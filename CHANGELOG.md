@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.240.0] — 2026-08-23
+
+### Act-tray Book actually writes (C4 v2 / W23)
+
+The Act-tray Book button was a clipboard. It now creates a Medicus
+general task — same endpoint as the existing inline widget (W4/W5).
+
+- Book prepares the next-green-day sentence and an assignee list.
+  Nothing is written until **Create the task**.
+- Confirm re-resolves the row’s task → patient and aborts on mismatch
+  (H-043). Success: “Task created — assigned to X. This request is
+  still open. No slot is held.” Never Booked.
+- Pharmacy First / Ask-back still open the existing draft menus.
+  Park is still local-only.
+
 ## [v3.239.0] — 2026-08-23
 
 ### Duty-doctor cockpit — Pulse tranche 2 (Northstar A1 / A2 / E-1.1 / E-1.2 / B2 / B4 / C4)

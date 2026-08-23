@@ -110,5 +110,50 @@ console.log('\nLayer 4: workingDatesFrom skips today + weekend');
   check(dates.length === 5, 'returns the requested count');
 }
 
+console.log('\nLayer 5: C4 v2 create-task identity + payload');
+{
+  const form = {
+    assigneeOptions: {
+      teams: [
+        { value: 't1', label: 'Reception' },
+        { value: 't2', label: 'GPs' },
+      ],
+      staff: [{ value: 's1', label: 'Dr Chen' }],
+    },
+  };
+  const assignees = B.normaliseAssignees(form);
+  check(assignees.length === 3, 'normalise teams + staff');
+  check(B.pickDefaultAssignee(assignees) === 'team|t1', 'defaults to Reception when present');
+  check(B.normaliseAssignees(null).length === 0, 'null form → no assignees');
+
+  const pin = { taskUuid: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', patientId: 'pat-1' };
+  check(B.assertTaskIdentity(pin, pin).ok === true, 'matching pin/live is ok');
+  check(
+    B.assertTaskIdentity(pin, { taskUuid: pin.taskUuid, patientId: 'other' }).ok === false,
+    'patient mismatch refuses'
+  );
+  check(
+    B.assertTaskIdentity(pin, { taskUuid: 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff', patientId: 'pat-1' }).ok === false,
+    'task mismatch refuses'
+  );
+  check(B.assertTaskIdentity(null, pin).ok === false, 'missing pin refuses');
+
+  const payload = B.buildCreatePayload({
+    patientId: 'pat-1',
+    assignee: 'team|t1',
+    description: 'book Patel — GP 15 — Mon 25 Aug. Does not hold a slot.',
+  });
+  check(!!payload && payload.assigneeType === 'team' && payload.assigneeId === 't1', 'payload splits assignee');
+  check(payload.contextId === null && payload.snoozeUntil === null, 'no invented context / snooze');
+  check(
+    B.buildCreatePayload({ patientId: 'pat-1', assignee: 't1', description: 'x' }) === null,
+    'bad assignee refuses'
+  );
+  check(
+    B.buildCreatePayload({ patientId: 'pat-1', assignee: 'team|t1', description: '  ' }) === null,
+    'blank description refuses'
+  );
+}
+
 console.log('\n--- Results: ' + passed + ' passed, ' + failed + ' failed ---\n');
 if (failed > 0) process.exit(1);

@@ -138,6 +138,9 @@ if (actFn) {
   );
   check(/n \+ '\. ' \+ label/.test(actFn[0]), 'act tray numbers actions (n. label)');
   check(/does not hold a slot/.test(actFn[0]), 'Book button states it does not hold a slot');
+  check(/Create the task/.test(actFn[0]), 'Book confirm creates a Medicus task, not a clipboard copy');
+  check(/This request is still open/.test(actFn[0]), 'success copy says the request stays open');
+  check(/assertTaskIdentity/.test(actFn[0]), 'Book confirm re-verifies task/patient identity');
   check(/Medicus status unchanged/.test(actFn[0]), 'Park button states Medicus status is unchanged');
 }
 check(

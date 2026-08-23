@@ -7366,6 +7366,30 @@
     return null;
   };
 
+  const actTaskApiFetch = async (path, opts) => {
+    opts = opts || {};
+    const API = typeof window !== 'undefined' && window.SentinelApiClient;
+    const ctx = API && API.detectMedicusContext(location.href);
+    if (!ctx || !ctx.apiBase) throw new Error('Not signed in to Medicus');
+    const resp = await fetch(ctx.apiBase + path, {
+      method: opts.method || 'GET',
+      credentials: 'include',
+      headers: Object.assign({ Accept: 'application/json, text/plain, */*' }, opts.headers),
+      body: opts.body,
+    });
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) throw new Error('Not signed in to Medicus');
+      throw new Error('HTTP ' + resp.status);
+    }
+    const text = await resp.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error('Task API returned an unexpected response.');
+    }
+  };
+
   const buildPulseActTray = (row, act) => {
     const tray = document.createElement('div');
     tray.className = 'ch-q-act';
@@ -7403,32 +7427,62 @@
     addBtn(
       '1',
       'Book',
-      Book ? 'Prepare a next-green-day note — does not hold a slot' : 'Book assist not loaded',
-      !!Book,
-      async () => {
-        const presets = await loadCapacityPresets();
-        if (!presets.length) {
+      Book ? 'Creates a reception task for the next green day — does not hold a slot' : 'Book assist not loaded',
+      !!Book && !!taskUuid,
+      async (btn) => {
+        if (!Book || !taskUuid) return;
+        const pinUuid = taskUuid;
+        const slug =
+          (_queueMonCache.get(pinUuid) && _queueMonCache.get(pinUuid).taskTypeSlug) || _currentQueueSlug;
+        if (btn) btn.querySelector('small').textContent = 'Looking up the next green day…';
+        try {
+          const patientId = await resolvePatientForTask(slug, pinUuid);
+          if (taskUuidFromRow(row) !== pinUuid) return;
+          if (!patientId) {
+            stagePulseAction(row, {
+              kind: 'book-error',
+              text: 'Could not resolve this patient — open the request. Task not created.',
+            });
+            return;
+          }
+          const form = await actTaskApiFetch(
+            '/patient/data/workflow/general-task/create?patientId=' + encodeURIComponent(patientId)
+          );
+          if (taskUuidFromRow(row) !== pinUuid) return;
+          const assignees = Book.normaliseAssignees(form);
+          if (!assignees.length) {
+            stagePulseAction(row, {
+              kind: 'book-error',
+              text: 'No assignee offered — task not created.',
+            });
+            return;
+          }
+          const presets = await loadCapacityPresets();
+          if (taskUuidFromRow(row) !== pinUuid) return;
+          const preset = presets[0] || null;
+          const day = preset ? await fetchGreenDayForPreset(preset) : null;
+          if (taskUuidFromRow(row) !== pinUuid) return;
           stagePulseAction(row, {
             kind: 'book',
             text: Book.composeBookSnippet({
               patientName: patientNameFromRow(row),
-              presetName: 'capacity preset',
-              day: null,
+              presetName: preset ? preset.name : 'capacity preset',
+              day: day,
             }),
-            emptyPresets: true,
+            patientId: patientId,
+            taskUuid: pinUuid,
+            taskTypeSlug: slug,
+            assignees: assignees,
+            assignee: Book.pickDefaultAssignee(assignees),
+            emptyPresets: !preset,
           });
-          return;
+        } catch (err) {
+          if (taskUuidFromRow(row) !== pinUuid) return;
+          stagePulseAction(row, {
+            kind: 'book-error',
+            text: (err && err.message) || 'Could not prepare the task — nothing was created.',
+          });
         }
-        const preset = presets[0];
-        const day = await fetchGreenDayForPreset(preset);
-        stagePulseAction(row, {
-          kind: 'book',
-          text: Book.composeBookSnippet({
-            patientName: patientNameFromRow(row),
-            presetName: preset.name,
-            day: day,
-          }),
-        });
       }
     );
     const pfOk = !!(act && act.pfElig && act.pfElig.eligible === true);
@@ -7473,40 +7527,106 @@
     if (staged && staged.text) {
       const bar = document.createElement('div');
       bar.className = 'ch-q-act-confirm';
-      const p = document.createElement('p');
-      p.textContent = ACT_CONFIRM;
-      bar.appendChild(p);
-      const pre = document.createElement('pre');
-      pre.textContent = staged.text;
-      bar.appendChild(pre);
-      if (staged.emptyPresets) {
-        const hint = document.createElement('p');
-        hint.textContent = 'No capacity presets — open the Capacity tab to add one.';
-        bar.appendChild(hint);
-      }
-      const go = document.createElement('button');
-      go.type = 'button';
-      go.textContent = staged.kind === 'park' ? 'Keep this local park' : 'Copy the draft';
-      go.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (staged.kind === 'park' && PL && taskUuid) {
-          const out = PL.parkTask(_parkMem, taskUuid, staged.untilMs, '', Date.now());
-          if (out.ok) {
-            _parkMem = out.store;
-            persistParkMem();
+      if (staged.kind === 'book-created' || staged.kind === 'book-error') {
+        const p = document.createElement('p');
+        p.textContent = staged.text;
+        bar.appendChild(p);
+        tray.appendChild(bar);
+      } else {
+        const p = document.createElement('p');
+        p.textContent = ACT_CONFIRM;
+        bar.appendChild(p);
+        const pre = document.createElement('pre');
+        pre.textContent = staged.text;
+        bar.appendChild(pre);
+        if (staged.kind === 'book' && Array.isArray(staged.assignees) && staged.assignees.length) {
+          const lab = document.createElement('label');
+          lab.textContent = 'Assign to';
+          const sel = document.createElement('select');
+          sel.setAttribute('aria-label', 'Assign the new task to');
+          staged.assignees.forEach((a) => {
+            const opt = document.createElement('option');
+            opt.value = a.value;
+            opt.textContent = a.label;
+            if (a.value === staged.assignee) opt.selected = true;
+            sel.appendChild(opt);
+          });
+          sel.addEventListener('change', () => {
+            staged.assignee = sel.value;
+            if (key) _pulseStageByKey.set(key, staged);
+          });
+          lab.appendChild(sel);
+          bar.appendChild(lab);
+        }
+        if (staged.emptyPresets) {
+          const hint = document.createElement('p');
+          hint.textContent = 'No capacity presets — open the Capacity tab to add one.';
+          bar.appendChild(hint);
+        }
+        const go = document.createElement('button');
+        go.type = 'button';
+        go.textContent = staged.kind === 'park' ? 'Keep this local park' : 'Create the task';
+        go.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (staged.kind === 'park' && PL && taskUuid) {
+            const out = PL.parkTask(_parkMem, taskUuid, staged.untilMs, '', Date.now());
+            if (out.ok) {
+              _parkMem = out.store;
+              persistParkMem();
+            }
+            _pulseStageByKey.delete(key);
+            refreshPulseOnRow(row);
+            return;
           }
-          _pulseStageByKey.delete(key);
-          refreshPulseOnRow(row);
-          return;
-        }
-        const text = staged.text || '';
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).catch(() => {});
-        }
-      });
-      bar.appendChild(go);
-      tray.appendChild(bar);
+          if (staged.kind === 'book' && Book) {
+            go.disabled = true;
+            go.textContent = 'Creating…';
+            (async () => {
+              const pin = { taskUuid: staged.taskUuid, patientId: staged.patientId };
+              const liveUuid = taskUuidFromRow(row);
+              const livePatient = await resolvePatientForTask(staged.taskTypeSlug, liveUuid);
+              const ident = Book.assertTaskIdentity(pin, { taskUuid: liveUuid, patientId: livePatient });
+              if (!ident.ok) {
+                stagePulseAction(row, { kind: 'book-error', text: ident.reason });
+                return;
+              }
+              const payload = Book.buildCreatePayload({
+                patientId: staged.patientId,
+                assignee: staged.assignee,
+                description: staged.text,
+              });
+              if (!payload) {
+                stagePulseAction(row, { kind: 'book-error', text: 'Assignee or description missing — task not created.' });
+                return;
+              }
+              try {
+                await actTaskApiFetch('/patient/workflow/general-task/create', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload),
+                });
+                const who = (staged.assignees || []).find((a) => a.value === staged.assignee);
+                stagePulseAction(row, {
+                  kind: 'book-created',
+                  text:
+                    'Task created — assigned to ' +
+                    ((who && who.label) || 'the chosen assignee') +
+                    '. This request is still open. No slot is held.',
+                });
+              } catch (err) {
+                stagePulseAction(row, {
+                  kind: 'book-error',
+                  text: (err && err.message) || 'Create failed — task not created.',
+                });
+              }
+            })();
+            return;
+          }
+        });
+        bar.appendChild(go);
+        tray.appendChild(bar);
+      }
     }
 
     const note = document.createElement('p');

@@ -141,6 +141,66 @@
     );
   }
 
+  // C4 v2 — create a reception task (same endpoint as W4/W5). Never a slot.
+  function normaliseAssignees(form) {
+    const teams = (form && form.assigneeOptions && form.assigneeOptions.teams) || (form && form.teams) || [];
+    const staff = (form && form.assigneeOptions && form.assigneeOptions.staff) || (form && form.staff) || [];
+    const out = [];
+    const push = (list, kind) => {
+      if (!Array.isArray(list)) return;
+      for (let i = 0; i < list.length; i++) {
+        const t = list[i] || {};
+        const id = t.value || t.id;
+        if (!id) continue;
+        out.push({
+          value: kind + '|' + id,
+          label: String(t.label || t.name || id),
+          kind: kind,
+        });
+      }
+    };
+    push(teams, 'team');
+    push(staff, 'staff');
+    return out;
+  }
+
+  function pickDefaultAssignee(assignees) {
+    if (!Array.isArray(assignees) || !assignees.length) return '';
+    const rec = assignees.find((a) => /reception|admin|care.?nav|workflow/i.test(a.label || ''));
+    return (rec || assignees[0]).value || '';
+  }
+
+  // pin + live must agree or the write is refused. Same H-043 shape as W5.
+  function assertTaskIdentity(pin, live) {
+    if (!pin || !live) return { ok: false, reason: 'Identity missing — task not created.' };
+    if (!pin.taskUuid || !pin.patientId) return { ok: false, reason: 'Identity missing — task not created.' };
+    if (!live.taskUuid || live.taskUuid !== pin.taskUuid) {
+      return { ok: false, reason: 'Row moved — task not created.' };
+    }
+    if (!live.patientId || live.patientId !== pin.patientId) {
+      return { ok: false, reason: 'Patient could not be re-verified — task not created.' };
+    }
+    return { ok: true };
+  }
+
+  function buildCreatePayload(opts) {
+    opts = opts || {};
+    const assignee = String(opts.assignee || '');
+    const sep = assignee.indexOf('|');
+    const description = String(opts.description || '').trim();
+    if (!opts.patientId || sep < 1 || !description) return null;
+    return {
+      patientId: opts.patientId,
+      contextId: null,
+      contextType: null,
+      assigneeType: assignee.slice(0, sep),
+      assigneeId: assignee.slice(sep + 1),
+      description: description,
+      priority: Number(opts.priority) || 0,
+      snoozeUntil: null,
+    };
+  }
+
   function workingDatesFrom(now, n) {
     const start = now instanceof Date ? now : new Date();
     const out = [];
@@ -166,6 +226,10 @@
     countFreeSlots: countFreeSlots,
     composeBookSnippet: composeBookSnippet,
     workingDatesFrom: workingDatesFrom,
+    normaliseAssignees: normaliseAssignees,
+    pickDefaultAssignee: pickDefaultAssignee,
+    assertTaskIdentity: assertTaskIdentity,
+    buildCreatePayload: buildCreatePayload,
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

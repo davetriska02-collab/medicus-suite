@@ -187,7 +187,7 @@ lessons):
 
 | # | Action | What it stages | What it does *not* do |
 |---|---|---|---|
-| 1 | **Book** | C4 next-green-day snippet (preset + day + “N free as of hh:mm”) into a draft | Does not hold or book a slot |
+| 1 | **Book** | C4 v2: next-green-day snippet + assignee, then **Create the task** (W23 / same endpoint as W5) | Does not hold or book a slot; does not close this request |
 | 2 | **Pharmacy First** | Pathway’s own CSO-signed draft sentence | Does not divert, message, or claim eligibility beyond the existing fail-closed age gate |
 | 3 | **Ask-back** | Reception-match gap questions / flagged-in-text list as comment draft | Does not send an SMS |
 | 4 | **Park until…** | Local parked-until timestamp on this `taskUuid` (session + ledger, no clinical text) | Does not change Medicus status; a parked row must still look *touched*, not unseen |
@@ -203,10 +203,9 @@ Staging is not completion. A row with a draft shows a persistent strip
 
 > Not yet submitted — reception sees nothing until you confirm.
 
-Confirm opens the existing pattern: named list of exactly what will be
-written (comment insert / task create / nothing-but-local-park). Copy ban
-from `test-reception-quick-actions-ui.js`: no “Done / Sent / Booked /
-Submitted” on a click. Undo where a write happened (1.4).
+Confirm is labelled **Create the task** (W23). It names the assignee and
+the snippet. Copy ban: no “Done / Sent / Booked / Submitted” on a click.
+Identity is re-verified immediately before POST. Park remains local-only.
 
 Opening the Medicus task remains one click on the name. Act is additive.
 
