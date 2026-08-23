@@ -36,6 +36,11 @@ try {
   console.warn('[Suite] importScripts shared/knowledge-utils.js failed:', e && e.message);
 }
 try {
+  importScripts('shared/pill-palette.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/pill-palette.js failed:', e && e.message);
+}
+try {
   importScripts('shared/reception-pathway-utils.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/reception-pathway-utils.js failed:', e && e.message);

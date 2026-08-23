@@ -22,7 +22,9 @@
 // 'default' means "no colour" (no --swatch token; rendered transparent).
 // Kept in lock-step with Reception's TILE_COLOUR_KEYS (shared/reception-pathway-utils.js)
 // and the --swatch-* tokens (panel.css) by test-pill-palette-sync.js — edit all three together.
-export const SWATCH_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
+const _PP = globalThis.PillPalette;
+if (!_PP) throw new Error('PillPalette missing — load shared/pill-palette.js before pill-prefs');
+export const SWATCH_KEYS = _PP.SWATCH_KEYS;
 
 // Validate raw stored prefs into a safe { order, colours } shape: order is a
 // string[]; colours only keeps entries whose value is a real, non-'default'

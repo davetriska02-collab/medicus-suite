@@ -627,7 +627,13 @@ be reviewed clinically and then toggled on explicitly in the Reception settings.
 
   // Palette offered for colour-coding tiles. 'default' = no colour. Each key maps
   // to a CSS class (rcp-tile-c-<key>) in reception.css; keep the two in sync.
-  const TILE_COLOUR_KEYS = ['default', 'slate', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'purple', 'pink'];
+  const TILE_COLOUR_KEYS = (function loadPillPalette() {
+    if (typeof require === 'function') {
+      try { return require('./pill-palette.js').SWATCH_KEYS; } catch (e) { /* fall through */ }
+    }
+    if (global && global.PillPalette) return global.PillPalette.SWATCH_KEYS;
+    throw new Error('PillPalette missing — load shared/pill-palette.js before reception-pathway-utils.js');
+  })();
 
   function isValidColourKey(k) { return TILE_COLOUR_KEYS.indexOf(k) !== -1; }
 

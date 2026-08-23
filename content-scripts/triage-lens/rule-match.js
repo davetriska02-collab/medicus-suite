@@ -126,7 +126,20 @@
   //  - past: one of PAST_MARKERS appearing as a whole PHRASE anywhere in the
   //    same sentence ("had a UTI last year").
   //  - negated wins if both are present.
-  const NEGATORS = ['no', 'not', 'denies', 'denied', 'denying', 'without', 'never', 'nil'];
+  const _Neg = (function loadNegationTerms() {
+    if (typeof require === 'function') {
+      try {
+        return require('../../engine/negation-terms.js');
+      } catch (e) {
+        /* fall through */
+      }
+    }
+    if (typeof globalThis !== 'undefined' && globalThis.NegationTerms) {
+      return globalThis.NegationTerms;
+    }
+    throw new Error('NegationTerms missing — load engine/negation-terms.js before rule-match.js');
+  })();
+  const NEGATORS = _Neg.BASE_NEGATORS;
   const PAST_MARKERS = [
     'last year',
     'last month',
@@ -142,7 +155,7 @@
   const PAST_MARKER_PATTERNS = PAST_MARKERS.map(
     (phrase) => new RegExp('\\b' + phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i')
   );
-  const NEGATION_WORD_WINDOW = 6;
+  const NEGATION_WORD_WINDOW = _Neg.NEGATION_WORD_WINDOW;
 
   function detectQualifier(text, start, end) {
     const { left, right } = sentenceSpan(text, start, end);

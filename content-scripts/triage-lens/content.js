@@ -392,152 +392,14 @@
   // label still matches a retired default we revert it to the current shipped label.
   // WHEN YOU CHANGE A SHIPPED CHIP LABEL: (a) add its previous value here, AND (b) bump
   // defaults.json "version" so this migration actually runs for existing users.
-  const RETIRED_CHIP_LABELS = {
-    'queue.resultUrgent': ['Urgent: {name}'],
-    'queue.resultRuleUrgent': ['Urgent: {name} — {rule}', '{name} — {rule}'],
-    'queue.resultRuleAbnormal': ['{name} — {rule}']
-  };
-  const revertRetiredChipLabels = (chips, shippedChips) => {
-    if (!chips || !shippedChips) return;
-    for (const id of Object.keys(RETIRED_CHIP_LABELS)) {
-      const entry = chips[id];
-      const shippedNow = shippedChips[id];
-      if (entry && shippedNow && RETIRED_CHIP_LABELS[id].indexOf(entry.label) !== -1) {
-        entry.label = shippedNow.label;
-      }
-    }
-  };
-  // Builtin result rules that GAINED an abnormalText positive-flag set in a later shipped
-  // version. The resultRules migration below is append-only (it adds builtins the user
-  // lacks BY ID), so a builtin the user already holds keeps its OLD shape and never
-  // receives the new positive flags — leaving the false-calm hazard those flags fix (e.g. a
-  // positive blood culture reading "...no growth in anaerobic bottle" being calmed). Adding
-  // abnormalText is purely additive (it only ever ADDS a 'review' outcome, never calms), so
-  // backfill the shipped abnormalText onto a held builtin that still lacks one. This also
-  // repairs a rule whose abnormalText was dropped by an older options edit. Kept in
-  // lock-step with options.js; bump defaults.json "version" when you add an id here.
-  const RESULT_RULES_GAINED_ABNORMALTEXT = ['msu-culture', 'base-blood-culture'];
-  const backfillBuiltinAbnormalText = (resultRules, shippedResultRules) => {
-    if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
-    for (const id of RESULT_RULES_GAINED_ABNORMALTEXT) {
-      const held = resultRules.find(r => r && r.id === id && r.builtin);
-      if (!held || (Array.isArray(held.abnormalText) && held.abnormalText.length)) continue;
-      const shippedRule = shippedResultRules.find(r => r && r.id === id);
-      if (shippedRule && Array.isArray(shippedRule.abnormalText) && shippedRule.abnormalText.length) {
-        held.abnormalText = [...shippedRule.abnormalText];
-      }
-    }
-  };
-  // Builtin result-rule fields (label, and threshold values) shipped in a PRIOR version and
-  // SINCE CHANGED. The resultRules merge below is append-by-id only, so a builtin the user
-  // already holds keeps its OLD label/thresholds forever — a changed shipped label or
-  // threshold value never reaches existing users (the resultRules analogue of the
-  // RETIRED_CHIP_LABELS systemChips trap above). For each id we list, per field, the retired
-  // shipped value(s). The revert is ATOMIC per id: only when EVERY listed field still equals a
-  // retired value (i.e. the user has not customised this rule) do we bring the rule fully up to
-  // the current shipped values — so we never overwrite a user's own edit, and never leave a
-  // label that disagrees with the live threshold. v17 surfaced each numeric trigger in the chip
-  // label and lowered the Hb critical red from 100→80 g/L (CSO-approved). Kept in lock-step with
-  // options.js; bump defaults.json "version" when you add an entry here.
-  const RETIRED_RESULTRULE_FIELDS = {
-    'base-low-haemoglobin': { label: ['Critical low haemoglobin'], red: [100] },
-    // v22 added an amber band (6.0–6.4 mmol/L, UKKA Oct 2023 "moderate" hyperkalaemia
-    // band) below the pre-existing red ≥6.5 — a NEW field on a held builtin, which the
-    // append-by-id merge never delivers on its own. Both the ancient (pre-v17) and the
-    // v17 numbered label are listed as retired candidates so either vintage of held rule
-    // (which never carried an amber field) is brought up to the new label + amber value.
-    'base-high-potassium': {
-      label: ['Critical high potassium', 'Critical high potassium (red ≥6.5 mmol/L)'],
-      amber: [undefined]
-    },
-    'base-low-sodium': { label: ['Critical low sodium'] },
-    'base-low-egfr': { label: ['Critical low eGFR'] },
-    'base-low-platelets': { label: ['Critical low platelets'] },
-    'base-low-neutrophils': { label: ['Critical low neutrophils'] },
-    'base-high-inr': { label: ['High INR'] },
-    'base-lithium-toxicity': { label: ['High lithium level — toxicity risk'] },
-    'base-digoxin-toxicity': { label: ['High digoxin level — toxicity risk'] },
-    'base-low-potassium': { label: ['Critical low potassium'] },
-    'base-high-calcium': { label: ['High calcium — hypercalcaemia'] },
-    'base-egfr-amber': { label: ['Low eGFR — significant CKD'] },
-    'base-low-calcium': { label: ['Low adjusted calcium — hypocalcaemia'] },
-    'base-low-magnesium': { label: ['Low magnesium — hypomagnesaemia'] },
-    'base-high-tsh': { label: ['High TSH — possible hypothyroidism'] },
-    'base-low-tsh': { label: ['Suppressed TSH — possible thyrotoxicosis'] },
-    // v22 (CSO calibration pass, TRIAGE-LENS-2026-07-02.md item 3.3) demoted HbA1c ≥48 from
-    // red to amber — 48 mmol/mol is the WHO/NICE NG28 DIAGNOSTIC threshold, not itself a
-    // marker of clinical urgency, and firing red on every newly-diagnostic HbA1c was alert
-    // fatigue. A held rule still at the old red:48/no-amber shape is moved to red:null,
-    // amber:48 (label text is unchanged — "HbA1c ≥48" reads correctly at either severity, so
-    // it is not part of this un-stick).
-    'base-hba1c-diabetes': { red: [48], amber: [undefined] },
-    // v21 tightened the bare "gram positive"/"gram negative"/"candida" substrings (they
-    // matched NEGATIVE phrasing like "No gram negative organisms isolated" and tripped a
-    // false-amber review) to morphology-qualified gram-stain terms and named candida
-    // species. A held rule whose abnormalText still deep-equals this OLD 30-element
-    // shipped array is un-stuck to the new shipped array; a customised array is left alone.
-    'base-blood-culture': {
-      abnormalText: [
-        [
-          'grown in aerobic bottle',
-          'grown in anaerobic bottle',
-          'positive blood culture',
-          'gram positive',
-          'gram negative',
-          'gram-positive',
-          'gram-negative',
-          'bacteraemia',
-          'bacteremia',
-          'fungaemia',
-          'sensitive to',
-          'resistant to',
-          'sensitivities shown',
-          'staphylococcus',
-          'streptococcus',
-          'escherichia',
-          'klebsiella',
-          'enterococcus',
-          'pseudomonas',
-          'haemophilus',
-          'neisseria',
-          'listeria',
-          'salmonella',
-          'candida',
-          'acinetobacter',
-          'serratia',
-          'enterobacter',
-          'proteus',
-          'citrobacter',
-          'stenotrophomonas'
-        ]
-      ]
-    }
-  };
-  // A retired field's candidate value may be a scalar (indexOf works) or, for
-  // abnormalText, an array of candidate arrays — reference-compare via indexOf never
-  // matches two distinct array instances, so deep-compare element-wise when the held
-  // value is itself an array.
-  const arraysShallowEqual = (a, b) =>
-    Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
-  const fieldStillDefault = (candidates, heldValue) => {
-    if (Array.isArray(heldValue)) return candidates.some(c => arraysShallowEqual(c, heldValue));
-    return candidates.indexOf(heldValue) !== -1;
-  };
-  const revertRetiredResultRuleFields = (resultRules, shippedResultRules) => {
-    if (!Array.isArray(resultRules) || !Array.isArray(shippedResultRules)) return;
-    for (const id of Object.keys(RETIRED_RESULTRULE_FIELDS)) {
-      const held = resultRules.find(r => r && r.id === id && r.builtin);
-      const shippedRule = shippedResultRules.find(r => r && r.id === id);
-      if (!held || !shippedRule) continue;
-      const fields = RETIRED_RESULTRULE_FIELDS[id];
-      const stillDefault = Object.keys(fields).every(f => fieldStillDefault(fields[f], held[f]));
-      if (!stillDefault) continue;
-      for (const f of Object.keys(fields)) {
-        if (shippedRule[f] === undefined) continue;
-        held[f] = Array.isArray(shippedRule[f]) ? [...shippedRule[f]] : shippedRule[f];
-      }
-    }
-  };
+  const _RD = globalThis.RetiredDefaults;
+  if (!_RD) throw new Error('RetiredDefaults missing — load shared/retired-defaults.js before content.js');
+  const RETIRED_CHIP_LABELS = _RD.RETIRED_CHIP_LABELS;
+  const revertRetiredChipLabels = _RD.revertRetiredChipLabels;
+  const RESULT_RULES_GAINED_ABNORMALTEXT = _RD.RESULT_RULES_GAINED_ABNORMALTEXT;
+  const backfillBuiltinAbnormalText = _RD.backfillBuiltinAbnormalText;
+  const RETIRED_RESULTRULE_FIELDS = _RD.RETIRED_RESULTRULE_FIELDS;
+  const revertRetiredResultRuleFields = _RD.revertRetiredResultRuleFields;
   const mergeShippedDefaults = (cfg) => {
     const shipped = fallbackConfig();
     if (!cfg || !Array.isArray(cfg.rules)) return null;
@@ -1399,37 +1261,9 @@
   // well-established, low-false-positive combinations and is worded as a review
   // prompt — decision support, verify against the record.
   function evaluatePrescribingFlags(meds, age) {
-    const NSAIDS = /ibuprofen|naproxen|diclofenac|celecoxib|etoricoxib|meloxicam|piroxicam|tenoxicam|indometh?acin|sulindac|ketoprofen|dexketoprofen|tiaprofenic|mefenamic|tolfenamic|fenoprofen|aceclofenac|nabumetone|etodolac|flurbiprofen/i;
-    const TOPICAL = /gel|cream|ointment|topical|patch|spray|eye ?drop|ear ?drop|foam/i;
-    const ANTICOAG = /warfarin|apixaban|rivaroxaban|edoxaban|dabigatran|acenocoumarol|phenindione|enoxaparin|dalteparin|tinzaparin|heparin/i;
-    const ANTIPLATELET = /aspirin|clopidogrel|ticagrelor|prasugrel|dipyridamole/i;
-    const ACEI_ARB = /ramipril|lisinopril|perindopril|enalapril|captopril|trandolapril|fosinopril|quinapril|imidapril|cilazapril|losartan|candesartan|valsartan|irbesartan|olmesartan|telmisartan|azilsartan|eprosartan/i;
-    const DIURETIC = /furosemide|frusemide|bumetanide|torasemide|bendroflumethiazide|indapamide|hydrochlorothiazide|chlortalidone|chlorthalidone|metolazone/i;
-    const BENZO_Z = /diazepam|lorazepam|temazepam|nitrazepam|oxazepam|chlordiazepoxide|clonazepam|alprazolam|zopiclone|zolpidem|zaleplon/i;
-    const GASTRO = /omeprazole|lansoprazole|esomeprazole|pantoprazole|rabeprazole|famotidine|cimetidine|nizatidine|ranitidine/i;
-
-    const list = (meds || []).map(m => String(m || ''));
-    const has = (re) => list.some(m => re.test(m));
-    const systemicNSAID = list.some(m => NSAIDS.test(m) && !TOPICAL.test(m));
-    const items = [];
-
-    if (systemicNSAID && has(ANTICOAG)) {
-      items.push({ severity: 'amber', text: 'NSAID + anticoagulant', detail: 'STOPP — major GI bleed risk; review need / gastroprotection' });
-    } else if (systemicNSAID && has(ANTIPLATELET)) {
-      items.push({ severity: 'amber', text: 'NSAID + antiplatelet', detail: 'STOPP — bleed risk; review need / gastroprotection' });
-    }
-    if (systemicNSAID && has(ACEI_ARB) && has(DIURETIC)) {
-      items.push({ severity: 'amber', text: 'Triple whammy (NSAID + ACEi/ARB + diuretic)', detail: 'AKI risk (PINCER / STOPP) — review' });
-    }
-    if (age != null && age >= 80 && has(BENZO_Z)) {
-      items.push({ severity: 'amber', text: 'Benzodiazepine/Z-drug in age ≥80', detail: 'STOPP — falls & sedation risk; consider deprescribing' });
-    }
-    // KD-32 — PINCER #1: NSAID in age ≥65 without gastroprotection
-    // Fail-closed: age must be known (age != null) and ≥65.
-    if (systemicNSAID && age != null && age >= 65 && !has(GASTRO)) {
-      items.push({ severity: 'amber', text: 'NSAID in age ≥65 without gastroprotection', detail: 'PINCER #1 — GI bleed risk; consider PPI cover / review NSAID need' });
-    }
-    return items;
+    const T = globalThis.PincerTables;
+    if (!T) throw new Error('PincerTables missing — load engine/pincer-tables.js before content.js');
+    return T.evaluatePrescribingFlags(meds, age);
   }
 
   const computeSignals = (d) => {

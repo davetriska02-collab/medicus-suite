@@ -29,28 +29,28 @@ const SRC = fs.readFileSync(path.join(__dirname, 'visualiser-core.js'), 'utf8');
 // ── Extract source slices ──────────────────────────────────────────────────
 // Slice from 'const HIGH_RISK_DRUGS = [' through computePINCER's closing brace,
 // up to the '// ══ STATE' anchor.
-const START_NEEDLE = 'const HIGH_RISK_DRUGS = [';
+const START_NEEDLE = 'function computePINCER(';
 const END_NEEDLE = '\n// ══ STATE';
 
 const startIdx = SRC.indexOf(START_NEEDLE);
 const endIdx = SRC.indexOf(END_NEEDLE, startIdx);
 
-if (startIdx < 0) throw new Error('HIGH_RISK_DRUGS anchor not found in visualiser-core.js');
-if (endIdx < 0) throw new Error('STATE anchor not found after HIGH_RISK_DRUGS in visualiser-core.js');
+if (startIdx < 0) throw new Error('computePINCER anchor not found in visualiser-core.js');
+if (endIdx < 0) throw new Error('STATE anchor not found after computePINCER in visualiser-core.js');
 
 const snippet = SRC.slice(startIdx, endIdx);
 
-// Run in a sandbox — expose computePINCER.
 const sandbox = {};
 vm.createContext(sandbox);
 vm.runInContext(snippet, sandbox);
-vm.runInContext('this.computePINCER = computePINCER; this.HIGH_RISK_DRUGS = HIGH_RISK_DRUGS;', sandbox);
+vm.runInContext('this.computePINCER = computePINCER;', sandbox);
 
 const computePINCER = sandbox.computePINCER;
-const HIGH_RISK_DRUGS = sandbox.HIGH_RISK_DRUGS;
+const { HIGH_RISK_DRUGS } = require('./engine/pincer-tables.js');
 
 assert(typeof computePINCER === 'function', 'computePINCER extracted from vm sandbox');
-assert(Array.isArray(HIGH_RISK_DRUGS), 'HIGH_RISK_DRUGS extracted from vm sandbox');
+assert(Array.isArray(HIGH_RISK_DRUGS), 'HIGH_RISK_DRUGS from engine/pincer-tables.js');
+assert(SRC.includes('PincerTables'), 'visualiser-core.js consumes PincerTables');
 
 // ── Build synthetic drug/problem fixtures ─────────────────────────────────
 

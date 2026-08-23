@@ -24,16 +24,12 @@ function check(cond, msg) {
 }
 
 const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'), 'utf8');
-const fnMatch = src.match(/function evaluatePrescribingFlags\(meds, age\) \{[\s\S]*?\n  \}/);
-check(!!fnMatch, 'evaluatePrescribingFlags extracted from content.js');
-
-let evaluate = null;
-if (fnMatch) {
-  const sandbox = {};
-  vm.runInNewContext(fnMatch[0] + '\nthis.evaluatePrescribingFlags = evaluatePrescribingFlags;', sandbox);
-  evaluate = sandbox.evaluatePrescribingFlags;
-  check(typeof evaluate === 'function', 'extracted helper is callable');
-}
+check(
+  src.includes('globalThis.PincerTables') && src.includes('evaluatePrescribingFlags'),
+  'content.js consumes PincerTables.evaluatePrescribingFlags'
+);
+const { evaluatePrescribingFlags: evaluate } = require('./engine/pincer-tables.js');
+check(typeof evaluate === 'function', 'evaluatePrescribingFlags exported from engine/pincer-tables.js');
 
 const texts = (items) => items.map((i) => i.text);
 

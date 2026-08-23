@@ -102,21 +102,9 @@ const KDIGO = {
   G5: { A1: '4+', A2: '4+', A3: '4+' },
 };
 
-function gStage(e) {
-  if (e == null || !Number.isFinite(e)) return null;
-  if (e >= 90) return 'G1';
-  if (e >= 60) return 'G2';
-  if (e >= 45) return 'G3a';
-  if (e >= 30) return 'G3b';
-  if (e >= 15) return 'G4';
-  return 'G5';
-}
-function aStage(a) {
-  if (a == null || !Number.isFinite(a)) return null;
-  if (a < 3) return 'A1';
-  if (a <= 30) return 'A2';
-  return 'A3';
-}
+const _CT = globalThis.ClinicalThresholds;
+if (!_CT) throw new Error('ClinicalThresholds missing — load shared/clinical-thresholds.js before trends');
+const { gStage, aStage } = _CT;
 
 // ── Module state ───────────────────────────────────────────────────────────────
 let container = null;
@@ -546,11 +534,7 @@ function buildRenalModel(data) {
       })),
     },
   ];
-  const acrBands = [
-    { lo: 0, hi: 3, cls: 'tc-a1' },
-    { lo: 3, hi: 30, cls: 'tc-a2' },
-    { lo: 30, hi: 100, cls: 'tc-a3' },
-  ];
+  const acrBands = _CT.ACR_BANDS;
   const acrUnit = acrRow?.unit || 'mg/mmol';
   const egfrUnit = egfrRow?.unit || 'mL/min/1.73m²';
 
@@ -633,14 +617,7 @@ function renderRenal(m) {
       `<div class="acrt-band-legend"><span class="acrt-band-a1">A1 &lt;3</span><span class="acrt-band-a2">A2 3–30</span><span class="acrt-band-a3">A3 &gt;30</span></div>`
     : `<div class="trends-msg" style="padding:10px 12px">No ACR readings available.</div>`;
 
-  const egfrBands = [
-    { lo: 90, hi: 200, cls: 'tc-g1' },
-    { lo: 60, hi: 90, cls: 'tc-g2' },
-    { lo: 45, hi: 60, cls: 'tc-g3a' },
-    { lo: 30, hi: 45, cls: 'tc-g3b' },
-    { lo: 15, hi: 30, cls: 'tc-g4' },
-    { lo: 0, hi: 15, cls: 'tc-g5' },
-  ];
+  const egfrBands = _CT.EGFR_BANDS;
   const egfrChart = rm.egfrPts.length
     ? `<div class="acrt-section-lbl">eGFR trend (mL/min/1.73m²)</div>` +
       lineChart({

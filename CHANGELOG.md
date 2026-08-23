@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.30] — 2026-08-23
+
+### Architecture plan Phase 2 — remaining sync-pairs collapsed
+
+No-value-change extracts (flagged to CSO as location refactors only):
+
+- `shared/clinical-thresholds.js` — KDIGO gStage/aStage, chart bands, CLINICAL_ZONES, RCV_TABLE, NICE NG136 bpTarget. Trends, visualiser, and trend-chart consume it.
+- `shared/pill-palette.js` — one SWATCH_KEYS / TILE_COLOUR_KEYS list. CSS `--swatch-*` tokens stay in `panel.css` (stylesheets cannot import JS); `test-pill-palette-sync.js` still pins them.
+- `engine/negation-terms.js` — shared negators + window. `result-severity.js` and `rule-match.js` consume it (loaded first; hard-throw if missing).
+- `shared/retired-defaults.js` — one `RETIRED_CHIP_LABELS` / `RETIRED_RESULTRULE_FIELDS` table. content.js and triage-lens options.js consume it.
+- `engine/pincer-tables.js` — HIGH_RISK_DRUGS + `evaluatePrescribingFlags`. Evaluators stay separate (pinned KD-18..21 LMWH divergence). `test-pincer-parity.js` is now a consumption test.
+- rota-io validation stays duplicated against `rota/engine/validate.js` (accepted classic↔ESM exception, CI-guarded).
+
+## [v3.236.29] — 2026-08-23
+
+### Architecture plan Phases 2–3 — STATUS_RANK single source, layering guards
+
+- `shared/status-rank.js` is the one STATUS_RANK table. `engine/rules-engine.js`
+  and `sentinel-core.js` consume it (classic script before the engine in the
+  manifest, panel, pop-out, and sentinel-options). `test-status-rank-sync.js`
+  is now a consumption test (same object).
+- `addFollowup` moved to `followups-store.js`; Monitoring imports the store,
+  not the Follow-ups tab entry. `test-sibling-imports.js` fails closed on
+  entry-file imports.
+- New `test-engine-purity.js` and `test-shared-core-purity.js` pin which
+  files may touch DOM/`chrome.*`/`fetch`.
+- `scripts/new-module.js` scaffolds a module dir and prints the catalog
+  entry to paste (Phase 5.4).
+
 ## [v3.236.28] — 2026-08-23
 
 ### Architecture plan Phase 1 — one module registry

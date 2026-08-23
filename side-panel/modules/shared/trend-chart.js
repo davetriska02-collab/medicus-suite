@@ -22,11 +22,9 @@ export function fmtDate(d) {
 // Resolve the BP target from achieved QOF register codes + patient age.
 // acrOver70 can be passed to trigger the more intensive CKD+proteinuria target.
 export function bpTarget(registers, age, acrOver70) {
-  const codes = new Set((registers || []).map((r) => String(r.code || '').toUpperCase()));
-  if (codes.has('CKD') && acrOver70) return { sys: 130, dia: 80, label: 'CKD + ACR >70' };
-  if (codes.has('HYP') && age != null && age >= 80) return { sys: 150, dia: 90, label: 'HYP ≥80' };
-  if (['HYP', 'DM', 'CHD', 'STIA'].some((c) => codes.has(c))) return { sys: 140, dia: 90, label: 'standard' };
-  return null;
+  const CT = globalThis.ClinicalThresholds;
+  if (!CT) throw new Error('ClinicalThresholds missing — load shared/clinical-thresholds.js before trend-chart');
+  return CT.bpTarget(registers, age, acrOver70);
 }
 
 // Render a multi-series SVG line chart with optional horizontal target lines and

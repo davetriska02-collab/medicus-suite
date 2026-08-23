@@ -28,6 +28,8 @@ const ENGINE = path.join(ROOT, 'engine');
 const PURE = [
   'rules-engine.js',
   'result-severity.js',
+  'negation-terms.js',
+  'pincer-tables.js',
   'result-rules.js',
   'triage-alert-engine.js',
   'acb-scores.js',

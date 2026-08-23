@@ -49,9 +49,10 @@
   // BEATS the default and reaches the engine — so the shapes are checked here.
   // Kept in lock-step with rota/engine/validate.js (the sync-path validator);
   // test-rota-validate.js feeds identical fixtures to both and asserts they
-  // agree, so the two copies cannot drift. rota-io.js deliberately keeps its
-  // own checks rather than importing the ESM validator — this is a classic
-  // script loaded by a bare <script src> and cannot import.
+  // agree, so the two copies cannot drift. ACCEPTED classic↔ESM exception
+  // (architecture plan Phase 2.7): rota-io.js is a classic <script src> and
+  // cannot import the ESM validator; leave the copies duplicated and
+  // CI-guarded rather than forcing a dual-mode rewrite of rota/engine.
   // rota.access members — kept in the same lock-step with validate.js. salt,
   // hash and iterations are required on a non-null record; a config missing its
   // salt is one no correct passcode can ever unlock.

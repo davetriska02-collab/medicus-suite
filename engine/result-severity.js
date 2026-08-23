@@ -219,67 +219,31 @@
     'raised',
   ];
 
-  // NEGATION GUARD — replicates content-scripts/triage-lens/rule-match.js's
-  // detectQualifier negation check (item 3.4) EXACTLY: a whole-word negator within 6
-  // words IMMEDIATELY BEFORE the matched token, in the SAME sentence (sentence
-  // boundary = . ! ? or newline). Deliberately REPLICATED here rather than imported:
-  // this file (engine/result-severity.js) is loaded EARLIER than rule-match.js in the
-  // manifest's content_scripts ordering — result-severity.js sits in the SECOND
-  // content_scripts block, rule-match.js is the FIRST file of the THIRD block — so a
-  // top-level `global.TriageLensMatch` read here would see `undefined` in the browser
-  // world at this file's load time (the two files DO share one JS global object once
-  // both blocks have loaded, since both are the default/isolated world, but that's
-  // only true from the time rule-match.js finishes executing onward — too late for a
-  // load-time import here). This is the SAME "avoid a content-world dep" reasoning
-  // this file already applies to result-rules.js (see computeTextOutcome's header
-  // comment) — Node tests CAN require() rule-match.js directly (it's dual-mode too),
-  // but the browser path cannot rely on load order, so the logic is duplicated for
-  // both rather than forked. Flagged in this change's report for the Phase 3 review:
-  // keep NEGATORS/the window/sentence-boundary semantics in lock-step with
-  // rule-match.js's NEGATORS/detectQualifier if either ever changes.
-  //
-  // Extends rule-match.js's base negator set (no/not/denies/denied/denying/without/
-  // never/nil) with 'none' — a common microbiology negative-culture phrasing ("None
-  // isolated") that none of the base words would catch on their own.
-  const UNCLASSIFIED_NEGATORS = ['no', 'not', 'denies', 'denied', 'denying', 'without', 'never', 'nil', 'none'];
-  const UNCLASSIFIED_NEGATOR_SET = new Set(UNCLASSIFIED_NEGATORS);
-  const UNCLASSIFIED_NEGATION_WORD_WINDOW = 6;
-  const UNCLASSIFIED_SENTENCE_BOUNDARY = /[.!?\n]/;
-
-  // The start of the sentence containing `index` in `text` — mirrors rule-match.js's
-  // sentenceSpan (left side only; this file only ever needs the BEFORE window).
-  function unclassifiedSentenceLeft(text, index) {
-    if (!UNCLASSIFIED_SENTENCE_BOUNDARY.test(text)) return 0;
-    let left = index;
-    while (left > 0 && !UNCLASSIFIED_SENTENCE_BOUNDARY.test(text[left - 1])) left--;
-    return left;
-  }
-
-  // Is the token match starting at `matchIndex` in `text` negated? Whole-word negator
-  // among the (up to) 6 words immediately BEFORE the match, within the same sentence —
-  // identical mechanics to rule-match.js's detectQualifier negation branch.
-  function isUnclassifiedTokenNegated(text, matchIndex) {
-    // A glued "non-" / "non " prefix immediately before the token is a negating
-    // prefix — "non-reactive", "non reactive" are standard true-NEGATIVE serology
-    // results. The word-window scan below misses this because "non" is not a
-    // standalone negator (and adding it to the set would over-suppress a distant
-    // "non-Hodgkin ... cells seen"), so handle the abutting prefix precisely.
-    // Require "non" to be its own word (boundary or string start before it) so
-    // "cannon"/"canon" never trip it.
-    const prefix = text.slice(Math.max(0, matchIndex - 5), matchIndex);
-    if (/(^|[^a-z])non[-\s]$/.test(prefix)) return true;
-    const left = unclassifiedSentenceLeft(text, matchIndex);
-    const before = text.slice(left, matchIndex);
-    const words = before.split(/\s+/).filter(Boolean);
-    const window = words.slice(-UNCLASSIFIED_NEGATION_WORD_WINDOW);
-    for (let i = window.length - 1; i >= 0; i--) {
-      // Strip surrounding punctuation so "no," / "(no" still match, but "notable"/
-      // "nothing" — real words that merely CONTAIN a negator — never do (whole-word
-      // discipline, same as rule-match.js).
-      const clean = window[i].replace(/[^a-zA-Z]/g, '').toLowerCase();
-      if (UNCLASSIFIED_NEGATOR_SET.has(clean)) return true;
+  // NEGATION GUARD — single source engine/negation-terms.js (loaded before this
+  // file in the manifest). Hard-throw if the global/require is missing: a silent
+  // fallback here would drop the unclassified-positive chip.
+  const _Neg = (function loadNegationTerms() {
+    if (typeof require === "function") {
+      try {
+        return require("./negation-terms.js");
+      } catch (e) {
+        /* fall through to the classic-script global */
+      }
     }
-    return false;
+    if (typeof globalThis !== "undefined" && globalThis.NegationTerms) {
+      return globalThis.NegationTerms;
+    }
+    throw new Error("NegationTerms missing — load engine/negation-terms.js before result-severity.js");
+  })();
+  const UNCLASSIFIED_NEGATORS = _Neg.MICRO_NEGATORS;
+  const UNCLASSIFIED_NEGATOR_SET = new Set(UNCLASSIFIED_NEGATORS);
+  const UNCLASSIFIED_NEGATION_WORD_WINDOW = _Neg.NEGATION_WORD_WINDOW;
+  const UNCLASSIFIED_SENTENCE_BOUNDARY = _Neg.SENTENCE_BOUNDARY;
+  function unclassifiedSentenceLeft(text, index) {
+    return _Neg.sentenceLeft(text, index);
+  }
+  function isUnclassifiedTokenNegated(text, matchIndex) {
+    return _Neg.isTokenNegated(text, matchIndex, UNCLASSIFIED_NEGATOR_SET);
   }
 
   // matchUnclassifiedPositive(result) → matched token string | null

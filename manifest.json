@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.236.28",
+  "version": "3.236.30",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -53,6 +53,7 @@
         "shared/status-rank.js",
         "engine/rules-engine.js",
         "engine/eval-cache.js",
+        "engine/negation-terms.js",
         "engine/result-severity.js",
         "engine/outstanding-match.js",
         "engine/acb-scores.js",
@@ -75,11 +76,14 @@
     {
       "matches": ["https://*.medicus.health/*"],
       "js": [
+        "engine/negation-terms.js",
         "content-scripts/triage-lens/rule-match.js",
         "engine/reception-match.js",
         "shared/pending-result-index.js",
         "shared/contact-ledger.js",
         "content-scripts/triage-lens/queue-pulse.js",
+        "shared/retired-defaults.js",
+        "engine/pincer-tables.js",
         "content-scripts/triage-lens/content.js",
         "content-scripts/triage-lens/routine-rx-button.js",
         "shared/lab-filing-utils.js",

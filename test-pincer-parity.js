@@ -89,37 +89,34 @@ function assert(cond, msg) {
 
 // ── Extract computePINCER from visualiser-core.js ─────────────────────────
 
+const PincerTables = require('./engine/pincer-tables.js');
+const HIGH_RISK_DRUGS = PincerTables.HIGH_RISK_DRUGS;
+const evaluate = PincerTables.evaluatePrescribingFlags;
+assert(Array.isArray(HIGH_RISK_DRUGS), 'HIGH_RISK_DRUGS from engine/pincer-tables.js');
+assert(typeof evaluate === 'function', 'evaluatePrescribingFlags from engine/pincer-tables.js');
+
 const CORE_SRC = fs.readFileSync(path.join(__dirname, 'visualiser-core.js'), 'utf8');
-const START_NEEDLE = 'const HIGH_RISK_DRUGS = [';
+const START_NEEDLE = 'function computePINCER(';
 const END_NEEDLE = '\n// ══ STATE';
 const coreStart = CORE_SRC.indexOf(START_NEEDLE);
 const coreEnd = CORE_SRC.indexOf(END_NEEDLE, coreStart);
-if (coreStart < 0) throw new Error('HIGH_RISK_DRUGS anchor not found in visualiser-core.js');
+if (coreStart < 0) throw new Error('computePINCER anchor not found in visualiser-core.js');
 if (coreEnd < 0) throw new Error('STATE anchor not found in visualiser-core.js');
 
 const coreSandbox = {};
 vm.createContext(coreSandbox);
 vm.runInContext(CORE_SRC.slice(coreStart, coreEnd), coreSandbox);
-vm.runInContext('this.computePINCER = computePINCER; this.HIGH_RISK_DRUGS = HIGH_RISK_DRUGS;', coreSandbox);
+vm.runInContext('this.computePINCER = computePINCER;', coreSandbox);
 
 const computePINCER = coreSandbox.computePINCER;
-const HIGH_RISK_DRUGS = coreSandbox.HIGH_RISK_DRUGS;
 assert(typeof computePINCER === 'function', 'computePINCER extracted from visualiser-core.js');
-assert(Array.isArray(HIGH_RISK_DRUGS), 'HIGH_RISK_DRUGS extracted from visualiser-core.js');
-
-// ── Extract evaluatePrescribingFlags from content.js ──────────────────────
 
 const CONTENT_SRC = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'), 'utf8');
-const fnMatch = CONTENT_SRC.match(/function evaluatePrescribingFlags\(meds, age\) \{[\s\S]*?\n  \}/);
-assert(!!fnMatch, 'evaluatePrescribingFlags extracted from content.js');
-
-let evaluate = null;
-if (fnMatch) {
-  const csSandbox = {};
-  vm.runInNewContext(fnMatch[0] + '\nthis.evaluatePrescribingFlags = evaluatePrescribingFlags;', csSandbox);
-  evaluate = csSandbox.evaluatePrescribingFlags;
-  assert(typeof evaluate === 'function', 'evaluatePrescribingFlags is callable');
-}
+assert(
+  CONTENT_SRC.includes('globalThis.PincerTables') && CONTENT_SRC.includes('evaluatePrescribingFlags'),
+  'content.js consumes PincerTables.evaluatePrescribingFlags'
+);
+assert(CORE_SRC.includes('PincerTables'), 'visualiser-core.js consumes PincerTables');
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 

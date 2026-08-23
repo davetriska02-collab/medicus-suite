@@ -26,7 +26,7 @@
 
 Both shells derive their `MODULES` maps from the catalog — do **not** add a hand-maintained `MODULES` entry in `panel.js` / `pop-out.js`.
 
-A module may import another module’s `*-core.js` / `*-store.js` / `*-ledger.js` / `*-api.js` (or anything under `modules/shared/`). It must **not** import another module’s entry file (`<name>/<name>.js`) — `test-sibling-imports.js` fails closed on that. `STATUS_RANK` lives in `shared/status-rank.js` (load the classic script before `rules-engine.js` / before any ESM that reads `globalThis.StatusRank`).
+A module may import another module’s `*-core.js` / `*-store.js` / `*-ledger.js` / `*-api.js` (or anything under `modules/shared/`). It must **not** import another module’s entry file (`<name>/<name>.js`) — `test-sibling-imports.js` fails closed on that. Dual-mode single sources (classic script + `require()` / `globalThis`): `STATUS_RANK` in `shared/status-rank.js`; KDIGO/NICE thresholds in `shared/clinical-thresholds.js`; pill keys in `shared/pill-palette.js`; negation terms in `engine/negation-terms.js`; retired chip/result-rule un-stick tables in `shared/retired-defaults.js`; PINCER tables in `engine/pincer-tables.js`. Load the classic script before any consumer. rota-io validation stays duplicated against `rota/engine/validate.js` (accepted classic↔ESM exception, CI-guarded).
 
 > **Panel-only tabs (intentional exceptions):** `visualiser`, `duplicate-checker`, `rota-app` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser`, `duplicate-checker` and `rota-app` are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `visualiser`/`duplicate-checker` via `chrome.tabs.create`, `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates), and `about` renders inline static text — none makes sense in the floating pop-out, so they are deliberately omitted there. The full-tab openers are also excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback command so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota` (labelled "Rota"), the compact companion to the full-tab "Rota manager" (`rota-app`), which does.
 
@@ -236,8 +236,9 @@ CHANGELOG v3.75.2.)
 
 - A **changed existing value** needs more than the bump to land: the merge is
   `{ ...shipped, ...cfg }`, so the user's stored value wins. New *keys* arrive; changed
-  *values* do not. For chip labels, add the old value to **`RETIRED_CHIP_LABELS`** (kept
-  in lock-step in content.js + options.js) so it un-sticks on migration.
+  *values* do not. For chip labels, add the old value to **`RETIRED_CHIP_LABELS`** in
+  `shared/retired-defaults.js` (content.js + options.js consume that one table) so it
+  un-sticks on migration.
 - After editing `defaults.json`: run `node scripts/regen-defaults.js` (propagates the two
   derived copies) **and** `node scripts/defaults-config-lock.js` (refreshes the version
   lock). The lock script **refuses** to bless a content change that wasn't version-bumped,

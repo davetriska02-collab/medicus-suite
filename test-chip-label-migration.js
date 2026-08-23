@@ -28,29 +28,28 @@ function check(cond, msg) {
   }
 }
 
-// Extract `const RETIRED_CHIP_LABELS = {...};` and `const revertRetiredChipLabels = ...;`
-// from a source file and evaluate them in a sandbox.
-function extractMigration(file) {
-  const src = fs.readFileSync(file, 'utf8');
-  const tableMatch = src.match(/const RETIRED_CHIP_LABELS = \{[\s\S]*?\n {2}\};/);
-  const fnMatch = src.match(/const revertRetiredChipLabels = \(chips, shippedChips\) => \{[\s\S]*?\n {2}\};/);
-  if (!tableMatch || !fnMatch) return null;
-  const sandbox = {};
-  vm.runInNewContext(
-    tableMatch[0] + '\n' + fnMatch[0] + '\nthis.RETIRED = RETIRED_CHIP_LABELS;\nthis.revert = revertRetiredChipLabels;',
-    sandbox
-  );
-  return { table: sandbox.RETIRED, revert: sandbox.revert };
-}
-
+const sharedRetired = require('./shared/retired-defaults.js');
 const contentPath = path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js');
 const optionsPath = path.join(__dirname, 'content-scripts', 'triage-lens', 'options.js');
+const contentSrc = fs.readFileSync(contentPath, 'utf8');
+const optionsSrc = fs.readFileSync(optionsPath, 'utf8');
 
-const content = extractMigration(contentPath);
-const options = extractMigration(optionsPath);
+function consumesRetiredDefaults(src) {
+  return src.includes('globalThis.RetiredDefaults') && src.includes('RETIRED_CHIP_LABELS = _RD.RETIRED_CHIP_LABELS');
+}
 
-check(!!content, 'RETIRED_CHIP_LABELS + revertRetiredChipLabels extracted from content.js');
-check(!!options, 'RETIRED_CHIP_LABELS + revertRetiredChipLabels extracted from options.js');
+check(consumesRetiredDefaults(contentSrc), 'content.js consumes shared/retired-defaults.js');
+check(consumesRetiredDefaults(optionsSrc), 'options.js consumes shared/retired-defaults.js');
+check(
+  !/const RETIRED_CHIP_LABELS = \{/.test(contentSrc) && !/const RETIRED_CHIP_LABELS = \{/.test(optionsSrc),
+  'neither consumer redefines RETIRED_CHIP_LABELS as a literal'
+);
+
+const content = { table: sharedRetired.RETIRED_CHIP_LABELS, revert: sharedRetired.revertRetiredChipLabels };
+const options = { table: sharedRetired.RETIRED_CHIP_LABELS, revert: sharedRetired.revertRetiredChipLabels };
+
+check(!!content.table && typeof content.revert === 'function', 'shared retired-defaults exports chip-label table + revert');
+check(!!options.table && typeof options.revert === 'function', 'options path uses the same shared chip-label table');
 
 if (content && options) {
   // 2. Lock-step: the two tables must be identical.
@@ -138,28 +137,17 @@ if (content && options) {
 // (added v3.77.10) patches those onto held builtins. It is purely additive (abnormalText
 // only ever ADDS a review). This pins: the two copies are in lock-step; the listed ids are
 // shipped builtins carrying abnormalText; and the backfill adds-but-never-clobbers.
-function extractBackfill(file) {
-  const src = fs.readFileSync(file, 'utf8');
-  const listMatch = src.match(/const RESULT_RULES_GAINED_ABNORMALTEXT = \[[\s\S]*?\];/);
-  const fnMatch = src.match(
-    /const backfillBuiltinAbnormalText = \(resultRules, shippedResultRules\) => \{[\s\S]*?\n {2}\};/
-  );
-  if (!listMatch || !fnMatch) return null;
-  const sandbox = {};
-  vm.runInNewContext(
-    listMatch[0] +
-      '\n' +
-      fnMatch[0] +
-      '\nthis.ids = RESULT_RULES_GAINED_ABNORMALTEXT;\nthis.backfill = backfillBuiltinAbnormalText;',
-    sandbox
-  );
-  return { ids: sandbox.ids, backfill: sandbox.backfill };
-}
-
-const contentBF = extractBackfill(contentPath);
-const optionsBF = extractBackfill(optionsPath);
-check(!!contentBF, 'backfillBuiltinAbnormalText + id list extracted from content.js');
-check(!!optionsBF, 'backfillBuiltinAbnormalText + id list extracted from options.js');
+const contentBF = {
+  ids: sharedRetired.RESULT_RULES_GAINED_ABNORMALTEXT,
+  backfill: sharedRetired.backfillBuiltinAbnormalText,
+};
+const optionsBF = contentBF;
+check(Array.isArray(contentBF.ids) && typeof contentBF.backfill === 'function', 'shared retired-defaults exports abnormalText backfill');
+check(
+  contentSrc.includes('RESULT_RULES_GAINED_ABNORMALTEXT = _RD.RESULT_RULES_GAINED_ABNORMALTEXT') &&
+    optionsSrc.includes('RESULT_RULES_GAINED_ABNORMALTEXT = _RD.RESULT_RULES_GAINED_ABNORMALTEXT'),
+  'both consumers take RESULT_RULES_GAINED_ABNORMALTEXT from RetiredDefaults'
+);
 
 if (contentBF && optionsBF) {
   check(
@@ -226,35 +214,17 @@ if (contentBF && optionsBF) {
 // ATOMICALLY per id: it only updates a rule when EVERY listed field still equals a retired
 // value (the user hasn't customised it), so it never clobbers a user edit and never leaves a
 // label that disagrees with the live threshold. This pins lock-step + that behaviour.
-function extractRRFields(file) {
-  const src = fs.readFileSync(file, 'utf8');
-  const tableMatch = src.match(/const RETIRED_RESULTRULE_FIELDS = \{[\s\S]*?\n {2}\};/);
-  // v21 added two small helpers revertRetiredResultRuleFields now depends on: a deep-equal
-  // for array-valued candidates (abnormalText) alongside the pre-existing scalar indexOf path.
-  const helpersMatch = src.match(
-    /const arraysShallowEqual = \(a, b\) =>[\s\S]*?\n {2}const fieldStillDefault = \(candidates, heldValue\) => \{[\s\S]*?\n {2}\};/
-  );
-  const fnMatch = src.match(
-    /const revertRetiredResultRuleFields = \(resultRules, shippedResultRules\) => \{[\s\S]*?\n {2}\};/
-  );
-  if (!tableMatch || !helpersMatch || !fnMatch) return null;
-  const sandbox = {};
-  vm.runInNewContext(
-    tableMatch[0] +
-      '\n' +
-      helpersMatch[0] +
-      '\n' +
-      fnMatch[0] +
-      '\nthis.table = RETIRED_RESULTRULE_FIELDS;\nthis.revert = revertRetiredResultRuleFields;',
-    sandbox
-  );
-  return { table: sandbox.table, revert: sandbox.revert };
-}
-
-const contentRR = extractRRFields(contentPath);
-const optionsRR = extractRRFields(optionsPath);
-check(!!contentRR, 'RETIRED_RESULTRULE_FIELDS + revertRetiredResultRuleFields extracted from content.js');
-check(!!optionsRR, 'RETIRED_RESULTRULE_FIELDS + revertRetiredResultRuleFields extracted from options.js');
+const contentRR = {
+  table: sharedRetired.RETIRED_RESULTRULE_FIELDS,
+  revert: sharedRetired.revertRetiredResultRuleFields,
+};
+const optionsRR = contentRR;
+check(!!contentRR.table && typeof contentRR.revert === 'function', 'shared retired-defaults exports result-rule field table + revert');
+check(
+  contentSrc.includes('RETIRED_RESULTRULE_FIELDS = _RD.RETIRED_RESULTRULE_FIELDS') &&
+    optionsSrc.includes('RETIRED_RESULTRULE_FIELDS = _RD.RETIRED_RESULTRULE_FIELDS'),
+  'both consumers take RETIRED_RESULTRULE_FIELDS from RetiredDefaults'
+);
 
 if (contentRR && optionsRR) {
   // Lock-step: the two tables must be identical.
