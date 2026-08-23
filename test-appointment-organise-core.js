@@ -56,8 +56,8 @@ const mouse = {
   patientName: 'Mr Micky Mouse',
   diaryId: '01a018d5-9e38-70a0-a826-6bda71a2b6c7',
   staffName: 'A Nurse Practitioner Clinic',
-  startDateTime: '2026-08-23 10:00:00',
-  endDateTime: '2026-08-23 11:00:00',
+  startDateTime: '2026-08-16 10:00:00',
+  endDateTime: '2026-08-16 11:00:00',
   duration: 60,
   appointmentTypeId: '0198a8f2-e665-701c-b744-4d8a7ab771bf',
   appointmentTypeName: 'GP Appointment',
@@ -75,7 +75,7 @@ const otherDiary = '01a018e0-c465-73dc-8808-5f5c76348e98';
 
 function sampleRaw() {
   return {
-    date: '2026-08-23',
+    date: '2026-08-16',
     staffSchedules: [
       {
         id: 'staff-1',
@@ -84,8 +84,8 @@ function sampleRaw() {
           {
             scheduleType: 'diary',
             id: mouse.diaryId,
-            startDateTime: '2026-08-23 10:00:00',
-            endDateTime: '2026-08-23 11:00:00',
+            startDateTime: '2026-08-16 10:00:00',
+            endDateTime: '2026-08-16 11:00:00',
             summary: {
               status: { isCancelled: false },
               usualAppointmentDuration: 15,
@@ -118,8 +118,8 @@ function sampleRaw() {
       {
         scheduleType: 'diary',
         id: otherDiary,
-        startDateTime: '2026-08-23 11:00:00',
-        endDateTime: '2026-08-23 12:00:00',
+        startDateTime: '2026-08-16 11:00:00',
+        endDateTime: '2026-08-16 12:00:00',
         summary: {
           status: { isCancelled: false },
           usualAppointmentDuration: 15,
@@ -140,8 +140,8 @@ const stretchMouse = {
   patientName: mouse.patientName,
   diaryId: stretchDiary,
   staffName: 'Unassigned',
-  startDateTime: '2026-08-23 14:00:00',
-  endDateTime: '2026-08-23 14:15:00',
+  startDateTime: '2026-08-16 14:00:00',
+  endDateTime: '2026-08-16 14:15:00',
   duration: 15,
   appointmentTypeId: mouse.appointmentTypeId,
   appointmentTypeName: 'GP Appointment',
@@ -186,35 +186,35 @@ function stretchEntry(kind, start, extra) {
 
 function sampleStretchRaw(nextBooked) {
   const entries = [
-    stretchEntry('slot', '2026-08-23 13:00:00'),
-    stretchEntry('appointment', '2026-08-23 14:00:00', {
+    stretchEntry('slot', '2026-08-16 13:00:00'),
+    stretchEntry('appointment', '2026-08-16 14:00:00', {
       id: stretchMouse.id,
       versionId: stretchMouse.versionId,
-      end: '2026-08-23 14:15:00',
+      end: '2026-08-16 14:15:00',
     }),
   ];
   if (nextBooked) {
     entries.push(
-      stretchEntry('appointment', '2026-08-23 14:15:00', {
+      stretchEntry('appointment', '2026-08-16 14:15:00', {
         id: '01a01967-24fa-723b-9563-9d7865a909d7',
         versionId: '3bb6bfcbb2979f139d972e2615c062dc',
-        end: '2026-08-23 14:30:00',
+        end: '2026-08-16 14:30:00',
       })
     );
   } else {
-    entries.push(stretchEntry('slot', '2026-08-23 14:15:00'));
+    entries.push(stretchEntry('slot', '2026-08-16 14:15:00'));
   }
-  entries.push(stretchEntry('slot', '2026-08-23 14:30:00'));
-  entries.push(stretchEntry('slot', '2026-08-23 14:45:00'));
+  entries.push(stretchEntry('slot', '2026-08-16 14:30:00'));
+  entries.push(stretchEntry('slot', '2026-08-16 14:45:00'));
   return {
-    date: '2026-08-23',
+    date: '2026-08-16',
     staffSchedules: [],
     unassignedDiaries: [
       {
         scheduleType: 'diary',
         id: stretchDiary,
-        startDateTime: '2026-08-23 13:00:00',
-        endDateTime: '2026-08-23 15:00:00',
+        startDateTime: '2026-08-16 13:00:00',
+        endDateTime: '2026-08-16 15:00:00',
         summary: {
           status: { isCancelled: false },
           usualAppointmentDuration: 15,
@@ -229,12 +229,12 @@ function sampleStretchRaw(nextBooked) {
 
 console.log('=== 1. route + board parse ===');
 {
-  const route = core.parseBookRoute('/560b6c/scheduling/appointment-book', '?date=2026-08-23');
+  const route = core.parseBookRoute('/560b6c/scheduling/appointment-book', '?date=2026-08-16');
   check(route && route.siteId === '560b6c', 'appointment-book route yields siteId');
-  check(route.date === '2026-08-23', 'date from query');
+  check(route.date === '2026-08-16', 'date from query');
   check(route.apiBase === API, 'apiBase is the site API host');
   check(
-    core.parseBookRoute('/560b6c/scheduling/homepage', '?tab=appointment-book&date=2026-08-23'),
+    core.parseBookRoute('/560b6c/scheduling/homepage', '?tab=appointment-book&date=2026-08-16'),
     'homepage?tab=appointment-book is a book route'
   );
   check(
@@ -254,7 +254,7 @@ console.log('=== 1. route + board parse ===');
   check(appts[0].diaryId === mouse.diaryId, 'diaryId is the session id');
   const unassigned = board.columns.find((c) => c.staffName === 'Unassigned');
   check(!!unassigned && unassigned.slots.length === 1, 'empty diary gets a synthetic drop slot');
-  check(unassigned.slots[0].startDateTime === '2026-08-23 11:00:00', 'synthetic slot uses session start');
+  check(unassigned.slots[0].startDateTime === '2026-08-16 11:00:00', 'synthetic slot uses session start');
   const noEmpty = core.filterBoardColumns(board.columns, { hideEmpty: true });
   check(noEmpty.length === 1 && noEmpty[0].staffName !== 'Unassigned', 'hide empty drops lists with no bookings');
   const named = core.filterBoardColumns(board.columns, { q: 'unassigned' });
@@ -269,7 +269,7 @@ console.log('=== 1. route + board parse ===');
     patient: { id: 'p', name: 'Other' },
     diaryEntryType: { value: 'appointment' },
     displayStatus: { value: 'cancelled' },
-    startDateTime: '2026-08-23 10:30:00',
+    startDateTime: '2026-08-16 10:30:00',
     duration: 10,
   });
   check(core.allAppointments(core.parseBoard(raw)).length === 1, 'cancelled appointments excluded');
@@ -278,7 +278,7 @@ console.log('=== 1. route + board parse ===');
 {
   const raw = sampleRaw();
   raw.staffSchedules[0].schedule[0].entries[0].displayStatus = { value: 'arrived' };
-  raw.staffSchedules[0].schedule[0].entries[0].arrivedDateTime = '2026-08-23 10:01:00';
+  raw.staffSchedules[0].schedule[0].entries[0].arrivedDateTime = '2026-08-16 10:01:00';
   const appt = core.allAppointments(core.parseBoard(raw))[0];
   check(appt.arrived && appt.locked, 'arrived appointment is locked');
 }
@@ -289,21 +289,21 @@ console.log('=== 2. draft stage / same-list allowed ===');
   check(core.hasDraftChanges(d0) === false, 'empty draft');
   const sameSlot = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: mouse.startDateTime });
   check(sameSlot.ok === false, "cannot drop onto the appointment's own slot");
-  const same = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: '2026-08-23 10:30:00' });
+  const same = core.canStageMove(mouse, { diaryId: mouse.diaryId, startDateTime: '2026-08-16 10:30:00' });
   check(same.ok === true, 'same-list move to a later slot is allowed');
   check(core.moveTypeFor(mouse, { diaryId: mouse.diaryId }) === 'to-same-diary', 'same diary → to-same-diary');
   check(core.isCrossListMove(mouse, { diaryId: mouse.diaryId }) === false, 'same diary is not cross-list');
   const arrived = Object.assign({}, mouse, { arrived: true, locked: true });
   check(core.canStageCancel(arrived).ok === false, 'arrived cannot cancel');
   check(
-    core.canStageMove(arrived, { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' }).ok === false,
+    core.canStageMove(arrived, { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00' }).ok === false,
     'arrived cannot move'
   );
-  const cross = core.canStageMove(mouse, { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' });
+  const cross = core.canStageMove(mouse, { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00' });
   check(cross.ok === true, 'cross-list move allowed');
   const d1 = core.stageMove(d0, mouse.id, {
     diaryId: otherDiary,
-    startDateTime: '2026-08-23 11:00:00',
+    startDateTime: '2026-08-16 11:00:00',
     staffName: 'Unassigned',
     duration: 15,
   });
@@ -318,7 +318,7 @@ console.log('=== 2. draft stage / same-list allowed ===');
   check(/will not send a cancellation message/.test(sum.items[0].text), 'confirm line states no patient message');
   const d4 = core.stageMove(core.emptyDraft(), mouse.id, {
     diaryId: otherDiary,
-    startDateTime: '2026-08-23 11:00:00',
+    startDateTime: '2026-08-16 11:00:00',
     staffName: 'Unassigned',
   });
   const visual = core.applyDraftToBoard(board, d4);
@@ -387,8 +387,8 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
   check(noChan, 'notify with no form channel refuses to write');
   const script = core.patientMessageScript(
     'move',
-    { startDateTime: '2026-08-23 10:00:00', patientName: mouse.patientName },
-    { startDateTime: '2026-08-23 11:00:00', staffName: 'Cover GP' },
+    { startDateTime: '2026-08-16 10:00:00', patientName: mouse.patientName },
+    { startDateTime: '2026-08-16 11:00:00', staffName: 'Cover GP' },
     'clinician sickness'
   );
   check(/rearrange/.test(script) && /clinician sickness/.test(script), 'call script names from/to and the reason');
@@ -408,7 +408,7 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
 {
   const reserve = core.buildReserveReschedulePayload({
     diaryId: otherDiary,
-    startDateTime: '2026-08-23 11:00:00',
+    startDateTime: '2026-08-16 11:00:00',
     intendedDuration: 15,
   });
   check(
@@ -422,7 +422,7 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
     slotReservationId: '01a018e1-9543-73c5-a073-799c14a50cb9',
     diaryId: otherDiary,
     appointmentId: mouse.id,
-    startDateTime: '2026-08-23 11:00:00',
+    startDateTime: '2026-08-16 11:00:00',
     intendedDuration: 60,
   });
   check(
@@ -439,7 +439,7 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
     versionId: mouse.versionId,
     slotReservationId: '01a018e1-9543-73c5-a073-799c14a50cb9',
     diaryId: otherDiary,
-    startDateTime: '2026-08-23 11:00:00',
+    startDateTime: '2026-08-16 11:00:00',
     intendedDuration: 60,
     deliveryMode: 'face-to-face',
     nhsNationalSlotTypeCategory: '10127',
@@ -479,7 +479,7 @@ console.log('=== 3. payload keys (captured byte-for-byte) ===');
           versionId: mouse.versionId,
           slotReservationId: 'r',
           diaryId: otherDiary,
-          startDateTime: '2026-08-23 11:00:00',
+          startDateTime: '2026-08-16 11:00:00',
           intendedDuration: 60,
         })
       ),
@@ -516,7 +516,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     });
     const client = core.createClient(API, { fetchImpl: f });
     await client.commitCancel({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointmentId: mouse.id,
       patientId: mouse.patientId,
       reason: 'SUITE TEST delete dummy Sunday booking',
@@ -548,7 +548,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitCancel({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointmentId: mouse.id,
           patientId: mouse.patientId,
           reason: 'x',
@@ -569,7 +569,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitCancel({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointmentId: mouse.id,
           reason: 'x',
         }),
@@ -622,9 +622,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const booking = recordingBooking();
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     const res = await client.commitMove({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointment: mouse,
-      target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', staffName: 'Unassigned', duration: 15 },
+      target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', staffName: 'Unassigned', duration: 15 },
       pinned: { apiBase: API },
     });
     check(res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c', 'move returns the new appointment id');
@@ -672,7 +672,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   {
     const sameTarget = {
       diaryId: mouse.diaryId,
-      startDateTime: '2026-08-23 14:00:00',
+      startDateTime: '2026-08-16 14:00:00',
       staffName: mouse.staffName,
       duration: 15,
     };
@@ -680,14 +680,14 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     // now proves the destination window is covered by free slots before writing.
     const sameRaw = sampleRaw();
     const sameSched = sameRaw.staffSchedules[0].schedule[0];
-    sameSched.endDateTime = '2026-08-23 15:00:00';
-    sameSched.entries[0].startDateTime = '2026-08-23 13:00:00';
-    sameSched.entries[0].endDateTime = '2026-08-23 13:15:00';
+    sameSched.endDateTime = '2026-08-16 15:00:00';
+    sameSched.entries[0].startDateTime = '2026-08-16 13:00:00';
+    sameSched.entries[0].endDateTime = '2026-08-16 13:15:00';
     sameSched.entries[0].duration = 15;
     sameSched.entries.push({
       diaryEntryType: { value: 'slot' },
-      startDateTime: '2026-08-23 14:00:00',
-      endDateTime: '2026-08-23 14:15:00',
+      startDateTime: '2026-08-16 14:00:00',
+      endDateTime: '2026-08-16 14:15:00',
       duration: 15,
     });
     const f = recordingFetch((url) => {
@@ -706,9 +706,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     });
     const booking = recordingBooking();
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
-    const sameMouse = Object.assign({}, mouse, { duration: 15, startDateTime: '2026-08-23 13:00:00' });
+    const sameMouse = Object.assign({}, mouse, { duration: 15, startDateTime: '2026-08-16 13:00:00' });
     const res = await client.commitMove({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointment: sameMouse,
       target: sameTarget,
       pinned: { apiBase: API },
@@ -717,7 +717,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(res.appointmentId !== sameMouse.id, 'same-list new id differs from source');
     check(booking.calls[0].payload.diaryId === sameMouse.diaryId, 'same-list create keeps the source diaryId');
     check(
-      booking.calls[0].payload.intendedStartDateTime === '2026-08-23 14:00:00',
+      booking.calls[0].payload.intendedStartDateTime === '2026-08-16 14:00:00',
       'same-list create uses the new start'
     );
     check(
@@ -760,9 +760,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const booking = recordingBooking();
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     await client.commitMove({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointment: mouse,
-      target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 30 },
+      target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 30 },
     });
     check(
       booking.calls[0].payload.intendedDuration === 60,
@@ -776,7 +776,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   {
     const raw = sampleRaw();
     raw.staffSchedules[0].schedule[0].entries[0].displayStatus = { value: 'arrived' };
-    raw.staffSchedules[0].schedule[0].entries[0].arrivedDateTime = '2026-08-23 10:02:00';
+    raw.staffSchedules[0].schedule[0].entries[0].arrivedDateTime = '2026-08-16 10:02:00';
     const f = recordingFetch((url) => {
       if (url.includes('embedded-overview')) return mockResponse(200, raw);
       return mockResponse(200, {});
@@ -785,9 +785,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
-          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+          target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
         }),
       'Arrived',
       'move aborts if the live row is now arrived'
@@ -817,9 +817,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
-          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+          target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
         }),
       'HTTP 500',
       'move surfaces update failure'
@@ -836,9 +836,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
-          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+          target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
         }),
       'booking-core reserve/create/release required',
       'commitMove refuses to invent a third reserve/create copy'
@@ -851,7 +851,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
           target: { diaryId: mouse.diaryId, startDateTime: mouse.startDateTime, duration: 15 },
         }),
@@ -880,7 +880,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const stretchUpd = core.buildStretchUpdatePayload({
       slotReservationId: '01a019a4-00aa-73af-8595-cb98780f69e4',
       diaryId: stretchDiary,
-      startDateTime: '2026-08-23 14:00:00',
+      startDateTime: '2026-08-16 14:00:00',
       intendedDuration: 30,
     });
     check(
@@ -896,7 +896,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       appointmentTypeId: stretchMouse.appointmentTypeId,
       slotReservationId: '01a019a4-00aa-73af-8595-cb98780f69e4',
       diaryId: stretchDiary,
-      startDateTime: '2026-08-23 14:00:00',
+      startDateTime: '2026-08-16 14:00:00',
       intendedDuration: 30,
     });
     check(
@@ -924,7 +924,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitStretch({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: stretchMouse,
           newDuration: 30,
         }),
@@ -963,7 +963,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const booking = recordingBooking();
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     const res = await client.commitStretch({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointment: stretchMouse,
       newDuration: 30,
     });
@@ -1015,15 +1015,15 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
           : [
               {
                 diaryEntryType: { value: 'slot' },
-                startDateTime: '2026-08-23 14:00:00',
-                endDateTime: '2026-08-23 14:15:00',
+                startDateTime: '2026-08-16 14:00:00',
+                endDateTime: '2026-08-16 14:15:00',
                 duration: 15,
                 appointmentType: { id: opts.coverTypeId || mouse.appointmentTypeId },
                 defaultDeliveryMode: { value: opts.coverDelivery || 'face-to-face' },
               },
             ];
       return core.parseBoard({
-        date: '2026-08-23',
+        date: '2026-08-16',
         staffSchedules: [
           {
             name: 'Cover GP',
@@ -1032,8 +1032,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               {
                 scheduleType: 'diary',
                 id: coverDiary,
-                startDateTime: '2026-08-23 13:00:00',
-                endDateTime: '2026-08-23 15:00:00',
+                startDateTime: '2026-08-16 13:00:00',
+                endDateTime: '2026-08-16 15:00:00',
                 summary: {
                   status: { isCancelled: false },
                   usualAppointmentDuration: 15,
@@ -1051,8 +1051,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
           {
             scheduleType: 'diary',
             id: sickDiary,
-            startDateTime: '2026-08-23 13:00:00',
-            endDateTime: '2026-08-23 15:00:00',
+            startDateTime: '2026-08-16 13:00:00',
+            endDateTime: '2026-08-16 15:00:00',
             summary: {
               status: { isCancelled: false },
               usualAppointmentDuration: 15,
@@ -1068,11 +1068,11 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
                 patient: { id: mouse.patientId, name: mouse.patientName },
                 diaryEntryType: { value: 'appointment' },
                 appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-                startDateTime: '2026-08-23 14:00:00',
-                endDateTime: '2026-08-23 14:15:00',
+                startDateTime: '2026-08-16 14:00:00',
+                endDateTime: '2026-08-16 14:15:00',
                 duration: 15,
                 displayStatus: { value: opts.arrived ? 'arrived' : 'booked' },
-                arrivedDateTime: opts.arrived ? '2026-08-23 13:55:00' : null,
+                arrivedDateTime: opts.arrived ? '2026-08-16 13:55:00' : null,
                 deliveryMode: { value: opts.delivery || 'face-to-face' },
                 appointmentStatus: { value: 'pending', isCancelled: false, isStarted: !!opts.arrived, isSeen: false },
               },
@@ -1086,7 +1086,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const sug = core.suggestRebook(happy, core.findAppointment(happy, stretchMouse.id));
     check(sug.ok === true, 'suggests a similar slot on another list');
     check(sug.suggestion.diaryId === coverDiary, 'suggestion is not the sick diary');
-    check(sug.suggestion.startDateTime === '2026-08-23 14:00:00', 'default is the earliest similar slot');
+    check(sug.suggestion.startDateTime === '2026-08-16 14:00:00', 'default is the earliest similar slot');
 
     const arrived = sickBoard({ arrived: true });
     check(
@@ -1104,16 +1104,16 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       coverSlots: [
         {
           diaryEntryType: { value: 'slot' },
-          startDateTime: '2026-08-23 14:00:00',
-          endDateTime: '2026-08-23 14:15:00',
+          startDateTime: '2026-08-16 14:00:00',
+          endDateTime: '2026-08-16 14:15:00',
           duration: 15,
           appointmentType: { id: mouse.appointmentTypeId },
           defaultDeliveryMode: { value: 'face-to-face' },
         },
         {
           diaryEntryType: { value: 'slot' },
-          startDateTime: '2026-08-23 14:15:00',
-          endDateTime: '2026-08-23 14:30:00',
+          startDateTime: '2026-08-16 14:15:00',
+          endDateTime: '2026-08-16 14:30:00',
           duration: 15,
           appointmentType: { id: mouse.appointmentTypeId },
           defaultDeliveryMode: { value: 'face-to-face' },
@@ -1122,7 +1122,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     });
     const mouse30 = Object.assign({}, core.findAppointment(twoFifteens, stretchMouse.id), {
       duration: 30,
-      endDateTime: '2026-08-23 14:30:00',
+      endDateTime: '2026-08-16 14:30:00',
     });
     const run = core.suggestRebook(twoFifteens, mouse30);
     check(run.ok === true, 'two consecutive 15-min free tiles match a 30-min booking');
@@ -1133,7 +1133,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       coverSlots: [
         {
           diaryEntryType: { value: 'slot' },
-          startDateTime: '2026-08-23 14:00:00',
+          startDateTime: '2026-08-16 14:00:00',
           duration: 15,
           appointmentType: { id: mouse.appointmentTypeId },
           defaultDeliveryMode: { value: 'face-to-face' },
@@ -1165,8 +1165,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
           patient: { id: 'other', name: 'Someone Else' },
           diaryEntryType: { value: 'appointment' },
           appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-          startDateTime: '2026-08-23 13:00:00',
-          endDateTime: '2026-08-23 15:00:00',
+          startDateTime: '2026-08-16 13:00:00',
+          endDateTime: '2026-08-16 15:00:00',
           duration: 120,
           displayStatus: { value: 'booked' },
           deliveryMode: { value: 'face-to-face' },
@@ -1187,7 +1187,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     );
     const mouse30onBoard = Object.assign({}, core.findAppointment(twoFifteens, stretchMouse.id), {
       duration: 30,
-      endDateTime: '2026-08-23 14:30:00',
+      endDateTime: '2026-08-16 14:30:00',
     });
     const prop30 = {
       rows: [
@@ -1231,13 +1231,13 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const fullLeftovers = core.sickDayLeftovers(prop);
     check(fullLeftovers.length === 1, 'full cover becomes a leftover phone-list row');
     check(fullLeftovers[0].patientName === mouse.patientName, 'leftover names the patient');
-    check(fullLeftovers[0].originalTime === '2026-08-23 14:00:00', 'leftover keeps the original time');
+    check(fullLeftovers[0].originalTime === '2026-08-16 14:00:00', 'leftover keeps the original time');
     check(/Still needs rebook/.test(fullLeftovers[0].reason), 'leftover says why it failed');
     check(/Mr Micky Mouse/.test(core.leftoverPhoneText(prop)), 'copyable phone list names the patient');
     check(/No phone numbers/.test(core.leftoverPhoneText(prop)), 'copyable list admits the book has no number');
 
     const twoSick = core.parseBoard({
-      date: '2026-08-23',
+      date: '2026-08-16',
       staffSchedules: [
         {
           name: 'Cover GP',
@@ -1246,8 +1246,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
             {
               scheduleType: 'diary',
               id: coverDiary,
-              startDateTime: '2026-08-23 13:00:00',
-              endDateTime: '2026-08-23 15:00:00',
+              startDateTime: '2026-08-16 13:00:00',
+              endDateTime: '2026-08-16 15:00:00',
               summary: {
                 status: { isCancelled: false },
                 usualAppointmentDuration: 15,
@@ -1259,16 +1259,16 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               entries: [
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-23 14:00:00',
-                  endDateTime: '2026-08-23 14:15:00',
+                  startDateTime: '2026-08-16 14:00:00',
+                  endDateTime: '2026-08-16 14:15:00',
                   duration: 15,
                   appointmentType: { id: mouse.appointmentTypeId },
                   defaultDeliveryMode: { value: 'face-to-face' },
                 },
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-23 14:15:00',
-                  endDateTime: '2026-08-23 14:30:00',
+                  startDateTime: '2026-08-16 14:15:00',
+                  endDateTime: '2026-08-16 14:30:00',
                   duration: 15,
                   appointmentType: { id: mouse.appointmentTypeId },
                   defaultDeliveryMode: { value: 'face-to-face' },
@@ -1282,8 +1282,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         {
           scheduleType: 'diary',
           id: sickDiary,
-          startDateTime: '2026-08-23 13:00:00',
-          endDateTime: '2026-08-23 15:00:00',
+          startDateTime: '2026-08-16 13:00:00',
+          endDateTime: '2026-08-16 15:00:00',
           summary: {
             status: { isCancelled: false },
             usualAppointmentDuration: 15,
@@ -1299,8 +1299,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               patient: { id: mouse.patientId, name: mouse.patientName },
               diaryEntryType: { value: 'appointment' },
               appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-              startDateTime: '2026-08-23 14:00:00',
-              endDateTime: '2026-08-23 14:15:00',
+              startDateTime: '2026-08-16 14:00:00',
+              endDateTime: '2026-08-16 14:15:00',
               duration: 15,
               displayStatus: { value: 'booked' },
               deliveryMode: { value: 'face-to-face' },
@@ -1312,8 +1312,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               patient: { id: 'daisy-p', name: 'Daisy Duck' },
               diaryEntryType: { value: 'appointment' },
               appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-              startDateTime: '2026-08-23 14:15:00',
-              endDateTime: '2026-08-23 14:30:00',
+              startDateTime: '2026-08-16 14:15:00',
+              endDateTime: '2026-08-16 14:30:00',
               duration: 15,
               displayStatus: { value: 'booked' },
               deliveryMode: { value: 'face-to-face' },
@@ -1361,7 +1361,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const npDiary = 'np-clinic';
     const unassignedSick = sickDiary;
     const fourFifteens = core.parseBoard({
-      date: '2026-08-23',
+      date: '2026-08-16',
       staffSchedules: [
         {
           name: 'A Nurse Practitioner Clinic',
@@ -1370,8 +1370,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
             {
               scheduleType: 'diary',
               id: npDiary,
-              startDateTime: '2026-08-23 10:00:00',
-              endDateTime: '2026-08-23 11:00:00',
+              startDateTime: '2026-08-16 10:00:00',
+              endDateTime: '2026-08-16 11:00:00',
               summary: {
                 status: { isCancelled: false },
                 usualAppointmentDuration: 15,
@@ -1383,32 +1383,32 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               entries: [
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-23 10:00:00',
-                  endDateTime: '2026-08-23 10:15:00',
+                  startDateTime: '2026-08-16 10:00:00',
+                  endDateTime: '2026-08-16 10:15:00',
                   duration: 15,
                   appointmentType: { id: mouse.appointmentTypeId },
                   defaultDeliveryMode: { value: 'face-to-face' },
                 },
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-23 10:15:00',
-                  endDateTime: '2026-08-23 10:30:00',
+                  startDateTime: '2026-08-16 10:15:00',
+                  endDateTime: '2026-08-16 10:30:00',
                   duration: 15,
                   appointmentType: { id: mouse.appointmentTypeId },
                   defaultDeliveryMode: { value: 'face-to-face' },
                 },
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-23 10:30:00',
-                  endDateTime: '2026-08-23 10:45:00',
+                  startDateTime: '2026-08-16 10:30:00',
+                  endDateTime: '2026-08-16 10:45:00',
                   duration: 15,
                   appointmentType: { id: mouse.appointmentTypeId },
                   defaultDeliveryMode: { value: 'face-to-face' },
                 },
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-23 10:45:00',
-                  endDateTime: '2026-08-23 11:00:00',
+                  startDateTime: '2026-08-16 10:45:00',
+                  endDateTime: '2026-08-16 11:00:00',
                   duration: 15,
                   appointmentType: { id: mouse.appointmentTypeId },
                   defaultDeliveryMode: { value: 'face-to-face' },
@@ -1422,8 +1422,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         {
           scheduleType: 'diary',
           id: unassignedSick,
-          startDateTime: '2026-08-23 11:00:00',
-          endDateTime: '2026-08-23 12:00:00',
+          startDateTime: '2026-08-16 11:00:00',
+          endDateTime: '2026-08-16 12:00:00',
           summary: {
             status: { isCancelled: false },
             usualAppointmentDuration: 15,
@@ -1439,8 +1439,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               patient: { id: mouse.patientId, name: mouse.patientName },
               diaryEntryType: { value: 'appointment' },
               appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-              startDateTime: '2026-08-23 11:00:00',
-              endDateTime: '2026-08-23 11:30:00',
+              startDateTime: '2026-08-16 11:00:00',
+              endDateTime: '2026-08-16 11:30:00',
               duration: 30,
               displayStatus: { value: 'booked' },
               deliveryMode: { value: 'face-to-face' },
@@ -1453,11 +1453,11 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const liveLike = core.proposeSickDay(fourFifteens, unassignedSick);
     check(liveLike.rows[0].status === 'accept', '30-min Mouse on Unassigned still finds NP consecutive 15s');
     check(
-      liveLike.rows[0].suggestion.startDateTime === '2026-08-23 10:00:00',
+      liveLike.rows[0].suggestion.startDateTime === '2026-08-16 10:00:00',
       'default is earliest 10:00, not closest-clock 10:30'
     );
     check(
-      liveLike.rows[0].alternatives.some((s) => s.startDateTime === '2026-08-23 10:30:00'),
+      liveLike.rows[0].alternatives.some((s) => s.startDateTime === '2026-08-16 10:30:00'),
       '10:30 remains offered as an alternative'
     );
     const livePrev = core.coverLoadPreview(fourFifteens, liveLike);
@@ -1479,8 +1479,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     function slot15(start, end) {
       return {
         diaryEntryType: { value: 'slot' },
-        startDateTime: '2026-08-23 ' + start,
-        endDateTime: '2026-08-23 ' + end,
+        startDateTime: '2026-08-16 ' + start,
+        endDateTime: '2026-08-16 ' + end,
         duration: 15,
         appointmentType: { id: mouse.appointmentTypeId },
         defaultDeliveryMode: { value: 'face-to-face' },
@@ -1490,7 +1490,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const liveCompleteU11 = 'unassigned-11';
     const liveCompleteU13 = 'unassigned-13';
     const liveComplete = core.parseBoard({
-      date: '2026-08-23',
+      date: '2026-08-16',
       staffSchedules: [
         {
           name: 'A Nurse Practitioner Clinic',
@@ -1499,8 +1499,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
             {
               scheduleType: 'diary',
               id: liveCompleteNp,
-              startDateTime: '2026-08-23 10:00:00',
-              endDateTime: '2026-08-23 11:00:00',
+              startDateTime: '2026-08-16 10:00:00',
+              endDateTime: '2026-08-16 11:00:00',
               summary: {
                 status: { isCancelled: false },
                 usualAppointmentDuration: 15,
@@ -1516,8 +1516,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
                   patient: { id: mouse.patientId, name: mouse.patientName },
                   diaryEntryType: { value: 'appointment' },
                   appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-                  startDateTime: '2026-08-23 10:30:00',
-                  endDateTime: '2026-08-23 11:00:00',
+                  startDateTime: '2026-08-16 10:30:00',
+                  endDateTime: '2026-08-16 11:00:00',
                   duration: 30,
                   displayStatus: { value: 'booked' },
                   deliveryMode: { value: 'face-to-face' },
@@ -1532,8 +1532,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         {
           scheduleType: 'diary',
           id: liveCompleteU11,
-          startDateTime: '2026-08-23 11:00:00',
-          endDateTime: '2026-08-23 12:00:00',
+          startDateTime: '2026-08-16 11:00:00',
+          endDateTime: '2026-08-16 12:00:00',
           summary: {
             status: { isCancelled: false },
             usualAppointmentDuration: 15,
@@ -1552,8 +1552,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
         {
           scheduleType: 'diary',
           id: liveCompleteU13,
-          startDateTime: '2026-08-23 13:00:00',
-          endDateTime: '2026-08-23 15:00:00',
+          startDateTime: '2026-08-16 13:00:00',
+          endDateTime: '2026-08-16 15:00:00',
           summary: {
             status: { isCancelled: false },
             usualAppointmentDuration: 15,
@@ -1578,20 +1578,20 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const completeProp = core.proposeSickDay(liveComplete, liveCompleteNp);
     const completeSug = completeProp.rows[0].suggestion;
     const completeAlts = completeProp.rows[0].alternatives || [];
-    check(completeSug.startDateTime === '2026-08-23 11:00:00', 'live-complete default is earliest 11:00 Unassigned');
+    check(completeSug.startDateTime === '2026-08-16 11:00:00', 'live-complete default is earliest 11:00 Unassigned');
     check(completeSug.staffName === 'Unassigned', 'live-complete default is the Unassigned covering list');
     check(
-      completeAlts.some((s) => s.startDateTime === '2026-08-23 11:15:00') &&
-        completeAlts.some((s) => s.startDateTime === '2026-08-23 11:30:00') &&
-        completeAlts.some((s) => s.startDateTime === '2026-08-23 13:00:00'),
+      completeAlts.some((s) => s.startDateTime === '2026-08-16 11:15:00') &&
+        completeAlts.some((s) => s.startDateTime === '2026-08-16 11:30:00') &&
+        completeAlts.some((s) => s.startDateTime === '2026-08-16 13:00:00'),
       'live-complete alts include 11:15/11:30 and 13:00 Unassigned'
     );
     check(
-      !completeAlts.some((s) => s.startDateTime === '2026-08-23 10:00:00' || s.startDateTime === '2026-08-23 10:30:00'),
+      !completeAlts.some((s) => s.startDateTime === '2026-08-16 10:00:00' || s.startDateTime === '2026-08-16 10:30:00'),
       'live-complete does not offer same-list 10:00/10:30'
     );
     check(
-      !completeAlts.some((s) => s.startDateTime === '2026-08-23 11:45:00' || s.startDateTime === '2026-08-23 14:45:00'),
+      !completeAlts.some((s) => s.startDateTime === '2026-08-16 11:45:00' || s.startDateTime === '2026-08-16 14:45:00'),
       'live-complete does not offer the last 15 of a window for a 30-min booking'
     );
     const completePrev = core.coverLoadPreview(liveComplete, completeProp);
@@ -1641,9 +1641,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     try {
       const client = core.createClient(API, { fetchImpl: f, booking: booking });
       const res = await client.commitMove({
-        date: '2026-08-23',
+        date: '2026-08-16',
         appointment: mouse,
-        target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+        target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
       });
       check(
         res.appointmentId === '01a018e2-04b1-72dd-a9c4-fdf551f98b4c',
@@ -1707,8 +1707,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
       patient: { id: 'p-else', name: 'Ms Other Patient' },
       diaryEntryType: { value: 'appointment' },
       appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
-      startDateTime: '2026-08-23 11:00:00',
-      endDateTime: '2026-08-23 11:15:00',
+      startDateTime: '2026-08-16 11:00:00',
+      endDateTime: '2026-08-16 11:15:00',
       duration: 15,
       displayStatus: { value: 'booked' },
       appointmentStatus: { value: 'pending', isCancelled: false, isStarted: false, isSeen: false },
@@ -1722,9 +1722,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
-          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+          target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
         }),
       'no longer free',
       'move refuses a destination someone booked since staging'
@@ -1739,7 +1739,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   // 7b. commitMove refuses an oversize drop (60 min onto a 30-min free window).
   {
     const shortRaw = sampleRaw();
-    shortRaw.unassignedDiaries[0].endDateTime = '2026-08-23 11:30:00';
+    shortRaw.unassignedDiaries[0].endDateTime = '2026-08-16 11:30:00';
     const f = recordingFetch((url) => {
       if (url.includes('embedded-overview')) return mockResponse(200, shortRaw);
       return mockResponse(200, {});
@@ -1748,9 +1748,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
-          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+          target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
         }),
       'no longer free',
       '60-min appointment refuses a 30-min free window (TEST A class)'
@@ -1761,7 +1761,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     );
     const gate = core.canStageMove(
       mouse,
-      { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00' },
+      { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00' },
       core.parseBoard(shortRaw)
     );
     check(
@@ -1774,21 +1774,21 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   {
     const mixRaw = sampleRaw();
     const mixSched = mixRaw.staffSchedules[0].schedule[0];
-    mixSched.endDateTime = '2026-08-23 15:00:00';
-    mixSched.entries[0].startDateTime = '2026-08-23 13:00:00';
-    mixSched.entries[0].endDateTime = '2026-08-23 13:30:00';
+    mixSched.endDateTime = '2026-08-16 15:00:00';
+    mixSched.entries[0].startDateTime = '2026-08-16 13:00:00';
+    mixSched.entries[0].endDateTime = '2026-08-16 13:30:00';
     mixSched.entries[0].duration = 30;
     mixSched.entries.push(
       {
         diaryEntryType: { value: 'slot' },
-        startDateTime: '2026-08-23 14:00:00',
-        endDateTime: '2026-08-23 14:15:00',
+        startDateTime: '2026-08-16 14:00:00',
+        endDateTime: '2026-08-16 14:15:00',
         duration: 15,
       },
       {
         diaryEntryType: { value: 'slot' },
-        startDateTime: '2026-08-23 14:15:00',
-        endDateTime: '2026-08-23 14:30:00',
+        startDateTime: '2026-08-16 14:15:00',
+        endDateTime: '2026-08-16 14:30:00',
         duration: 15,
       }
     );
@@ -1807,13 +1807,13 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     const mixMouse = Object.assign({}, mouse, {
       duration: 30,
-      startDateTime: '2026-08-23 13:00:00',
-      endDateTime: '2026-08-23 13:30:00',
+      startDateTime: '2026-08-16 13:00:00',
+      endDateTime: '2026-08-16 13:30:00',
     });
     await client.commitMove({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointment: mixMouse,
-      target: { diaryId: mixMouse.diaryId, startDateTime: '2026-08-23 14:00:00', duration: 15, reserveDuration: 15 },
+      target: { diaryId: mixMouse.diaryId, startDateTime: '2026-08-16 14:00:00', duration: 15, reserveDuration: 15 },
     });
     const upd = f.calls.find((c) => c.url.includes('update-slot-reservation'));
     check(!!upd, 'same-list 30-min onto a 15-min tile posts update-slot-reservation');
@@ -1842,7 +1842,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     let err = null;
     try {
-      await client.commitStretch({ date: '2026-08-23', appointment: stretchMouse, newDuration: 30 });
+      await client.commitStretch({ date: '2026-08-16', appointment: stretchMouse, newDuration: 30 });
     } catch (e) {
       err = e;
     }
@@ -1884,7 +1884,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     let err = null;
     try {
-      await client.commitStretch({ date: '2026-08-23', appointment: stretchMouse, newDuration: 30 });
+      await client.commitStretch({ date: '2026-08-16', appointment: stretchMouse, newDuration: 30 });
     } catch (e) {
       err = e;
     }
@@ -1909,7 +1909,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitStretch({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: Object.assign({}, stretchMouse, { appointmentTypeId: null }),
           newDuration: 30,
         }),
@@ -1943,9 +1943,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     });
     const client = core.createClient(API, { fetchImpl: f, booking: booking });
     const res = await client.commitMove({
-      date: '2026-08-23',
+      date: '2026-08-16',
       appointment: mouse,
-      target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+      target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
     });
     check(res.appointmentId === 'created-despite-release', 'a confirmed move is returned even if the release fails');
   }
@@ -1975,9 +1975,9 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     await expectReject(
       () =>
         client.commitMove({
-          date: '2026-08-23',
+          date: '2026-08-16',
           appointment: mouse,
-          target: { diaryId: otherDiary, startDateTime: '2026-08-23 11:00:00', duration: 15 },
+          target: { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00', duration: 15 },
         }),
       'HTTP 500',
       'the create failure, not the release failure, is surfaced'
@@ -1991,7 +1991,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     check(
       core.matchingSlots(
         core.parseBoard({
-          date: '2026-08-23',
+          date: '2026-08-16',
           staffSchedules: [
             {
               name: 'Untyped',
@@ -2000,14 +2000,14 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
                 {
                   scheduleType: 'diary',
                   id: 'other-d',
-                  startDateTime: '2026-08-23 14:00:00',
-                  endDateTime: '2026-08-23 15:00:00',
+                  startDateTime: '2026-08-16 14:00:00',
+                  endDateTime: '2026-08-16 15:00:00',
                   summary: { status: { isCancelled: false }, usualAppointmentDuration: 15 },
                   entries: [
                     {
                       diaryEntryType: { value: 'slot' },
-                      startDateTime: '2026-08-23 14:00:00',
-                      endDateTime: '2026-08-23 14:15:00',
+                      startDateTime: '2026-08-16 14:00:00',
+                      endDateTime: '2026-08-16 14:15:00',
                       duration: 15,
                     },
                   ],
@@ -2097,7 +2097,7 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     // hole (break/blocked time never maps into the board model).
     const gapFilter = (sched) => {
       sched.entries = sched.entries.filter(
-        (e) => !(e.diaryEntryType && e.diaryEntryType.value === 'slot' && e.startDateTime >= '2026-08-23 14:15:00')
+        (e) => !(e.diaryEntryType && e.diaryEntryType.value === 'slot' && e.startDateTime >= '2026-08-16 14:15:00')
       );
     };
     (gapRaw.staffSchedules || []).forEach((s) => s.schedule.forEach(gapFilter));

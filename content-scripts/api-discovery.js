@@ -83,9 +83,29 @@ function templateUrl(cleanUrl) {
   return cleanUrl.replace(re, PATIENT_UUID_PLACEHOLDER);
 }
 
+// Medicus's own journal-tab UI applies year/category filters by default
+// (`?year[]=2005&type[]=investigation&initialCat=year`), and the resource
+// observer captures whatever request happens to fire while a clinician is
+// browsing under one of those filters. Strip them before storing — the
+// discovered template feeds "Analyse full record for duplicates", which
+// needs the FULL unfiltered journal; keeping a filtered template would
+// silently narrow every future analysis to whatever slice was last viewed,
+// for every entity kind (see docs/learnings-patient-journal-api.md line 69
+// for the confirmed filter params).
+function stripJournalFilterParams(u) {
+  // Keep in lock-step with engine/record-duplicate-parser.js
+  // JOURNAL_FILTER_PARAM_KEYS / stripJournalFilterParams — that copy is
+  // also applied on read in duplicate-checker.js so an already-stored
+  // filtered template cannot silently narrow "Analyse full record".
+  u.searchParams.delete('year[]');
+  u.searchParams.delete('type[]');
+  u.searchParams.delete('initialCat');
+  return u;
+}
+
 function storeJournalUrl(url) {
   try {
-    const clean = new URL(url).toString();
+    const clean = stripJournalFilterParams(new URL(url)).toString();
     const pathname = new URL(url).pathname;
     const template = templateUrl(clean);
 

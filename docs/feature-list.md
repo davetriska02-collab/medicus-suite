@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.237.2
+**Version:** v3.238.0
 **Generated:** 2026-08-23 (automated)
 
 ## What it is
@@ -149,7 +149,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 
 **Full-tab tools:**
 - **Patient Record Visualiser** — analyses an exported Medicus PDF locally into a multi-tab clinical dashboard (continuity, investigation trends, medication compliance, frailty, prescribing-safety flags, QOF status, event timeline). Nothing leaves the browser.
-- **Duplicate Problem Checker** — finds likely duplicate problems, notes and documents and offers a guided compare/merge/remove workflow.
+- **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow. Same-size/type document groups can be verified by content hash before removal.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 - **Practice Report** — a printable snapshot built from Condor's pressure-index history.
 - **CQC Inspection Readiness** — a printable inspection-preparation summary.
