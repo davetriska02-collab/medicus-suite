@@ -1,5 +1,18 @@
 # Sentinel
 
+> **Current architecture (suite mode, v3.x).** Sentinel is no longer a
+> floating in-page sidebar. `content-scripts/sentinel.js` is a **data
+> pipeline only**: it fetches, evaluates, and publishes an in-memory
+> snapshot. The side-panel **Monitoring** tab (`side-panel/modules/sentinel/`)
+> polls that snapshot via `getSentinelSnapshot` and renders the chips. Settings
+> live in `sentinel-options/`. The content script still owns the
+> wrong-patient guard (invalidate on SPA navigation) and must never be
+> clobbered by triage-lens evaluating the same patient. The historical
+> intended-purpose statement below is retained as the regulatory anchor;
+> the "writes nothing" sentence is superseded for the suite as a whole by
+> `docs/INTENDED-PURPOSE.md` v3.202.0 and CSN §6.1 (Monitoring can create
+> a general task — W4 — under the user's own session).
+
 **A read-only clinical context sidebar for a single clinician's personal use within the Medicus EHR.**
 
 Sentinel renders, in a sidebar adjacent to the patient record, the most recent recorded values relevant to (a) published drug-monitoring guidance for medications the patient is taking, and (b) the QOF 2025/26 indicator criteria for clinical registers the patient is on. It is a memory aid. It performs no clinical reasoning, makes no recommendations, writes nothing to any record, transmits nothing to any third party, and is not clinical decision support software.

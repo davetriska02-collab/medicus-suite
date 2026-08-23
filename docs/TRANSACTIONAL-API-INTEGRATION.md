@@ -34,7 +34,7 @@ than today. Reads only — no write endpoint is wired.
 
 | Key                   | Default     | Meaning                                                                            |
 | --------------------- | ----------- | ---------------------------------------------------------------------------------- |
-| `txn.integrationMode` | `'session'` | `'session'` (off) / `'hybrid'` (txn first, session fallback) / `'transactional'`   |
+| `txn.integrationMode` | `'session'` | `'session'` (off) / `'hybrid'` (session displayed; txn fetched in parallel as a shadow for parity) / `'transactional'` (txn first, session fallback) |
 | `txn.environment`     | `'staging'` | Medicus environment the proxy targets                                              |
 | `txn.proxyUrl`        | `''`        | Backend proxy base, e.g. `https://<proj>.supabase.co/functions/v1`                 |
 | `txn.callerKey`       | `''`        | **SECRET** proxy credential — service-worker only, **excluded from suite backups** |

@@ -125,6 +125,11 @@ const KEY_PREFIXES = [
   // for labfiling/patientAlerts/followups/practice above.
   'contactsCanvas',
   'rota',
+  // Architecture plan Phase 0.4: txn.* was invisible to this scanner (same
+  // class of gap Audit M18 found for labfiling). The keys are practice
+  // connection settings + a secret; they are deliberately not in an IO file
+  // (see ALLOWLIST entries below) — exclusion is now a recorded decision.
+  'txn',
 ];
 
 function hasKeyPrefix(k) {
@@ -437,6 +442,19 @@ const ALLOWLIST = new Set([
   // patient-identifiable data, and restoring stale patient reminders onto
   // another machine would surface them out of context. Never backed up:
   'followups.entries',
+
+  // Transactional API connection settings (shared/txn-config.js). Practice-
+  // configured, not user-owned suite backup: the caller key is a SECRET the
+  // service worker owns; the rest are proxy/environment wiring that a portable
+  // backup must never transplant onto another machine (wrong proxy + a leaked
+  // key). There is no txn-io.js on purpose — INTENDED-PURPOSE names this path
+  // as the one optional egress, dormant by default. See
+  // docs/TRANSACTIONAL-API-INTEGRATION.md.
+  'txn.integrationMode',
+  'txn.environment',
+  'txn.proxyUrl',
+  'txn.callerKey',
+  'txn.userEmail',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

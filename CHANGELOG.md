@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.27] — 2026-08-23
+
+### Architecture plan Phase 0 — safety-net guards
+
+Implements `docs/plans/ARCHITECTURE-EVOLUTION-2026-08-22.md` Phase 0.
+Additive tests and doc re-sync; no product behaviour change.
+
+- `test-write-path-inventory.js` now greps POST/PUT/PATCH/DELETE, flags a
+  non-literal `method:`, and asserts every loaded write-capable file sits
+  inside the scan set (scan trees derived from the manifest/HTML load graph).
+- New `test-modules-parity.js` — the two shell `MODULES` maps must agree
+  (modulo panel-only `about`).
+- New `test-load-graph.js` — every manifest and shipped-HTML script/link
+  path resolves on disk.
+- `test-backup-coverage.js` now sees the `txn` prefix; `txn.*` keys are
+  allowlisted with recorded reasons (secret / practice connection, no IO file
+  on purpose).
+- New `test-writecore-adoption.js` — Finalise canvases must adopt WriteCore
+  or sit on a documented pending list.
+- New `test-message-contract.js` — every sent `action`/`type` is handled
+  (and vice versa); every `onMessage` listener is sender-gated or named.
+- CLAUDE.md strips 4 → 6 + roll-up; `docs/sentinel-README.md` records the
+  live suite-mode architecture; hybrid txn mode in
+  `docs/TRANSACTIONAL-API-INTEGRATION.md` now matches the session-display +
+  shadow implementation.
+
 ## [v3.236.26] — 2026-08-22
 
 ### Architecture evolution plan (docs only)

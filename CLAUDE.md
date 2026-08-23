@@ -43,13 +43,15 @@
 
 ## Global demand / alert strips
 
-Four permanent strips live in `side-panel/panel.html` outside `<main>`, polled independently by `panel.js`:
+Six permanent strips plus a roll-up live in `side-panel/panel.html` outside `<main>` (`#alertRollup` / `#alertStack`), polled independently by `panel.js`:
 - `#wrStrip` — waiting room patients (`wr-strip-*` CSS)
 - `#rmStrip` — new medical/admin requests (`rm-strip-*` CSS)
 - `#subRagStrip` — submissions RAG threshold alerts (`sub-rag-strip-*` CSS)
 - `#healthStrip` — suite self-diagnosis: >= 1 DOM contract (`shared/dom-contracts.js`) probed `degraded` by the runtime canary (`shared/contract-canary.js`, injected into the live Medicus page) — amber-only, never red (`health-strip-*` CSS)
+- `#paStrip` — patient-alerts for the open record (`pa-strip-*` CSS); not in the roll-up
+- `#slaBreachStrip` — SLA-breach on the request-monitor cache (`sla-breach-strip-*` CSS); not in the roll-up
 
-Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern. All four are panel-only by convention — `pop-out/pop-out.js`'s `MODULES` comment records this deliberately ("no WR/RM strips — they stay in the docked panel"); a new strip should match unless there's a specific reason to break the pattern.
+The roll-up (`#alertRollup`) groups WR + RM + SubRag when two or more are elevated. Pattern: each strip has a hidden class, polls on load + interval, shows amber/red state when threshold crossed. If you add another global alert, follow this same pattern. All strips are panel-only by convention — `pop-out/pop-out.js`'s `MODULES` comment records this deliberately ("no WR/RM strips — they stay in the docked panel"); a new strip should match unless there's a specific reason to break the pattern.
 
 ## Injecting chips into the live Medicus queue (mechanics — copy the pattern, don't rediscover)
 
