@@ -1,224 +1,177 @@
 # Medicus Suite — Feature List
 
 **Version:** v3.236.25
-**Generated:** 2026-08-22
+**Generated:** 2026-08-23 (automated)
 
 ## What it is
 
-Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 19 tabs plus a small number of full-tab tools, and a handful of in-page additions on top of Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks, and reminds; it does not diagnose, does not recommend treatment, and does not use AI to interpret anything. A short, explicitly listed set of actions (appointment booking, task creation, document filing, and a few others) can write back to Medicus, and every one of those requires the user to review and confirm before anything happens.
+Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 19 tabs, a handful of full-tab tools, and a set of small additions layered onto Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks and reminds, never diagnoses, never recommends treatment, and runs no AI-based interpretation of patient data. A short, explicitly listed set of actions can write back to Medicus (booking, task creation, document filing, problem-list tidying and a few others), and each one requires the user to review and confirm before anything happens.
 
 ## At a glance
 
 - 19 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, staff rota and reference material
-- 6 full-tab-style tools: three opened from the panel (Patient Record Visualiser, Duplicate Problem Checker, Rota manager), one triggered from Medicus's own contacts page (Contacts Management), and two reached from Options/Condor (Practice Report, CQC Inspection Readiness)
-- roughly 16 in-page content-script features layered onto live Medicus screens (queue chips, inline booking/task/document widgets, code-cleanup tools)
-- 8 rule types in the clinical alert engine (drug-monitoring, drug-combo, drug/allergy conflict, qof-register, qof-indicator, event-count, vaccine, composite)
-- 32 drug-monitoring rules (31 enabled), 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result rules, and 37 starter alerts in the practice alert library (34 prescribing-safety, 3 clinical-review)
+- 5 full-tab tools reached from the panel or from Medicus's own pages (Patient Record Visualiser, Duplicate Problem Checker, Rota Manager, Contacts Management, Practice Report / CQC Inspection Readiness)
+- around 14 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools)
+- 8 rule types in the clinical alert engine
+- 32 built-in drug-monitoring rules (31 enabled), 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result threshold rules, and 37 starter alerts in the practice alert library (34 prescribing safety, 3 clinical review)
 
 ## Side-panel modules
 
-### Today
-
-One morning screen: a headline sentence plus waiting-room count, triage queue load, today's medical/admin demand, today's available slots, and the last pre-clinic Sweep status — answering "what needs me right now?" without opening five other tabs.
-
+### Today — v1.0
+One morning screen: a headline sentence plus waiting-room count, triage queue load, today's demand, today's available slots, and the last pre-clinic sweep status.
 - Headline sentence rolled up from the cards below
 - Waiting-room count with amber/red wait thresholds
-- Triage load and today's demand, both with threshold colouring
-- Today's available slot count and a link into the last Sweep
+- Triage load and demand counts, both threshold-coloured
+- Link into today's slot count and the last sweep run
 
-### Slot Counter
-
-Available appointment slots by type for any date, read directly from the Medicus scheduling API. Updates live while a Medicus tab is open.
-
-- Slot counts by appointment type, with configurable alert thresholds
+### Slot Counter — v2.2
+Available appointment slots by type for any date, read directly from Medicus's scheduling data, with live updates while a Medicus tab is open.
+- Slot counts by type with configurable alert thresholds
 - CSV export
-- Live updates via the practice's Pusher feed, without the scheduling page open
-- "First available appointment" lookup: starred favourite types as one-click tiles, plus a typable type filter — earliest slot in the next 4 weeks, with a "Book →" handoff into the booking section (type + day pre-filled; patient checks unchanged); the same section appears as a card on the Reception tab
-- Typable appointment-type filter on the booking section's picker (type "acute" to narrow the list; a single match auto-selects)
+- "First available appointment" lookup with a one-click booking handoff
+- Typable appointment-type filter on the booking picker
 
-### Monitoring (Sentinel)
-
-The clinical context sidebar for whichever patient record is open. Checks active medications, problems, and recent results against drug-monitoring intervals and this year's QOF indicators, showing a plain green/amber/red chip for each. Passive display only — never writes to the record, never orders anything, never tells the clinician what to do.
-
+### Monitoring (Sentinel) — v0.5.1
+The clinical context sidebar for whichever patient record is open. Checks active medications, problems and recent results against drug-monitoring intervals and this year's QOF indicators, showing a plain green/amber/red chip for each. Passive display only — never writes to the record, never orders anything, never tells the clinician what to do.
 - Drug-monitoring interval chips (overdue / due soon / in date)
 - QOF register and indicator achievement chips
 - Prescribing-safety scores (ACB, STOPP/START-style)
-- Practice custom alert rules, editable from Options
+- Practice-editable custom alert rules
 - Coverage view showing meds/problems with no matching rule
-- One-click "create task" / "add to Follow-ups" from an action chip
+- One-click "create task" / "add to Follow-ups" from a chip
 
 ### Trends
-
 Charts a patient's blood pressure, renal function, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses.
-
-- Line charts for BP, eGFR/ACR, HbA1c, cholesterol, weight, with clinical zone bands
+- Line charts with clinical zone bands
 - CSV export of the underlying series
 
 ### Capacity Forecast
+A calendar comparing available appointment capacity against the practice's own configured daily minimums, so a slot gap is visible days or weeks ahead.
+- Day/week/month views with per-day red/amber/green status
+- Per-weekday minimum presets and a per-session-type breakdown
 
-A calendar comparing available appointment capacity against the practice's own configured daily minimums, so a slot gap is visible days or weeks ahead rather than discovered on the day.
+### Submissions Tracker — v1.0
+Counts inbound requests (medical, admin, investigation, prescription) arriving each day against a rolling baseline, so an unusual day stands out.
+- Daily counts by category, date-range and day-vs-day comparison
+- RAG-threshold alert strip; CSV export
 
-- Day/week/month calendar views with per-day red/amber/green status
-- Per-day minimum presets, editable per weekday, and a per-session-type breakdown
-
-### Submissions Tracker
-
-Counts inbound requests (medical, admin, investigation, prescription) arriving each day, compared against a rolling baseline so a genuinely unusual day stands out.
-
-- Daily counts by task category, date-range and day-vs-day comparison
-- RAG-threshold alert strip when a category runs hot; CSV export
-
-### Activity Report
-
-Practice activity per staff member over a configurable date range — consultations, prescription requests, medication reviews, document tasks, investigation results — as a stacked bar chart and period totals.
-
+### Activity Report — v1.0
+Practice activity per staff member over a configurable date range, as a stacked bar chart and period totals.
 - Per-staff-member breakdown, configurable date range
-- Optional "per session" adjustment for fair comparison; CSV export
+- Optional "per session" adjustment; CSV export
 
-### Referrals Tracker
-
-Referral audit data over a configurable date range: totals, priority mix (Routine/Urgent/2WW), and status, broken down by clinician, specialty, and receiving hospital.
-
+### Referrals Tracker — v1.0
+Referral audit data over a configurable date range: totals, priority mix (Routine/Urgent/2WW) and status.
 - Bar charts by clinician, specialty, hospital
 - Configurable date presets and letterhead-aware export
 
 ### Condor
-
-A single live "practice pressure" gauge combining waiting-room load, queue backlog, urgent-task count, and remaining capacity into one score with an amber/red threshold — a busy morning as one number, not four tabs.
-
-- Composite Practice Pressure Index with configurable weightings/thresholds
+A single live "practice pressure" gauge combining waiting-room load, queue backlog, urgent-task count and remaining capacity into one score — a busy morning as one number.
+- Composite pressure index with configurable weightings/thresholds
 - A capacity safety floor: never shows green while demand already exceeds capacity
-- Daily snapshot history feeding the Practice Report tool; 7-/30-day pulse view
+- Daily snapshot history feeding the Practice Report tool
 
 ### Reception
+A reception-facing view of whichever patient's record is open, plus optional guided-capture question sets for common presenting problems and an inline appointment-booking panel. Guided pathways ship switched off until a practice administrator accepts the disclaimer.
+- Single-glance, practice-configurable patient status pill
+- Guided capture pathways with a signed-off call script (red flags, then a short history set)
+- Structured plain-text output to paste into the triage entry
+- Inline booking panel, gated to an open record with no unresolved red flag
+- "First available appointment" card for phone answers with no patient record needed
 
-A reception-facing view of whichever patient's record is open, plus optional guided-capture question sets for common presenting problems and an inline appointment-booking panel. Guided pathways ship switched off until a practice administrator accepts the disclaimer; booking is only offered when no red flag has been raised.
-
-- Single-glance patient status pill (practice-configurable which chips show)
-- Guided capture pathways per presenting problem; on a call, red flags are two same-tier lists (emergency / duty) with None of these, then a short history set (CSO-signed call script, v3.236.22)
-- Structured plain-text output to paste into the triage entry — capture only, never a diagnosis
-- Inline "book an appointment" panel, gated to an open record with no unresolved red flag
-- "First available appointment" card (shared with the Slot Counter tab): one-click "when is the next FCP?" answers for the phone — no patient record needed, with a "Book →" handoff into the Slots booking section
-- Typable appointment-type filter on the booking panel's picker (type "acute" to narrow the list; a single match auto-selects)
-
-### Signing Queue
-
-Every open repeat-prescription request, alongside that patient's recorded drug-monitoring currency, so the end-of-day signing pile can be worked riskiest-first instead of opening each record blind.
-
-- Monitoring-currency verdict and renal context per queued request
+### Signing Queue — v1.0
+Every open repeat-prescription request, alongside that patient's recorded drug-monitoring currency, so the pile can be worked riskiest-first.
+- Monitoring-currency verdict and renal context per request
 - Location/collection filter pills
-- A closing "nothing outstanding" line that never implies a request is safe to sign, only that no flag was found
+- Never implies a request is safe to sign — only that no flag was found
 
-### Follow-ups
-
-A personal safety-net reminder list — "chase Friday" logged in seconds, resurfacing when the due date passes. Explicitly a personal reminder, not the clinical safety-netting record; the header says so every time it's open.
-
-- Quick-add reminders, optionally linked to the patient open in Monitoring
-- Due/overdue sorting and counts; entries stay device-local, not part of suite backups, by design
+### Follow-ups — v1.0
+A personal safety-net reminder list — "chase Friday" logged in seconds, resurfacing when the due date passes. Explicitly a personal reminder, not the clinical safety-netting record.
+- Quick-add reminders, optionally linked to the open patient
+- Due/overdue sorting; entries stay device-local, not part of suite backups
 
 ### Pre-clinic Sweep
-
-Runs the Monitoring rules across every patient booked in today's clinic (or one clinician's list), producing a morning-huddle worklist of overdue monitoring before, not during, the consultation.
-
-- Practice-wide or per-clinician run, in batches to avoid hammering the API
-- Printable reception handout of the day's action list
-- Deliberately ignores per-workstation dismissed-rule settings — a recall list must not inherit one user's suppressions
+Runs the Monitoring rules across every patient booked in today's clinic (or one clinician's list), producing a morning-huddle worklist before the consultation.
+- Practice-wide or per-clinician run, in batches
+- Printable reception handout
+- Ignores per-workstation dismissed-rule settings by design
 
 ### Practice Knowledge
-
-A practice-owned reference base — referral criteria, contacts, pathways, template text — searchable from the panel, with near-duplicate detection when adding new entries.
-
+A practice-owned reference base — referral criteria, contacts, pathways, template text — searchable from the panel, with near-duplicate detection.
 - Add/edit/search, categorised browsing, optional starter-pack import
 
 ### NHS Patient Leaflets
-
-Search of the NHS conditions/medicines leaflet index, with an "Open on nhs.uk" link for every result and, if a practice has configured an API key, the leaflet text rendered in-panel.
-
-- Fuzzy search over the bundled NHS A-Z index, "Open"/"Copy link" per result
-- Optional in-panel leaflet rendering (text only, practice opt-in) and a recent-searches list
+Search of the NHS conditions/medicines leaflet index, with an "Open on nhs.uk" link for every result and, if a practice has configured an API key, leaflet text rendered in-panel.
+- Fuzzy search over the bundled NHS A-Z index
+- Optional in-panel leaflet rendering (text only) and a recent-searches list
 
 ### Patient Record (live)
-
-A live snapshot of the patient currently open — demographics, coded problems, current medications, recent results, and the same prescribing-safety scores and monitoring/QOF chips Monitoring computes — sourced from the API rather than an exported PDF. Explicitly incomplete (no allergies or immunisations live) and says so on screen; the deep multi-year view stays in the full PDF visualiser.
-
+A live snapshot of the patient currently open — demographics, coded problems, current medications, recent results, and the same safety scores and monitoring/QOF chips Monitoring computes. Explicitly incomplete (no allergies or immunisations live) and says so on screen.
 - Demographics, problems, medications, recent results in one screen
-- Gap-markers (not silent blanks) where data isn't available live
-- Copy-to-clipboard summary, watermarked as a live snapshot to verify against the record
+- Gap-markers, not silent blanks, where data isn't available live
+- Copy-to-clipboard summary, watermarked as a live snapshot
 
 ### Patient Alerts
-
-Per-patient custom flags a practice defines itself (interpreter required, safeguarding concern, etc.) that surface automatically whenever that patient's record is open — in the panel, an on-page banner, and queue chips.
-
-- Add/edit/remove flags, browse every flagged patient, customisable quick-add palette
-- Flags follow patient identity, not a name — nothing shows if identity can't be confirmed
+Per-patient custom flags a practice defines itself (interpreter required, safeguarding concern, etc.) that surface whenever that patient's record is open — in the panel, an on-page banner, and queue chips.
+- Add/edit/remove flags, browse every flagged patient
+- Flags follow confirmed patient identity, not a name
 
 ### Phrases
+A personal library of reusable message text blocks that combine into one message the clinician copies into Medicus's own message/comment box. Copy-only — nothing is sent or written by the extension itself.
+- Compose mode: quick slot-chip rows build one message fast
+- Library mode: full search, categories, edit
+- Placeholder text must be manually filled before the Copy button allows a copy
 
-A personal library of reusable message text blocks (opener, substance, safety-net, next step, sign-off) that combine into one message the clinician copies into Medicus's own message/comment box. Copy-only: nothing is sent or written by the extension itself.
+### Rota
+The compact, glanceable half of the Rota Manager, available in the panel and pop-out; the full application opens in its own browser tab.
+- Today's duty cover, who's on leave, sessions still needing cover
+- This week's high-priority safe-staffing warnings
+- Live drift card: reconciles today's rota against the real Medicus appointment book each minute (read-only, never persisted)
+- Optional passcode protection can lock the module to a read-only card
 
-- Compose mode: quick slot-chip rows build one message fast; Library mode: full search/categories/edit
-- Placeholder text (\*\*\*) must be manually filled before copying — the Copy button blocks a careless copy
-
-### Rota (Practice rota)
-
-The compact, glanceable half of the Rota Manager — available in both the side panel and the pop-out window. The full application opens in its own browser tab from the **Rota manager** tab (side panel) or Ctrl+K → "Open Rota manager".
-
-- Duty cover for today, AM and PM, with an OK/Gap state and the named duty doctors
-- Who is on approved leave today; upcoming sessions still flagged as vacancies needing cover
-- This week's high-priority safe-staffing warnings (duty cover, registrar supervision, HCA supervision)
-- Estimated GP appointments this week against the ~72-per-1,000-patients access benchmark
-- **Live drift card**: reconciles today's rota against the live Medicus appointment book each minute (read-only fetch, counted transiently, never persisted); green only after a completed zero-finding check, red for missing/ghost clinics, amber for minor drift or an unavailable check — with an opt-in notification on new red drift
-- Reads local extension storage plus the read-only appointment-book check above; persists no patient-identifiable data
-- When the rota's passcode protection is set to strict, the module stops fetching and shows a locked card instead
-
-The **full Rota Manager** (its own browser tab) covers working patterns and multi-week templates, session-accounted leave on an April–March leave year, Bradford-factor and fit-note flags, the cover worklist and shift swaps, duty fairness pro-rata to contracted sessions, demand-led planning, and read-only reconciliation against the Medicus appointment book. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, they never block, and every threshold is a practice setting. A first-run setup assistant goes from install to a working rota in about three minutes (connect to Medicus with a review-before-import step, load a sample practice, or set up by hand), and an optional passcode gate keeps editing to partners and managers — staff view stays read-only with self-service leave requests and swap proposals, or a strict mode locks the app entirely. The grid supports drag-and-drop with live validity feedback, Excel-style rectangle selection, copy/paste, undo/redo, an interactive rooms view, and a discoverable shortcuts strip; the annealing solver additionally allocates enhanced-access sessions, respects avoid-duty preferences, and resolves room clashes, explaining its score dimension by dimension.
+The full **Rota Manager** (separate browser tab) additionally covers working-pattern templates, session-accounted leave, Bradford-factor/fit-note flags, a cover worklist and shift swaps, duty fairness, demand-led planning, and a drag-and-drop scheduling grid with an annealing solver. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, never block, and every threshold is a practice setting.
 
 ## In-page features (content scripts)
 
-- **Triage Lens** — decoration chips on the request queue (age, flags) plus keyword-based red-flag detection with linked actions (Samaritans, risk-assessment snippets). From v3.236.4 the chip pile **compresses into a pulse** (one named headline + left rail + quiet overflow) when `queuePulseCompress` is on (default): red is a filled bar, amber is a hollow ring; compression is escalate-only so a quiet row keeps its chips; Space opens why, › / `a` stages Pharmacy First or ask-back drafts. Not a score; a quiet rail is not all-clear. Untick the pref to see the full pile. On tasks / investigations (no preview row) the pulse sits **after** the patient name on the same line — it does not cover it and is not clipped under it (v3.236.8). Expanding why / › opens a popover on the screen, not a taller row you have to scroll (v3.236.10).
-- **Triage Lens investigation-results queue** — the same overlay applied to the lab-results queue, flagging results against configured thresholds
-- **Lab Results Auto-Filing button** — files a lab result as normal (driving Medicus's own filing controls) only when every parameter is confirmed within normal limits
-- **Prescribing workflow button** — one-click re-assignment of a routine prescription request to the practice's configured team, driving Medicus's own UI
-- **Inline appointment booking / task creation** — booking and create-task panels injected on task/patient pages, using Medicus's own scheduling and task-creation endpoints. Not injected on document-filing task pages (2026-08-19) — Medicus's own UI already offers direct `/task` and `/appointment` access there, so the panels would only be redundant duplicates
-- **Save attachment as document** — one-click filing of a patient-submitted photo/attachment as a clinical document, via Medicus's own upload endpoint
-- **Add coded entries as problems** — a floating panel on document-filing task pages offering a checkbox per coded journal-note entry on that document; ticking entries and confirming creates each as a new Problem via Medicus's own create-problem endpoint, carrying the code, note text, and an onset date derived from the document's own date — something Medicus's own "Codes & actions" card has no action for at all. Docks top-right so it does not cover File document; header is draggable.
-- **Sentinel content script** — the data pipeline feeding Monitoring's drug/QOF chips and Trends' charts
-- **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's Internal Comment box; inserts plain-English text only, the clinician still presses Medicus's own Submit
-- **Clean up code** — flags outdated/retired SNOMED problem-list codes and suggests a cleaner description or replacement code. Also detects journal (consultation) entries that duplicate the problem's clinical event — matched by Medicus's own linked-problems references, date and wording across nine confidence tiers, with the true per-note record date fetched to disambiguate several identically-worded candidates — and can sync the problem's cleaned-up code (and separately its cleaned "additional info" text) into the matching journal entry, via a per-match button or an automatic prompt right after a fix; every journal write is individually confirmed, names the exact before/after, and carries a one-click Undo that restores the entry's previous code or text
-- **Bulk remove/merge** — _retired as a page trigger (v3.236.14)._ Ending and merging live on **Organise problems** (End bin + drop-to-merge). The write helpers remain in `problem-bulk-end.js` for tests.
-- **Organise problems** — an "Organise problems?" trigger on the Clinical Summary (wherever the summary panel renders) that opens the "Organise on canvas…" full-screen drag-and-drop organiser directly, with no intermediate panel of its own (2026-08-19: the trigger is now a single static button, so it never reflows mid-click). Active problems sit in Major / Minor / Unresolved columns (Unknown significance) — **Major is double the width of Minor/Unresolved** (2026-08-19, it usually carries the bulk of the list) — each with its own nest tree; drag onto another tile still nests or flat-links (confirmed one pair at a time); drag onto a column or the End bin stages the change on the canvas — arrange many, then Finalise writes them all as Resolved (today) or the new significance (dragging between significance columns is how "Change significance" now happens — there is no separate batch re-grader panel any more). A parent with live children cannot be ended from the bin. **2026-08-19: the separate right-hand suggestion tray is gone.** SNOMED/practice-override candidate parents and "(Grouped with X)" GP2GP import-text matches (exact/word-overlap only, ties never guessed) now render as a connector line straight onto the suggested tile itself, wherever its own significance already places it — routed the same elbow/bus way as the existing linked-problems lines (out from the tile's own right edge to a shared vertical bus, visible to the right of the tiles, own lane per connected group), dashed rather than solid since nothing is written yet. A small shape-and-letter flag on the line itself (circle "S" for a SNOMED-ancestry candidate, square "G" for a text-link match, plus a distinct dash rhythm per kind — shape/pattern, not colour alone, so it survives colourblind mode) tells the two kinds apart; the flag's own hover tooltip names the specific candidate ("SNOMED marks this as a child of X" / "this practice's own reference list marks this as a child of X") — that explanation no longer sits permanently on the card itself. Dragging the tile onto its candidate confirms the pairing via the same general tile-onto-tile gesture as any other nest/link; a text-link match additionally offers its relationship-choice buttons (Link as related / Nest under / Nest it under this / Leave as-is, with automatic import-text cleanup on commit) once the tile is clicked, alongside "Remove link" / "Edit problem…". The old "Unknown significance, pick a grade" tray card is also gone — the Unresolved column already IS that decision, and dragging a tile out of it already stages exactly that. **A confirmed linked-problem line now also carries a red × at its own midpoint** (2026-08-19) — click to arm the same confirmed-write flow the tile's own "Remove link" button uses, removing that flat link directly from the connector without first selecting the tile. Per-tile "Remove link" / "Edit problem…" actions, read-only linked-problems visualisation; cycle-guarded, every write individually confirmed (with an explicit "will move" disclosure when a nest replaces an existing link). The same "(Grouped with X)" offer appears inline in the Clean-up-code panel with its own two-step confirm. **The "Edit problem…" popup (2026-08-19) now also shows this problem's own nesting/linkage** — a "Nested under X" / "Has N problems nested under it" / "Linked to Y" section with a per-item "Un-nest"/"Remove link" button (the ability to remove a flat link was previously missing entirely) — and runs the same per-problem retirement/legacy-code check the separate "Code cleanup?" scan does, since the canvas is now the primary way to reach this popup and no longer sits alongside that scan's own trigger. **Clean up code** stays on the page as its own trigger. Recode is still Edit problem… on a tile. The canvas owns no API — writes go through `window.ProblemNesting`.
-- **Allergy cleanup suite** — a "Clean up allergies?" trigger on the Clinical Summary (wherever the summary panel renders) that opens the "Organise allergies" full-screen canvas directly, with no intermediate accordion (2026-08-20). Every active allergy is a tile in one of four computed lanes — **Active**, **Junk / low-rel**, **Convert**, **Dual-coded** — plus an **End** bin. Drag junk or a "not an allergy" row onto End to stage removal; drop a dual-coded tile onto Dual-coded to stage clearing the stale legacy code; drop one duplicate onto its pair (dashed connector lines mark detected groups) to open the existing per-entry merge review; click a Convert tile to open the existing substance-conversion review. Arrange many, then **Finalise** writes the staged ends and tidies — merge and convert stay one-at-a-time modal reviews. Genuine allergies cannot be ended from the bin; the last "No known allergies" copy cannot be staged. The canvas owns no API — writes go through `window.AllergyCleanup`. Every action still requires explicit confirmation; nothing is auto-applied
-- **Bulk task actions** — "Bulk acknowledge?" / "Bulk discard?" checklists on two routine, low-risk task queues (Privacy Officer Alerts and EPS Cancellation Failures), where Medicus's own UI is one dialog per row; tasks are ticked from a standalone checklist keyed by each task's stable identifier (never grid-row position), reviewed on an explicit confirm step listing exactly what will be acted on and what is kept, then committed through Medicus's own task endpoints
-- **Task presence** — stops two clinicians unknowingly working the same triage request: a "👁 name" chip on any queue row a colleague currently has open, and an advisory banner when you open a request they're already in. The store is the practice's own shared folder — presence files on your own network, nothing sent anywhere else; setup is one click per machine (Options → Task Presence → Choose folder, docs/task-presence-setup.md). Advisory only, never a lock; absence of a chip never means nobody is there. (Hosted-store alternative remains for practices without a shared folder.)
-- **Pusher relay** — keeps the panel's live data current via the practice's real-time feed
-- **Referrals discovery** — watches the referrals audit-report page and feeds discovered data to the Referrals Tracker tab
+These run directly on live Medicus pages, on top of Medicus's own UI:
+
+- **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue; compresses into a compact "pulse" display on busy queues.
+- **Inline booking and task creation** — appointment-booking and create-task panels injected directly on patient and task pages, using Medicus's own scheduling and task-creation controls.
+- **Document handling** — one-click filing of a patient-submitted attachment as a clinical document; a checklist that turns a document's coded journal entries into new Problems.
+- **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit.
+- **Clean up code** — flags outdated or retired SNOMED problem-list codes, suggests a cleaner code or description, and can sync a cleaned-up code or text into a matching consultation-note entry, with one-click undo.
+- **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with SNOMED- and text-based suggested links; every change staged, then confirmed together.
+- **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance.
+- **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view.
+- **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch.
+- **Task presence** — shows a colleague's name on a queue row they already have open, backed by the practice's own shared folder; advisory only, never a lock.
+- **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker.
 
 **Full-tab tools:**
-
-- **Patient Record Visualiser** — analyses an exported Medicus PDF locally to build a multi-tab clinical dashboard: continuity indices, investigation trends, medication-monitoring compliance, frailty index, prescribing-safety flags, QOF register status, and an event timeline. Nothing leaves the browser.
-- **Duplicate Problem Checker** — finds likely duplicate problems, notes, and documents (including ones carried over via GP2GP) and offers a guided compare/merge/remove workflow, always requiring explicit confirmation before anything is removed.
-- **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from a button on Medicus's own contacts page: places candidate contacts visually, flags next-of-kin/copy-correspondence status, matches contacts across GP2GP-merged records by name (including non-English naming patterns), and lets a wrongly-placed contact be removed from the tree.
-- **Practice Report** — a printable snapshot report built from Condor's daily pressure-index history.
-- **CQC Inspection Readiness** — a printable summary for inspection preparation, reached from Options or the command palette.
+- **Patient Record Visualiser** — analyses an exported Medicus PDF locally into a multi-tab clinical dashboard (continuity, investigation trends, medication compliance, frailty, prescribing-safety flags, QOF status, event timeline). Nothing leaves the browser.
+- **Duplicate Problem Checker** — finds likely duplicate problems, notes and documents and offers a guided compare/merge/remove workflow.
+- **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
+- **Practice Report** — a printable snapshot built from Condor's pressure-index history.
+- **CQC Inspection Readiness** — a printable inspection-preparation summary.
 
 ## Alert engine
 
-The Monitoring tab and Sweep both run patient data through the same rules engine. Every rule type is a passive check — none of them recommend treatment or write to the record.
+The Monitoring tab and Sweep both run patient data through the same rules engine. Every rule type is a passive check — none recommend treatment or write to the record.
 
-- **Drug-monitoring** — drug X requires test Y within an interval; flags overdue/due-soon/stale
-- **Drug-combination** — a set of co-prescribed drugs (optionally requiring or excluding a problem, or requiring/forbidding another drug) triggers a review flag, e.g. NSAID without gastroprotection
+- **Drug-monitoring** — a medication requires a test within an interval; flags overdue/due-soon/stale
+- **Drug-combination** — a set of co-prescribed drugs (optionally requiring or excluding a problem or another drug) triggers a review flag
 - **Drug/allergy conflict** — an active medication matched against a recorded active allergy
 - **QOF register** — problem-list membership of a QOF register
-- **QOF indicator** — threshold check against an observation or medication for a 2025/26 QOF indicator
-- **Event count** — counts qualifying events (e.g. exacerbations) within a rolling window against a threshold
-- **Vaccine** — eligibility and due/given/declined status against seasonal or one-off vaccination schedules
+- **QOF indicator** — threshold or trend check against an observation or medication for a 2025/26 QOF indicator
+- **Event count** — counts qualifying events within a rolling window against a threshold
+- **Vaccine** — eligibility and due/given/declined status against seasonal or one-off schedules
 - **Composite** — combines the results of several other rules into one higher-level flag
 
-The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely sourced from the PINCER prescribing-safety indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled; digoxin remains disabled pending a separate activation review), 74 QOF rules (14 register, 60 indicator), 5 vaccine rules, and 44 investigation-result threshold rules for the results queue. Practices can also author their own rules of any type from Options, which arrive disabled by default and must be reviewed and switched on by a clinician before they fire.
+The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled), 74 QOF rules, 5 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
 
 ## Settings & customisation
 
-- **Practice Profile** — shared-folder managed deployment so config (rules, thresholds, pathways) can be published once and picked up across every machine in the practice; machines can also contribute their own "Clean up code" preference tallies back to the shared pool (one-time "Connect shared file" grant per machine, then silent on side-panel open) without becoming a publisher of anything else
+- **Practice Profile** — shared-folder managed deployment so rules, thresholds and pathways can be published once and picked up across every machine in the practice
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
@@ -227,49 +180,15 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.236.25 (2026-08-22)** — CSN §6.1 W-row and version-history ordering fixed; issue date matches document version 3.19.
-- **v3.236.24 (2026-08-22)** — CSO sign-off of CSN §6.1 W17–W21 (write-path inventory); product pin moves to 3.236.23.
-- **v3.236.23 (2026-08-22)** — Write-path safety net: CSN §6.1 gains W17–W21 (nest problems, Contacts, journal code-sync, add-codes-as-problems, bulk task complete/discard); `test-write-path-inventory.js` CI gate fails on any unmapped Medicus write POST; README/VISION drop the read-only claim for the honest enumerated-writes posture; `shared/write-core.js` extracts the bridge-confirmed Finalise diff (allergy canvas is the first consumer).
-- **v3.236.22 (2026-08-22)** — Reception call script: two same-tier safety lists, short history, no separate caller/age questions. CSO-signed.
-- **v3.236.15 (2026-08-21)** — Bulk acknowledge: Review/Confirm sit in a footer so select-all cannot hide the mass-resolve button.
-- **v3.236.14 (2026-08-21)** — Bulk remove/merge trigger removed from the Clinical Summary (Organise problems owns End/merge). Quiet-row chips clip inside the name column so the next box cannot chop them.
-- **v3.236.13 (2026-08-21)** — Add-as-problem panel nudges off the Save as document chip, not only Medicus File.
-- **v3.236.12 (2026-08-21)** — Bulk acknowledge/discard Review and Confirm stay in the viewport after select-all (list scrolls, buttons stay).
-- **v3.236.11 (2026-08-21)** — Repeat / carry / presence chips join the same-line-after-name layout on tasks and investigations.
-- **v3.236.10 (2026-08-21)** — Pulse why / act expand as a viewport popover, so you don't scroll the task/investigation row.
-- **v3.236.9 (2026-08-21)** — Privacy Officer "Bulk acknowledge?" stays on the page (re-injects if Vue strips it) and still finds the queue if the URL uses `/data/` or hyphens.
-- **v3.236.8 (2026-08-21)** — Queue chips on tasks / investigations sit after the patient name on the same line (no longer clipped under it).
-- **v3.236.7 (2026-08-21)** — "Add coded entries as problems" docks top-right (not on File document) and the header is draggable.
-- **v3.236.6 (2026-08-21)** — Queue pulse on tasks / investigations no longer covers the patient name (100% flex was preview-row only; name stays first).
-- **v3.236.5 (2026-08-21)** — Appointment-book organise canvas: cancel, same-list/cross-list move, stretch into a free following slot, and sick-day rebook. SMS off. Leftover phone list; covering-list preview + cap; earliest similar slot; launcher sits left of Open Actions; diary filter for working-day boards.
-- **v3.235.0 (2026-08-19)** — "Add coded entries as problems": a floating panel on document-filing task pages checklists every coded journal-note entry on that document and, on confirmation, creates each as a new Problem via Medicus's own create-problem endpoint — code, note text, and an onset date derived from the document's own date carried across automatically, closing a gap where Medicus's own "Codes & actions" card has no such action at all. Ships as a fixed floating panel rather than anchored inline, since the task page's switchable right pane (existing problems / medication) would otherwise unmount an inline widget along with whatever card it sat under.
-- **v3.234.1 (2026-08-18)** — Canvas End and significance are staged: arrange many tiles, then Finalise writes them all. Nest/link still confirm per drop.
-- **v3.234.0 (2026-08-18)** — Organise-problems canvas is now a unified organiser: Major / Minor / Unresolved lanes, an End bin (Resolved, today's date; parents with live children blocked), tile-to-tile nest/link unchanged. Existing single-action buttons stay on the page.
-- **v3.233.0 (2026-08-18)** — The Keeper currency check, CSO-signed: new warfarin/VKA INR, mycophenolate and fezolinetant monitoring rules; eprosartan/Teveten, Curatil, Mintreleq XL/Sondate XL and Marevan brand gaps closed; RSV 65–74 COPD and immunosuppression eligibility from 1 Sept 2026 (bare asthma omitted); topiramate PPP and warfarin+tramadol alerts; sore-throat unwell-child promoted to 999; headache household carbon-monoxide flag. Held (not applied): CKD002/003 disable, AST ID rename, NDH, RSV care-home under-18 exclusion.
-- **v3.232.0 (2026-08-14)** — Rota Manager major upgrade: optional passcode protection (staff read-only view with self-service leave/swap requests, or strict full lock; hashed config, synced and backed up with the practice data); a first-run setup assistant (connect to Medicus with review-before-import, sample practice, or by-hand — install to working rota in about three minutes) plus a "Finish setting up" dashboard checklist; grid drag-and-drop upgrades (live validity greying, Excel-style rectangle selection, copy/paste, redo, undo toasts, right-click menu, shortcuts strip, interactive rooms view); Solver v2 (enhanced-access allocation, avoid-duty preference repair, room-clash-aware proposals with per-dimension score explanation); and a live drift card in the compact Rota module reconciling today's rota against the Medicus appointment book each minute with an opt-in alert on serious drift.
-- **v3.230.0–v3.231.0 (2026-08-12–14)** — Journal–code sync: the Clean-up-code panel now finds journal entries duplicating the problem's clinical event (nine confidence tiers: structural linked-problems references, verified true record dates, day-group date + wording, and two fuzzy fallbacks), warns when several match (GP2GP can duplicate whole records) and flags the one whose own record date exactly confirms against the problem, and can write the problem's current code — and separately its cleaned "additional info" text — into the matching entry, per-match or auto-prompted right after a fix. v3.231.0 adds the post-review fixes (one row per journal entry even when two detection passes find the same note; unknown confidence tiers rank last) and a one-click Undo for both journal writes, restoring the entry's previous code or text via the same confirmed contract. Also new: the `{Episodicity…}` / `Problem Info: Problem Notes:` GP2GP wrapper patterns join the generic-import-text rules, and "Date records held from" joins the Bulk-remove admin-code roots.
-- **v3.227.0–.1 (2026-08-09)** — "(Grouped with X)" GP2GP import text now resolves to a real relationship offer (flat link or nest in either direction) in both the Clean-up-code panel and the Organise-problems canvas tray, with existing-relationship detection, automatic import-text cleanup on commit, canvas locator lines, drag-and-drop flat links, and Unknown-significance flagging. v3.227.1 adds the review fixes: an authoritative fail-closed cycle guard on the no-scan surface, a two-step confirm on the inline relationship buttons, ambiguous-match refusal, truthful strip feedback, per-choice confirm copy, and scan-race/card-lifecycle corrections.
-- **v3.226.0 (2026-08-08)** — Cleanup Code Preferences gain automatic practice-pool contribution (a machine's own tallies merge back to the shared profile without a full publish; additive-only, never touches the practice-wide enforced choice), and "Bulk acknowledge?" / "Bulk discard?" checklists arrive on the Privacy Officer Alerts and EPS Cancellation Failures task queues, each batch explicitly confirmed.
-- **v3.225.0–.1 (2026-08-08)** — "Organise problems" canvas: the suggestion/manual-link accordion sections replaced by a full-screen drag-and-drop canvas (date-sorted parent/child tree, SNOMED + practice-override suggestion tray with connector lines, per-tile Remove link / Edit problem… actions embedding the Clean-up-code panel, read-only linked-problems visualisation with per-set lanes/colours). v3.225.1 adds the review fixes: patient-change guard on the open canvas, post-save Edit-problem state reset, re-parent "will move" disclosure, rescan after a code edit, full keyboard operability, parent-map cycle rescue, and lazy linked-problem prefill.
-- **v3.219.0 (2026-08-03)** — "Change significance": batch re-grade problems between Major/Minor/Unknown via Medicus's own edit form, with per-row current-grade display and explicit move-by-move confirm; the problems widget trigger renamed to "Organise problems?".
-- **v3.218.0 (2026-08-03)** — The record-tidy widgets (bulk end, nesting, allergy cleanup) now work on any page that renders the Clinical Summary panel — appointment and consultation views included — via a page-world bridge that reads the patient from the page's own summary fetch, with a wrong-patient row-match guard.
-- **v3.217.0 (2026-08-03)** — Nest problems gains an in-panel "Merge duplicate copies" section: same-code duplicate problems merged down to a chosen keeper using the Duplicate Checker's confirmed removal contract, with children-protected copies excluded and additional-info copies cautioned.
-- **v3.216.0 (2026-08-03)** — Nest problems' manual builder goes parent-first and multi-child: tick several problems and nest them under one parent in a single confirmed batch.
-- **v3.215.0 (2026-08-03)** — Nest problems gains a manual "Link manually" builder: nest any problem under any other (re-parenting and same-code pairs included, cycle-guarded), alongside the SNOMED-ancestry suggestions.
-- **v3.214.0 (2026-08-03)** — "Nest problems?": suggested parent/child problem links on the Clinical Summary, driven by SNOMED ancestry between the problems already on the record, each link individually reviewed and confirmed; works on both the care-record and task ("split") pages.
-- **v3.213.0 (2026-08-03)** — "Bulk remove?" and "Clean up allergies?" now also run on the task ("split") page's embedded Clinical Summary panel, not just the full care-record page — same scans, review steps and confirmations, with the patient resolved from the task itself.
-- **v3.212.0 (2026-08-02)** — Allergy cleanup suite: a single "Clean up allergies?" trigger folding in junk/low-relevance-code removal, duplicate-entry merge, dual-coded (legacy code alongside an already-correct substance) cleanup, and pre-defined-allergy-to-substance conversion, each with its own review step appropriate to how much clinical judgement it needs.
-- **v3.211.0 (2026-08-02)** — Rota Manager subsumed into the suite: a full rota application in its own browser tab (**Rota manager**) plus a compact **Rota** module in the panel and pop-out; all eight `rota.*` storage keys covered by the suite backup. The standalone Medicus Rota Manager extension is deprecated.
-- **v3.192.0–v3.210.0 (26 Jul – 1 Aug)** — Contacts Management: a new tool for managing a patient's next-of-kin and family contacts as a drag-and-drop family tree, with review-driven fixes for wrong-record flagging safety, a confirmable and repairable "remove from tree" action, and better name-matching for contacts carried over from a previous practice.
-- **v3.176.13–v3.196.0 (22–28 Jul)** — Clean up code (renamed from "Fix description"): flags outdated/retired SNOMED problem-list codes and suggests a cleaner replacement, extended to catch more patterns, plus a "bulk end problems" companion tool and per-practice learning of preferred replacements.
-- **v3.197.0–v3.206.0 (28–31 Jul)** — Reception's quick-actions composer went through three rounds of layout hardening after feedback that the comment box was being visually crushed, plus clearer two-step "insert, then submit" wording.
-- **Duplicate-checker enhancements (through 8–17 Jul)** — cross-record file-matching, document removal, and side-by-side note/consultation comparison added, continuing its build-out for GP2GP-merged records.
-- **New tabs (7–31 Jul)** — Follow-ups (personal safety-net reminders), Signing Queue (monitoring context on the repeat-prescription pile), and Phrases (copy-only message blocks) all launched.
-- **Patient Alerts (16–18 Jul)** — a new per-patient custom-flag feature (interpreter required, safeguarding concern), surfaced across the panel, an on-page banner, and queue chips.
-- **The Keeper rule-set updates (25 Jul, 1 Aug)** — clinical rule-content refreshes, including a vaccine-eligibility fix, a guard against a vaccine wrongly marked as given, and groundwork for digoxin monitoring.
-- **Transactional feed groundwork (7–9 Jul)** — an alternative, off-by-default data source for Monitoring/Trends behind a practice-level switch, bringing a new drug/allergy conflict rule type; dormant unless explicitly turned on.
-- **Suite reliability fixes (throughout)** — fixes to demand-count accuracy, a false-alarming health strip, backup/restore failures, and cross-machine profile sync — none changing what a tab displays, only making it more trustworthy.
+- **Write-path governance** — every action that can write back to Medicus is now named in a public inventory, cross-checked by an automated test, with the public docs rewritten to describe the real (enumerated-writes) safety posture rather than a blanket "read-only" claim.
+- **Record-tidying tools matured into canvases** — Organise problems, Allergy cleanup and Appointment organise moved from one-at-a-time popups to full drag-and-drop canvases where several changes are staged and then committed together; Clean up code gained the ability to sync a cleaned SNOMED code or description into a matching consultation-note entry, with one-click undo.
+- **Reception call script signed off** — the guided-capture red-flag script was reworked to two same-tier safety-check lists plus a short history set, and formally signed off by the practice's clinical safety officer.
+- **Rota Manager upgrade** — optional passcode protection, a guided first-run setup assistant, drag-and-drop grid improvements (multi-select, copy/paste, undo/redo), a stronger automatic-scheduling solver, and a live check of today's rota against the real appointment book.
+- **Task and queue polish** — bulk acknowledge/discard on routine task queues, and a round of fixes keeping queue chips positioned correctly and readable on busy task and investigation-results lists.
+- **Contacts Management** — a new drag-and-drop family-tree tool for a patient's next-of-kin and contacts, opened directly from Medicus's own contacts page.
+- **Clinical rule-set refresh** — the periodic rule-currency review added and expanded several drug-monitoring rules, closed brand-name gaps, and corrected a vaccine-eligibility date window.
+- **Task presence** — a new indicator showing when a colleague already has a triage request open, to reduce duplicated work on the same request.
 
 ## Safety posture
 
-Medicus Suite is a passive display layer by default: everything it shows is read from data already recorded in Medicus, and it makes no clinical recommendation, orders nothing, and runs no AI-based inference on patient data. A small, deliberately enumerated set of actions can write back to Medicus — appointment booking, general-task creation, inbound-document filing, normal-lab-result filing, routine-prescription re-assignment, problem-list tidying, and bulk acknowledge/discard of two routine task types (Privacy Officer Alerts, EPS cancellation failures) — and every one of them is user-initiated, explicitly confirmed at the point of commit, and executed through Medicus's own controls under the clinician's own session, so Medicus's own validation, access control and audit trail apply as normal. No patient data leaves the browser except through the one optional, off-by-default Transactional API read path a practice must deliberately configure. Full detail on scope, hazards, and residual risk is maintained in `docs/INTENDED-PURPOSE.md`, `docs/HAZARD-LOG.md`, and `docs/CLINICAL-SAFETY-NOTICE.md`.
+Medicus Suite is a passive display layer by default: everything it shows is read from data already recorded in Medicus, it makes no clinical recommendation, orders nothing, and runs no AI-based inference on patient data. A small, deliberately enumerated set of actions can write back to Medicus — appointment booking, task creation, document filing, routine-prescription reassignment, problem-list tidying, and bulk acknowledge/discard of two routine task types — and every one is user-initiated, explicitly confirmed before it commits, and executed through Medicus's own controls under the clinician's own session, so Medicus's own validation, access control and audit trail apply as normal. No patient data leaves the browser except through one optional, off-by-default read-only feed a practice must deliberately configure. Full detail on scope, hazards and residual risk is maintained in the suite's Intended Purpose statement, Hazard Log and Clinical Safety Notice.
