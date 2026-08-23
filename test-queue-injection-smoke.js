@@ -524,7 +524,7 @@ const parts = [
   extract(/const closeActionMenu = \(\) => \{[\s\S]*?\n {2}\};/, 'closeActionMenu'),
   extract(/const onDocClickForMenu = \(e\) => \{[\s\S]*?\n {2}\};/, 'onDocClickForMenu'),
   extract(/const onKeydownForMenu = \(e\) => \{[\s\S]*?\n {2}\};/, 'onKeydownForMenu'),
-  extract(/const onScrollForMenu = \(\) => closeActionMenu\(\);/, 'onScrollForMenu'),
+  extract(/const onScrollForMenu = \(e\) => \{[\s\S]*?\n {2}\};/, 'onScrollForMenu'),
   extract(/const armActionMenuDismissal = \(\) => \{[\s\S]*?\n {2}\};/, 'armActionMenuDismissal'),
   extract(/const isSafeActionUrl = \(url\) => \{[\s\S]*?\n {2}\};/, 'isSafeActionUrl'),
   extract(/const executeAction = \(action, anchorEl, menuEl\) => \{[\s\S]*?\n {2}\};/, 'executeAction'),

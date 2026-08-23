@@ -763,7 +763,10 @@
   order: 2;
   flex: 0 1 auto;
   flex-wrap: nowrap;
-  min-width: 0;
+  /* Floor, not 0 (same as .ch-q-pulse-inline above): a long patient name
+     must never crush a red/amber chip to nothing — a squeezed chip keeps a
+     visible colour stub instead of vanishing. */
+  min-width: 1.75rem;
   max-width: 46%;
   margin: 0;
   overflow: hidden;

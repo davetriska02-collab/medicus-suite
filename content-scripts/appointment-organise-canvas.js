@@ -32,6 +32,7 @@
   }
 
   var _route = null;
+  var _openRoute = null; // apiBase + date pinned at openOverlay — commits use THIS, not the live _route
   var _board = null;
   var _draft = C.emptyDraft();
   var _pending = null;
@@ -40,13 +41,18 @@
   var _drag = null;
   var _open = false;
   var _sick = null;
+  var _writing = false; // a Finalise batch is mid-write: the whole overlay is frozen
   var _booking = null;
   var _bookingWait = null;
   var _colFilter = { q: '', hideEmpty: false, site: '' };
 
   function announce(text) {
-    var live = document.querySelector('#' + OVERLAY_ID + ' .ms-aoc-live');
-    if (live) live.textContent = text || '';
+    // Deferred: most callers announce then synchronously render(), which
+    // rebuilds the live region and would wipe the message before AT reads it.
+    setTimeout(function () {
+      var live = document.querySelector('#' + OVERLAY_ID + ' .ms-aoc-live');
+      if (live) live.textContent = text || '';
+    }, 0);
   }
 
   function currentRoute() {
@@ -73,21 +79,23 @@
   }
 
   function client() {
-    if (!_route) throw new Error('appointment-organise: no book route');
+    var route = _openRoute || _route;
+    if (!route) throw new Error('appointment-organise: no book route');
     if (!_booking) throw new Error('appointment-organise: booking-core reserve/create/release required');
-    return C.createClient(_route.apiBase, { booking: _booking });
+    return C.createClient(route.apiBase, { booking: _booking });
   }
 
   async function loadBoard() {
+    var route = _openRoute || _route;
     _loading = true;
     _error = null;
     render();
     try {
       await ensureBooking();
-      _board = await client().fetchBoard(_route.date);
+      _board = await client().fetchBoard(route.date);
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read the appointment book.';
-      _board = { date: _route.date, columns: [] };
+      _board = { date: route.date, columns: [] };
     } finally {
       _loading = false;
       render();
@@ -102,10 +110,7 @@
     opts = opts || {};
     var locked = !!(appt.locked || appt.arrived);
     var staged = !!opts.staged;
-    var cls =
-      'ms-aoc-tile' +
-      (locked ? ' ms-aoc-tile-locked' : '') +
-      (staged ? ' ms-aoc-tile-staged' : '');
+    var cls = 'ms-aoc-tile' + (locked ? ' ms-aoc-tile-locked' : '') + (staged ? ' ms-aoc-tile-staged' : '');
     return (
       '<div class="' +
       cls +
@@ -124,9 +129,7 @@
       (staged ? '<div class="ms-aoc-tile-draft">On this canvas only — not in Medicus yet</div>' : '') +
       '<div class="ms-aoc-stretch-live" hidden></div>' +
       (!locked && !opts.inBin
-        ? '<button type="button" class="ms-aoc-tile-cancel" data-cancel-id="' +
-          esc(appt.id) +
-          '">Cancel</button>'
+        ? '<button type="button" class="ms-aoc-tile-cancel" data-cancel-id="' + esc(appt.id) + '">Cancel</button>'
         : '') +
       (opts.canStretch
         ? '<button type="button" class="ms-aoc-tile-stretch" data-stretch-id="' +
@@ -182,6 +185,7 @@
     }
     if (_pending.kind === 'finalise') {
       var s = _pending.summary || { items: [], count: 0 };
+      var frozen = _pending.writing ? ' disabled' : '';
       var rows = s.items
         .map(function (item) {
           var reason =
@@ -190,7 +194,9 @@
                 esc(item.id) +
                 '" value="' +
                 esc(item.reason || '') +
-                '" placeholder="Cancellation reason (required)">'
+                '" placeholder="Cancellation reason (required)"' +
+                frozen +
+                '>'
               : '';
           return (
             '<label class="ms-aoc-finalise-row">' +
@@ -198,19 +204,22 @@
             esc(item.id) +
             '"' +
             (item.included ? ' checked' : '') +
+            frozen +
             '>' +
             '<span class="ms-aoc-finalise-desc">' +
             esc(item.text) +
-            (item.kind === 'move'
-              ? '<div class="ms-aoc-hint">' + esc(C.LENGTH_ON_MOVE_BLOCKED) + '</div>'
-              : '') +
+            (item.kind === 'move' ? '<div class="ms-aoc-hint">' + esc(C.LENGTH_ON_MOVE_BLOCKED) + '</div>' : '') +
             '</span>' +
             reason +
-            '<label class="ms-aoc-notify"><input type="checkbox" class="ms-aoc-finalise-notify" data-notify-id="' +
-            esc(item.id) +
-            '"' +
-            (item.notify ? ' checked' : '') +
-            '> Tell the patient — Medicus’s own confirmation, not custom wording</label>' +
+            // A stretch write never sends recipients — do not offer the tick.
+            (item.kind === 'stretch'
+              ? ''
+              : '<label class="ms-aoc-notify"><input type="checkbox" class="ms-aoc-finalise-notify" data-notify-id="' +
+                esc(item.id) +
+                '"' +
+                (item.notify ? ' checked' : '') +
+                frozen +
+                '> Tell the patient — Medicus’s own confirmation, not custom wording</label>') +
             (item.script
               ? '<button type="button" class="ms-aoc-ghost ms-aoc-copy-script" data-copy-script="' +
                 esc(item.script) +
@@ -223,10 +232,21 @@
       var missingReason = s.items.some(function (i) {
         return i.included && i.kind === 'cancel' && !String(i.reason || '').trim();
       });
+      var notifyCount = s.items.filter(function (i) {
+        return i.included && i.notify;
+      }).length;
+      var sendToLine = notifyCount
+        ? 'Send-to is ticked for ' +
+          notifyCount +
+          ' patient' +
+          (notifyCount === 1 ? '' : 's') +
+          ' — Medicus will send its own confirmation to them; nobody else is messaged. '
+        : 'Send-to is off — no SMS or email. ';
       return (
         '<div class="ms-aoc-confirmbar">' +
         '<strong>This is the write.</strong> Everything above is only staged on this canvas until you press the red button. ' +
-        'Send-to is off — no SMS or email. There is no undo after this. ' +
+        sendToLine +
+        'There is no undo after this. ' +
         'Review staged greys out afterwards because there is nothing left to send.' +
         '<div class="ms-aoc-finalise-list">' +
         rows +
@@ -239,9 +259,7 @@
         '<button type="button" class="ms-aoc-confirm-btn" id="ms-aoc-action-confirm"' +
         (_pending.writing || !s.count || missingReason ? ' disabled' : '') +
         '>' +
-        (_pending.writing
-          ? 'Writing…'
-          : 'Write ' + s.count + ' to Medicus') +
+        (_pending.writing ? 'Writing…' : 'Write ' + s.count + ' to Medicus') +
         '</button>' +
         '</div></div>'
       );
@@ -285,9 +303,11 @@
           '<div class="ms-aoc-col-meta">' +
           esc(hhmm(col.sessionStart) + '–' + hhmm(col.sessionEnd)) +
           '</div>' +
-          (items.map(function (i) {
-            return i.html;
-          }).join('') || '<div class="ms-aoc-empty">No bookings or free slots.</div>') +
+          (items
+            .map(function (i) {
+              return i.html;
+            })
+            .join('') || '<div class="ms-aoc-empty">No bookings or free slots.</div>') +
           '</div>'
         );
       })
@@ -320,13 +340,7 @@
     var siteOpts = sites
       .map(function (s) {
         return (
-          '<option value="' +
-          esc(s) +
-          '"' +
-          (_colFilter.site === s ? ' selected' : '') +
-          '>' +
-          esc(s) +
-          '</option>'
+          '<option value="' + esc(s) + '"' + (_colFilter.site === s ? ' selected' : '') + '>' + esc(s) + '</option>'
         );
       })
       .join('');
@@ -357,9 +371,11 @@
       '<div class="ms-aoc-panel" role="dialog" aria-labelledby="ms-aoc-title">' +
       '<header class="ms-aoc-header">' +
       '<h2 class="ms-aoc-title" id="ms-aoc-title">Organise appointments — ' +
-      esc((_route && _route.date) || '') +
+      esc((_openRoute && _openRoute.date) || (_route && _route.date) || '') +
       '</h2>' +
-      '<button type="button" class="ms-aoc-close" id="ms-aoc-close">Close</button>' +
+      '<button type="button" class="ms-aoc-close" id="ms-aoc-close"' +
+      (_writing ? ' disabled' : '') +
+      '>Close</button>' +
       '</header>' +
       filterBarHtml() +
       '<div class="ms-aoc-explainer">' +
@@ -367,7 +383,8 @@
       'Stretch with <strong>+15 min</strong> or the bottom handle only when the following slot is free. ' +
       'If the next slot is booked the handle will not stage. <strong>Review staged</strong> shows the list; ' +
       '<strong>Write to Medicus</strong> is the actual send. After a successful write the review button greys out because the canvas is empty. ' +
-      'Arrived patients stay locked. Medicus will not send SMS or email from this board.' +
+      'Arrived patients stay locked. Medicus sends no SMS or email from this board unless you tick ' +
+      '“Tell the patient” on a staged action at Review.' +
       '</div>' +
       '<div class="ms-aoc-body">' +
       bodyHtml() +
@@ -375,12 +392,14 @@
       (_sick ? sickHtml() : '') +
       confirmBarHtml() +
       '<footer class="ms-aoc-footer">' +
-      '<button type="button" class="ms-aoc-ghost" id="ms-aoc-sick">Sick day…</button>' +
+      '<button type="button" class="ms-aoc-ghost" id="ms-aoc-sick"' +
+      (_writing ? ' disabled' : '') +
+      '>Sick day…</button>' +
       '<button type="button" class="ms-aoc-ghost" id="ms-aoc-discard"' +
-      (n ? '' : ' disabled') +
+      (n && !_writing ? '' : ' disabled') +
       '>Discard staged</button>' +
       '<button type="button" class="ms-aoc-finalise" id="ms-aoc-finalise"' +
-      (n ? '' : ' disabled') +
+      (n && !_writing ? '' : ' disabled') +
       (n ? '' : ' title="Nothing staged. Drag a patient first."') +
       '>Review staged…</button>' +
       '</footer>' +
@@ -421,7 +440,7 @@
       return (
         '<div class="ms-aoc-confirmbar">' +
         '<strong>Sick day.</strong> Whose list are we emptying? Arrived patients stay put. ' +
-        'Suggestions are same type, length, site and delivery on another list today. SMS stays off.' +
+        'Suggestions are same type, length, site and delivery on another list today. Send-to stays off unless you tick Tell patients.' +
         '<div class="ms-aoc-finalise-list">' +
         (cols || '<div class="ms-aoc-empty">No diaries.</div>') +
         '</div>' +
@@ -474,7 +493,10 @@
         var opts = (row.alternatives || [])
           .map(function (s) {
             var val = s.diaryId + '|' + s.startDateTime;
-            var sel = row.suggestion && s.diaryId === row.suggestion.diaryId && s.startDateTime === row.suggestion.startDateTime;
+            var sel =
+              row.suggestion &&
+              s.diaryId === row.suggestion.diaryId &&
+              s.startDateTime === row.suggestion.startDateTime;
             return (
               '<option value="' +
               esc(val) +
@@ -489,7 +511,16 @@
         return (
           '<div class="ms-aoc-finalise-row">' +
           '<span class="ms-aoc-finalise-desc">' +
-          esc(hhmm(a.startDateTime) + ' · ' + a.patientName + ' · ' + (a.appointmentTypeName || '') + ' · ' + a.duration + ' min') +
+          esc(
+            hhmm(a.startDateTime) +
+              ' · ' +
+              a.patientName +
+              ' · ' +
+              (a.appointmentTypeName || '') +
+              ' · ' +
+              a.duration +
+              ' min'
+          ) +
           '</span>' +
           (opts
             ? '<select class="ms-aoc-finalise-reason" data-sick-pick="' +
@@ -509,7 +540,7 @@
       '<strong>Sick day — ' +
       esc(_sick.proposal.sickStaffName) +
       '.</strong> Accept a similar slot, pick another, or leave as still needs rebook. ' +
-      'Finalise uses the captured cross-list move. Confirm will say rebooked with the covering clinician. SMS stays off.' +
+      'Finalise uses the captured cross-list move. Confirm stages “Rebook with” the covering clinician. Send-to stays off unless you tick Tell patients below.' +
       '<label class="ms-aoc-cap-label">Why (for the call script, not Medicus SMS) ' +
       '<input type="text" class="ms-aoc-filter-q" id="ms-aoc-sick-because" placeholder="e.g. clinician sickness" value="' +
       esc(_sick.because || '') +
@@ -588,6 +619,7 @@
   }
 
   function tryStretchTo(apptId, newDuration) {
+    if (_writing) return;
     var appt = C.findAppointment(_board, apptId);
     if (!appt) return;
     var next = Number(newDuration);
@@ -637,6 +669,7 @@
   }
 
   function stageFromDrop(apptId, target) {
+    if (_writing) return;
     var appt = C.findAppointment(_board, apptId);
     if (!appt) return;
     if (target && target.kind === 'cancel') {
@@ -651,7 +684,9 @@
       render();
       return;
     }
-    var gate = C.canStageMove(appt, target);
+    // Fit-check against the draft-applied board, so windows claimed by
+    // already-staged moves count as taken too.
+    var gate = C.canStageMove(appt, target, visualBoard());
     if (!gate.ok) {
       _error = gate.reason;
       render();
@@ -663,63 +698,101 @@
   }
 
   async function commitFinalise() {
+    if (_writing) return;
     var summary = C.summariseDraft(_draft, _board || { columns: [] });
     var included = summary.items.filter(function (i) {
       return i.included;
     });
+    // The book this canvas was opened on is the ONLY book it may write to. If
+    // the SPA moved to another day or site underneath, refuse before anything.
+    var live = currentRoute();
+    if (!_openRoute || !live || live.apiBase !== _openRoute.apiBase || live.date !== _openRoute.date) {
+      _pending = {
+        kind: 'finalise',
+        summary: summary,
+        writing: false,
+        error:
+          'The Medicus book has moved to a different day or site since this canvas was opened — nothing was written. Close and reopen the canvas.',
+      };
+      render();
+      return;
+    }
+    _writing = true;
     _pending = { kind: 'finalise', summary: summary, writing: true, error: null };
     render();
     var api = client();
     var failed = null;
-    for (var i = 0; i < included.length; i++) {
-      var item = included[i];
-      var appt = C.findAppointment(_board, item.id);
-      try {
-        if (item.kind === 'cancel') {
-          await api.commitCancel({
-            date: _route.date,
-            appointmentId: item.id,
-            patientId: appt && appt.patientId,
-            reason: item.reason,
-            notify: !!item.notify,
-            pinned: {
-              apiBase: _route.apiBase,
-              patientId: appt && appt.patientId,
+    var writtenCount = 0;
+    try {
+      for (var i = 0; i < included.length; i++) {
+        var item = included[i];
+        var appt = C.findAppointment(_board, item.id);
+        try {
+          if (item.kind === 'cancel') {
+            await api.commitCancel({
+              date: _openRoute.date,
               appointmentId: item.id,
-              versionId: appt && appt.versionId,
-            },
-          });
-          _draft = C.unstageCancel(_draft, item.id);
-        } else if (item.kind === 'move') {
-          var mv = _draft.moves[item.id];
-          await api.commitMove({
-            date: _route.date,
-            appointment: appt,
-            target: Object.assign({}, mv, { notify: !!item.notify }),
-            pinned: { apiBase: _route.apiBase },
-          });
-          _draft = C.unstageMove(_draft, item.id);
-        } else if (item.kind === 'stretch') {
-          await api.commitStretch({
-            date: _route.date,
-            appointment: appt,
-            newDuration: item.duration,
-            pinned: { apiBase: _route.apiBase },
-          });
-          _draft = C.unstageStretch(_draft, item.id);
+              patientId: appt && appt.patientId,
+              reason: item.reason,
+              notify: !!item.notify,
+              pinned: {
+                apiBase: _openRoute.apiBase,
+                patientId: appt && appt.patientId,
+                appointmentId: item.id,
+                versionId: appt && appt.versionId,
+              },
+            });
+            _draft = C.unstageCancel(_draft, item.id);
+          } else if (item.kind === 'move') {
+            var mv = _draft.moves[item.id];
+            await api.commitMove({
+              date: _openRoute.date,
+              appointment: appt,
+              target: Object.assign({}, mv, { notify: !!item.notify }),
+              pinned: { apiBase: _openRoute.apiBase },
+            });
+            _draft = C.unstageMove(_draft, item.id);
+          } else if (item.kind === 'stretch') {
+            await api.commitStretch({
+              date: _openRoute.date,
+              appointment: appt,
+              newDuration: item.duration,
+              pinned: { apiBase: _openRoute.apiBase },
+            });
+            _draft = C.unstageStretch(_draft, item.id);
+          }
+          writtenCount++;
+          _board = await api.fetchBoard(_openRoute.date);
+        } catch (err) {
+          failed = (err && err.message) || 'Write failed.';
+          // A stretch that cancelled but could not rebook is NOT still staged:
+          // the source appointment is gone, so a retry can never write it. The
+          // error text (from the core) carries the rebook-them-now instruction.
+          if (err && err.stretchCancelWritten && !err.stretchRestored) {
+            _draft = C.unstageStretch(_draft, item.id);
+          }
+          // Show the board as Medicus now has it — never the pre-failure one.
+          try {
+            _board = await api.fetchBoard(_openRoute.date);
+          } catch (_) {}
+          break;
         }
-        _board = await api.fetchBoard(_route.date);
-      } catch (err) {
-        failed = (err && err.message) || 'Write failed.';
-        break;
       }
+    } finally {
+      _writing = false;
     }
     if (failed) {
       _pending = {
         kind: 'finalise',
         summary: C.summariseDraft(_draft, _board || { columns: [] }),
         writing: false,
-        error: failed + ' Earlier ticked actions in this list were written; the rest are still staged.',
+        error:
+          failed +
+          ' — ' +
+          writtenCount +
+          ' earlier ticked action' +
+          (writtenCount === 1 ? ' was' : 's were') +
+          ' written; anything still listed above is still staged, not written.',
       };
       render();
       return;
@@ -778,6 +851,7 @@
       render();
     });
     root.querySelector('#ms-aoc-sick-apply')?.addEventListener('click', function () {
+      if (_writing) return;
       if (!_sick || !_sick.proposal) return;
       _draft = C.applySickDayProposal(_draft, _sick.proposal);
       var because = _sick.because || '';
@@ -791,7 +865,9 @@
       _sick = { step: 'leftovers', proposal: _sick.proposal };
       announce(
         leftovers.length
-          ? 'Staged accepted sick-day moves. ' + leftovers.length + ' still need a phone call. Review staged when ready.'
+          ? 'Staged accepted sick-day moves. ' +
+              leftovers.length +
+              ' still need a phone call. Review staged when ready.'
           : 'Staged accepted sick-day moves. Nobody left to phone. Review staged when ready.'
       );
       render();
@@ -867,20 +943,24 @@
       });
     });
     root.querySelector('#ms-aoc-discard')?.addEventListener('click', function () {
+      if (_writing) return;
       _draft = C.emptyDraft();
       _pending = null;
       _sick = null;
       render();
     });
     root.querySelector('#ms-aoc-finalise')?.addEventListener('click', function () {
+      if (_writing) return;
       _pending = { kind: 'finalise', summary: C.summariseDraft(_draft, _board || { columns: [] }), writing: false };
       render();
     });
     root.querySelector('#ms-aoc-action-cancel')?.addEventListener('click', function () {
+      if (_writing) return;
       _pending = null;
       render();
     });
     root.querySelector('#ms-aoc-action-confirm')?.addEventListener('click', function () {
+      if (_writing) return;
       if (!_pending) return;
       if (_pending.kind === 'abandon') {
         _draft = C.emptyDraft();
@@ -892,6 +972,7 @@
 
     root.querySelectorAll('.ms-aoc-finalise-inc').forEach(function (box) {
       box.addEventListener('change', function () {
+        if (_writing) return;
         _draft = C.setDraftIncluded(_draft, box.getAttribute('data-item-id'), box.checked);
         _pending = { kind: 'finalise', summary: C.summariseDraft(_draft, _board || { columns: [] }), writing: false };
         render();
@@ -899,6 +980,7 @@
     });
     root.querySelectorAll('.ms-aoc-finalise-notify').forEach(function (box) {
       box.addEventListener('change', function () {
+        if (_writing) return;
         _draft = C.setDraftNotify(_draft, box.getAttribute('data-notify-id'), box.checked);
         _pending = { kind: 'finalise', summary: C.summariseDraft(_draft, _board || { columns: [] }), writing: false };
         render();
@@ -918,6 +1000,7 @@
     });
     root.querySelectorAll('[data-cancel-reason]').forEach(function (input) {
       input.addEventListener('change', function () {
+        if (_writing) return;
         _draft = C.setCancelReason(_draft, input.getAttribute('data-cancel-reason'), input.value);
         _pending = { kind: 'finalise', summary: C.summariseDraft(_draft, _board || { columns: [] }), writing: false };
         render();
@@ -1034,6 +1117,10 @@
   }
 
   function requestClose() {
+    if (_writing) {
+      announce('Writing to Medicus — wait for it to finish before closing.');
+      return;
+    }
     if (C.hasDraftChanges(_draft)) {
       _pending = { kind: 'abandon', count: C.summariseDraft(_draft, _board || { columns: [] }).items.length };
       render();
@@ -1043,10 +1130,12 @@
   }
 
   function closeOverlay() {
+    if (_writing) return;
     _open = false;
     _pending = null;
     _draft = C.emptyDraft();
     _board = null;
+    _openRoute = null;
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
   }
@@ -1054,6 +1143,9 @@
   function openOverlay() {
     _route = currentRoute();
     if (!_route) return;
+    // Pin the book identity NOW: ensureLauncher keeps overwriting _route while
+    // the overlay is open, so every fetch and commit uses this pinned copy.
+    _openRoute = { apiBase: _route.apiBase, date: _route.date };
     _open = true;
     _draft = C.emptyDraft();
     _pending = null;
