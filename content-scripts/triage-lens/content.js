@@ -3909,6 +3909,12 @@
   // skipped by the pending pass + reinject.
   let _currentQueueSlug = null;
   const isResultQueueSlug = (slug) => /investigation|result/i.test(String(slug || ''));
+  // Act (Book / Pharmacy First / Ask-back / Park until…) models reception
+  // triage of a patient request — it has no meaning on the results queue, and
+  // none either on registration, PDS-change, appointment-request, miscellaneous,
+  // or any other non-triage task queue. Rather than blacklist queue after queue
+  // as each turns up, whitelist the two queues it actually applies to.
+  const isTriageQueueSlug = (slug) => /^(medical|admin)_patient_request_task$/i.test(String(slug || ''));
 
   // Recently-parsed investigation reports, NEWEST FIRST, served to the options-page
   // result-rule inspector on demand ("Load a recent result" instead of paste-a-JSON).
@@ -6507,6 +6513,7 @@
       }
     } else if (key === 'a' || key === 'A') {
       if (!PREF('queuePulseCompress', true)) return;
+      if (!isTriageQueueSlug(_currentQueueSlug)) return; // Act only exists on the triage queues
       if (_kbdCursorRowIndex == null) return;
       const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
       if (!row) return;
@@ -7355,15 +7362,22 @@
       more.setAttribute('aria-label', composed.overflowCount + ' more signals — show why');
       line.appendChild(more);
     }
+    // Act is a reception-request affordance (Book / Pharmacy First / Ask-back /
+    // Park until…) — meaningful only on the medical/admin triage queues, so it
+    // is withheld on every other task queue rather than shown there to open a
+    // tray of disabled placeholders.
+    const showActBtn = isTriageQueueSlug(_currentQueueSlug);
     const act = ri != null ? _pulseActByRow.get(Number(ri)) : null;
     const actBtn = document.createElement('button');
-    actBtn.type = 'button';
-    actBtn.className = 'ch-q-pulse-act';
-    actBtn.textContent = 'Act ›';
-    actBtn.setAttribute('aria-label', 'Stage a next step — nothing is sent from here');
-    actBtn.setAttribute('aria-controls', actTrayId);
-    actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
-    line.appendChild(actBtn);
+    if (showActBtn) {
+      actBtn.type = 'button';
+      actBtn.className = 'ch-q-pulse-act';
+      actBtn.textContent = 'Act ›';
+      actBtn.setAttribute('aria-label', 'Stage a next step — nothing is sent from here');
+      actBtn.setAttribute('aria-controls', actTrayId);
+      actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
+      line.appendChild(actBtn);
+    }
     host.appendChild(line);
 
 
@@ -7395,15 +7409,18 @@
         if (e.key === 'Enter' || e.key === ' ') onWhy(e);
       });
     });
-    actBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggle('act', 'ch-q-pulse-act');
-    });
+    if (showActBtn) {
+      actBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggle('act', 'ch-q-pulse-act');
+      });
+    }
 
     target.insertBefore(host, target.firstChild);
 
-    if (open === 'why' || open === 'act') {
+    const showActTray = open === 'act' && showActBtn;
+    if (open === 'why' || showActTray) {
       const tray = open === 'why' ? buildPulseWhyTray(composed) : buildPulseActTray(row, act);
       // The triggers' aria-controls point at these ids (crit decision I).
       tray.id = open === 'why' ? whyTrayId : actTrayId;

@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.239.1] — 2026-08-23
+
+### Fix: "Act ›" queue-pulse button restricted to the medical/admin triage queues
+
+The reception "Act" affordance (`content-scripts/triage-lens/content.js`,
+`refreshPulseOnRow`) opened a tray of Book / Pharmacy First / Ask-back / Park
+until… buttons — all reception-request actions with no meaning outside the
+two GP triage queues, and all disabled placeholders anyway wherever they did
+appear, since the pathway-matching that populates them only runs off request
+preview text. Confirmed present (unhelpfully) on investigation results,
+registration, PDS change, appointment requests and miscellaneous tasks alike.
+Rather than blacklist queue after queue as each turns up, the button (its
+tray, and the `a` key shortcut that opens it) is now gated by a new
+`isTriageQueueSlug()` whitelist matching exactly `medical_patient_request_task`
+and `admin_patient_request_task` — the two "Medical"/"Admin" request queues —
+so it is withheld everywhere else by default. Age/decoration and
+monitoring/result-triage chips are unaffected — only the "Act ›" control is
+suppressed. (Same fix as [PR #316](https://github.com/davetriska02-collab/medicus-suite/pull/316)
+against `main`, ported here so it's present on this branch too.)
+
 ## [v3.239.0] — 2026-08-23
 
 ### Fix: episodicitySuffix pattern missed the unbraced GP2GP wrapper variant
