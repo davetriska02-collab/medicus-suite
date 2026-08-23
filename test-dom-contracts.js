@@ -282,12 +282,7 @@ const FIXTURES = {
   'routine-rx.action-anchor': { current: 'routine-rx-action-anchor.html', legacy: [] },
   'lab-file.file-button': { current: 'lab-file-file-button.html', legacy: [] },
   'lab-file.normal-option-controls': { current: 'lab-file-normal-option-controls.html', legacy: [] },
-  'task-widget.codes-actions-heading': {
-    current: 'task-widget-codes-actions-heading-current.html',
-    legacy: ['task-widget-codes-actions-heading-legacy.html'],
-  },
   'task-widget.card-submit-button': { current: 'task-widget-card-submit-button.html', legacy: [] },
-  'task-inline.action-row': { current: 'task-inline-action-row.html', legacy: [] },
   'quick-actions.internal-comment': { current: 'quick-actions-internal-comment.html', legacy: [] },
   'sentinel.mount-anchor': { current: 'sentinel-mount-anchor.html', legacy: [] },
   'api-client.patient-uuid-dom-fallback': {

@@ -3,8 +3,10 @@
 //
 // shared/booking-core.js is the ONE copy of the suite's appointment-booking
 // write path (previously inlined in side-panel/modules/slots/booking-api.js,
-// with a divergent hand-copy still living in content-scripts/booking-inline.js).
-// This is that path's first CI coverage. What is pinned here, and why:
+// with a divergent hand-copy still living in the booking section of
+// content-scripts/task-actions-panel.js, formerly the standalone
+// booking-inline.js). This is that path's first CI coverage. What is pinned
+// here, and why:
 //
 //   • Endpoint paths and the create payload's field names — the live Medicus
 //     API depends on them byte-for-byte; a "tidy-up" that renames one is a
@@ -230,8 +232,9 @@ const API = 'https://ab12cd.api.england.medicus.health';
   // ==========================================================================
   console.log('\n=== 2. createAppointment identity guard (H-043 / plan D1.2) ===');
 
-  // The exact payload slots.js and booking-inline.js build. Field names are the
-  // live API contract — this list changing is a deliberate act, not a refactor.
+  // The exact payload slots.js and task-actions-panel.js build. Field names
+  // are the live API contract — this list changing is a deliberate act, not
+  // a refactor.
   const CREATE_PAYLOAD_KEYS = [
     'context',
     'appointmentTemporalType',
