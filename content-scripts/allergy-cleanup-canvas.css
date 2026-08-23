@@ -327,6 +327,14 @@
   text-overflow: ellipsis;
 }
 
+/* Coded reaction(s) inline with the substance name, e.g. "Tramadol - nausea"
+   -- deliberately NOT bold like the substance itself, so the eye still
+   lands on the substance first. */
+.ms-acc-tile-desc-reactions {
+  font-weight: 400;
+  color: var(--text-2);
+}
+
 .ms-acc-tile-date {
   flex: 0 0 auto;
   margin-left: auto;

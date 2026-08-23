@@ -2,6 +2,177 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.239.0] — 2026-08-23
+
+### Fix: episodicitySuffix pattern missed the unbraced GP2GP wrapper variant
+
+Found immediately after shipping the allergy import-text cleanup below:
+the real allergy in question had NO surrounding braces at all —
+`Episodicity : code=255217005, displayName=First`, not
+`{Episodicity : code=255217005, displayName=First}` — so the
+braces-required `episodicitySuffix` pattern in
+`rules/generic-additional-info-text.json` never matched it, and nothing
+was offered for removal. The pattern is now an alternation: the original
+braced form (unchanged, still swallows anything up to the closing brace)
+OR a bounded unbraced form matched as `code=<digits>, displayName=<value>`
+(the value stops at whitespace/comma/period/semicolon/brace, so it can't
+run on and eat genuine free text sharing the same line). Since this rules
+file is shared with `problem-description-cleanup.js`, the fix applies
+there too. Version bumped 3→4; `test-allergy-cleanup.js` and
+`test-problem-description-cleanup.js` both still pass on the original
+braced example, plus new coverage for the unbraced one.
+
+### Allergy canvas: clean up GP2GP import-text noise from additional info
+
+Real example: an allergy's additionalInformation was nothing but
+`{Episodicity : code=255217005, displayName=First}` — pure GP2GP-import
+boilerplate, no clinical meaning. The review card (opened by clicking any
+tile) now reuses `rules/generic-additional-info-text.json` — the SAME
+file `problem-description-cleanup.js`'s "Clean up code" widget already
+draws on for problems, since that file's own header note calls out
+"problems are the test bed, not the only intended entity type" — to
+detect and offer removal of known GP2GP noise from an allergy's own free
+text. New pure helpers in `allergy-cleanup.js`: `findGenericTextPatternMatch`/
+`removeGenericTextSpan` (pattern entries matched and stripped against the
+whole text first, so multi-line or run-together boilerplate is
+recognised either way) and `computeGenericTextRemoval` (then literal
+entries mop up per-line). Deliberately reuses only the strip half of the
+problem-side machinery, not its severityCorrection/reviewSeverity/
+linkSuggestion actions — those compare a captured value against a
+problem's own significance or resolve it against another problem, and
+allergies have no equivalent concept. "Clean up text" is an independent
+action from Convert (`buildCleanTextChangeAllergyPayload`, the opposite
+invariant to `buildConversionChangeAllergyPayload`: it rewrites ONLY
+additionalInformation, carrying substance/allergyCode/allergyCodeType/
+severity/certainty/reactions/onset through completely unchanged), so it's
+offered and can be applied whether or not the clinician also picks a
+substance or reaction. Every removed fragment is listed before
+confirming, same as every other write in this widget — nothing is
+stripped without an explicit click.
+
+### Allergy canvas: single-word substance match, inline reaction display, and any allergy can be ended
+
+Three more allergy-canvas changes. **First-word substance search**: a
+multi-part drug name (e.g. "Tramadol hydrochloride") now also searches its
+plain first word ("Tramadol") and folds the results in, deduped by
+conceptId (`firstQueryWord`/`mergeUniqueByConceptId`) — Medicus's own
+search requires every query word present in a result, so the full-query
+search alone can never surface the base ingredient. This also gives
+`rankSubstanceResults`' existing VTM-ranking heuristic a real shot at
+recognising the base ingredient as an ancestor-of-sibling, since merging
+makes them genuine siblings of one result set.
+
+**Coded reactions inline on the tile**: a tile now reads "Tramadol -
+nausea" (or "- nausea, diarrhoea, skin rash" for several) instead of just
+the substance name — `snapshotAllergies()` now carries each entry's
+`reactions` (reusing `reactionDescriptions`), rendered inline by
+`allergy-cleanup-canvas.js`'s `tileHtml`. `additionalInformation` free
+text stays a separate line underneath, unchanged.
+
+**Any allergy can now be ended from the canvas — explicit product
+decision, not a bug fix.** The End bin used to hard-block ending anything
+except junk-classified or confirmed "not-an-allergy" rows, and separately
+refused ending the LAST "No known allergies" copy. Both blocks are
+removed: it is not this tool's place to restrict what a clinician can end
+in their own clinical system — the underlying SNOMED history stays in the
+patient's journal regardless of what the allergy list shows (that's
+where "was this ever checked/coded" belongs, not the allergy section),
+and a short, current, at-a-glance allergy list is the actual
+prescribing-safety goal. A patient coded "No known allergies" in 1999 who
+has since developed confirmed allergies has a list that is, in the
+present moment, factually wrong while that marker stays. Every end still
+requires the same explicit stage-then-Finalise confirmation naming the
+count (Cancel default) — the relaxation is about WHICH rows can be
+staged, not about removing confirmation. `isEndableClassification`/
+`canStageEnd` in `allergy-cleanup-canvas.js` simplified accordingly;
+`resolveEndTargets` in `allergy-cleanup.js` rewritten to resolve ANY
+currently-listed allergy (reusing the same ad-hoc `_conversionFlagged`
+registration the generalised Convert… action already uses), and
+`commitEndJunk` renamed to `commitEndAllergies` to match its new scope.
+`rules/allergy-junk-codes.json`'s "No known allergies" `caution` text is
+rewritten to a purely informational framing: *"This code is a positive
+record that allergy status was checked historically. That information is
+stored in the journal; if the patient has since developed allergies, you
+may want to end this allergy here, or you may wish to leave it for
+historical interest."* Documented as a dated addendum in
+`docs/HAZARD-LOG.md` (H-060 controls (b)/(h), v3.30, pending CSO review)
+and `docs/CLINICAL-SAFETY-NOTICE.md` (W13, v3.23, pending CSO review) —
+this corrects both documents' prior claim that the End bin cannot retire
+a genuine allergy, which stops being true with this change.
+
+### Allergy canvas: every tile opens the conversion/reaction-review card directly
+
+Clicking any allergy tile in the Clean up allergies canvas — EVERY lane
+(Active, Junk/low-rel, Convert, Dual-coded) — now opens the conversion/
+reaction-review card straight away, no separate "Convert…" button/step
+(`isConvertEligible` in `allergy-cleanup-canvas.js`). Only two rows still
+fall through to the select-then-"Stage end" flow instead, because
+"convert to a substance" is the wrong action for them, not merely
+unhelpful: a confirmed "not-an-allergy" match, and the "No known
+allergies" sentinel entry (structurally the opposite of an allergy —
+there's no substance to convert it to; it also keeps the
+last-remaining-NKA protection that only Stage end honours). Every other
+junk-lane row — a genuine but generically/badly-coded allergy, e.g.
+"Allergic reaction" — is convert-eligible too: ending it was never the
+only reasonable outcome. `allergy-cleanup.js`'s `findOrRegisterConversionEntry`
+registers an ad-hoc review entry on demand for a tile the scan never
+flagged, opening the SAME review panel used for a genuinely-flagged
+pre-defined-allergy code — but it now PULLS THROUGH what's already coded
+rather than guessing from the raw description: the pending substance
+defaults to the entry's own current substance, and any already-coded
+reaction(s) are pulled through as the pending picks too. Only when there
+is no coded reaction yet does it fall back to seeding the reaction
+search from the allergy's own `additionalInformation` free text
+(`pickReactionSeed`) — running the legacy-description pattern extractor
+(`extractAllergenAndReactionHint`) on an already-clean substance
+description was producing nonsense seeds (e.g. "2.5mg tablets" for
+"Indapamide 2.5mg tablets"), so that extractor is no longer used on the
+ad-hoc path at all. The ad-hoc entry is marked `adHoc: true` and
+`liveLaneKey`/tile rendering explicitly exclude it from Convert-lane
+classification and from the "Pre-defined-allergy code" hint — it exists
+only to give that one review modal somewhere to keep its state, never to
+reclassify the row.
+
+### Allergy conversion review: preliminary search (top 5 + % match) and a top-level substance option
+
+Two more asks from the same review card, "as in the problem checker":
+substance and reaction searches now run PRELIMINARILY — automatically, the
+moment the card opens with whatever query got seeded, no manual "Search"
+click needed — and every result list is ranked and capped to the top 5
+(`capResults`) with a display "N% match" badge (`searchMatchPercent`,
+`allergy-cleanup.js`). The % is a transparency cue only, the same status as
+the SNOMED id already shown alongside every result — Medicus's own search
+already decided relevance by returning the result at all, this never
+re-filters. Deliberately SUBSTRING matching, not
+problem-description-cleanup.js's `\bword\b` boundary matching: dm+d
+substance names routinely embed the query as part of a longer compound word
+(a search for "penicillin" returns "Phenoxymethylpenicillin", which a
+strict word-boundary check would score 0% against despite it being the
+obvious clinical match). Substance results keep `rankSubstanceResults`'
+existing VTM-aware reorder as the primary sort — the % is decoration on top
+of that ranking, never a competing one.
+
+Also new: a "Broader, top-level option" suggestion for the substance pick
+(e.g. "Penicillin V 250mg capsules" -> "Penicillin") — useful because an
+allergy is often better recorded against the whole ingredient/class than
+one specific dose-form product, so cross-reactivity checks catch every
+sibling product too. `fetchTopLevelSubstanceAncestor` walks UP the pending
+substance's own `parentConceptIds` chain (via the new
+`fetchSubstanceConceptById`, the same bare-SCTID-as-query trick
+`fetchAncestorConceptIds` already uses, but scoped to the substance refset
+so parent DESCRIPTIONS — not just ids — can be read) until it reaches the
+first ancestor whose own description doesn't look dose/form/brand-specific
+(`DOSE_OR_BRAND_RE`, the same filter `rankSubstanceResults` already uses
+for its VTM guess) — bounded to 4 hops, fails closed to no suggestion
+rather than guessing past the bound, and deliberately stops at that first
+clean ancestor rather than climbing on into the broader SNOMED
+substance-CLASS hierarchy. Offered as an extra pick alongside the ranked
+results, never auto-applied. **Pending live verification**: assembled
+entirely from already-confirmed building blocks, but the walk itself has
+not yet been HAR-captured against a real patient record — needs a live
+check with a real dose-specific entry before the code comment can drop
+"pending" and say confirmed.
+
 ## [v3.238.0] — 2026-08-23
 
 ### Investigation (lab result) duplicate detection + document content-hash verification
