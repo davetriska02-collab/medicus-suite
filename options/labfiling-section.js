@@ -161,7 +161,10 @@ async function loadState() {
     'labfiling.suppress',
     'triagelens.config',
   ]);
-  _profiles = Array.isArray(r['labfiling.profiles']) ? r['labfiling.profiles'] : [];
+  // 2026-08-23 review fix: migrate legacy profiles on read so the editor shows
+  // the fail-closed requireRangeForAll default rather than a stale explicit
+  // false (which the old sanitiser wrote for everyone who never ticked it).
+  _profiles = LF.migrateStoredProfiles(r['labfiling.profiles']);
   _config = r['labfiling.config'] && typeof r['labfiling.config'] === 'object' ? r['labfiling.config'] : {};
   _audit = Array.isArray(r['labfiling.auditLog']) ? r['labfiling.auditLog'] : [];
   _suppress = Array.isArray(r['labfiling.suppress']) ? r['labfiling.suppress'] : [];
@@ -312,7 +315,11 @@ function renderForm() {
   const mode = LF.LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual';
   // requireRangeForAll defaults ON for a brand-new profile (P10 safety default);
   // for an existing profile it reflects the saved value.
-  const reqAllDefault = _editingId === 'new' ? p.requireRangeForAll !== false : p.requireRangeForAll === true;
+  // 2026-08-23 review fix: `=== true` for an existing profile rendered the
+  // safety box UNTICKED for every legacy profile (explicit false), and saving
+  // re-persisted that. Profiles are migrated on load, so `!== false` is right
+  // for both branches.
+  const reqAllDefault = p.requireRangeForAll !== false;
   return `
     <div class="lf-form">
       <div class="lf-form-head">${_editingId === 'new' ? 'New filing profile' : 'Edit filing profile'}</div>
@@ -738,7 +745,7 @@ function fillFromLlm() {
     paramsBox.innerHTML = rows || paramRowHtml({});
   }
   const reqChk = container.querySelector('#lfRequireAll');
-  if (reqChk) reqChk.checked = clean.requireRangeForAll === true;
+  if (reqChk) reqChk.checked = clean.requireRangeForAll !== false;
   const ovrChk = container.querySelector('#lfParamsOverride');
   if (ovrChk) ovrChk.checked = clean.paramsOverrideLabFlags === true;
   // Message stays OFF (lockForReview) — the clinician opts in deliberately.

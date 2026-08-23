@@ -854,7 +854,13 @@
       // from the URL and re-resolve its patient; abort on any mismatch rather
       // than filing this document into the previously-open patient's record.
       var commitInfo = getTaskInfo();
-      if (!commitInfo || (s.resolvedForTaskUuid && commitInfo.taskUuid !== s.resolvedForTaskUuid)) {
+      // 2026-08-23 review fix: the uuid comparison used to sit behind
+      // `s.resolvedForTaskUuid &&`, so it was SKIPPED entirely whenever that
+      // value was falsy — a guard whose failure mode is silence. Unreachable
+      // today, but it meant the check silently degraded to "trust it" the moment
+      // any future path set patientId from elsewhere. Absent identity now fails
+      // closed like every other arm.
+      if (!commitInfo || !s.resolvedForTaskUuid || commitInfo.taskUuid !== s.resolvedForTaskUuid) {
         throw new Error(
           'The task on screen changed since this form was opened — nothing was saved. Reopen the form on the task you want.'
         );
@@ -865,13 +871,20 @@
           'Could not re-confirm the patient for this task at save time — nothing was saved. Reopen the form and try again.'
         );
       }
-      var downloadUrl = resolveAttachmentUrl(att, s.resolvedAttachments, apiBaseUrl());
+      // 2026-08-23 review fix: everything below awaits a multi-MB attachment
+      // download before the POST, and `runInject` blanks `s` on any SPA path
+      // change — so the write used to read `s.patientId` (and re-derive the API
+      // base) AFTER that window. Pin the verified identity into locals here so
+      // the write cannot be repointed by a navigation mid-download.
+      var verifiedPatientId = freshOverview.patientId;
+      var verifiedApiBase = apiBaseUrl();
+      var downloadUrl = resolveAttachmentUrl(att, s.resolvedAttachments, verifiedApiBase);
       if (!downloadUrl) throw new Error("Could not locate this attachment's file — try reopening the task.");
       var resp = await fetch(downloadUrl, { credentials: 'include' });
       if (!resp.ok) throw new Error('Could not fetch the attachment (HTTP ' + resp.status + ').');
       var blob = await resp.blob();
       await apiCreateDocument({
-        patientId: s.patientId,
+        patientId: verifiedPatientId,
         blob: blob,
         filename: att.filename || 'attachment',
         title: s.title.trim(),

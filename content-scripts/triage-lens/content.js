@@ -3243,7 +3243,10 @@
   // Standalone/testable — kept out of applyOutstandingMatch's body so it can
   // be extracted and unit-tested without the rest of the match pipeline.
   const performOirAutoTick = (verdicts, rows, taskUuid) => {
-    if (!PREF('oirAutoTick', false)) return;
+    // 2026-08-23 review fix: a bare truthiness test meant any junk value from a
+    // restored backup ("no", 1, {}) re-enabled a machine-initiated write that
+    // this release deliberately made opt-in. Require an explicit boolean true.
+    if (PREF('oirAutoTick', false) !== true) return;
     const toTickVerdicts = verdicts.filter((v) => v.autoTick && rows[v.id]);
     if (!toTickVerdicts.length) return;
     const toTick = toTickVerdicts.map((v) => rows[v.id].box);

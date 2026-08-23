@@ -255,6 +255,7 @@
       // gate's doctrine, so the un-ranged backstop must be opt-OUT, not opt-in.
       // A profile that genuinely wants the old behaviour must say
       // `"requireRangeForAll": false` explicitly.
+      lfSchema: LF_SCHEMA,
       requireRangeForAll: p.requireRangeForAll !== false,
       // When true, a result that is within the clinician's set parameter range counts
       // as normal for the all-normal gate EVEN IF the lab flagged it out-of-range
@@ -492,15 +493,103 @@
   // lab's LOW flag on a critical haemoglobin and graded it fileable-as-normal.
   // A short result name that happens to sit inside a longer param term must
   // never be treated as that analyte.
+  // 2026-08-23 review fix (audit R1b follow-up): substring matching was still
+  // wrong in the surviving direction. `n.includes(a)` let a SHORT parameter
+  // capture a DIFFERENT, longer-named analyte — a clinician's "albumin" range
+  // captured "Microalbumin", and with paramsOverrideLabFlags on it CLEARED the
+  // lab's HIGH flag on a microalbuminuria and graded it fileable-as-normal.
+  // It was also first-match-wins rather than most-specific: for "HbA1c (IFCC)"
+  // a parameter list of [hb, hba1c] returned `hb`, so the practice's HbA1c
+  // limit was never consulted.
+  //
+  // Matching is now TOKEN-anchored: the analyte must appear as a whole word (or
+  // whole run of words) inside the result name. "hba1c" still matches
+  // "HbA1c (IFCC)" and "calcium" still matches "Adjusted calcium"; "albumin" no
+  // longer matches "Microalbumin" and "hb" no longer matches "HbA1c".
+  // A tightened match that now finds NOTHING is the safe direction: the result
+  // falls to the requireRangeForAll backstop and blocks.
+  function tokenPad(str) {
+    return (
+      ' ' +
+      String(str || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim() +
+      ' '
+    );
+  }
+
+  // An analyte matches a result name when it appears at a TOKEN BOUNDARY:
+  //   • as a whole token / run of tokens — "calcium" in "Adjusted calcium"; or
+  //   • as the START of a token, but only for terms of 4+ characters — so
+  //     "egfr" still matches the real-world "eGFRcreat (CKD-EPI)/1.73 m*2",
+  //     while a 1–3 character code like "hb" or "k" must match a whole token
+  //     and can never capture "HbA1c".
+  // What it deliberately no longer does is match mid-token: "albumin" does not
+  // match "Microalbumin", which is how a serum-albumin range came to clear the
+  // lab's HIGH flag on a microalbuminuria.
+  const ANALYTE_PREFIX_MIN = 4;
+
+  function analyteMatchesName(name, analyte) {
+    const a = tokenPad(analyte).slice(1, -1);
+    if (!a) return false;
+    const hay = tokenPad(name);
+    if (hay.indexOf(' ' + a + ' ') >= 0) return true; // whole token / token run
+    if (a.replace(/ /g, '').length < ANALYTE_PREFIX_MIN) return false;
+    return hay.indexOf(' ' + a) >= 0; // token-initial prefix
+  }
+
+  // Every parameter whose analyte token-matches this result name, most specific
+  // (longest analyte) first.
+  function findParamMatches(name, params) {
+    if (!String(name || '').trim()) return [];
+    return (Array.isArray(params) ? params : [])
+      .filter((pr) => pr && isStr(pr.analyte) && analyteMatchesName(name, pr.analyte))
+      .sort((x, y) => String(y.analyte).length - String(x.analyte).length);
+  }
+
+  // Most-specific parameter for a result name, or null.
+  // ── Stored-profile schema migration ───────────────────────────────────────
+  // 2026-08-23 review fix. The fail-closed `requireRangeForAll` default added by
+  // the 2026-08-22 audit (sanitiseProfile: `!== false`) never reached the
+  // installed base. The PREVIOUS sanitiser wrote `p.requireRangeForAll === true`
+  // — an explicit boolean — so every profile already saved in the field carries
+  // an explicit `false` for every clinician who simply never ticked the box, and
+  // stored profiles are not re-sanitised on load. The new default therefore
+  // protected only brand-new profiles.
+  //
+  // A stored `false` from before this marker cannot be distinguished from "never
+  // considered it", so it is upgraded ONCE to the fail-closed value. A clinician
+  // who genuinely wants it off unticks it again and that choice sticks, because
+  // the marker is stamped from then on.
+  const LF_SCHEMA = 2;
+
+  function migrateStoredProfile(p) {
+    if (!p || typeof p !== 'object') return p;
+    if (Number(p.lfSchema) >= LF_SCHEMA) return p;
+    return { ...p, lfSchema: LF_SCHEMA, requireRangeForAll: true };
+  }
+
+  function migrateStoredProfiles(list) {
+    return (Array.isArray(list) ? list : []).map(migrateStoredProfile);
+  }
+
   function findParamFor(name, params) {
-    const n = String(name || '').toLowerCase();
-    if (!n) return null;
-    for (const pr of Array.isArray(params) ? params : []) {
-      if (!pr || !isStr(pr.analyte)) continue;
-      const a = pr.analyte.toLowerCase();
-      if (a && n.includes(a)) return pr;
-    }
-    return null;
+    return findParamMatches(name, params)[0] || null;
+  }
+
+  // True when two or more parameters match this result name and the losers are
+  // NOT simply less-specific forms of the winner (so "calcium" alongside
+  // "corrected calcium" is fine — one is a refinement of the other — but "t4"
+  // alongside "tsh" on one panel row is a genuine tie the code cannot resolve).
+  // An unresolved tie must BLOCK, never silently pick one range and file on it.
+  function findParamAmbiguity(name, params) {
+    const matches = findParamMatches(name, params);
+    if (matches.length < 2) return null;
+    const winner = matches[0];
+    const rival = matches.find((m) => m !== winner && !analyteMatchesName(winner.analyte, m.analyte));
+    if (!rival) return null;
+    return { winner: winner.analyte, rival: rival.analyte };
   }
 
   // Unit compatibility for the parameter path. Delegates to the grading engine's
@@ -529,6 +618,25 @@
     return a === b ? 'match' : 'mismatch';
   }
 
+  // May a clinician parameter be applied to this result at all, unit-wise?
+  // 2026-08-23 review fix. The old test was `param.unit && r.unit && … ===
+  // 'mismatch'`, and unitsCompat returns 'unknown' (not 'mismatch') when EITHER
+  // side is empty — so a parameter declared in ug/L was silently applied to a
+  // lab-flagged value of unknown unit, and cleared the flag.
+  //   • both sides declare and agree  → apply
+  //   • neither side declares         → apply (nothing to conflict; this is the
+  //                                     ordinary eGFR / ratio case)
+  //   • they disagree                 → refuse
+  //   • exactly one side declares     → refuse: the clinician stated a unit and
+  //                                     the value cannot be confirmed to be in it
+  function unitsSafeToApply(paramUnit, resultUnit) {
+    const pu = String(paramUnit || '').trim();
+    const ru = String(resultUnit || '').trim();
+    if (!pu && !ru) return true;
+    if (!pu || !ru) return false;
+    return unitsCompat(pu, ru) === 'match';
+  }
+
   // Reasons a report fails the profile's OWN per-analyte parameters — the clinician-
   // set normal ranges. Used IN ADDITION to the lab's flags, so it catches analytes
   // the lab leaves un-ranged (e.g. HbA1c). Returns [] when all set parameters pass.
@@ -541,18 +649,55 @@
     // Missing key = TRUE (audit R1c): stored profiles predating the fail-closed
     // default never re-pass sanitiseProfile, so the gate must default here too.
     const requireAll = profile.requireRangeForAll !== false;
-    if (!params.length && !requireAll) return reasons;
     for (const r of report.results) {
-      if (!r || typeof r !== 'object') continue;
+      // 2026-08-23 review fix: a malformed entry is not a normal result. The
+      // old `continue` let a parser-produced null row pass the gate silently.
+      if (!r || typeof r !== 'object') {
+        reasons.push('A result row could not be read at all — file this report by hand');
+        continue;
+      }
       const name = isStr(r.name) ? r.name : '';
       const val = Number(r.value);
+      // 2026-08-23 review fix: a row with NEITHER a readable number NOR any text
+      // (specimen unsuitable, test not performed, a value field this parser does
+      // not understand) is the purest case of "the gate cannot judge this" — and
+      // it used to clear every blocker, because the free-text check needs text
+      // and the requireRangeForAll backstop needs a finite number. Blocks
+      // regardless of requireRangeForAll: opting out of "every analyte needs a
+      // range" is not opting out of "this row was unreadable".
+      const hasAnyText = isStr(r.text) ? r.text.trim() !== '' : false;
+      const hasRawText = isStr(r.rawValue) ? r.rawValue.trim() !== '' : false;
+      if (!Number.isFinite(val) && !hasAnyText && !hasRawText) {
+        reasons.push(
+          `${name || 'A result'} has no readable value — the suite cannot judge it, so this report needs filing by hand`
+        );
+        continue;
+      }
+      // 2026-08-23 review fix: two unrelated parameters matching one result is a
+      // tie the code cannot resolve. It used to silently pick one and file on it.
+      const ambiguous = findParamAmbiguity(name, params);
+      if (ambiguous) {
+        reasons.push(
+          `${name || 'a result'} matches more than one of your parameters (“${ambiguous.winner}” and “${ambiguous.rival}”) — rename them so only one applies`
+        );
+        continue;
+      }
       const param = findParamFor(name, params);
       if (param) {
         // Units must agree before a clinician range is applied to a lab value
-        // (audit R1/F7): a mismatch is a blocker, never a silent compare.
-        if (param.unit && r.unit && unitsCompat(param.unit, r.unit) === 'mismatch') {
+        // (audit R1/F7). 2026-08-23 review fix: the old test was
+        // `param.unit && r.unit && … === 'mismatch'`, and unitsCompat returns
+        // 'unknown' (not 'mismatch') when EITHER side is empty — so a parameter
+        // declared in ug/L was silently applied to a value of unknown unit. When
+        // the clinician has declared a unit, anything short of a positive match
+        // now blocks.
+        if (!unitsSafeToApply(param.unit, r.unit)) {
           reasons.push(
-            `${name || 'a result'} is reported in ${r.unit} but your parameter for “${param.analyte}” is set in ${param.unit} — units don't match`
+            param.unit && r.unit
+              ? `${name || 'a result'} is reported in ${r.unit} but your parameter for “${param.analyte}” is set in ${param.unit} — units don't match`
+              : param.unit
+                ? `${name || 'a result'} is reported with no unit but your parameter for “${param.analyte}” is set in ${param.unit} — units cannot be confirmed`
+                : `${name || 'a result'} is reported in ${r.unit} but your parameter for “${param.analyte}” sets no unit — units cannot be confirmed`
           );
           continue;
         }
@@ -607,13 +752,21 @@
       if (!r || typeof r !== 'object') return r;
       if (r.urgent) return r; // never override an urgent flag
       if (!(r.isAbove || r.isBelow)) return r; // nothing flagged to clear
-      const param = findParamFor(isStr(r.name) ? r.name : '', params);
+      const rName = isStr(r.name) ? r.name : '';
+      // 2026-08-23 review fix: an unresolved tie between two parameters must
+      // never clear a lab flag — the code cannot tell which range applies.
+      if (findParamAmbiguity(rName, params)) return r;
+      const param = findParamFor(rName, params);
       if (!param) return r;
       const val = Number(r.value);
       if (!Number.isFinite(val)) return r; // can't judge → keep the lab flag
-      // A unit mismatch must never clear a lab flag (audit R1/F7) — the
-      // clinician's range was set in a different unit from the reported value.
-      if (param.unit && r.unit && unitsCompat(param.unit, r.unit) === 'mismatch') return r;
+      // Units must POSITIVELY match before a clinician range clears a flag the
+      // lab itself raised (audit R1/F7). 2026-08-23 review fix: the old test
+      // only caught 'mismatch', and unitsCompat returns 'unknown' when either
+      // side is empty — so a ug/L range cleared a lab-flagged value of unknown
+      // unit. Clearing a lab flag is the most dangerous thing this function
+      // does; anything short of a confirmed match keeps the lab's own flag.
+      if (!unitsSafeToApply(param.unit, r.unit)) return r;
       // A comparator-censored value must never clear a lab flag (audit R1/F6) —
       // the true value is only bounded by, not equal to, the parse.
       if (isStr(r.comparator) && r.comparator.trim()) return r;
@@ -1047,7 +1200,12 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     applyParamOverrides,
     // 2026-08-22 audit R1b — exported so the unidirectional-match invariant is
     // pinned directly, not only through the blocker functions.
+    LF_SCHEMA,
+    migrateStoredProfile,
+    migrateStoredProfiles,
     findParamFor,
+    findParamMatches,
+    findParamAmbiguity,
     analyteTrend,
     trendBlockers,
     medExclusionBlockers,

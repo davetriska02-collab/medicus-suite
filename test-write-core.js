@@ -135,6 +135,33 @@ console.log('--- finaliseConfirmCopy: never claims completion ---');
       (offenders.length ? ': ' + JSON.stringify(offenders) : '')
   );
 
+  // 2026-08-23 review fix: this BANNED sweep only ever scanned write-core.js, so
+  // the house "never claim completion" rule was unenforced on the two DOM macros
+  // that actually click Medicus's own commit buttons — exactly where observing a
+  // click is furthest from observing a successful write. Scan their user-facing
+  // toast copy too.
+  {
+    const MACROS = [
+      ['content-scripts', 'triage-lens', 'lab-file-button.js'],
+      ['content-scripts', 'triage-lens', 'routine-rx-button.js'],
+    ];
+    // Past-tense completion claims about the Medicus action itself. "Clicked X"
+    // is fine — that is what the macro actually observed.
+    const CLAIMS =
+      /\b(Filed as normal|Filed successfully|Successfully filed|Sent to routine list\.|Done|Submitted|Booked)\b/;
+    const offending = [];
+    for (const parts of MACROS) {
+      const text = fs.readFileSync(path.join(__dirname, ...parts), 'utf8');
+      const toastCalls = text.match(/toast\(\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/g) || [];
+      for (const c of toastCalls) if (CLAIMS.test(c)) offending.push(parts[parts.length - 1] + ': ' + c);
+    }
+    check(
+      offending.length === 0,
+      'DOM macro toast copy never claims the Medicus action completed' +
+        (offending.length ? ': ' + JSON.stringify(offending) : '')
+    );
+  }
+
   const src = fs.readFileSync(path.join(__dirname, 'shared', 'write-core.js'), 'utf8');
   const start = src.indexOf('function finaliseConfirmCopy');
   check(start !== -1, 'finaliseConfirmCopy is in the source');

@@ -334,11 +334,28 @@ check(sp.requireRangeForAll === true, 'requireRangeForAll preserved');
 // ── profileParamBlockers (clinician-set ranges, incl. un-ranged analytes) ─────
 console.log('\n--- profileParamBlockers ---');
 const hba1cProfile = { parameters: [{ analyte: 'hba1c', high: 47, unit: 'mmol/mol' }] };
-const rep = (name, value, low, high) => ({ results: [{ name, value, low: low ?? null, high: high ?? null }] });
-check(LF.profileParamBlockers(rep('HbA1c (IFCC)', 42), hba1cProfile).length === 0, 'HbA1c within set max → fileable');
+const rep = (name, value, low, high, unit) => ({
+  results: [{ name, value, low: low ?? null, high: high ?? null, unit: unit ?? null }],
+});
+// 2026-08-23 review fix: these fixtures used to omit the result unit while the
+// parameter declares mmol/mol. A parameter that states a unit is no longer
+// applied to a value whose unit cannot be confirmed, so the fixtures now carry
+// the unit a real Medicus result reports.
 check(
-  LF.profileParamBlockers(rep('HbA1c (IFCC)', 53), hba1cProfile).some((r) => /above your set maximum/.test(r)),
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 42, null, null, 'mmol/mol'), hba1cProfile).length === 0,
+  'HbA1c within set max → fileable'
+);
+check(
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 53, null, null, 'mmol/mol'), hba1cProfile).some((r) =>
+    /above your set maximum/.test(r)
+  ),
   'HbA1c above set max → blocked (lab gave no range)'
+);
+// …and the same parameter against a value of UNKNOWN unit must refuse, not
+// silently compare (the ug/L-range-vs-unitless-digoxin class).
+check(
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 42), hba1cProfile).some((r) => /units cannot be confirmed/.test(r)),
+  'parameter declaring a unit + result with no unit → blocked, never silently compared'
 );
 check(
   LF.profileParamBlockers(rep('eGFR', 55), { parameters: [{ analyte: 'egfr', low: 60 }] }).some((r) =>

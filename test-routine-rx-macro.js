@@ -879,6 +879,46 @@ function makeSandbox(rootEl, pathname) {
     );
   }
 
+  {
+    // 2026-08-23 review fix: the mid-run navigation guard (audit M7) called
+    // `fail(team, mode, msg)`, which does not exist — the helper is
+    // `abort(msg, team, mode)`. Under 'use strict' the guard threw a
+    // ReferenceError, so the commit was correctly skipped but the clinician got
+    // NO toast and NO audit line, and the rejection went unhandled. The commit
+    // must stay unclicked AND the abort must be announced.
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const assign = el('input', { attrs: { placeholder: 'Assign to' }, label: 'AssignInput' });
+    const root = buildRoot([radio, assign]);
+    const sb = makeSandbox(root, '/tasks/data/prescription-requests/overview/abc-123');
+    CONFIRM_RETURN = true;
+
+    const teamName = 'Prescribing / Meds Management';
+    setTimeout(() => {
+      root.appendChild(
+        el('li', { attrs: { id: 'select-item-1', role: 'option' }, text: teamName, label: 'TeamOption' })
+      );
+    }, 5);
+    setTimeout(() => {
+      root.appendChild(el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false }));
+    }, 10);
+    // The SPA swaps to a different task while the picker round-trips.
+    setTimeout(() => {
+      sb.location.pathname = '/tasks/data/prescription-requests/overview/SOMEONE-ELSE';
+    }, 12);
+
+    let threw = null;
+    await sb.runMacro(teamName, 'confirm').catch((e) => {
+      threw = e;
+    });
+
+    check(threw === null, 'mid-run navigation: the guard does not throw (no undefined helper)');
+    check(CLICKS.indexOf('CommitBtn') === -1, 'mid-run navigation: the commit button is never clicked');
+    check(
+      TOASTS.some((t) => t.kind === 'err' && /Task changed mid-run/.test(t.msg)),
+      'mid-run navigation: the clinician is told the task changed and nothing was clicked'
+    );
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();

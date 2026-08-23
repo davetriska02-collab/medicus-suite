@@ -565,7 +565,13 @@
       }
       // Belt-and-braces: never commit against a task the run didn't start on.
       if (location.pathname !== _macroPath) {
-        fail(team, mode, 'Task changed mid-run — nothing was clicked on the new task.');
+        // 2026-08-23 review fix: this called `fail(team, mode, msg)`, which does
+        // not exist — the helper is `abort(msg, team, mode)`, different name AND
+        // argument order. Under 'use strict' the guard threw a ReferenceError:
+        // the commit was still (correctly) skipped, but the clinician got NO
+        // toast and NO audit record, and the rejection was unhandled — so the
+        // natural next move was to click again.
+        abort('Task changed mid-run — nothing was clicked on the new task.', team, mode);
         return;
       }
       commitAndAudit(commit, team, mode);
@@ -713,7 +719,18 @@
     btn = document.createElement('button');
     btn.className = 'chrx-btn';
     btn.onclick = function () {
-      if (!busy) runMacro(cfg.lastTeam, cfg.commitMode);
+      // 2026-08-23 review fix: runMacro is async and was called bare, so any
+      // throw inside it became an unhandled rejection — the button just reset
+      // with no toast and no audit line. A macro that dies must SAY it died.
+      if (!busy)
+        runMacro(cfg.lastTeam, cfg.commitMode).catch((e) => {
+          abort(
+            'The routine-list macro stopped unexpectedly — nothing was committed. ' + (e && e.message ? e.message : ''),
+            cfg.lastTeam,
+            cfg.commitMode
+          );
+          setBusy(false);
+        });
     };
 
     caret = document.createElement('button');

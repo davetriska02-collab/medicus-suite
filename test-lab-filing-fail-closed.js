@@ -300,6 +300,133 @@ console.log('--- suppress-list fail-closed ---');
   check(LF.suppressedBlockers(report([numericResult({})]), ['uuid-9']).length === 0, 'unlisted patient stays quiet');
 }
 
+// ── 2026-08-23 review fixes ──────────────────────────────────────────────────
+console.log('\n--- 2026-08-23 review fixes: parameter matching, migration, unjudgeable rows ---');
+{
+  // A — a SHORT parameter must not capture a DIFFERENT, longer-named analyte.
+  const params = [{ analyte: 'albumin', low: 35, high: 50 }];
+  check(LF.findParamFor('Microalbumin', params) === null, 'albumin parameter does NOT capture Microalbumin');
+  check(!!LF.findParamFor('Serum albumin', params), 'albumin parameter still matches Serum albumin');
+
+  // …and the lab's own HIGH flag must survive, with the override on.
+  const flagged = {
+    results: [{ name: 'Microalbumin', value: 40, unit: 'mg/L', low: null, high: null, isAbove: true, text: '' }],
+  };
+  const prof = { parameters: params, paramsOverrideLabFlags: true };
+  check(
+    LF.applyParamOverrides(flagged, prof).results[0].isAbove === true,
+    'lab HIGH flag on Microalbumin is NOT cleared by an albumin parameter'
+  );
+  check(
+    LF.profileParamBlockers(flagged, prof).length > 0,
+    'a lab-flagged Microalbumin with no parameter of its own still blocks'
+  );
+
+  // A — most specific wins, not first-listed.
+  const two = [
+    { analyte: 'hb', low: 130, high: 170 },
+    { analyte: 'hba1c', low: 20, high: 47 },
+  ];
+  const won = LF.findParamFor('HbA1c (IFCC)', two);
+  check(won && won.analyte === 'hba1c', 'HbA1c (IFCC) resolves to the hba1c parameter, not hb');
+  check(LF.findParamFor('Hb', two).analyte === 'hb', 'a bare Hb result still resolves to the hb parameter');
+  // A short code must never capture a longer analyte at all.
+  check(
+    LF.findParamFor('HbA1c (IFCC)', [{ analyte: 'hb', low: 130, high: 170 }]) === null,
+    'hb alone does not capture HbA1c'
+  );
+  // Real-world glued names still match (4+ char terms may match a token prefix).
+  check(
+    !!LF.findParamFor('eGFRcreat (CKD-EPI)/1.73 m*2', [{ analyte: 'egfr', low: 60 }]),
+    'egfr still matches eGFRcreat'
+  );
+
+  // A — an unresolved tie blocks instead of silently picking one range.
+  const tie = [
+    { analyte: 'free t4', low: 12, high: 22 },
+    { analyte: 'tsh', low: 0.3, high: 4.2 },
+  ];
+  check(!!LF.findParamAmbiguity('Free T4 / TSH', tie), 'two unrelated parameters on one result name are ambiguous');
+  check(
+    LF.profileParamBlockers({ results: [{ name: 'Free T4 / TSH', value: 3, unit: null }] }, { parameters: tie }).some(
+      (r) => /more than one of your parameters/.test(r)
+    ),
+    'an ambiguous parameter match BLOCKS'
+  );
+  check(
+    LF.findParamAmbiguity('Adjusted calcium', [
+      { analyte: 'calcium', low: 2.2, high: 2.6 },
+      { analyte: 'adjusted calcium', low: 2.2, high: 2.6 },
+    ]) === null,
+    'a more specific refinement of the same analyte is not a tie'
+  );
+}
+{
+  // B — the fail-closed default must reach profiles already saved in the field.
+  const legacy = { id: 'p1', name: 'U&E', requireRangeForAll: false };
+  check(
+    LF.migrateStoredProfile(legacy).requireRangeForAll === true,
+    'a pre-schema stored profile is upgraded to fail-closed'
+  );
+  check(
+    LF.migrateStoredProfile({ id: 'p1', lfSchema: LF.LF_SCHEMA, requireRangeForAll: false }).requireRangeForAll ===
+      false,
+    'a deliberate opt-out made AFTER the migration is honoured'
+  );
+  check(
+    LF.sanitiseProfile({ id: 'p', name: 'n' }).lfSchema === LF.LF_SCHEMA,
+    'a freshly saved profile carries the schema marker'
+  );
+  const migrated = LF.migrateStoredProfiles([legacy, null]);
+  check(migrated.length === 2 && migrated[0].requireRangeForAll === true, 'migrateStoredProfiles maps the whole list');
+}
+{
+  // D — a row the suite could not read at all must never grade normal.
+  const unreadable = {
+    results: [
+      { name: 'Serum free light chains', value: NaN, rawValue: '', unit: 'mg/L', low: null, high: null, text: '' },
+    ],
+  };
+  check(
+    LF.profileParamBlockers(unreadable, { parameters: [], requireRangeForAll: false }).some((r) =>
+      /no readable value/.test(r)
+    ),
+    'a result with no value and no text blocks even with requireRangeForAll off'
+  );
+  check(
+    LF.profileParamBlockers({ results: [null] }, { parameters: [] }).some((r) => /could not be read at all/.test(r)),
+    'a null result row blocks'
+  );
+  check(
+    LF.profileParamBlockers(
+      { results: [{ name: 'Sodium', value: 140, unit: 'mmol/L', low: 133, high: 146 }] },
+      { parameters: [] }
+    ).length === 0,
+    'a well-formed in-range result with a lab range still files'
+  );
+}
+{
+  // E — units must be confirmable before a clinician range clears a lab flag.
+  const digoxin = {
+    results: [{ name: 'Digoxin', value: 1.4, unit: null, low: 0.5, high: 1.0, isAbove: true, text: '' }],
+  };
+  const prof = {
+    parameters: [{ analyte: 'digoxin', low: 0.8, high: 2.0, unit: 'ug/L' }],
+    paramsOverrideLabFlags: true,
+  };
+  check(
+    LF.applyParamOverrides(digoxin, prof).results[0].isAbove === true,
+    'a ug/L parameter does NOT clear a lab flag on a value of unknown unit'
+  );
+  // Both sides unitless is the ordinary eGFR case and still applies.
+  const egfr = { results: [{ name: 'eGFR', value: 89, low: 90, high: 120, isBelow: true }] };
+  check(
+    LF.applyParamOverrides(egfr, { parameters: [{ analyte: 'egfr', low: 60 }], paramsOverrideLabFlags: true })
+      .results[0].isBelow === false,
+    'an unitless parameter still overrides an unitless lab flag (eGFR)'
+  );
+}
+
 if (failed) {
   console.error(`\n${failed} check(s) failed, ${passed} passed`);
   process.exit(1);

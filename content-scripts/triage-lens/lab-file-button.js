@@ -444,7 +444,15 @@
     return new Promise((resolve) => {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return resolve();
       chrome.storage.local.get([STORE_PROFILES, STORE_CONFIG, STORE_SUPPRESS, TRIAGE_CONFIG], (r) => {
-        profiles = Array.isArray(r[STORE_PROFILES]) ? r[STORE_PROFILES] : [];
+        // 2026-08-23 review fix: stored profiles are NOT re-sanitised on load, so
+        // the audit's fail-closed requireRangeForAll default never reached any
+        // profile already saved in the field. Migrate on read.
+        profiles =
+          LF && typeof LF.migrateStoredProfiles === 'function'
+            ? LF.migrateStoredProfiles(r[STORE_PROFILES])
+            : Array.isArray(r[STORE_PROFILES])
+              ? r[STORE_PROFILES]
+              : [];
         const c = r[STORE_CONFIG];
         config = c && typeof c === 'object' ? c : { commitMode: 'manual' };
         suppress = Array.isArray(r[STORE_SUPPRESS]) ? r[STORE_SUPPRESS] : [];

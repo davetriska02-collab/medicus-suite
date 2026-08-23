@@ -32,7 +32,17 @@ async function triageExport() {
 // version. The known list-shaped fields must also BE lists, or they are
 // rejected rather than written where the rules engine will iterate them.
 function sanitiseTriageConfigForImport(config) {
-  const out = Object.assign({}, config);
+  // 2026-08-23 review fix: `Object.assign({}, config)` uses [[Set]], so a JSON
+  // own-property `__proto__` fires the Object.prototype setter and re-parents
+  // `out`, and `constructor` survives as an own key into storage. The sibling
+  // sanitiser in shared/lab-filing-utils.js already strips both and pins it with
+  // a test; the two must not disagree. Build on a null-prototype object and copy
+  // only own, non-magic keys.
+  const out = {};
+  for (const k of Object.keys(Object(config))) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    out[k] = config[k];
+  }
   delete out.version;
   for (const key of ['rules', 'resultRules', 'systemChips']) {
     if (out[key] !== undefined && !Array.isArray(out[key])) {
