@@ -107,6 +107,13 @@ console.log('\n--- parseQueuePagePath: /{site}/tasks/{slug}/task-list detection 
     ) === JSON.stringify({ siteId: 'e38a9f' }),
     'hyphenated URL slug still matches the underscore API slug — otherwise the Bulk button never appears'
   );
+  check(
+    parseQueuePagePath(
+      '/prefix/e38a9f/tasks/patient_privacy_officer_alert_task/task-list',
+      'patient_privacy_officer_alert_task'
+    ) === null,
+    'anchored: the siteId must be the FIRST path segment, never fished out mid-path'
+  );
 }
 
 console.log('\n--- extractTaskArray / taskIdFromRow: envelopes and id aliases ---');

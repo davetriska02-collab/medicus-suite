@@ -688,6 +688,15 @@
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', endDrag);
       window.removeEventListener('blur', endDrag);
+      // A drag that ends off the toggle (mouseup elsewhere, or window blur)
+      // never fires the click that consumes _skipToggle — left set, it would
+      // silently swallow the NEXT legitimate collapse click. The click for a
+      // drag that DOES end on the toggle is dispatched synchronously right
+      // after this mouseup, so a deferred reset lets that one click be
+      // suppressed and then always clears the flag.
+      setTimeout(function () {
+        _skipToggle = false;
+      }, 0);
       if (!moved) return;
       _userDragged = true;
       var r = el.getBoundingClientRect();

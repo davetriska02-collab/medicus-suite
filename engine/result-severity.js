@@ -193,6 +193,45 @@
     return an === bn ? 'match' : 'mismatch';
   }
 
+  // ── Own-reference-range belt (2026-08-22 clinical-safety audit, R1d) ──────────
+  // ESCALATE-ONLY second belt under the lab's boolean flags. Grading used to be a
+  // single point of failure on three Medicus payload booleans
+  // (isAboveReferenceRange / isBelowReferenceRange / requiresUrgentReview): if the
+  // host renamed or stopped populating them, every result graded 'none' — all
+  // abnormal chips vanished AND the all-normal filing gate (W7) opened for
+  // genuinely abnormal reports, silently. This helper re-derives out-of-range from
+  // the report's OWN parsed reference range (the same low/high the normaliser
+  // already extracts, and already uses for history flags via deriveHistoryFlag).
+  // It can only ever RAISE a result to 'abnormal' — it never clears a lab flag.
+  // Comparator-censored values are handled in the fail-closed direction: a value
+  // like ">6.0" (true value at least 6.0) counts as above a high bound it touches;
+  // "<5" never triggers the above-range arm (its true value is below the parse).
+  function outsideOwnRange(r) {
+    if (!r || typeof r !== 'object') return false;
+    // A clinician-parameter override (applyParamOverrides) deliberately
+    // supersedes the lab's own range for THIS analyte — it is only ever set
+    // when the value sits inside the clinician's range, units agree and the
+    // value is uncensored, and it never touches an urgent flag. Re-deriving
+    // from the lab range here would silently neuter that documented feature.
+    if (r._labFlagOverridden === true) return false;
+    const v = Number(r.value);
+    if (!Number.isFinite(v)) return false;
+    const low = r.low == null ? null : Number(r.low);
+    const high = r.high == null ? null : Number(r.high);
+    const comp = typeof r.comparator === 'string' ? r.comparator.trim() : '';
+    const compBelow = comp === '<' || comp === '≤' || comp === '<=';
+    const compAbove = comp === '>' || comp === '≥' || comp === '>=';
+    if (high != null && Number.isFinite(high) && !compBelow) {
+      // An above-censored value that merely TOUCHES the bound is out of range
+      // (">5.3" against high 5.3 means the true value exceeds it).
+      if (v > high || (compAbove && v >= high)) return true;
+    }
+    if (low != null && Number.isFinite(low) && !compAbove) {
+      if (v < low || (compBelow && v <= low)) return true;
+    }
+    return false;
+  }
+
   // ── Unclassified-positive qualitative safety net (Part B, item 3.2,
   // TRIAGE-LENS-2026-07-02.md) ──────────────────────────────────────────────────
   // A non-numeric result carrying an apparently-positive qualitative token — that NO
@@ -1201,8 +1240,11 @@
       results.forEach((r, i) => {
         if (!r || typeof r !== 'object') return;
 
-        // Lab-derived severity
-        const labSev = r.urgent ? 'urgent' : r.isAbove || r.isBelow ? 'abnormal' : 'none';
+        // Lab-derived severity — the lab's own booleans, plus the escalate-only
+        // own-range belt (see outsideOwnRange above): a value outside the
+        // report's own parsed reference range is abnormal even when the payload
+        // flags are absent (field-rename drift) or not set.
+        const labSev = r.urgent ? 'urgent' : r.isAbove || r.isBelow || outsideOwnRange(r) ? 'abnormal' : 'none';
 
         // Rule-derived severity for numeric (threshold) rules
         const ruleResult = computeRuleSev(r, resultRules, problems, patientContext);
@@ -1441,7 +1483,14 @@
         unclassified,
       };
     } catch (_) {
-      return none;
+      // FAIL-CLOSED MARKER (2026-08-22 clinical-safety audit, R1e). This is the
+      // one function whose output authorises an irreversible write (W7 lab
+      // filing), and its failure default used to be the permissive verdict: a
+      // bare `none` — level:'none' — is the FILEABLE grade. The chip pipeline
+      // keeps its long-standing shape (level 'none' → no chip), but the
+      // evalError flag lets fileabilityBlockers refuse to treat an evaluator
+      // crash as "confirmed normal". Never remove the flag from this path.
+      return Object.assign({}, none, { evalError: true });
     }
   }
 
@@ -1461,6 +1510,9 @@
     collapseWs,
     specimenAllows,
     unitsCompatible,
+    // 2026-08-22 audit R1d — exported for direct unit tests of the escalate-only
+    // own-range belt (comparator-censored boundaries especially).
+    outsideOwnRange,
     // Part B (item 3.2) — exported for direct unit tests. See the header comment above
     // matchUnclassifiedPositive for why the negation guard is REPLICATED (not imported)
     // from content-scripts/triage-lens/rule-match.js.

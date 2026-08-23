@@ -2229,7 +2229,13 @@
   const onKeydownForMenu = (e) => {
     if (e.key === 'Escape') closeActionMenu();
   };
-  const onScrollForMenu = () => closeActionMenu();
+  const onScrollForMenu = (e) => {
+    // The menu itself scrolls (max-height + overflow-y cap in the embedded
+    // CSS) — its own internal scroll must not close it. Only a scroll
+    // OUTSIDE the open menu dismisses.
+    if (activeActionMenu && e && e.target instanceof Element && activeActionMenu.contains(e.target)) return;
+    closeActionMenu();
+  };
   const armActionMenuDismissal = () => {
     setTimeout(() => document.addEventListener('click', onDocClickForMenu, true), 0);
     document.addEventListener('keydown', onKeydownForMenu, true);
@@ -3234,12 +3240,19 @@
 
   // Filters confident, report-covered verdicts, ticks their checkboxes,
   // audits (kind: 'auto') and surfaces the review toast above. Gated by the
-  // oirAutoTick pref (default ON — preserves the pre-existing behaviour);
-  // turning it off leaves the inline flags but never writes a tick.
+  // oirAutoTick pref — default OFF (2026-08-22 clinical-safety audit R2:
+  // ticking writes to Medicus server-side with no per-instance confirmation,
+  // so a machine-initiated write must be a deliberate practice opt-in, per
+  // the intended-purpose statement's "no write is automatic" boundary and
+  // CSN §6.1 W22). Turning it on is a practice decision recorded in prefs;
+  // off leaves the inline flags and the clinician-confirmed bulk tick-off.
   // Standalone/testable — kept out of applyOutstandingMatch's body so it can
   // be extracted and unit-tested without the rest of the match pipeline.
   const performOirAutoTick = (verdicts, rows, taskUuid) => {
-    if (!PREF('oirAutoTick', true)) return;
+    // 2026-08-23 review fix: a bare truthiness test meant any junk value from a
+    // restored backup ("no", 1, {}) re-enabled a machine-initiated write that
+    // this release deliberately made opt-in. Require an explicit boolean true.
+    if (PREF('oirAutoTick', false) !== true) return;
     const toTickVerdicts = verdicts.filter((v) => v.autoTick && rows[v.id]);
     if (!toTickVerdicts.length) return;
     const toTick = toTickVerdicts.map((v) => rows[v.id].box);
@@ -6950,14 +6963,40 @@
   const PULSE_FLOAT = 'ch-q-pulse-float';
   const _pulseActByRow = new Map(); // rowIndex → pathway context from decorateOneRow
   const _pulseOpenByKey = new Map(); // taskUuid|ri → 'why' | 'act'
-  let _pulseFloatCleanup = null;
+  // key → cleanup fn. Per-key (NOT a single slot): the reapplyQueuePulses
+  // sweep calls refreshPulseOnRow for EVERY row, so a shared slot gets run by
+  // whichever row refreshes next — before the deferred arm() has even added
+  // the listeners — leaking 3 document/window capture listeners per sweep
+  // while a tray is open. Each cleanup also cancels its own pending arm
+  // timeout so a cleanup that runs before arm prevents the listeners from
+  // ever being added.
+  const _pulseFloatCleanups = new Map();
 
+  const runPulseFloatCleanup = (key) => {
+    const fn = _pulseFloatCleanups.get(key);
+    if (!fn) return;
+    _pulseFloatCleanups.delete(key);
+    fn();
+  };
+
+  // Churn-path teardown (refreshQueueChips): drop every float's DOM and
+  // listeners but KEEP _pulseOpenByKey, so reapplyQueuePulses re-opens the
+  // same tray after the rebuild.
   const clearPulseFloatUi = () => {
-    if (_pulseFloatCleanup) {
-      _pulseFloatCleanup();
-      _pulseFloatCleanup = null;
-    }
+    _pulseFloatCleanups.forEach((fn) => fn());
+    _pulseFloatCleanups.clear();
     document.querySelectorAll('.' + PULSE_FLOAT).forEach((el) => el.remove());
+  };
+
+  // Dismissal (click-away / Escape / grid scroll): close every float AND
+  // null EVERY open-state entry — not just the dismissing tray's own key —
+  // so a dismissed tray for another key can never resurrect on the next
+  // refresh sweep.
+  const dismissPulseFloats = () => {
+    clearPulseFloatUi();
+    _pulseOpenByKey.forEach((v, k) => {
+      if (v) _pulseOpenByKey.set(k, null);
+    });
   };
 
   const positionPulseFloat = (tray, anchor) => {
@@ -7227,13 +7266,17 @@
     const { target, previewRow } = pulseTarget(row);
     if (!target) return;
     const key = pulseOpenKey(row);
-    if (_pulseFloatCleanup) {
-      _pulseFloatCleanup();
-      _pulseFloatCleanup = null;
+    // Clean up and remove ONLY this key's tray — other rows' open trays (and
+    // their listeners) are theirs to manage on their own refresh. A keyless
+    // row can't own a tray, so it falls back to the full teardown.
+    if (key) {
+      runPulseFloatCleanup(key);
+      document.querySelectorAll('.' + PULSE_FLOAT).forEach((el) => {
+        if (el.getAttribute('data-pulse-key') === key) el.remove();
+      });
+    } else {
+      clearPulseFloatUi();
     }
-    document.querySelectorAll('.' + PULSE_FLOAT).forEach((el) => {
-      if (!key || el.getAttribute('data-pulse-key') === key) el.remove();
-    });
     target.querySelectorAll('.' + PULSE_HOST).forEach((el) => el.remove());
     if (!PREF('queuePulseCompress', true)) {
       clearPulseClasses(row);
@@ -7370,29 +7413,33 @@
       positionPulseFloat(tray, host);
       const onDoc = (e) => {
         if (tray.contains(e.target) || host.contains(e.target)) return;
-        if (key) _pulseOpenByKey.set(key, null);
-        clearPulseFloatUi();
+        dismissPulseFloats();
       };
       const onKey = (e) => {
         if (e.key !== 'Escape') return;
-        if (key) _pulseOpenByKey.set(key, null);
-        clearPulseFloatUi();
+        dismissPulseFloats();
       };
-      const onScroll = () => {
-        if (key) _pulseOpenByKey.set(key, null);
-        clearPulseFloatUi();
+      const onScroll = (e) => {
+        // The tray itself scrolls (overflow-y: auto cap in positionPulseFloat)
+        // — its own internal scroll must not dismiss it.
+        if (e.target instanceof Element && tray.contains(e.target)) return;
+        dismissPulseFloats();
       };
       const arm = () => {
         document.addEventListener('click', onDoc, true);
         document.addEventListener('keydown', onKey, true);
         window.addEventListener('scroll', onScroll, true);
       };
-      _pulseFloatCleanup = () => {
+      const armTimer = setTimeout(arm, 0);
+      _pulseFloatCleanups.set(key, () => {
+        // Cancelling the pending arm matters: a cleanup that runs before the
+        // deferred arm() must prevent the listeners from ever being added,
+        // or they leak with nothing left holding a reference to remove them.
+        clearTimeout(armTimer);
         document.removeEventListener('click', onDoc, true);
         document.removeEventListener('keydown', onKey, true);
         window.removeEventListener('scroll', onScroll, true);
-      };
-      setTimeout(arm, 0);
+      });
     }
   };
 

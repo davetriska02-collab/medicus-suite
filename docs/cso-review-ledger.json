@@ -4,9 +4,15 @@
   "docs": [
     {
       "file": "docs/CLINICAL-SAFETY-NOTICE.md",
-      "last_cso_review_version": "3.236.23",
-      "last_cso_review_date": "2026-08-22",
+      "last_cso_review_version": "3.237.1",
+      "last_cso_review_date": "2026-08-23",
       "incremental_reviews": [
+        {
+          "version": "3.237.1",
+          "date": "2026-08-23",
+          "scope": "Sign-off of the doc-3.20 increment only (PR #302, organise-canvas review fixes): the section 6.3 item 3 / W14 / W15 Send-to opt-in correction (W16 never notifies), W15's commit-time destination free-slot proof and same-list shorter-tile reserve-then-update, W16's pre-cancel pre-flight and compensating re-create with the URGENT no-appointment error, and W14's batch freeze + board refetch + honest written/staged counts. Aligned with HAZARD-LOG.md v3.28 (H-062 Accepted ALARP). The whole-document review items (the 3.14 write-path posture, section 6 items 1/8/9 transactional-API correction) remain outstanding. Recorded via Dave's session instruction of 2026-08-23 ('Reviewed and signed off').",
+          "doc_version": "3.21"
+        },
         {
           "version": "3.236.23",
           "date": "2026-08-22",
@@ -26,13 +32,19 @@
           "doc_version": "3.13"
         }
       ],
-      "notes": "INCREMENTAL CSO SIGN-OFF 2026-08-22 (doc v3.19, product 3.236.23): W17-W21 only. last_cso_review_version moved 3.177.0 -> 3.236.23. STILL PENDING a whole-document CSN review: the 2026-07-28 3.14 write-path posture (sections 6.2/6.3) and the section 6 items 1/8/9 transactional-API correction note. H-060/H-061/H-062 stay Proposed on the hazard log. || PENDING CSO REVIEW (2026-07-28): CSN doc version 3.14 corrects sections 6.2/6.3 (false no-write claims). Section 6.1 was created then and has since grown to W1-W21; W17-W21 are signed (3.19); the 3.14 posture text and the items 1/8/9 txn correction note are not. || CSN v3.10. FULL CSO clinical-hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17)."
+      "notes": "PENDING CSO REVIEW (2026-08-23): doc v3.22 — clinical-safety audit corrections: new W22 (OIR tick-off, a DOM-macro write that had shipped uninventoried; oirAutoTick now default OFF), limitation 38 rewritten (ticks commit server-side immediately), W14/W15 + section 6.3 corrected (recipient lists empty BY DEFAULT, populated on per-action 'Tell the patient' opt-in), limitation 22 corrected (hidden chips DO resurface on severity worsening; residual gaps stated). Does not move last_cso_review_version. || INCREMENTAL CSO SIGN-OFF 2026-08-23 (doc v3.21, product 3.237.1): the 3.20 organise-canvas correction set only; last_cso_review_version moved 3.236.23 -> 3.237.1; H-062 now Accepted (ALARP) on the hazard log. Prior: INCREMENTAL CSO SIGN-OFF 2026-08-22 (doc v3.19, product 3.236.23): W17-W21 only. last_cso_review_version moved 3.177.0 -> 3.236.23. STILL PENDING a whole-document CSN review: the 2026-07-28 3.14 write-path posture (sections 6.2/6.3) and the section 6 items 1/8/9 transactional-API correction note. H-060/H-061/H-062 stay Proposed on the hazard log. || PENDING CSO REVIEW (2026-07-28): CSN doc version 3.14 corrects sections 6.2/6.3 (false no-write claims). Section 6.1 was created then and has since grown to W1-W21; W17-W21 are signed (3.19); the 3.14 posture text and the items 1/8/9 txn correction note are not. || CSN v3.10. FULL CSO clinical-hazard re-baseline completed at 3.115.0 (Dr Dave Triska, 2026-06-17)."
     },
     {
       "file": "docs/HAZARD-LOG.md",
       "last_cso_review_version": "3.202.0",
       "last_cso_review_date": "2026-07-28",
       "incremental_reviews": [
+        {
+          "version": "3.237.1",
+          "date": "2026-08-23",
+          "scope": "H-062 (appointment organise canvas) signed off as amended by the v3.26/v3.27 addenda: moves from 'Proposed — pending CSO sign-off' to Accepted (ALARP) at residual 4x1=4, with the adversarial-review hardening controls (destination free-slot proof, pre-cancel pre-flight + compensating re-create, Finalise batch freeze, honest failure counts, fail-closed gates, Send-to opt-in correction) CI-pinned by test-appointment-organise-core.js. The pre-sign-off weekday-clinic restriction is lifted. H-060 and H-061 unchanged; not a re-baseline (product pin stays 3.202.0). Recorded via Dave's session instruction of 2026-08-23 ('Reviewed and signed off'). Document version 3.28.",
+          "doc_version": "3.28"
+        },
         {
           "version": "3.202.0",
           "date": "2026-07-28",
@@ -64,7 +76,7 @@
           "doc_version": "3.22"
         }
       ],
-      "notes": "Hazard Log v3.18. CSO sign-off 2026-07-28 (Dr D. Triska; review performed by delegated virtual-Dave agent at Dave's instruction, chat) of H-050 and H-051, with two controls changed at review — see the 3.202.0 incremental entry. Product-version pin moved 3.177.0 -> 3.202.0. Ledger continuity: H-049 (doc v3.17), H-050 and H-051 were added by automated syncs; H-050/H-051 arrived with no version-history row and the header document version was left at 3.16 — the 3.18 entry closes that gap. OPEN, NOT CLOSED BY THIS REVIEW: the optional Medicus Transactional API proxy read path (shared/txn-transport.js, shared/data-source-transactional.js, service-worker.js txnFetchPatientBundle; txn.integrationMode defaults to 'session' so it is dormant) has NO hazard entry and no DPIA assessment. It was found during the INTENDED-PURPOSE review and is named in that document's v3.202.0 change-log row and in a correction note in CLINICAL-SAFETY-NOTICE.md section 6. No practice should enable hybrid/transactional mode until it is covered. Prior full re-baseline remains 3.115.0 (2026-06-17)."
+      "notes": "PENDING CSO REVIEW (2026-08-23): doc v3.29 — clinical-safety audit corrections: H-053/H-054 recovered into the register (drafted 2026-08-01 on a never-merged weekly-review branch; the register had silently skipped H-052 -> H-055), H-009 control (l) recovered (XSS recurrence — code fixes ARE in main), H-036 control (f) oirAutoTick default OFF + W22, H-062 control (d) Send-to per-action opt-in, H-009 control (a) full host_permissions list incl. supabase wildcard, dead paths fixed. Does not move last_cso_review_version. || Hazard Log v3.28. H-062 CSO sign-off 2026-08-23 (Dr D. Triska, in session) — see the 3.237.1 incremental entry; weekday-clinic restriction lifted. Prior: Hazard Log v3.18. CSO sign-off 2026-07-28 (Dr D. Triska; review performed by delegated virtual-Dave agent at Dave's instruction, chat) of H-050 and H-051, with two controls changed at review — see the 3.202.0 incremental entry. Product-version pin moved 3.177.0 -> 3.202.0. Ledger continuity: H-049 (doc v3.17), H-050 and H-051 were added by automated syncs; H-050/H-051 arrived with no version-history row and the header document version was left at 3.16 — the 3.18 entry closes that gap. OPEN, NOT CLOSED BY THIS REVIEW: the optional Medicus Transactional API proxy read path (shared/txn-transport.js, shared/data-source-transactional.js, service-worker.js txnFetchPatientBundle; txn.integrationMode defaults to 'session' so it is dormant) has NO hazard entry and no DPIA assessment. It was found during the INTENDED-PURPOSE review and is named in that document's v3.202.0 change-log row and in a correction note in CLINICAL-SAFETY-NOTICE.md section 6. No practice should enable hybrid/transactional mode until it is covered. Prior full re-baseline remains 3.115.0 (2026-06-17)."
     },
     {
       "file": "docs/SOUP.md",

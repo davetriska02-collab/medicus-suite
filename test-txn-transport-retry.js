@@ -82,7 +82,11 @@ test('retry: read + timeout then success succeeds', async () => {
   assert.equal(calls, 2);
 });
 
-test('retry: write + 503 makes exactly ONE fetch call; error propagates immediately with isWrite true', async () => {
+// 2026-08-22 clinical-safety audit R5: writes are no longer "one attempt, never
+// retried" — they are REFUSED outright before any network call (the transport is
+// the read-only boundary the intended-purpose statement claims). The stronger
+// invariant supersedes the retry-count one.
+test('retry: write is REFUSED before any fetch call; error carries isWrite true', async () => {
   let calls = 0;
   const sleeps = [];
   const transport = TxnTransport.createProxyTransport(
@@ -97,9 +101,9 @@ test('retry: write + 503 makes exactly ONE fetch call; error propagates immediat
   );
   await assert.rejects(
     () => transport({ method: 'POST', path: '/transactional-api/create-note', body: {}, isWrite: true }),
-    (e) => e.status === 503 && e.isWrite === true && e.attempts === 1
+    (e) => e.refusedWrite === true && e.isWrite === true && /read-only/.test(e.message)
   );
-  assert.equal(calls, 1);
+  assert.equal(calls, 0);
   assert.deepEqual(sleeps, []);
 });
 
