@@ -754,6 +754,9 @@ if (!parts.some((p) => !p)) {
     _pulseOpenByKey: new Map(),
     refreshPulseOnRow: () => {},
     pulseOpenKey: () => null,
+    // Act is medical/admin-only (isTriageQueueNow). Pulse lives outside this
+    // harness; fail-closed so an accidental "a" keypress is a no-op.
+    isTriageQueueNow: () => false,
     PULSE_ON: 'ch-row-pulse-on',
     PULSE_RED: 'ch-row-pulse-red',
     PULSE_AMBER: 'ch-row-pulse-amber',

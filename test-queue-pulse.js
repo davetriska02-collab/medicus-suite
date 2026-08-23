@@ -240,5 +240,92 @@ check(
   'scrolling INSIDE the action menu does not close it (it has a max-height scroll cap)'
 );
 
+console.log('\nLayer 5: Act button is medical/admin triage only');
+check(/function isTriageQueueSlug\(slug\)/.test(content), 'isTriageQueueSlug is a named function (extractable)');
+check(/function queueSlugFromHref\(href\)/.test(content), 'queueSlugFromHref is a named function (extractable)');
+check(/const isTriageQueueNow = \(\) => isTriageQueueSlug\(currentQueueSlug\(\)\)/.test(content), 'isTriageQueueNow composes URL-first slug + whitelist');
+check(
+  /if \(!isTriageQueueNow\(\)\) return;/.test(content),
+  'a-key shortcut gates on isTriageQueueNow, not the lagging bridge slug'
+);
+check(
+  /const showActBtn = isTriageQueueNow\(\)/.test(content),
+  'refreshPulseOnRow gates Act chrome on isTriageQueueNow'
+);
+check(
+  /open === 'act' && !showActBtn/.test(content),
+  'leftover act-open state is cleared on a non-triage queue (no ghost host)'
+);
+check(
+  !/isTriageQueueSlug\(_currentQueueSlug\)/.test(content),
+  'Act is never gated on the bridge slug alone'
+);
+
+const vm = require('vm');
+const slugFn = content.match(/function isTriageQueueSlug\(slug\) \{[\s\S]*?\n  \}/);
+const hrefFn = content.match(/function queueSlugFromHref\(href\) \{[\s\S]*?\n  \}/);
+check(!!slugFn, 'isTriageQueueSlug extracted');
+check(!!hrefFn, 'queueSlugFromHref extracted');
+const slugBox = {};
+if (slugFn && hrefFn) {
+  vm.runInNewContext(slugFn[0] + '\n' + hrefFn[0] + '\nthis.isTriageQueueSlug = isTriageQueueSlug;\nthis.queueSlugFromHref = queueSlugFromHref;', slugBox);
+}
+const { isTriageQueueSlug, queueSlugFromHref } = slugBox;
+check(typeof isTriageQueueSlug === 'function', 'isTriageQueueSlug callable');
+check(typeof queueSlugFromHref === 'function', 'queueSlugFromHref callable');
+if (typeof isTriageQueueSlug === 'function') {
+  check(isTriageQueueSlug('medical_patient_request_task') === true, 'medical request queue is triage');
+  check(isTriageQueueSlug('admin_patient_request_task') === true, 'admin request queue is triage');
+  check(isTriageQueueSlug('MEDICAL_PATIENT_REQUEST_TASK') === true, 'whitelist is case-insensitive');
+  const notTriage = [
+    'review_investigation_results_task',
+    'investigation_result_task',
+    'prescription_request_task_routine',
+    'prescription_request_task_non_routine',
+    'routine_prescription_request_task',
+    'miscellaneous_task',
+    'appointments_required_task',
+    'patient_questionnaire_response_task',
+    'patient_privacy_officer_alert_task',
+    'eps_subsequent_cancellation_task',
+    'communication_thread_task',
+    'medical_patient_request_task_extra',
+    'x_medical_patient_request_task',
+    'medical_patient_request',
+    'admin_patient_request',
+    '',
+    null,
+    undefined,
+  ];
+  notTriage.forEach((slug) => {
+    check(isTriageQueueSlug(slug) === false, 'not triage: ' + String(slug));
+  });
+}
+if (typeof queueSlugFromHref === 'function') {
+  check(
+    queueSlugFromHref('https://x.medicus.health/e38a9f/tasks/medical_patient_request_task/task-list') ===
+      'medical_patient_request_task',
+    'page URL yields the medical slug'
+  );
+  check(
+    queueSlugFromHref('/e38a9f/tasks/admin_patient_request_task/task-list?statuses[]=new-request') ===
+      'admin_patient_request_task',
+    'page URL with query yields the admin slug'
+  );
+  check(
+    queueSlugFromHref('/e38a9f/tasks/review_investigation_results_task/task-list') ===
+      'review_investigation_results_task',
+    'page URL yields the results slug'
+  );
+  check(
+    queueSlugFromHref('/e38a9f/tasks/data/medical_patient_request_task/task-list') ===
+      'medical_patient_request_task',
+    'API /tasks/data/{slug}/task-list shape still yields the real slug'
+  );
+  check(queueSlugFromHref('/e38a9f/tasks/data/task-list') === '', 'bare /tasks/data/task-list is not a queue type');
+  check(queueSlugFromHref('/e38a9f/care-record/abc') === '', 'non-queue URL yields empty slug');
+  check(queueSlugFromHref('') === '' && queueSlugFromHref(null) === '', 'empty/null href fails closed');
+}
+
 console.log('\n--- Results: ' + passed + ' passed, ' + failed + ' failed ---\n');
 if (failed > 0) process.exit(1);

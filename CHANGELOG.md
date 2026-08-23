@@ -332,6 +332,7 @@ changed. CSN write-path rows W2 and W5 now point at the merged file (see
 `task-inline.action-row` DOM contracts (and their fixtures) are retired with
 the anchor search they existed for; `task-widget.card-submit-button` is kept
 — `reception-quick-actions.js` still uses it for its own composer placement.
+
 ## [v3.238.0] — 2026-08-23
 
 ### Investigation (lab result) duplicate detection + document content-hash verification

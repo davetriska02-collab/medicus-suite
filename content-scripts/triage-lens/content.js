@@ -3914,7 +3914,24 @@
   // none either on registration, PDS-change, appointment-request, miscellaneous,
   // or any other non-triage task queue. Rather than blacklist queue after queue
   // as each turns up, whitelist the two queues it actually applies to.
-  const isTriageQueueSlug = (slug) => /^(medical|admin)_patient_request_task$/i.test(String(slug || ''));
+  // Pure helpers (function declarations) so tests can extract and lock them.
+  function isTriageQueueSlug(slug) {
+    return /^(medical|admin)_patient_request_task$/i.test(String(slug || ''));
+  }
+  // Page URL is SPA-navigation-accurate. `_currentQueueSlug` is written only
+  // by the ch-task-list-data bridge and lags one fetch behind a queue hop —
+  // gating Act on the bridge alone kept showing the button on investigation
+  // results (and every other destination) until that fetch landed.
+  function queueSlugFromHref(href) {
+    const m = String(href || '').match(/\/tasks\/(?:data\/)?([^/?#]+)\/task-list/i);
+    if (!m) return '';
+    // `/tasks/data/{slug}/task-list` is the API shape; the page shape is
+    // `/tasks/{slug}/task-list`. A bare `data` capture is not a queue type.
+    return m[1].toLowerCase() === 'data' ? '' : m[1];
+  }
+  const currentQueueSlug = () =>
+    queueSlugFromHref(typeof location !== 'undefined' ? location.href : '') || _currentQueueSlug || '';
+  const isTriageQueueNow = () => isTriageQueueSlug(currentQueueSlug());
 
   // Recently-parsed investigation reports, NEWEST FIRST, served to the options-page
   // result-rule inspector on demand ("Load a recent result" instead of paste-a-JSON).
@@ -6513,7 +6530,7 @@
       }
     } else if (key === 'a' || key === 'A') {
       if (!PREF('queuePulseCompress', true)) return;
-      if (!isTriageQueueSlug(_currentQueueSlug)) return; // Act only exists on the triage queues
+      if (!isTriageQueueNow()) return; // Act only exists on the triage queues
       if (_kbdCursorRowIndex == null) return;
       const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
       if (!row) return;
@@ -7294,7 +7311,14 @@
     const composed = QP.composePulse(collectSignalsFromRow(row), {});
     applyPulseRail(row, composed.rail);
     const escalate = composed.rail === 'red' || composed.rail === 'amber';
-    const open = key ? _pulseOpenByKey.get(key) : null;
+    const showActBtn = isTriageQueueNow();
+    let open = key ? _pulseOpenByKey.get(key) : null;
+    // A leftover 'act' open-state from a previous medical/admin visit must
+    // not keep a pulse host (or resurrect a tray) on a non-triage queue.
+    if (open === 'act' && !showActBtn) {
+      if (key) _pulseOpenByKey.set(key, null);
+      open = null;
+    }
     // Nothing to say and nothing summoned: no pulse chrome at all — a quiet
     // row keeps its chip pile untouched (applyPulseRail above) and gets no
     // extra host. The keyboard Space/`a` paths still work: they set the open
@@ -7365,11 +7389,12 @@
     // Act is a reception-request affordance (Book / Pharmacy First / Ask-back /
     // Park until…) — meaningful only on the medical/admin triage queues, so it
     // is withheld on every other task queue rather than shown there to open a
-    // tray of disabled placeholders.
-    const showActBtn = isTriageQueueSlug(_currentQueueSlug);
+    // tray of disabled placeholders. Gate uses isTriageQueueNow() (URL-first)
+    // computed above, not the lagging bridge slug.
     const act = ri != null ? _pulseActByRow.get(Number(ri)) : null;
-    const actBtn = document.createElement('button');
+    let actBtn = null;
     if (showActBtn) {
+      actBtn = document.createElement('button');
       actBtn.type = 'button';
       actBtn.className = 'ch-q-pulse-act';
       actBtn.textContent = 'Act ›';
@@ -7409,7 +7434,7 @@
         if (e.key === 'Enter' || e.key === ' ') onWhy(e);
       });
     });
-    if (showActBtn) {
+    if (actBtn) {
       actBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
