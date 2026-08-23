@@ -134,5 +134,26 @@ console.log('\n--- GU tie-break: generic UTI wording offers BOTH urinary and gu-
   check(ids.includes('gyn-female'), 'gynae wording offers the gyn-female pathway');
 }
 
+// ── The fever tie-break pin (2026-08-23, Keeper gap analysis gap #1) ──────────
+// Same shape as the GU tie-break above: fever-adult carries the GENERIC fever
+// terms, feverish-child keeps its child-qualified phrases. Child-worded text
+// offers BOTH — a candidate list, never an auto-pick — so an adult fever is
+// never silently routed down the child pathway and vice versa.
+console.log('\n--- fever tie-break: child fever wording offers BOTH feverish-child and fever-adult ---');
+{
+  const text = 'child with a fever since last night';
+  const ids = matchPathways(text, PATHWAYS).map((p) => p.id);
+  check(ids.includes('feverish-child'), `"${text}" offers the "feverish-child" pathway`);
+  check(ids.includes('fever-adult'), `"${text}" ALSO offers the "fever-adult" pathway (offer both, human picks)`);
+}
+{
+  // Generic adult wording must reach fever-adult without dragging in the child pathway.
+  for (const text of ['fever and feeling hot for two days', 'high temperature and hot and shivery', 'thinks it is the flu']) {
+    const ids = matchPathways(text, PATHWAYS).map((p) => p.id);
+    check(ids.includes('fever-adult'), `"${text}" offers the fever-adult pathway`);
+    check(!ids.includes('feverish-child'), `"${text}" does NOT offer feverish-child (no child-qualified wording)`);
+  }
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

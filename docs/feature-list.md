@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.26
+**Version:** v3.237.1
 **Generated:** 2026-08-23 (automated)
 
 ## What it is
@@ -181,6 +181,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 ## Recent additions (last 4 weeks)
 
 - **Organise-canvas fail-safe write paths** — the appointment-organise canvas's failure modes were closed after an adversarial review: moves now prove the destination window is still free on the fresh board before writing, a failed stretch re-creates the original booking (with an urgent named-patient error if even that fails), the confirmation overlay freezes while a batch is being written, and the "Tell the patient" opt-in is described honestly everywhere it appears (and never offered on a stretch).
+- **Ten new clinical rules (The Keeper gap analysis)** — an expanded rule-currency sweep filled the ten highest-impact gaps: an adult fever call-script pathway including neutropenic-sepsis screening (plus a chemotherapy flag on the child fever pathway, both pending clinical safety sign-off before enabling); thiazide and denosumab monitoring chips; opioid-with-sedative and valproate-in-men prescribing-safety alerts (and a fix so brand-only lithium prescriptions fire the existing lithium alerts); the five remaining SMI physical-health QOF indicators; pneumococcal and shingles vaccine chips for at-risk under-65s and immunosuppressed adults; and three STOPP/START medication-review checks for bone protection and opioid-without-laxative.
 - **Write-path governance** — every action that can write back to Medicus is now named in a public inventory, cross-checked by an automated test, with the public docs rewritten to describe the real (enumerated-writes) safety posture rather than a blanket "read-only" claim.
 - **Record-tidying tools matured into canvases** — Organise problems, Allergy cleanup and Appointment organise moved from one-at-a-time popups to full drag-and-drop canvases where several changes are staged and then committed together; Clean up code gained the ability to sync a cleaned SNOMED code or description into a matching consultation-note entry, with one-click undo.
 - **Reception call script signed off** — the guided-capture red-flag script was reworked to two same-tier safety-check lists plus a short history set, and formally signed off by the practice's clinical safety officer.

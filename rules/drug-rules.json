@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-08-18",
+  "lastUpdated": "2026-08-22",
   "schemaVersion": 2,
   "specVersion": "Sentinel drug rules - August 2026 review (The Keeper)",
-  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review. 2026-08-18 (The Keeper): added warfarin/VKA INR 84d (BNF warfarin-sodium, max 12-weekly when stable), mycophenolate-maintenance FBC/LFT/U&E 84d (SPS 7 Jan 2026, ≥12-weekly once stable), and fezolinetant-lft 90d (MHRA DSU 10 Apr 2025 — monthly LFTs for 3 months then periodic; 90d is the conservative maintenance interval). Brand additions: eprosartan/Teveten (ace-arb), Curatil (carbamazepine), Mintreleq XL/Sondate XL (quetiapine). Additive only; no interval lengthened. CSO-SIGNED-OFF 2026-08-18: Dr D. Triska approved this applied set in session.",
+  "sourceNotes": "Curated subset of primary care drug-monitoring rules from BNF, NICE guidelines, BSR/specialty shared care protocols and MHRA Drug Safety Updates current at June 2026. Includes previous 20 rules plus 4 additions (ADHD stimulants paediatric/adult, atomoxetine, guanfacine) and carbamazepine. Intervals reflect stable-maintenance phase; intensified initiation monitoring is described in notes but not enforced by the rule. 2026-06-04 brand-completeness pass (The Keeper): added UK brands maxtrex (methotrexate), sulazine (sulfasalazine), azapress (azathioprine), cordarone (amiodarone), caplenal/uricto (allopurinol) to close silent under-matching; brands corroborated via dm+d/emc search, pending primary-source confirmation. 2026-06-14 CSO-approved Keeper addition: added brand 'jayempi' to azathioprine-maintenance (licensed UK azathioprine 10mg/ml oral suspension, Nova Laboratories, MA PLGB 13581/0005, available Feb 2024) — WebSearch-corroborated (emc SmPC / NHSBSA Drug Tariff), CSO-signed-off. 2026-06-20 (The Keeper, CSO proposal): corrected the DOAC rule notes to specify CrCl (Cockcroft-Gault), NOT eGFR, for renal-banded monitoring frequency (eGFR overestimates clearance and raises bleeding risk; MHRA/SPS/EHRA) — no interval change. Added a DMPA injectable-contraception monitoring rule (dmpa-injectable, enabled, 2-yearly BP+weight, FSRH). Added a combined-hormonal-contraception rule (chc-combined-hormonal) SHIPPED DISABLED pending engine disambiguation: the hrt-systemic rule matches bare 'estradiol', a substring of 'ethinylestradiol', so an enabled CHC rule would double-fire the HRT rule for oestrogen-ingredient/natural-oestrogen records. SOURCE GAP: FSRH/BNF primary PDFs 403 — corroborated via NHS formulary/NICE CKS reproductions; pending primary-source confirmation. 2026-06-21 (The Keeper, Sentinel currency review): additive safety/source refresh only — added the MHRA DSU 29 Jan 2026 strengthened GLP-1/GIP pancreatitis warning (glp1-receptor-agonist), refreshed the csDMARD source citation to the 2025 BSR guideline (Rheumatology, Nov 2025) across methotrexate/leflunomide/azathioprine/sulfasalazine/hydroxychloroquine with NO interval change, and noted the MHRA tirzepatide-to-oral-contraceptive interaction on chc-combined-hormonal. All corroborated across multiple secondary summaries; primary gov.uk/journal PDFs were 403 this run, pending primary-source confirmation. NOT changed: QOF DM036 age band (file uses <=70; one secondary source says <=79) — held for primary confirmation to avoid a silent chip change. 2026-06-29 (additive safety enhancement, PENDING CSO REVIEW): added a post-initiation U&E test to the ace-arb (RAAS blocker) rule enforcing NICE NG136's requirement for a U&E within ~1-2 weeks of STARTING an ACE-I/ARB (previously only described in notes, not enforced). Implemented via a new engine `postInitiationDays`/`postInitiationDueSoonDays` test mechanism that fires only when the drug's start date is known AND no U&E has been recorded since starting — so it cannot raise a false alert on an established patient whose start date is not visible. No change to the existing annual U&E/BP intervals or to any other rule. 2026-07-08 (Transactional-API enablement): added the drug-allergy rule type and three starter cross-check rules (penicillin, NSAID hypersensitivity, sulfonamide) that fire only when a documented ACTIVE allergy co-occurs with a contraindicated drug. These read the allergies bundle, available ONLY from the Transactional (GP Connect Structured) feed; on the legacy session/DOM feed there are no allergies so they FAIL CLOSED and never fire. SHIPPED ENABLED because fail-closed makes them zero-risk today; marked PENDING CSO REVIEW for the term lists and cross-sensitivity scope. Sources: BNF interactions/allergy guidance, MHRA, NICE CKS drug-allergy; primary PDFs to be confirmed at CSO review. 2026-08-18 (The Keeper): added warfarin/VKA INR 84d (BNF warfarin-sodium, max 12-weekly when stable), mycophenolate-maintenance FBC/LFT/U&E 84d (SPS 7 Jan 2026, ≥12-weekly once stable), and fezolinetant-lft 90d (MHRA DSU 10 Apr 2025 — monthly LFTs for 3 months then periodic; 90d is the conservative maintenance interval). Brand additions: eprosartan/Teveten (ace-arb), Curatil (carbamazepine), Mintreleq XL/Sondate XL (quetiapine). Additive only; no interval lengthened. CSO-SIGNED-OFF 2026-08-18: Dr D. Triska approved this applied set in session. 2026-08-22 (The Keeper, gap analysis): added thiazide-diuretic-ue (thiazide/thiazide-like diuretics — annual U&E plus post-initiation U&E at 28d; NICE CKS Hypertension / indapamide SmPC / NG136; previously the largest-population silent monitoring gap in the file — loop diuretics carried a PINCER U&E chip, thiazides nothing) and denosumab-calcium (calcium before each 6-monthly dose 182d + annual U&E/eGFR; MHRA DSU Sept 2014 fatal hypocalcaemia / Prolia SmPC / SPS biosimilar brand set Nov 2025–Apr 2026 — denosumab must now be prescribed BY BRAND, so the 13-biosimilar brand list is load-bearing). Both rules guard bare analyte observation terms (sodium/potassium/calcium/creatinine) with the audit-H4 test-level exclude ['urine'] so a urine-specimen result can never satisfy or headline the blood test. Combo-brand thiazides (co-amilozide/Moduretic/co-triamterzide/co-tenidone/Tenoret) listed explicitly — no generic substring exists, pending dm+d confirmation pass.",
   "rules": [
     {
       "type": "drug-monitoring",
@@ -1333,6 +1333,118 @@
       "source": "MHRA Drug Safety Update 10 April 2025 (fezolinetant / Veoza — risk of liver injury; LFTs monthly for first 3 months then periodically). 2026-08-18 (The Keeper, drug-008).",
       "notes": "MHRA 10 Apr 2025: check LFTs before starting, monthly for the first 3 months, then periodically. Sentinel encodes a 90-day maintenance interval (conservative periodic check) and describes the monthly-for-3-months initiation phase in this note — the engine does not yet enforce a time-limited monthly initiation schedule. Stop and investigate if ALT/AST >3× ULN or if the patient develops symptoms of liver injury. COMMISSIONING CAVEAT: the April 2025 DSU described private prescribing; NICE later recommended fezolinetant (March 2026) so NHS scripts may now appear. Brand Veoza. Added 2026-08-18.",
       "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "thiazide-diuretic-ue",
+      "drugClass": "Thiazide / thiazide-like diuretic",
+      "drug": {
+        "match": [
+          "indapamide",
+          "natrilix",
+          "alkapamid",
+          "cardide",
+          "rawel",
+          "bendroflumethiazide",
+          "aprinox",
+          "neo-naclex",
+          "chlortalidone",
+          "chlorthalidone",
+          "hydrochlorothiazide",
+          "xipamide",
+          "diurexan",
+          "metolazone",
+          "xaqua",
+          "cyclopenthiazide",
+          "navidrex",
+          "co-amilozide",
+          "moduretic",
+          "co-triamterzide",
+          "co-tenidone",
+          "tenoret"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "U&E (sodium/potassium/renal)",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "sodium", "potassium"],
+          "exclude": ["urine"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        },
+        {
+          "name": "U&E (post-initiation)",
+          "match": ["u&e", "urea and electrolytes", "renal profile"],
+          "snomed": ["1019331000000106"],
+          "postInitiationDays": 28,
+          "postInitiationDueSoonDays": 14
+        }
+      ],
+      "source": "NICE CKS Hypertension (thiazide-like diuretics) / indapamide SmPC / NICE NG136 annual review",
+      "notes": "Sodium falls can be asymptomatic — CKS calls regular monitoring essential, more frequent in the elderly. Annual interval is a conservative synthesis of CKS 'regular intervals' + the NG136 annual review; no single-source interval exists. Combo brands (co-amilozide, co-tenidone etc.) carry hidden thiazide content. The bare 'sodium'/'potassium' observation terms carry the audit-H4 test-level exclude ['urine'] so a urine-specimen result (e.g. 'Urine sodium') can never satisfy or headline the blood U&E; exact-SNOMED matches bypass the exclude because the code is specimen-specific already. Added 2026-08-22 (The Keeper gap analysis, gap-drug-01).",
+      "sharedCare": false
+    },
+    {
+      "type": "drug-monitoring",
+      "enabled": true,
+      "id": "denosumab-calcium",
+      "drugClass": "RANKL inhibitor",
+      "drug": {
+        "match": [
+          "denosumab",
+          "prolia",
+          "xgeva",
+          "stoboclo",
+          "jubbonti",
+          "obodence",
+          "osvyrti",
+          "conexxence",
+          "evfraxy",
+          "izamby",
+          "junod",
+          "kefdensis",
+          "ponlimsi",
+          "zadenvi",
+          "acvybra",
+          "bildyos",
+          "wyost",
+          "osenvelt",
+          "bomyntra",
+          "enwylma",
+          "jubereq",
+          "yaxwer",
+          "xbryk",
+          "vevzuo",
+          "denbrayce"
+        ],
+        "exclude": []
+      },
+      "phase": "maintenance",
+      "tests": [
+        {
+          "name": "Calcium (before each 6-monthly dose)",
+          "match": ["calcium", "corrected calcium", "adjusted calcium", "bone profile"],
+          "exclude": ["urine"],
+          "snomed": ["390967006"],
+          "intervalDays": 182,
+          "dueSoonDays": 21
+        },
+        {
+          "name": "U&E / eGFR",
+          "match": ["u&e", "urea and electrolytes", "renal profile", "egfr", "creatinine"],
+          "exclude": ["urine"],
+          "snomed": ["1019331000000106"],
+          "intervalDays": 365,
+          "dueSoonDays": 30
+        }
+      ],
+      "source": "MHRA DSU Sept 2014 (fatal hypocalcaemia) / Prolia SmPC / SPS biosimilar brand set (Nov 2025–Apr 2026)",
+      "notes": "Hypocalcaemia risk rises steeply with renal impairment. The 182-day calcium chip also proxies on-time dosing — delayed denosumab causes rebound vertebral fractures. Xgeva 120mg (oncology, 4-weekly) is secondary-care administered: specialist schedule prevails, chip is a backstop. Denosumab must now be prescribed BY BRAND (SPS): keep this brand list current every Keeper run. Calcium and creatinine observation terms carry the audit-H4 test-level exclude ['urine'] so urine-specimen results never satisfy the blood tests; calcium matching runs against observations only, so 'calcium channel blocker' medication text cannot hit it. Added 2026-08-22 (The Keeper gap analysis, gap-drug-02).",
+      "sharedCare": true
     },
     {
       "type": "drug-no-monitoring",

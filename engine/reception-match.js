@@ -170,6 +170,24 @@
       'temperature in baby',
       'feverish baby',
     ],
+    // ── Added 2026-08-23 (The Keeper gap analysis 2026-08-22, gap #1) — PENDING CSO sign-off ────
+    // fever-adult carries the GENERIC fever terms; feverish-child keeps its child-qualified
+    // phrases ('child with a fever', 'feverish baby', …). Child-worded text therefore matches
+    // BOTH pathways (bare 'fever'/'temperature' is a substring of the child phrases) — that is
+    // the INTENDED behaviour, the same offer-both-and-a-human-picks tie-break as urinary /
+    // gu-male above (pinned by test-reception-pathway-coverage.js). Do not "fix" it into
+    // first-match-wins: an adult fever must never be silently routed down the child pathway,
+    // and vice versa.
+    'fever-adult': [
+      'fever',
+      'high temperature',
+      'temperature',
+      'hot and shivery',
+      'shivery',
+      'flu',
+      'influenza',
+      'feeling hot',
+    ],
     rash: [
       'rash',
       'skin rash',
@@ -447,7 +465,19 @@
     'rf-under3m': ['baby under 3 months', 'under 3 months old with a fever', '3 month old fever'],
     'rf-floppy': ['floppy', 'hard to wake', 'high pitched cry', 'weak cry'],
     'rf-colour': ['blue skin', 'grey skin', 'mottled skin', 'pale skin', 'pale lips', 'mottled'],
-    'rf-fluids': ['no wet nappy', 'not passing urine', 'sunken eyes', 'dehydrated', 'dry nappies'],
+    // rf-fluids is shared between feverish-child (nappy-worded) and fever-adult (fluids-down /
+    // urine-output wording, added 2026-08-23) — same clinical meaning (dehydration), one list.
+    'rf-fluids': [
+      'no wet nappy',
+      'not passing urine',
+      'sunken eyes',
+      'dehydrated',
+      'dry nappies',
+      'unable to keep fluids down',
+      'cant keep fluids down',
+      'hardly passing any urine',
+      'not passing much urine',
+    ],
     'rf-seizure': ['seizure', 'fit', 'convulsion'],
     'rf-neck': ['stiff neck', 'bright light bothering them', 'photophobia'],
     'rf-nonblanching': ['non blanching rash', 'doesnt fade', 'glass test', 'purpura', 'rash that doesnt fade'],
@@ -841,6 +871,54 @@
       'nobody with them',
       'alone and distressed',
       'homeless',
+    ],
+
+    // ── Added 2026-08-23 (The Keeper gap analysis 2026-08-22, gap #1) — PENDING CSO sign-off ────
+    // Topic terms for the fever-adult pathway's three NEW red-flag ids (rf-sepsis, rf-confusion,
+    // rf-nonblanching, rf-meningism and rf-fluids are REUSED shared ids, listed above). Terms
+    // derived conservatively from each red flag's `ask` text in reception-pathways.json.
+    // CSO-reviewable content — see this file's header. A missing/unmatched term is the SAFE
+    // direction (the topic reads as a GAP and is re-asked).
+
+    // fever-adult + feverish-child — neutropenic sepsis: chemotherapy or other anticancer
+    // treatment in the last few weeks with this fever (NICE CG151).
+    'rf-chemo-fever': [
+      'chemotherapy',
+      'chemo',
+      'cancer treatment',
+      'anticancer treatment',
+      'treatment for cancer',
+      'immunotherapy',
+      'neutropenic',
+    ],
+    // fever-adult — non-chemo immunosuppression: immune-weakening medicines or asplenia.
+    'rf-immune-other': [
+      'immunosuppressed',
+      'immunocompromised',
+      'weakened immune system',
+      'immune suppressing',
+      'methotrexate',
+      'long term steroids',
+      'biologic',
+      'transplant',
+      'spleen removed',
+      'no spleen',
+      'splenectomy',
+    ],
+    // fever-adult — returned traveller within the last month (possible malaria; CKS page VERIFY).
+    'rf-travel': [
+      'returned from abroad',
+      'back from abroad',
+      'been abroad',
+      'foreign travel',
+      'recent travel',
+      'travelled to africa',
+      'travelled to asia',
+      'travel to africa',
+      'travel to asia',
+      'south america',
+      'central america',
+      'malaria',
     ],
   };
 

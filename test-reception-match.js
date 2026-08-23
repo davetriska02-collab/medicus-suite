@@ -102,6 +102,7 @@ console.log('\n--- matchPathways: hits (one representative synonym per shipped p
     headache: 'Patient has had a headache since this morning.',
     backpain: 'Sudden onset lower back pain after gardening.',
     'feverish-child': 'Mum calling about her feverish child, temperature 38.5.',
+    'fever-adult': 'Adult caller feeling hot and shivery since yesterday.',
     rash: 'New skin rash on the arms, itchy.',
     general: 'Caller says it is something else, not covered by usual reasons.',
   };
@@ -132,6 +133,10 @@ console.log('\n--- matchPathways: synonym matching ---');
   assert(
     matchPathways('query shingles on the trunk').some((p) => p.id === 'rash'),
     '"shingles" synonym matches rash'
+  );
+  assert(
+    matchPathways('thinks they have the flu, aching all over').some((p) => p.id === 'fever-adult'),
+    '"flu" synonym matches fever-adult (spec edge case: caller says flu, not fever)'
   );
   assert(
     matchPathways('SORE THROAT for a week').some((p) => p.id === 'sore-throat'),

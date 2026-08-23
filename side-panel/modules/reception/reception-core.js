@@ -338,7 +338,7 @@ function pharmacyFirstAgeStatus(pathway, ageYears) {
 // Kept in lock-step with shared/reception-pathway-utils.js (a classic script
 // that cannot be imported from this ES module). test-reception-disposition.js
 // asserts the two copies are identical.
-const CLINICIAN_ONLY_IDS = Object.freeze(['mental-health', 'gu-male', 'gyn-female', 'general']);
+const CLINICIAN_ONLY_IDS = Object.freeze(['mental-health', 'gu-male', 'gyn-female', 'general', 'fever-adult']);
 const CLINICIAN_ONLY_DOMAINS = Object.freeze(['mental_health', 'gu_male', 'gyn_female']);
 
 // The single sentence every rendered suggestion carries — on screen AND in the
