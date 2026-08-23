@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.238.1",
+  "version": "3.238.4",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -90,8 +90,7 @@
     {
       "matches": ["https://*.medicus.health/*"],
       "js": [
-        "content-scripts/booking-inline.js",
-        "content-scripts/task-inline.js",
+        "content-scripts/task-actions-panel.js",
         "shared/quick-actions-core.js",
         "content-scripts/reception-quick-actions.js",
         "content-scripts/document-file-inline.js",
@@ -117,8 +116,7 @@
         "content-scripts/eps-cancellation-bulk-discard.js"
       ],
       "css": [
-        "content-scripts/booking-inline.css",
-        "content-scripts/task-inline.css",
+        "content-scripts/task-actions-panel.css",
         "content-scripts/reception-quick-actions.css",
         "content-scripts/document-file-inline.css",
         "content-scripts/document-codes-to-problems.css",

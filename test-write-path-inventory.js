@@ -132,13 +132,9 @@ const CLICK_MACRO_MAP = {
     wids: ['W22'],
     note: 'tickRows (W22 OIR tick-off); the only other Medicus-control click is the keyboard-nav Enter-to-open-row, a user-initiated navigation click that writes nothing',
   },
-  'content-scripts/booking-inline.js': {
+  'content-scripts/task-actions-panel.js': {
     reason:
-      'keyboard-accessibility self-click on its OWN widget toggle only; the W2 Medicus write is a POST, caught by the verb scanner',
-  },
-  'content-scripts/task-inline.js': {
-    reason:
-      'keyboard-accessibility self-click on its OWN widget toggle only; the W5 Medicus write is a POST, caught by the verb scanner',
+      'keyboard-accessibility self-click on its OWN widget toggles only (outer collapse, booking section, task section); the W2/W5 Medicus writes are POSTs, caught by the verb scanner',
   },
   'content-scripts/reception-quick-actions.js': {
     reason:
@@ -163,9 +159,8 @@ const CLICK_MACRO_MAP = {
 const FILE_TO_WIDS = {
   'side-panel/modules/slots/booking-api.js': ['W1'],
   'shared/booking-core.js': ['W1', 'W2', 'W12', 'W15'],
-  'content-scripts/booking-inline.js': ['W2'],
   'shared/task-api.js': ['W4'],
-  'content-scripts/task-inline.js': ['W5'],
+  'content-scripts/task-actions-panel.js': ['W2', 'W5'],
   'content-scripts/document-file-inline.js': ['W6'],
   'content-scripts/triage-lens/lab-file-button.js': ['W7'],
   'content-scripts/triage-lens/routine-rx-button.js': ['W8'],

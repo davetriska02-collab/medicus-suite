@@ -1,0 +1,407 @@
+/* Medicus Suite — "Book appointment" / "Create task" floating panel for task pages */
+/* All selectors scoped to #ms-tap-widget to avoid Medicus style conflicts */
+
+/* Fixed-position floating panel — deliberately NOT nested inline in
+   Medicus's own page flow, so it survives SPA re-renders and pane-switching
+   without depending on finding a card that may not exist yet (or at all).
+   See the file header comment in task-actions-panel.js. */
+#ms-tap-widget {
+  position: fixed;
+  top: 72px;
+  right: 20px;
+  bottom: auto;
+  z-index: 999999;
+  width: 340px;
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 92px);
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a2030;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+}
+
+#ms-tap-widget .ms-tap-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f0f4ff;
+  border: 1px solid #c3cef5;
+  border-radius: 8px 8px 0 0;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e3a8a;
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+#ms-tap-widget.ms-tap-dragging .ms-tap-header {
+  cursor: grabbing;
+}
+
+#ms-tap-widget:has(.ms-tap-body) .ms-tap-header {
+  border-radius: 8px 8px 0 0;
+}
+
+#ms-tap-widget:not(:has(.ms-tap-body)) .ms-tap-header {
+  border-radius: 8px;
+}
+
+#ms-tap-widget .ms-tap-grip {
+  width: 8px;
+  height: 14px;
+  flex-shrink: 0;
+  background-image: radial-gradient(circle, #7b8ec4 1.1px, transparent 1.25px);
+  background-size: 4px 5px;
+  background-repeat: repeat;
+  opacity: 0.85;
+}
+
+#ms-tap-widget .ms-tap-header-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+  flex: 1;
+}
+
+#ms-tap-widget .ms-tap-chevron {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+#ms-tap-widget .ms-tap-body {
+  border: 1px solid #c3cef5;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+#ms-tap-widget .ms-tap-section + .ms-tap-section {
+  border-top: 1px solid #e5e7eb;
+}
+
+#ms-tap-widget .ms-tap-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e3a8a;
+}
+
+#ms-tap-widget .ms-tap-section-header:hover {
+  background: #f7f9ff;
+}
+
+#ms-tap-widget .ms-tap-section-body {
+  padding: 4px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#ms-tap-widget .ms-tap-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-tap-widget .ms-tap-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+#ms-tap-widget .ms-tap-select,
+#ms-tap-widget .ms-tap-date-input,
+#ms-tap-widget .ms-tap-text-input,
+#ms-tap-widget .ms-tap-textarea {
+  padding: 7px 10px;
+  border: 1px solid #c8cdd6;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #1a2030;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+#ms-tap-widget .ms-tap-textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.4;
+}
+
+#ms-tap-widget .ms-tap-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+#ms-tap-widget .ms-tap-btn {
+  padding: 8px 16px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  font-family: inherit;
+}
+
+#ms-tap-widget .ms-tap-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+#ms-tap-widget .ms-tap-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#ms-tap-widget .ms-tap-btn-ghost {
+  padding: 7px 14px;
+  background: transparent;
+  color: #2563eb;
+  border: 1px solid #c3cef5;
+  border-radius: 5px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-btn-ghost:hover:not(:disabled) {
+  background: #f0f4ff;
+}
+
+#ms-tap-widget .ms-tap-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#ms-tap-widget .ms-tap-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#ms-tap-widget .ms-tap-loading {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-tap-widget .ms-tap-error {
+  padding: 8px 10px;
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+#ms-tap-widget .ms-tap-warn {
+  padding: 8px 10px;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  font-size: 13px;
+  color: #92400e;
+}
+
+/* Patient-record section (triage tasks only) — future appointments + unused
+   booking links. Read-only, so no button/warn styling of its own beyond the
+   shared section-body layout above. */
+#ms-tap-widget .ms-tap-rec-group + .ms-tap-rec-group {
+  margin-top: 12px;
+}
+
+#ms-tap-widget .ms-tap-rec-heading {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+#ms-tap-widget .ms-tap-rec-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#ms-tap-widget .ms-tap-rec-row {
+  padding: 7px 9px;
+  border: 1px solid #e5e7eb;
+  border-radius: 5px;
+  background: #fafbfc;
+}
+
+#ms-tap-widget .ms-tap-rec-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#ms-tap-widget .ms-tap-rec-when {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a2030;
+}
+
+#ms-tap-widget .ms-tap-rec-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #374151;
+}
+
+#ms-tap-widget .ms-tap-rec-status-pending {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+#ms-tap-widget .ms-tap-rec-status-seen {
+  background: #dcfce7;
+  color: #166534;
+}
+
+#ms-tap-widget .ms-tap-rec-status-cancelled {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+#ms-tap-widget .ms-tap-rec-status-did-not-attend {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+#ms-tap-widget .ms-tap-rec-status-rescheduled {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+#ms-tap-widget .ms-tap-rec-row-detail {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #555;
+}
+
+#ms-tap-widget .ms-tap-rec-row-reason {
+  margin-top: 4px;
+  font-size: 12px;
+  font-style: italic;
+  color: #666;
+}
+
+#ms-tap-widget .ms-tap-rec-empty {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+}
+
+#ms-tap-widget .ms-tap-bk-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#ms-tap-widget .ms-tap-bk-slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  width: 100%;
+  font-family: inherit;
+}
+
+#ms-tap-widget .ms-tap-bk-slot:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+#ms-tap-widget .ms-tap-bk-slot-time {
+  font-weight: 700;
+  color: #1a2030;
+  flex-shrink: 0;
+}
+
+#ms-tap-widget .ms-tap-bk-slot-dur {
+  color: #666;
+  font-size: 12px;
+}
+
+#ms-tap-widget .ms-tap-bk-slot-site {
+  color: #888;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+#ms-tap-widget .ms-tap-no-slots {
+  font-size: 13px;
+  color: #666;
+  font-style: italic;
+}
+
+#ms-tap-widget .ms-tap-summary {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#ms-tap-widget .ms-tap-success {
+  align-items: center;
+  text-align: center;
+}
+
+#ms-tap-widget .ms-tap-success-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+}

@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.238.1] — 2026-08-23
+## [v3.238.4] — 2026-08-23
 
 ### Signed .crx packaging for managed (IT policy) installs
 
@@ -17,6 +17,65 @@ policy-deployed installs auto-update from
 (Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
 `git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
 into a package.
+
+## [v3.238.3] — 2026-08-23
+
+### "Patient record" section in the task actions panel — triage requests only
+
+On a medical or admin patient-request task, the floating panel added in
+v3.238.2 now shows a read-only "Patient record" section above Book/Create
+task: any **future appointments** (with status) and any **unused booking
+links** already sent to the patient (date sent + the booking text, when
+one was set) — context meant to inform whether a new booking or task is
+even needed. Read-only GETs only; not a new write path.
+
+Getting "triage requests only" right took a second pass. The first attempt
+gated on the task's own overview-URL slug matching the queue-list slugs
+(`medical_patient_request_task` / `admin_patient_request_task`) — those
+slugs never appear on an individual task's own overview page, which loads
+at the generic `/tasks/data/communication-thread/overview/{uuid}` instead
+(confirmed live: that same slug is shared by admin/medical requests,
+repeat-prescription requests, patient-questionnaire responses, and plain
+conversations, so the URL alone can't tell them apart — the gate silently
+never fired). Fixed by classifying from the overview response itself:
+`data.communicationThreadTaskType.isPatientRequestTask` plus, on the
+communication entry that carries the original request,
+`patientRequest.patientRequestType.isMedical` / `.isAdmin`
+(`classifyPatientRequest()`). Fails closed — a classification failure
+leaves the section hidden rather than guessing; once classification
+confirms a medical/admin request, a later load failure shows an error
+instead of silently nothing.
+
+## [v3.238.2] — 2026-08-23
+
+### "Book appointment" / "Create task" widgets merged into one floating panel
+
+The two inline task-page widgets — `booking-inline.js` ("Book appointment for
+this patient", W2) and `task-inline.js` ("Create task for this patient", W5)
+— anchored below the "Codes & actions" card via a three-gate DOM search
+(card heading → bottom action row → "Initial Request" card), the same
+anchor-search machinery `document-codes-to-problems.js` abandoned in
+2026-08-13 for exactly the same two failure modes: the anchor can race
+Medicus's own Vue render on first paint, and some task types (prescribing
+overviews) have no "Codes & actions" card to anchor to at all, which is why
+that search needed three fallback gates in the first place. Both widgets are
+retired and merged into one new `content-scripts/task-actions-panel.js` — a
+single fixed-position floating panel, appended directly to `document.body`,
+carrying both features as independent collapsible sections under one
+draggable, position-persisted header (the same floating-panel pattern
+`document-codes-to-problems.js` already uses for the document-filing task
+page). Nothing to anchor to means nothing to race or fail to find.
+
+Both sections' business logic — API contracts, state machines, and every
+H-043 wrong-patient guard (per-task state pinned across every `await`,
+hard commit-time re-verification immediately before the write, reservation
+release on navigation) — is carried over unchanged; only the DOM placement
+changed. CSN write-path rows W2 and W5 now point at the merged file (see
+`docs/CLINICAL-SAFETY-NOTICE.md`, `docs/HAZARD-LOG.md` H-043,
+`test-write-path-inventory.js`). The `task-widget.codes-actions-heading` and
+`task-inline.action-row` DOM contracts (and their fixtures) are retired with
+the anchor search they existed for; `task-widget.card-submit-button` is kept
+— `reception-quick-actions.js` still uses it for its own composer placement.
 
 ## [v3.238.0] — 2026-08-23
 
