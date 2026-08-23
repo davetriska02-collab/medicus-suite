@@ -104,7 +104,8 @@ const path = require('path');
     'CLINICIAN_ONLY_DOMAINS identical in reception-core and reception-pathway-utils'
   );
   check(
-    JSON.stringify(CLINICIAN_ONLY_IDS) === JSON.stringify(['mental-health', 'gu-male', 'gyn-female', 'general']),
+    JSON.stringify(CLINICIAN_ONLY_IDS) ===
+      JSON.stringify(['mental-health', 'gu-male', 'gyn-female', 'general', 'fever-adult']),
     'CLINICIAN_ONLY_IDS content pinned'
   );
   check(
@@ -193,7 +194,7 @@ const path = require('path');
   r = evaluateDisposition(pathway({ id: 'mental-health' }), ctx({ bundledId: 'mental-health' }));
   check(r.status === 'none', 'mental-health → status none');
 
-  for (const id of ['gu-male', 'gyn-female', 'general']) {
+  for (const id of ['gu-male', 'gyn-female', 'general', 'fever-adult']) {
     r = evaluateDisposition(pathway({ id }), ctx({ bundledId: id, redFlagPositives: positives }));
     check(
       r.status === 'withheld' && r.reason === 'clinician-only pathway',

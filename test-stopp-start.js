@@ -570,6 +570,178 @@ console.log('\n--- 2026-07-25 Keeper: NSAID celebrex, loop diuretic torasemide, 
   assert(!!find(flags, 'stopp_firstgen_ah_elderly'), 'STOPP 3 fires: brompheniramine + age 68 — brompheniramine recognised as first-gen AH');
 }
 
+// ── 2026-08-22 Keeper: START H4 — bone protection in osteoporosis ─────────
+console.log('\n--- 2026-08-22 Keeper: START H4 bone protection (osteoporosis / fragility fracture) ---');
+{
+  const flags = computeStoppStart({
+    drugs: ['amlodipine 5mg'],
+    problems: [{ name: 'osteoporosis' }],
+    ageYears: 78,
+    egfr: null,
+  });
+  const f = find(flags, 'start_bone_protection_osteoporosis');
+  assert(!!f, 'START H4 fires: coded osteoporosis + no bone therapy');
+  assert(f.kind === 'start', 'START H4 kind = start');
+  assert(f.severity === 'amber', 'START H4 severity = amber');
+  assert(f.detail.includes('clinic-administered'), 'START H4 detail notes clinic-administered denosumab/IV zoledronate');
+  assert(f.detail.includes('life expectancy'), 'START H4 detail notes poor-life-expectancy exemption');
+}
+{
+  // Alendronic acid present → no flag ('alendron' stem covers acid + alendronate)
+  const flags = computeStoppStart({
+    drugs: ['alendronic acid 70mg tablets'],
+    problems: [{ name: 'osteoporosis' }],
+    ageYears: 78,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bone_protection_osteoporosis'), 'START H4 does NOT fire: alendronic acid present');
+}
+{
+  // Fragility-fracture coding fires too
+  const flags = computeStoppStart({
+    drugs: [],
+    problems: [{ name: 'fragility fracture of neck of femur' }],
+    ageYears: 82,
+    egfr: null,
+  });
+  assert(!!find(flags, 'start_bone_protection_osteoporosis'), 'START H4 fires: fragility fracture coded');
+}
+{
+  // Negation-aware matcher: FH is not the disease → no flag
+  const flags = computeStoppStart({
+    drugs: [],
+    problems: [{ name: 'family history of osteoporosis' }],
+    ageYears: 60,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bone_protection_osteoporosis'), 'START H4 does NOT fire: family history of osteoporosis (negated)');
+}
+{
+  // '?osteoporosis' — query-diagnosis shorthand is a negation cue (review fix
+  // 2026-08-23: the original /\b\?/ pattern never matched a leading '?'
+  // because no word boundary exists before a non-word char)
+  const flags = computeStoppStart({
+    drugs: [],
+    problems: [{ name: '?osteoporosis' }],
+    ageYears: 60,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bone_protection_osteoporosis'), "START H4 does NOT fire: '?osteoporosis' (query diagnosis negated)");
+}
+{
+  // 'history of fragility fracture' is NOT treated as negation — H4 targets
+  // exactly that history (pure-history cues deliberately omitted from the matcher)
+  const flags = computeStoppStart({
+    drugs: [],
+    problems: [{ name: 'history of fragility fracture' }],
+    ageYears: 82,
+    egfr: null,
+  });
+  assert(!!find(flags, 'start_bone_protection_osteoporosis'), 'START H4 fires: history of fragility fracture (history IS the indication)');
+}
+{
+  // Bare traumatic 'fracture' and 'osteopenia' deliberately do NOT gate
+  const flags = computeStoppStart({
+    drugs: [],
+    problems: [{ name: 'fracture of radius' }, { name: 'osteopenia' }],
+    ageYears: 70,
+    egfr: null,
+  });
+  assert(
+    !find(flags, 'start_bone_protection_osteoporosis'),
+    'START H4 does NOT fire: traumatic fracture / osteopenia only (deliberate term exclusions)'
+  );
+}
+
+// ── 2026-08-22 Keeper: START H2 — bone protection with corticosteroid ─────
+console.log('\n--- 2026-08-22 Keeper: START H2 bone protection (corticosteroid, degraded) ---');
+{
+  const flags = computeStoppStart({ drugs: ['prednisolone 5mg tablets'], problems: [], ageYears: 70, egfr: null });
+  const f = find(flags, 'start_bone_protection_steroid');
+  assert(!!f, 'START H2 fires: prednisolone + no bone therapy + no calcium/vit D');
+  assert(f.kind === 'start', 'START H2 kind = start');
+  assert(f.severity === 'amber', 'START H2 severity = amber');
+  assert(f.detail.includes('snapshot'), 'START H2 detail carries snapshot duration caveat');
+  assert(f.detail.includes('≥3 months'), 'START H2 detail states the ≥3-month course qualifier');
+}
+{
+  // Calcium/vit D present → no flag ('adcal' covers Adcal-D3)
+  const flags = computeStoppStart({
+    drugs: ['prednisolone 5mg tablets', 'Adcal-D3 caplets'],
+    problems: [],
+    ageYears: 70,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bone_protection_steroid'), 'START H2 does NOT fire: Adcal-D3 co-prescribed');
+}
+{
+  // Bone therapy present → no flag
+  const flags = computeStoppStart({
+    drugs: ['prednisolone 5mg tablets', 'alendronic acid 70mg tablets'],
+    problems: [],
+    ageYears: 70,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bone_protection_steroid'), 'START H2 does NOT fire: alendronic acid co-prescribed');
+}
+{
+  // Hydrocortisone cream deliberately not a trigger (topical substring;
+  // documented limitation: oral Addisonian replacement is also missed)
+  const flags = computeStoppStart({ drugs: ['hydrocortisone 1% cream'], problems: [], ageYears: 70, egfr: null });
+  assert(!find(flags, 'start_bone_protection_steroid'), 'START H2 does NOT fire: hydrocortisone cream (deliberate exclusion)');
+}
+
+// ── 2026-08-22 Keeper: STOPP L2/START K2 — opioid without laxative ────────
+console.log('\n--- 2026-08-22 Keeper: STOPP L2/START K2 opioid without laxative ---');
+{
+  const flags = computeStoppStart({ drugs: ['Zomorph 30mg capsules'], problems: [], ageYears: 75, egfr: null });
+  const f = find(flags, 'stopp_opioid_no_laxative');
+  assert(!!f, 'STOPP L2 fires: Zomorph + no laxative');
+  assert(f.kind === 'stopp', 'STOPP L2 kind = stopp');
+  assert(f.severity === 'amber', 'STOPP L2 severity = amber');
+  assert(f.detail.includes('PRN'), 'STOPP L2 detail carries the regular-vs-PRN caveat');
+}
+{
+  const flags = computeStoppStart({
+    drugs: ['Zomorph 30mg capsules', 'senna 7.5mg tablets'],
+    problems: [],
+    ageYears: 75,
+    egfr: null,
+  });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 does NOT fire: Zomorph + senna');
+}
+{
+  // Targinact (oxycodone/naloxone): 'naloxone' in LAXATIVE_TERMS self-covers
+  const flags = computeStoppStart({
+    drugs: ['Targinact 10mg/5mg (oxycodone/naloxone) prolonged-release tablets'],
+    problems: [],
+    ageYears: 75,
+    egfr: null,
+  });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 does NOT fire: Targinact (naloxone self-cover)');
+}
+{
+  // Weak opioid co-codamol: DELIBERATELY excluded in v1 (false-positive control)
+  const flags = computeStoppStart({ drugs: ['co-codamol 8/500 tablets'], problems: [], ageYears: 75, egfr: null });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 does NOT fire: co-codamol (weak-opioid exclusion pinned as deliberate)');
+}
+{
+  // Tramadol IS in STRONG_OPIOID_TERMS (deliberate — regular use constipates)
+  const flags = computeStoppStart({ drugs: ['tramadol 50mg capsules'], problems: [], ageYears: 60, egfr: null });
+  assert(!!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 fires: tramadol (included, pinned as deliberate)');
+}
+{
+  // Apomorphine (dopamine agonist, Parkinson's) substring-contains 'morphine'
+  // but is NOT an opioid — excluded via STRONG_OPIOID_NOT (review fix 2026-08-23)
+  const flags = computeStoppStart({
+    drugs: ['apomorphine 10mg/ml solution for infusion (APO-go)'],
+    problems: [],
+    ageYears: 72,
+    egfr: null,
+  });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 does NOT fire: apomorphine (not an opioid — substring collision excluded)');
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

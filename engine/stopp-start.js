@@ -217,6 +217,162 @@
   // empty list and the criterion simply does not fire (fail-closed).
   const ANTICHOLINERGIC_TERMS = (ACB_TABLE || []).filter((e) => e.score >= 2).map((e) => e.term);
 
+  // Oral systemic corticosteroids (for the steroid bone-protection START check).
+  // Hydrocortisone is DELIBERATELY excluded: as a substring it would match the
+  // large volume of topical hydrocortisone creams/ointments. The cost is that
+  // oral hydrocortisone (Addisonian replacement therapy — which also warrants
+  // bone protection) is silently missed: a documented limitation.
+  const CORTICOSTEROID_TERMS = ['prednisolone', 'deflazacort', 'methylprednisolone', 'dexamethasone'];
+
+  // Bone-protection therapy (anti-resorptive + anabolic agents) — SHARED by the
+  // osteoporosis (START H4) and corticosteroid (START H2) checks. Generic stems
+  // cover salt/ester variants; brands listed because records may show only the
+  // brand name.
+  const BONE_THERAPY_TERMS = [
+    'alendron', // stem: alendronic acid / alendronate
+    'fosamax', // alendronic acid brand
+    'binosto', // alendronic acid effervescent brand
+    'risedron', // stem: risedronate / risedronic acid
+    'actonel', // risedronate brand
+    'ibandron', // stem: ibandronic acid / ibandronate
+    'bonviva', // ibandronic acid brand
+    'zoledron', // stem: zoledronic acid / zoledronate
+    'aclasta', // zoledronic acid brand
+    'pamidron', // stem: pamidronate / pamidronic acid
+    'denosumab',
+    'prolia', // denosumab brand
+    'teriparatide',
+    'forsteo', // teriparatide brand
+    'movymia', // teriparatide biosimilar
+    'terrosa', // teriparatide biosimilar
+    'sondelbay', // teriparatide biosimilar
+    'romosozumab',
+    'evenity', // romosozumab brand
+    'raloxifene',
+    'evista', // raloxifene brand
+    'abaloparatide',
+    'eladynos', // abaloparatide brand
+    'strontium ranelate',
+  ];
+
+  // Calcium / vitamin D supplements (for the steroid bone-protection START
+  // check). Brand names dominate real records (Adcal-D3, Calcichew etc.).
+  const CALCIUM_VITD_TERMS = [
+    'adcal',
+    'calcichew',
+    'accrete',
+    'evacal',
+    'theical',
+    'calceos',
+    'natecal',
+    'colecalciferol', // UK spelling (BNF/dm+d)
+    'cholecalciferol', // international spelling — not a substring of 'colecalciferol'
+    'fultium',
+    'desunin',
+    'invita d3',
+    'stexerol',
+    'plenachol',
+    'calcium carbonate',
+  ];
+
+  // Strong / regular-use opioids (for the opioid-without-laxative check,
+  // STOPP L2 / START K2). Generic names + UK brands that may appear in a record
+  // without the generic. Tramadol and dihydrocodeine ARE included (regular use
+  // constipates like any full agonist). WEAK opioids (codeine, co-codamol) are
+  // DELIBERATELY excluded in this first version to control false positives
+  // (huge, mostly-PRN prescribing volume) — extend later if flag volume
+  // tolerates it. The exclusion is pinned by test-stopp-start.js.
+  // NOT-opioids that substring-collide with a term below: apomorphine
+  // (dopamine agonist for Parkinson's — contains 'morphine'). A drug whose
+  // name hits this list never counts as an opioid.
+  const STRONG_OPIOID_NOT = ['apomorphine'];
+  const STRONG_OPIOID_TERMS = [
+    'morphine',
+    'zomorph', // morphine MR brand
+    'mst continus', // morphine MR brand
+    'sevredol', // morphine IR brand
+    'oramorph', // morphine oral solution brand
+    'mxl', // morphine MR (24h) brand
+    'oxycodone',
+    'oxycontin', // oxycodone MR brand
+    'oxynorm', // oxycodone IR brand
+    'longtec', // oxycodone MR brand
+    'shortec', // oxycodone IR brand
+    'reltebon', // oxycodone MR brand
+    'abtard', // oxycodone MR brand
+    'fentanyl',
+    'durogesic', // fentanyl patch brand
+    'matrifen', // fentanyl patch brand
+    'mezolar', // fentanyl patch brand
+    'fencino', // fentanyl patch brand
+    'buprenorphine',
+    'butrans', // buprenorphine patch brand
+    'butec', // buprenorphine patch brand
+    'transtec', // buprenorphine patch brand
+    'bupeaze', // buprenorphine patch brand
+    'sevodyne', // buprenorphine patch brand
+    'tapentadol',
+    'palexia', // tapentadol brand
+    'methadone',
+    'physeptone', // methadone brand
+    'diamorphine',
+    'pethidine',
+    'tramadol',
+    'zydol', // tramadol brand
+    'zamadol', // tramadol brand
+    'marol', // tramadol MR brand
+    'maxitram', // tramadol MR brand
+    'meptazinol',
+    'meptid', // meptazinol brand
+    'dihydrocodeine',
+    'dhc continus', // dihydrocodeine MR brand
+  ];
+
+  // Laxatives — all classes (stimulant, osmotic, bulk, softener, PAMORA,
+  // prokinetic). 'naloxone' is DELIBERATELY present so oxycodone/naloxone
+  // combination products (Targinact) self-cover: their naloxone component
+  // exists precisely to prevent opioid-induced constipation.
+  const LAXATIVE_TERMS = [
+    'senna',
+    'senokot', // senna brand
+    'lactulose',
+    'duphalac', // lactulose brand
+    'macrogol',
+    'movicol', // macrogol brand
+    'laxido', // macrogol brand
+    'cosmocol', // macrogol brand
+    'molaxole', // macrogol brand
+    'bisacodyl',
+    'dulcolax', // bisacodyl brand
+    'sodium picosulfate',
+    'docusate',
+    'dioctyl', // docusate brand
+    'docusol', // docusate brand
+    'ispaghula',
+    'fybogel', // ispaghula brand
+    'methylcellulose',
+    'celevac', // methylcellulose brand
+    'sterculia',
+    'normacol', // sterculia brand
+    'glycerol suppositor', // stem covers suppository/suppositories
+    'glycerin suppositor', // spelling variant
+    'magnesium hydroxide',
+    'co-danthramer',
+    'co-danthrusate',
+    'dantron',
+    'linaclotide',
+    'constella', // linaclotide brand
+    'prucalopride',
+    'resolor', // prucalopride brand
+    'naloxegol',
+    'moventig', // naloxegol brand
+    'methylnaltrexone',
+    'relistor', // methylnaltrexone brand
+    'naldemedine',
+    'rizmoic', // naldemedine brand
+    'naloxone', // Targinact self-cover — see comment above
+  ];
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   // Normalise a drug to a searchable lowercase string
@@ -239,6 +395,16 @@
     });
   }
 
+  // hasDrug variant with a not-list: a drug whose name hits any `notTerms`
+  // entry is skipped entirely (apomorphine-vs-'morphine' substring collision)
+  function hasDrugExcluding(drugs, terms, notTerms) {
+    return drugs.some((d) => {
+      const n = drugName(d);
+      if (notTerms.some((x) => n.includes(x))) return false;
+      return terms.some((t) => n.includes(t));
+    });
+  }
+
   // True if any problem matches any of the given terms
   function hasProblem(problems, terms) {
     return problems.some((p) => {
@@ -252,6 +418,64 @@
   // unrelated term lists like DIABETES_TERMS/CKD_TERMS if added to hasProblem generally)
   function hasBareProblemToken(problems, token) {
     return problems.some((p) => problemName(p).trim() === token);
+  }
+
+  // Negation/context cues that disqualify a substring problem match, so
+  // "family history of osteoporosis" or "at risk of osteoporosis" does not
+  // satisfy a criterion that requires the disease itself. Clause-bounding and
+  // reach semantics mirror problemLabelMatchesTerm in engine/rules-engine.js —
+  // keep in lock-step if either changes. The pure-history cues from that list
+  // ('history of', 'past', 'previous', 'resolved') are DELIBERATELY omitted
+  // here: START H4 explicitly targets a *history* of fragility fracture, and
+  // osteoporosis does not resolve — treating those cues as negating would
+  // silently miss exactly the patients the criterion exists for.
+  const PROBLEM_NEGATION_PATTERNS = [
+    /\bno\s+/,
+    /\bnot\s+/,
+    /\bfamily history\s+of\s+/,
+    /\bfh\s+of\s+/,
+    /\bat risk of\s+/,
+    /\brisk of\s+/,
+    /\bquery\s+/,
+    // Bare '?' (query-diagnosis shorthand: '?osteoporosis'). No \b prefix —
+    // there is no word boundary between start-of-string and a non-word char,
+    // so /\b\?/ would never match the common leading-'?' form.
+    /\?/,
+  ];
+  // How close (in characters) a negation cue's END must be to the matched term
+  // for it to negate the match. Bounds the cue to the words immediately before
+  // the term ("no significant osteoporosis") without letting an unrelated
+  // earlier cue reach across the clause.
+  const PROBLEM_NEGATION_REACH = 30;
+
+  function problemMatchesTermNegationAware(label, term) {
+    const l = String(label || '').toLowerCase();
+    const idx = l.indexOf(term);
+    if (idx < 0) return false;
+    // Bound the negation scan to (a) the same clause as the match (split on
+    // ; . :) and (b) cues whose end sits within PROBLEM_NEGATION_REACH chars
+    // of the term — same semantics as rules-engine.js (audit H3, 2026-07-18).
+    const prefix = l.slice(0, idx);
+    const clauseStart = Math.max(prefix.lastIndexOf(';'), prefix.lastIndexOf('.'), prefix.lastIndexOf(':')) + 1;
+    const clause = prefix.slice(clauseStart);
+    return !PROBLEM_NEGATION_PATTERNS.some((rx) => {
+      const g = new RegExp(rx.source, 'gi');
+      let m;
+      let lastEnd = -1;
+      while ((m = g.exec(clause)) !== null) {
+        lastEnd = m.index + m[0].length;
+        if (m[0].length === 0) g.lastIndex++; // safety vs zero-width match
+      }
+      return lastEnd >= 0 && clause.length - lastEnd <= PROBLEM_NEGATION_REACH;
+    });
+  }
+
+  // hasProblem variant that ignores matches inside a negating context
+  function hasProblemNegationAware(problems, terms) {
+    return problems.some((p) => {
+      const n = problemName(p);
+      return terms.some((t) => problemMatchesTermNegationAware(n, t));
+    });
   }
 
   // ── Problem term lists ─────────────────────────────────────────────────────
@@ -322,6 +546,11 @@
 
   // Myocardial infarction (for beta-blocker START)
   const MI_TERMS = ['myocardial infarction', 'mi ', 'stemi', 'nstemi', 'heart attack'];
+
+  // Osteoporosis / fragility fracture (for bone-protection START H4).
+  // Deliberately NOT bare 'fracture' (would flood on traumatic fractures) and
+  // NOT 'osteopenia' (H4 requires established osteoporosis, T-score ≤ -2.5).
+  const OSTEOPOROSIS_TERMS = ['osteoporosis', 'osteoporotic', 'fragility fracture'];
 
   // Digoxin
   const DIGOXIN_TERMS = ['digoxin'];
@@ -551,6 +780,27 @@
       });
     }
 
+    // STOPP L2 / START K2 (2026-08-22 Keeper): regular strong opioid without
+    // concomitant laxative (amber). DEGRADED presence-only check: regular-vs-PRN
+    // dosing is unknowable from a snapshot, so that caveat is carried in the
+    // detail text. Weak opioids (codeine/co-codamol) deliberately excluded —
+    // see STRONG_OPIOID_TERMS comment.
+    if (hasDrugExcluding(drugs, STRONG_OPIOID_TERMS, STRONG_OPIOID_NOT) && !hasDrug(drugs, LAXATIVE_TERMS)) {
+      flags.push({
+        id: 'stopp_opioid_no_laxative',
+        kind: 'stopp',
+        criterion: 'Regular strong opioid without concomitant laxative',
+        detail:
+          'Strong opioid detected with no laxative co-prescribed. Opioid-induced constipation affects ' +
+          '40–80% of patients on regular opioids; in older adults it causes impaction, overflow ' +
+          'incontinence, delirium, and admission. Criterion applies to DAILY REGULAR opioids — verify ' +
+          'this is not PRN-only use (dosing pattern cannot be determined from this snapshot). ' +
+          'Note: over-the-counter laxatives (e.g. senna bought OTC) do not appear in the medication list.',
+        severity: 'amber',
+        source: 'STOPP/START v3 (2023) — Section L: Analgesics (L2) / START Section K (K2)',
+      });
+    }
+
     // ── START ─────────────────────────────────────────────────────────────────
 
     // START 11: Coronary/IHD present AND no statin (amber)
@@ -607,6 +857,54 @@
           'or whether it was discontinued.',
         severity: 'amber',
         source: 'STOPP/START v3 (2023) — START Section A: Cardiovascular',
+      });
+    }
+
+    // START H4 (2026-08-22 Keeper): osteoporosis / fragility fracture AND no
+    // bone-protection therapy (amber). Problem match is negation-aware so
+    // "family history of osteoporosis" / "at risk of osteoporosis" do not fire
+    // (see hasProblemNegationAware — pure-history cues deliberately still match).
+    if (hasProblemNegationAware(problems, OSTEOPOROSIS_TERMS) && !hasDrug(drugs, BONE_THERAPY_TERMS)) {
+      flags.push({
+        id: 'start_bone_protection_osteoporosis',
+        kind: 'start',
+        criterion: 'Consider bone-protection therapy in osteoporosis / fragility fracture',
+        detail:
+          'Osteoporosis or fragility fracture coded but no bone-protection therapy (bisphosphonate, ' +
+          'denosumab, or other anti-resorptive/anabolic agent) detected. Antiresorptive therapy roughly ' +
+          'halves re-fracture risk (NOGG / NICE TA464). Caution: denosumab (6-monthly injection) and ' +
+          'IV zoledronate (annual infusion) are often clinic-administered and may not appear in the ' +
+          'practice medication list — verify before acting. Exemption per the v3 criterion: bone ' +
+          'protection may reasonably be withheld where estimated life expectancy is under 1 year ' +
+          '(clinical judgement).',
+        severity: 'amber',
+        source: 'STOPP/START v3 (2023) — START Section H: Musculoskeletal (H4)',
+      });
+    }
+
+    // START H2 (2026-08-22 Keeper): systemic corticosteroid AND no bone
+    // protection AND no calcium/vitamin D (amber). DEGRADED variant: H2 applies
+    // to corticosteroid courses expected to run ≥3 months, but course duration
+    // is unknowable from a snapshot — that caveat is carried in the detail
+    // text. Hydrocortisone is deliberately absent from CORTICOSTEROID_TERMS
+    // (topical substring; oral Addisonian replacement is a documented miss —
+    // see the term-list comment).
+    if (
+      hasDrug(drugs, CORTICOSTEROID_TERMS) &&
+      !hasDrug(drugs, BONE_THERAPY_TERMS) &&
+      !hasDrug(drugs, CALCIUM_VITD_TERMS)
+    ) {
+      flags.push({
+        id: 'start_bone_protection_steroid',
+        kind: 'start',
+        criterion: 'Consider bone protection with long-term systemic corticosteroid',
+        detail:
+          'Systemic corticosteroid detected without bone-protection therapy or calcium/vitamin D ' +
+          'supplementation. Corticosteroid-induced bone loss is most rapid in the first months of ' +
+          'treatment. Course duration cannot be determined from this snapshot — applies to ' +
+          'corticosteroid courses expected to run ≥3 months; verify against the live record.',
+        severity: 'amber',
+        source: 'STOPP/START v3 (2023) — START Section H: Musculoskeletal (H2)',
       });
     }
 

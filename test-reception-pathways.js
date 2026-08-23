@@ -289,14 +289,58 @@ check(
   'the CURRENT spec version is not itself marked DRAFT (historical draft markers below it are fine)'
 );
 
+// ── 2026-08-23 Keeper gap analysis: fever-adult pathway + feverish-child chemo flag ──
+// Gap #1 of the 2026-08-22 gap analysis (NICE CG151 neutropenic sepsis) — PENDING CSO
+// sign-off; these locks guard the structure and escalation tiers, the wording is the
+// CSO's call.
+console.log('\n--- 2026-08-23 Keeper gap analysis: fever-adult + feverish-child chemo flag ---');
+const feverAdult = doc.pathways.find(p => p.id === 'fever-adult');
+check(!!feverAdult, 'fever-adult pathway exists');
+check(feverAdult && feverAdult.pharmacyFirst === undefined, 'fever-adult has NO pharmacyFirst block (clinician-only pathway)');
+{
+  const rfChemo = feverAdult && (feverAdult.redFlags || []).find(rf => rf.id === 'rf-chemo-fever');
+  check(!!rfChemo, 'fever-adult rf-chemo-fever red flag exists (neutropenic sepsis, NICE CG151)');
+  check(rfChemo && rfChemo.escalate === '999', 'fever-adult rf-chemo-fever escalates to 999');
+  check(rfChemo && /chemotherapy/i.test(rfChemo.ask), 'fever-adult rf-chemo-fever ask mentions chemotherapy');
+  check(rfChemo && /do not book|escalate now/i.test(rfChemo.ask), 'fever-adult rf-chemo-fever ask carries the do-not-book instruction');
+}
+{
+  const rfNonblanching = feverAdult && (feverAdult.redFlags || []).find(rf => rf.id === 'rf-nonblanching');
+  check(!!rfNonblanching && rfNonblanching.escalate === '999', 'fever-adult rf-nonblanching exists and escalates to 999');
+}
+// The house shared-flag pattern: rf-sepsis is reused with its usual clinical meaning and
+// its ask text must be byte-IDENTICAL to the general pathway's copy — two copies that
+// drift apart give two different escalation prompts for the same caller.
+{
+  const a = generalP && (generalP.redFlags || []).find(rf => rf.id === 'rf-sepsis');
+  const b = feverAdult && (feverAdult.redFlags || []).find(rf => rf.id === 'rf-sepsis');
+  check(!!a && !!b && a.ask === b.ask, 'fever-adult rf-sepsis ask text is IDENTICAL to general\'s rf-sepsis');
+  check(!!b && b.escalate === '999', 'fever-adult rf-sepsis escalates to 999');
+}
+for (const [id, level] of [['rf-confusion', '999'], ['rf-meningism', '999'], ['rf-immune-other', 'duty'], ['rf-travel', 'duty'], ['rf-fluids', 'duty']]) {
+  check(
+    feverAdult && (feverAdult.redFlags || []).some(rf => rf.id === id && rf.escalate === level),
+    `fever-adult ${id} escalates to ${level}`
+  );
+}
+check(feverAdult && (feverAdult.sources || []).some(s => /CG151/.test(s)), 'fever-adult cites NICE CG151 (neutropenic sepsis)');
+// Companion single-flag addition: feverish-child also lacked a chemo flag.
+{
+  const rfChemoChild = feverishChild && (feverishChild.redFlags || []).find(rf => rf.id === 'rf-chemo-fever');
+  check(!!rfChemoChild, 'feverish-child rf-chemo-fever red flag exists (companion addition)');
+  check(rfChemoChild && rfChemoChild.escalate === '999', 'feverish-child rf-chemo-fever escalates to 999');
+  check(rfChemoChild && /chemotherapy/i.test(rfChemoChild.ask), 'feverish-child rf-chemo-fever ask mentions chemotherapy');
+}
+check(/v1\.10/.test(doc.specVersion || ''), 'specVersion records the v1.10 additions');
+
 // ── 2026-07-28 (plan section E): disposition routing blocks ──────────────────
 // Structural locks only — the guardrail truth table lives in
-// test-reception-disposition.js. What matters here is that the four
+// test-reception-disposition.js. What matters here is that the five
 // clinician-only pathways never acquire a routing block by a content edit: the
 // engine would still refuse them (CLINICIAN_ONLY_IDS is frozen in code), but a
 // block sitting in the file would misrepresent the shipped clinical intent.
 console.log('\n--- 2026-07-28 (plan E): disposition blocks ---');
-const CLINICIAN_ONLY = ['mental-health', 'gu-male', 'gyn-female', 'general'];
+const CLINICIAN_ONLY = ['mental-health', 'gu-male', 'gyn-female', 'general', 'fever-adult'];
 for (const id of CLINICIAN_ONLY) {
   const p = doc.pathways.find(x => x.id === id);
   check(!!p && p.disposition === undefined, `[${id}] has NO disposition block (clinician-only pathway)`);
