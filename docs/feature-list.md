@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.25
+**Version:** v3.237.0
 **Generated:** 2026-08-22
 
 ## What it is
@@ -227,6 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.237.0 (2026-08-22)** — Clinical-safety audit remediation: OIR auto-tick now default OFF and inventoried as W22; the Transactional-API transport refuses writes in code; the lab-filing gate fails closed on unmatched comment text, missing ranges, unit mismatches, comparator-censored values and evaluator crashes; commit clicks are exact-match only and post-click copy never claims completion; never-merged hazard entries H-053/H-054 recovered into the register.
 - **v3.236.25 (2026-08-22)** — CSN §6.1 W-row and version-history ordering fixed; issue date matches document version 3.19.
 - **v3.236.24 (2026-08-22)** — CSO sign-off of CSN §6.1 W17–W21 (write-path inventory); product pin moves to 3.236.23.
 - **v3.236.23 (2026-08-22)** — Write-path safety net: CSN §6.1 gains W17–W21 (nest problems, Contacts, journal code-sync, add-codes-as-problems, bulk task complete/discard); `test-write-path-inventory.js` CI gate fails on any unmapped Medicus write POST; README/VISION drop the read-only claim for the honest enumerated-writes posture; `shared/write-core.js` extracts the bridge-confirmed Finalise diff (allergy canvas is the first consumer).
