@@ -40,8 +40,9 @@ export default [
   },
   {
     // shared/medicus-api.js, shared/task-api.js, shared/tab-help.js,
-    // shared/panel-txn-feed.js and shared/booking-core.js are ES modules
-    // (export keyword), imported by side-panel modules / panel.js / pop-out.js
+    // shared/panel-txn-feed.js, shared/booking-core.js, shared/booking-identity.js
+    // and shared/practice-report-api.js are ES modules (export keyword),
+    // imported by side-panel modules / panel.js / pop-out.js / practice-report.js
     // rather than loaded as classic scripts. (booking-core.js additionally
     // assigns window.BookingCore behind a typeof guard so a classic script can
     // adopt it later — that does not change how it is parsed.)
@@ -51,6 +52,8 @@ export default [
       'shared/tab-help.js',
       'shared/panel-txn-feed.js',
       'shared/booking-core.js',
+      'shared/booking-identity.js',
+      'shared/practice-report-api.js',
     ],
     languageOptions: { sourceType: 'module' },
   },

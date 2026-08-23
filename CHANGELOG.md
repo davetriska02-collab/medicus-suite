@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.38] — 2026-08-23
+
+### Lint — parse Phase 3 ESM files in `shared/`
+
+- `shared/booking-identity.js` and `shared/practice-report-api.js` are ES
+  modules; eslint.config.mjs now parses them as `sourceType: 'module'`.
+
 ## [v3.236.37] — 2026-08-23
 
 ### Architecture plan Phase 4.2 — content.js date helpers
