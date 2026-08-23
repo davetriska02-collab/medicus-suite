@@ -439,8 +439,8 @@ const RECEPTION = 'side-panel/modules/reception/reception.js';
     const coreSrc = read(CORE);
 
     // "No third copy" (plan section D). The panel must reach every endpoint
-    // through ../slots/booking-api.js, which re-exports the ONE copy in
-    // shared/booking-core.js.
+    // through shared/booking-core.js (identity via shared/booking-identity.js).
+    // slots/booking-api.js remains a one-release re-export for slots.js.
     for (const [label, src] of [
       ['booking-panel.js', panelSrc],
       ['booking-panel-core.js', coreSrc],
@@ -458,9 +458,14 @@ const RECEPTION = 'side-panel/modules/reception/reception.js';
     check(!/chrome\.[A-Za-z_$]/.test(coreSrc), 'booking-panel-core.js is chrome-free (pure logic)');
     check(!/(document|window)\.[A-Za-z_$]/.test(coreSrc), 'booking-panel-core.js is DOM-free (pure logic)');
     check(
-      /from '\.\.\/slots\/booking-api\.js'/.test(panelSrc),
-      'booking-panel.js imports the shared booking API shim (single endpoint copy)'
+      /from '\.\.\/\.\.\/\.\.\/shared\/booking-core\.js'/.test(panelSrc),
+      'booking-panel.js imports shared/booking-core.js (single endpoint copy)'
     );
+    check(
+      /from '\.\.\/\.\.\/\.\.\/shared\/booking-identity\.js'/.test(panelSrc),
+      'booking-panel.js imports shared/booking-identity.js (not the slots shim)'
+    );
+    check(!/from '\.\.\/slots\/booking-api\.js'/.test(panelSrc), 'booking-panel.js no longer imports the slots sibling');
     check(
       /createAppointment/.test(panelSrc) && /reserveSlot/.test(panelSrc) && /releaseReservation/.test(panelSrc),
       'booking-panel.js uses the shim functions rather than re-declaring them'

@@ -33,11 +33,11 @@
 //
 // ── WHAT THIS FILE MUST NEVER GROW ───────────────────────────────────────────
 //
-// Endpoint code. Every call goes through ../slots/booking-api.js, which
-// re-exports the ONE copy in shared/booking-core.js and adds the tab/patient
-// detection that the core deliberately refuses to own (plan D1.2). A third
-// hand-copy of the booking flow is exactly what plan section D forbids and what
-// test-reception-booking.js asserts against (no endpoint path literals here).
+// Endpoint code. Every call goes through shared/booking-core.js; identity
+// resolution is shared/booking-identity.js (the core deliberately refuses to
+// own tab detection — plan D1.2 / H-043). A third hand-copy of the booking
+// flow is exactly what plan section D forbids and what test-reception-booking.js
+// asserts against (no endpoint path literals here).
 //
 // ── SAFETY CONTROLS (hazard H-051) ───────────────────────────────────────────
 //
@@ -62,8 +62,6 @@
 'use strict';
 
 import {
-  detectMedicusTab,
-  detectPatientId,
   fetchAppointmentFinder,
   fetchAvailableSlots,
   findSlotsInWindow,
@@ -71,7 +69,8 @@ import {
   fetchCreateForm,
   createAppointment,
   releaseReservation,
-} from '../slots/booking-api.js';
+} from '../../../shared/booking-core.js';
+import { detectMedicusTab, detectPatientId } from '../../../shared/booking-identity.js';
 
 import {
   BOOKING_DATE_MODES,

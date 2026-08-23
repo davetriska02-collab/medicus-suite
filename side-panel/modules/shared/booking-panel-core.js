@@ -16,8 +16,7 @@
 //                               distinguishable from "never looked"
 //
 // Nothing in this file talks to the network. The endpoints live in ONE place
-// (shared/booking-core.js, reached through side-panel/modules/slots/booking-api.js);
-// a second copy of them is exactly the failure plan D forbids.
+// (shared/booking-core.js); a second copy of them is exactly the failure plan D forbids.
 
 'use strict';
 

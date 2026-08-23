@@ -142,6 +142,7 @@ const ALLOWLIST = {
 
 const FILE_TO_WIDS = {
   'side-panel/modules/slots/booking-api.js': ['W1'],
+  'shared/booking-identity.js': ['W1', 'W12'],
   'shared/booking-core.js': ['W1', 'W2', 'W12', 'W15'],
   'content-scripts/booking-inline.js': ['W2'],
   'shared/task-api.js': ['W4'],
@@ -170,6 +171,7 @@ const FILE_TO_WIDS = {
 // the shared bulk-action engine. All must still exist on disk.
 const EXISTENCE_EVEN_WITHOUT_POST = [
   'side-panel/modules/slots/booking-api.js',
+  'shared/booking-identity.js',
   'content-scripts/triage-lens/lab-file-button.js',
   'content-scripts/triage-lens/routine-rx-button.js',
   'side-panel/modules/shared/booking-panel.js',

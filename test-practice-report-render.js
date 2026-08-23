@@ -9,6 +9,7 @@
 
 'use strict';
 
+const fs = require('fs');
 const path = require('path');
 
 (async () => {
@@ -24,6 +25,16 @@ const path = require('path');
       process.exitCode = 1;
     }
   }
+
+  const prSrc = fs.readFileSync(path.join(__dirname, 'practice-report.js'), 'utf8');
+  check(
+    /from '\.\/shared\/practice-report-api\.js'/.test(prSrc),
+    'practice-report.js imports the shared practice-report-api barrel'
+  );
+  check(
+    !/from '\.\/side-panel\/modules\/condor\//.test(prSrc),
+    'practice-report.js imports nothing under side-panel/modules/condor/'
+  );
 
   const base = `file://${path.resolve(__dirname)}/`;
   const profiles = await import(new URL('side-panel/modules/condor/report/report-profiles.js', base).href);

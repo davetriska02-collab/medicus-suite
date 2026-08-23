@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.31] — 2026-08-23
+
+### Architecture plan Phase 3.3–3.4 — invert booking-panel and practice-report
+
+- `shared/booking-identity.js` holds slots-style tab/patient detection.
+  `booking-panel.js` and `first-available.js` import `shared/booking-core.js` +
+  this file; they no longer import a sibling module. `slots/booking-api.js` is
+  a one-release re-export. CSN W1/W12 "where it lives" and the write-path
+  inventory updated in the same commit.
+- `shared/practice-report-api.js` is the full-tab Practice Report's one import
+  surface; `practice-report.js` no longer reaches into `condor/` internals.
+
 ## [v3.236.30] — 2026-08-23
 
 ### Architecture plan Phase 2 — remaining sync-pairs collapsed

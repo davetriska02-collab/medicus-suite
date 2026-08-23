@@ -4,11 +4,18 @@
 // fetches the period's data + a live snapshot, applies the chosen audience profile,
 // renders the report, and wires Print/PDF + CSV.
 
-import { resolveRange, buildReport, localISO } from './side-panel/modules/condor/report/report-data.js';
-import { getProfile, applyProfile } from './side-panel/modules/condor/report/report-profiles.js';
-import { buildReportHtml, buildReportCsv, SECTION_LABELS } from './side-panel/modules/condor/report/report-render.js';
-import { fetchAllStreams } from './side-panel/modules/condor/condor-data.js';
-import { computeIndex } from './side-panel/modules/condor/condor-index-core.js';
+import {
+  resolveRange,
+  buildReport,
+  localISO,
+  getProfile,
+  applyProfile,
+  buildReportHtml,
+  buildReportCsv,
+  SECTION_LABELS,
+  fetchAllStreams,
+  computeIndex,
+} from './shared/practice-report-api.js';
 import { downloadCsv, toCsv } from './side-panel/modules/shared/export-util.js';
 
 const INDEX_CONFIG_KEY = 'condor.indexConfig';

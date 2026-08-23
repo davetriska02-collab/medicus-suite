@@ -47,7 +47,8 @@
 
 'use strict';
 
-import { detectMedicusTab, fetchAppointmentFinder, findSlotsInWindow } from '../slots/booking-api.js';
+import { fetchAppointmentFinder, findSlotsInWindow } from '../../../shared/booking-core.js';
+import { detectMedicusTab } from '../../../shared/booking-identity.js';
 import { filterAppointmentTypes } from './booking-panel-core.js';
 import {
   MAX_FAVOURITES,
