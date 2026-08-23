@@ -5,7 +5,7 @@
 import { createModuleLoader } from '../side-panel/module-loader.js';
 import { initTour } from '../side-panel/tour/tour.js';
 import { initPalette } from '../side-panel/palette/palette.js';
-import { sanitiseHiddenTabs } from '../side-panel/tab-catalog.js';
+import { sanitiseHiddenTabs, TAB_CATALOG, isLoadableModule } from '../side-panel/tab-catalog.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 
 const content = document.getElementById('popoutContent');
@@ -14,77 +14,20 @@ let activeModule = null;
 let moduleCleanup = null;
 let switchSeq = 0;
 
-// ── Module registry (mirrors panel.js; no WR/RM strips — they stay in the docked panel) ──
+// ── Module registry (derived from tab-catalog.js; no strips — they stay docked) ──
 
-const MODULES = {
-  today: { js: () => import('../side-panel/modules/today/today.js'), css: '../side-panel/modules/today/today.css' },
-  slots: { js: () => import('../side-panel/modules/slots/slots.js'), css: '../side-panel/modules/slots/slots.css' },
-  capacity: {
-    js: () => import('../side-panel/modules/capacity/capacity.js'),
-    css: '../side-panel/modules/capacity/capacity.css',
-  },
-  submissions: {
-    js: () => import('../side-panel/modules/submissions/submissions.js'),
-    css: '../side-panel/modules/submissions/submissions.css',
-  },
-  sentinel: {
-    js: () => import('../side-panel/modules/sentinel/sentinel.js'),
-    css: '../side-panel/modules/sentinel/sentinel.css',
-  },
-  activity: {
-    js: () => import('../side-panel/modules/activity/activity.js'),
-    css: '../side-panel/modules/activity/activity.css',
-  },
-  referrals: {
-    js: () => import('../side-panel/modules/referrals/referrals.js'),
-    css: '../side-panel/modules/referrals/referrals.css',
-  },
-  condor: {
-    js: () => import('../side-panel/modules/condor/condor.js'),
-    css: '../side-panel/modules/condor/condor.css',
-  },
-  trends: {
-    js: () => import('../side-panel/modules/trends/trends.js'),
-    css: '../side-panel/modules/trends/trends.css',
-  },
-  reception: {
-    js: () => import('../side-panel/modules/reception/reception.js'),
-    css: '../side-panel/modules/reception/reception.css',
-  },
-  signing: {
-    js: () => import('../side-panel/modules/signing/signing.js'),
-    css: '../side-panel/modules/signing/signing.css',
-  },
-  followups: {
-    js: () => import('../side-panel/modules/followups/followups.js'),
-    css: '../side-panel/modules/followups/followups.css',
-  },
-  sweep: { js: () => import('../side-panel/modules/sweep/sweep.js'), css: '../side-panel/modules/sweep/sweep.css' },
-  knowledge: {
-    js: () => import('../side-panel/modules/knowledge/knowledge.js'),
-    css: '../side-panel/modules/knowledge/knowledge.css',
-  },
-  leaflets: {
-    js: () => import('../side-panel/modules/leaflets/leaflets.js'),
-    css: '../side-panel/modules/leaflets/leaflets.css',
-  },
-  record: {
-    js: () => import('../side-panel/modules/record/record.js'),
-    css: '../side-panel/modules/record/record.css',
-  },
-  'patient-alerts': {
-    js: () => import('../side-panel/modules/patient-alerts/patient-alerts.js'),
-    css: '../side-panel/modules/patient-alerts/patient-alerts.css',
-  },
-  phrases: {
-    js: () => import('../side-panel/modules/phrases/phrases.js'),
-    css: '../side-panel/modules/phrases/phrases.css',
-  },
-  rota: {
-    js: () => import('../side-panel/modules/rota/rota.js'),
-    css: '../side-panel/modules/rota/rota.css',
-  },
-};
+function modulesFromCatalog(shell, prefix) {
+  const out = {};
+  for (const t of TAB_CATALOG) {
+    if (!isLoadableModule(t, shell)) continue;
+    const entry = prefix + t.entry;
+    const css = prefix + t.css;
+    out[t.id] = { js: () => import(entry), css };
+  }
+  return out;
+}
+
+const MODULES = modulesFromCatalog('popout', '../side-panel/modules/');
 
 // ── Per-tab help registry ──────────────────────────────────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both

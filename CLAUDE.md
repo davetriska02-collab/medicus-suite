@@ -17,11 +17,14 @@
 
 ## Adding a new side-panel module
 
-1. Create `side-panel/modules/<name>/<name>.js` (ES module, exports `init(container)` and optionally `cleanup()`)
+1. Create `side-panel/modules/<name>/<name>.js` (ES module, exports `init(container)` that **returns** a cleanup function)
 2. Create `side-panel/modules/<name>/<name>.css`
-3. Add `<button class="nav-tab" data-module="<name>">` to `side-panel/panel.html` AND `pop-out/pop-out.html`
-4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
-5. Follow the backup convention below
+3. Add one entry to `TAB_CATALOG` in `side-panel/tab-catalog.js` (`kind: 'module'`, `shells: ['panel','popout']`, `entry`/`css` paths, optional `gChord` / `aboutDesc`)
+4. Add `<button class="nav-tab" data-module="<name>">` to `side-panel/panel.html` AND `pop-out/pop-out.html`
+5. Add a `TAB_HELP` entry in `shared/tab-help.js` and a tour step (or `NAV_COVERED_BY_OVERVIEW`)
+6. Follow the backup convention below if the module stores anything
+
+Both shells derive their `MODULES` maps from the catalog — do **not** add a hand-maintained `MODULES` entry in `panel.js` / `pop-out.js`.
 
 > **Panel-only tabs (intentional exceptions):** `visualiser`, `duplicate-checker`, `rota-app` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser`, `duplicate-checker` and `rota-app` are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `visualiser`/`duplicate-checker` via `chrome.tabs.create`, `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates), and `about` renders inline static text — none makes sense in the floating pop-out, so they are deliberately omitted there. The full-tab openers are also excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback command so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota` (labelled "Rota"), the compact companion to the full-tab "Rota manager" (`rota-app`), which does.
 

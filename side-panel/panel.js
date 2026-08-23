@@ -13,7 +13,7 @@ import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
-import { sanitiseHiddenTabs } from './tab-catalog.js';
+import { sanitiseHiddenTabs, TAB_CATALOG, isLoadableModule, gChordMap, aboutEntries } from './tab-catalog.js';
 import { initSetup } from './setup/setup.js';
 import { openRotaTab } from './modules/rota/rota-open.js';
 import { TAB_HELP } from '../shared/tab-help.js';
@@ -115,43 +115,27 @@ function renderDisplayPopover() {
   document.addEventListener('click', _dpCloseHandler);
 }
 
-// ── Module registry ───────────────────────────────────────────────────────────
+// ── Module registry (derived from tab-catalog.js — do not hand-edit) ──────────
+// Dynamic import() from the catalog path is required: a static map here would
+// re-introduce the duplicated list Phase 1 exists to retire. Chrome MV3
+// extension pages resolve specifier strings against the extension origin.
 
-const MODULES = {
-  today: { js: () => import('./modules/today/today.js'), css: './modules/today/today.css' },
-  slots: { js: () => import('./modules/slots/slots.js'), css: './modules/slots/slots.css' },
-  capacity: { js: () => import('./modules/capacity/capacity.js'), css: './modules/capacity/capacity.css' },
-  submissions: {
-    js: () => import('./modules/submissions/submissions.js'),
-    css: './modules/submissions/submissions.css',
-  },
-  sentinel: { js: () => import('./modules/sentinel/sentinel.js'), css: './modules/sentinel/sentinel.css' },
-  activity: { js: () => import('./modules/activity/activity.js'), css: './modules/activity/activity.css' },
-  referrals: { js: () => import('./modules/referrals/referrals.js'), css: './modules/referrals/referrals.css' },
-  condor: { js: () => import('./modules/condor/condor.js'), css: './modules/condor/condor.css' },
-  trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
-  reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
-  signing: { js: () => import('./modules/signing/signing.js'), css: './modules/signing/signing.css' },
-  followups: {
-    js: () => import('./modules/followups/followups.js'),
-    css: './modules/followups/followups.css',
-  },
-  sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
-  knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
-  leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
-  record: { js: () => import('./modules/record/record.js'), css: './modules/record/record.css' },
-  'patient-alerts': {
-    js: () => import('./modules/patient-alerts/patient-alerts.js'),
-    css: './modules/patient-alerts/patient-alerts.css',
-  },
-  phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
-  rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
-  about: null,
-};
-// NOTE: 'rota-app' is deliberately absent. Like 'visualiser', it opens the full
-// application in a browser tab; the nav click handler returns before
-// switchModule is reached, and the boot guard (`m in MODULES`) then correctly
-// refuses to restore the panel into it.
+function modulesFromCatalog(shell, prefix) {
+  const out = {};
+  for (const t of TAB_CATALOG) {
+    if (!isLoadableModule(t, shell)) continue;
+    const entry = prefix + t.entry;
+    const css = prefix + t.css;
+    out[t.id] = { js: () => import(entry), css };
+  }
+  if (shell === 'panel') out.about = null;
+  return out;
+}
+
+const MODULES = modulesFromCatalog('panel', './modules/');
+// NOTE: 'rota-app' / 'visualiser' / 'duplicate-checker' are fulltab kind and
+// stay out of MODULES so the boot guard (`m in MODULES`) cannot restore into
+// them. The nav click handler opens those as full browser tabs.
 
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
@@ -404,22 +388,7 @@ function wireTabNavShortcuts() {
 //   c* → condor keeps 'c'; capacity → 'p'
 //   r* → referrals keeps 'r'; record → 'd', reception → 'e'
 //   t* → today keeps 't'; trends → 'n'
-const G_CHORD_MAP = {
-  t: 'today',
-  s: 'slots',
-  m: 'sentinel',
-  r: 'referrals',
-  c: 'condor',
-  a: 'activity',
-  u: 'submissions',
-  k: 'knowledge',
-  l: 'leaflets',
-  p: 'capacity',
-  w: 'sweep',
-  e: 'reception',
-  d: 'record',
-  n: 'trends',
-};
+const G_CHORD_MAP = gChordMap();
 
 const G_CHORD_TIMEOUT_MS = 1500;
 let _gChordArmed = false;
@@ -825,61 +794,13 @@ function renderAbout() {
       </div>
 
       <h2>Modules</h2>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Today</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Morning command centre: waiting room, triage load, demand counts, available slots and
-          the pre-clinic sweep — one screen answers "what does today look like?" before clinic starts.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Slot Counter</span>
-          <span class="module-card-version">v2.2</span>
-        </div>
-        <div class="module-card-desc">
-          Available appointment slots by type for any date. API-based; no scheduling page required.
-          Updates live via Pusher when a Medicus tab is open.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Submissions Tracker</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Daily inbound task counts across medical, admin, investigation and prescription categories.
-          Today view, date range, day-vs-day comparison.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Triage Lens</span>
-          <span class="module-card-version">v0.5.0</span>
-        </div>
-        <div class="module-card-desc">
-          In-page overlay on Medicus patient records and triage queues.
-          User-defined keyword rules with severity chips. Runs as a content script.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Monitoring (Sentinel)</span>
-          <span class="module-card-version">v0.5.1</span>
-        </div>
-        <div class="module-card-desc">
-          Clinical context sidebar on patient records. Drug monitoring and QOF (Quality and Outcomes Framework) 25/26 indicators.
-          Runs as a content script; requires a patient page to be open.
-        </div>
-        <div class="purpose-box">
+      ${aboutEntries()
+        .map((t) => {
+          const name = escStrip(t.aboutName || t.name);
+          const ver = escStrip(t.aboutVersion || '');
+          const desc = escStrip(t.aboutDesc);
+          const purpose = t.aboutPurpose
+            ? `<div class="purpose-box">
           Software that displays, against the patient's active medication list, active problem list,
           and recent observations as already recorded in the Medicus electronic patient record,
           the most recent recorded values relevant to published drug-monitoring guidance and to QOF
@@ -892,45 +813,27 @@ function renderAbout() {
           All clinical decisions, including verification of any displayed value against the source
           record, remain the responsibility of the clinician.
         </div>
-        <a class="disclaimer-link" href="../docs/sentinel-DISCLAIMER.txt" target="_blank">View DISCLAIMER ↗</a>
-      </div>
+        <a class="disclaimer-link" href="../docs/sentinel-DISCLAIMER.txt" target="_blank">View DISCLAIMER ↗</a>`
+            : '';
+          return `<div class="module-card">
+        <div class="module-card-header">
+          <span class="module-card-name">${name}</span>
+          <span class="module-card-version">${ver}</span>
+        </div>
+        <div class="module-card-desc">${desc}</div>
+        ${purpose}
+      </div>`;
+        })
+        .join('\n')}
 
       <div class="module-card">
         <div class="module-card-header">
-          <span class="module-card-name">Activity Report</span>
-          <span class="module-card-version">v1.0</span>
+          <span class="module-card-name">Triage Lens</span>
+          <span class="module-card-version">v0.5.0</span>
         </div>
         <div class="module-card-desc">
-          Practice activity per staff member across a configurable date range. Shows period totals
-          and a stacked horizontal bar chart broken down by consultations, prescription requests,
-          medication reviews, document tasks, and investigation results. API-based.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Referrals Tracker</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Referral audit data across a configurable date range. Shows total referral count with
-          priority (Routine / Urgent / 2WW) and status breakdowns, plus horizontal bar charts
-          by referring clinician, specialty, and hospital. Fetches from the Medicus
-          clinical-audit-report endpoint. API-based.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Rota Manager</span>
-          <span class="module-card-version">v1.10</span>
-        </div>
-        <div class="module-card-desc">
-          Practice rota built in sessions: working patterns, leave (April–March, session-accounted),
-          registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.
-          The Rota manager tab opens the full app in a new browser tab; the Rota tab is the compact
-          morning view. Formerly a standalone extension, now part of the suite. Local storage only;
-          read-only where it reads Medicus, and no patient data is ever persisted.
+          In-page overlay on Medicus patient records and triage queues.
+          User-defined keyword rules with severity chips. Runs as a content script — not a side-panel tab.
         </div>
       </div>
 

@@ -66,6 +66,33 @@ function check(cond, msg) {
     'every entry has a name'
   );
 
+  // ── Registration fields (architecture plan Phase 1) ─────────────────────
+  const KINDS = new Set(['module', 'fulltab', 'about']);
+  const badKind = TAB_CATALOG.filter((t) => !KINDS.has(t.kind));
+  check(badKind.length === 0, badKind.length === 0 ? 'every entry has kind module|fulltab|about' : `bad kind: ${badKind.map((t) => t.id).join(', ')}`);
+  const modules = TAB_CATALOG.filter((t) => t.kind === 'module');
+  const missingPaths = modules.filter((t) => !t.entry || !t.css || !Array.isArray(t.shells));
+  check(missingPaths.length === 0, 'every module declares entry, css, shells');
+  const missingFiles = [];
+  for (const t of modules) {
+    const js = path.join(__dirname, 'side-panel', 'modules', t.entry);
+    const css = path.join(__dirname, 'side-panel', 'modules', t.css);
+    if (!fs.existsSync(js)) missingFiles.push(t.entry);
+    if (!fs.existsSync(css)) missingFiles.push(t.css);
+  }
+  check(
+    missingFiles.length === 0,
+    missingFiles.length === 0 ? `every module entry/css exists on disk (${modules.length})` : `missing: ${missingFiles.join(', ')}`
+  );
+  const popoutHtml = fs.readFileSync(path.join(__dirname, 'pop-out', 'pop-out.html'), 'utf8');
+  const popoutNav = new Set([...popoutHtml.matchAll(/data-module="([a-z-]+)"/g)].map((m) => m[1]));
+  const popoutModules = TAB_CATALOG.filter((t) => t.kind === 'module' && t.shells.includes('popout')).map((t) => t.id);
+  const missingPop = popoutModules.filter((id) => !popoutNav.has(id));
+  check(
+    missingPop.length === 0,
+    missingPop.length === 0 ? 'every popout-shell module is in pop-out.html nav' : `missing pop-out nav: ${missingPop.join(', ')}`
+  );
+
   // ── Presets ─────────────────────────────────────────────────────────────
   check(new Set(ROLE_PRESETS.map((p) => p.id)).size === ROLE_PRESETS.length, 'preset ids are unique');
   const badPresetRefs = ROLE_PRESETS.flatMap((p) => p.show.filter((id) => !catalogIds.includes(id)));

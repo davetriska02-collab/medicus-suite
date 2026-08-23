@@ -1,18 +1,15 @@
-// Medicus Suite — MODULES-map parity (architecture plan Phase 0.2)
+// Medicus Suite — MODULES-map parity (architecture plan Phase 0.2 / Phase 1)
 // Run with: node test-modules-parity.js
 //
-// panel.js and pop-out/pop-out.js each keep a MODULES map. The HTML navs are
-// already parity-tested (test-tab-help-coverage.js); the JS maps were not.
-// A module present in one shell's map and absent from the other silently
-// doesn't load in that shell. This test parses both maps the same way
-// test-module-lifecycle.js does and asserts the same keys, modulo the
-// documented panel-only set (about — and the full-tab openers, which are
-// deliberately absent from both maps).
+// Both shells derive MODULES from tab-catalog.js. This test asserts the
+// catalog's loadable-module set matches what each shell would load, and that
+// full-tab openers stay out of MODULES.
 
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 
 let passed = 0;
 let failed = 0;
@@ -26,72 +23,44 @@ function check(cond, msg) {
   }
 }
 
-const ROOT = __dirname;
-
-function extractModuleKeys(src) {
-  // Top-level MODULES keys only: `today: {` / `'patient-alerts': {` / `about: null`.
-  // Nested `js:` / `css:` are ignored because their values are not `{` or `null`.
-  const start = src.indexOf('const MODULES = {');
-  check(start !== -1, 'found const MODULES = {');
-  if (start === -1) return [];
-  const from = src.slice(start);
-  let depth = 0;
-  let end = -1;
-  for (let i = from.indexOf('{'); i < from.length; i++) {
-    if (from[i] === '{') depth++;
-    else if (from[i] === '}') {
-      depth--;
-      if (depth === 0) {
-        end = i;
-        break;
-      }
-    }
-  }
-  const block = end === -1 ? from : from.slice(0, end + 1);
-  return [...block.matchAll(/^\s+(?:'([a-z-]+)'|([a-z]+))\s*:\s*(?:\{|null)/gm)].map(
-    (m) => m[1] || m[2]
+(async () => {
+  const ROOT = __dirname;
+  const { TAB_CATALOG, loadableModuleIds, isLoadableModule } = await import(
+    pathToFileURL(path.join(ROOT, 'side-panel', 'tab-catalog.js')).href
   );
-}
 
-const panelSrc = fs.readFileSync(path.join(ROOT, 'side-panel', 'panel.js'), 'utf8');
-const popoutSrc = fs.readFileSync(path.join(ROOT, 'pop-out', 'pop-out.js'), 'utf8');
+  const panelIds = loadableModuleIds('panel');
+  const popoutIds = loadableModuleIds('popout');
 
-const panelKeys = extractModuleKeys(panelSrc);
-const popoutKeys = extractModuleKeys(popoutSrc);
+  check(panelIds.length >= 15, `catalog has ${panelIds.length} panel-loadable modules`);
+  check(popoutIds.length >= 15, `catalog has ${popoutIds.length} popout-loadable modules`);
+  check(
+    panelIds.join(',') === popoutIds.join(','),
+    'every loadable module is in both shells (no panel-only real module)'
+  );
 
-check(panelKeys.length >= 15, `panel.js MODULES has ${panelKeys.length} keys`);
-check(popoutKeys.length >= 15, `pop-out.js MODULES has ${popoutKeys.length} keys`);
+  const panelSrc = fs.readFileSync(path.join(ROOT, 'side-panel', 'panel.js'), 'utf8');
+  const popoutSrc = fs.readFileSync(path.join(ROOT, 'pop-out', 'pop-out.js'), 'utf8');
+  check(panelSrc.includes('modulesFromCatalog'), 'panel.js derives MODULES from the catalog');
+  check(popoutSrc.includes('modulesFromCatalog'), 'pop-out.js derives MODULES from the catalog');
+  check(panelSrc.includes("out.about = null") || panelSrc.includes('out.about = null'), 'panel.js still registers about: null');
 
-const PANEL_ONLY = new Set(['about']);
-const panelReal = panelKeys.filter((k) => !PANEL_ONLY.has(k));
+  for (const id of ['visualiser', 'duplicate-checker', 'rota-app']) {
+    const tab = TAB_CATALOG.find((t) => t.id === id);
+    check(tab && tab.kind === 'fulltab', `${id} is kind=fulltab (not in MODULES)`);
+    check(!isLoadableModule(tab, 'panel'), `${id} is not loadable as a panel module`);
+  }
 
-const missingInPopout = panelReal.filter((k) => !popoutKeys.includes(k));
-const extraInPopout = popoutKeys.filter((k) => !panelReal.includes(k));
+  const about = TAB_CATALOG.find((t) => t.id === 'about');
+  check(about && about.kind === 'about', 'about is kind=about (inline, panel-only)');
+  check(about.shells.includes('panel') && !about.shells.includes('popout'), 'about is panel-only');
 
-check(
-  missingInPopout.length === 0,
-  missingInPopout.length === 0
-    ? 'every real panel MODULES key is in pop-out.js'
-    : `panel MODULES keys missing from pop-out: ${missingInPopout.join(', ')}`
-);
-check(
-  extraInPopout.length === 0,
-  extraInPopout.length === 0
-    ? 'no extra pop-out MODULES keys'
-    : `pop-out MODULES keys not in panel: ${extraInPopout.join(', ')}`
-);
-
-// Full-tab openers must stay out of both maps (boot-restore guard).
-for (const id of ['visualiser', 'duplicate-checker', 'rota-app']) {
-  check(!panelKeys.includes(id), `panel MODULES does not contain full-tab opener "${id}"`);
-  check(!popoutKeys.includes(id), `pop-out MODULES does not contain full-tab opener "${id}"`);
-}
-
-check(panelKeys.includes('about'), 'panel MODULES includes about (inline, panel-only)');
-check(!popoutKeys.includes('about'), 'pop-out MODULES omits about (panel-only)');
-
-if (failed) {
-  console.error(`\n${failed} check(s) failed, ${passed} passed`);
+  if (failed) {
+    console.error(`\n${failed} check(s) failed, ${passed} passed`);
+    process.exit(1);
+  }
+  console.log(`\nAll ${passed} checks passed`);
+})().catch((err) => {
+  console.error(err);
   process.exit(1);
-}
-console.log(`\nAll ${passed} checks passed`);
+});

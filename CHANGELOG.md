@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.28] — 2026-08-23
+
+### Architecture plan Phase 1 — one module registry
+
+`side-panel/tab-catalog.js` is now the single registration source: `kind`,
+`shells`, `entry`/`css` paths, `gChord`, and About-card copy. Both shells
+derive their `MODULES` maps from it (dynamic `import()` of the catalog path);
+`G_CHORD_MAP` and the About module cards are derived the same way. Adding a
+real tab is one catalog entry + module dir + nav buttons + help/tour — not
+two hand-maintained `MODULES` maps. Lifecycle / catalog / parity tests read
+the catalog rather than grepping the old literals. CLAUDE.md checklist updated.
+
 ## [v3.236.27] — 2026-08-23
 
 ### Architecture plan Phase 0 — safety-net guards

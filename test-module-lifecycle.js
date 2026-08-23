@@ -35,11 +35,12 @@ function check(cond, msg) {
 }
 
 const ROOT = __dirname;
-const panelJs = fs.readFileSync(path.join(ROOT, 'side-panel', 'panel.js'), 'utf8');
+const { pathToFileURL } = require('url');
 
-// Extract module paths from panel.js's MODULES map: import('./modules/x/x.js')
-const modulePaths = [...panelJs.matchAll(/import\('(\.\/modules\/[a-z-]+\/[a-z-]+\.js)'\)/g)].map((m) => m[1]);
-check(modulePaths.length >= 15, `found ${modulePaths.length} module entries in panel.js MODULES`);
+(async () => {
+const { TAB_CATALOG } = await import(pathToFileURL(path.join(ROOT, 'side-panel', 'tab-catalog.js')).href);
+const modulePaths = TAB_CATALOG.filter((t) => t.kind === 'module').map((t) => './modules/' + t.entry);
+check(modulePaths.length >= 15, `found ${modulePaths.length} module entries in tab-catalog.js`);
 
 // Pull the body of `export async function init(` (to the matching close brace
 // at depth 0) and assert it contains a `return <fn>` that yields a function:
@@ -79,3 +80,7 @@ for (const rel of modulePaths) {
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
 if (failed > 0) process.exit(1);
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
