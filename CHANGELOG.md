@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.241.2] — 2026-08-24
+
+### Fix: "Act ›" queue-pulse button restricted to the medical/admin triage queues
+
+The reception "Act" affordance (`content-scripts/triage-lens/content.js`,
+`refreshPulseOnRow`) opened a tray of Book / Pharmacy First / Ask-back / Park
+until… buttons — all reception-request actions with no meaning outside the
+two GP triage queues, and all disabled placeholders anyway wherever they did
+appear, since the pathway-matching that populates them only runs off request
+preview text. Confirmed present (unhelpfully) on investigation results,
+registration, PDS change, appointment requests and miscellaneous tasks alike.
+Rather than blacklist queue after queue as each turns up, the button (its
+tray, and the `a` key shortcut that opens it) is now gated by a new
+`isTriageQueueSlug()` whitelist matching exactly `medical_patient_request_task`
+and `admin_patient_request_task` — the two "Medical"/"Admin" request queues —
+so it is withheld everywhere else by default. Age/decoration and
+monitoring/result-triage chips are unaffected — only the "Act ›" control is
+suppressed.
+
+The first cut gated Act on `_currentQueueSlug` alone. That value is written
+only by the `ch-task-list-data` bridge and lags one fetch behind a SPA queue
+hop, so leaving Medical for investigation results (the original report) still
+showed Act until the new task-list landed. The gate now prefers the slug in
+the page URL (`queueSlugFromHref` / `isTriageQueueNow`) and treats a leftover
+`act` open-state as closed on a non-triage queue, so a hop cannot leave a
+ghost pulse host or resurrect the tray. `test-queue-pulse.js` extracts and
+locks the whitelist plus the URL parser.
+
 ## [v3.241.1] — 2026-08-24
 
 ### Companion chrome — instrument, not a chatbot
@@ -304,7 +332,6 @@ changed. CSN write-path rows W2 and W5 now point at the merged file (see
 `task-inline.action-row` DOM contracts (and their fixtures) are retired with
 the anchor search they existed for; `task-widget.card-submit-button` is kept
 — `reception-quick-actions.js` still uses it for its own composer placement.
-
 ## [v3.238.0] — 2026-08-23
 
 ### Investigation (lab result) duplicate detection + document content-hash verification
