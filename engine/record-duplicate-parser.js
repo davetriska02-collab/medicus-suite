@@ -82,17 +82,49 @@
 //    confirmed as the actual server-side dedup mechanism, so it doesn't
 //    change any handling here.
 //
-// Only problem/note/prescription/investigation-request/document entries are
-// compared for duplicates in this first pass. Investigation *results* (lab
-// values, item.type === 'investigation') are deliberately NOT flattened —
-// live testing (2026-07-02, docs/learnings-duplicate-entry-timestamps.md)
-// found a lab result that did NOT duplicate under the same reimport event
-// that duplicated this patient's notes/prescriptions/documents, suggesting
-// structured results may carry their own dedup key on ingestion. n=1, not
-// confirmed as a general rule, but no evidence yet that this heuristic
-// extends usefully to lab data. `future-action`, `communication`,
-// `referral`, `observation`, `medication-statement-prescribed-elsewhere` are
-// also unhandled — no duplicate evidence for any of them either way.
+// Problem/note/prescription/investigation-request/document entries are
+// compared for duplicates as described above. `future-action`,
+// `communication`, `referral`, `observation`,
+// `medication-statement-prescribed-elsewhere` remain unhandled — no
+// duplicate evidence for any of them either way.
+//
+// Investigation *results* (lab values, item.type === 'investigation') ARE
+// now flattened too (2026-08-22), but detection-only and EXACT-tier-only —
+// see groupAndTier's own investigation-specific filter. Live evidence this
+// is built from (three HAR captures, one patient, 2026-08-22):
+//  - The n=1 "one lab result didn't duplicate" finding from 2026-07-02
+//    (docs/learnings-duplicate-entry-timestamps.md) turned out to be the
+//    wrong generalisation — it was read as "results carry their own dedup
+//    key and don't reimport-duplicate", but a same-patient result
+//    (`clinical/data/investigation/overview/{reportId}`, then confirmed via
+//    `investigation/result-overview/{resultId}`'s longer `previousResults`
+//    trend) showed a genuine 14-copy cluster: same conceptId, same
+//    specimenCollectionDate to the minute, same resultValue, 14 distinct
+//    `investigationReportId`s. A second, smaller 5-copy cluster sat right
+//    next to it at a different date. So results DO reimport-duplicate —
+//    just not universally, and apparently event-driven (specific bad
+//    import/retry) rather than a general property of old data.
+//  - A same-day pair with a DIFFERENT collection time and a DIFFERENT value
+//    (a legitimate same-day repeat, e.g. an AKI recheck) must NOT collide
+//    with the above — this is why grouping keys off the exact per-result
+//    `orderingDateString` (to the minute), not the day-group's calendar-day
+//    `date`, and why a group is kept only when it also tiers EXACT (i.e.
+//    every member's resultValue matches too). Anything looser is dropped
+//    silently, not downgraded to a lower tier for manual review — this
+//    first pass is deliberately unambiguous-clusters-only, per explicit
+//    product decision.
+//  - No write contract exists for a single investigation RESULT — Medicus's
+//    own "mark incorrect/remove from record" UI operates on the whole
+//    REPORT (`investigationReportId`), confirmed live via HAR capture of a
+//    real manual duplicate-report removal (`POST
+//    clinical/investigation/mark-incorrect-and-hidden`,
+//    `{reason, isConfirmedRemoval, investigationReportId}`). Every result in
+//    that captured report was independently confirmed duplicated (not just
+//    the one being viewed) — but a report mixing duplicate and unique
+//    results is a real possible shape this pass doesn't yet reason about, so
+//    `investigation` is deliberately left OUT of WRITE_CONTRACTS for now:
+//    read-only recommendation, same pattern already used for
+//    investigation-request/communication.
 
 (function (global) {
   'use strict';
@@ -688,10 +720,64 @@
             { title: d.title || null }
           );
           for (const p of d.linkedProblems || []) pushProblem(p, date, null, null, false);
+        } else if (item.type === 'investigation') {
+          // Lab-result duplicate detection (2026-08-22 — see file header
+          // update below for the evidence trail). Confirmed live shape:
+          // `item.data.investigationGroups[].results[]`, one entry per
+          // reported analyte, on the SAME bulk journal payload every other
+          // kind here already reads — no extra fetch. Per-result fields
+          // confirmed live: `id` (own UUIDv7), `investigationReportId`
+          // (parent report — the write-contract id, once one exists),
+          // `investigationResultCode.conceptId` (stable across reimport,
+          // unlike free-text `investigationResultLabel`/`description` —
+          // one duplicate cluster showed "Serum creatinine" vs "CREATININE"
+          // for the identical conceptId), `resultValue`, `resultUnit`,
+          // `orderingDateString` (specimen collection date+time, to the
+          // minute — this is what distinguishes a real reimport duplicate
+          // from a legitimate same-day repeat test at a different time).
+          //
+          // `date` is deliberately the per-RESULT `orderingDateString`
+          // here, not the day-group's own `date` (which is calendar-day
+          // only) — grouping on the exact timestamp is what let a genuine
+          // 14-copy reimport cluster (same minute, same value) tier EXACT
+          // while a same-day-different-time pair of distinct repeat tests
+          // (different minute, different value) fell into separate groups
+          // instead of colliding into one ambiguous candidate. A result
+          // with no collection timestamp at all is skipped rather than
+          // grouped under a shared `null` key (see groupAndTier's own
+          // EXACT-tier-only filter for investigation groups, which then
+          // makes this rigorous: same conceptId + same exact collection
+          // time + same resultValue + distinct entry ids only).
+          //
+          // No evidence yet that a result also appears nested inside an
+          // encounter's headings (unlike note/prescription/document, which
+          // do) — investigation results are only ever read from this flat
+          // top-level branch. groupAndTier's own defensive id-dedupe covers
+          // the case if that assumption turns out wrong later.
+          const d = item.data || {};
+          for (const group of d.investigationGroups || []) {
+            for (const result of group.results || []) {
+              if (!result || !result.orderingDateString) continue;
+              pushEntry(
+                'investigation',
+                result.id,
+                result.investigationResultCode && result.investigationResultCode.conceptId,
+                result.resultValue != null ? String(result.resultValue) : null,
+                null,
+                null,
+                result.orderingDateString,
+                null,
+                false,
+                {
+                  investigationReportId: result.investigationReportId || null,
+                  resultUnit: result.resultUnit || null,
+                  investigationResultLabel: result.investigationResultLabel || null,
+                  requiresUrgentReview: !!result.requiresUrgentReview,
+                }
+              );
+            }
+          }
         }
-        // 'investigation' (lab result) items are intentionally not flattened
-        // here — see file header. Extend separately if lab-result dedup is
-        // ever needed, with its own clinical review.
       }
     }
     return { entries, transferEncounters };
@@ -700,7 +786,13 @@
   // ── Group + tier ──────────────────────────────────────────────────────────
   // Groups flattened entries by (kind, date, normalised code) and assigns a
   // confidence tier per candidate group.
-  function groupAndTier(entries, suppressed, suppressedQuantityMismatch, suppressedProblemLinkage) {
+  function groupAndTier(
+    entries,
+    suppressed,
+    suppressedQuantityMismatch,
+    suppressedProblemLinkage,
+    suppressedInvestigationAmbiguous
+  ) {
     const groups = new Map();
     for (const e of entries) {
       const key = `${e.kind}|${e.date}|${normCode(e.code)}`;
@@ -800,7 +892,39 @@
         }
       }
 
-      result.push(buildGroupRecord(kind, date, members));
+      // Defensive id-dedupe, same principle as 'problem' above — no live
+      // evidence an investigation result is ever double-counted (see
+      // flattenJournal's own comment), but this is a free safety net if that
+      // assumption ever turns out wrong.
+      if (kind === 'investigation') {
+        const byId = new Map();
+        for (const m of members) if (!byId.has(m.id)) byId.set(m.id, m);
+        members = Array.from(byId.values());
+        if (members.length < 2) continue;
+      }
+
+      const rec = buildGroupRecord(kind, date, members);
+
+      // Detection-only, unambiguous-clusters-only for investigation
+      // (2026-08-22 product decision — see file header). Anything short of
+      // EXACT — a different resultValue among members sharing this
+      // conceptId+collection-minute bucket, e.g. a legitimate same-day
+      // repeat test — is dropped silently rather than surfaced at a lower
+      // tier for manual review.
+      if (kind === 'investigation' && rec.tier !== TIER.EXACT) {
+        if (suppressedInvestigationAmbiguous) {
+          suppressedInvestigationAmbiguous.push({
+            kind,
+            date,
+            code: members[0].code,
+            count: members.length,
+            tier: rec.tier,
+          });
+        }
+        continue;
+      }
+
+      result.push(rec);
     }
     return result;
   }
@@ -898,6 +1022,102 @@
     };
   }
 
+  // ── Investigation report rollup (2026-08-22) ───────────────────────────────
+  // Medicus shows a lab result as one REPORT card (a panel of analytes taken
+  // together), not one card per analyte — and its own write contract is
+  // report-level too (see file header). So the per-analyte EXACT groups
+  // groupAndTier already produces for kind === 'investigation' are an
+  // internal building block here, not the display unit: this rolls them up
+  // into one card per set of reports that share a duplicate cluster.
+  //
+  // Safety-critical distinction, matching the file header's own caveat that
+  // a report mixing duplicate and unique results isn't reasoned about yet:
+  // `fullMatch` is only true when EVERY result in EVERY report of the set is
+  // accounted for by a matched analyte cluster (matched count === that
+  // report's own total result count, for all reports in the set). Only a
+  // fullMatch cluster is safe to offer for report-level removal — removing
+  // a report that also holds even one unmatched (potentially unique) result
+  // would destroy real data Medicus's own report-level write contract has
+  // no way to preserve selectively.
+  function buildInvestigationReportGroups(groups, entries) {
+    const invGroups = groups.filter((g) => g.kind === 'investigation');
+    if (!invGroups.length) return [];
+
+    const totalByReport = new Map();
+    for (const e of entries) {
+      if (e.kind !== 'investigation' || !e.investigationReportId) continue;
+      totalByReport.set(e.investigationReportId, (totalByReport.get(e.investigationReportId) || 0) + 1);
+    }
+
+    const clusters = new Map();
+    for (const g of invGroups) {
+      const reportIds = [...new Set(g.entries.map((e) => e.investigationReportId).filter(Boolean))].sort();
+      if (reportIds.length < 2) continue;
+      const key = reportIds.join('|');
+      if (!clusters.has(key)) clusters.set(key, { reportIds, analyteGroups: [] });
+      clusters.get(key).analyteGroups.push(g);
+    }
+
+    const result = [];
+    for (const { reportIds, analyteGroups } of clusters.values()) {
+      const matchedCountByReport = {};
+      const totalCountByReport = {};
+      for (const rid of reportIds) {
+        matchedCountByReport[rid] = analyteGroups.filter((g) => g.entries.some((e) => e.investigationReportId === rid))
+          .length;
+        totalCountByReport[rid] = totalByReport.get(rid) || 0;
+      }
+      const fullMatch = reportIds.every((rid) => matchedCountByReport[rid] === totalCountByReport[rid]);
+
+      // Keeper = earliest-created report, via the UUIDv7 timestamp of its
+      // own member result ids — same tie-breaker principle as every other
+      // kind's keeperEntryId, just applied at report level.
+      const earliestIdTimeByReport = {};
+      for (const rid of reportIds) {
+        const times = analyteGroups
+          .flatMap((g) => g.entries.filter((e) => e.investigationReportId === rid))
+          .map((e) => decodeIdTimestamp(e.id))
+          .filter((t) => t != null);
+        earliestIdTimeByReport[rid] = times.length ? Math.min(...times) : null;
+      }
+      const withTime = reportIds.filter((rid) => earliestIdTimeByReport[rid] != null);
+      const keeperReportId =
+        withTime.length >= 2
+          ? withTime.reduce((a, b) => (earliestIdTimeByReport[a] <= earliestIdTimeByReport[b] ? a : b))
+          : null;
+
+      result.push({
+        reportIds,
+        date: analyteGroups[0].date,
+        analyteGroups,
+        matchedCountByReport,
+        totalCountByReport,
+        fullMatch,
+        keeperReportId,
+      });
+    }
+    return result;
+  }
+
+  // Dedicated removal-request builder for a whole investigation REPORT —
+  // deliberately separate from WRITE_CONTRACTS/buildRemovalRequest above.
+  // Those two are entry-id-keyed (one call per journal entry); an
+  // investigation report's member results each have their OWN `id`, and
+  // sending a result id here instead of its `investigationReportId` would
+  // silently mark the WRONG thing incorrect — a real hazard, not a
+  // theoretical one, so this stays a separate, narrowly-typed function
+  // rather than one more row in the generic per-kind table.
+  function buildInvestigationReportRemovalRequest(apiBase, reportId, reason) {
+    if (!apiBase || !reportId) return null;
+    const trimmedReason = (reason || '').trim();
+    if (!trimmedReason) return null;
+    return {
+      url: `${apiBase}/clinical/investigation/mark-incorrect-and-hidden`,
+      method: 'POST',
+      body: { investigationReportId: reportId, reason: trimmedReason, isConfirmedRemoval: true },
+    };
+  }
+
   // Splits an over-merged document-kind group when >=2 members have known,
   // differing fileType and/or fileSize — evidence (2026-07-07, real
   // test-patient pair) that two genuinely unrelated documents sharing a
@@ -954,6 +1174,17 @@
       const keys = fileTypes.map((ft, i) => (ft ? `${ft}::${fileSizes[i] || 'unknown-size'}` : null));
       const knownKeys = new Set(keys.filter(Boolean));
       if (knownKeys.size < 2) {
+        // `sameFileTypeAndSize` feeds splitDocumentGroupsByContentHash below
+        // — confirmed same only when at least 2 members genuinely HAVE both
+        // a known fileType and a known fileSize that agree, not merely
+        // "nothing here disagreed" (which could just mean the data isn't
+        // fetched yet). See that function's own header for why this
+        // distinction matters: a hash check is only safe evidence of
+        // non-duplication once type+size are already confirmed identical —
+        // GP2GP/export can legitimately change either for a genuine
+        // duplicate, so an unconfirmed group must never reach that check.
+        const fullyKnownCount = fileTypes.filter((ft, i) => ft && fileSizes[i]).length;
+        g.sameFileTypeAndSize = knownKeys.size === 1 && fullyKnownCount >= 2;
         result.push(g);
         continue;
       }
@@ -961,15 +1192,123 @@
       const buckets = new Map();
       g.entries.forEach((e, i) => {
         const key = keys[i];
-        if (!buckets.has(key)) buckets.set(key, []);
-        buckets.get(key).push(e);
+        if (!buckets.has(key)) buckets.set(key, { entries: [], fullyKnown: !!(fileTypes[i] && fileSizes[i]) });
+        buckets.get(key).entries.push(e);
       });
-      for (const members of buckets.values()) {
-        if (members.length < 2) continue;
-        result.push(buildGroupRecord(g.kind, g.date, members));
+      for (const bucket of buckets.values()) {
+        if (bucket.entries.length < 2) continue;
+        const rebuilt = buildGroupRecord(g.kind, g.date, bucket.entries);
+        rebuilt.sameFileTypeAndSize = bucket.fullyKnown;
+        result.push(rebuilt);
       }
     }
     return { groups: result, documentGroupsSplit };
+  }
+
+  // ── Content-hash verification (2026-08-22) ─────────────────────────────────
+  // fileType+fileSize is strong but imperfect evidence of identical content —
+  // live finding: a single bad GP2GP reimport dumped six historical
+  // vaccination documents, dating back two decades, onto one date, all
+  // sharing fileType AND fileSize (auto-generated from the same template) —
+  // correctly matched by that heuristic, yet genuinely different vaccines.
+  // A hash of the actual downloaded bytes is the only ground truth available
+  // beyond size/type.
+  //
+  // Deliberately scoped to ONLY groups already tagged `sameFileTypeAndSize`
+  // (set above and in findFileMatchedDuplicates) — explicit product
+  // decision (2026-08-22): this must never become a gate that can exclude a
+  // match formed on any OTHER basis. GP2GP/export/reimport can legitimately
+  // convert a document to a different file type, or rename it, while it
+  // remains the same real document — a group whose members don't already
+  // have a CONFIRMED matching type+size is left completely untouched here,
+  // because a hash difference there could just as easily be that legitimate
+  // conversion as a genuine non-duplicate. A hash difference is only safe
+  // evidence of non-duplication once there's no format-conversion story
+  // left to explain it, i.e. type and size already agree exactly.
+  //
+  // Caller-fetched `hashByEntryId: {entryId: sha256Hex}` — same on-demand,
+  // never-a-blanket-fetch principle as every other cross-check in this
+  // file. A member with no known hash (fetch not yet run, or failed) pools
+  // into its own "unknown" bucket rather than being excluded, dropped, or
+  // guessed onto either side — same discipline as the unknown-fileSize
+  // bucket in splitDocumentGroupsByFileType above. Only splits when 2+
+  // DISTINCT known hashes exist — i.e. only once non-duplication is
+  // actually proven for at least one pair, never merely suspected.
+  //
+  // A checked group whose members turn out to share NO confirmed hash (or
+  // only partially match) used to just silently vanish or shrink with no
+  // trace — a real reported gap (2026-08-22): a same-size/type group of 6+
+  // documents could be checked and produce nothing visible at all if every
+  // member turned out unique, or if only some of them did. `checkResults`
+  // reports, per originally-checked group, exactly what was found — which
+  // entries ended up in a confirmed duplicate cluster (still present in
+  // `groups`, unaffected), which were PROVEN unique (a real, known,
+  // non-matching hash), and which stayed unresolved (no hash at all) — so
+  // the caller can always render a clear outcome, including the "checked,
+  // found nothing" case.
+  function splitDocumentGroupsByContentHash(groups, hashByEntryId) {
+    const result = [];
+    let documentGroupsSplitByContentHash = 0;
+    const checkResults = [];
+    for (const g of groups) {
+      if (g.kind !== 'document' || !g.sameFileTypeAndSize) {
+        result.push(g);
+        continue;
+      }
+      // Bucket key is the real hash when known, or a shared 'unknown-hash'
+      // pool otherwise — a split is needed whenever more than one DISTINCT
+      // key exists, which covers both "2+ genuinely different known
+      // hashes" AND "some members confirmed, others still unverified"
+      // (e.g. a fetch failed for one). Requiring 2+ known hashes alone
+      // missed the latter case: a known-matching pair sitting alongside an
+      // unverified pair never split apart, wrongly implying the unverified
+      // members were just as confirmed as the known ones.
+      const keys = g.entries.map((e) => (hashByEntryId ? hashByEntryId[e.id] : null) || 'unknown-hash');
+      if (new Set(keys).size < 2) {
+        // Nothing to split, but a real finding either way: if every member
+        // shares one genuine known hash, that's a CONFIRMED duplicate —
+        // mark it so the caller can show that instead of silently doing
+        // nothing (previously this case never set contentHashConfirmed at
+        // all, so the "Verify" button just reappeared with no visible
+        // change even on the simplest possible positive result). If
+        // instead the shared key is 'unknown-hash' (no hash data at all,
+        // or every fetch failed), leave unconfirmed — nothing was actually
+        // learned, so nothing should be claimed.
+        if (keys[0] !== 'unknown-hash') g.contentHashConfirmed = true;
+        result.push(g);
+        continue;
+      }
+      documentGroupsSplitByContentHash++;
+      const buckets = new Map();
+      g.entries.forEach((e, i) => {
+        const key = keys[i];
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(e);
+      });
+      const confirmedGroupEntryIds = [];
+      const uniqueEntryIds = [];
+      const unresolvedEntryIds = [];
+      for (const [key, members] of buckets) {
+        if (members.length < 2) {
+          (key === 'unknown-hash' ? unresolvedEntryIds : uniqueEntryIds).push(members[0].id);
+          continue;
+        }
+        const rebuilt = buildGroupRecord(g.kind, g.date, members);
+        rebuilt.sameFileTypeAndSize = true;
+        rebuilt.contentHashConfirmed = key !== 'unknown-hash';
+        result.push(rebuilt);
+        confirmedGroupEntryIds.push(members.map((m) => m.id));
+      }
+      checkResults.push({
+        date: g.date,
+        code: g.code,
+        checkedEntryIds: g.entries.map((e) => e.id),
+        confirmedGroupEntryIds,
+        uniqueEntryIds,
+        unresolvedEntryIds,
+      });
+    }
+    return { groups: result, documentGroupsSplitByContentHash, checkResults };
   }
 
   // ── Cross-record file-match duplicate detection (2026-07-08) ───────────────
@@ -1153,6 +1492,11 @@
         recordedByOrganisationVaries: orgSet.size > 1,
         keeperEntryId,
         fileMatched: true,
+        // Always true by construction — this bucket key is (fileType,
+        // fileSize) with both required truthy (see the `!ft || !fs`
+        // continue above), so every member here already has a confirmed,
+        // agreeing type and size. Feeds splitDocumentGroupsByContentHash.
+        sameFileTypeAndSize: true,
         entries: members.map((m) => ({
           ...m,
           isKeeper: keeperEntryId != null && m.id === keeperEntryId,
@@ -1948,7 +2292,14 @@
     const suppressedSameConsultation = [];
     const suppressedQuantityMismatch = [];
     const suppressedProblemLinkage = [];
-    const groups = groupAndTier(entries, suppressedSameConsultation, suppressedQuantityMismatch, suppressedProblemLinkage);
+    const suppressedInvestigationAmbiguous = [];
+    const groups = groupAndTier(
+      entries,
+      suppressedSameConsultation,
+      suppressedQuantityMismatch,
+      suppressedProblemLinkage,
+      suppressedInvestigationAmbiguous
+    );
     const confirmedTransfers = markTransferConfirmation(transferEncounters, groups);
     const gp2gpWrapperCoverage = analyzeGp2gpWrapperCoverage(entries);
     // Zero-fetch trigger for the opt-in cross-record file-match second pass
@@ -1956,21 +2307,31 @@
     // always, since it costs nothing; the expensive match itself is opt-in.
     const suspiciousDocuments = findSuspiciousDocuments(entries.filter((e) => e.kind === 'document'));
 
+    // Investigation is displayed as one report card, not one card per
+    // analyte (see buildInvestigationReportGroups) — the per-analyte EXACT
+    // groups above are its raw material, not a second, redundant display of
+    // the same duplicates. Excluded here so byTier/totalCandidateGroups and
+    // the generic groups list reflect only what's actually rendered there.
+    const investigationReportGroups = buildInvestigationReportGroups(groups, entries);
+    const visibleGroups = groups.filter((g) => g.kind !== 'investigation');
+
     const byTier = { exact: 0, high: 0, review: 0 };
-    for (const g of groups) byTier[g.tier]++;
+    for (const g of visibleGroups) byTier[g.tier]++;
 
     return {
-      groups,
+      groups: visibleGroups,
+      investigationReportGroups,
       entries,
       transferEncounters: confirmedTransfers,
       suppressedSameConsultation,
       suppressedQuantityMismatch,
       suppressedProblemLinkage,
+      suppressedInvestigationAmbiguous,
       gp2gpWrapperCoverage,
       suspiciousDocuments,
       summary: {
         totalEntries: entries.length,
-        totalCandidateGroups: groups.length,
+        totalCandidateGroups: visibleGroups.length,
         byTier,
         transferEncountersTotal: confirmedTransfers.length,
         transferEncountersConfirmed: confirmedTransfers.filter((t) => t.contentConfirmed).length,
@@ -1979,9 +2340,12 @@
           .length,
         suppressedQuantityMismatchTotal: suppressedQuantityMismatch.length,
         suppressedProblemLinkageTotal: suppressedProblemLinkage.length,
+        suppressedInvestigationAmbiguousTotal: suppressedInvestigationAmbiguous.length,
         gp2gpWrapperStrictMatches: gp2gpWrapperCoverage.strictMatches,
         gp2gpWrapperNearMisses: gp2gpWrapperCoverage.nearMisses.length,
         suspiciousDocumentsTotal: suspiciousDocuments.length,
+        investigationReportGroupsTotal: investigationReportGroups.length,
+        investigationFullMatchReportGroupsTotal: investigationReportGroups.filter((g) => g.fullMatch).length,
       },
     };
   }
@@ -1991,6 +2355,8 @@
     analyzeJournal,
     flattenJournal,
     groupAndTier,
+    buildInvestigationReportGroups,
+    buildInvestigationReportRemovalRequest,
     normCode,
     normText,
     decodeIdTimestamp,
@@ -2021,6 +2387,7 @@
     buildDocumentEditOverrides,
     buildDocumentEditRequest,
     splitDocumentGroupsByFileType,
+    splitDocumentGroupsByContentHash,
     hasJunkTitlePrefix,
     accurxAttachmentUrl,
     hasCreatedAfterFiled,

@@ -151,6 +151,22 @@ async function apiFetch(url) {
   return r.json();
 }
 
+// Raw file bytes (not JSON) for content-hash verification — same-origin
+// download of the document's ORIGINAL file, the same endpoint the existing
+// "Download original" links already use (buildDocumentDownloadUrl).
+async function apiFetchArrayBuffer(url) {
+  const r = await fetch(url, { credentials: 'include' });
+  if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { status: r.status, url });
+  return r.arrayBuffer();
+}
+
+// SHA-256 hex digest via the standard Web Crypto API — no library, no extra
+// permission needed in an extension page context.
+async function sha256Hex(buffer) {
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Confirmed write calls (mark-incorrect-and-hidden) return an empty `{}` ack,
 // not always with a JSON content-type — tolerate an empty body rather than
 // throwing on r.json() with nothing to parse.
@@ -961,6 +977,123 @@ async function runFreshFileMatchSecondPass(out) {
   await runFileMatchSecondPass(out);
 }
 
+// ── Content-hash verification (opt-in, per-group, 2026-08-22) ───────────────
+// Downloads each member's actual file bytes (via the same confirmed
+// download endpoint the "Download original" links already use) and hashes
+// them — the only ground truth beyond fileType/fileSize, which a bad GP2GP
+// reimport can satisfy for genuinely different documents (six historical
+// vaccination records, same template, same size, dumped onto one date).
+// Per-group and user-triggered only: unlike the JSON-only checks above,
+// this downloads real file bytes, materially more expensive per document —
+// never run automatically. `sameFileTypeAndSize` (set by
+// splitDocumentGroupsByFileType/findFileMatchedDuplicates) gates which
+// groups even offer this button — see splitDocumentGroupsByContentHash's
+// own header for why that gate matters (GP2GP/export can legitimately
+// convert a genuine duplicate to a different type, so a group not already
+// confirmed same-type-same-size must never be hash-checked at all).
+// Wrapped in try/catch end-to-end (2026-08-22 reliability fix): the caller
+// (the click handler below) never awaits this promise, so an uncaught
+// throw anywhere in here — a render bug, a malformed preview, anything —
+// used to become a silent unhandled rejection: the status text would show
+// briefly, then just sit there with the button stuck disabled and no
+// explanation. Any failure now surfaces as an explicit message and leaves
+// the button clickable again.
+async function runContentHashVerification(out, gIdx) {
+  const statusEl = out.querySelector(`.content-hash-status[data-group-idx="${gIdx}"]`);
+  try {
+    await runContentHashVerificationInner(out, gIdx, statusEl);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `Content-hash check failed: ${err && err.message ? err.message : err}`;
+    const btn = out.querySelector(`.verify-content-hash-btn[data-group-idx="${gIdx}"]`);
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function runContentHashVerificationInner(out, gIdx, statusEl) {
+  const analysis = out.__analysis;
+  const g = analysis.groups[gIdx];
+  analysis.contentHashByEntryId = analysis.contentHashByEntryId || {};
+
+  let done = 0;
+  for (const e of g.entries) {
+    // Only skip re-fetching a genuinely successful hash (a real string) —
+    // a prior `null` (download/hash failed last time) is retried, so
+    // clicking "Verify" again after a transient failure can actually
+    // recover instead of permanently reporting the same failure forever.
+    if (typeof analysis.contentHashByEntryId[e.id] === 'string') {
+      done++;
+      continue;
+    }
+    if (statusEl) statusEl.textContent = `Downloading & hashing ${done + 1}/${g.entries.length}…`;
+    try {
+      const preview = analysis.documentPreviewsByEntryId && analysis.documentPreviewsByEntryId[e.id];
+      const fileId = preview && preview.fileId;
+      const url = fileId && window.RecordDuplicateParser.buildDocumentDownloadUrl(_apiBase, fileId);
+      if (!url) {
+        analysis.contentHashByEntryId[e.id] = null;
+      } else {
+        const buf = await apiFetchArrayBuffer(url);
+        analysis.contentHashByEntryId[e.id] = await sha256Hex(buf);
+      }
+    } catch (err) {
+      analysis.contentHashByEntryId[e.id] = null;
+    }
+    done++;
+  }
+
+  // This group's own outcome, computed directly from the hash data and
+  // ALWAYS reported — never left to depend on whether
+  // splitDocumentGroupsByContentHash below decides a split is warranted.
+  // That engine function only reports/acts when there's something to
+  // split; a group where every download/hash attempt failed, or where
+  // every member turned out to share the same real hash (confirmed, no
+  // split needed), previously produced no visible signal at all — this is
+  // the fix for "clicking shows the status message briefly, then nothing".
+  const byKey = new Map();
+  g.entries.forEach((e) => {
+    const key = analysis.contentHashByEntryId[e.id] || 'unknown-hash';
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(e.id);
+  });
+  const confirmedGroupEntryIds = [];
+  const uniqueEntryIds = [];
+  const unresolvedEntryIds = [];
+  for (const [key, ids] of byKey) {
+    if (ids.length >= 2) confirmedGroupEntryIds.push(ids);
+    else if (key === 'unknown-hash') unresolvedEntryIds.push(ids[0]);
+    else uniqueEntryIds.push(ids[0]);
+  }
+  // Persisted across every check run this session (not just this one
+  // group) — a checked group can shrink to zero surviving cards, so this
+  // is the only durable record of "we checked, here's what we found" once
+  // the re-render below replaces the card that triggered it.
+  analysis.contentHashCheckResults = (analysis.contentHashCheckResults || []).concat([
+    {
+      date: g.date,
+      code: g.code,
+      checkedEntryIds: g.entries.map((e) => e.id),
+      confirmedGroupEntryIds,
+      uniqueEntryIds,
+      unresolvedEntryIds,
+    },
+  ]);
+
+  const { groups: splitGroups, documentGroupsSplitByContentHash } =
+    window.RecordDuplicateParser.splitDocumentGroupsByContentHash(analysis.groups, analysis.contentHashByEntryId);
+  analysis.groups = splitGroups;
+  analysis.summary.documentGroupsSplitByContentHash =
+    (analysis.summary.documentGroupsSplitByContentHash || 0) + documentGroupsSplitByContentHash;
+  const byTier = { exact: 0, high: 0, review: 0 };
+  for (const grp of analysis.groups) byTier[grp.tier]++;
+  analysis.summary.byTier = byTier;
+  analysis.summary.totalCandidateGroups = analysis.groups.length;
+
+  // Full re-render, same as the file-match second pass — group indices
+  // shift after a split, so patching the single triggering card in place
+  // isn't safe here.
+  out.innerHTML = renderJournalAnalysisHtml(analysis, _apiBase, out.__patient.uuid);
+}
+
 // ── Cross-record file-match second pass (opt-in, 2026-07-08) ────────────────
 // The expensive half of cross-record file-match detection: fetches
 // clinical/data/document/modals/preview/{id} for every document-kind entry
@@ -1097,12 +1230,50 @@ function fileMatchSecondPassBannerHtml(analysis) {
   </div>`;
 }
 
+// Explicit outcome for every content-hash check run this session (2026-08-22
+// — a checked group used to just vanish or shrink with no trace once every
+// member turned out unique or only some matched, so a click on "Verify by
+// content hash…" could look like it did nothing at all). Persisted on
+// analysis.contentHashCheckResults across every check, since a checked
+// group's own card can shrink to zero surviving entries after a split —
+// this section is the only place a "checked, found nothing" outcome is
+// still visible once that happens.
+function contentHashCheckResultsHtml(analysis) {
+  const results = analysis.contentHashCheckResults || [];
+  if (!results.length) return '';
+  const items = results
+    .map((r) => {
+      const total = r.checkedEntryIds.length;
+      const confirmedCount = r.confirmedGroupEntryIds.reduce((sum, ids) => sum + ids.length, 0);
+      const clusterCount = r.confirmedGroupEntryIds.length;
+      const uniqueCount = r.uniqueEntryIds.length;
+      const unresolvedCount = r.unresolvedEntryIds.length;
+      const label = `${esc(r.code || 'document')} · ${esc(r.date || 'unknown date')}`;
+      const unresolvedLine = unresolvedCount
+        ? `<div style="margin-top:2px;color:var(--text-3)">${unresolvedCount} could not be verified (download/hash failed) — re-run to try again.</div>`
+        : '';
+      const outcome =
+        clusterCount === 0
+          ? `<span style="color:var(--amber)">none share identical content</span>. This match was based on file size/type alone — likely a false positive unless other evidence suggests otherwise.`
+          : `<span style="color:var(--green)">${confirmedCount} confirmed identical across ${clusterCount} group${clusterCount !== 1 ? 's' : ''}</span> (see above — removal offered there)${uniqueCount ? `, <span style="color:var(--amber)">${uniqueCount} proven genuinely different</span>` : ''}.`;
+      return `<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
+        <strong style="color:var(--text-1)">${label}</strong> — checked ${total} document${total !== 1 ? 's' : ''} by content hash: ${outcome}
+        ${unresolvedLine}
+      </div>`;
+    })
+    .join('');
+  return `<div style="margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:var(--r-md);font-size:11px;color:var(--text-3)">
+    <strong style="color:var(--text-1)">Content-hash verification results</strong>
+    ${items}
+  </div>`;
+}
+
 function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
-  const { groups, transferEncounters, summary, gp2gpWrapperCoverage } = analysis;
+  const { groups, transferEncounters, summary, gp2gpWrapperCoverage, investigationReportGroups } = analysis;
   const nearMisses = (gp2gpWrapperCoverage && gp2gpWrapperCoverage.nearMisses) || [];
   const patientLinkHtml = patientJournalLinkHtml(apiBase, patientUuid);
   const fileMatchBannerHtml = fileMatchSecondPassBannerHtml(analysis);
-  if (!groups.length && !transferEncounters.length && !nearMisses.length) {
+  if (!groups.length && !transferEncounters.length && !nearMisses.length && !investigationReportGroups.length) {
     return `${patientLinkHtml}${fileMatchBannerHtml}<div class="empty-state">No candidate duplicate entries found in this patient's journal.</div>`;
   }
 
@@ -1114,9 +1285,12 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
     ${summary.suppressedSameConsultationTotal ? ` · <span style="color:var(--amber)">${summary.suppressedSameConsultationTotal} group(s) suppressed as same-consultation (${summary.suppressedSameConsultationFromTransfer} from transfer encounters)</span>` : ''}
     ${summary.suppressedQuantityMismatchTotal ? ` · <span style="color:var(--amber)">${summary.suppressedQuantityMismatchTotal} prescription group(s) suppressed as quantity-mismatch (different issued amounts, not a duplicate)</span>` : ''}
     ${summary.suppressedProblemLinkageTotal ? ` · <span style="color:var(--amber)">${summary.suppressedProblemLinkageTotal} problem code(s) suppressed as same-record linkage (one real problem linked from multiple encounters, not duplicate records)</span>` : ''}
+    ${summary.suppressedInvestigationAmbiguousTotal ? ` · <span style="color:var(--amber)">${summary.suppressedInvestigationAmbiguousTotal} investigation result group(s) suppressed as ambiguous (same test, same collection time, but a different result value — not flagged)</span>` : ''}
+    ${summary.investigationReportGroupsTotal ? ` · <span class="mono">${summary.investigationFullMatchReportGroupsTotal}/${summary.investigationReportGroupsTotal}</span> duplicate investigation report(s) found (full match, safe to remove)` : ''}
     ${summary.excludedPrescriptionTimingTotal ? ` · <span style="color:var(--amber)">${summary.excludedPrescriptionTimingTotal} prescription group(s) excluded after timing cross-check (issued a minute+ apart, not a duplicate)</span>` : ''}
     ${summary.excludedQuestionnaireMismatchTotal ? ` · <span style="color:var(--amber)">${summary.excludedQuestionnaireMismatchTotal} document group(s) excluded after questionnaire-template cross-check (different questionnaire types)</span>` : ''}
     ${summary.documentGroupsSplitByFileType ? ` · <span style="color:var(--amber)">${summary.documentGroupsSplitByFileType} document group(s) split by file type/size (were wrongly merged — different documents sharing a date)</span>` : ''}
+    ${summary.documentGroupsSplitByContentHash ? ` · <span style="color:var(--amber)">${summary.documentGroupsSplitByContentHash} document group(s) split by content hash (same file type/size but genuinely different content)</span>` : ''}
     ${summary.noteAttachmentMismatchTotal ? ` · <span style="color:var(--amber)">${summary.noteAttachmentMismatchTotal} note group(s) downgraded to review after an attached-document mismatch (same note text, different attachment)</span>` : ''}
     ${summary.documentPreviewsChecked ? ` · <span class="mono">${summary.documentPreviewsWithFileSize}/${summary.documentPreviewsChecked}</span> document preview(s) had a usable file-size field` : ''}
     ${summary.documentLinkedGroupsFound ? ` · <span style="color:var(--amber)">${summary.documentLinkedGroupsFound} document-linked duplicate group(s) found (experimental — see warning on each)</span>` : ''}
@@ -1158,6 +1332,16 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
       ${
         g.emptyWrapperOnly
           ? `<div style="font-size:11px;color:var(--amber);margin-top:2px;font-weight:600">⚠ These entries only "match" on a content-free reimport wrapper — the SNOMED code and problem/topic are shared, but nothing here confirms the underlying content is the same (e.g. several different vaccines given the same day are often coded this way). Verify independently before removing.</div>`
+          : ''
+      }
+      ${
+        g.kind === 'document' && g.sameFileTypeAndSize
+          ? g.contentHashConfirmed
+            ? `<div style="font-size:11px;color:var(--green);margin-top:2px">✓ Content hash verified — these copies are confirmed byte-identical.</div>`
+            : `<div class="content-hash-check" data-group-idx="${gIdx}" style="margin-top:4px">
+                 <button class="verify-content-hash-btn btn-ghost" data-group-idx="${gIdx}">Verify by content hash…</button>
+                 <span class="content-hash-status" data-group-idx="${gIdx}" style="margin-left:6px;font-size:11px;color:var(--text-3)"></span>
+               </div>`
           : ''
       }
       <div class="rec-line">${INFO_ICON}<span>${TIER_ACTION[g.tier]}</span></div>
@@ -1204,7 +1388,18 @@ function renderJournalAnalysisHtml(analysis, apiBase, patientUuid) {
         </div>`
       : '';
 
-  return patientLinkHtml + summaryLine + fileMatchBannerHtml + groupsHtml + transferHtml + wrapperHtml;
+  const investigationReportGroupsHtmlStr = investigationReportGroupsHtml(investigationReportGroups);
+  const contentHashResultsHtmlStr = contentHashCheckResultsHtml(analysis);
+  return (
+    patientLinkHtml +
+    summaryLine +
+    fileMatchBannerHtml +
+    investigationReportGroupsHtmlStr +
+    groupsHtml +
+    transferHtml +
+    wrapperHtml +
+    contentHashResultsHtmlStr
+  );
 }
 
 // ── Removal action (EXACT-tier, confirmed-write kinds only) ─────────────────
@@ -1334,18 +1529,29 @@ function renderRemovalFormHtml(g, gIdx, keeperId) {
     g.kind === 'document'
       ? `permanently remove ${toRemove.length} document${toRemove.length !== 1 ? 's' : ''} from this patient's record`
       : `permanently hide ${toRemove.length} ${esc(g.kind)} ${toRemove.length !== 1 ? 'entries' : 'entry'} from this patient's record`;
+  // The summary boxes below must line up with the entry cards above (same
+  // flex row, same left-to-right order as g.entries, which is what
+  // reviewEntriesHtml/standardEntryLinesHtml render the cards from) — the
+  // keeper isn't always the first card. A fixed "KEEPING-then-REMOVING"
+  // order put the green box under the wrong column whenever the keeper was
+  // the second (or later) card (2026-08-22 user feedback). Order these two
+  // boxes to match the keeper's actual position instead.
+  const keepingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--green)">✓ KEEPING</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(keeperEntry)}</div>
+      </div>`;
+  const removingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
+        ${listHtml}
+      </div>`;
+  const keeperIsFirst = g.entries.length > 0 && g.entries[0].id === keeperId;
+  const summaryBoxesHtml = keeperIsFirst ? keepingBoxHtml + removingBoxHtml : removingBoxHtml + keepingBoxHtml;
+
   return `<div class="removal-form" style="border:1px solid var(--red-line);border-radius:var(--r-md);padding:8px;font-size:11px">
     <div style="color:var(--text-1)">This will ${removalVerb}. There is no confirmed undo for this action.</div>
     <div class="note-link-warning" data-group-idx="${gIdx}"></div>
     <div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--green)">✓ KEEPING</div>
-        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(keeperEntry)}</div>
-      </div>
-      <div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
-        ${listHtml}
-      </div>
+      ${summaryBoxesHtml}
     </div>
     <div style="margin-top:6px;color:var(--text-3)">Wrong way round? Click the copy to keep in the cards above — the green highlight will follow.</div>
     <label style="display:block;margin-top:8px;color:var(--text-2)">Reason (required)</label>
@@ -1819,17 +2025,24 @@ function renderNoteMergeConfirmHtml(g, gIdx, keeperId, mergedText) {
         `<div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${esc(e.recordedBy || '(unknown author)')}</div>`
     )
     .join('');
+  // Same column-alignment fix as renderRemovalFormHtml above — order these
+  // two boxes to match the keeper's actual position among g.entries, not a
+  // fixed KEEPING-then-REMOVING order.
+  const keepingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--green)">✓ KEEPING (text replaced by the merge)</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(keeperEntry)}</div>
+      </div>`;
+  const removingBoxHtml = `<div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
+        ${listHtml}
+      </div>`;
+  const keeperIsFirst = g.entries.length > 0 && g.entries[0].id === keeperId;
+  const summaryBoxesHtml = keeperIsFirst ? keepingBoxHtml + removingBoxHtml : removingBoxHtml + keepingBoxHtml;
+
   return `<div class="note-merge-form" style="border:1px solid var(--red-line);border-radius:var(--r-md);padding:8px;font-size:11px">
     <div style="color:var(--text-1)">This will edit the kept copy's note to the merged text below, then permanently hide ${toRemove.length} other cop${toRemove.length !== 1 ? 'ies' : 'y'}. There is no confirmed undo for either action.</div>
     <div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
-      <div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--green)">✓ KEEPING (text replaced by the merge)</div>
-        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– ${entryOneLiner(keeperEntry)}</div>
-      </div>
-      <div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
-        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
-        ${listHtml}
-      </div>
+      ${summaryBoxesHtml}
     </div>
     <div style="margin-top:4px;color:var(--text-2)">Merged text:</div>
     <textarea class="note-merge-text" data-group-idx="${gIdx}" rows="3" style="width:100%;box-sizing:border-box;margin-top:2px;font-size:11px;background:var(--bg-mid);color:var(--text-1);border:1px solid var(--border)">${esc(mergedText)}</textarea>
@@ -2215,6 +2428,168 @@ async function executeDocumentFieldApply(out, gIdx) {
      <div style="margin-top:4px">${removableSlotHtml(g, gIdx)}</div>`;
 }
 
+// ── Investigation report-level removal (2026-08-22) ─────────────────────────
+// Displayed as Medicus itself shows a lab result — one card per REPORT, not
+// one per analyte — and removed the same way: Medicus's own write contract
+// is report-level (see record-duplicate-parser.js's file header), so this
+// whole flow works in reportIds throughout, never result ids, via the
+// dedicated buildInvestigationReportRemovalRequest (never the generic
+// per-entry buildRemovalRequest, which would send the wrong kind of id).
+function investigationReportGroupsHtml(investigationReportGroups) {
+  return investigationReportGroups
+    .map((rg, rIdx) => {
+      const analyteRows = rg.analyteGroups
+        .map((ag) => {
+          const first = ag.entries[0];
+          const value = esc(first.rawText || '(no value)') + (first.resultUnit ? ` ${esc(first.resultUnit)}` : '');
+          const label = esc(first.investigationResultLabel || ag.code);
+          const urgent = first.requiresUrgentReview ? ' · <span style="color:var(--red)">urgent review</span>' : '';
+          return `<div style="margin-top:2px"><strong style="color:var(--text-1)">${label}:</strong> ${value}${urgent}</div>`;
+        })
+        .join('');
+      const matchSummary = rg.reportIds
+        .map((rid) => `${esc(rid)} (${rg.matchedCountByReport[rid]}/${rg.totalCountByReport[rid]} matched)`)
+        .join(', ');
+      const badge = rg.fullMatch
+        ? `<span style="background:var(--red-dim);color:var(--red);border:1px solid var(--red-line);border-radius:999px;padding:1px 8px;font-size:10px;font-weight:600">FULL MATCH</span>`
+        : `<span style="color:var(--amber);border:1px solid var(--amber);border-radius:999px;padding:1px 8px;font-size:10px;font-weight:600">PARTIAL MATCH</span>`;
+      return `<div class="investigation-report-group" data-report-idx="${rIdx}" style="border:1px solid var(--border);border-radius:var(--r-md);padding:8px;margin-top:8px">
+        <div class="dup-group-head">
+          <span class="dup-group-key"><strong>investigation report</strong> · <span class="entry-date">${esc(rg.date || 'unknown date')}</span> · ${rg.reportIds.length} report(s), ${rg.analyteGroups.length} analyte(s)</span>
+          ${badge}
+        </div>
+        <div style="margin-top:4px;font-size:11px;color:var(--text-3)">${esc(matchSummary)}</div>
+        <div style="margin-top:6px">${analyteRows}</div>
+        <div class="investigation-removal-slot" data-report-idx="${rIdx}" style="margin-top:8px">${investigationReportRemovalSlotHtml(rg, rIdx)}</div>
+      </div>`;
+    })
+    .join('');
+}
+
+function investigationReportRemovalSlotHtml(rg, rIdx) {
+  if (!rg.fullMatch) {
+    return `<div style="font-size:11px;color:var(--amber)">Not offered for removal — at least one result in one of these reports didn't match, so this report may hold data the other(s) don't. Review manually in Medicus.</div>`;
+  }
+  if (!rg.keeperReportId) return investigationChooseKeeperButtonHtml(rIdx);
+  return investigationRemovalButtonHtml(rg, rIdx, rg.keeperReportId);
+}
+
+function investigationChooseKeeperButtonHtml(rIdx) {
+  return `<button class="investigation-choose-keeper-btn btn-ghost" data-report-idx="${rIdx}">
+    Choose which report to keep…
+  </button>`;
+}
+
+function investigationChooseKeeperFormHtml(rg, rIdx) {
+  const rows = rg.reportIds
+    .map(
+      (rid) => `<label style="display:block;margin-top:6px;color:var(--text-2)">
+        <input type="radio" name="investigation-keeper-choice-${rIdx}" class="investigation-keeper-choice-radio" data-report-idx="${rIdx}" value="${esc(rid)}" />
+        <span class="mono">${esc(rid)}</span> (${rg.matchedCountByReport[rid]} result${rg.matchedCountByReport[rid] !== 1 ? 's' : ''})
+      </label>`
+    )
+    .join('');
+  return `<div class="choose-keeper-form" style="border:1px solid var(--border);border-radius:var(--r-md);padding:8px;font-size:11px">
+    <div style="color:var(--text-1)">
+      Could not automatically tell which of these ${rg.reportIds.length} reports is the original (fewer than two have a
+      decodable id timestamp) — pick the one to KEEP; the rest will be offered for removal.
+    </div>
+    ${rows}
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="investigation-continue-keeper-btn btn-primary" data-report-idx="${rIdx}" disabled>Continue</button>
+      <button class="investigation-cancel-removal-btn btn-ghost" data-report-idx="${rIdx}">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function investigationRemovalButtonHtml(rg, rIdx, keeperReportId) {
+  const toRemove = rg.reportIds.filter((rid) => rid !== keeperReportId).length;
+  return `<button class="investigation-remove-report-btn" data-report-idx="${rIdx}" data-keeper-id="${esc(keeperReportId)}" style="background:var(--red-dim);color:var(--red);border:1px solid var(--red-line)">
+    Remove ${toRemove} duplicate report${toRemove !== 1 ? 's' : ''}
+  </button>`;
+}
+
+function investigationRemovalFormHtml(rg, rIdx, keeperReportId) {
+  const toRemove = rg.reportIds.filter((rid) => rid !== keeperReportId);
+  const listHtml = toRemove
+    .map(
+      (rid) =>
+        `<div style="font-size:11px;color:var(--text-2);margin-top:2px">– <span class="mono">${esc(rid)}</span></div>`
+    )
+    .join('');
+  return `<div class="investigation-removal-form" style="border:1px solid var(--red-line);border-radius:var(--r-md);padding:8px;font-size:11px">
+    <div style="color:var(--text-1)">This will permanently hide ${toRemove.length} whole investigation report${toRemove.length !== 1 ? 's' : ''} from this patient's record — every result in ${toRemove.length !== 1 ? 'each' : 'it'}, not just the matched ones. There is no confirmed undo for this action.</div>
+    <div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1 1 200px;border:1px solid var(--green);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--green)">✓ KEEPING</div>
+        <div style="font-size:11px;color:var(--text-2);margin-top:2px">– <span class="mono">${esc(keeperReportId)}</span></div>
+      </div>
+      <div style="flex:1 1 200px;border:1px solid var(--red-line);border-radius:var(--r-md);padding:6px 8px">
+        <div style="font-weight:700;color:var(--red)">✗ REMOVING (permanently hidden)</div>
+        ${listHtml}
+      </div>
+    </div>
+    <label style="display:block;margin-top:8px;color:var(--text-2)">Reason (required)</label>
+    <textarea class="investigation-removal-reason" data-report-idx="${rIdx}" rows="2" style="width:100%;box-sizing:border-box;margin-top:4px;font-size:11px;background:var(--bg-mid);color:var(--text-1);border:1px solid var(--border)">${esc(DEFAULT_REMOVAL_REASON)}</textarea>
+    <div style="margin-top:8px;display:flex;gap:8px">
+      <button class="investigation-confirm-removal-btn" data-report-idx="${rIdx}" data-keeper-id="${esc(keeperReportId)}" style="background:var(--red);color:var(--bg-deep);border:none;padding:7px 16px;border-radius:var(--r-md);font-weight:600">Confirm removal</button>
+      <button class="investigation-cancel-removal-btn btn-ghost" data-report-idx="${rIdx}">Cancel</button>
+    </div>
+    <div class="investigation-removal-status" data-report-idx="${rIdx}" style="margin-top:6px"></div>
+  </div>`;
+}
+
+function syncInvestigationConfirmEnabled(out, rIdx) {
+  const form = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"] .investigation-removal-form`);
+  if (!form) return;
+  const reason = form.querySelector('.investigation-removal-reason').value.trim();
+  form.querySelector('.investigation-confirm-removal-btn').disabled = !reason;
+}
+
+// Same "patch in place, don't re-fetch" principle as executeRemoval above.
+async function executeInvestigationReportRemoval(out, rIdx, keeperReportId) {
+  const analysis = out.__analysis;
+  const r = out.__patient;
+  const rg = analysis.investigationReportGroups[rIdx];
+  const form = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"] .investigation-removal-form`);
+  const reason = form.querySelector('.investigation-removal-reason').value.trim();
+  const statusEl = form.querySelector('.investigation-removal-status');
+
+  form.querySelectorAll('button, textarea, input').forEach((el) => (el.disabled = true));
+
+  const toRemove = rg.reportIds.filter((rid) => rid !== keeperReportId);
+  let succeeded = 0;
+  let failed = 0;
+  for (const reportId of toRemove) {
+    statusEl.textContent = `Removing report ${succeeded + failed + 1}/${toRemove.length}…`;
+    const req = window.RecordDuplicateParser.buildInvestigationReportRemovalRequest(_apiBase, reportId, reason);
+    if (!req) {
+      failed++;
+      continue;
+    }
+    try {
+      await apiPost(req.url, req.body);
+      await logRemoval({
+        patientUuid: r.uuid,
+        patientName: r.name,
+        kind: 'investigation',
+        entryId: reportId,
+        code: rg.analyteGroups.map((ag) => ag.code).join(', '),
+        date: rg.date,
+        reason,
+      });
+      succeeded++;
+    } catch (e) {
+      failed++;
+    }
+  }
+
+  const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+  slot.innerHTML = failed
+    ? `<div style="font-size:11px;color:var(--red)">${succeeded} report(s) removed, ${failed} failed.</div>`
+    : `<div style="font-size:11px;color:var(--green)">${succeeded} duplicate report${succeeded !== 1 ? 's' : ''} removed.</div>`;
+}
+
 // Delegated listener attached once per journal-result panel (`out` persists
 // across "Re-analyse" re-renders; only its innerHTML is replaced), so state
 // lives on the element itself (`out.__analysis`/`__patient`/`__idx`) rather
@@ -2269,6 +2644,46 @@ function wireRemovalDelegation(out) {
     if (confirmBtn && !confirmBtn.disabled) {
       const gIdx = parseInt(confirmBtn.dataset.groupIdx, 10);
       executeRemoval(out, gIdx, confirmBtn.dataset.keeperId);
+      return;
+    }
+    const invChooseBtn = ev.target.closest('.investigation-choose-keeper-btn');
+    if (invChooseBtn) {
+      const rIdx = parseInt(invChooseBtn.dataset.reportIdx, 10);
+      const rg = out.__analysis.investigationReportGroups[rIdx];
+      const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+      slot.innerHTML = investigationChooseKeeperFormHtml(rg, rIdx);
+      return;
+    }
+    const invContinueBtn = ev.target.closest('.investigation-continue-keeper-btn');
+    if (invContinueBtn && !invContinueBtn.disabled) {
+      const rIdx = parseInt(invContinueBtn.dataset.reportIdx, 10);
+      const rg = out.__analysis.investigationReportGroups[rIdx];
+      const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+      const chosen = slot.querySelector('.investigation-keeper-choice-radio:checked');
+      if (!chosen) return;
+      slot.innerHTML = investigationRemovalFormHtml(rg, rIdx, chosen.value);
+      return;
+    }
+    const invRemoveBtn = ev.target.closest('.investigation-remove-report-btn');
+    if (invRemoveBtn) {
+      const rIdx = parseInt(invRemoveBtn.dataset.reportIdx, 10);
+      const rg = out.__analysis.investigationReportGroups[rIdx];
+      const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+      slot.innerHTML = investigationRemovalFormHtml(rg, rIdx, invRemoveBtn.dataset.keeperId);
+      return;
+    }
+    const invCancelBtn = ev.target.closest('.investigation-cancel-removal-btn');
+    if (invCancelBtn) {
+      const rIdx = parseInt(invCancelBtn.dataset.reportIdx, 10);
+      const rg = out.__analysis.investigationReportGroups[rIdx];
+      const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+      slot.innerHTML = investigationReportRemovalSlotHtml(rg, rIdx);
+      return;
+    }
+    const invConfirmBtn = ev.target.closest('.investigation-confirm-removal-btn');
+    if (invConfirmBtn && !invConfirmBtn.disabled) {
+      const rIdx = parseInt(invConfirmBtn.dataset.reportIdx, 10);
+      executeInvestigationReportRemoval(out, rIdx, invConfirmBtn.dataset.keeperId);
       return;
     }
     const equivalentBtn = ev.target.closest('.review-equivalent-btn');
@@ -2369,6 +2784,12 @@ function wireRemovalDelegation(out) {
       runFreshFileMatchSecondPass(out);
       return;
     }
+    const verifyHashBtn = ev.target.closest('.verify-content-hash-btn');
+    if (verifyHashBtn && !verifyHashBtn.disabled) {
+      verifyHashBtn.disabled = true;
+      runContentHashVerification(out, parseInt(verifyHashBtn.dataset.groupIdx, 10));
+      return;
+    }
     const applyDocFieldsBtn = ev.target.closest('.apply-doc-fields-btn');
     if (applyDocFieldsBtn && !applyDocFieldsBtn.disabled) {
       prepareDocumentFieldApply(out, parseInt(applyDocFieldsBtn.dataset.groupIdx, 10));
@@ -2434,6 +2855,10 @@ function wireRemovalDelegation(out) {
       syncConfirmEnabled(out, ev.target.dataset.groupIdx);
       return;
     }
+    if (ev.target.classList.contains('investigation-removal-reason')) {
+      syncInvestigationConfirmEnabled(out, ev.target.dataset.reportIdx);
+      return;
+    }
     if (ev.target.classList.contains('note-merge-text') || ev.target.classList.contains('note-merge-reason')) {
       syncNoteMergeConfirmEnabled(out, ev.target.dataset.groupIdx);
     }
@@ -2453,6 +2878,13 @@ function wireRemovalDelegation(out) {
       const gIdx = ev.target.dataset.groupIdx;
       const slot = out.querySelector(`.removal-slot[data-group-idx="${gIdx}"]`);
       const btn = slot && slot.querySelector('.continue-keeper-btn');
+      if (btn) btn.disabled = false;
+      return;
+    }
+    if (ev.target.classList.contains('investigation-keeper-choice-radio')) {
+      const rIdx = ev.target.dataset.reportIdx;
+      const slot = out.querySelector(`.investigation-removal-slot[data-report-idx="${rIdx}"]`);
+      const btn = slot && slot.querySelector('.investigation-continue-keeper-btn');
       if (btn) btn.disabled = false;
       return;
     }

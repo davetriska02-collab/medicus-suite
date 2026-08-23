@@ -19,6 +19,8 @@ const {
   hasAttachedDocumentMismatch,
   isRemovableKind,
   buildRemovalRequest,
+  buildInvestigationReportGroups,
+  buildInvestigationReportRemovalRequest,
   splitWrapperText,
   isJunkRecordedBy,
   wordDiff,
@@ -35,6 +37,7 @@ const {
   buildDocumentEditOverrides,
   buildDocumentEditRequest,
   splitDocumentGroupsByFileType,
+  splitDocumentGroupsByContentHash,
   hasJunkTitlePrefix,
   accurxAttachmentUrl,
   hasCreatedAfterFiled,
@@ -116,6 +119,34 @@ function flatDocumentItem(id, documentTypeLabel, title, extra) {
 
 function nestedDocumentEntry(id, documentTypeLabel, title, extra) {
   return Object.assign({ entryType: 'document', id, documentTypeLabel, title }, extra);
+}
+
+// Confirmed real shape (2026-08-22, three HAR captures against one patient):
+// `item.data.investigationGroups[].results[]`, one entry per reported
+// analyte. conceptId is the stable match key — free-text description/label
+// is confirmed to vary across copies of the same duplicated result.
+function investigationResult(id, conceptId, resultLabel, resultValue, resultUnit, orderingDateString, reportId) {
+  return {
+    id,
+    investigationResultCode: { conceptId, description: resultLabel },
+    investigationResultLabel: resultLabel,
+    investigationReportId: reportId,
+    resultValue,
+    resultUnit: resultUnit || null,
+    orderingDateString,
+    requiresUrgentReview: false,
+  };
+}
+
+function investigationGroup(label, results) {
+  return { label, results };
+}
+
+function flatInvestigationItem(itemId, groups) {
+  return {
+    type: 'investigation',
+    data: { id: itemId, investigationGroups: groups },
+  };
 }
 
 // Live-confirmed 2026-07-17: a nested prescription entry has NO recordedBy/
@@ -2025,6 +2056,309 @@ console.log('\n--- splitDocumentGroupsByFileType (document over-merge disambigua
   }
 }
 
+console.log('\n--- splitDocumentGroupsByContentHash (content-hash verification, 2026-08-22) ---');
+{
+  function hashDocEntry(id) {
+    return {
+      id,
+      kind: 'document',
+      date: 'Sun 29 Dec 2024',
+      code: 'Immunisation record',
+      rawText: 'text',
+      recordedBy: null,
+      recordedByOrganisation: null,
+      idTime: 1,
+    };
+  }
+
+  // The real motivating case: six historical vaccination documents dumped
+  // by one bad GP2GP reimport onto a single date, all sharing fileType AND
+  // fileSize (auto-generated from the same template) — genuinely two
+  // duplicated pairs plus two entirely distinct vaccines. A content hash is
+  // the only thing that can tell them apart once size+type already agree.
+  const sixVaccineGroup = {
+    kind: 'document',
+    date: 'Sun 29 Dec 2024',
+    code: 'Immunisation record',
+    tier: TIER.REVIEW,
+    gp2gpWrapper: false,
+    recordedByVaries: false,
+    recordedByOrganisationVaries: false,
+    keeperEntryId: null,
+    sameFileTypeAndSize: true,
+    entries: [
+      hashDocEntry('flu-1'),
+      hashDocEntry('flu-2'),
+      hashDocEntry('pneumo-1'),
+      hashDocEntry('pneumo-2'),
+      hashDocEntry('tetanus'),
+      hashDocEntry('shingles'),
+    ],
+  };
+  const hashByEntryId = {
+    'flu-1': 'hash-a',
+    'flu-2': 'hash-a',
+    'pneumo-1': 'hash-b',
+    'pneumo-2': 'hash-b',
+    tetanus: 'hash-c',
+    shingles: 'hash-d',
+  };
+  const {
+    groups: split,
+    documentGroupsSplitByContentHash,
+    checkResults: sixVaccineCheckResults,
+  } = splitDocumentGroupsByContentHash([sixVaccineGroup], hashByEntryId);
+  assert(documentGroupsSplitByContentHash === 1, 'the over-merged six-document group is reported as split');
+  assert(
+    split.length === 2,
+    'only the two genuinely byte-identical pairs survive as groups — the singletons are dropped'
+  );
+  const fluGroup = split.find((g) => g.entries.some((e) => e.id === 'flu-1'));
+  const pneumoGroup = split.find((g) => g.entries.some((e) => e.id === 'pneumo-1'));
+  assert(
+    !!fluGroup && fluGroup.entries.length === 2 && fluGroup.entries.every((e) => ['flu-1', 'flu-2'].includes(e.id)),
+    'the two byte-identical flu documents land together'
+  );
+  assert(
+    !!pneumoGroup &&
+      pneumoGroup.entries.length === 2 &&
+      pneumoGroup.entries.every((e) => ['pneumo-1', 'pneumo-2'].includes(e.id)),
+    'the two byte-identical pneumococcal documents land together, kept apart from the flu pair'
+  );
+  assert(
+    fluGroup.contentHashConfirmed === true && pneumoGroup.contentHashConfirmed === true,
+    'a surviving group whose members share a genuinely known hash is marked contentHashConfirmed'
+  );
+  assert(
+    !split.some((g) => g.entries.some((e) => ['tetanus', 'shingles'].includes(e.id))),
+    'the two genuinely unique vaccines (tetanus, shingles) never appear in any surviving group at all'
+  );
+
+  // checkResults reports exactly what happened to the ORIGINAL six-document
+  // group — real gap fixed 2026-08-22: a checked group used to just vanish
+  // or shrink with no trace, so a caller had no way to tell "checked, found
+  // nothing" from "never checked at all".
+  assert(sixVaccineCheckResults.length === 1, 'one checked group produces one checkResults entry');
+  const sixVaccineOutcome = sixVaccineCheckResults[0];
+  assert(
+    sixVaccineOutcome.checkedEntryIds.length === 6,
+    'checkResults records every entry id that was actually part of the check'
+  );
+  assert(
+    sixVaccineOutcome.confirmedGroupEntryIds.length === 2 &&
+      sixVaccineOutcome.confirmedGroupEntryIds.some((ids) => ids.sort().join() === ['flu-1', 'flu-2'].join()) &&
+      sixVaccineOutcome.confirmedGroupEntryIds.some((ids) => ids.sort().join() === ['pneumo-1', 'pneumo-2'].join()),
+    'checkResults lists both confirmed duplicate clusters explicitly, by entry id'
+  );
+  assert(
+    sixVaccineOutcome.uniqueEntryIds.sort().join() === ['shingles', 'tetanus'].join(),
+    'checkResults explicitly names the entries PROVEN unique (a real, known, non-matching hash) — never silently dropped with no trace'
+  );
+  assert(
+    sixVaccineOutcome.unresolvedEntryIds.length === 0,
+    'no unresolved entries here — every entry had a known hash'
+  );
+
+  // The exact scenario reported live (2026-08-22): a same-size/type group
+  // is checked and NOT ONE pair turns out byte-identical — every one of
+  // n>2 documents has its own distinct hash. Previously this just made the
+  // group vanish (0 surviving sub-groups, since every bucket has exactly 1
+  // member) with nothing else to show — checkResults must still report the
+  // outcome explicitly so the caller can render "checked N, found none
+  // identical" rather than silence.
+  const allUniqueGroup = {
+    kind: 'document',
+    date: 'Sun 29 Dec 2024',
+    code: 'Immunisation record',
+    tier: TIER.REVIEW,
+    gp2gpWrapper: false,
+    recordedByVaries: false,
+    recordedByOrganisationVaries: false,
+    keeperEntryId: null,
+    sameFileTypeAndSize: true,
+    entries: [hashDocEntry('v1'), hashDocEntry('v2'), hashDocEntry('v3'), hashDocEntry('v4')],
+  };
+  const {
+    groups: allUniqueSplit,
+    documentGroupsSplitByContentHash: allUniqueSplitCount,
+    checkResults: allUniqueCheckResults,
+  } = splitDocumentGroupsByContentHash([allUniqueGroup], {
+    v1: 'hash-1',
+    v2: 'hash-2',
+    v3: 'hash-3',
+    v4: 'hash-4',
+  });
+  assert(allUniqueSplitCount === 1, 'a group where nothing matches is still reported as split (it was processed)');
+  assert(allUniqueSplit.length === 0, 'zero surviving groups when every document turns out to have a distinct hash');
+  assert(
+    allUniqueCheckResults.length === 1 && allUniqueCheckResults[0].confirmedGroupEntryIds.length === 0,
+    'checkResults confirms zero duplicate clusters were found — an explicit negative, not an empty array with no explanation'
+  );
+  assert(
+    allUniqueCheckResults[0].uniqueEntryIds.sort().join() === ['v1', 'v2', 'v3', 'v4'].join(),
+    'checkResults names all four documents as individually proven unique, even though no group card survives to show them on'
+  );
+
+  // The critical caveat (explicit product decision, 2026-08-22): a group
+  // NOT already confirmed sameFileTypeAndSize must be left completely
+  // untouched, even with hash data that would otherwise split it — GP2GP/
+  // export/reimport can legitimately convert a genuine duplicate to a
+  // different file type or filename, so an unconfirmed group must never be
+  // second-guessed by a hash comparison that could just be reflecting that
+  // legitimate conversion.
+  const unconfirmedGroup = {
+    kind: 'document',
+    date: 'd',
+    code: 'c',
+    tier: TIER.REVIEW,
+    gp2gpWrapper: false,
+    recordedByVaries: false,
+    recordedByOrganisationVaries: false,
+    keeperEntryId: null,
+    entries: [hashDocEntry('u1'), hashDocEntry('u2')],
+  };
+  const { groups: untouched, documentGroupsSplitByContentHash: untouchedSplitCount } = splitDocumentGroupsByContentHash(
+    [unconfirmedGroup],
+    { u1: 'hash-x', u2: 'hash-y' } // clearly different hashes
+  );
+  assert(
+    untouched.length === 1 && untouched[0] === unconfirmedGroup,
+    'a group without a confirmed sameFileTypeAndSize flag passes through completely unchanged, regardless of hash data'
+  );
+  assert(untouchedSplitCount === 0, 'no split reported for a group never eligible for hash verification');
+
+  // A member with no known hash (fetch not yet run, or failed) pools into
+  // its own bucket rather than being excluded, dropped, or guessed onto
+  // either side.
+  const partialHashGroup = {
+    kind: 'document',
+    date: 'd',
+    code: 'c',
+    tier: TIER.REVIEW,
+    gp2gpWrapper: false,
+    recordedByVaries: false,
+    recordedByOrganisationVaries: false,
+    keeperEntryId: null,
+    sameFileTypeAndSize: true,
+    entries: [hashDocEntry('k1'), hashDocEntry('k2'), hashDocEntry('unk1'), hashDocEntry('unk2')],
+  };
+  const { groups: partial } = splitDocumentGroupsByContentHash([partialHashGroup], {
+    k1: 'hash-known',
+    k2: 'hash-known',
+    // unk1/unk2 deliberately absent — hash not yet fetched
+  });
+  assert(partial.length === 2, 'known-matching pair and unknown-hash pair both survive as separate groups');
+  const knownPair = partial.find((g) => g.entries.some((e) => e.id === 'k1'));
+  const unknownPair = partial.find((g) => g.entries.some((e) => e.id === 'unk1'));
+  assert(
+    !!knownPair && knownPair.contentHashConfirmed === true,
+    'the genuinely known-matching pair is marked contentHashConfirmed'
+  );
+  assert(
+    !!unknownPair && unknownPair.contentHashConfirmed === false,
+    'the unknown-hash pair survives together but is NOT marked confirmed — hash absence is never treated as a match'
+  );
+
+  // Fewer than 2 distinct KNOWN hashes (all agree, or too few known at all)
+  // — must not split, since nothing has actually been proven different yet.
+  const agreeingGroup = {
+    kind: 'document',
+    date: 'd',
+    code: 'c',
+    tier: TIER.REVIEW,
+    gp2gpWrapper: false,
+    recordedByVaries: false,
+    recordedByOrganisationVaries: false,
+    keeperEntryId: null,
+    sameFileTypeAndSize: true,
+    entries: [hashDocEntry('m1'), hashDocEntry('m2')],
+  };
+  const { groups: agreeing, documentGroupsSplitByContentHash: agreeingSplitCount } = splitDocumentGroupsByContentHash(
+    [agreeingGroup],
+    { m1: 'same-hash', m2: 'same-hash' }
+  );
+  assert(
+    agreeing.length === 1 && agreeing[0] === agreeingGroup,
+    'a group whose known hashes all agree passes through unchanged (genuinely confirmed duplicate, nothing to split)'
+  );
+  assert(agreeingSplitCount === 0, 'no split reported when nothing disagrees');
+  assert(
+    agreeing[0].contentHashConfirmed === true,
+    'a real fix (2026-08-22): a no-split "everyone genuinely agrees" group is still marked contentHashConfirmed, so the UI shows the byte-identical confirmation instead of silently showing the same button again'
+  );
+
+  const { groups: noHashData } = splitDocumentGroupsByContentHash([sixVaccineGroup], {});
+  assert(
+    noHashData.length === 1 && noHashData[0] === sixVaccineGroup,
+    'no hash data fetched at all (check not yet run) leaves the group untouched, never guessed'
+  );
+  assert(
+    !noHashData[0].contentHashConfirmed,
+    'no hash data at all must NOT be marked confirmed — nothing was actually learned'
+  );
+
+  const { groups: nonDocPassthrough } = splitDocumentGroupsByContentHash([{ kind: 'note', entries: [] }], {});
+  assert(
+    nonDocPassthrough.length === 1 && nonDocPassthrough[0].kind === 'note',
+    'non-document groups are never touched'
+  );
+}
+
+console.log('\n--- sameFileTypeAndSize flag propagation ---');
+{
+  // splitDocumentGroupsByFileType: confirmed same only when at least 2
+  // members genuinely have BOTH a known fileType and a known fileSize that
+  // agree — feeds splitDocumentGroupsByContentHash's own gate.
+  const confirmedGroup = {
+    kind: 'document',
+    date: 'd',
+    code: 'c',
+    tier: TIER.REVIEW,
+    gp2gpWrapper: false,
+    recordedByVaries: false,
+    recordedByOrganisationVaries: false,
+    keeperEntryId: null,
+    entries: [
+      { id: 'p1', kind: 'document', date: 'd', code: 'c', rawText: 'x', recordedBy: null, idTime: 1 },
+      { id: 'p2', kind: 'document', date: 'd', code: 'c', rawText: 'x', recordedBy: null, idTime: 2 },
+    ],
+  };
+  const { groups: confirmed } = splitDocumentGroupsByFileType(
+    [confirmedGroup],
+    { p1: 'pdf', p2: 'pdf' },
+    { p1: '10 KB', p2: '10 KB' }
+  );
+  assert(
+    confirmed[0].sameFileTypeAndSize === true,
+    'both fileType and fileSize known and agreeing marks the group sameFileTypeAndSize'
+  );
+
+  const { groups: typeOnly } = splitDocumentGroupsByFileType([confirmedGroup], { p1: 'pdf', p2: 'pdf' }, {});
+  assert(
+    typeOnly[0].sameFileTypeAndSize === false,
+    'fileType known but fileSize entirely unknown does NOT count as confirmed — no evidence size actually matches'
+  );
+
+  // findFileMatchedDuplicates: always confirmed by construction (its
+  // bucket key requires both fileType and fileSize truthy).
+  const fileMatchEntries = [
+    { id: 'fm1', kind: 'document', date: 'd1', code: 'c', rawText: 'x', recordedBy: null, idTime: 1 },
+    { id: 'fm2', kind: 'document', date: 'd2', code: 'c', rawText: 'x', recordedBy: null, idTime: 2 },
+  ];
+  const { groups: fileMatched } = findFileMatchedDuplicates(
+    fileMatchEntries,
+    [],
+    { fm1: 'pdf', fm2: 'pdf' },
+    { fm1: '10 KB', fm2: '10 KB' },
+    {},
+    {}
+  );
+  assert(
+    fileMatched.length === 1 && fileMatched[0].sameFileTypeAndSize === true,
+    'a cross-record file-matched group is always confirmed sameFileTypeAndSize by construction'
+  );
+}
+
 console.log('\n--- Note/consultation entries carry sibling attachment ids from flattenJournal (2026-07-13) ---');
 {
   const attachDayGroups = [
@@ -2881,6 +3215,460 @@ console.log('\n--- External links (buildCareRecordJournalUrl / buildDocumentDown
   );
   assert(buildDocumentDownloadUrl(null, 'file-1') === null, 'buildDocumentDownloadUrl refuses a missing apiBase');
   assert(buildDocumentDownloadUrl(apiBase, null) === null, 'buildDocumentDownloadUrl refuses a missing fileId');
+}
+
+console.log('\n--- Investigation (lab result) duplicate detection (2026-08-22) ---');
+{
+  // The confirmed real cluster this feature was built from: same conceptId,
+  // same specimenCollectionDate to the minute, same resultValue, distinct
+  // investigationReportIds (the live capture had 14 copies; three suffice
+  // here to prove the group forms and everything remains a member). Single-
+  // analyte reports, so matchedCount === totalCount === 1 for every report —
+  // trivially a full match, which is exactly right (Medicus itself shows
+  // this as one report card, not one per analyte — see
+  // buildInvestigationReportGroups).
+  const invDupDayGroups = [
+    {
+      title: 'Tue 11 Jan 2005',
+      items: [
+        flatInvestigationItem('inv-report-1', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-1',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              '2005-01-11 14:15:00',
+              'report-a'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-2', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-2',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              '2005-01-11 14:15:00',
+              'report-b'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-3', [
+          investigationGroup('U&Es', [
+            // Same conceptId, different free-text label — real finding:
+            // description varies ("CREATININE" vs "Serum creatinine") across
+            // copies of the same duplicated result; conceptId doesn't.
+            investigationResult(
+              'inv-res-3',
+              '1000731000000107',
+              'CREATININE',
+              '97',
+              'µmol/L',
+              '2005-01-11 14:15:00',
+              'report-c'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const invDupResult = analyzeJournal(invDupDayGroups);
+  assert(
+    !invDupResult.groups.some((g) => g.kind === 'investigation'),
+    'Investigation groups no longer appear in the generic groups list — rolled up into investigationReportGroups instead'
+  );
+  assert(
+    invDupResult.investigationReportGroups.length === 1,
+    'Three same-concept, same-minute, same-value investigation results roll up into one report-level candidate group'
+  );
+  const invDupGroup = invDupResult.investigationReportGroups[0];
+  assert(invDupGroup.reportIds.length === 3, 'All three distinct reports are members of the report group');
+  assert(invDupGroup.fullMatch === true, 'Every result in every report is accounted for — a full, safe-to-remove match');
+  assert(
+    invDupResult.summary.investigationReportGroupsTotal === 1 &&
+      invDupResult.summary.investigationFullMatchReportGroupsTotal === 1,
+    'Summary counts reflect one report group, one of which is a full match'
+  );
+
+  // Legitimate same-day, different-time, different-value pair (the real
+  // 2026-08-20 AKI-recheck creatinine example) — must NOT collide into one
+  // candidate group just because both fall on the same calendar day.
+  const sameDayDifferentTimeDayGroups = [
+    {
+      title: 'Thu 20 Aug 2026',
+      items: [
+        flatInvestigationItem('inv-report-4', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-4',
+              '1000731000000107',
+              'Serum creatinine',
+              '116',
+              'µmol/L',
+              '2026-08-20 11:00:00',
+              'report-d'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-5', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-5',
+              '1000731000000107',
+              'Serum creatinine',
+              '115',
+              'µmol/L',
+              '2026-08-20 19:42:00',
+              'report-e'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const sameDayResult = analyzeJournal(sameDayDifferentTimeDayGroups);
+  assert(
+    sameDayResult.investigationReportGroups.length === 0,
+    'A same-day, different-time, different-value repeat test never forms a report group — exact collection minute is the grouping key, not the calendar day'
+  );
+
+  // Genuinely ambiguous case: same concept, same EXACT collection minute,
+  // but a DIFFERENT result value — must be suppressed, not surfaced at a
+  // lower tier for manual review (explicit "unambiguous clusters only"
+  // product decision).
+  const ambiguousDayGroups = [
+    {
+      title: 'Sun 1 Jun 2005',
+      items: [
+        flatInvestigationItem('inv-report-6', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-6',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              '2005-06-01 09:00:00',
+              'report-f'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-7', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-7',
+              '1000731000000107',
+              'Serum creatinine',
+              '150',
+              'µmol/L',
+              '2005-06-01 09:00:00',
+              'report-g'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const ambiguousResult = analyzeJournal(ambiguousDayGroups);
+  assert(
+    ambiguousResult.investigationReportGroups.length === 0,
+    'Same concept + same exact collection minute but a DIFFERENT result value is suppressed, not surfaced as a report group'
+  );
+  assert(
+    ambiguousResult.summary.suppressedInvestigationAmbiguousTotal === 1,
+    'The ambiguous exclusion is tracked in the suppressed-investigation-ambiguous diagnostic, not silently dropped'
+  );
+
+  // A result with no collection timestamp at all must be skipped rather
+  // than grouped under a shared null-date key.
+  const noTimestampDayGroups = [
+    {
+      title: 'Tue 11 Jan 2005',
+      items: [
+        flatInvestigationItem('inv-report-8', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-8',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              null,
+              'report-h'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-9', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-9',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              null,
+              'report-i'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const noTimestampResult = analyzeJournal(noTimestampDayGroups);
+  assert(
+    noTimestampResult.investigationReportGroups.length === 0,
+    'Results with no collection timestamp are skipped entirely, never grouped under a shared null-date key'
+  );
+
+  // No write contract exists for a single investigation RESULT (Medicus's
+  // own removal operates at report level) — investigation must stay a
+  // read-only recommendation via the generic per-entry contract table;
+  // report-level removal has its own dedicated function, tested below.
+  assert(
+    isRemovableKind('investigation') === false,
+    'investigation has no generic per-entry write contract — report-level removal is a separate, dedicated path'
+  );
+
+  // Only one occurrence at all — never a candidate group (shared <2-member rule).
+  const singleResultDayGroups = [
+    {
+      title: 'Tue 11 Jan 2005',
+      items: [
+        flatInvestigationItem('inv-report-10', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-10',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              '2005-01-11 14:15:00',
+              'report-j'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const singleResult = analyzeJournal(singleResultDayGroups);
+  assert(
+    singleResult.investigationReportGroups.length === 0,
+    'A single investigation result, with nothing to compare against, never forms a report group'
+  );
+
+  // Multi-analyte FULL match: two reports, each with two analytes
+  // (creatinine + sodium), every analyte matching between them — the
+  // "displayed as Medicus does" case: one card covering the whole panel,
+  // safe to offer for report-level removal.
+  const fullMatchDayGroups = [
+    {
+      title: 'Wed 12 Mar 2025',
+      items: [
+        flatInvestigationItem('inv-report-11', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-11a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-k'
+            ),
+            investigationResult(
+              'inv-res-11b',
+              '1000761000000109',
+              'Serum sodium',
+              '140',
+              'mmol/L',
+              '2025-03-12 09:00:00',
+              'report-k'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-12', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-12a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-l'
+            ),
+            investigationResult(
+              'inv-res-12b',
+              '1000761000000109',
+              'Serum sodium',
+              '140',
+              'mmol/L',
+              '2025-03-12 09:00:00',
+              'report-l'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const fullMatchResult = analyzeJournal(fullMatchDayGroups);
+  assert(
+    fullMatchResult.investigationReportGroups.length === 1,
+    'Two reports whose every analyte matches roll up into one report group'
+  );
+  const fullMatchGroup = fullMatchResult.investigationReportGroups[0];
+  assert(fullMatchGroup.analyteGroups.length === 2, 'Both analytes (creatinine and sodium) are part of the report group');
+  assert(fullMatchGroup.fullMatch === true, 'Both reports are fully accounted for — safe to remove');
+
+  // Multi-analyte PARTIAL match: two reports share a matching creatinine,
+  // but their sodium DIFFERS — this report pair must still surface (the
+  // creatinine match is real evidence) but must NOT be flagged as safe to
+  // bulk-remove, since one of the two reports may hold genuinely unique
+  // data the other doesn't.
+  const partialMatchDayGroups = [
+    {
+      title: 'Wed 12 Mar 2025',
+      items: [
+        flatInvestigationItem('inv-report-13', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-13a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-m'
+            ),
+            investigationResult(
+              'inv-res-13b',
+              '1000761000000109',
+              'Serum sodium',
+              '140',
+              'mmol/L',
+              '2025-03-12 09:00:00',
+              'report-m'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-14', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              'inv-res-14a',
+              '1000731000000107',
+              'Serum creatinine',
+              '90',
+              'µmol/L',
+              '2025-03-12 09:00:00',
+              'report-n'
+            ),
+            investigationResult(
+              'inv-res-14b',
+              '1000761000000109',
+              'Serum sodium',
+              '138',
+              'mmol/L',
+              '2025-03-12 09:00:00',
+              'report-n'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const partialMatchResult = analyzeJournal(partialMatchDayGroups);
+  assert(
+    partialMatchResult.investigationReportGroups.length === 1,
+    'A partially-matching report pair still surfaces as a candidate group (the creatinine match is real evidence)'
+  );
+  const partialMatchGroup = partialMatchResult.investigationReportGroups[0];
+  assert(
+    partialMatchGroup.analyteGroups.length === 1,
+    'Only the analyte that actually matches (creatinine) is part of the group — sodium differs, so it is excluded entirely'
+  );
+  assert(
+    partialMatchGroup.fullMatch === false,
+    'A report where not every result is matched is NOT flagged as safe to bulk-remove'
+  );
+  assert(
+    partialMatchResult.summary.investigationReportGroupsTotal === 1 &&
+      partialMatchResult.summary.investigationFullMatchReportGroupsTotal === 0,
+    'Summary counts distinguish a surfaced-but-not-safe group from a full-match one'
+  );
+
+  // Keeper selection: the earliest-created report (by UUIDv7 id timestamp
+  // of its own member results) is picked as the one to keep, same
+  // tie-breaker principle as every other kind's keeperEntryId — real
+  // UUIDv7 ids from confirmed live captures (2005-era vs 2026-era).
+  const keeperDayGroups = [
+    {
+      title: 'Tue 11 Jan 2005',
+      items: [
+        flatInvestigationItem('inv-report-15', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              '019236e3-e6b4-72a3-a219-00f42d2c075b',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              '2005-01-11 14:15:00',
+              'report-o'
+            ),
+          ]),
+        ]),
+        flatInvestigationItem('inv-report-16', [
+          investigationGroup('U&Es', [
+            investigationResult(
+              '01a02250-4f82-717b-b1c2-6c2dd20f3c5b',
+              '1000731000000107',
+              'Serum creatinine',
+              '97',
+              'µmol/L',
+              '2005-01-11 14:15:00',
+              'report-p'
+            ),
+          ]),
+        ]),
+      ],
+    },
+  ];
+  const keeperResult = analyzeJournal(keeperDayGroups);
+  assert(
+    keeperResult.investigationReportGroups[0].keeperReportId === 'report-o',
+    'The report whose member result has the earlier UUIDv7 timestamp is picked as the keeper'
+  );
+}
+
+console.log('\n--- buildInvestigationReportRemovalRequest (report-level write contract) ---');
+{
+  const apiBase = 'https://e38a9f.api.england.medicus.health';
+  const req = buildInvestigationReportRemovalRequest(apiBase, 'report-a', 'Removing duplicate report');
+  assert(
+    req.url === 'https://e38a9f.api.england.medicus.health/clinical/investigation/mark-incorrect-and-hidden',
+    'Posts to the confirmed live-captured endpoint'
+  );
+  assert(req.method === 'POST', 'Uses POST');
+  assert(
+    req.body.investigationReportId === 'report-a' &&
+      req.body.reason === 'Removing duplicate report' &&
+      req.body.isConfirmedRemoval === true,
+    'Body matches the confirmed real capture exactly: investigationReportId + reason + isConfirmedRemoval'
+  );
+  assert(
+    buildInvestigationReportRemovalRequest(null, 'report-a', 'reason') === null,
+    'Refuses a missing apiBase'
+  );
+  assert(buildInvestigationReportRemovalRequest(apiBase, null, 'reason') === null, 'Refuses a missing reportId');
+  assert(buildInvestigationReportRemovalRequest(apiBase, 'report-a', '') === null, 'Refuses a blank reason');
+  assert(
+    buildInvestigationReportRemovalRequest(apiBase, 'report-a', '   ') === null,
+    'Refuses a whitespace-only reason'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
