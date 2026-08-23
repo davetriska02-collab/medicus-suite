@@ -258,6 +258,22 @@ check(
 );
 check(DomContracts.selectorsFor('nonexistent.contract') === null, 'selectorsFor() returns null for an unknown id');
 
+// A1 SLA canary must not probe results queues (Created column, no chip).
+const slaHost = DomContracts.get('queue.sla-host');
+check(!!slaHost && slaHost.pageMatch instanceof RegExp, 'queue.sla-host has a pageMatch');
+check(
+  slaHost.pageMatch.test('/tasks/medical_patient_request_task/task-list'),
+  'queue.sla-host pageMatch applies on a request queue'
+);
+check(
+  !slaHost.pageMatch.test('/tasks/investigation_result_task/task-list'),
+  'queue.sla-host pageMatch skips investigation_result slugs'
+);
+check(
+  !slaHost.pageMatch.test('/tasks/lab-results/task-list'),
+  'queue.sla-host pageMatch skips result slugs'
+);
+
 // ============================================================
 // 2. Fixture coverage — id → { current, legacy: [...] }
 // ============================================================

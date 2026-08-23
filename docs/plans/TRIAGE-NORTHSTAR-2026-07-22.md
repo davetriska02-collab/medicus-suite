@@ -27,6 +27,13 @@ Two items were added from the same-day Practice-board and GP-panel reviews:
 C4 and C5 below, plus the cross-cutting role-visibility question under
 "Regulatory & safety programme".
 
+**Status update (2026-08-23, v3.239.0):** the duty-doctor cockpit tranche is
+on the Pulse (v3.236.4+): A1 Created-column SLA chips, A2/E-1.2 huddle on
+the existing status bar + `#slaBreachStrip`, Pulse-specific E-1.1 dashed
+rail, hollow silent diamond for B2/B4 headlines, C4 prepare-only Book
+snippet + local Park. Still out: B1 context headlines, C1 queue lens, C2
+batch packs. No new CSN §6.1 write. H-063 / H-064 Proposed.
+
 ---
 
 ## Why now — the market context in five lines

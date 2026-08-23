@@ -176,12 +176,15 @@
     {
       id: 'queue.sla-host',
       description:
-        'Where the A1 contract-clock chip is prepended: the Created column cell. SLA never owns the clinical rail — it is a mono deadline echo of Medicus priorityDisplay + createdAt.',
+        'Where the A1 contract-clock chip is prepended: the Created column cell. SLA never owns the clinical rail — it is a mono deadline echo of Medicus priorityDisplay + createdAt. Request queues only — decorateOneRow skips investigation/result slugs (isResultQueueSlug), so a Created column with no chip on those lists is expected, not a degradation.',
       feature: 'Queue SLA / contract-clock chip (.ch-q-sla)',
       degradation:
         'contract-clock chips stop injecting into the Created column, so the duty GP cannot scan remaining SLA time without opening each request.',
       source: 'content-scripts/triage-lens/content.js (decorateOneRow createdAt inject)',
-      pageMatch: /\/tasks\/[^/]+\/task-list/,
+      // Same /task-list shape as the other queue contracts, but exclude
+      // investigation/result slugs so the canary cannot amber the health
+      // strip on a results queue (Created column present, no .ch-q-sla).
+      pageMatch: /\/tasks\/(?![^/]*(?:investigation|result)[^/]*)[^/]+\/task-list/i,
       anchor: '[col-id="createdAt"]',
       target: ['.ch-q-sla'],
       legacy: [],
