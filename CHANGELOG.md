@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.238.4] — 2026-08-23
+
+### Task-actions panel — H-043 / triage-classifier regression lock
+
+Review of the v3.238.2/3 floating-panel merge. The W2/W5 write contracts and
+H-043 guards (pin-across-await, commit-time re-verify, reservation release
+on navigation) were already present; they were not CI-pinned. New
+`test-task-actions-panel.js` extracts `classifyPatientRequest` /
+`isCommunicationThreadSlug` / `getTaskInfo` and locks: medical/admin
+requests show the Patient-record section; repeat-prescription /
+questionnaire / conversation / missing-type fail closed; reply-only
+communications are skipped; `doConfirmBooking` / `doCreateTask` re-resolve
+the patient BEFORE the write and abort on task-UUID or patient mismatch;
+an orphan reservation is released on navigation. Unused-booking-link and
+future-appointment headings now name their count (a 97-link history is
+otherwise a silent scroll). H-043's title/description and H-049 (f)'s
+precedent citation updated so they no longer imply the reception composer
+lives in the task panel.
+
 ## [v3.238.3] — 2026-08-23
 
 ### "Patient record" section in the task actions panel — triage requests only

@@ -4,9 +4,10 @@
 // Phase D1 of docs/plans/RECEPTION-FEEDBACK-2026-07-28.md ("no third copy"):
 // the six /scheduling/* endpoint functions used to live in
 // side-panel/modules/slots/booking-api.js, and a divergent hand-copy of the
-// same flow lives in content-scripts/booking-inline.js. This file is the ONE
-// copy; booking-api.js is now a thin re-export shim (plus the slots-only tab /
-// patient detection), and booking-inline.js adopts it in a later phase.
+// same flow lives in content-scripts/task-actions-panel.js (formerly
+// booking-inline.js). This file is the ONE copy; booking-api.js is now a thin
+// re-export shim (plus the slots-only tab / patient detection). The task-page
+// panel still hand-rolls the flow — a pre-existing divergence, not a new one.
 //
 // Endpoint paths and payload field names in here are byte-for-byte what the
 // live Medicus API expects — do not "tidy" them. Tests pin them.

@@ -610,11 +610,15 @@
     return (
       '<div class="ms-tap-section-body">' +
       '<div class="ms-tap-rec-group">' +
-      '<div class="ms-tap-rec-heading">Future appointments</div>' +
+      '<div class="ms-tap-rec-heading">Future appointments' +
+      (rec.appointments.length ? ' (' + rec.appointments.length + ')' : '') +
+      '</div>' +
       apptsHtml +
       '</div>' +
       '<div class="ms-tap-rec-group">' +
-      '<div class="ms-tap-rec-heading">Unused booking links</div>' +
+      '<div class="ms-tap-rec-heading">Unused booking links' +
+      (rec.bookingLinks.length ? ' (' + rec.bookingLinks.length + ')' : '') +
+      '</div>' +
       linksHtml +
       '</div>' +
       '</div>'

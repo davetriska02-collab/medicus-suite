@@ -136,7 +136,7 @@ The full **Rota Manager** (separate browser tab) additionally covers working-pat
 These run directly on live Medicus pages, on top of Medicus's own UI:
 
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue; compresses into a compact "pulse" display on busy queues.
-- **Inline booking and task creation** — appointment-booking and create-task panels injected directly on patient and task pages, using Medicus's own scheduling and task-creation controls.
+- **Task-page actions panel** — a floating Book-appointment / Create-task panel on task overview pages (Medicus's own scheduling and task-creation endpoints), plus a read-only future-appointments and unused-booking-links section on medical/admin patient requests.
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document; a checklist that turns a document's coded journal entries into new Problems.
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit.
 - **Clean up code** — flags outdated or retired SNOMED problem-list codes, suggests a cleaner code or description, and can sync a cleaned-up code or text into a matching consultation-note entry, with one-click undo.
