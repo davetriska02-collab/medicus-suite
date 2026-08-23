@@ -24,6 +24,9 @@ An adversarial review of the v3.236.5–.15 merge found the organise canvas's fa
 - Bulk-acknowledge URL matching re-anchored (siteId must be the first path segment); an aborted drag of the codes-to-problems panel header no longer swallows the next collapse click.
 
 Tests: `test-appointment-organise-core.js` grows to 241 checks (destination-taken, oversize drop, post-cancel restore both ways, release failures, pre-flight, fail-closed identity, day naming, notify no-op); `test-queue-pulse.js`, `test-task-bulk-action.js`, `test-document-codes-to-problems.js` extended.
+
+Clinical safety: CSO sign-off recorded 2026-08-23 (Dr D. Triska, in session) — `HAZARD-LOG.md` v3.28 (H-062 Accepted (ALARP); the "do not use on a live weekday clinic" restriction is lifted), `CLINICAL-SAFETY-NOTICE.md` doc version 3.21, and `docs/cso-review-ledger.json` updated.
+
 ## [v3.237.0] — 2026-08-23
 
 ### The Keeper (expanded) — top 10 missing clinical rules implemented
