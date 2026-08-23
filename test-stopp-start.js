@@ -617,6 +617,18 @@ console.log('\n--- 2026-08-22 Keeper: START H4 bone protection (osteoporosis / f
   assert(!find(flags, 'start_bone_protection_osteoporosis'), 'START H4 does NOT fire: family history of osteoporosis (negated)');
 }
 {
+  // '?osteoporosis' — query-diagnosis shorthand is a negation cue (review fix
+  // 2026-08-23: the original /\b\?/ pattern never matched a leading '?'
+  // because no word boundary exists before a non-word char)
+  const flags = computeStoppStart({
+    drugs: [],
+    problems: [{ name: '?osteoporosis' }],
+    ageYears: 60,
+    egfr: null,
+  });
+  assert(!find(flags, 'start_bone_protection_osteoporosis'), "START H4 does NOT fire: '?osteoporosis' (query diagnosis negated)");
+}
+{
   // 'history of fragility fracture' is NOT treated as negation — H4 targets
   // exactly that history (pure-history cues deliberately omitted from the matcher)
   const flags = computeStoppStart({
@@ -717,6 +729,17 @@ console.log('\n--- 2026-08-22 Keeper: STOPP L2/START K2 opioid without laxative 
   // Tramadol IS in STRONG_OPIOID_TERMS (deliberate — regular use constipates)
   const flags = computeStoppStart({ drugs: ['tramadol 50mg capsules'], problems: [], ageYears: 60, egfr: null });
   assert(!!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 fires: tramadol (included, pinned as deliberate)');
+}
+{
+  // Apomorphine (dopamine agonist, Parkinson's) substring-contains 'morphine'
+  // but is NOT an opioid — excluded via STRONG_OPIOID_NOT (review fix 2026-08-23)
+  const flags = computeStoppStart({
+    drugs: ['apomorphine 10mg/ml solution for infusion (APO-go)'],
+    problems: [],
+    ageYears: 72,
+    egfr: null,
+  });
+  assert(!find(flags, 'stopp_opioid_no_laxative'), 'STOPP L2 does NOT fire: apomorphine (not an opioid — substring collision excluded)');
 }
 
 // ── Summary ──────────────────────────────────────────────────────────────

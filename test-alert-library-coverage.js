@@ -288,6 +288,10 @@ check(
   'codeine linctus + diazepam does NOT fire (linctus exclude holds)'
 );
 check(
+  !comboFires('mhra-opioid-cns-depressant', ['Apomorphine 10mg/ml solution for infusion (APO-go)', 'Zopiclone 7.5mg tablets'], {}),
+  'apomorphine + zopiclone does NOT fire (apomorphine exclude holds — dopamine agonist, not an opioid; review fix 2026-08-23)'
+);
+check(
   comboFires('mhra-valproate-male-u55', ['Epilim 500mg tablets'], { ageYears: 30, sex: 'M' }),
   'valproate male <55 fires: Epilim in a 30yo male'
 );

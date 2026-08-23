@@ -282,6 +282,10 @@
   // DELIBERATELY excluded in this first version to control false positives
   // (huge, mostly-PRN prescribing volume) — extend later if flag volume
   // tolerates it. The exclusion is pinned by test-stopp-start.js.
+  // NOT-opioids that substring-collide with a term below: apomorphine
+  // (dopamine agonist for Parkinson's — contains 'morphine'). A drug whose
+  // name hits this list never counts as an opioid.
+  const STRONG_OPIOID_NOT = ['apomorphine'];
   const STRONG_OPIOID_TERMS = [
     'morphine',
     'zomorph', // morphine MR brand
@@ -391,6 +395,16 @@
     });
   }
 
+  // hasDrug variant with a not-list: a drug whose name hits any `notTerms`
+  // entry is skipped entirely (apomorphine-vs-'morphine' substring collision)
+  function hasDrugExcluding(drugs, terms, notTerms) {
+    return drugs.some((d) => {
+      const n = drugName(d);
+      if (notTerms.some((x) => n.includes(x))) return false;
+      return terms.some((t) => n.includes(t));
+    });
+  }
+
   // True if any problem matches any of the given terms
   function hasProblem(problems, terms) {
     return problems.some((p) => {
@@ -423,7 +437,10 @@
     /\bat risk of\s+/,
     /\brisk of\s+/,
     /\bquery\s+/,
-    /\b\?/,
+    // Bare '?' (query-diagnosis shorthand: '?osteoporosis'). No \b prefix —
+    // there is no word boundary between start-of-string and a non-word char,
+    // so /\b\?/ would never match the common leading-'?' form.
+    /\?/,
   ];
   // How close (in characters) a negation cue's END must be to the matched term
   // for it to negate the match. Bounds the cue to the words immediately before
@@ -768,7 +785,7 @@
     // dosing is unknowable from a snapshot, so that caveat is carried in the
     // detail text. Weak opioids (codeine/co-codamol) deliberately excluded —
     // see STRONG_OPIOID_TERMS comment.
-    if (hasDrug(drugs, STRONG_OPIOID_TERMS) && !hasDrug(drugs, LAXATIVE_TERMS)) {
+    if (hasDrugExcluding(drugs, STRONG_OPIOID_TERMS, STRONG_OPIOID_NOT) && !hasDrug(drugs, LAXATIVE_TERMS)) {
       flags.push({
         id: 'stopp_opioid_no_laxative',
         kind: 'stopp',
