@@ -28,6 +28,7 @@ export const CALL_MAIN_QUESTION_IDS = {
   'gu-male': ['area', 'dysuria', 'luts'],
   'gyn-female': ['bleeding', 'pain', 'discharge'],
   'mental-health': ['who-with', 'known-team'],
+  'fever-adult': ['temp', 'localising', 'conditions'],
 };
 
 export const CALL_MAIN_CLOSING_IDS = ['wants', 'contact'];

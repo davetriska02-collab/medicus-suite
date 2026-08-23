@@ -411,5 +411,95 @@ check(chol003Pad && chol003Pad.indicatorCode === 'CHOL003', 'qof-chol003-pad has
 check(chol004Pad && chol004Pad.indicatorCode === 'CHOL004', 'qof-chol004-pad has indicatorCode CHOL004');
 check(chol003Ckd && chol003Ckd.indicatorCode === 'CHOL003', 'qof-chol003-ckd has indicatorCode CHOL003');
 
+// ── 2026-08-22 Keeper: SMI physical-health suite (MH002/003/006/007/012) ─────
+console.log('\n--- SMI physical-health suite (MH002/MH003/MH006/MH007/MH012, new 2026-08-22) ---');
+const smiReg = qof.rules.find((r) => r.registerCode === 'SMI');
+const smiSuite = {
+  MH002: { points: 5, lower: 40 },
+  MH003: { points: 3, lower: 50 },
+  MH006: { points: 3, lower: 50 },
+  MH007: { points: 3, lower: 50 },
+  MH012: { points: 7, lower: 50 },
+};
+Object.entries(smiSuite).forEach(([code, exp]) => {
+  const r = qof.rules.find((x) => x.indicatorCode === code);
+  check(!!r && r.enabled === true, `${code} exists and is enabled`);
+  check(r && r.requiresRegister === 'SMI', `${code} scoped to SMI register`);
+  check(r && r.check && r.check.kind === 'observation-recent', `${code} uses observation-recent`);
+  check(
+    r && r.check && r.check.withinDays === 365,
+    `${code} has a flat 12-month window (withinDays 365, no MH011-style split)`
+  );
+  check(r && r.points === exp.points, `${code} points = ${exp.points}`);
+  check(
+    r && r.thresholds && r.thresholds.lower === exp.lower && r.thresholds.upper === 90,
+    `${code} thresholds ${exp.lower}-90%`
+  );
+});
+
+// MH012 diabetes exclusion must never be bare "diabetes" (would catch insipidus/gestational).
+const mh012 = qof.rules.find((r) => r.indicatorCode === 'MH012');
+check(
+  Array.isArray(mh012.excludeIfProblem) && mh012.excludeIfProblem.length > 0,
+  'MH012 carries an excludeIfProblem diabetes exclusion'
+);
+check(
+  mh012.excludeIfProblem.every((t) => t !== 'diabetes'),
+  'MH012 exclusion terms never include bare "diabetes"'
+);
+
+// End-to-end through evaluateQofIndicatorRule with the REAL rules + SMI register.
+// NOW is Feb so a 6-month-old observation sits inside the current QOF year
+// (started 1 Apr 2026) — the default useQofYearFloor applies to these rules.
+const SMI_NOW = '2027-02-01T12:00:00Z';
+const smiEval = (rule, data) =>
+  engine.evaluateQofIndicatorRule(
+    rule,
+    {
+      medications: [],
+      observations: [],
+      problems: [{ label: 'Schizophrenia' }],
+      patientContext: {},
+      _registerLookup: { SMI: smiReg },
+      ...data,
+    },
+    SMI_NOW
+  );
+const mh003 = qof.rules.find((r) => r.indicatorCode === 'MH003');
+{
+  // BP recorded 6 months ago (2026-08-01) → achieved
+  const chips = smiEval(mh003, { observations: [{ name: 'Blood pressure', value: '128/82', date: '2026-08-01' }] });
+  check(chips.length === 1 && chips[0].status === 'achieved', 'MH003: SMI patient with BP 6 months old → achieved');
+}
+{
+  // BP recorded 18 months ago (2025-08-01) → overdue
+  const chips = smiEval(mh003, { observations: [{ name: 'Blood pressure', value: '128/82', date: '2025-08-01' }] });
+  check(chips.length === 1 && chips[0].status === 'overdue', 'MH003: SMI patient with BP 18 months old → overdue');
+}
+{
+  // Not on the SMI register → no chip at all
+  const chips = smiEval(mh003, { problems: [{ label: 'Asthma' }] });
+  check(chips.length === 0, 'MH003: non-SMI patient raises no chip (register precondition)');
+}
+{
+  // SMI patient with coded type 2 diabetes → MH012 excluded (no chip)
+  const chips = smiEval(mh012, {
+    problems: [{ label: 'Schizophrenia' }, { label: 'Type 2 diabetes mellitus' }],
+    observations: [{ name: 'HbA1c', value: '52', date: '2026-08-01' }],
+  });
+  check(chips.length === 0, 'MH012: SMI patient with coded type 2 diabetes → excluded (no chip)');
+}
+{
+  // Diabetes insipidus is NOT diabetes mellitus → MH012 must still fire
+  const chips = smiEval(mh012, {
+    problems: [{ label: 'Schizophrenia' }, { label: 'Diabetes insipidus' }],
+    observations: [{ name: 'HbA1c', value: '38', date: '2026-08-01' }],
+  });
+  check(
+    chips.length === 1 && chips[0].status === 'achieved',
+    'MH012: diabetes insipidus does NOT exclude (bare-"diabetes" trap avoided)'
+  );
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

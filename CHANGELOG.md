@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.236.26] — 2026-08-23
+## [v3.237.1] — 2026-08-23
 
 ### Signed .crx packaging for managed (IT policy) installs
 
@@ -17,6 +17,62 @@ policy-deployed installs auto-update from
 (Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
 `git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
 into a package.
+
+## [v3.237.0] — 2026-08-23
+
+### The Keeper (expanded) — top 10 missing clinical rules implemented
+
+Implements the ten highest-value missing rules identified by the
+2026-08-22 expanded Keeper gap analysis (`docs/keeper/KEEPER-GAP-ANALYSIS-2026-08-22.md`),
+ranked by clinical impact × frequency × feasibility. All additive; every
+rule carries its source and a test lock-in. **Pending CSO sign-off on the
+review PR before release** — clinical rule changes are never auto-merged.
+
+New rules:
+
+- **Reception pathways**: `fever-adult` (adult fever incl. neutropenic
+  sepsis — NICE CG151; clinician-only, 8 red flags) plus an
+  `rf-chemo-fever` 999 flag on `feverish-child`. The pathways file
+  previously had no chemotherapy question anywhere.
+- **Drug monitoring**: `thiazide-diuretic-ue` (annual + post-initiation
+  U&E, 22-term brand set incl. combo brands) and `denosumab-calcium`
+  (calcium before each 6-monthly dose per MHRA 2014, 25-term set
+  covering the post-patent biosimilar landscape).
+- **Alerts**: `mhra-opioid-cns-depressant` (opioid + benzodiazepine/
+  Z-drug/gabapentinoid respiratory depression — MHRA 2020/2017/2021)
+  and `mhra-valproate-male-u55` (MHRA Jan 2024 regulatory measures;
+  female rule's brand list extended in step).
+- **QOF**: the SMI physical-health suite — MH002 care plan, MH003 BP,
+  MH006 BMI, MH007 alcohol, MH012 glucose/HbA1c (diabetes excluded via
+  `excludeIfProblem`, never bare "diabetes") — 21 points on the SMI
+  register alongside the existing MH011.
+- **Vaccines**: `vax-pneumo-risk-u65` (PCV20 clinical risk groups 2–64,
+  Green Book ch 25 — asplenia cohort was previously invisible) and
+  `vax-shingles-immuno` (Shingrix, severely immunosuppressed 18+, no
+  upper age limit, per the NHSE/UKHSA Jul 2025 letter); corrected the
+  stale engine-limitation sentence in `vax-shingles` notes.
+- **STOPP/START**: `start_bone_protection_osteoporosis` (START H4),
+  `start_bone_protection_steroid` (START H2, degraded presence-only
+  with the duration caveat stated in the detail text), and
+  `stopp_opioid_no_laxative` (STOPP L2/START K2; Targinact self-covered
+  via naloxone).
+
+Fixes shipped in the same batch:
+
+- 🔴 **Lithium brand blindness in `pincer-12` and
+  `nice-lithium-monitoring`**: both matched only the substring
+  "lithium", so brand-only Priadel/Camcolit/Liskonum/Li-Liquid scripts
+  never fired either alert. Brand lists now match `drug-rules.json`.
+- **Engine**: vaccine `register`-kind eligibility clauses now honour
+  `ageMin`/`ageMax` (previously only problem/medication clauses did) —
+  required so `vax-pneumo-risk-u65`'s register clause cannot double-fire
+  with the 65+ rule.
+- **Engine**: `stopp-start.js` gains a negation-aware problem matcher
+  (lock-step with `rules-engine.js` semantics) so "family history of
+  osteoporosis" cannot fire the new START H4 criterion.
+
+Full test suite green (390 files, 0 failures); every new rule is pinned
+in its domain's coverage/regression test per repo convention.
 
 ## [v3.236.25] — 2026-08-22
 

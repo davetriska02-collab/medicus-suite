@@ -187,6 +187,48 @@ const EXPECTED = {
   ],
   'fezolinetant-lft': [
     'Fezolinetant 45mg tablets', 'Veoza 45mg tablets'
+  ],
+  // 2026-08-22 Keeper gap analysis — new monitoring rules
+  'thiazide-diuretic-ue': [
+    'Indapamide 2.5mg tablets', 'Natrilix SR 1.5mg tablets', 'Alkapamid XL 1.5mg tablets',
+    'Cardide SR 1.5mg tablets', 'Rawel XL 1.5mg prolonged-release tablets',
+    'Bendroflumethiazide 2.5mg tablets', 'Aprinox 2.5mg tablets', 'Neo-Naclex 5mg tablets',
+    'Chlortalidone 50mg tablets', 'Chlorthalidone 25mg tablets',
+    'Hydrochlorothiazide 25mg tablets', 'Xipamide 20mg tablets', 'Diurexan 20mg tablets',
+    'Metolazone 5mg tablets', 'Xaqua 5mg tablets',
+    'Cyclopenthiazide 500microgram tablets', 'Navidrex 500microgram tablets',
+    // combination brands carry hidden thiazide content — no generic substring, so
+    // each must be listed explicitly or it silently never fires
+    'Co-amilozide 5mg/50mg tablets', 'Moduretic 5/50 tablets',
+    'Co-triamterzide 50mg/25mg tablets', 'Co-tenidone 50mg/12.5mg tablets',
+    'Tenoret 50 tablets'
+  ],
+  'denosumab-calcium': [
+    'Denosumab 60mg solution for injection pre-filled syringe',
+    'Prolia 60mg solution for injection', 'Xgeva 120mg solution for injection vial',
+    // SPS biosimilar brand set (Nov 2025–Apr 2026) — denosumab is prescribed BY BRAND
+    'Stoboclo 60mg solution for injection pre-filled syringe',
+    'Jubbonti 60mg solution for injection pre-filled syringe',
+    'Obodence 60mg solution for injection pre-filled syringe',
+    'Osvyrti 60mg solution for injection pre-filled syringe',
+    'Conexxence 60mg solution for injection pre-filled syringe',
+    'Evfraxy 60mg solution for injection pre-filled syringe',
+    'Izamby 60mg solution for injection pre-filled syringe',
+    'Junod 60mg solution for injection pre-filled syringe',
+    'Kefdensis 60mg solution for injection pre-filled syringe',
+    'Ponlimsi 60mg solution for injection pre-filled syringe',
+    'Zadenvi 60mg solution for injection pre-filled syringe',
+    'Acvybra 60mg solution for injection pre-filled syringe',
+    'Bildyos 60mg solution for injection pre-filled syringe',
+    'Wyost 120mg solution for injection vial',
+    'Osenvelt 120mg solution for injection vial',
+    'Bomyntra 120mg solution for injection vial',
+    'Enwylma 120mg solution for injection vial',
+    'Jubereq 120mg solution for injection vial',
+    'Yaxwer 120mg solution for injection vial',
+    'Xbryk 120mg solution for injection vial',
+    'Vevzuo 120mg solution for injection vial',
+    'Denbrayce 120mg solution for injection vial'
   ]
 };
 
@@ -218,7 +260,12 @@ const MUST_NOT = [
   ['chc-combined-hormonal', 'Cerazette 75mcg tablets'],
   ['chc-combined-hormonal', 'Cerelle 75microgram tablets'],
   // Slinda (drospirenone POP) added to CHC exclude list — must not fire CHC rule
-  ['chc-combined-hormonal', 'Slinda 3mg tablets']
+  ['chc-combined-hormonal', 'Slinda 3mg tablets'],
+  // loop diuretics are covered by PINCER #10 in the alert library, not this rule
+  ['thiazide-diuretic-ue', 'Furosemide 40mg tablets'],
+  // amiloride ALONE is not a thiazide — only the co-amilozide combination fires
+  ['thiazide-diuretic-ue', 'Amiloride 5mg tablets'],
+  ['denosumab-calcium', 'Alendronic acid 70mg tablets']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');
