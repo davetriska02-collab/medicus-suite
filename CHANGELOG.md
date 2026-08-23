@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.34] — 2026-08-23
+
+### Architecture plan Phase 5.3 — observer-hub adoption
+
+- `appointment-organise-canvas.js` subscribes to `__chObserverHub` when
+  present and keeps a private `document.documentElement` observer as
+  fallback. Overlay/launcher `closest` filter is unchanged. Sentinel's
+  dedicated observer stays.
+
 ## [v3.236.33] — 2026-08-23
 
 ### Architecture plan Phase 5.2 — registry-driven backup IO

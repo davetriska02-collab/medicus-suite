@@ -1129,14 +1129,24 @@
     true
   );
 
-  var _mo = new MutationObserver(function (records) {
+  // Subscribe to the shared observer hub if present; else stand up a private
+  // observer (identical behaviour) so the launcher works even without the hub.
+  // Hub watches document.body; the fallback keeps document.documentElement so
+  // a launcher mounted on <html> is still seen when the hub is absent.
+  function onCanvasMutations(records) {
     for (var i = 0; i < records.length; i++) {
       var t = records[i].target;
       if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_ID))) return;
     }
     ensureLauncher();
-  });
-  _mo.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  var _hub = window.__chObserverHub;
+  if (_hub && _hub.subscribe) {
+    _hub.subscribe(onCanvasMutations);
+  } else {
+    var _mo = new MutationObserver(onCanvasMutations);
+    _mo.observe(document.documentElement, { childList: true, subtree: true });
+  }
   window.addEventListener('popstate', ensureLauncher);
   setInterval(ensureLauncher, 1500);
   ensureLauncher();

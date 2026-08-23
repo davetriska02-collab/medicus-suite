@@ -163,5 +163,25 @@ console.log('\n--- idempotent re-run ---');
   check(e.win.__chObserverHub === first, 're-running the hub source is a no-op (same instance kept)');
 }
 
+console.log('\n--- appointment-organise-canvas hub adoption ---');
+{
+  const canvas = fs.readFileSync(
+    path.join(__dirname, 'content-scripts', 'appointment-organise-canvas.js'),
+    'utf8'
+  );
+  check(
+    canvas.includes('window.__chObserverHub') && canvas.includes('_hub.subscribe'),
+    'appointment-organise-canvas.js subscribes to the shared hub when present'
+  );
+  check(
+    /new MutationObserver\(onCanvasMutations\)/.test(canvas),
+    'appointment-organise-canvas.js falls back to a private observer'
+  );
+  check(
+    canvas.includes("t.closest('#' + OVERLAY_ID)") || canvas.includes('t.closest(\'#\' + OVERLAY_ID)'),
+    'appointment-organise-canvas.js keeps the overlay/launcher closest filter'
+  );
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
