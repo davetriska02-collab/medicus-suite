@@ -20,6 +20,28 @@ async function triageExport() {
   return out;
 }
 
+// Sanitise an imported triage config before it is written (2026-08-22
+// clinical-safety audit): NEVER trust the backup's `version` integer. The
+// shipped-defaults migration (content.js/options.js mergeShippedDefaults) only
+// runs when the SHIPPED defaults version exceeds the stored one — so an import
+// carrying an inflated version (crafted, or from a newer install restored onto
+// an older one) would permanently strand this machine off every future shipped
+// rule/threshold/chip migration, silently. Dropping the key is safe and
+// self-healing: the merge treats it as version 0, re-runs (it is idempotent
+// and additive — stored user values always win), and re-stamps the shipped
+// version. The known list-shaped fields must also BE lists, or they are
+// rejected rather than written where the rules engine will iterate them.
+function sanitiseTriageConfigForImport(config) {
+  const out = Object.assign({}, config);
+  delete out.version;
+  for (const key of ['rules', 'resultRules', 'systemChips']) {
+    if (out[key] !== undefined && !Array.isArray(out[key])) {
+      throw new Error(`triagelens.config.${key} must be an array.`);
+    }
+  }
+  return out;
+}
+
 async function triageImport(data, _opts = {}) {
   if (!data || typeof data !== 'object') throw new Error('Triage data must be an object.');
   if (data.config === undefined) throw new Error('Triage data must have a config field.');
@@ -33,7 +55,7 @@ async function triageImport(data, _opts = {}) {
   // 2026-07-18: this used to be an early `return` that ALSO silently dropped
   // the routineRx restore below).
   if (Object.keys(data.config).length > 0) {
-    await chrome.storage.local.set({ 'triagelens.config': data.config });
+    await chrome.storage.local.set({ 'triagelens.config': sanitiseTriageConfigForImport(data.config) });
   }
   // Restore routine-prescription button prefs when present in the backup.
   if (data.routineRx && typeof data.routineRx === 'object' && !Array.isArray(data.routineRx)) {
@@ -50,5 +72,5 @@ async function triageImport(data, _opts = {}) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { triageExport, triageImport };
+  module.exports = { triageExport, triageImport, sanitiseTriageConfigForImport };
 }

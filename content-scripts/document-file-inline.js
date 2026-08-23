@@ -352,6 +352,10 @@
       loading: false,
       error: null,
       patientId: null,
+      // The task uuid patientId was resolved FROM — doCreate's commit-time
+      // re-verification (H-043 family) compares this against the task on
+      // screen at save time and aborts on mismatch.
+      resolvedForTaskUuid: null,
       // Cached once loaded — reused across every chip open/switch on this
       // task page, so switching between attachments never re-fetches it.
       reviewerAssigneeId: null,
@@ -767,7 +771,15 @@
       var info = getTaskInfo();
       if (info) {
         var overview = await fetchTaskOverview(info.typeSlug, info.taskUuid);
+        // H-043 family: if the SPA navigated to a DIFFERENT task while the
+        // overview fetch was in flight, discard the resolution — never bind a
+        // stale patient to the task now on screen (audit, 2026-08-22).
+        var nowInfo = getTaskInfo();
+        if (!nowInfo || nowInfo.taskUuid !== info.taskUuid) {
+          throw new Error('The task changed while loading — reopen the form on the task you want.');
+        }
         s.patientId = overview.patientId;
+        s.resolvedForTaskUuid = info.taskUuid;
         s.resolvedAttachments = overview.attachments;
       }
       if (!s.patientId) throw new Error('Could not determine the patient for this task.');
@@ -835,6 +847,20 @@
     s.createError = null;
     rerender();
     try {
+      // COMMIT-TIME RE-VERIFICATION (2026-08-22 clinical-safety audit — the
+      // same H-043 contract W2/W5 carry): the patient id was resolved when the
+      // form OPENED. Medicus is an SPA — the user may have navigated to a
+      // different task since. Immediately before the write, re-read the task
+      // from the URL and re-resolve its patient; abort on any mismatch rather
+      // than filing this document into the previously-open patient's record.
+      var commitInfo = getTaskInfo();
+      if (!commitInfo || (s.resolvedForTaskUuid && commitInfo.taskUuid !== s.resolvedForTaskUuid)) {
+        throw new Error('The task on screen changed since this form was opened — nothing was saved. Reopen the form on the task you want.');
+      }
+      var freshOverview = await fetchTaskOverview(commitInfo.typeSlug, commitInfo.taskUuid);
+      if (!freshOverview.patientId || freshOverview.patientId !== s.patientId) {
+        throw new Error('Could not re-confirm the patient for this task at save time — nothing was saved. Reopen the form and try again.');
+      }
       var downloadUrl = resolveAttachmentUrl(att, s.resolvedAttachments, apiBaseUrl());
       if (!downloadUrl) throw new Error("Could not locate this attachment's file — try reopening the task.");
       var resp = await fetch(downloadUrl, { credentials: 'include' });
