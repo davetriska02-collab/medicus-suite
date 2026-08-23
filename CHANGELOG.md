@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.37] — 2026-08-23
+
+### Architecture plan Phase 4.2 — content.js date helpers
+
+- `content-scripts/triage-lens/date-helpers.js` is the one MONTHS / NOW /
+  parseDate / monthsAgo / daysAgo implementation. content.js consumes it
+  (hard-throw if missing). `test-queue-injection-smoke.js` extracts those
+  helpers from the new file.
+- Phase 4.3–4.5 (OIR matcher, result-triage queue layer, HUD UI) are
+  **not** extracted in this PR: they need a live Medicus page-console
+  capture (peak/final chip counts) before they can ship. The queue
+  PREPEND / `_durableRowMap` / token-scope invariants stay in content.js
+  until that verify.
+
 ## [v3.236.36] — 2026-08-23
 
 ### Architecture plan Phase 4.6 — options backup split

@@ -1,6 +1,6 @@
 # Architecture Evolution Plan — 2026-08-22
 
-**Status:** in progress — Phases 0–3 + 4.1 + 4.6 + 5 shipped (v3.236.27–.36). Remaining: Phase 4.2–4.5 content.js stranglers (live Medicus verify).
+**Status:** Phases 0–3, 4.1, 4.2 (date helpers), 4.6, and 5 shipped (v3.236.27–.37). Remaining: Phase 4.3–4.5 content.js OIR / queue / HUD extracts — **blocked on live Medicus verification** (page-console capture playbook). Do not extract those until a live peak/final chip-count pass can run.
 **Scope:** the whole suite (side-panel, pop-out, content-scripts, engine, rules, shared, options, full-tab apps, rota)
 **Baseline:** v3.236.25 (`main` @ 7816ffc)
 **Method:** four-phase repo audit (discovery → evidence-based findings → strategy → phased plan), evidence gathered by parallel subsystem surveys of the shell, the write path, engine/rules/tests, and the shared/IO layers, cross-checked against `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/INTENDED-PURPOSE.md`, `manifest.json`, and the CI workflows.

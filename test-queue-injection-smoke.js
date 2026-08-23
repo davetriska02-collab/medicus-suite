@@ -404,22 +404,29 @@ function buildFlatRow({ rowIndex, rowId, dob }) {
 // vm-extract the real injection functions from content.js
 // ============================================================
 const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'content.js'), 'utf8');
+const dateSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'date-helpers.js'), 'utf8');
 
-function extract(re, label) {
-  const m = src.match(re);
-  check(!!m, `${label} extracted from content.js`);
+function extractFrom(haystack, re, label, fileLabel) {
+  const m = haystack.match(re);
+  check(!!m, `${label} extracted from ${fileLabel}`);
   return m ? m[0] : '';
 }
+
+function extract(re, label) {
+  return extractFrom(src, re, label, 'content.js');
+}
+
+check(src.includes('TriageDateHelpers'), 'content.js consumes TriageDateHelpers');
 
 console.log('Extraction: pulling injection functions + their small pure deps out of content.js');
 const parts = [
   extract(/const _HTML_ESC = \{[\s\S]*?\};/, '_HTML_ESC'),
   extract(/const escapeHtml = \(s\)[\s\S]*?;/, 'escapeHtml'),
   extract(/const renderChipHtml = \(chip\) => \{[\s\S]*?\n {2}\};/, 'renderChipHtml'),
-  extract(/const MONTHS = \{[\s\S]*?\};/, 'MONTHS'),
-  extract(/const NOW = \(\)[\s\S]*?;/, 'NOW'),
-  extract(/const parseDate = \(s\) => \{[\s\S]*?\n {2}\};/, 'parseDate'),
-  extract(/const daysAgo = \(d\) => \{[\s\S]*?\n {2}\};/, 'daysAgo'),
+  extractFrom(dateSrc, /const MONTHS = \{[\s\S]*?\};/, 'MONTHS', 'date-helpers.js'),
+  extractFrom(dateSrc, /const NOW = \(\)[\s\S]*?;/, 'NOW', 'date-helpers.js'),
+  extractFrom(dateSrc, /const parseDate = \(s\) => \{[\s\S]*?\n {2}\};/, 'parseDate', 'date-helpers.js'),
+  extractFrom(dateSrc, /const daysAgo = \(d\) => \{[\s\S]*?\n {2}\};/, 'daysAgo', 'date-helpers.js'),
   extract(/const TH_DEFAULTS = \{[\s\S]*?\};/, 'TH_DEFAULTS'),
   extract(/const TH = \(k\) => \{[\s\S]*?\n {2}\};/, 'TH'),
   extract(/const PREF = \(k, dflt\) => \{[\s\S]*?\n {2}\};/, 'PREF'),
