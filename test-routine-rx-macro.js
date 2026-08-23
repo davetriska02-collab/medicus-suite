@@ -611,8 +611,10 @@ function makeSandbox(rootEl, pathname) {
       'happy path: confirm dialog names the destination team'
     );
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
-      'happy path: a success toast is shown after commit'
+      TOASTS.some(
+        (t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg) && /Check the task/.test(t.msg)
+      ),
+      'happy path: the commit toast reports the CLICK and asks the user to verify — never claims "Sent" (audit R10)'
     );
   }
 
@@ -663,8 +665,8 @@ function makeSandbox(rootEl, pathname) {
     );
     check(assign.value === teamName, 'full-name fallback: the full team name was typed on the fallback query');
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
-      'full-name fallback: a success toast is shown'
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg)),
+      'full-name fallback: the commit toast is shown (click-reported, not completion-claimed)'
     );
   }
 
@@ -733,8 +735,60 @@ function makeSandbox(rootEl, pathname) {
     check(CLICKS.indexOf('CommitBtn') !== -1, 'auto mode: commit IS clicked');
     check(!confirmCalled, 'auto mode: window.confirm is never invoked');
     check(
-      TOASTS.some((t) => t.kind === 'ok' && /Sent to/.test(t.msg)),
-      'auto mode: a success toast is shown'
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg)),
+      'auto mode: the commit toast is shown (click-reported, not completion-claimed)'
+    );
+  }
+
+  console.log('\n--- auto mode with a PARTIAL team match downgrades to confirm (audit R8) ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const assign = el('input', { attrs: { 'aria-label': 'Assign to' }, label: 'AssignInput' });
+    // Configured team is a PREFIX of the only rendered option — a contains
+    // match, not exact. Auto mode must not commit without a human reading it.
+    const option = el('li', {
+      attrs: { id: 'select-item-1', role: 'option' },
+      text: 'Prescribing / Meds Management',
+      label: 'TeamOption',
+    });
+    const commit = el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false });
+    const root = buildRoot([radio, assign, option, commit]);
+    const sb = makeSandbox(root, '/tasks/data/prescription-requests/overview/abc-123');
+
+    let confirmMsg = null;
+    sb.window.confirm = (msg) => {
+      confirmMsg = msg;
+      return false; // clinician declines
+    };
+    await sb.runMacro('Prescribing', 'auto');
+    check(confirmMsg !== null, 'auto + partial match: window.confirm IS invoked (no unconfirmed commit)');
+    check(
+      !!confirmMsg && /Prescribing \/ Meds Management/.test(confirmMsg) && /not an exact match/.test(confirmMsg),
+      'auto + partial match: the confirm names the REAL option text and says it was not exact'
+    );
+    check(CLICKS.indexOf('CommitBtn') === -1, 'auto + partial match declined: commit is never clicked');
+  }
+
+  console.log('\n--- commit button is matched EXACT-only (audit R8) ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const assign = el('input', { attrs: { 'aria-label': 'Assign to' }, label: 'AssignInput' });
+    const teamName = 'Prescribing / Meds Management';
+    const option = el('li', { attrs: { id: 'select-item-1', role: 'option' }, text: teamName, label: 'TeamOption' });
+    // Only a SUPERSTRING of the commit label exists — the substring fallback
+    // must never commit-click it.
+    const wrongCommit = el('button', {
+      text: 'Send to routine list and close task',
+      label: 'WrongCommitBtn',
+      disabled: false,
+    });
+    const root = buildRoot([radio, assign, option, wrongCommit]);
+    const sb = makeSandbox(root, '/tasks/data/prescription-requests/overview/abc-123');
+    await sb.runMacro(teamName, 'auto');
+    check(CLICKS.indexOf('WrongCommitBtn') === -1, 'exact-only commit: a superstring-labelled button is never clicked');
+    check(
+      TOASTS.some((t) => t.kind === 'err'),
+      'exact-only commit: the macro aborts with an error toast instead'
     );
   }
 
@@ -822,6 +876,46 @@ function makeSandbox(rootEl, pathname) {
     check(
       TOASTS.some((t) => t.kind === 'err' && /couldn.t find the .Send to routine list. button/.test(t.msg)),
       'abort (no commit control): toasts an error naming the missing commit control'
+    );
+  }
+
+  {
+    // 2026-08-23 review fix: the mid-run navigation guard (audit M7) called
+    // `fail(team, mode, msg)`, which does not exist — the helper is
+    // `abort(msg, team, mode)`. Under 'use strict' the guard threw a
+    // ReferenceError, so the commit was correctly skipped but the clinician got
+    // NO toast and NO audit line, and the rejection went unhandled. The commit
+    // must stay unclicked AND the abort must be announced.
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const assign = el('input', { attrs: { placeholder: 'Assign to' }, label: 'AssignInput' });
+    const root = buildRoot([radio, assign]);
+    const sb = makeSandbox(root, '/tasks/data/prescription-requests/overview/abc-123');
+    CONFIRM_RETURN = true;
+
+    const teamName = 'Prescribing / Meds Management';
+    setTimeout(() => {
+      root.appendChild(
+        el('li', { attrs: { id: 'select-item-1', role: 'option' }, text: teamName, label: 'TeamOption' })
+      );
+    }, 5);
+    setTimeout(() => {
+      root.appendChild(el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false }));
+    }, 10);
+    // The SPA swaps to a different task while the picker round-trips.
+    setTimeout(() => {
+      sb.location.pathname = '/tasks/data/prescription-requests/overview/SOMEONE-ELSE';
+    }, 12);
+
+    let threw = null;
+    await sb.runMacro(teamName, 'confirm').catch((e) => {
+      threw = e;
+    });
+
+    check(threw === null, 'mid-run navigation: the guard does not throw (no undefined helper)');
+    check(CLICKS.indexOf('CommitBtn') === -1, 'mid-run navigation: the commit button is never clicked');
+    check(
+      TOASTS.some((t) => t.kind === 'err' && /Task changed mid-run/.test(t.msg)),
+      'mid-run navigation: the clinician is told the task changed and nothing was clicked'
     );
   }
 

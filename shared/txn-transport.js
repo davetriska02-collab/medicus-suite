@@ -47,6 +47,19 @@
     const randomFn = c.randomFn || Math.random;
 
     return async function transport({ method, path, body, isWrite }) {
+      // HARD READ-ONLY BOUNDARY. The intended-purpose statement (v3.202.0,
+      // "Data flow and egress") declares this path read-only for patient
+      // data. That must be enforced here — the one choke point every proxy
+      // call passes through — not merely asserted by the absence of a
+      // caller. A future feature wanting a transactional write needs a CSN
+      // §6.1 W-row and a deliberate removal of this refusal, which is
+      // regression-guarded by test-txn-modules.js.
+      if (isWrite) {
+        const err = new Error('txn transport is read-only: write refused (intended-purpose data-flow boundary)');
+        err.isWrite = true;
+        err.refusedWrite = true;
+        throw err;
+      }
       if (!c.proxyUrl) throw new Error('txn proxy URL not configured');
       if (!doFetch) throw new Error('no fetch available');
       const cred = c.getCallerCredential ? await c.getCallerCredential() : null;

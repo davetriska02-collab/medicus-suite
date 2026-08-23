@@ -402,5 +402,43 @@ console.log('--- findDocumentTypeByConceptId ---');
   );
 }
 
+// ── W6 commit-time identity re-verification (2026-08-23 review fix) ──────────
+// The audit added a commit-time patient re-check to doCreate but shipped it with
+// NO test — deleting both throws left the whole suite green. doCreate is not
+// exported (it closes over the module's DOM state), so this is a STRUCTURAL pin:
+// it asserts the guard is present, fails closed on every arm, and still precedes
+// the write. It is deliberately explicit about being structural rather than
+// behavioural — its job is to make a future refactor that removes the guard
+// fail CI rather than pass silently.
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'document-file-inline.js'), 'utf8');
+  const start = src.indexOf('var commitInfo = getTaskInfo();');
+  check(start !== -1, 'W6: doCreate re-reads the task identity at commit time');
+  const body = src.slice(start, start + 3000);
+
+  check(
+    /if \(!commitInfo \|\| !s\.resolvedForTaskUuid \|\| commitInfo\.taskUuid !== s\.resolvedForTaskUuid\)/.test(body),
+    'W6: identity check fails closed when the task uuid is missing OR diverged (no short-circuit)'
+  );
+  check(
+    /await fetchTaskOverview\(commitInfo\.typeSlug, commitInfo\.taskUuid\)/.test(body),
+    'W6: the patient is re-fetched fresh at commit, not reused from state'
+  );
+  check(
+    /if \(!freshOverview\.patientId \|\| freshOverview\.patientId !== s\.patientId\)/.test(body),
+    'W6: an unresolvable patient blocks as well as a mismatched one'
+  );
+
+  const guardEnd = body.indexOf('var verifiedPatientId');
+  const postAt = body.indexOf('await apiCreateDocument(');
+  check(guardEnd !== -1 && postAt !== -1 && guardEnd < postAt, 'W6: the guard precedes the create-document write');
+  check(
+    /patientId: verifiedPatientId,/.test(body),
+    'W6: the write posts the identity verified by the guard, not a re-read of mutable state'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

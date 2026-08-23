@@ -2581,9 +2581,20 @@ console.log('\n--- item 3.6: delta rules — rise/fall/either grading (absolute 
   const excludedOut = evaluateReportSeverity(makeReport([urineCreat]), { resultRules: [risingCreatinine] });
   assert(excludedOut.level === 'none', 'analyte.exclude drops "Urine Creatinine" even with a qualifying rise');
 
-  // 'fall'-only rule: a rise never fires it.
+  // 'fall'-only rule: a rise never fires it. Fixture kept INSIDE its own
+  // reference range (2026-08-22 audit R1d): creat148 sits above its printed
+  // 60–120 range, so the own-range belt now correctly grades it abnormal
+  // regardless of delta rules — which is the belt working, not the delta
+  // direction leaking. The direction invariant is pinned on an in-range rise.
   const fallRule = { ...risingCreatinine, id: 'delta-fall', direction: 'fall' };
-  const fallOnRiseOut = evaluateReportSeverity(makeReport([creat148]), { resultRules: [fallRule] });
+  const creatInRangeRise = mkResult('Creatinine', 148, {
+    unit: 'umol/L',
+    low: 60,
+    high: 200,
+    date: '2026-06-13',
+    history: [{ value: 110, date: '2026-06-08', unit: 'umol/L' }],
+  });
+  const fallOnRiseOut = evaluateReportSeverity(makeReport([creatInRangeRise]), { resultRules: [fallRule] });
   assert(fallOnRiseOut.level === 'none', "a RISE never fires a 'fall'-only delta rule");
   const fallOnFallOut = evaluateReportSeverity(makeReport([creatFallen]), { resultRules: [fallRule] });
   assert(fallOnFallOut.level === 'red', "a FALL of 30 fires a 'fall'-only delta rule (crosses red 26)");

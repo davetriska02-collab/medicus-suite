@@ -148,7 +148,9 @@
   // full async find/type/wait pipeline — see test-routine-rx-macro.js.
   function commitAndAudit(commitEl, team, mode) {
     realClick(commitEl);
-    toast('Sent to “' + team + '”.', 'ok');
+    // Audit R10 doctrine (shared/write-core.js): observing our own click is
+    // not a successful re-assignment — the copy must not claim completion.
+    toast('Clicked “Send to routine list” for “' + team + '”. Check the task has left your list.', 'ok');
     recordAudit(team, mode, 'committed', null);
   }
   function highlightAndAudit(commitEl, team, mode) {
@@ -179,7 +181,13 @@
   }
   // Find the first visible element matching one of `selectors` whose text equals
   // (or, as a fallback, contains) `wanted`.
-  function findByText(selectors, wanted) {
+  //
+  // `exactOnly` (2026-08-22 clinical-safety audit R8): the COMMIT click must
+  // pass true — a partial fallback that clicks a control merely CONTAINING
+  // "send to routine list" could commit a different Medicus action from the
+  // one this macro names. Exact (whitespace-normalised, case-insensitive) or
+  // nothing. Finding/marking steps may keep the partial arm.
+  function findByText(selectors, wanted, exactOnly) {
     var w = norm(wanted);
     var nodes = [];
     selectors.forEach(function (sel) {
@@ -203,7 +211,7 @@
         exact = el;
         break;
       }
-      if (!partial && t.indexOf(w) >= 0 && visible(el)) partial = el;
+      if (!exactOnly && !partial && t.indexOf(w) >= 0 && visible(el)) partial = el;
     }
     return exact || partial;
   }
@@ -451,6 +459,19 @@
         }
         return exact || partial;
       };
+      // Audit R8: was the picked option an EXACT match for the configured team?
+      // A contains-match (configured "Prescribing" hitting "Prescribing / Meds
+      // Management") is allowed to pre-fill, but must never be committed
+      // without a human reading the real name — auto mode downgrades to a
+      // confirm below when this is false.
+      var optionIsExact = function (el) {
+        return !!el && textOf(el) === norm(team);
+      };
+      // Case-preserving text for user-facing copy (textOf lowercases for match).
+      var rawTextOf = function (el) {
+        var s = (el && el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent) || '';
+        return String(s).replace(/\s+/g, ' ').trim();
+      };
       // Try each query in turn (safe leading token first, then the full name —
       // see searchQueriesFor), re-typing from empty each time. The FINAL query
       // gets the full 6s margin (a real debounce + server round trip, not a
@@ -489,12 +510,16 @@
           mode
         );
       }
+      var optionExact = optionIsExact(option);
+      var optionText = rawTextOf(option);
       realClick(option);
 
-      // 4. commit — find the button, then wait until Medicus ENABLES it
-      //    (it stays disabled until a valid assignee is registered).
+      // 4. commit — find the button (EXACT label only — a commit click must
+      //    never go through the substring fallback, audit R8), then wait until
+      //    Medicus ENABLES it (it stays disabled until a valid assignee is
+      //    registered).
       var commit = await waitFor(function () {
-        var b = findByText(['button', '[role="button"]'], 'Send to routine list');
+        var b = findByText(['button', '[role="button"]'], 'Send to routine list', true);
         return b && isEnabled(b) ? b : null;
       }, 5000);
       if (!commit) {
@@ -518,8 +543,20 @@
         highlightAndAudit(commit, team, mode);
         return;
       }
-      if (mode === 'confirm') {
-        var ok = window.confirm('Send this prescription to routine requests for “' + team + '”?');
+      // Audit R8: auto mode may only skip the confirm when the picked option
+      // EXACTLY matches the configured team — a contains-match must be read by
+      // a human (named with the option's REAL text) before the write.
+      if (mode === 'confirm' || (mode === 'auto' && !optionExact)) {
+        var confirmMsg = optionExact
+          ? 'Send this prescription to routine requests for “' + team + '”?'
+          : 'The assignee list matched “' +
+            optionText +
+            '” for your configured team “' +
+            team +
+            '” (not an exact match). Send this prescription to routine requests for “' +
+            optionText +
+            '”?';
+        var ok = window.confirm(confirmMsg);
         if (!ok) {
           toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
           recordAudit(team, mode, 'aborted', 'clinician declined the confirm-mode dialog');
@@ -528,7 +565,13 @@
       }
       // Belt-and-braces: never commit against a task the run didn't start on.
       if (location.pathname !== _macroPath) {
-        fail(team, mode, 'Task changed mid-run — nothing was clicked on the new task.');
+        // 2026-08-23 review fix: this called `fail(team, mode, msg)`, which does
+        // not exist — the helper is `abort(msg, team, mode)`, different name AND
+        // argument order. Under 'use strict' the guard threw a ReferenceError:
+        // the commit was still (correctly) skipped, but the clinician got NO
+        // toast and NO audit record, and the rejection was unhandled — so the
+        // natural next move was to click again.
+        abort('Task changed mid-run — nothing was clicked on the new task.', team, mode);
         return;
       }
       commitAndAudit(commit, team, mode);
@@ -676,7 +719,18 @@
     btn = document.createElement('button');
     btn.className = 'chrx-btn';
     btn.onclick = function () {
-      if (!busy) runMacro(cfg.lastTeam, cfg.commitMode);
+      // 2026-08-23 review fix: runMacro is async and was called bare, so any
+      // throw inside it became an unhandled rejection — the button just reset
+      // with no toast and no audit line. A macro that dies must SAY it died.
+      if (!busy)
+        runMacro(cfg.lastTeam, cfg.commitMode).catch((e) => {
+          abort(
+            'The routine-list macro stopped unexpectedly — nothing was committed. ' + (e && e.message ? e.message : ''),
+            cfg.lastTeam,
+            cfg.commitMode
+          );
+          setBusy(false);
+        });
     };
 
     caret = document.createElement('button');

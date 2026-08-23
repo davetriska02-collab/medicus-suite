@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.237.1
+**Version:** v3.237.2
 **Generated:** 2026-08-23 (automated)
 
 ## What it is
@@ -180,6 +180,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **Clinical-safety audit remediation** — an adversarial audit of the write paths, the fail-closed rules and the safety documentation was acted on in full: the automated lab-filing gate now refuses anything it cannot judge (unreadable rows, unconfirmable units, ambiguous or cross-matched analyte ranges), the outstanding-investigation tick-off became opt-in and is now listed in the public write inventory, the transactional feed refuses writes in code rather than only in prose, and two hazard entries that had never reached the register were recovered.
 - **Organise-canvas fail-safe write paths** — the appointment-organise canvas's failure modes were closed after an adversarial review: moves now prove the destination window is still free on the fresh board before writing, a failed stretch re-creates the original booking (with an urgent named-patient error if even that fails), the confirmation overlay freezes while a batch is being written, and the "Tell the patient" opt-in is described honestly everywhere it appears (and never offered on a stretch).
 - **Ten new clinical rules (The Keeper gap analysis)** — an expanded rule-currency sweep filled the ten highest-impact gaps: an adult fever call-script pathway including neutropenic-sepsis screening (plus a chemotherapy flag on the child fever pathway, both pending clinical safety sign-off before enabling); thiazide and denosumab monitoring chips; opioid-with-sedative and valproate-in-men prescribing-safety alerts (and a fix so brand-only lithium prescriptions fire the existing lithium alerts); the five remaining SMI physical-health QOF indicators; pneumococcal and shingles vaccine chips for at-risk under-65s and immunosuppressed adults; and three STOPP/START medication-review checks for bone protection and opioid-without-laxative.
 - **Write-path governance** — every action that can write back to Medicus is now named in a public inventory, cross-checked by an automated test, with the public docs rewritten to describe the real (enumerated-writes) safety posture rather than a blanket "read-only" claim.

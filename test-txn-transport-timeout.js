@@ -39,20 +39,25 @@ test('txn-transport: hung fetch aborts and rejects with isTimeout after timeoutM
   );
 });
 
-test('txn-transport: timeout propagates isWrite so writes are never silently retried', async () => {
+// 2026-08-22 clinical-safety audit R5: a write never reaches the timeout path —
+// it is refused before any fetch. Timeout semantics stay pinned on reads above.
+test('txn-transport: a write is refused before the timeout machinery can even start', async () => {
+  let fetchStarted = false;
   const transport = TxnTransport.createProxyTransport(
     baseCfg({
       timeoutMs: 50,
       fetchFn: (url, opts) =>
         new Promise((_, rej) => {
+          fetchStarted = true;
           opts.signal.addEventListener('abort', () => rej(Object.assign(new Error('aborted'), { name: 'AbortError' })));
         }),
     })
   );
   await assert.rejects(
     () => transport({ method: 'POST', path: '/transactional-api/create-note', body: {}, isWrite: true }),
-    (e) => e.isTimeout === true && e.isWrite === true
+    (e) => e.refusedWrite === true && e.isWrite === true
   );
+  assert.equal(fetchStarted, false);
 });
 
 test('txn-transport: fast fetch still succeeds and clears the timer (no stray rejection)', async () => {
@@ -68,17 +73,18 @@ test('txn-transport: fast fetch still succeeds and clears the timer (no stray re
   await new Promise((resolve) => setTimeout(resolve, 100));
 });
 
-test('txn-transport: plain network error rethrows with isWrite set, isTimeout falsy', async () => {
+test('txn-transport: plain network error rethrows with isWrite false, isTimeout falsy (read path)', async () => {
   const transport = TxnTransport.createProxyTransport(
     baseCfg({
       timeoutMs: 50,
+      retry: { attempts: 1 },
       fetchFn: async () => {
         throw new Error('ECONNRESET');
       },
     })
   );
   await assert.rejects(
-    () => transport({ method: 'POST', path: '/transactional-api/create-note', body: {}, isWrite: true }),
-    (e) => e.message === 'ECONNRESET' && e.isWrite === true && !e.isTimeout
+    () => transport({ method: 'GET', path: '/transactional-api/patient/p1/demographics', isWrite: false }),
+    (e) => e.message === 'ECONNRESET' && e.isWrite === false && !e.isTimeout
   );
 });

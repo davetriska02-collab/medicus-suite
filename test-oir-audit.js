@@ -195,9 +195,11 @@ arr = STORE['triagelens.oir.auditLog'];
 check(arr.length === 2 && arr[0].taskUuid === 'task-5' && arr[1].taskUuid === 'task-4', 'newest-first ring buffer');
 
 // ============================================================
-// 2. performOirAutoTick — pref ON (default): ticks + audits + toasts
+// 2. performOirAutoTick — pref explicitly ON (opt-in): ticks + audits + toasts
 // ============================================================
-console.log('performOirAutoTick (oirAutoTick default ON):');
+// 2026-08-22 audit R2: the DEFAULT is now OFF — a machine-initiated Medicus
+// write must be a deliberate practice opt-in. Assert the default first.
+console.log('performOirAutoTick (default is OFF — audit R2):');
 reset();
 const box1 = makeEl('input');
 const rows = { 0: { box: box1 } };
@@ -205,6 +207,13 @@ const verdicts = [
   { id: 0, name: 'Full Blood Count', autoTick: true },
   { id: 1, autoTick: false },
 ];
+performOirAutoTick(verdicts, rows, 'task-auto-0');
+check(tickRowsCalls.length === 0, 'with NO pref set, auto-tick does not fire (default OFF)');
+check(STORE['triagelens.oir.auditLog'] === undefined, 'no audit entry with no pref set');
+
+console.log('performOirAutoTick (oirAutoTick explicitly true):');
+reset();
+PREFS.oirAutoTick = true;
 performOirAutoTick(verdicts, rows, 'task-auto-1');
 check(
   tickRowsCalls.length === 1 && tickRowsCalls[0].length === 1 && tickRowsCalls[0][0] === box1,
@@ -244,6 +253,7 @@ check(!findByClass(documentStub.body, 'ch-oir-toast'), 'no toast shown when oirA
 // ============================================================
 console.log('performOirAutoTick (nothing eligible):');
 reset();
+PREFS.oirAutoTick = true; // opt in (default OFF since audit R2)
 documentStub.body = makeEl('body');
 performOirAutoTick([{ id: 0, autoTick: false }], rows, 'task-auto-3');
 check(tickRowsCalls.length === 0, 'tickRows NOT called when no verdict has autoTick');
@@ -254,6 +264,7 @@ check(STORE['triagelens.oir.auditLog'] === undefined, 'no audit entry when nothi
 // ============================================================
 console.log('performOirAutoTick (oirAuditLog = false):');
 reset();
+PREFS.oirAutoTick = true; // opt in (default OFF since audit R2)
 PREFS.oirAuditLog = false;
 documentStub.body = makeEl('body');
 performOirAutoTick(verdicts, rows, 'task-auto-4');

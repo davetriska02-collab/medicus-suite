@@ -3240,12 +3240,19 @@
 
   // Filters confident, report-covered verdicts, ticks their checkboxes,
   // audits (kind: 'auto') and surfaces the review toast above. Gated by the
-  // oirAutoTick pref (default ON — preserves the pre-existing behaviour);
-  // turning it off leaves the inline flags but never writes a tick.
+  // oirAutoTick pref — default OFF (2026-08-22 clinical-safety audit R2:
+  // ticking writes to Medicus server-side with no per-instance confirmation,
+  // so a machine-initiated write must be a deliberate practice opt-in, per
+  // the intended-purpose statement's "no write is automatic" boundary and
+  // CSN §6.1 W22). Turning it on is a practice decision recorded in prefs;
+  // off leaves the inline flags and the clinician-confirmed bulk tick-off.
   // Standalone/testable — kept out of applyOutstandingMatch's body so it can
   // be extracted and unit-tested without the rest of the match pipeline.
   const performOirAutoTick = (verdicts, rows, taskUuid) => {
-    if (!PREF('oirAutoTick', true)) return;
+    // 2026-08-23 review fix: a bare truthiness test meant any junk value from a
+    // restored backup ("no", 1, {}) re-enabled a machine-initiated write that
+    // this release deliberately made opt-in. Require an explicit boolean true.
+    if (PREF('oirAutoTick', false) !== true) return;
     const toTickVerdicts = verdicts.filter((v) => v.autoTick && rows[v.id]);
     if (!toTickVerdicts.length) return;
     const toTick = toTickVerdicts.map((v) => rows[v.id].box);

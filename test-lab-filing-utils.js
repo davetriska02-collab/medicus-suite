@@ -334,11 +334,28 @@ check(sp.requireRangeForAll === true, 'requireRangeForAll preserved');
 // ── profileParamBlockers (clinician-set ranges, incl. un-ranged analytes) ─────
 console.log('\n--- profileParamBlockers ---');
 const hba1cProfile = { parameters: [{ analyte: 'hba1c', high: 47, unit: 'mmol/mol' }] };
-const rep = (name, value, low, high) => ({ results: [{ name, value, low: low ?? null, high: high ?? null }] });
-check(LF.profileParamBlockers(rep('HbA1c (IFCC)', 42), hba1cProfile).length === 0, 'HbA1c within set max → fileable');
+const rep = (name, value, low, high, unit) => ({
+  results: [{ name, value, low: low ?? null, high: high ?? null, unit: unit ?? null }],
+});
+// 2026-08-23 review fix: these fixtures used to omit the result unit while the
+// parameter declares mmol/mol. A parameter that states a unit is no longer
+// applied to a value whose unit cannot be confirmed, so the fixtures now carry
+// the unit a real Medicus result reports.
 check(
-  LF.profileParamBlockers(rep('HbA1c (IFCC)', 53), hba1cProfile).some((r) => /above your set maximum/.test(r)),
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 42, null, null, 'mmol/mol'), hba1cProfile).length === 0,
+  'HbA1c within set max → fileable'
+);
+check(
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 53, null, null, 'mmol/mol'), hba1cProfile).some((r) =>
+    /above your set maximum/.test(r)
+  ),
   'HbA1c above set max → blocked (lab gave no range)'
+);
+// …and the same parameter against a value of UNKNOWN unit must refuse, not
+// silently compare (the ug/L-range-vs-unitless-digoxin class).
+check(
+  LF.profileParamBlockers(rep('HbA1c (IFCC)', 42), hba1cProfile).some((r) => /units cannot be confirmed/.test(r)),
+  'parameter declaring a unit + result with no unit → blocked, never silently compared'
 );
 check(
   LF.profileParamBlockers(rep('eGFR', 55), { parameters: [{ analyte: 'egfr', low: 60 }] }).some((r) =>
@@ -346,9 +363,20 @@ check(
   ),
   'eGFR below set min → blocked'
 );
+// 2026-08-22 audit R1c: requireRangeForAll now defaults ON (missing key = true),
+// so the "no parameter → no param block" invariant is pinned with a lab range
+// present; the same analyte with NO range now blocks by default.
 check(
-  LF.profileParamBlockers(rep('Sodium', 140), hba1cProfile).length === 0,
-  'analyte with no parameter is not blocked by params'
+  LF.profileParamBlockers(rep('Sodium', 140, 133, 146), hba1cProfile).length === 0,
+  'analyte with no parameter but a lab range is not blocked by params'
+);
+check(
+  LF.profileParamBlockers(rep('Sodium', 140), hba1cProfile).some((r) => /no reference range/.test(r)),
+  'analyte with no parameter and NO range blocks by default (fail closed)'
+);
+check(
+  LF.profileParamBlockers(rep('Sodium', 140), { ...hba1cProfile, requireRangeForAll: false }).length === 0,
+  'explicit requireRangeForAll:false restores the opt-out'
 );
 check(
   LF.profileParamBlockers(rep('HbA1c', 60, 20, 42), {}).length === 0,
@@ -432,7 +460,10 @@ check(
 
 // ── fileabilityBlockers (fail-closed gate) ────────────────────────────────────
 console.log('\n--- fileabilityBlockers ---');
-const okReport = { unmatched: false, results: [{ name: 'Haemoglobin', value: 130, text: 'Haemoglobin 130' }] };
+const okReport = {
+  unmatched: false,
+  results: [{ name: 'Haemoglobin', value: 130, rawValue: '130', text: 'Haemoglobin 130' }],
+};
 const someRules = [{ id: 'r', enabled: true }];
 check(
   LF.fileabilityBlockers(okReport, { level: 'none' }, someRules).length === 0,
@@ -526,9 +557,16 @@ check(
   'suppressedBlockers fires on an object-uuid match'
 );
 check(LF.suppressedBlockers(suppRep, ['other']).length === 0, 'suppressedBlockers clear for a different patient');
+// 2026-08-22 audit R11: a non-empty suppress list with NO patient uuid now
+// fails CLOSED — a payload variant without the patient id must not silently
+// bypass a clinician's explicit per-patient opt-out.
 check(
-  LF.suppressedBlockers({ results: [] }, ['abc-123']).length === 0,
-  'suppressedBlockers clear when report has no uuid'
+  LF.suppressedBlockers({ results: [] }, ['abc-123']).some((r) => /could not confirm/.test(r)),
+  'suppressedBlockers fail closed when the list is in use but the report has no uuid'
+);
+check(
+  LF.suppressedBlockers({ results: [] }, []).length === 0,
+  'suppressedBlockers stay quiet with no uuid when the list is empty'
 );
 
 // ── text-suppress (P9) ────────────────────────────────────────────────────────────

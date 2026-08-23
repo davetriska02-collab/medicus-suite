@@ -2,6 +2,91 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.237.2] — 2026-08-23
+
+### Clinical-safety audit remediation — fail-closed hardening, honest docs
+
+Remediation of the 2026-08-22 adversarial clinical-safety audit
+(write paths vs intended purpose, rules-engine fail-closed invariants,
+doc/code consistency, DOM/API-drift silent-risk review). All shipped
+behaviour changes push toward fail-closed; two user-visible defaults
+change (below). Every fix carries a pinning regression test; the full
+suite (393 tests) is green.
+
+**Behavioural changes:**
+
+- **OIR auto-tick now defaults OFF** (`oirAutoTick`, opt-in). The
+  Outstanding-Investigation tick-off is a server-side-committing write
+  and had shipped as an on-by-default DOM macro without an inventory
+  row. It is now CSN inventory row **W22**, and CSN limitation 38 is
+  rewritten to say what a tick actually does (commits immediately;
+  not reversible from the extension).
+- **Transactional-API transport is read-only in code, not just in
+  prose**: `shared/txn-transport.js` now throws on any `isWrite`
+  request before any network call.
+- **Lab-filing gate fails closed on everything it cannot judge**
+  (`shared/lab-filing-utils.js`, `engine/result-severity.js`):
+  unmatched free-text residue on numeric results blocks filing;
+  parameter matching is strictly unidirectional; missing reference
+  ranges block by default (`requireRangeForAll` now opt-out);
+  unit mismatch between profile parameter and result blocks;
+  comparator-censored values (e.g. `>47`) block rather than parse as
+  their bound; an evaluator crash (`evalError`) blocks; a non-empty
+  suppress list with no patient UUID blocks; and an escalate-only
+  `outsideOwnRange` belt marks any result strictly outside its own
+  reported range as abnormal even if the lab flag is missing.
+- **Commit clicks are exact-match only** (lab-file and routine-rx
+  macros): a button labelled "File and complete something else" can no
+  longer satisfy a search for "File". Routine-rx `auto` mode downgrades
+  to a confirm dialog when the team option is only a partial match.
+- **Post-click copy never claims completion**: "Filed as normal" /
+  "Sent to X" toasts now say what was observed ("Clicked 'File' …
+  check the report has left your list").
+- **W6 document filing re-verifies patient identity at commit time**
+  (H-043 contract), and triage-config import sanitises: the stored
+  `version` key is dropped (a high imported version silently stranded
+  all future shipped-defaults migrations) and non-array
+  `rules`/`resultRules`/`systemChips` are rejected.
+- **Write-path inventory CI guard hardened**
+  (`test-write-path-inventory.js`): now walks every product tree,
+  matches all mutating verbs (POST/PUT/PATCH/DELETE), flags
+  non-literal `method:` values, `sendBeacon`/`XHR`/`form.submit()`,
+  and classifies synthetic clicks in content scripts against the
+  W-inventory.
+
+**Documentation corrections (all PENDING CSO review; CSN v3.20,
+hazard log v3.27):**
+
+- Hazard log: recovered the never-merged **H-053/H-054** entries (the
+  register had silently skipped H-052 → H-055) and H-009 control (l);
+  H-036 control (f) records the auto-tick default flip; H-062 control
+  (d) and CSN W14/W15/§6.3 corrected — organise-canvas Send-to is a
+  per-action opt-in ("Tell the patient"), recipient lists are empty
+  *by default*, not "always"; H-009 control (a) now lists the full
+  shipped `host_permissions` set including the `*.supabase.co/*`
+  wildcard; CSN limitation 22 corrected (hidden chips DO resurface
+  when severity worsens; the real residual gaps are stated); dead
+  file paths fixed.
+
+New tests: `test-lab-filing-fail-closed.js` (27 checks),
+`test-triage-io.js`; extended: `test-txn-modules.js`,
+`test-txn-transport-{retry,timeout}.js`, `test-oir-audit.js`,
+`test-lab-file-macro.js`, `test-routine-rx-macro.js`,
+`test-lab-filing-utils.js`, `test-result-severity.js`.
+
+### Review fixes applied before merge
+
+An independent review of this branch found several of its own fail-closed claims did not hold, plus a live bug in a guard the safety story leans on. All fixed here, each with a pinning regression test:
+
+- **Parameter matching was still substring-based in the surviving direction.** A short `albumin` parameter captured `Microalbumin` and, with the lab-flag override on, cleared the lab's own HIGH flag and graded it fileable as normal — the same failure R1b believed it had removed. It was also first-match-wins, so `[hb, hba1c]` resolved "HbA1c (IFCC)" to `hb`. Matching is now token-anchored, most-specific wins, and an unresolved tie between two unrelated parameters blocks.
+- **The `requireRangeForAll` fail-closed default never reached the installed base.** The previous sanitiser wrote an explicit `false` for everyone who never ticked the box, and stored profiles are not re-sanitised on load. A stamped one-shot migration now runs on read in both the gate and the options editor, which no longer renders the safety box unticked for legacy profiles.
+- **A row with neither a readable number nor any text cleared every blocker** — the purest "cannot judge this" case. It now blocks regardless of `requireRangeForAll`, as does a malformed result row.
+- **The unit veto only caught an explicit mismatch**, but `unitsCompatible` returns `unknown` when either side is empty — so a µg/L range was applied to a lab-flagged value of unknown unit and cleared the flag. A parameter is applied only when units positively agree or neither side declares one.
+- **The routine-rx mid-run navigation guard called an undefined function** (`fail` vs the real `abort`), so it threw a ReferenceError: the commit was skipped but the clinician got no toast and no audit line. Fixed, and the click handler now catches so a dying macro says so.
+- **W6 identity re-verification** no longer sits behind a short-circuit that skipped it when the task uuid was absent, and the verified patient id and API base are pinned into locals so the attachment download cannot leave the write reading state a navigation has blanked.
+- **Import hardening**: triage config is rebuilt key-by-key rather than via `Object.assign` (which re-parented the object through `__proto__`), and the OIR auto-tick gate requires an explicit boolean `true`, so a restored backup cannot re-enable a machine-initiated write with a junk value.
+- **Coverage**: the W6 guard and the lab-file post-click copy previously had *no* test — deleting them left the suite green. W6 gains a structural pin and the "never claim completion" grep now covers both DOM macro files, not just `write-core.js`.
+
 ## [v3.237.1] — 2026-08-23
 
 ### Organise canvas — fail-safe write paths (merge-review fixes)
