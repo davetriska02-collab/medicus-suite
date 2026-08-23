@@ -38,11 +38,10 @@ A module may import another module’s `*-core.js` / `*-store.js` / `*-ledger.js
 
 **When you add a brand-new module with its own storage keys:**
 1. Create `shared/io/<module>-io.js` with `async function <module>Export()` and `async function <module>Import(data)`
-2. Add the scope name to `VALID_SCOPES` in `shared/io/suite-envelope.js`
-3. Add the module to `doFullExport()` and `applyEnvelope()` in `options/options.js`
-4. Add a preview summary line in `previewEnvelope()` in `suite-envelope.js`
-5. Add `<script src="../shared/io/<module>-io.js">` to `options/options.html`
-6. Add a per-module export card in `options/options.html`
+2. Add the scope to `MODULE_SCOPES` in `shared/io/suite-envelope.js` **and** to `MODULE_IO` in `options/options.js` (the export/import loops read those tables)
+3. Add a preview summary line in `previewEnvelope()` in `suite-envelope.js`
+4. Add `<script src="../shared/io/<module>-io.js">` to `options/options.html`
+5. Add a per-module export card in `options/options.html`
 
 **Do NOT add raw storage keys to `doFullExport` in options.js** — it delegates entirely to the IO files. Hard-coding keys there is what caused the backup to drift out of sync.
 

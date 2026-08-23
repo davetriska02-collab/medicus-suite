@@ -1,6 +1,6 @@
 # Architecture Evolution Plan — 2026-08-22
 
-**Status:** in progress — Phases 0–3 + 5.1 shipped (v3.236.27–.32). Remaining: Phase 4 god-file stranglers, Phase 5.2–5.3.
+**Status:** in progress — Phases 0–3 + 5.1–5.2 shipped (v3.236.27–.33). Remaining: Phase 4 god-file stranglers, Phase 5.3.
 **Scope:** the whole suite (side-panel, pop-out, content-scripts, engine, rules, shared, options, full-tab apps, rota)
 **Baseline:** v3.236.25 (`main` @ 7816ffc)
 **Method:** four-phase repo audit (discovery → evidence-based findings → strategy → phased plan), evidence gathered by parallel subsystem surveys of the shell, the write path, engine/rules/tests, and the shared/IO layers, cross-checked against `docs/CLINICAL-SAFETY-NOTICE.md`, `docs/INTENDED-PURPOSE.md`, `manifest.json`, and the CI workflows.

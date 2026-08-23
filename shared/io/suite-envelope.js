@@ -14,15 +14,14 @@
 //
 // IMPORTANT — when adding new chrome.storage.local keys to a module:
 //   1. Update shared/io/<module>-io.js — add the key to *Export() and *Import()
-//   2. That's all: doFullExport() in options.js delegates to those functions,
-//      so the new key is captured automatically.
+//   2. That's all: doFullExport() in options.js loops MODULE_SCOPES and
+//      delegates to those functions, so the new key is captured automatically.
 // When adding a brand-new module:
 //   1. Create shared/io/<module>-io.js with *Export()/*Import()
-//   2. Add the scope name to VALID_SCOPES below
-//   3. Wire it into doFullExport/applyEnvelope in options/options.js
-//   4. Add a preview line in previewEnvelope() below
-//   5. Load the script in options/options.html
-//   6. Add a per-module export card in options/options.html
+//   2. Add the scope to MODULE_SCOPES below AND to MODULE_IO in options.js
+//   3. Add a preview line in previewEnvelope() below
+//   4. Load the script in options/options.html
+//   5. Add a per-module export card in options/options.html
 
 'use strict';
 
@@ -84,8 +83,10 @@ function _computePayloadHash(scope, modulesData) {
   return _cyrb53(_payloadCanonical(scope, modulesData));
 }
 
-const VALID_SCOPES = [
-  'suite',
+// Export/import order. `suite` is last so a full backup stamps the shell
+// payload after every module. VALID_SCOPES is the same list (wrap() only
+// cares about membership). options.js MODULE_IO must have one entry per scope.
+const MODULE_SCOPES = [
   'sentinel',
   'capacity',
   'triage',
@@ -105,7 +106,9 @@ const VALID_SCOPES = [
   'problemDescriptionCleanup',
   'phrases',
   'rota',
+  'suite',
 ];
+const VALID_SCOPES = MODULE_SCOPES.slice();
 
 // Build an envelope from a scope name and a modules object.
 // modules should contain only the keys relevant to scope.
@@ -580,6 +583,7 @@ const api = {
   FORMAT,
   FORMAT_VERSION,
   EXTENSION_VERSION,
+  MODULE_SCOPES,
   VALID_SCOPES,
   INTEGRITY_OK,
   INTEGRITY_LEGACY,

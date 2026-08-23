@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.33] — 2026-08-23
+
+### Architecture plan Phase 5.2 — registry-driven backup IO
+
+- `MODULE_SCOPES` in `shared/io/suite-envelope.js` is the one ordered scope
+  list (`suite` last). `options.js` has a matching `MODULE_IO` table;
+  `doFullExport` / `doModuleExport` / `applyEnvelope` loop it.
+- Sentinel still imports with `skipInvalidCustomRules` and surfaces rejected
+  custom-rule notes. `test-module-io-registry.js` fails closed on table drift.
+
 ## [v3.236.32] — 2026-08-23
 
 ### Architecture plan Phase 5.1 — message names + gated listener

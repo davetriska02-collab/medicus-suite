@@ -832,105 +832,46 @@ document.querySelectorAll('.nav-item').forEach((btn) => {
 // Uses SuiteEnvelope from shared/io/suite-envelope.js (loaded as a script tag).
 // IO functions are inlined here to avoid ES module issues in options pages.
 
-// --- Backup helpers — delegate to per-module IO files (loaded in options.html).
-//     See shared/io/suite-envelope.js for the convention: when you add a new
-//     storage key, update the relevant shared/io/<module>-io.js only. ---
+// --- Backup helpers — one MODULE_IO table, looped from MODULE_SCOPES.
+//     See shared/io/suite-envelope.js: add a storage key in the IO file;
+//     add a new module as one MODULE_SCOPES + MODULE_IO entry. ---
+
+const MODULE_IO = {
+  sentinel: { exportFn: () => sentinelExport(), importFn: (d, opts) => sentinelImport(d, opts) },
+  capacity: { exportFn: () => capacityExport(), importFn: (d) => capacityImport(d) },
+  triage: { exportFn: () => triageExport(), importFn: (d) => triageImport(d) },
+  triageAlerts: { exportFn: () => TriageAlertIO.exportData(), importFn: (d) => TriageAlertIO.importData(d) },
+  slots: { exportFn: () => slotCounterExport(), importFn: (d) => slotCounterImport(d) },
+  submissions: { exportFn: () => submissionsExport(), importFn: (d) => submissionsImport(d) },
+  popout: { exportFn: () => popoutExport(), importFn: (d) => popoutImport(d) },
+  referrals: { exportFn: () => referralsExport(), importFn: (d) => referralsImport(d) },
+  requestMonitor: { exportFn: () => requestMonitorExport(), importFn: (d) => requestMonitorImport(d) },
+  condor: { exportFn: () => condorExport(), importFn: (d) => condorImport(d) },
+  reception: { exportFn: () => receptionExport(), importFn: (d) => receptionImport(d) },
+  knowledge: { exportFn: () => knowledgeExport(), importFn: (d) => knowledgeImport(d) },
+  labfiling: { exportFn: () => labfilingExport(), importFn: (d) => labfilingImport(d) },
+  notifications: { exportFn: () => notificationsExport(), importFn: (d) => notificationsImport(d) },
+  leaflets: { exportFn: () => leafletsExport(), importFn: (d) => leafletsImport(d) },
+  patientAlerts: { exportFn: () => patientAlertsExport(), importFn: (d) => patientAlertsImport(d) },
+  problemDescriptionCleanup: {
+    exportFn: () => problemDescriptionCleanupExport(),
+    importFn: (d) => problemDescriptionCleanupImport(d),
+  },
+  phrases: { exportFn: () => phrasesExport(), importFn: (d) => phrasesImport(d) },
+  rota: { exportFn: () => rotaExport(), importFn: (d) => rotaImport(d) },
+  suite: { exportFn: () => suiteExport(), importFn: (d) => suiteImport(d) },
+};
 
 async function doFullExport() {
-  const [
-    sentinel,
-    capacity,
-    triage,
-    triageAlerts,
-    slots,
-    submissions,
-    popout,
-    referrals,
-    requestMonitor,
-    condor,
-    reception,
-    knowledge,
-    labfiling,
-    notifications,
-    leaflets,
-    patientAlerts,
-    problemDescriptionCleanup,
-    phrases,
-    rota,
-  ] = await Promise.all([
-    sentinelExport(),
-    capacityExport(),
-    triageExport(),
-    TriageAlertIO.exportData(),
-    slotCounterExport(),
-    submissionsExport(),
-    popoutExport(),
-    referralsExport(),
-    requestMonitorExport(),
-    condorExport(),
-    receptionExport(),
-    knowledgeExport(),
-    labfilingExport(),
-    notificationsExport(),
-    leafletsExport(),
-    patientAlertsExport(),
-    problemDescriptionCleanupExport(),
-    phrasesExport(),
-    rotaExport(),
-  ]);
-  const suite = await suiteExport();
-  return window.SuiteEnvelope.wrap(
-    'suite',
-    {
-      sentinel,
-      capacity,
-      triage,
-      triageAlerts,
-      slots,
-      submissions,
-      popout,
-      referrals,
-      requestMonitor,
-      condor,
-      reception,
-      knowledge,
-      labfiling,
-      notifications,
-      leaflets,
-      patientAlerts,
-      problemDescriptionCleanup,
-      phrases,
-      rota,
-      suite,
-    },
-    chrome.runtime.getManifest().version
-  );
+  const scopes = window.SuiteEnvelope.MODULE_SCOPES;
+  const entries = await Promise.all(scopes.map((s) => MODULE_IO[s].exportFn().then((data) => [s, data])));
+  return window.SuiteEnvelope.wrap('suite', Object.fromEntries(entries), chrome.runtime.getManifest().version);
 }
 
 async function doModuleExport(scope) {
-  const exporters = {
-    sentinel: () => sentinelExport(),
-    capacity: () => capacityExport(),
-    triage: () => triageExport(),
-    triageAlerts: () => TriageAlertIO.exportData(),
-    slots: () => slotCounterExport(),
-    submissions: () => submissionsExport(),
-    popout: () => popoutExport(),
-    referrals: () => referralsExport(),
-    requestMonitor: () => requestMonitorExport(),
-    condor: () => condorExport(),
-    reception: () => receptionExport(),
-    knowledge: () => knowledgeExport(),
-    labfiling: () => labfilingExport(),
-    notifications: () => notificationsExport(),
-    leaflets: () => leafletsExport(),
-    patientAlerts: () => patientAlertsExport(),
-    problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
-    phrases: () => phrasesExport(),
-    rota: () => rotaExport(),
-  };
-  if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
-  const data = await exporters[scope]();
+  const io = MODULE_IO[scope];
+  if (!io || scope === 'suite') throw new Error('Unknown scope: ' + scope);
+  const data = await io.exportFn();
   // Real manifest version (audit M18: the envelope's fallback stamped every
   // backup "2.5.0", defeating the preview's provenance line).
   return window.SuiteEnvelope.wrap(scope, { [scope]: data }, chrome.runtime.getManifest().version);
@@ -939,38 +880,21 @@ async function doModuleExport(scope) {
 async function applyEnvelope(envelope) {
   const mods = envelope.modules || {};
   const notes = [];
-  // Build task list in the same order as doFullExport to make auditing straightforward.
-  // Only include modules that are present in this backup (same mods.X && gating).
-  // applyWithRollback runs them sequentially; if any throws, all writes are rolled back.
-  const tasks = [
-    mods.sentinel &&
-      (async () => {
-        const res = await sentinelImport(mods.sentinel, { skipInvalidCustomRules: true });
+  // Same order as doFullExport (MODULE_SCOPES). Only modules present in this
+  // backup. applyWithRollback runs them sequentially; if any throws, all
+  // writes are rolled back.
+  const tasks = window.SuiteEnvelope.MODULE_SCOPES.filter((s) => mods[s]).map((s) => {
+    if (s === 'sentinel') {
+      return async () => {
+        const res = await MODULE_IO.sentinel.importFn(mods.sentinel, { skipInvalidCustomRules: true });
         if (res && res.rejectedCustomRules && res.rejectedCustomRules.length) {
           const ids = res.rejectedCustomRules.map((r) => r.id || r.label || '(unnamed)').join(', ');
           notes.push(`${res.rejectedCustomRules.length} custom rule(s) skipped as invalid: ${ids}`);
         }
-      }),
-    mods.capacity && (() => capacityImport(mods.capacity)),
-    mods.triage && (() => triageImport(mods.triage)),
-    mods.triageAlerts && (() => TriageAlertIO.importData(mods.triageAlerts)),
-    mods.slots && (() => slotCounterImport(mods.slots)),
-    mods.submissions && (() => submissionsImport(mods.submissions)),
-    mods.popout && (() => popoutImport(mods.popout)),
-    mods.referrals && (() => referralsImport(mods.referrals)),
-    mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
-    mods.condor && (() => condorImport(mods.condor)),
-    mods.reception && (() => receptionImport(mods.reception)),
-    mods.knowledge && (() => knowledgeImport(mods.knowledge)),
-    mods.labfiling && (() => labfilingImport(mods.labfiling)),
-    mods.notifications && (() => notificationsImport(mods.notifications)),
-    mods.leaflets && (() => leafletsImport(mods.leaflets)),
-    mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
-    mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
-    mods.phrases && (() => phrasesImport(mods.phrases)),
-    mods.rota && (() => rotaImport(mods.rota)),
-    mods.suite && (() => suiteImport(mods.suite)),
-  ].filter(Boolean);
+      };
+    }
+    return () => MODULE_IO[s].importFn(mods[s]);
+  });
   await window.SuiteEnvelope.applyWithRollback(tasks);
   return { notes };
 }
