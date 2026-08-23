@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.236.25
-**Generated:** 2026-08-22
+**Version:** v3.237.0
+**Generated:** 2026-08-23
 
 ## What it is
 
@@ -227,6 +227,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.237.0 (2026-08-23)** — Keeper gap-analysis batch: ten new clinical rules across six domains — adult fever reception pathway (incl. neutropenic sepsis), thiazide U&E and denosumab calcium monitoring, opioid+CNS-depressant and valproate-male alerts, the QOF SMI physical-health suite (MH002/003/006/007/012), pneumococcal risk-group 2–64 and shingles severely-immunosuppressed 18+ vaccine eligibility, and three STOPP/START v3 criteria (bone protection ×2, opioid-without-laxative). Lithium brand-name blindness fixed in two existing alerts.
 - **v3.236.25 (2026-08-22)** — CSN §6.1 W-row and version-history ordering fixed; issue date matches document version 3.19.
 - **v3.236.24 (2026-08-22)** — CSO sign-off of CSN §6.1 W17–W21 (write-path inventory); product pin moves to 3.236.23.
 - **v3.236.23 (2026-08-22)** — Write-path safety net: CSN §6.1 gains W17–W21 (nest problems, Contacts, journal code-sync, add-codes-as-problems, bulk task complete/discard); `test-write-path-inventory.js` CI gate fails on any unmapped Medicus write POST; README/VISION drop the read-only claim for the honest enumerated-writes posture; `shared/write-core.js` extracts the bridge-confirmed Finalise diff (allergy canvas is the first consumer).
