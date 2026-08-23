@@ -223,10 +223,22 @@
       var missingReason = s.items.some(function (i) {
         return i.included && i.kind === 'cancel' && !String(i.reason || '').trim();
       });
+      // 2026-08-22 clinical-safety audit R4: this bar used to claim "Send-to is
+      // off — no SMS or email" unconditionally, while the rows above it carry
+      // per-action "Tell the patient" ticks that DO put recipients on the
+      // Medicus payload. State what will actually happen for THIS batch.
+      var notifyCount = s.items.filter(function (i) {
+        return i.included && i.notify;
+      }).length;
+      var sendToLine = notifyCount
+        ? notifyCount +
+          ' action(s) are ticked “Tell the patient” — Medicus will send its OWN confirmation SMS/email to those patients (never custom wording). Untick if that is not wanted. All other actions send nothing. '
+        : 'No “Tell the patient” box is ticked — Send-to is off, no SMS or email. ';
       return (
         '<div class="ms-aoc-confirmbar">' +
         '<strong>This is the write.</strong> Everything above is only staged on this canvas until you press the red button. ' +
-        'Send-to is off — no SMS or email. There is no undo after this. ' +
+        sendToLine +
+        'There is no undo after this. ' +
         'Review staged greys out afterwards because there is nothing left to send.' +
         '<div class="ms-aoc-finalise-list">' +
         rows +
