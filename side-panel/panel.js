@@ -24,6 +24,11 @@ import {
   sortAlerts as paSortAlerts,
 } from './modules/patient-alerts/patient-alerts-core.js';
 
+const SuiteMessages = globalThis.SuiteMessages;
+if (!SuiteMessages) {
+  throw new Error('[panel] SuiteMessages missing — load shared/messages.js before panel.js');
+}
+
 const content = document.getElementById('suiteContent');
 const settingsBtn = document.getElementById('settingsBtn');
 let activeModule = 'slots';
@@ -735,10 +740,11 @@ popoutBtn?.addEventListener('click', async () => {
   await updatePopoutBtn();
 });
 
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!sender || sender.id !== chrome.runtime.id) return;
-  if (msg?.type === 'popout:closed') updatePopoutBtn();
-});
+chrome.runtime.onMessage.addListener(
+  SuiteMessages.gatedListener((msg) => {
+    if (msg?.type === 'popout:closed') updatePopoutBtn();
+  })
+);
 
 updatePopoutBtn();
 
@@ -975,19 +981,19 @@ function renderAbout() {
 
 // ── Service worker messages ────────────────────────────────────────────────────
 
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  // F5: Only accept messages from this extension's own contexts.
-  if (!sender || sender.id !== chrome.runtime.id) return;
-  // Dispatched UNCONDITIONALLY (v3.173.2): the Capacity tab listens for this
-  // same DOM event as its ONLY live-update path, so the old
-  // `activeModule === 'slots'` gate silently froze Capacity (the classic
-  // symptom: "slots no longer auto refresh"). Unconditional dispatch cannot
-  // double-fire — module switching runs the outgoing module's cleanup(), which
-  // removes its listener, so at any instant only the active module listens.
-  if (msg?.type === 'slots:refresh') {
-    document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
-  }
-});
+chrome.runtime.onMessage.addListener(
+  SuiteMessages.gatedListener((msg) => {
+    // Dispatched UNCONDITIONALLY (v3.173.2): the Capacity tab listens for this
+    // same DOM event as its ONLY live-update path, so the old
+    // `activeModule === 'slots'` gate silently froze Capacity (the classic
+    // symptom: "slots no longer auto refresh"). Unconditional dispatch cannot
+    // double-fire — module switching runs the outgoing module's cleanup(), which
+    // removes its listener, so at any instant only the active module listens.
+    if (msg?.type === 'slots:refresh') {
+      document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
+    }
+  })
+);
 
 // ── Alert roll-up (groups elevated demand strips into one summary bar) ────────
 // Three strips (#wrStrip, #rmStrip, #subRagStrip) each render independently below
@@ -1410,11 +1416,12 @@ function makePoller(fn, baseMs, label) {
 // guarded by document.visibilityState and their own fetch-in-flight guard
 // (_rmFetchInFlight for the RM strip), so duplicate refreshes within the same
 // tick are absorbed naturally by awaiting the existing in-flight call.
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!sender || sender.id !== chrome.runtime.id) return;
-  if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
-  if (msg?.type === 'requestMonitor:refresh') fetchAndRenderRmStrip();
-});
+chrome.runtime.onMessage.addListener(
+  SuiteMessages.gatedListener((msg) => {
+    if (msg?.type === 'waiting:refresh') fetchAndRenderStrip(true);
+    if (msg?.type === 'requestMonitor:refresh') fetchAndRenderRmStrip();
+  })
+);
 
 // Boot the strip — initial fetch + self-scheduling poll with failure backoff
 wrPoller = makePoller(fetchAndRenderStrip, WR_POLL_MS, 'wr-strip').start();
@@ -1511,10 +1518,11 @@ function applySentinelBadgeToDom(actionCount, hasRed) {
 }
 
 chrome.tabs.onActivated.addListener(() => scheduleSentinelBadgeUpdate());
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!sender || sender.id !== chrome.runtime.id) return;
-  if (msg?.type === 'sentinel:snapshot-updated') scheduleSentinelBadgeUpdate();
-});
+chrome.runtime.onMessage.addListener(
+  SuiteMessages.gatedListener((msg) => {
+    if (msg?.type === 'sentinel:snapshot-updated') scheduleSentinelBadgeUpdate();
+  })
+);
 updateSentinelBadge();
 
 // ── Request Monitor strip (v1.3) ─────────────────────────────────────────────
@@ -2066,10 +2074,11 @@ function schedulePaStripRefresh() {
     fetchAndRenderPaStrip();
   }, 400);
 }
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!sender || sender.id !== chrome.runtime.id) return;
-  if (msg?.type === 'sentinel:snapshot-updated') schedulePaStripRefresh();
-});
+chrome.runtime.onMessage.addListener(
+  SuiteMessages.gatedListener((msg) => {
+    if (msg?.type === 'sentinel:snapshot-updated') schedulePaStripRefresh();
+  })
+);
 chrome.tabs.onActivated.addListener(() => schedulePaStripRefresh());
 chrome.storage.onChanged.addListener((changes) => {
   if (changes['patientAlerts.byPatient']) {

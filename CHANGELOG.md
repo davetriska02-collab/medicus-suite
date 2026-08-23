@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.236.32] — 2026-08-23
+
+### Architecture plan Phase 5.1 — message names + gated listener
+
+- `shared/messages.js` is the named `ACTIONS` table plus `gatedListener()`,
+  which drops any message whose `sender.id` is not this extension.
+- Side panel and pop-out load it as a classic script and wrap their
+  `onMessage` handlers. Handler comparisons stay raw string literals so
+  `test-message-contract.js` still inventories them.
+- The contract test now also asserts every inventoried name is in
+  `ACTIONS` (and vice versa) and that `gatedListener` rejects a foreign
+  sender.
+
 ## [v3.236.31] — 2026-08-23
 
 ### Architecture plan Phase 3.3–3.4 — invert booking-panel and practice-report

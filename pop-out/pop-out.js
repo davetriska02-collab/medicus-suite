@@ -8,6 +8,11 @@ import { initPalette } from '../side-panel/palette/palette.js';
 import { sanitiseHiddenTabs, TAB_CATALOG, isLoadableModule } from '../side-panel/tab-catalog.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 
+const SuiteMessages = globalThis.SuiteMessages;
+if (!SuiteMessages) {
+  throw new Error('[pop-out] SuiteMessages missing — load shared/messages.js before pop-out.js');
+}
+
 const content = document.getElementById('popoutContent');
 const settingsBtn = document.getElementById('popoutSettingsBtn');
 let activeModule = null;
@@ -272,21 +277,21 @@ wireHelpButton();
 
 // ── Service worker messages ───────────────────────────────────────────────────
 
-// F5: Sender guard — only accept messages from intra-extension contexts.
-chrome.runtime.onMessage.addListener((msg, sender) => {
-  if (!sender || sender.id !== chrome.runtime.id) return;
-  // slots needs the relay because the slots module listens for a DOM CustomEvent
-  // (not the chrome.runtime message). Other modules (e.g. sentinel) register their
-  // own chrome.runtime.onMessage listener in init(), so they receive
-  // waiting:refresh / sentinel:snapshot-updated directly in the pop-out too.
-  // Dispatched UNCONDITIONALLY (v3.173.2): Capacity listens for the same DOM
-  // event as its only live-update path — the old `activeModule === 'slots'`
-  // gate froze it. Module cleanup() removes the outgoing module's listener, so
-  // unconditional dispatch cannot double-fire. Mirrors panel.js.
-  if (msg?.type === 'slots:refresh') {
-    document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
-  }
-});
+chrome.runtime.onMessage.addListener(
+  SuiteMessages.gatedListener((msg) => {
+    // slots needs the relay because the slots module listens for a DOM CustomEvent
+    // (not the chrome.runtime message). Other modules (e.g. sentinel) register their
+    // own chrome.runtime.onMessage listener in init(), so they receive
+    // waiting:refresh / sentinel:snapshot-updated directly in the pop-out too.
+    // Dispatched UNCONDITIONALLY (v3.173.2): Capacity listens for the same DOM
+    // event as its only live-update path — the old `activeModule === 'slots'`
+    // gate froze it. Module cleanup() removes the outgoing module's listener, so
+    // unconditional dispatch cannot double-fire. Mirrors panel.js.
+    if (msg?.type === 'slots:refresh') {
+      document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
+    }
+  })
+);
 
 // ── Quiet pill ────────────────────────────────────────────────────────────────
 // Mirrors the panel's quiet pill: amber indicator + click-to-clear.

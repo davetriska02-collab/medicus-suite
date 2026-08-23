@@ -123,6 +123,47 @@ for (const abs of PRODUCT_JS) {
 check(sent.size >= 8, `found ${sent.size} sent action/type literals`);
 check(handled.size >= 5, `found ${handled.size} handled action/type literals`);
 
+// Phase 5.1 — lock-step with shared/messages.js ACTIONS. Handlers keep raw
+// string literals so this inventory still sees them; ACTIONS must name every
+// inventoried runtime action (scanner noise `basic` is not a runtime message).
+const SuiteMessages = require('./shared/messages.js');
+check(typeof SuiteMessages.gatedListener === 'function', 'SuiteMessages.gatedListener is exported');
+check(SuiteMessages.ACTIONS && typeof SuiteMessages.ACTIONS === 'object', 'SuiteMessages.ACTIONS is exported');
+
+const actionValues = new Set(Object.values(SuiteMessages.ACTIONS));
+const inventoryNames = new Set([...sent.keys(), ...handled.keys()].filter((k) => k !== 'basic'));
+const missingInActions = [...inventoryNames].filter((k) => !actionValues.has(k));
+check(
+  missingInActions.length === 0,
+  missingInActions.length === 0
+    ? 'every inventoried action/type is in SuiteMessages.ACTIONS'
+    : `inventoried names missing from ACTIONS: ${missingInActions.join(', ')}`
+);
+const unusedActions = [...actionValues].filter((k) => !inventoryNames.has(k));
+check(
+  unusedActions.length === 0,
+  unusedActions.length === 0
+    ? 'every ACTIONS value appears as sent or handled'
+    : `ACTIONS values not in inventory (stale?): ${unusedActions.join(', ')}`
+);
+
+{
+  const prevChrome = globalThis.chrome;
+  globalThis.chrome = { runtime: { id: 'ext-id' } };
+  const calls = [];
+  const wrapped = SuiteMessages.gatedListener((msg) => {
+    calls.push(msg);
+  });
+  wrapped({ type: 'x' }, { id: 'other' });
+  check(calls.length === 0, 'gatedListener drops a foreign sender');
+  wrapped({ type: 'x' }, { id: 'ext-id' });
+  check(calls.length === 1, 'gatedListener accepts this extension');
+  wrapped({ type: 'x' }, null);
+  check(calls.length === 1, 'gatedListener drops a missing sender');
+  if (prevChrome === undefined) delete globalThis.chrome;
+  else globalThis.chrome = prevChrome;
+}
+
 // Recorded exceptions. A new entry is a deliberate decision.
 const SENT_ONLY = {
   'popout:closed': 'broadcast after window close; listeners treat it as informational',
@@ -163,7 +204,8 @@ const NO_SENDER_GATE = {
     'listens for sentinel:snapshot-updated only; not a privileged action router',
 };
 
-const GATE_RE = /sender\.id\s*!==\s*chrome\.runtime\.id|sender\.id\s*===\s*chrome\.runtime\.id/;
+const GATE_RE =
+  /sender\.id\s*!==\s*chrome\.runtime\.id|sender\.id\s*===\s*chrome\.runtime\.id|SuiteMessages\.gatedListener/;
 
 const listenerFiles = [];
 for (const abs of PRODUCT_JS) {
