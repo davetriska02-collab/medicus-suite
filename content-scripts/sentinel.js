@@ -84,7 +84,6 @@
     CONFIG = { ...DEFAULT_CONFIG, ...newConfig };
   });
 
-
   // ============================================================
   // API SHADOW (crossover safety: hybrid parity check + transactional fallback)
   // ============================================================
@@ -564,7 +563,7 @@
             {
               now: _evalNowIso,
               problems: data.problems || [],
-        pastProblems: data.pastProblems || [],
+              pastProblems: data.pastProblems || [],
               patientContext: data.patientContext,
               observationHistory: data.observationHistory || [],
               allergies: data.allergies || [],
@@ -672,11 +671,26 @@
     }
   }
 
+  // Same-page reader for sibling content scripts (same isolated world).
+  // The floating Patient-actions "What's due" strip uses this instead of
+  // chrome.tabs.sendMessage (content scripts cannot message each other).
+  // Returns the live snapshot object — callers MUST identity-check
+  // patientContext against their own resolved patient before rendering
+  // (see shared/due-mini.js dueFromSnapshot). Never put chips on a DOM event.
+  window.__msReadSentinelSnapshot = function () {
+    return _lastSnapshot;
+  };
+
   // Notify any open side panel that the snapshot changed.
   function notifySnapshotUpdated() {
     try {
       const p = chrome.runtime.sendMessage({ type: 'sentinel:snapshot-updated' });
       if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) {}
+    // Same-page ping for the floating panel. No payload — readers call
+    // __msReadSentinelSnapshot so a stale listener cannot cache chips.
+    try {
+      document.dispatchEvent(new CustomEvent('ms-sentinel-snapshot'));
     } catch (_) {}
   }
 

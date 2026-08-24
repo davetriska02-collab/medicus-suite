@@ -1,0 +1,336 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
+// Shared — miniaturised "What's due" list from Sentinel chips.
+//
+// Used by the floating Patient-actions panel on task pages
+// (content-scripts/task-actions-panel.js). Same action-needed threshold as
+// sentinel-core.js / brief-core.js (STATUS_RANK <= 2), plus drug-monitoring
+// `no_data` so TAP matches the on-page HUD (H-002). Signal wording mirrors
+// brief-core.js so the strip reads as a pocket Sentinel brief, not a second
+// invented voice. Max 4 lines + "+N more" — same cap as the side-panel brief.
+//
+// Dual-mode export (same pattern as shared/smoking-status.js):
+//   Browser (classic script): window.MsDueMini.<fn>(...)
+//   Node / test:              require('./shared/due-mini.js').<fn>(...)
+//
+// THIS FILE DOES NOT FETCH. Callers pass chips they already trust belong to
+// the on-screen patient. dueFromSnapshot() is the identity gate: it refuses
+// to build a list unless snapshot.patientContext matches the caller-supplied
+// patient UUID. A mismatch is 'pending', never a list for the wrong person.
+
+(function (global) {
+  'use strict';
+
+  // MUST stay in lock-step with STATUS_RANK in engine/rules-engine.js and
+  // side-panel/modules/sentinel/sentinel-core.js. test-status-rank-sync.js
+  // pins those two; test-due-mini.js pins this copy to the engine table.
+  var STATUS_RANK = {
+    overdue: 0,
+    not_met: 0,
+    alert: 0,
+    stale: 1,
+    due_soon: 2,
+    caution: 2,
+    no_data: 3,
+    noted: 3,
+    recently_initiated: 4,
+    achieved: 5,
+    in_date: 5,
+    vax_given: 5,
+    vax_declined: 3,
+    vax_due: 1,
+  };
+
+  var TYPE_RANK = {
+    'drug-monitoring': 0,
+    'drug-combo': 1,
+    'event-count': 1,
+    composite: 1,
+    'qof-indicator': 2,
+    'qof-process-indicator': 2,
+    vaccine: 3,
+  };
+
+  var MAX_ITEMS = 4;
+
+  // Trojan Source / bidi overrides in EHR text must not reverse a due line.
+  var BIDI_RE = /[\u202A-\u202E\u2066-\u2069]/g;
+
+  function stripBidi(s) {
+    return String(s == null ? '' : s).replace(BIDI_RE, '');
+  }
+
+  function isChipActionNeeded(status) {
+    return (STATUS_RANK[status] ?? 99) <= 2;
+  }
+
+  // TAP action list: brief threshold PLUS drug-monitoring no_data (HUD-aligned).
+  function isDueMiniActionNeeded(chip) {
+    if (!chip) return false;
+    if (isChipActionNeeded(chip.status)) return true;
+    return chip.type === 'drug-monitoring' && chip.status === 'no_data';
+  }
+
+  function typeRank(type) {
+    return TYPE_RANK[type] ?? 4;
+  }
+
+  // Visual severity. Rank 0 is red; stale (severely overdue) and drug-monitoring
+  // no_data are also red so hue matches the tag, not a "due soon" hollow ring.
+  function chipSeverity(chip) {
+    if (!chip) return 'amber';
+    if (chip.status === 'stale') return 'red';
+    if (chip.type === 'drug-monitoring' && chip.status === 'no_data') return 'red';
+    var rank = STATUS_RANK[chip.status] ?? 99;
+    return rank === 0 ? 'red' : 'amber';
+  }
+
+  function isDueMiniRed(chip) {
+    return chipSeverity(chip) === 'red';
+  }
+
+  function missingTestNames(chip) {
+    return (chip.tests || [])
+      .filter(function (t) {
+        return t && t.status === 'no_data';
+      })
+      .map(function (t) {
+        return stripBidi(t.testName || t.name);
+      })
+      .filter(Boolean);
+  }
+
+  // Mirrors brief-core.js drugSignalText — do not drift independently.
+  // no_data uses the HUD wording ("no recent FBC, LFT"), never "overdue".
+  function drugSignalText(chip) {
+    var drug = stripBidi(chip.drugName || chip.ruleId || 'Drug');
+    if (chip.status === 'no_data') {
+      var missing = missingTestNames(chip);
+      var missingPart = missing.length > 0 ? missing.join(', ') : 'monitoring';
+      return drug + ' — no recent ' + missingPart;
+    }
+    var dueTests = (chip.tests || [])
+      .filter(function (t) {
+        return t && isChipActionNeeded(t.status);
+      })
+      .map(function (t) {
+        return stripBidi(t.testName || t.name);
+      })
+      .filter(Boolean);
+    var testsPart = dueTests.length > 0 ? dueTests.join(', ') : 'monitoring';
+    var word = chip.status === 'stale' ? 'severely overdue' : chip.status === 'overdue' ? 'overdue' : 'due soon';
+    return drug + ' — ' + testsPart + ' ' + word;
+  }
+
+  // Clinician glance, not QOF-code + threshold. DM006 + "≤58 OVERDUE" was
+  // being read as "her HbA1c is currently over 58". Prefix map matches
+  // sentinel-core QOF_ACTION_BY_PREFIX (admin audience) but names the
+  // review, not the booking verb — this strip is a due-list, not a script.
+  // Explicit codes beat prefixes (MH011 is a lipid indicator, not an MH review).
+  // Prefix match requires a digit (or end) after the letters so LD ≠ LDL.
+  var QOF_GLANCE_BY_CODE = {
+    MH011: 'Lipid profile (SMI)',
+  };
+
+  var QOF_GLANCE_BY_PREFIX = [
+    ['HYP', 'Blood pressure check'],
+    ['DM', 'Diabetes review'],
+    ['AST', 'Asthma review'],
+    ['COPD', 'COPD review'],
+    ['CHD', 'Heart disease review'],
+    ['AF', 'Atrial fibrillation review'],
+    ['CKD', 'Kidney review'],
+    ['HF', 'Heart failure review'],
+    ['MH', 'Mental health review'],
+    ['DEP', 'Depression review'],
+    ['EP', 'Epilepsy review'],
+    ['PAD', 'Circulation review'],
+    ['STIA', 'Stroke or TIA review'],
+    ['RA', 'Rheumatoid arthritis review'],
+    ['OB', 'Weight review'],
+    ['SMOK', 'Stop-smoking review'],
+    ['LD', 'Annual health check'],
+  ].slice().sort(function (a, b) {
+    return b[0].length - a[0].length;
+  });
+
+  function qofPrefixMatches(code, prefix) {
+    if (code.indexOf(prefix) !== 0) return false;
+    if (code.length === prefix.length) return true;
+    var next = code.charAt(prefix.length);
+    return next >= '0' && next <= '9';
+  }
+
+  function qofSignalText(chip) {
+    var code = stripBidi(String(chip.indicatorCode || chip.ruleId || '')).toUpperCase();
+    if (QOF_GLANCE_BY_CODE[code]) return QOF_GLANCE_BY_CODE[code];
+    var hit = QOF_GLANCE_BY_PREFIX.find(function (row) {
+      return qofPrefixMatches(code, row[0]);
+    });
+    if (hit) return hit[1];
+    if (chip.indicatorName) return stripBidi(String(chip.indicatorName)).slice(0, 40);
+    return stripBidi(chip.indicatorCode || chip.ruleId || 'Review');
+  }
+
+  // Mirrors brief-core.js genericSignalText.
+  function genericSignalText(chip) {
+    var label = stripBidi(
+      chip.displayName || chip.label || chip.drugName || chip.indicatorCode || chip.ruleName || chip.ruleId || 'Alert'
+    );
+    var word = chip.status ? String(chip.status).replace(/_/g, ' ') : '';
+    return word ? label + ' — ' + word : label;
+  }
+
+  function chipSignalText(chip) {
+    if (chip.type === 'drug-monitoring') return drugSignalText(chip);
+    if (chip.type === 'qof-indicator' || chip.type === 'qof-process-indicator') return qofSignalText(chip);
+    return genericSignalText(chip);
+  }
+
+  // Strips the trailing status word from a signal line so it can be shown
+  // next to a tag (which already names the state) without saying it twice.
+  // Drug lines end in "… severely overdue"/"… overdue"/"… due soon" (see
+  // drugSignalText); no_data lines use " — no recent {tests}"; generic lines
+  // end in " — {status with _ -> space}" (see genericSignalText). QOF lines
+  // (qofSignalText) carry no trailing status word at all, so they pass
+  // through unchanged — ruling L, brief-aligned.
+  function stripTrailingStatusWord(text, status) {
+    var stripped = text.replace(/ (severely overdue|overdue|due soon)$/, '');
+    if (stripped !== text) return stripped;
+    if (status === 'no_data' && text.indexOf(' — no recent ') !== -1) {
+      return text.replace(' — no recent ', ' — ');
+    }
+    var genericWord = status ? String(status).replace(/_/g, ' ') : '';
+    if (genericWord) {
+      var suffix = ' \u2014 ' + genericWord;
+      if (text.slice(-suffix.length) === suffix) {
+        return text.slice(0, -suffix.length);
+      }
+    }
+    return text;
+  }
+
+  /**
+   * buildDueMini(chips) → DueMini
+   *
+   * @param {Array|null} chips — Sentinel chip array (or null)
+   * @returns {{
+   *   items: Array<{ severity: 'red'|'amber', text: string, label: string, status: string }>,
+   *   moreCount: number,
+   *   moreRed: number,
+   *   redCount: number,
+   *   amberCount: number,
+   *   nothingDue: boolean,
+   *   unclassified: boolean
+   * }}
+   */
+  function buildDueMini(chips) {
+    var raw = Array.isArray(chips) ? chips.filter(Boolean) : [];
+    var list = raw.filter(isDueMiniActionNeeded);
+    var hasUnrecognised = raw.some(function (c) {
+      return c.status && !Object.prototype.hasOwnProperty.call(STATUS_RANK, c.status);
+    });
+    var redCount = 0;
+    var amberCount = 0;
+    for (var i = 0; i < list.length; i++) {
+      if (isDueMiniRed(list[i])) redCount++;
+      else amberCount++;
+    }
+    var sorted = list.slice().sort(function (a, b) {
+      var rankDiff = (STATUS_RANK[a.status] ?? 99) - (STATUS_RANK[b.status] ?? 99);
+      if (rankDiff !== 0) return rankDiff;
+      return typeRank(a.type) - typeRank(b.type);
+    });
+    var shown = sorted.slice(0, MAX_ITEMS);
+    var hidden = sorted.slice(MAX_ITEMS);
+    return {
+      items: shown.map(function (chip) {
+        var text = chipSignalText(chip);
+        return {
+          severity: chipSeverity(chip),
+          text: text,
+          label: stripTrailingStatusWord(text, chip.status),
+          status: chip.status,
+        };
+      }),
+      moreCount: hidden.length,
+      moreRed: hidden.filter(isDueMiniRed).length,
+      redCount: redCount,
+      amberCount: amberCount,
+      nothingDue: list.length === 0 && !hasUnrecognised,
+      unclassified: list.length === 0 && hasUnrecognised,
+    };
+  }
+
+  function snapshotPatientUuid(snapshot) {
+    var pc = snapshot && snapshot.patientContext;
+    if (!pc) return null;
+    return pc.patientUuid || pc.patientId || pc.id || pc.uuid || null;
+  }
+
+  function samePatientId(a, b) {
+    if (!a || !b) return false;
+    return String(a).toLowerCase() === String(b).toLowerCase();
+  }
+
+  function unmatchedHighRiskList(snapshot) {
+    var list = snapshot && snapshot.unmatchedHighRisk;
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter(function (h) {
+        return h && (h.name || h.riskClass);
+      })
+      .map(function (h) {
+        return {
+          name: stripBidi(h.name || ''),
+          riskClass: stripBidi(h.riskClass || ''),
+        };
+      });
+  }
+
+  /**
+   * dueFromSnapshot(snapshot, patientId) → { state, mini?, degraded?, journalAugmentFailed?, unmatchedHighRisk? }
+   *
+   * Identity gate. Returns state 'pending' (do not render chips) unless the
+   * snapshot carries chips for THIS patientId. A previous patient's snapshot,
+   * an unavailable/invalidated snapshot, or a missing patientId must never
+   * produce a due list — that is the H-001 control for this surface.
+   *
+   * state:
+   *   'pending' — no trusted match yet (loading / wrong patient / empty snap)
+   *   'ready'   — mini belongs to this patient and may be rendered
+   */
+  function dueFromSnapshot(snapshot, patientId) {
+    if (!snapshot || snapshot.unavailable === true || !Array.isArray(snapshot.chips)) {
+      return { state: 'pending' };
+    }
+    var snapPid = snapshotPatientUuid(snapshot);
+    if (!patientId || !snapPid || !samePatientId(snapPid, patientId)) {
+      return { state: 'pending' };
+    }
+    return {
+      state: 'ready',
+      mini: buildDueMini(snapshot.chips),
+      degraded: !!snapshot.degraded,
+      journalAugmentFailed: snapshot.journalAugmentFailed === true,
+      unmatchedHighRisk: unmatchedHighRiskList(snapshot),
+    };
+  }
+
+  var api = {
+    STATUS_RANK: STATUS_RANK,
+    MAX_ITEMS: MAX_ITEMS,
+    isChipActionNeeded: isChipActionNeeded,
+    isDueMiniActionNeeded: isDueMiniActionNeeded,
+    buildDueMini: buildDueMini,
+    snapshotPatientUuid: snapshotPatientUuid,
+    samePatientId: samePatientId,
+    dueFromSnapshot: dueFromSnapshot,
+    stripBidi: stripBidi,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = api;
+  } else {
+    global.MsDueMini = api;
+  }
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : global);

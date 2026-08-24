@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.238.0
-**Generated:** 2026-08-23 (automated)
+**Version:** v3.239.2
+**Generated:** 2026-08-24 (automated)
 
 ## What it is
 
@@ -136,7 +136,7 @@ The full **Rota Manager** (separate browser tab) additionally covers working-pat
 These run directly on live Medicus pages, on top of Medicus's own UI:
 
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue; compresses into a compact "pulse" display on busy queues.
-- **Inline booking and task creation** — appointment-booking and create-task panels injected directly on patient and task pages, using Medicus's own scheduling and task-creation controls.
+- **Inline booking and task creation** — appointment-booking and create-task panels injected directly on patient and task pages, using Medicus's own scheduling and task-creation controls. The same floating Patient-actions box now carries a read-only pocket Sentinel **What’s due** strip (drug monitoring, QOF, vaccines) identity-gated to the task’s patient.
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document; a checklist that turns a document's coded journal entries into new Problems.
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit.
 - **Clean up code** — flags outdated or retired SNOMED problem-list codes, suggests a cleaner code or description, and can sync a cleaned-up code or text into a matching consultation-note entry, with one-click undo.
@@ -180,6 +180,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **What’s due on Patient actions** — the floating booking/task panel on a task page now shows a four-line pocket of Sentinel’s action-needed chips for that patient (no second clinical fetch). Identity-gated; journal-fetch and unmatched high-risk drugs fail visible rather than painting “nothing due”.
 - **Clinical-safety audit remediation** — an adversarial audit of the write paths, the fail-closed rules and the safety documentation was acted on in full: the automated lab-filing gate now refuses anything it cannot judge (unreadable rows, unconfirmable units, ambiguous or cross-matched analyte ranges), the outstanding-investigation tick-off became opt-in and is now listed in the public write inventory, the transactional feed refuses writes in code rather than only in prose, and two hazard entries that had never reached the register were recovered.
 - **Organise-canvas fail-safe write paths** — the appointment-organise canvas's failure modes were closed after an adversarial review: moves now prove the destination window is still free on the fresh board before writing, a failed stretch re-creates the original booking (with an urgent named-patient error if even that fails), the confirmation overlay freezes while a batch is being written, and the "Tell the patient" opt-in is described honestly everywhere it appears (and never offered on a stretch).
 - **Ten new clinical rules (The Keeper gap analysis)** — an expanded rule-currency sweep filled the ten highest-impact gaps: an adult fever call-script pathway including neutropenic-sepsis screening (plus a chemotherapy flag on the child fever pathway, both pending clinical safety sign-off before enabling); thiazide and denosumab monitoring chips; opioid-with-sedative and valproate-in-men prescribing-safety alerts (and a fix so brand-only lithium prescriptions fire the existing lithium alerts); the five remaining SMI physical-health QOF indicators; pneumococcal and shingles vaccine chips for at-risk under-65s and immunosuppressed adults; and three STOPP/START medication-review checks for bone protection and opioid-without-laxative.
