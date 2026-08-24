@@ -46,10 +46,7 @@ check(
 );
 check(/__msReadSentinelSnapshot/.test(panel), 'panel reads the live snapshot via __msReadSentinelSnapshot');
 check(/st !== s\.due/.test(panel), 'loadWhatsDue pins due sub-state across the patient-id await');
-check(
-  /live\.pageKey !== ctx\.pageKey/.test(panel),
-  'loadWhatsDue re-checks the live pageKey after the resolve await'
-);
+check(/live\.pageKey !== ctx\.pageKey/.test(panel), 'loadWhatsDue re-checks the live pageKey after the resolve await');
 check(/stopDuePoll\(\)/.test(panel), 'SPA navigation / pagehide stops the due poll');
 check(/state === 'pending' && s\.due\.mini/.test(panel), 'a pending snapshot clears any painted chips immediately');
 check(/function clearDuePaint/.test(panel), 'path change clears painted due chips synchronously');
@@ -64,7 +61,9 @@ check(
 );
 check(
   /st\.loadedForTask = info\.taskUuid/.test(panel) &&
-    !/due\.loadedForTask = info\.taskUuid/.test(panel.split('async function loadWhatsDue')[1].split('function retryWhatsDue')[0]),
+    !/due\.loadedForTask = info\.taskUuid/.test(
+      panel.split('async function loadWhatsDue')[1].split('function retryWhatsDue')[0]
+    ),
   'loadedForTask is set only after a successful patient resolve (one-shot fail is retryable)'
 );
 check(/function retryWhatsDue/.test(panel) && /ms-tap-due-retry/.test(panel), 'error state offers Try again');
@@ -88,10 +87,7 @@ check(/lang.*en-GB/.test(panel), 'widget is en-GB so the date field is not US-fo
 {
   const sw = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
   check(/case 'ms-open-panel'/.test(sw), 'service worker handles ms-open-panel');
-  check(
-    /mod !== 'sentinel' && mod !== 'slots'/.test(sw),
-    'ms-open-panel allow-lists only Monitoring and Slot Counter'
-  );
+  check(/mod !== 'sentinel' && mod !== 'slots'/.test(sw), 'ms-open-panel allow-lists only Monitoring and Slot Counter');
 }
 check(/Couldn't load the desk glance/.test(panel), 'desk fetch failure is named, not painted as zero');
 check(
@@ -99,19 +95,25 @@ check(
   'slots glance uses the Slot Counter embedded-overview scrape, not the first two finder types'
 );
 check(/slotsFromOverview/.test(panel), 'slots glance maps the overview through the tested helper');
-check(/<span>Companion<\/span>/.test(panel), 'header title is Companion');
+check(/ms-tap-title">Companion</.test(panel), 'header title is Companion');
 check(/ms-tap-minimise/.test(panel), 'header has a dedicated Minimise / Restore button');
+check(/ms-tap-icon-btn/.test(panel) && /function iconSvg/.test(panel), 'chrome uses stroke icons, not Unicode corners');
+check(!/⌞/.test(panel), 'pop-in control is not the ⌞ character that rendered as L');
+check(/ms-tap-mark/.test(panel) && /ms-tap-dock-chevron/.test(panel), 'header and docked tab share the Companion mark');
+check(
+  /ms-tap-signal-red/.test(panel) && /function dueSignal/.test(panel),
+  'collapsed / docked chrome carries a severity signal class'
+);
 check(/ms-companion-collapsed/.test(panel), 'minimise state is persisted in localStorage');
 check(/function readCollapsed/.test(panel) && /function writeCollapsed/.test(panel), 'collapsed persist helpers exist');
 check(/function setCollapsed/.test(panel), 'title click and minimise both go through setCollapsed');
 check(/ms-tap-minimised/.test(css), 'minimised chrome shrinks to a compact bar');
+check(/ms-tap-icon-btn/.test(css) && /transparent/.test(css), 'chrome buttons are ghost at rest');
 check(/ms-tap-dock-tab/.test(panel) && /ms-tap-docked/.test(css), 'Companion can pop in to an edge tab');
+check(/ms-tap-signal-red::before/.test(css), 'reduced states promote severity onto the identity hairline');
 {
   const dockFn = panel.slice(panel.indexOf('function setDocked'), panel.indexOf('function outerCollapsedDueBadge'));
-  check(
-    dockFn.length > 80 && /apiReleaseReservation/.test(dockFn),
-    'popping in releases any held booking reservation'
-  );
+  check(dockFn.length > 80 && /apiReleaseReservation/.test(dockFn), 'popping in releases any held booking reservation');
 }
 check(/ms-tap-resize/.test(panel) && /nwse-resize/.test(css), 'Companion has a resize handle');
 check(/Show on every Medicus screen/.test(panel), 'all-screens opt-in is in the widget, not forced on');

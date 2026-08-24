@@ -598,7 +598,8 @@
         width: sw + (e.clientX - sx),
         height: sh + (e.clientY - sy),
       };
-      const clamped = api && api.clampSize ? api.clampSize(next, { width: window.innerWidth, height: window.innerHeight }) : next;
+      const clamped =
+        api && api.clampSize ? api.clampSize(next, { width: window.innerWidth, height: window.innerHeight }) : next;
       el.style.width = clamped.width + 'px';
       el.style.height = clamped.height + 'px';
       el.style.maxHeight = 'none';
@@ -679,7 +680,7 @@
 
     header.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
-      if (e.target.closest && e.target.closest('button, input, select, textarea')) return;
+      if (e.target.closest && e.target.closest('button, input, select, textarea, [role="button"]')) return;
       const rect = el.getBoundingClientRect();
       sx = e.clientX;
       sy = e.clientY;
@@ -730,7 +731,10 @@
     }
     const api = chromeApi();
     const size = currentSize();
-    const clamped = api && api.clampSize ? api.clampSize(size || { width: 340 }, { width: window.innerWidth, height: window.innerHeight }) : size;
+    const clamped =
+      api && api.clampSize
+        ? api.clampSize(size || { width: 340 }, { width: window.innerWidth, height: window.innerHeight })
+        : size;
     if (!clamped) return;
     el.style.width = clamped.width + 'px';
     if (clamped.height) {
@@ -745,6 +749,9 @@
     el.classList.toggle('ms-tap-collapsed', !!s.collapsed && !docked);
     el.classList.toggle('ms-tap-minimised', !!s.collapsed && !docked);
     el.classList.toggle('ms-tap-docked', !!docked);
+    const signal = dueSignal();
+    el.classList.toggle('ms-tap-signal-red', signal === 'red');
+    el.classList.toggle('ms-tap-signal-amber', signal === 'amber');
     el.innerHTML = buildHtml();
     applySavedSize(el);
     bindEvents(el);
@@ -797,6 +804,40 @@
   // Collapsing the whole panel hides the section detail, not the fact that
   // something is due — when collapsed and the due section is carrying a
   // count, the outer header wears the same red/amber count badge (ruling D).
+  function dueSignal() {
+    const mini = s.due && s.due.mini;
+    if (!mini) return '';
+    if (countInt(mini.redCount) > 0) return 'red';
+    if (countInt(mini.amberCount) > 0) return 'amber';
+    return '';
+  }
+
+  // Feather-style stroke icons (14px chrome). No emoji, no rare Unicode
+  // corners — those rendered as a capital L on the live page.
+  function iconSvg(name) {
+    const inner = {
+      mark:
+        '<rect x="1.8" y="2.8" width="8.4" height="10.4" rx="1.7" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
+        '<rect x="6.8" y="4.8" width="7.4" height="8.4" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/>',
+      dock:
+        '<rect x="2" y="3" width="12" height="10" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/>' +
+        '<rect x="10.2" y="3.8" width="3.1" height="8.4" rx="0.6" fill="currentColor"/>',
+      minus: '<path d="M3.4 8h9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      plus: '<path d="M3.4 8h9.2M8 3.4v9.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+      chevronDown:
+        '<path d="M4 6.2L8 10l4-3.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+      chevronLeft:
+        '<path d="M9.8 4L6 8l3.8 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    };
+    return (
+      '<svg class="ms-tap-icon ms-tap-icon-' +
+      name +
+      '" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">' +
+      (inner[name] || '') +
+      '</svg>'
+    );
+  }
+
   function outerCollapsedDueBadge() {
     if (!s.collapsed && !readDocked()) return '';
     const mini = s.due.mini;
@@ -850,23 +891,32 @@
       '<div class="ms-tap-header-row">' +
       '<span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
       !s.collapsed +
+      '" aria-label="' +
+      (s.collapsed ? 'Restore Companion' : 'Minimise Companion') +
       '">' +
-      '<span class="ms-tap-chevron" aria-hidden="true">' +
-      (s.collapsed ? '▸' : '▾') +
+      '<span class="ms-tap-mark" aria-hidden="true">' +
+      iconSvg('mark') +
       '</span>' +
-      '<span>Companion</span>' +
+      '<span class="ms-tap-title">Companion</span>' +
       outerCollapsedDueBadge() +
+      '<span class="ms-tap-chevron' +
+      (s.collapsed ? ' is-collapsed' : '') +
+      '" aria-hidden="true">' +
+      iconSvg('chevronDown') +
       '</span>' +
-      '<button type="button" class="ms-tap-chrome-btn" id="ms-tap-dock" aria-label="Pop Companion in — park it on the edge" title="Pop in (park on the edge)">' +
-      '⌞' +
+      '</span>' +
+      '<div class="ms-tap-chrome">' +
+      '<button type="button" class="ms-tap-icon-btn ms-tap-chrome-btn" id="ms-tap-dock" aria-label="Pop Companion in — park it on the edge" title="Park on the edge">' +
+      iconSvg('dock') +
       '</button>' +
-      '<button type="button" class="ms-tap-minimise" id="ms-tap-minimise" aria-label="' +
+      '<button type="button" class="ms-tap-icon-btn ms-tap-minimise" id="ms-tap-minimise" aria-label="' +
       minLabel +
       '" title="' +
       minLabel +
       '">' +
-      (s.collapsed ? '+' : '−') +
+      iconSvg(s.collapsed ? 'plus' : 'minus') +
       '</button>' +
+      '</div>' +
       '</div>' +
       roleToggleHtml() +
       '</div>' +
@@ -876,9 +926,15 @@
 
   function dockedHtml() {
     return (
-      '<button type="button" class="ms-tap-dock-tab" id="ms-tap-dock-tab" aria-label="Pop Companion out" title="Pop out Companion">' +
-      '<span class="ms-tap-dock-label">Companion</span>' +
+      '<button type="button" class="ms-tap-dock-tab" id="ms-tap-dock-tab" aria-label="Pop Companion out" title="Pop Companion out">' +
+      '<span class="ms-tap-dock-chevron" aria-hidden="true">' +
+      iconSvg('chevronLeft') +
+      '</span>' +
       outerCollapsedDueBadge() +
+      '<span class="ms-tap-mark" aria-hidden="true">' +
+      iconSvg('mark') +
+      '</span>' +
+      '<span class="ms-tap-dock-label">Companion</span>' +
       '</button>'
     );
   }
@@ -1023,9 +1079,7 @@
         );
       }
       const emptyLine =
-        currentRole() === 'reception'
-          ? 'Nothing to book from this record right now.'
-          : 'Nothing due right now.';
+        currentRole() === 'reception' ? 'Nothing to book from this record right now.' : 'Nothing due right now.';
       return (
         '<div class="ms-tap-due-empty">' +
         '<div>' +
@@ -1040,8 +1094,7 @@
     }
     const showAll = !!due.showAll && Array.isArray(mini.allItems) && mini.allItems.length;
     const list = showAll ? mini.allItems : mini.items;
-    const slotLines =
-      s.slots && (s.slots.allLines && s.slots.allLines.length ? s.slots.allLines : s.slots.lines);
+    const slotLines = s.slots && (s.slots.allLines && s.slots.allLines.length ? s.slots.allLines : s.slots.lines);
     const hintApi = currentRole() === 'reception' ? roleApi() : null;
     const items = (list || [])
       .map(function (item) {
@@ -1219,8 +1272,7 @@
       } else if (slots.error && !slots.lines.length) {
         inner = '<div class="ms-tap-due-error">' + esc(slots.error) + '</div>';
       } else if (!slots.lines.length) {
-        inner =
-          '<div class="ms-tap-due-empty">No free slots left today on the appointment book.</div>';
+        inner = '<div class="ms-tap-due-empty">No free slots left today on the appointment book.</div>';
       } else {
         const lead =
           '<div class="ms-tap-glance-lead">' +
@@ -1315,7 +1367,9 @@
           pulse.worst
             .slice(0, 2)
             .map(function (t) {
-              return '<li class="ms-tap-glance-row ms-tap-due-red"><span class="ms-tap-due-text">' + esc(t) + '</span></li>';
+              return (
+                '<li class="ms-tap-glance-row ms-tap-due-red"><span class="ms-tap-due-text">' + esc(t) + '</span></li>'
+              );
             })
             .join('') +
           '</ul>';
@@ -1848,10 +1902,16 @@
       const results = await Promise.allSettled([
         apiFetch('/scheduling/data/homepage/my-appointments'),
         apiFetch(
-          '/tasks/data/medical_patient_request_task/task-list?createdAt_startDate=' + today + '&createdAt_endDate=' + today
+          '/tasks/data/medical_patient_request_task/task-list?createdAt_startDate=' +
+            today +
+            '&createdAt_endDate=' +
+            today
         ),
         apiFetch(
-          '/tasks/data/admin_patient_request_task/task-list?createdAt_startDate=' + today + '&createdAt_endDate=' + today
+          '/tasks/data/admin_patient_request_task/task-list?createdAt_startDate=' +
+            today +
+            '&createdAt_endDate=' +
+            today
         ),
       ]);
       if (st !== s.desk) return;
@@ -1866,7 +1926,11 @@
       st.waiting = mapped.waiting;
       st.medical = mapped.medical;
       st.admin = mapped.admin;
-      if (results.every(function (r) { return r.status === 'rejected'; })) {
+      if (
+        results.every(function (r) {
+          return r.status === 'rejected';
+        })
+      ) {
         st.error = "Couldn't load the desk glance.";
       } else {
         st.loadedForPage = key;
