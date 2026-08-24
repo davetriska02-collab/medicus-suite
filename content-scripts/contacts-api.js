@@ -259,6 +259,16 @@
     );
   }
 
+  // Confirmed via HAR capture 2026-08-20 (deleting a duplicate email address) — same shape as
+  // deleteAddress/deleteTelephoneNumber: POST, no request body, id in the URL only, response body
+  // just `{}`. The prefill/read side (getEditTelephoneNumber's equivalent) would be
+  // GET /patient/data/email/edit-email-address/{emailAddressId} -> { id, displayName,
+  // emailAddress, emailAddressType, emailAddressTypes, patientId, preferredEmailAddress } — not
+  // wired up here, since nothing in this file edits an email address yet, only deletes one.
+  function deleteEmailAddress(apiBase, emailAddressId) {
+    return postJson(apiBase, `/patient/email/delete-email-address/${encodeURIComponent(emailAddressId)}`, undefined);
+  }
+
   // Confirmed via HAR capture 2026-07-26 (editing an EXISTING patient-contact's relationship —
   // creating a new one is buildLinkPatientBody/linkPatient, an entirely different endpoint). Lets
   // the canvas write a corrected relationship label back to Medicus for an already-real link whose
@@ -642,6 +652,7 @@
     getEditTelephoneNumber,
     changeTelephoneNumber,
     deleteTelephoneNumber,
+    deleteEmailAddress,
     getEditPatientContact,
     changePatientContact,
     findReverseManualMatch,

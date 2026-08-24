@@ -178,6 +178,20 @@
       addressMergeGroups: [], // [{ indexes: [i, j, ...], keepIndex }] — duplicateAddressGroups augmented with which member to keep (buildAddressMergeGroups), drives renderDuplicateAddressWarning + mergeDuplicateAddressGroup
       addressMerging: new Set(), // group keys (indexes.join(',')) currently mid-merge — same Set-not-single-value reasoning as phoneDeleting
       addressMergeError: null,
+
+      // Duplicate phone/email detection (2026-08-20 request) — same pattern as the address
+      // duplicates above, but no per-member fetch is needed: preferredTelephoneNumberForSms /
+      // preferredEmailAddress are already present directly on patientTelephoneNumbers[] /
+      // patientEmailAddresses[] (confirmed via HAR capture 2026-08-20), unlike
+      // isCorrespondenceAddress for addresses.
+      indexPhones: [], // the hub/index patient's OWN patientContactInformationSection.patientTelephoneNumbers — feeds duplicatePhoneGroups
+      duplicatePhoneGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicatePhoneGroups(indexPhones)
+      duplicatePhoneDeleting: new Set(), // telephoneNumberIds currently being deleted from THIS (duplicate-cleanup) flow — kept separate from phoneDeleting below, which is scoped to an active merge-panel review of a DIFFERENT (candidate) patient's numbers
+      duplicatePhoneError: null,
+      indexEmails: [], // the hub/index patient's OWN patientContactInformationSection.patientEmailAddresses — feeds duplicateEmailGroups
+      duplicateEmailGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicateEmailGroups(indexEmails)
+      duplicateEmailDeleting: new Set(), // emailAddressIds currently being deleted
+      duplicateEmailError: null,
       flagUpdating: new Set(), // `${cardId}:${flagKind}` currently mid-write — same Set-not-single-value reasoning as phoneDeleting
       reciprocalDowngrading: new Set(), // cardIds currently mid-write for removeCardFromTree's reciprocal-relationship downgrade
       tree: null, // window.ContactTree instance — LOCKED edges only, pre-placed from linkedCards; see file header
@@ -187,7 +201,6 @@
       // in-page tree swap). Populated from this patient's own linked contacts in loadCanvas' Step
       // 1.8, and grown further by every edge committed this session (doCanvasConfirm).
       familySession: null,
-      expandedSlots: {}, // slotPath -> true once the user has clicked "+ <slot>" to reveal an empty collapsible row
       // patientId -> the PLACED PARENT's own cardId this grandparent was composed from (loadCanvas
       // step 1.6) — persisted here (not just local to loadCanvas) so renderTree can still group a
       // grandparent under the correct parent's own tree item after it's been placed, without
@@ -504,6 +517,21 @@
       st.duplicateAddressGroups = window.ContactRelationships.findDuplicateAddressGroups(st.indexAddresses);
       st.addressMergeGroups = await buildAddressMergeGroups(st.apiBase, st.indexAddresses, st.duplicateAddressGroups);
       if (st !== cs) return;
+      // Duplicate phone/email detection (2026-08-20 request), same "hub/index patient only" scoping
+      // as addresses above — no extra fetch needed (see indexPhones/indexEmails' own state comment),
+      // so groups are built with their default keepIndex directly here rather than via an async
+      // buildXMergeGroups helper like addresses need.
+      const cinfo = details.patientContactInformationSection;
+      st.indexPhones = (cinfo && cinfo.patientTelephoneNumbers) || [];
+      st.duplicatePhoneGroups = window.ContactRelationships.findDuplicatePhoneGroups(st.indexPhones).map((indexes) => {
+        const keepPos = window.ContactRelationships.choosePhoneToKeep(indexes.map((idx) => st.indexPhones[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
+      st.indexEmails = (cinfo && cinfo.patientEmailAddresses) || [];
+      st.duplicateEmailGroups = window.ContactRelationships.findDuplicateEmailGroups(st.indexEmails).map((indexes) => {
+        const keepPos = window.ContactRelationships.chooseEmailToKeep(indexes.map((idx) => st.indexEmails[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
       const indexAge = candidateAgeFromDob(details.patientDetailsSection && details.patientDetailsSection.dateOfBirth);
       st.indexAge = indexAge; // stashed on state too — cardHtml's sharedContactInfoDetailHtml needs it for the "ages side by side" hint
 
@@ -1298,13 +1326,14 @@
       </div>`;
   }
 
-  // collapsibleSlotHtml — grandparents/aunts-uncles/other start collapsed behind a "+" button
-  // unless already populated or the user has expanded it this session, so an empty canvas isn't
-  // dominated by rarely-used rows.
+  // collapsibleSlotHtml — RENAMED-IN-PLACE (2026-08-21 request): grandparents/aunts-uncles/other
+  // used to start collapsed behind a "+" button unless already populated, so an empty canvas
+  // wasn't dominated by rarely-used rows. Nick's own call after live use: always show them —
+  // always-visible drop targets outweigh the empty-canvas tidiness. Kept as its own function
+  // (rather than inlining slotHtml at each call site) so a future change to how these three slots
+  // render still has one place to make it.
   function collapsibleSlotHtml(slotPath) {
-    const entries = cardsInSlot(slotPath);
-    if (entries.length || cs.expandedSlots[slotPath]) return slotHtml(slotPath);
-    return `<button class="ms-ct-btn-ghost ms-cv-slot-expand" data-expand-slot="${esc(slotPath)}">+ ${esc(SLOT_TITLES[slotPath])}</button>`;
+    return slotHtml(slotPath);
   }
 
   // branchPlaceholderHtml — the "drop here" list item appended to every branch (see below), always
@@ -1360,13 +1389,10 @@
   // 1.6's cs.grandparentViaParent) — dragged in directly (e.g. via search) rather than composed
   // from a placed parent's own record, so there's no specific parent's item to nest them under.
   // Those WITH a known association render nested there instead (grandparentsPairHtml) — excluded
-  // here so they're never shown twice. Collapsible, same as every other rarely-used slot, since
-  // most families will have nothing left to show here once composition has done its job.
+  // here so they're never shown twice. Always shown (2026-08-21 — see collapsibleSlotHtml's own
+  // comment for the same change applied here), not collapsed behind a "+" button any more.
   function unassignedGrandparentsHtml() {
     const unassigned = cardsInSlot('grandparents').filter(({ edge }) => !cs.grandparentViaParent.has(edge.cardId));
-    if (!unassigned.length && !cs.expandedSlots.grandparents) {
-      return `<button class="ms-ct-btn-ghost ms-cv-slot-expand" data-expand-slot="grandparents">+ ${esc(SLOT_TITLES.grandparents)}</button>`;
-    }
     const cardsHtml = unassigned
       .map(({ edge, card }) =>
         cardHtml(card, 'linked', {
@@ -1756,6 +1782,13 @@
         cs.transitiveCards.find((c) => c.id === id)
       );
     if (kind === 'address') return cs.addressCards.find((c) => c.id === id);
+    // 'linked' (2026-08-21, relocate): a card ALREADY placed in the tree carries data-card-kind
+    // "linked" (see cardHtml's calls throughout slotHtml/grandparentsPairHtml/
+    // unassignedGrandparentsHtml) — the drag payload's own kind field, read straight off that
+    // attribute at dragstart, so tryAssign's very first lookup for a relocate drop was silently
+    // returning null (no match here) and bailing before buildConfirmForCard ever ran — no confirm
+    // panel, no error, nothing visible, exactly the reported "dropping it has no effect".
+    if (kind === 'linked') return cs.linkedCards.find((c) => c.id === id);
     return null;
   }
 
@@ -1826,12 +1859,19 @@
     const candidateName = card.name;
 
     // LEFT column — Jane's (the candidate's) relationship to John (the index patient), written
-    // onto John's own record. Unchanged logic from before this redesign, just relocated: the
-    // picker + forward NOK/copy only apply when the relationship isn't already known (a brand-new
-    // candidate, or an already-linked one whose free text didn't parse) and isn't just cleaning up
-    // an existing link.
-    const forwardColumnBody = !cs.confirm.relationshipKnown
-      ? `<select class="ms-ct-select" id="ms-cv-base">${baseSelect}</select>
+    // onto John's own record. Picker + forward NOK/copy apply when the relationship isn't already
+    // known (a brand-new candidate, or an already-linked one whose free text didn't parse), and
+    // ALSO for a RELOCATE (2026-08-21 — drag an already-placed card onto a different slot): the
+    // whole point of dragging it there is to change what it's recorded as, so leaving the picker
+    // hidden — as the pre-relocate logic did, since relationshipKnown is still true for an
+    // already-linked card — silently applied whatever buildConfirmForCard's slot-override guessed
+    // (or, if the OLD baseId happened to still be valid for the new slot, left it completely
+    // unchanged) with no way to refine or correct it. baseSelect/modRadios already pre-select
+    // cs.confirm's current baseId/modifierId (the guess, or the unchanged original), so showing
+    // the picker here just makes that guess reviewable and editable, never blank.
+    const forwardColumnBody =
+      !cs.confirm.relationshipKnown || cs.confirm.relocateFromSlotPath
+        ? `<select class="ms-ct-select" id="ms-cv-base">${baseSelect}</select>
          ${modRadios}
          ${
            cs.confirm.existingForwardLink
@@ -1841,7 +1881,7 @@
                 <label><input type="checkbox" id="ms-cv-fwd-copy" ${cs.confirm.forwardCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
                 <div class="ms-ct-note">This will allow messages to be sent to ${esc(candidateName)} about ${esc(indexName)}.</div>`
          }`
-      : `<div class="ms-ct-note">Already recorded on ${esc(indexName)}'s own record.</div>`;
+        : `<div class="ms-ct-note">Already recorded on ${esc(indexName)}'s own record.</div>`;
 
     // RIGHT column — John's reciprocal relationship to Jane, written onto JANE's own record (a
     // SEPARATE write, performLinkAndCleanup's reverse link). The relationship label itself is
@@ -1860,15 +1900,23 @@
     // performLinkAndCleanup deliberately preserves that record's existing next-of-kin and
     // copy-correspondence values rather than applying this panel's reverse checkboxes — so offering
     // those checkboxes here would promise a write that never happens.
-    const reverseColumnBody = cs.confirm.reciprocalNeedsRepair
+    // RELOCATE copy (2026-08-21) is distinct from the placeholder-repair copy below: a relocate's
+    // reciprocal currently holds a REAL, previously-correct relationship (not the "Family member"
+    // placeholder text), so saying it "was reset when removed from the tree" would be false — it
+    // says what it will change TO/FROM instead.
+    const reverseColumnBody = cs.confirm.relocateFromSlotPath
       ? cs.confirm.reverseBaseId
-        ? `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree). Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
-        : `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree), and the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
-      : cs.confirm.existingReciprocal
-        ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
-        : cs.confirm.reverseAmbiguous
-          ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
-          : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
+        ? `<div class="ms-ct-warn">Moving this changes ${esc(candidateName)}'s own record too — it currently reads “${esc((cs.confirm.existingReciprocal && cs.confirm.existingReciprocal.patientContactRelationship) || '')}”. Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
+        : `<div class="ms-ct-warn">Moving this should also update ${esc(candidateName)}'s own record (currently “${esc((cs.confirm.existingReciprocal && cs.confirm.existingReciprocal.patientContactRelationship) || '')}”), but the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
+      : cs.confirm.reciprocalNeedsRepair
+        ? cs.confirm.reverseBaseId
+          ? `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree). Confirming corrects it to “${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}”. Their next-of-kin and copy-correspondence settings are left exactly as they are.</div>`
+          : `<div class="ms-ct-warn">${esc(candidateName)}'s own record currently reads “${esc(PLACEHOLDER_RELATIONSHIP_TEXT)}” (it was reset when they were removed from the tree), and the reverse relationship can't be worked out automatically (gender not recorded) — it will stay as it is. Correct it on their own record in Medicus.</div>`
+        : cs.confirm.existingReciprocal
+          ? `<div class="ms-ct-warn">${esc(candidateName)} already lists this patient as their own contact (recorded as "${esc(cs.confirm.existingReciprocal.patientContactRelationship)}") — no reverse link will be created.</div>`
+          : cs.confirm.reverseAmbiguous
+            ? `<div class="ms-ct-note">Reverse relationship not auto-suggested (gender not recorded) — use the wizard for this case.</div>`
+            : `<div class="ms-cv-confirm-reverse-label">${esc(rel.formatLabel(cs.confirm.reverseBaseId, cs.confirm.modifierId))}</div>
            <label><input type="checkbox" id="ms-cv-rev-nok" ${cs.confirm.reverseIsNextOfKin ? 'checked' : ''}/> Next of kin</label>
            <div class="ms-ct-note">This will record ${esc(indexName)} as ${esc(candidateName)}'s next of kin.</div>
            <label><input type="checkbox" id="ms-cv-rev-copy" ${cs.confirm.reverseCopyCorrespondence ? 'checked' : ''}/> Copy correspondence</label>
@@ -1880,10 +1928,12 @@
         ${
           cs.confirm.existingForwardLink
             ? `<div class="ms-ct-warn">Already linked (recorded as "${esc(cs.confirm.existingForwardLink.patientContactRelationship)}")${
-                cs.confirm.relationshipKnown
-                  ? ` — this will just clean up the manual duplicate, if one is merged in.`
-                  : `, which didn't match a known category — pick how it should appear below. Confirming will ` +
-                    `update this relationship on Medicus and clean up the manual duplicate, if one is merged in.`
+                cs.confirm.relocateFromSlotPath
+                  ? ` — moving this changes the relationship recorded here. Pick how it should appear below; confirming updates it on Medicus.`
+                  : cs.confirm.relationshipKnown
+                    ? ` — this will just clean up the manual duplicate, if one is merged in.`
+                    : `, which didn't match a known category — pick how it should appear below. Confirming will ` +
+                      `update this relationship on Medicus and clean up the manual duplicate, if one is merged in.`
               }</div>`
             : ''
         }
@@ -2226,6 +2276,98 @@
     `;
   }
 
+  // renderDuplicatePhoneWarning / renderDuplicateEmailWarning (2026-08-20 request) — same shape as
+  // renderDuplicateAddressWarning above, simplified: no correspondence-flag transfer, no per-member
+  // fetch/unverified state (see deleteDuplicatePhoneGroup/deleteDuplicateEmailGroup's own comment).
+  function renderDuplicatePhoneWarning() {
+    if (!cs.duplicatePhoneGroups.length) return '';
+    const groups = cs.duplicatePhoneGroups
+      .map((plan) => {
+        const groupKey = plan.indexes.join(',');
+        const deleting = cs.duplicatePhoneDeleting.has(groupKey);
+        const rows = plan.indexes
+          .map((idx) => {
+            const entry = cs.indexPhones[idx];
+            const text = (entry && entry.telephoneNumber) || '(no number)';
+            const type = (entry && entry.telephoneNumberType) || '';
+            return `
+              <label class="ms-cv-dupaddr-line">
+                <input type="radio" name="ms-cv-dupphone-keep-${esc(groupKey)}" class="ms-cv-dupphone-keep-radio"
+                       data-phone-group="${esc(groupKey)}" data-phone-index="${idx}"
+                       ${idx === plan.keepIndex ? 'checked' : ''} ${deleting ? 'disabled' : ''}/>
+                ${esc(text)}${type ? ` <span class="ms-ct-note">(${esc(type)})</span>` : ''}${
+                  entry && entry.preferredTelephoneNumberForSms
+                    ? ' <span class="ms-ct-note">(preferred for SMS)</span>'
+                    : ''
+                }
+              </label>
+            `;
+          })
+          .join('');
+        return `
+          <div class="ms-cv-dupaddr-group">
+            ${rows}
+            <button class="ms-ct-btn-ghost ms-cv-dupphone-delete" data-phone-group="${esc(groupKey)}" ${deleting ? 'disabled' : ''}>${deleting ? 'Deleting…' : 'Keep the selected number — delete the rest'}</button>
+          </div>
+        `;
+      })
+      .join('');
+    const n = cs.duplicatePhoneGroups.length;
+    return `
+      <div class="ms-ct-warn ms-cv-dupaddr-warn">
+        <strong>${n} possible duplicate phone number${n === 1 ? '' : 's'} on this patient's own record</strong> —
+        looks like the same number recorded more than once, e.g. once with its area code and once
+        without. Pick which one to keep for each group (defaults to whichever is preferred for SMS,
+        or the fuller number if neither is).
+        ${groups}
+        ${cs.duplicatePhoneError ? `<div class="ms-ct-error">${esc(cs.duplicatePhoneError)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function renderDuplicateEmailWarning() {
+    if (!cs.duplicateEmailGroups.length) return '';
+    const groups = cs.duplicateEmailGroups
+      .map((plan) => {
+        const groupKey = plan.indexes.join(',');
+        const deleting = cs.duplicateEmailDeleting.has(groupKey);
+        const rows = plan.indexes
+          .map((idx) => {
+            const entry = cs.indexEmails[idx];
+            const text = (entry && entry.emailAddress) || '(no address)';
+            const type = (entry && entry.emailAddressType) || '';
+            return `
+              <label class="ms-cv-dupaddr-line">
+                <input type="radio" name="ms-cv-dupemail-keep-${esc(groupKey)}" class="ms-cv-dupemail-keep-radio"
+                       data-email-group="${esc(groupKey)}" data-email-index="${idx}"
+                       ${idx === plan.keepIndex ? 'checked' : ''} ${deleting ? 'disabled' : ''}/>
+                ${esc(text)}${type ? ` <span class="ms-ct-note">(${esc(type)})</span>` : ''}${
+                  entry && entry.preferredEmailAddress ? ' <span class="ms-ct-note">(preferred)</span>' : ''
+                }
+              </label>
+            `;
+          })
+          .join('');
+        return `
+          <div class="ms-cv-dupaddr-group">
+            ${rows}
+            <button class="ms-ct-btn-ghost ms-cv-dupemail-delete" data-email-group="${esc(groupKey)}" ${deleting ? 'disabled' : ''}>${deleting ? 'Deleting…' : 'Keep the selected address — delete the rest'}</button>
+          </div>
+        `;
+      })
+      .join('');
+    const n = cs.duplicateEmailGroups.length;
+    return `
+      <div class="ms-ct-warn ms-cv-dupaddr-warn">
+        <strong>${n} possible duplicate email address${n === 1 ? '' : 'es'} on this patient's own record</strong> —
+        looks like the same address recorded more than once with different capitalisation or spacing.
+        Pick which one to keep for each group (defaults to whichever is marked preferred).
+        ${groups}
+        ${cs.duplicateEmailError ? `<div class="ms-ct-error">${esc(cs.duplicateEmailError)}</div>` : ''}
+      </div>
+    `;
+  }
+
   function render() {
     const overlay = document.getElementById('ms-contacts-canvas-overlay');
     if (!overlay) return;
@@ -2258,6 +2400,8 @@
                    ${renderFlagTokens()}
                    ${renderRemoveZone()}
                    ${renderDuplicateAddressWarning()}
+                   ${renderDuplicatePhoneWarning()}
+                   ${renderDuplicateEmailWarning()}
                    ${renderTree()}
                    ${cs.pendingMerge ? renderMergePanel() : renderConfirmPanel()}
                    ${renderSources()}
@@ -2831,6 +2975,100 @@
     }
   }
 
+  // deleteDuplicatePhoneGroup / deleteDuplicateEmailGroup (2026-08-20 request) — simpler than
+  // mergeDuplicateAddressGroup above: no flag-transfer step, since neither
+  // preferredTelephoneNumberForSms nor preferredEmailAddress needs moving first — choosePhoneToKeep/
+  // chooseEmailToKeep already refuse to pick anything OTHER than the preferred entry when one
+  // exists (see their own comments), so the entry being kept already holds whichever flag matters.
+  // Same "filter locally from deletes we know completed, don't re-fetch" discipline as
+  // mergeDuplicateAddressGroup — a re-fetch immediately after a delete was found (live, for
+  // addresses) to sometimes still show the just-deleted entry.
+  async function deleteDuplicatePhoneGroup(groupKey) {
+    const plan = cs.duplicatePhoneGroups.find((g) => g.indexes.join(',') === groupKey);
+    if (!plan) return;
+    const st = cs;
+    if (st.duplicatePhoneDeleting.has(groupKey)) return; // already mid-delete — never fire twice
+    if (anyWriteInFlight()) {
+      st.duplicatePhoneError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.duplicatePhoneError = null;
+    st.duplicatePhoneDeleting.add(groupKey);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const deletedIds = new Set();
+      for (const idx of plan.indexes) {
+        if (idx === plan.keepIndex) continue;
+        const entry = st.indexPhones[idx];
+        if (!entry || !entry.telephoneNumberId) continue;
+        await window.ContactsApi.deleteTelephoneNumber(st.apiBase, entry.telephoneNumberId);
+        if (st !== cs) return;
+        deletedIds.add(entry.telephoneNumberId);
+      }
+      st.indexPhones = st.indexPhones.filter(
+        (entry) => !entry.telephoneNumberId || !deletedIds.has(entry.telephoneNumberId)
+      );
+      st.duplicatePhoneGroups = window.ContactRelationships.findDuplicatePhoneGroups(st.indexPhones).map((indexes) => {
+        const keepPos = window.ContactRelationships.choosePhoneToKeep(indexes.map((idx) => st.indexPhones[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
+    } catch (err) {
+      st.duplicatePhoneError = `${err.message || 'Failed to delete these duplicate numbers.'} Some may still be there — refresh to check what remains.`;
+    } finally {
+      if (st === cs) {
+        st.duplicatePhoneDeleting.delete(groupKey);
+        render();
+      }
+    }
+  }
+
+  async function deleteDuplicateEmailGroup(groupKey) {
+    const plan = cs.duplicateEmailGroups.find((g) => g.indexes.join(',') === groupKey);
+    if (!plan) return;
+    const st = cs;
+    if (st.duplicateEmailDeleting.has(groupKey)) return;
+    if (anyWriteInFlight()) {
+      st.duplicateEmailError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.duplicateEmailError = null;
+    st.duplicateEmailDeleting.add(groupKey);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const deletedIds = new Set();
+      for (const idx of plan.indexes) {
+        if (idx === plan.keepIndex) continue;
+        const entry = st.indexEmails[idx];
+        if (!entry || !entry.emailAddressId) continue;
+        await window.ContactsApi.deleteEmailAddress(st.apiBase, entry.emailAddressId);
+        if (st !== cs) return;
+        deletedIds.add(entry.emailAddressId);
+      }
+      st.indexEmails = st.indexEmails.filter((entry) => !entry.emailAddressId || !deletedIds.has(entry.emailAddressId));
+      st.duplicateEmailGroups = window.ContactRelationships.findDuplicateEmailGroups(st.indexEmails).map((indexes) => {
+        const keepPos = window.ContactRelationships.chooseEmailToKeep(indexes.map((idx) => st.indexEmails[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
+    } catch (err) {
+      st.duplicateEmailError = `${err.message || 'Failed to delete these duplicate email addresses.'} Some may still be there — refresh to check what remains.`;
+    } finally {
+      if (st === cs) {
+        st.duplicateEmailDeleting.delete(groupKey);
+        render();
+      }
+    }
+  }
+
   // setContactFlag(cardId, flagKind, value) — sets/unsets NOK ('nok') or copy-correspondence ('cc')
   // directly on an already-real link, via drag-a-token-onto-a-card or clicking the resulting badge.
   // Same GET-full-state-then-full-replace-POST pattern as doCanvasConfirm's relationshipUpdateId
@@ -2997,7 +3235,7 @@
     const otherName = (lc && lc.name) || 'this contact';
     // Asked BEFORE anything is cleared or written, so cancelling leaves the canvas exactly as it
     // was — including any success panel or unanswered offer already on screen. Spells out which
-    // button does what, matching confirmDiscardUnfinishedMerge: window.confirm's OK/Cancel carry no
+    // button does what, matching resolveUnfinishedMergesBeforeLeaving: window.confirm's OK/Cancel carry no
     // inherent meaning of their own.
     if (
       lc &&
@@ -3241,9 +3479,26 @@
       (downgrade && downgrade.reciprocalRelationshipId) ||
       (medicusCard && medicusCard.reciprocalRelationshipId) ||
       null;
+    // RELOCATE (2026-08-21 request — drag a locked/already-placed card straight onto a DIFFERENT
+    // slot to change its relationship, instead of the two-step "drag to remove, then re-drop"):
+    // the card's OWN current slot, if it has one AND it differs from where it's just been
+    // dropped. Forces reciprocalNeedsRepair below even when existingReciprocal ISN'T a placeholder
+    // — a relocate changes THIS side's relationship, so the OTHER side's text needs recomputing to
+    // match, exactly the same correctness requirement removeCardFromTree's downgrade exists to
+    // guarantee for the two-step flow (see that function's own comment: without something forcing
+    // reciprocalNeedsRepair, existingReciprocal alone reads as "already linked, nothing to do" and
+    // the reverse side is silently left saying the OLD relationship). doCanvasConfirm clears the
+    // old slot locally once this commit lands (see its own comment) — no separate Medicus write for
+    // the removal itself, since the forward relationship record is being UPDATED in place
+    // (relationshipUpdateId below), not deleted and recreated.
+    const currentEdge = cs.tree && cs.tree.edges.find((e) => e.cardId === candidatePatientId);
+    const relocateFromSlotPath =
+      currentEdge && slotPath && currentEdge.slotPath !== slotPath ? currentEdge.slotPath : null;
     const reciprocalNeedsRepair = !!(
       existingReciprocal &&
-      (downgrade || isPlaceholderRelationshipText(existingReciprocal.patientContactRelationship))
+      (downgrade ||
+        isPlaceholderRelationshipText(existingReciprocal.patientContactRelationship) ||
+        relocateFromSlotPath)
     );
     let reverseBaseId = null;
     let reverseAmbiguous = false;
@@ -3265,6 +3520,7 @@
       originalBaseId,
       originalModifierId,
       slotPath: slotPath || null,
+      relocateFromSlotPath,
       forwardIsNextOfKin: false,
       forwardCopyCorrespondence: false,
       reverseBaseId,
@@ -3542,6 +3798,19 @@
         // scenario where an already-known relationship gets deliberately corrected.
         const lockedBaseId = st.confirm.baseId;
         const lockedModifierId = st.confirm.modifierId;
+        // RELOCATE (2026-08-21): this card is already placed somewhere else in the tree — clear
+        // that slot FIRST, or assignToSlot below pushes a second edge for the same card without
+        // ever removing the first, leaving it placed twice. Purely local bookkeeping — no separate
+        // Medicus write for the removal itself, since the forward relationship record already got
+        // UPDATED in place above (relationshipUpdateId), not deleted and recreated. See
+        // buildConfirmForCard's own comment for why the reciprocal is ALSO corrected for this case.
+        if (st.confirm.relocateFromSlotPath) {
+          st.tree = window.ContactTree.removeFromSlot(
+            st.tree,
+            st.confirm.relocateFromSlotPath,
+            st.confirm.candidatePatientId
+          );
+        }
         st.tree = window.ContactTree.assignToSlot(
           st.tree,
           st.confirm.slotPath,
@@ -3703,8 +3972,8 @@
     // Guarded exactly like Close: a reload discards `cs` just as completely as closing does, so an
     // unfinished merge is just as lost. It was missing here purely because this button was added
     // later than the guard.
-    overlay.querySelector('#ms-cv-refresh-page')?.addEventListener('click', () => {
-      if (!confirmDiscardUnfinishedMerge()) return;
+    overlay.querySelector('#ms-cv-refresh-page')?.addEventListener('click', async () => {
+      if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
       location.reload();
     });
     // Secondary path to the older inline widget (content-scripts/contacts-link-button.js), kept
@@ -3717,8 +3986,8 @@
     // close() normally does (see close()'s own comment) — the widget renders in place at its own
     // position on the page, not as an overlay on top of this.
     overlay.querySelector('#ms-cv-next-family')?.addEventListener('click', () => advanceToNextFamilyMember());
-    overlay.querySelector('#ms-cv-open-import')?.addEventListener('click', () => {
-      if (!confirmDiscardUnfinishedMerge()) return;
+    overlay.querySelector('#ms-cv-open-import')?.addEventListener('click', async () => {
+      if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
       closeOverlay();
       window.ContactsWidget.openImport();
     });
@@ -3727,7 +3996,12 @@
     // card-to-card merge, {flagKind} for an NOK/cc token drag, or {removeCardId} for a
     // locked/tree-placed card being dragged to the dedicated remove zone — every drop handler
     // below branches on which shape is present, explicitly ignoring shapes it doesn't handle
-    // rather than falling through to a merge/assign call with undefined arguments.
+    // rather than falling through to a merge/assign call with undefined arguments. A removable
+    // (locked/tree-placed) card's payload carries id/kind ALONGSIDE removeCardId (2026-08-21,
+    // "enable dragging between boxes to change relationships") — the SAME drag can land on either
+    // a regular slot zone (relocate — see buildConfirmForCard's relocateFromSlotPath) or the
+    // dedicated remove zone (unplace — removeCardFromTree), each handler reading only the field it
+    // cares about.
     let dragPayload = null;
     // dragend fires on the SOURCE element after every drag, including one the user abandoned
     // (Escape, or a drop on nothing) — the only event that does. Without it `dragPayload` stayed
@@ -3740,7 +4014,11 @@
     overlay.querySelectorAll('.ms-cv-card[draggable="true"]').forEach((el) => {
       el.addEventListener('dragstart', (e) => {
         dragPayload = el.hasAttribute('data-removable')
-          ? { removeCardId: el.getAttribute('data-card-id') }
+          ? {
+              removeCardId: el.getAttribute('data-card-id'),
+              id: el.getAttribute('data-card-id'),
+              kind: el.getAttribute('data-card-kind'),
+            }
           : { id: el.getAttribute('data-card-id'), kind: el.getAttribute('data-card-kind') };
         e.dataTransfer.setData('text/plain', JSON.stringify(dragPayload));
         e.dataTransfer.effectAllowed = 'move';
@@ -3796,11 +4074,19 @@
       el.addEventListener('dragover', (e) => {
         if (!dragPayload) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = dragPayload.flagKind ? 'copy' : dragPayload.removeCardId ? 'none' : 'move';
+        // A removable card's combined payload (removeCardId + id/kind) now falls through to a
+        // real assign on drop (see the drop handler below) — 'none' here would show a wrong "not
+        // allowed" cursor for a drop that actually works. Only a bare removeCardId (no id) is
+        // truly a dead end for this target.
+        e.dataTransfer.dropEffect = dragPayload.flagKind
+          ? 'copy'
+          : dragPayload.removeCardId && !dragPayload.id
+            ? 'none'
+            : 'move';
         // Same nearest-target-wins rule as the drop below, so the enclosing <li> can't relabel a
         // drop this card is going to handle (a remove-drag showed as an accepted 'move' over a card
         // it would then be ignored on, purely because the outer zone overwrote dropEffect).
-        if (dragPayload.flagKind || dragPayload.removeCardId) e.stopPropagation();
+        if (dragPayload.flagKind || (dragPayload.removeCardId && !dragPayload.id)) e.stopPropagation();
       });
       el.addEventListener('drop', (e) => {
         e.preventDefault();
@@ -3818,10 +4104,15 @@
           dragPayload = null;
           return;
         }
-        if (payload.removeCardId) {
-          // A card being dragged to remove it from the tree was dropped on a regular card, not
-          // the dedicated remove zone — not a valid target for this payload shape; ignore. Stopped
-          // too: "ignore" has to mean ignored, not "ignored here and then handled upstairs".
+        // A removable (already-placed) card's payload carries removeCardId ALONGSIDE id/kind
+        // (2026-08-21, relocate) — dropped on a regular card, this is exactly the same "not a
+        // valid merge target" case a fresh card's drop already handles below (tryMerge declines,
+        // the drop falls through to the slot underneath). Only a BARE removeCardId with no id
+        // (shouldn't occur, defensive) has nothing this handler — or the slot below it — can act
+        // on, so THAT'S ignored here; found live (HAR-free bug report, 2026-08-21): the old
+        // unconditional ignore swallowed every relocate dropped anywhere near an occupied card
+        // instead of the empty "Drop here" placeholder, which is most of a populated tree.
+        if (payload.removeCardId && !payload.id) {
           e.stopPropagation();
           dragPayload = null;
           return;
@@ -3869,7 +4160,11 @@
           if (cardId) setContactFlag(cardId, payload.flagKind, true);
           return;
         }
-        if (payload.removeCardId) return; // not handled here — only the dedicated remove zone
+        // A removable (already-placed) card's payload carries removeCardId ALONGSIDE id/kind —
+        // dropped on a SLOT zone (here) that's a relocate, handled the same way as any other
+        // assign; only a bare removeCardId with no id (shouldn't occur, defensive) has nothing
+        // this handler can act on.
+        if (payload.removeCardId && !payload.id) return;
         e.stopPropagation(); // the slot the card was actually dropped in owns it, not its parent slot
         tryAssign(payload.id, payload.kind, zone.getAttribute('data-slot-path'));
       });
@@ -3897,13 +4192,6 @@
     overlay.querySelectorAll('[data-toggle-flag]').forEach((btn) => {
       btn.addEventListener('click', () => {
         setContactFlag(btn.getAttribute('data-card-id'), btn.getAttribute('data-toggle-flag'), false);
-      });
-    });
-
-    overlay.querySelectorAll('[data-expand-slot]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        cs.expandedSlots[btn.getAttribute('data-expand-slot')] = true;
-        render();
       });
     });
 
@@ -4040,6 +4328,32 @@
     overlay.querySelectorAll('.ms-cv-dupaddr-merge').forEach((btn) => {
       btn.addEventListener('click', () => mergeDuplicateAddressGroup(btn.getAttribute('data-address-group')));
     });
+    overlay.querySelectorAll('.ms-cv-dupphone-keep-radio').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        const groupKey = r.getAttribute('data-phone-group');
+        const idx = Number(r.getAttribute('data-phone-index'));
+        const plan = cs.duplicatePhoneGroups.find((g) => g.indexes.join(',') === groupKey);
+        if (plan) plan.keepIndex = idx;
+        render();
+      });
+    });
+    overlay.querySelectorAll('.ms-cv-dupphone-delete').forEach((btn) => {
+      btn.addEventListener('click', () => deleteDuplicatePhoneGroup(btn.getAttribute('data-phone-group')));
+    });
+    overlay.querySelectorAll('.ms-cv-dupemail-keep-radio').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        const groupKey = r.getAttribute('data-email-group');
+        const idx = Number(r.getAttribute('data-email-index'));
+        const plan = cs.duplicateEmailGroups.find((g) => g.indexes.join(',') === groupKey);
+        if (plan) plan.keepIndex = idx;
+        render();
+      });
+    });
+    overlay.querySelectorAll('.ms-cv-dupemail-delete').forEach((btn) => {
+      btn.addEventListener('click', () => deleteDuplicateEmailGroup(btn.getAttribute('data-email-group')));
+    });
     overlay.querySelector('#ms-cv-phone-edit-cancel')?.addEventListener('click', () => cancelPhoneEdit());
     overlay.querySelector('#ms-cv-phone-edit-save')?.addEventListener('click', () => savePhoneEdit());
     overlay.querySelector('#ms-cv-phone-edit-number')?.addEventListener('input', (e) => {
@@ -4141,7 +4455,7 @@
   // Peeking before probing also means the confirm dialog can ALWAYS name the target: the candidate
   // is known before the user is asked, not chosen by the same call that consumed it.
   async function advanceToNextFamilyMember() {
-    if (!confirmDiscardUnfinishedMerge()) return;
+    if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
     const st = cs;
     const fromPatientId = st.patientId;
     let session = window.ContactTree.setTreeFor(st.familySession, fromPatientId, st.tree);
@@ -4318,20 +4632,123 @@
     loadCanvas();
   }
 
+  // Converts every manual card that's been matched-but-not-yet-placed (card.mergedWith set, no
+  // family-tree slot chosen) into a real Medicus link on BOTH records, using the generic 'Other'
+  // relationship, then deletes the manual duplicate — 2026-08-2X request: "we should not make this
+  // another action", so this reuses the EXISTING close-time warning as its trigger rather than
+  // adding a new button. baseId defaults to 'other' inside buildConfirmForCard itself whenever there
+  // is no slot/guess/reciprocal signal to work from (see that function's own fallback chain) —
+  // calling it here with slotPath=null IS exactly that "no specific relationship known" case, the
+  // same default the rest of this file already trusts. 'other' is also the one relationship in
+  // rules/contact-relationships.json with an unambiguous, gender-neutral reciprocal ("other" ->
+  // "other"), so — unlike a real family relationship — there is no gender-inversion review step to
+  // skip past here; the reverse side can be written with the same confidence as the forward side.
+  //
+  // Every card is attempted independently; one failure does not abort the others (a GP who merged
+  // three contacts shouldn't lose the two that DID convert because the third's request failed) — but
+  // the CALLER only proceeds to close/reload/navigate if every one succeeded, so a genuine failure
+  // stays visibly pending on screen (still merged, still unplaced) rather than being silently
+  // discarded by the very action it was meant to block.
+  //
+  // KNOWN LIMITATION, deliberately parked (2026-08-20, Nick's own call after live-testing this):
+  // a normal drag-to-slot confirm ALSO checks for and offers to remove a REVERSE manual match — a
+  // manual contact sitting on the OTHER (candidate's) record that itself represents THIS index
+  // patient (see cs.reverseManualMatch / renderReverseManualMatch, set by doCanvasConfirm's own
+  // follow-up check). This bulk close-time path does NOT run that check — doing so per merged card,
+  // each needing its own separate review-and-confirm popup, would be clunky exactly where this
+  // whole flow is trying to avoid extra interaction. Left as a known gap rather than solved here;
+  // revisit if it turns out to matter in practice.
+  async function convertUnfinishedMergesToOther() {
+    const CR = window.ContactRelationships;
+    const merged = cs.manualCards.filter((c) => c.mergedWith);
+    let allOk = true;
+    for (const manual of merged) {
+      if (!cs.manualCards.includes(manual)) continue; // removed by an earlier iteration this same pass
+      const params = buildConfirmForCard(manual, 'manual', null);
+      if (!params) continue; // mergedWith was just checked above — fail-safe skip, not a throw
+      try {
+        const ctx = window.ContactsApi.resolveContext();
+        if (!ctx || ctx.patientId !== cs.patientId) {
+          throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+        }
+        // Same reciprocal-repair resolution as doCanvasConfirm's own — a downgraded-to-placeholder
+        // reciprocal from an EARLIER canvas session carries no cached id, so it's resolved here with
+        // the same single bounded fetch, immediately before writing.
+        let reciprocalUpdateId = params.reciprocalRelationshipId || null;
+        let reverseBaseId = params.reverseBaseId;
+        if (params.reciprocalNeedsRepair && !reciprocalUpdateId) {
+          const candidateDetails = await window.ContactsApi.getPatientDetails(
+            cs.apiBase,
+            params.candidatePatientId
+          ).catch(() => null);
+          const entry = candidateDetails && CR.findExistingForwardLink(candidateDetails, cs.patientId);
+          reciprocalUpdateId = (entry && entry.patientContactId) || null;
+          if (!reciprocalUpdateId) reverseBaseId = null;
+        }
+        await window.ContactsApi.performLinkAndCleanup({
+          apiBase: cs.apiBase,
+          patientId: cs.patientId,
+          candidatePatientId: params.candidatePatientId,
+          candidateDisplayName: params.candidateDisplayName,
+          indexPatientFullName:
+            cs.indexPatientDetails.patientDetailsSection &&
+            cs.indexPatientDetails.patientDetailsSection.fullOfficialName,
+          baseId: params.baseId,
+          modifierId: params.modifierId,
+          forwardIsNextOfKin: params.forwardIsNextOfKin,
+          forwardCopyCorrespondence: params.forwardCopyCorrespondence,
+          notes: params.notes,
+          existingForwardLink: params.existingForwardLink,
+          relationshipUpdateId:
+            params.existingForwardLink &&
+            (!params.relationshipKnown ||
+              params.baseId !== params.originalBaseId ||
+              params.modifierId !== params.originalModifierId)
+              ? params.existingForwardLink.patientContactId
+              : null,
+          reverseBaseId,
+          reverseIsNextOfKin: params.reverseIsNextOfKin,
+          reverseCopyCorrespondence: params.reverseCopyCorrespondence,
+          existingReciprocal: params.existingReciprocal,
+          reciprocalUpdateId,
+          manualContactIdToDelete: params.manualContactIdToDelete,
+          progress: null,
+        });
+        cs.manualCards = cs.manualCards.filter((c) => c.id !== manual.id);
+      } catch (err) {
+        allOk = false;
+        cs.workingError = `Failed to link ${manual.name} as "Other" — ${err.message || 'please try again.'}`;
+      }
+    }
+    render();
+    return allOk;
+  }
+
   // A merged-but-not-yet-linked pairing lives only in cs, which is discarded on close — warn
   // before losing it, matching duplicate-checker.js's confirm() pattern for a similar
   // "in-progress decision about to be discarded" situation. Shared by every way of leaving the
   // canvas (Close, and the "Import from another patient" header link) — an unfinished merge is
   // equally lost whichever way the canvas closes.
-  function confirmDiscardUnfinishedMerge() {
+  //
+  // RENAMED from confirmDiscardUnfinishedMerge (2026-08-2X): OK no longer discards the pairing —
+  // it converts it to a real 'Other' link via convertUnfinishedMergesToOther, reusing this existing
+  // hook rather than adding a separate action for it (Nick's explicit call). Returns false (caller
+  // must not proceed) on Cancel OR on a conversion failure — only a clean Cancel-free, error-free
+  // path clears the way to actually leave.
+  async function resolveUnfinishedMergesBeforeLeaving() {
     if (!(cs && cs.manualCards.some((c) => c.mergedWith))) return true;
     // window.confirm's OK/Cancel buttons carry no inherent meaning of their own — spell out
     // which button does what rather than relying on the reader inferring it from context.
-    return window.confirm(
-      "You've merged one or more contacts that haven't been linked yet — nothing has been written to Medicus, so closing now will lose that pairing.\n\n" +
-        'Click CANCEL to go back and drag the merged card down to the family tree to finish.\n' +
-        'Click OK to close anyway and discard the unfinished merge.'
-    );
+    if (
+      !window.confirm(
+        "You've merged one or more contacts that haven't been linked yet.\n\n" +
+          'Click CANCEL to go back and drag the merged card down to the family tree yourself, if you know how they’re related.\n\n' +
+          'Click OK to close anyway and link them as "Other" instead — a generic contact relationship, written to both records — rather than losing the match. You can re-open the canvas and correct it to a specific relationship any time.'
+      )
+    ) {
+      return false;
+    }
+    return convertUnfinishedMergesToOther();
   }
 
   function closeOverlay() {
@@ -4340,8 +4757,8 @@
     if (overlay) overlay.remove();
   }
 
-  function close() {
-    if (!confirmDiscardUnfinishedMerge()) return;
+  async function close() {
+    if (!(await resolveUnfinishedMergesBeforeLeaving())) return;
     closeOverlay();
     // Every write this canvas makes only ever updates local state (see the "Refresh now" buttons
     // sprinkled through the confirm/merge panels) — Medicus's own contacts card never reflects any

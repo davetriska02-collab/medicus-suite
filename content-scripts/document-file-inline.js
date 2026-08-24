@@ -65,6 +65,31 @@
 // deferred as a bigger change for little benefit). A chip already saved this
 // page visit shows "✓ Saved as document" and is disabled.
 //
+// ALREADY-SAVED CROSS-CHECK (2026-08-19 request, matching logic corrected
+// same day after live testing): a triage request is routinely worked across
+// multiple computers by multiple people, so the per-visit "saved this
+// visit" state above can't be the whole story — it's blind to a save made
+// by a DIFFERENT clinician, on a DIFFERENT machine, or via Medicus's own
+// native document upload. ensureSavedDocumentCheck cross-references the
+// patient's journal (the same bulk GET /clinical/data/patient-journal/
+// overview/{patientId} endpoint the duplicate-checker and journal-code-sync
+// already use) for a document entry within a ±2-day window of the
+// attachment's expected date, corroborated by a fileType check via the
+// duplicate-checker's own per-entry preview endpoint.
+//
+// The first cut also required an exact TITLE match (titleFromFilename) —
+// removed the same day, live HAR evidence (docs, see
+// findPossibleSavedDocuments' own comment): it failed on the very case it
+// exists for, because the widget's own default title is a meaningless
+// attachment filename that any sensible clinician overwrites before saving.
+// Since the real saved title can't be predicted, a match here is only ever
+// a POSSIBLE one (date + file type, not title) — the chip stays enabled and
+// shows a small non-blocking hint rather than disabling the "Save as
+// document" button. Deliberately not a hard block: a wrong guess must never
+// make a genuine save impossible with no way to override it. See
+// extractJournalDocumentCandidates' own header comment for the walker
+// design and findPossibleSavedDocuments for the matching logic.
+//
 // The side panel and content scripts alike have host_permissions for
 // *.api.england.medicus.health, so this works directly from the content-script
 // context (same as booking-inline.js / task-inline.js).
@@ -275,13 +300,232 @@
     return base || 'Attachment';
   }
 
+  // ── "Already saved as a document?" cross-check (2026-08-19 request) ────────────
+  // Nick's correction to an earlier local-storage-only design: triage
+  // requests are routinely worked across multiple computers by multiple
+  // people, so per-machine chrome.storage state can never be the source of
+  // truth for "has ANYONE already filed this" — it has to be a live,
+  // server-side check every clinician's browser gets the same answer from.
+  //
+  // The duplicate-checker (engine/record-duplicate-parser.js) already solves
+  // "list every document on this patient's record": it reads the SAME bulk
+  // GET /clinical/data/patient-journal/overview/{patientId} -> {
+  // patientJournalRecords } contract shared/journal-problem-matching.js
+  // already reads elsewhere in this suite, via its own flattenJournal(). Per
+  // that file's own header comment discipline ("a PURPOSE-BUILT walker, not
+  // a reuse of flattenJournal — that function lives only in the
+  // duplicate-checker.html bundle, not this medicus.health content-script
+  // group"), extractJournalDocumentCandidates below is a second, narrower
+  // purpose-built walker for THIS file, not an extraction of a stable,
+  // tested, load-bearing file for a second consumer. Field access (title,
+  // documentTypeLabel, documentDate — item.data for flat top-level items,
+  // directly on the entry for nested ones) mirrors record-duplicate-
+  // parser.js's own confirmed document-entry shape exactly
+  // (docs/learnings-duplicate-entry-timestamps.md).
+  //
+  // WHY THIS IS DATE + FILE TYPE, NOT TITLE OR FILESIZE. Filesize was ruled
+  // out for the same reason the duplicate-checker never uses it as a primary
+  // signal here: Medicus's own preview endpoint returns fileSize as a
+  // human-rounded display string ("10.44 KB", confirmed in
+  // engine/record-duplicate-parser.js's own comment), not a raw byte count,
+  // so reproducing its exact rounding to compare against our attachment's
+  // own raw byte count would be guessing at a format never captured live.
+  //
+  // Title was the FIRST design (2026-08-19) — the widget itself sets the
+  // title at save time (titleFromFilename), so a document whose title
+  // matched what we'd generate for THIS exact attachment looked like a much
+  // stronger anchor than a coincidence. Live-tested and found to fail on the
+  // very case it exists for (HAR 70-not-flipping.har, same day): the default
+  // title is a meaningless attachment filename (a UUID, in the captured
+  // case), so any clinician saving it sensibly types a real title instead —
+  // "ENT letter New Victoria" for "d73050ca-....jpeg" was the actual
+  // capture. That title can't be predicted from the filename, so exact-title
+  // matching was near-guaranteed to never fire in the cross-machine case it
+  // was built for.
+  //
+  // Corrected design: date window (±SAVED_DOC_DATE_TOLERANCE_DAYS of the
+  // attachment's expected date) plus a fileType check via the same per-entry
+  // preview fetch the duplicate-checker uses — two independent,
+  // well-understood signals, no format-guessing, but also no title-strength
+  // certainty. That's why a match here is surfaced as a non-blocking
+  // "a .jpeg was filed on … — check before saving" hint (see
+  // updatePossibleSavedHint) rather than disabling the chip outright — see
+  // findPossibleSavedDocuments below. ±2 days (not ±7): a save from a
+  // triage attachment lands on the task's own date; a 15-day window was
+  // lighting up every same-extension document on an active patient's
+  // record (H-061).
+  var SAVED_DOC_DATE_TOLERANCE_DAYS = 2;
+
+  // Journal overview `documentDate` is a DISPLAY string ("16 Aug 2025",
+  // confirmed docs/learnings-duplicate-entry-timestamps.md:114/370);
+  // `day.title` (the fallback when documentDate is null — same doc, row
+  // 185, and content-scripts/document-codes-to-problems.js:133-135) is
+  // the same shape, sometimes with a weekday prefix ("Sat 16 Aug 2025",
+  // test-record-duplicate-parser.js). window.__msTaskCreatedDate is ISO
+  // YYYY-MM-DD (content.js). Parse both explicitly to local midnight —
+  // never rely on new Date()'s non-standard fallback, and never mix
+  // UTC-parsed ISO with locally-parsed display strings (an hour of
+  // timezone skew would flip a same-day match).
+  var DOC_MONTHS = {
+    Jan: 0,
+    Feb: 1,
+    Mar: 2,
+    Apr: 3,
+    May: 4,
+    Jun: 5,
+    Jul: 6,
+    Aug: 7,
+    Sep: 8,
+    Oct: 9,
+    Nov: 10,
+    Dec: 11,
+  };
+
+  function parseDocDate(v) {
+    if (typeof v !== 'string') return null;
+    var t = v.trim();
+    var m = t.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    // Optional weekday ("Sat 16 Aug 2025" / "Mon 1 Jan 2024") then D/DD Mon YYYY.
+    m = t.match(/^(?:[A-Za-z]{3,9}\s+)?(\d{1,2})\s+([A-Z][a-z]{2})\s+(\d{4})$/);
+    if (m && DOC_MONTHS[m[2]] !== undefined) return new Date(+m[3], DOC_MONTHS[m[2]], +m[1]);
+    return null;
+  }
+
+  function candidateAnchorDate(c) {
+    if (!c) return null;
+    return c.documentDate || c.dayTitle || null;
+  }
+
+  function isDocumentKindEntry(entry) {
+    // record-duplicate-parser.js treats document and fit-note as one
+    // document kind (live-confirmed 2026-07-04) — a colleague who filed
+    // the attachment via Medicus's own fit-note path would otherwise be
+    // an invisible miss for this check.
+    return !!entry && (entry.entryType === 'document' || entry.entryType === 'fit-note');
+  }
+
+  function extractJournalDocumentCandidates(dayGroups) {
+    var out = [];
+    (Array.isArray(dayGroups) ? dayGroups : []).forEach(function (day) {
+      var dayTitle = (day && day.title) || null;
+      (day && Array.isArray(day.items) ? day.items : []).forEach(function (item) {
+        if (!item) return;
+        if (item.type === 'encounter') {
+          var enc = item.data || {};
+          (Array.isArray(enc.consultationTopics) ? enc.consultationTopics : []).forEach(function (topic) {
+            (Array.isArray(topic && topic.headings) ? topic.headings : []).forEach(function (heading) {
+              (Array.isArray(heading && heading.entries) ? heading.entries : []).forEach(function (entry) {
+                if (!isDocumentKindEntry(entry)) return;
+                out.push({
+                  entryId: entry.id,
+                  title: entry.title || null,
+                  documentTypeLabel: entry.documentTypeLabel || null,
+                  documentDate: entry.documentDate || null,
+                  dayTitle: dayTitle,
+                });
+              });
+            });
+          });
+        } else if (item.type === 'document') {
+          // Confirmed live (docs/learnings-duplicate-entry-timestamps.md): a
+          // flat top-level document's real content lives under item.data,
+          // in the SAME shape a nested entry exposes directly — item.title
+          // itself is always null.
+          var d = item.data || {};
+          out.push({
+            entryId: d.id || item.id,
+            title: d.title || null,
+            documentTypeLabel: d.documentTypeLabel || null,
+            documentDate: d.documentDate || null,
+            dayTitle: dayTitle,
+          });
+        }
+      });
+    });
+    return out;
+  }
+
+  function daysBetween(a, b) {
+    var da = parseDocDate(a);
+    var db = parseDocDate(b);
+    if (!da || !db) return null;
+    return Math.abs(da.getTime() - db.getTime()) / (24 * 60 * 60 * 1000);
+  }
+
+  // The cheap pre-filter — no fetch, just comparing already-fetched fields.
+  // No title involved (see the header comment above for why that was tried
+  // and removed). Date anchor is documentDate, falling back to the journal
+  // day's title when documentDate is null (a real original document in
+  // docs/learnings-duplicate-entry-timestamps.md:185 has documentDate:
+  // null — dropping those silently missed the native-upload case this
+  // check exists for). Returns every candidate within the window, closest
+  // first; the caller narrows further with a per-candidate fileType check
+  // before treating anything as even a "possible" match.
+  function findPossibleSavedDocuments(candidates, expectedDateIso, toleranceDays) {
+    var tol = typeof toleranceDays === 'number' ? toleranceDays : SAVED_DOC_DATE_TOLERANCE_DAYS;
+    if (!expectedDateIso) return [];
+    return (Array.isArray(candidates) ? candidates : [])
+      .filter(function (c) {
+        var anchor = candidateAnchorDate(c);
+        if (!anchor) return false;
+        var diff = daysBetween(anchor, expectedDateIso);
+        return diff !== null && diff <= tol;
+      })
+      .sort(function (x, y) {
+        return (
+          daysBetween(candidateAnchorDate(x), expectedDateIso) - daysBetween(candidateAnchorDate(y), expectedDateIso)
+        );
+      });
+  }
+
+  // Medicus preview `fileType` is a bare lowercase extension ('pdf',
+  // 'jpeg', 'tiff' — live fixtures in test-record-duplicate-parser.js).
+  // IMAGE_EXT_RE admits jpg/jpe/tif aliases, so exact-string compare
+  // against extensionOf would silently miss photo.jpg vs stored jpeg.
+  function normExt(e) {
+    var x = (e || '').toString().trim().toLowerCase();
+    if (x === 'jpg' || x === 'jpe') return 'jpeg';
+    if (x === 'tif') return 'tiff';
+    if (x === 'htm') return 'html';
+    return x || null;
+  }
+
+  function extensionOf(filename) {
+    var m = /\.([^./]+)$/.exec(filename || '');
+    return m ? normExt(m[1]) : null;
+  }
+
+  // Strips a documentType object down to exactly the three fields Medicus's
+  // create-document endpoint accepts (bug found live via HAR
+  // 69-failed-docsave.har, 2026-08-19: `{"errors":{"documentType.docPriority":
+  // ["This field was not expected."]}}`). Every one of the 1768 entries in
+  // rules/document-types.json carries a FOURTH field, `docPriority` (1-6,
+  // this extension's own local ranking/colour metadata for search results —
+  // see the SCOPE header comment) — a real field on the object the search
+  // picker sets `s.documentType` to (bindDocumentTypePicks), but one Medicus
+  // has no concept of and rejects outright. The two hardcoded extension-
+  // guess objects (DOCUMENT_TYPES.image/.document) happen to be clean
+  // (no docPriority), which is why a save only ever worked when the
+  // clinician accepted the auto-guess untouched — the INSTANT they used
+  // search for ANY reason, on ANY file type (confirmed live: the failing
+  // HAR's own file was a .jpeg, "Medical photograph" itself is also in the
+  // rules file with docPriority — this was never actually a photo-vs-
+  // document distinction), the picked object 400'd. One sanitize at this
+  // single choke point — the one place the write payload gets built — fixes
+  // every document type at once, not just the one in this capture.
+  function sanitizeDocumentType(dt) {
+    if (!dt) return null;
+    return { conceptId: dt.conceptId, description: dt.description, descriptionId: dt.descriptionId };
+  }
+
   // Builds the confirmed `formPayload` object (see
   // docs/learnings-triage-attachment-to-document.md) — pure, no fetch. The
   // caller JSON.stringifies this into the FormData field of the same name.
   function buildFormPayload(opts) {
     return {
       patientId: opts.patientId,
-      documentType: opts.documentType,
+      documentType: sanitizeDocumentType(opts.documentType),
       documentDate: opts.documentDate,
       authoredByDepartment: null,
       authoredByPractitioner: null,
@@ -311,6 +555,7 @@
       filterEligibleAttachments,
       titleFromFilename,
       buildFormPayload,
+      sanitizeDocumentType,
       documentTypeForFilename,
       findAttachmentsInOverview,
       patientIdFromOverview,
@@ -318,6 +563,14 @@
       filterDocumentTypes,
       priorityColor,
       findDocumentTypeByConceptId,
+      extractJournalDocumentCandidates,
+      findPossibleSavedDocuments,
+      daysBetween,
+      parseDocDate,
+      candidateAnchorDate,
+      normExt,
+      extensionOf,
+      SAVED_DOC_DATE_TOLERANCE_DAYS,
       DOCUMENT_TYPES,
       IMAGE_EXT_RE,
       DOCFILE_EXT_RE,
@@ -370,9 +623,36 @@
       // index isn't, if the underlying attachment list is ever reordered).
       // null when no form is open.
       activeFilename: null,
-      // Filenames already saved as a document THIS page visit — drives each
-      // chip's "✓ Saved as document" state (injectAttachmentChips).
+      // Filenames already saved as a document THIS page visit, via THIS
+      // widget — instant, free, no fetch (drives each chip's disabled "✓
+      // Saved as document" state; possibleSavedMatches below is separate and
+      // never disables the chip — see its own comment).
       savedFilenames: [],
+      // filename -> {title, date} for a POSSIBLE (not confirmed) match found
+      // via the server-side journal cross-check (2026-08-19 — see
+      // ensureSavedDocumentCheck's own comment) — catches a save made by a
+      // DIFFERENT clinician, on a DIFFERENT computer, or via Medicus's own
+      // native upload, none of which savedFilenames above could ever see.
+      // Genuinely non-blocking (unlike the name might suggest before you've
+      // read the header comment): the chip stays enabled and shows a hint,
+      // it never disables — see updatePossibleSavedHint.
+      possibleSavedMatches: Object.create(null),
+      // entryIds already assigned to an attachment THIS task load — one
+      // journal document must not flag every same-extension attachment
+      // on the card (three photos + one saved jpeg would otherwise all
+      // show the same hint).
+      claimedSavedEntryIds: [],
+      // The ONE bulk GET /clinical/data/patient-journal/overview/{patientId}
+      // fetch this whole check needs — 'idle'|'loading'|'done'|'error',
+      // fetched once per task and cached here so re-running the check for a
+      // later-appearing attachment never re-fetches it.
+      journalFetchState: 'idle',
+      journalDocCandidates: null,
+      // Filenames already run through the per-attachment check THIS task
+      // load, regardless of outcome — lets ensureSavedDocumentCheck skip
+      // straight to any genuinely NEW attachment on a later tick instead of
+      // repeating work for ones already resolved.
+      serverCheckedFilenames: [],
       title: '',
       // The SNOMED code that will actually be sent — pre-filled from
       // documentTypeForFilename's extension-based guess, overridable via the
@@ -452,6 +732,40 @@
 
   async function apiFetchCreateForm(patientId) {
     return apiFetch('/clinical/data/document/forms/create-inbound-document-form/' + encodeURIComponent(patientId));
+  }
+
+  // The SAME bulk endpoint shared/journal-problem-matching.js already reads
+  // for journal-code-sync — see extractJournalDocumentCandidates' own
+  // comment for the full "already saved?" cross-check design.
+  async function fetchJournalDocumentCandidates(patientId) {
+    var data = await apiFetch('/clinical/data/patient-journal/overview/' + encodeURIComponent(patientId));
+    return extractJournalDocumentCandidates(data && data.patientJournalRecords);
+  }
+
+  // Confirms a date-window candidate is the same *kind* of file by
+  // checking its fileType against the attachment's own extension — the
+  // SAME GET /clinical/data/document/modals/preview/{entryId} endpoint
+  // duplicate-checker.js's fetchDocumentPreviews already uses. Memoised
+  // on entryId: three same-extension attachments used to re-fetch the
+  // same preview N times each (duplicate-checker.js:908-913 recorded
+  // that exact cost as ~25s on a 63-document record and made the pass
+  // opt-in). Best-effort: a failed preview fetch for one candidate just
+  // excludes that candidate (never treated as a match).
+  var _previewFileTypeCache = Object.create(null);
+  async function candidateFileTypeMatches(entryId, expectedExt) {
+    var want = normExt(expectedExt);
+    if (!want || !entryId) return false;
+    if (!Object.prototype.hasOwnProperty.call(_previewFileTypeCache, entryId)) {
+      try {
+        var preview = await apiFetch('/clinical/data/document/modals/preview/' + encodeURIComponent(entryId));
+        var ft = preview && typeof preview.fileType === 'string' ? preview.fileType.trim() : null;
+        _previewFileTypeCache[entryId] = ft ? normExt(ft) : null;
+      } catch (e) {
+        _previewFileTypeCache[entryId] = null;
+      }
+    }
+    var cached = _previewFileTypeCache[entryId];
+    return !!cached && cached === want;
   }
 
   // Loads the full document-type picklist (rules/document-types.json, see the
@@ -539,6 +853,59 @@
     chip.textContent = saved ? '✓ Saved as document' : 'Save as document';
     chip.classList.toggle('ms-df-chip-saved', saved);
     chip.classList.toggle('ms-df-chip-active', active);
+    updatePossibleSavedHint(chip, filename, saved);
+  }
+
+  // Renders (or removes) the non-blocking "possibly already saved" hint
+  // next to a chip — see blankState's possibleSavedMatches comment and the
+  // ALREADY-SAVED CROSS-CHECK header comment for why this is a hint, not a
+  // disabled button. Never shown once savedFilenames already covers this
+  // filename (that state — disabled "✓ Saved as document" — already says
+  // more than the hint would, no need for both).
+  function formatHintDate(v) {
+    var d = parseDocDate(v);
+    if (!d) return '';
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return d.getDate() + ' ' + months[d.getMonth()];
+  }
+
+  function updatePossibleSavedHint(chip, filename, saved) {
+    var wrap = chip.parentElement;
+    if (!wrap) return;
+    var hint = wrap.querySelector('.ms-df-possible-saved-hint');
+    var match = !saved ? s.possibleSavedMatches[filename] : null;
+    if (!match) {
+      if (hint) {
+        withObserverPaused(function () {
+          hint.remove();
+        });
+      }
+      return;
+    }
+    if (!hint) {
+      withObserverPaused(function () {
+        hint = document.createElement('span');
+        hint.className = 'ms-df-possible-saved-hint';
+        hint.setAttribute('tabindex', '0');
+        hint.setAttribute('role', 'note');
+        wrap.appendChild(hint);
+      });
+    }
+    // State the evidence, not the conclusion (H-061). Date + file type
+    // cannot support "already saved as <title>" — that wording is what
+    // a ±7-day same-extension coincidence used to assert.
+    var dateBit = match.date ? ' on ' + formatHintDate(match.date) : '';
+    var extBit = match.ext ? '.' + match.ext : 'document';
+    hint.textContent = '⚠ a ' + extBit + ' was filed' + dateBit + ' — check before saving';
+    var tip =
+      'A ' +
+      extBit +
+      ' document is in the patient journal' +
+      (match.date ? ' (' + match.date + ')' : '') +
+      (match.title ? ', titled “' + String(match.title).slice(0, 40) + '”' : '') +
+      ' — matched by date and file type, not by title. Check before saving again.';
+    hint.title = tip;
+    hint.setAttribute('aria-label', tip);
   }
 
   function refreshAllChipVisuals() {
@@ -599,6 +966,91 @@
       updateChipVisual(chip, name);
       _chipEls[name] = chip;
     });
+  }
+
+  // Kicks off (and incrementally extends) the server-side "already saved?"
+  // cross-check — see extractJournalDocumentCandidates' own header comment
+  // for the full design. Proactive, not lazy: called from runInject
+  // alongside injectAttachmentChips, so a chip can pick up its "possibly
+  // already saved" hint before the clinician ever clicks it, not just after.
+  // The bulk journal fetch happens ONCE per task (journalFetchState guards
+  // it); each eligible attachment is then checked ONCE
+  // (serverCheckedFilenames guards that) — so a later-appearing attachment
+  // (content.js's own async extraction can populate
+  // window.__msTriageAttachments progressively) still gets checked on a
+  // later tick without ever re-fetching the journal. Fire-and-forget at the
+  // call site, same discipline as ensureDocumentTypesLoaded — errors are
+  // swallowed here, never surfaced as a load error, since this whole check
+  // is advisory: a failure just leaves chips with no hint, same as before
+  // this check existed.
+  async function ensureSavedDocumentCheck() {
+    var atts = eligibleAttachments();
+    if (!atts.length) return;
+    var st = s;
+
+    if (st.journalFetchState === 'idle') {
+      st.journalFetchState = 'loading';
+      try {
+        if (!st.patientId) {
+          var info = getTaskInfo();
+          if (!info) {
+            st.journalFetchState = 'error';
+            return;
+          }
+          var overview = await fetchTaskOverview(info.typeSlug, info.taskUuid);
+          if (st !== s) return; // navigated away mid-fetch — discard
+          st.patientId = overview.patientId;
+          st.resolvedForTaskUuid = info.taskUuid;
+          st.resolvedAttachments = overview.attachments;
+        }
+        if (!st.patientId) {
+          st.journalFetchState = 'error';
+          return;
+        }
+        st.journalDocCandidates = await fetchJournalDocumentCandidates(st.patientId);
+        if (st !== s) return;
+        st.journalFetchState = 'done';
+      } catch (e) {
+        if (st === s) st.journalFetchState = 'error';
+        return;
+      }
+    }
+    if (st.journalFetchState !== 'done' || !st.journalDocCandidates) return;
+
+    var taskDate = (typeof window.__msTaskCreatedDate === 'string' && window.__msTaskCreatedDate) || null;
+    var anyNewlyConfirmed = false;
+    // Cap per-attachment preview walks — with the 2-day window this is
+    // usually 0–2 candidates; the cap is the backstop if a busy record
+    // still has a cluster of same-day documents.
+    var PREVIEW_MATCH_CAP = 10;
+    for (var i = 0; i < atts.length; i++) {
+      var att = atts[i];
+      var name = (att && att.filename ? att.filename : '').trim();
+      if (!name || st.serverCheckedFilenames.indexOf(name) !== -1) continue;
+      st.serverCheckedFilenames.push(name);
+      var expectedExt = extensionOf(att.filename || att.href);
+      var matches = findPossibleSavedDocuments(st.journalDocCandidates, taskDate, SAVED_DOC_DATE_TOLERANCE_DAYS).slice(
+        0,
+        PREVIEW_MATCH_CAP
+      );
+      for (var j = 0; j < matches.length; j++) {
+        var entryId = matches[j].entryId;
+        if (!entryId || st.claimedSavedEntryIds.indexOf(entryId) !== -1) continue;
+        var ok = await candidateFileTypeMatches(entryId, expectedExt);
+        if (st !== s) return;
+        if (ok) {
+          st.claimedSavedEntryIds.push(entryId);
+          st.possibleSavedMatches[name] = {
+            title: matches[j].title,
+            date: candidateAnchorDate(matches[j]),
+            ext: expectedExt,
+          };
+          anyNewlyConfirmed = true;
+          break;
+        }
+      }
+    }
+    if (st === s && anyNewlyConfirmed) refreshAllChipVisuals();
   }
 
   // Moves the (already-mounted) form to sit immediately after the clicked
@@ -768,19 +1220,29 @@
     s.error = null;
     rerender();
     try {
-      var info = getTaskInfo();
-      if (info) {
-        var overview = await fetchTaskOverview(info.typeSlug, info.taskUuid);
-        // H-043 family: if the SPA navigated to a DIFFERENT task while the
-        // overview fetch was in flight, discard the resolution — never bind a
-        // stale patient to the task now on screen (audit, 2026-08-22).
-        var nowInfo = getTaskInfo();
-        if (!nowInfo || nowInfo.taskUuid !== info.taskUuid) {
-          throw new Error('The task changed while loading — reopen the form on the task you want.');
+      // ensureSavedDocumentCheck (2026-08-19) may have already fetched the
+      // task overview to get patientId — never re-fetch it here if so, this
+      // just needs the create-form's own reviewer/date defaults. If that
+      // path set patientId without pinning resolvedForTaskUuid, pin it now
+      // so doCreate's fail-closed H-043 check has an identity to compare.
+      if (!s.patientId) {
+        var info = getTaskInfo();
+        if (info) {
+          var overview = await fetchTaskOverview(info.typeSlug, info.taskUuid);
+          // H-043 family: if the SPA navigated to a DIFFERENT task while the
+          // overview fetch was in flight, discard the resolution — never bind a
+          // stale patient to the task now on screen (audit, 2026-08-22).
+          var nowInfo = getTaskInfo();
+          if (!nowInfo || nowInfo.taskUuid !== info.taskUuid) {
+            throw new Error('The task changed while loading — reopen the form on the task you want.');
+          }
+          s.patientId = overview.patientId;
+          s.resolvedForTaskUuid = info.taskUuid;
+          s.resolvedAttachments = overview.attachments;
         }
-        s.patientId = overview.patientId;
-        s.resolvedForTaskUuid = info.taskUuid;
-        s.resolvedAttachments = overview.attachments;
+      } else if (!s.resolvedForTaskUuid) {
+        var pinned = getTaskInfo();
+        if (pinned) s.resolvedForTaskUuid = pinned.taskUuid;
       }
       if (!s.patientId) throw new Error('Could not determine the patient for this task.');
       var form = await apiFetchCreateForm(s.patientId);
@@ -1002,6 +1464,16 @@
         for (var n of nodes) {
           if (n.nodeType !== 1) continue;
           if (n.id === 'ms-df-widget') continue;
+          // Our injected nodes only — never the wrap's *contents*, which
+          // include Medicus's own attachment button (a Vue re-render of
+          // that button must still trigger re-inject).
+          if (
+            n.classList &&
+            (n.classList.contains('ms-df-chip-wrap') ||
+              n.classList.contains('ms-df-possible-saved-hint') ||
+              n.classList.contains('ms-df-chip'))
+          )
+            continue;
           if (n.closest && n.closest('#ms-df-widget')) continue;
           return false;
         }
@@ -1031,6 +1503,7 @@
       removeWidget();
       s = blankState();
       _chipEls = Object.create(null);
+      _previewFileTypeCache = Object.create(null);
     }
     if (document.hidden) return;
     if (!getTaskInfo()) return;
@@ -1043,6 +1516,16 @@
       // yet on the very first tick, but the shared mutation observer keeps
       // re-evaluating until it is.
       injectAttachmentChips();
+      // Fire-and-forget (2026-08-19) — proactively checks whether any
+      // eligible attachment is already saved as a document elsewhere
+      // (a different clinician, a different computer, Medicus's own native
+      // upload), so a chip can show the non-blocking "check before saving"
+      // hint before it's ever clicked. Does NOT disable the chip (a wrong
+      // guess must never block a genuine save). Cheap to call every tick:
+      // internally guards both the one-off bulk journal fetch and each
+      // attachment's own check, so a repeat call after the first is a
+      // fast no-op unless a genuinely new attachment has appeared.
+      ensureSavedDocumentCheck();
       // If a form is open, make sure it's still mounted and still sitting
       // right after its chip — SPA churn can detach either.
       if (s.open && s.activeFilename) {

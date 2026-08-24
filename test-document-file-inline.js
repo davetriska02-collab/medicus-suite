@@ -14,6 +14,7 @@ const {
   filterEligibleAttachments,
   titleFromFilename,
   buildFormPayload,
+  sanitizeDocumentType,
   documentTypeForFilename,
   findAttachmentsInOverview,
   patientIdFromOverview,
@@ -21,11 +22,30 @@ const {
   filterDocumentTypes,
   priorityColor,
   findDocumentTypeByConceptId,
+  extractJournalDocumentCandidates,
+  findPossibleSavedDocuments,
+  daysBetween,
+  parseDocDate,
+  candidateAnchorDate,
+  normExt,
+  extensionOf,
+  SAVED_DOC_DATE_TOLERANCE_DAYS,
   DOCUMENT_TYPES,
   IMAGE_EXT_RE,
   DOCFILE_EXT_RE,
 } = require('./content-scripts/document-file-inline.js');
 const documentTypesData = require('./rules/document-types.json');
+
+// Field-value equality for {conceptId, description, descriptionId} objects —
+// deliberately NOT JSON.stringify comparison, since sanitizeDocumentType's
+// key insertion order (conceptId first) differs from DOCUMENT_TYPES'
+// (description first); same values, different key order, and
+// JSON.stringify is order-sensitive.
+function sameDocType(a, b) {
+  return (
+    !!a && !!b && a.conceptId === b.conceptId && a.description === b.description && a.descriptionId === b.descriptionId
+  );
+}
 
 let passed = 0,
   failed = 0;
@@ -140,7 +160,10 @@ console.log('--- buildFormPayload: matches the confirmed clinical/document/creat
     payload.documentDate === '2026-07-20' && payload.recordDate === '2026-07-20',
     'documentDate mirrors recordDate'
   );
-  check(payload.documentType === DOCUMENT_TYPES.image, 'documentType passed through from the caller, not hardcoded');
+  check(
+    sameDocType(payload.documentType, DOCUMENT_TYPES.image),
+    'documentType passed through from the caller (sanitized — see sanitizeDocumentType tests below for why this is no longer the SAME object reference)'
+  );
   check(payload.authorOrganisationOption === 'local', 'authorOrganisationOption defaults to local');
   check(payload.nextStep === 'file-into-patient-record', 'nextStep skips the review-routing workflow');
   check(
@@ -168,6 +191,71 @@ console.log('--- buildFormPayload: matches the confirmed clinical/document/creat
   check(
     pdfPayload.documentType.description === 'Patient/Carer Correspondence',
     'a pdf/doc create uses the Patient/Carer Correspondence type when asked'
+  );
+}
+
+console.log(
+  '--- sanitizeDocumentType / buildFormPayload: strips docPriority (bug found live, HAR 69-failed-docsave.har, 2026-08-19) ---'
+);
+{
+  // Modelled EXACTLY on a real rules/document-types.json entry shape — every
+  // one of its 1768 entries carries docPriority, confirmed via
+  // documentTypesData below. Medicus's own create-document endpoint 400'd on
+  // this exact extra field: {"errors":{"documentType.docPriority":["This
+  // field was not expected."]}}.
+  const rulesFileEntry = {
+    conceptId: '24561000000109',
+    description: 'A&E report',
+    descriptionId: '62021000000110',
+    docPriority: 1,
+  };
+  const sanitized = sanitizeDocumentType(rulesFileEntry);
+  check(
+    JSON.stringify(sanitized) ===
+      JSON.stringify({ conceptId: '24561000000109', description: 'A&E report', descriptionId: '62021000000110' }),
+    'docPriority is stripped; conceptId/description/descriptionId survive unchanged'
+  );
+  check(!('docPriority' in sanitized), 'docPriority is genuinely absent from the result, not just falsy');
+  check(sanitizeDocumentType(null) === null, 'null -> null, never throws');
+  check(sanitizeDocumentType(undefined) === null, 'undefined -> null, never throws');
+  check(
+    sameDocType(sanitizeDocumentType(DOCUMENT_TYPES.image), DOCUMENT_TYPES.image),
+    'an already-clean hardcoded type (no docPriority to begin with) passes through with identical field values'
+  );
+
+  // The actual regression this bug needs: buildFormPayload itself must never
+  // let a docPriority-carrying documentType (exactly what the search picker
+  // sets s.documentType to — bindDocumentTypePicks reads straight from
+  // rules/document-types.json's own entries) reach the write payload.
+  const searchPickedPayload = buildFormPayload({
+    patientId: 'patient-uuid',
+    documentDate: '2026-07-20',
+    title: 'A&E report',
+    documentType: rulesFileEntry,
+    reviewerAssigneeId: 'team-uuid',
+    reviewerAssigneeType: 'team',
+  });
+  check(
+    !('docPriority' in searchPickedPayload.documentType),
+    'buildFormPayload strips docPriority even when the caller passes a raw rules-file entry straight through — this is the actual live 400 fix'
+  );
+  check(
+    searchPickedPayload.documentType.conceptId === '24561000000109',
+    'the real conceptId still reaches the payload after sanitizing'
+  );
+
+  // Confirms EVERY real rules-file entry — not just the one example above —
+  // would 400 without the fix, and is clean with it. The failing HAR's own
+  // file was a .jpeg picked via search, not a "non-photo" issue at all — see
+  // this file's own header/CHANGELOG for the full story.
+  check(
+    documentTypesData.entries.every((e) => 'docPriority' in e),
+    "confirms the bug's real scope: EVERY one of the 1768 entries carries docPriority, so ANY search selection (any file type) would have 400'd, not just specific document types"
+  );
+  const sampleEntries = documentTypesData.entries.slice(0, 25);
+  check(
+    sampleEntries.every((e) => !('docPriority' in sanitizeDocumentType(e))),
+    'a sample of 25 real rules-file entries all sanitize clean'
   );
 }
 
@@ -438,6 +526,181 @@ console.log('--- findDocumentTypeByConceptId ---');
     /patientId: verifiedPatientId,/.test(body),
     'W6: the write posts the identity verified by the guard, not a re-read of mutable state'
   );
+}
+
+console.log(
+  '--- extractJournalDocumentCandidates: purpose-built walker for document/fit-note entries (2026-08-19, "already saved?" cross-check) ---'
+);
+{
+  // Modelled on record-duplicate-parser.js's own confirmed document-entry
+  // shape: item.data for flat top-level items, directly on the entry for
+  // nested ones under consultationTopics[].headings[].entries[].
+  const dayGroups = [
+    {
+      title: '19 Aug 2026',
+      items: [
+        {
+          type: 'document',
+          id: 'flat-doc-1',
+          title: null, // confirmed live: item.title is always null on the flat branch
+          data: {
+            id: 'flat-doc-1-real',
+            title: 'IMG_1234',
+            documentTypeLabel: 'Medical photograph',
+            documentDate: '2026-08-19',
+          },
+        },
+        {
+          type: 'note', // a sibling non-document item — must never be picked up
+          id: 'note-1',
+          data: { clinicalCodeDescription: 'Unrelated note' },
+        },
+        {
+          type: 'encounter',
+          id: 'enc-1',
+          data: {
+            consultationTopics: [
+              {
+                headings: [
+                  {
+                    entries: [
+                      {
+                        entryType: 'document',
+                        id: 'nested-doc-1',
+                        title: 'Referral letter',
+                        documentTypeLabel: 'Patient/Carer Correspondence',
+                        documentDate: '2026-08-15',
+                      },
+                      {
+                        entryType: 'note', // sibling nested non-document entry
+                        id: 'nested-note-1',
+                        clinicalCodeDescription: 'Unrelated nested note',
+                      },
+                      {
+                        entryType: 'fit-note', // same document kind as record-duplicate-parser.js
+                        id: 'fit-note-1',
+                        title: 'Fit note',
+                        documentDate: '2026-08-18',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ];
+  const candidates = extractJournalDocumentCandidates(dayGroups);
+  check(candidates.length === 3, 'document + fit-note survive — the sibling note is excluded');
+  check(
+    candidates.some((c) => c.entryId === 'flat-doc-1-real' && c.title === 'IMG_1234'),
+    'flat top-level document: real content read from item.data, not the (always-null) item.title'
+  );
+  check(
+    candidates.some((c) => c.entryId === 'nested-doc-1' && c.title === 'Referral letter'),
+    'nested document (inside a consultation topic heading): real content read directly off the entry'
+  );
+  check(
+    candidates.some((c) => c.entryId === 'fit-note-1' && c.title === 'Fit note'),
+    'nested fit-note is a document-kind entry (record-duplicate-parser.js parity), not dropped'
+  );
+  check(
+    candidates.every((c) => c.dayTitle === '19 Aug 2026'),
+    'every candidate carries the journal day title as a date fallback'
+  );
+  check(
+    JSON.stringify(extractJournalDocumentCandidates([])) === '[]' &&
+      JSON.stringify(extractJournalDocumentCandidates(null)) === '[]',
+    'empty/null dayGroups -> [], never throws'
+  );
+  const nullData = extractJournalDocumentCandidates([
+    { title: 'Mon 1 Jan 2024', items: [{ type: 'document', id: 'x', data: null }] },
+  ]);
+  check(
+    nullData.length === 1 && nullData[0].entryId === 'x' && nullData[0].dayTitle === 'Mon 1 Jan 2024',
+    'a document item with null data still produces a candidate (falls back to item.id + day.title) rather than throwing'
+  );
+}
+
+console.log('--- parseDocDate / daysBetween: ISO and live journal display strings ---');
+{
+  check(!!parseDocDate('2026-08-19') && parseDocDate('2026-08-19').getDate() === 19, 'ISO YYYY-MM-DD');
+  check(
+    !!parseDocDate('16 Aug 2025') && parseDocDate('16 Aug 2025').getDate() === 16,
+    'live journal display "16 Aug 2025"'
+  );
+  check(
+    !!parseDocDate('Sat 16 Aug 2025') && parseDocDate('Sat 16 Aug 2025').getMonth() === 7,
+    'day.title weekday prefix "Sat 16 Aug 2025" (journal day title shape)'
+  );
+  check(parseDocDate('not-a-date') === null, 'unparseable -> null');
+  check(parseDocDate(null) === null, 'null -> null, never throws');
+  check(daysBetween('2026-08-19', '2026-08-19') === 0, 'same ISO date -> 0');
+  check(daysBetween('16 Aug 2025', '2025-08-19') === 3, 'live display vs ISO, 3 days apart');
+  check(daysBetween('19 Aug 2026', '2026-08-19') === 0, 'same calendar day across formats -> 0 (no UTC/local skew)');
+  check(daysBetween('2026-08-19', '2026-08-17') === 2, 'exactly 2 days apart -> 2');
+  check(daysBetween('2026-08-12', '2026-08-19') === 7, 'order-independent (absolute difference)');
+  check(daysBetween('not-a-date', '2026-08-19') === null, 'unparseable date -> null, never throws');
+  check(daysBetween(null, '2026-08-19') === null, 'null date -> null, never throws');
+}
+
+console.log('--- normExt / extensionOf ---');
+{
+  check(normExt('jpg') === 'jpeg' && normExt('JPG') === 'jpeg' && normExt('jpe') === 'jpeg', 'jpg/jpe alias to jpeg');
+  check(normExt('tif') === 'tiff' && normExt('tiff') === 'tiff', 'tif alias to tiff');
+  check(normExt('pdf') === 'pdf', 'already-canonical extensions pass through');
+  check(extensionOf('photo.jpg') === 'jpeg', 'extensionOf normalises jpg');
+  check(extensionOf('https://x/doc/1.PDF') === 'pdf', 'extensionOf is case-insensitive');
+  check(extensionOf('no-extension') === null, 'no extension -> null');
+}
+
+console.log(
+  `--- findPossibleSavedDocuments: date-window match only, no title (dropped 2026-08-19 after live HAR evidence — HAR 70-not-flipping.har) ---`
+);
+{
+  // Real case that killed the title-based version: attachment filename
+  // "d73050ca-93a2-484c-bb84-184971c1566f.jpeg" (a meaningless UUID), but
+  // the clinician saved it with the title "ENT letter New Victoria" — no
+  // title-based match could ever have found this candidate.
+  const candidates = [
+    { entryId: 'a', title: 'ENT letter New Victoria', documentDate: '2026-08-17' }, // 2 days before — within ±2
+    { entryId: 'b', title: 'Unrelated scan result', documentDate: '2026-08-25' }, // +6 days — outside ±2
+    { entryId: 'c', title: 'Old referral', documentDate: '2026-08-30' }, // +11 days — outside
+    { entryId: 'd', title: 'No date on this one', documentDate: null }, // no date, no dayTitle — excluded
+    { entryId: 'e', title: 'Native upload', documentDate: null, dayTitle: 'Mon 18 Aug 2026' }, // null documentDate, day.title fallback
+    { entryId: 'f', title: 'Same-day display string', documentDate: '19 Aug 2026' }, // live journal format
+  ];
+  check(SAVED_DOC_DATE_TOLERANCE_DAYS === 2, 'default window is ±2 days (not the original ±7)');
+  const matches = findPossibleSavedDocuments(candidates, '2026-08-19');
+  const ids = matches.map((m) => m.entryId);
+  check(
+    JSON.stringify(ids.slice().sort()) === JSON.stringify(['a', 'e', 'f']),
+    `in-window candidates survive regardless of title, including dayTitle fallback + display-string date (got ${ids})`
+  );
+  check(ids[0] === 'f', 'closest date (same day) is sorted first');
+  check(!ids.includes('b'), 'a candidate 6 days out is outside the default ±2-day window');
+  check(!ids.includes('c'), 'a candidate 11 days out is excluded');
+  check(!ids.includes('d'), 'a candidate with neither documentDate nor dayTitle is excluded');
+  check(candidateAnchorDate(candidates[4]) === 'Mon 18 Aug 2026', 'candidateAnchorDate falls back to dayTitle');
+  check(findPossibleSavedDocuments(candidates, null).length === 0, 'no expectedDateIso -> no matches, never throws');
+  check(findPossibleSavedDocuments(null, '2026-08-19').length === 0, 'null candidates -> [], never throws');
+  check(
+    findPossibleSavedDocuments(candidates, '2026-08-19', 7).some((m) => m.entryId === 'b'),
+    'an explicit 7-day tolerance still includes the +6-day candidate (window is a parameter, not hardcoded in the filter)'
+  );
+}
+
+console.log('--- hint copy does not assert a title identity (H-061) ---');
+{
+  const fs = require('fs');
+  const src = fs.readFileSync(require('path').join(__dirname, 'content-scripts/document-file-inline.js'), 'utf8');
+  check(
+    !/possibly already saved as/.test(src),
+    'hint copy no longer asserts “already saved as <title>” — date+type cannot support that claim'
+  );
+  check(/check before saving/.test(src), 'hint tells the clinician to check, not that a match is confirmed');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
