@@ -1,8 +1,8 @@
 Medicus Suite v3.240.0 — Companion HUD test build
 =================================================
 
-This is a Load-unpacked test instance of the suite (Companion HUD on the
-floating box). It is not a GitHub Release.
+Temporary Load-unpacked test zip for PR #322. Drop this dist/ folder before
+merge — it is not a GitHub Release.
 
 1. Download medicus-suite-v3.240.0-companion-test.zip and unzip it
    somewhere permanent.
