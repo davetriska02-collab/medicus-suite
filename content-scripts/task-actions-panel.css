@@ -141,7 +141,7 @@
 }
 
 #ms-tap-widget.ms-tap-minimised {
-  width: auto;
+  width: max-content;
   min-width: 0;
   max-height: none;
 }
