@@ -114,6 +114,31 @@
   color: var(--text-3);
 }
 
+.ms-acc-selection-hint {
+  flex: 0 0 auto;
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--accent-line);
+  background: var(--accent-dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.ms-acc-tile-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  cursor: pointer;
+}
+
+.ms-acc-tile-checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .ms-acc-stage-error {
   flex: 0 0 auto;
   padding: 8px 18px;
@@ -314,8 +339,13 @@
 
 .ms-acc-tile-main {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 6px;
+}
+
+.ms-acc-tile-copy {
+  min-width: 0;
+  flex: 1;
 }
 
 .ms-acc-tile-desc {

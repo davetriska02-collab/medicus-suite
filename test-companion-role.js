@@ -80,6 +80,56 @@ console.log('\n--- pageContext ---');
   check(qRoot && qRoot.kind === 'queue', 'queue root without /task-list still counts');
 
   check(role.pageContext('/e38a9f/scheduling/diary') === null, 'unknown page → null (widget stays off)');
+  check(
+    role.pageContext('/e38a9f/scheduling/diary', { allScreens: true }).kind === 'practice',
+    'all-screens diary → practice (no patient pin)'
+  );
+  const enc = role.pageContext(
+    '/e38a9f/patient/cccccccc-cccc-cccc-cccc-cccccccccccc/clinical/notes',
+    { allScreens: true }
+  );
+  check(enc && enc.kind === 'elsewhere', 'all-screens /patient/{uuid}/… → elsewhere');
+  check(enc.patientId === 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'elsewhere captures the patient UUID');
+  check(
+    role.pageContext('/e38a9f/scheduling/diary/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', { allScreens: true }).kind ===
+      'practice',
+    'a random UUID on the diary is not treated as a patient'
+  );
+  check(role.pageContext('/login', { allScreens: true }) === null, 'no site id → still off even with all-screens');
+  check(
+    role.extractPatientUuidFromPath('/e38a9f/care-record/dddddddd-dddd-dddd-dddd-dddddddddddd') ===
+      'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    'extractPatientUuidFromPath reads a care-record UUID'
+  );
+  check(role.siteIdFromPath('/e38a9f/scheduling/diary') === 'e38a9f', 'siteIdFromPath reads the practice prefix');
+}
+
+console.log('\n--- all-screens / dock / size persist ---');
+{
+  const store = {
+    data: {},
+    getItem(k) {
+      return Object.prototype.hasOwnProperty.call(this.data, k) ? this.data[k] : null;
+    },
+    setItem(k, v) {
+      this.data[k] = String(v);
+    },
+  };
+  check(role.readAllScreens(store) === false, 'all-screens defaults off');
+  role.writeAllScreens(store, true);
+  check(store.data[role.ALL_SCREENS_LS] === '1', 'all-screens persists as 1');
+  check(role.readAllScreens(store) === true, 'all-screens reads back on');
+  check(role.readDocked(store) === false, 'docked defaults off (floating)');
+  role.writeDocked(store, true);
+  check(role.readDocked(store) === true, 'docked reads back on');
+  const clamped = role.clampSize({ width: 80, height: 40 }, { width: 800, height: 600 });
+  check(clamped.width === role.MIN_WIDTH, 'clampSize floors width');
+  check(clamped.height === role.MIN_HEIGHT, 'clampSize floors height');
+  const wide = role.clampSize({ width: 9000, height: 9000 }, { width: 800, height: 600 });
+  check(wide.width === 784, 'clampSize caps width to viewport-16');
+  role.writeSavedSize(store, { width: 420, height: 300 });
+  const saved = role.readSavedSize(store);
+  check(saved && saved.width === 420 && saved.height === 300, 'saved size round-trips');
 }
 
 console.log('\n--- roleShows ---');
@@ -103,6 +153,13 @@ console.log('\n--- roleShows ---');
   const nurseRec = role.roleShows('nursing', 'record');
   check(nurseRec.due && nurseRec.slots && nurseRec.book, 'nursing record: due + nurse slots + book');
   check(!nurseRec.pulse && !nurseRec.desk && !nurseRec.task, 'nursing: no pulse / desk / create-task');
+
+  const clinicElse = role.roleShows('clinic', 'elsewhere');
+  check(clinicElse.due && clinicElse.book && !clinicElse.task, 'clinic elsewhere: due + book, no create-task');
+  const clinicPractice = role.roleShows('clinic', 'practice');
+  check(!clinicPractice.due && !clinicPractice.book, 'clinic practice page: no due/book without a patient pin');
+  const recPractice = role.roleShows('reception', 'practice');
+  check(recPractice.desk && recPractice.slots && !recPractice.due, 'reception practice: desk + slots only');
 }
 
 console.log('\n--- deskFromPayloads is honest ---');

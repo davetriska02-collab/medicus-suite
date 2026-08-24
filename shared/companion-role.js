@@ -24,6 +24,9 @@
     nursing: 'Nursing',
   };
   var ROLE_LS = 'ms-companion-role';
+  var ALL_SCREENS_LS = 'ms-companion-all-screens';
+  var DOCKED_LS = 'ms-companion-docked';
+  var SIZE_LS = 'ms-companion-size';
   var ROLE_CAPTIONS = {
     clinic: 'GP due list for this patient',
     reception: 'What to book, plus the desk',
@@ -75,6 +78,95 @@
     }
   }
 
+  function readFlag(storage, key) {
+    if (!storage || typeof storage.getItem !== 'function') return false;
+    try {
+      return storage.getItem(key) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function writeFlag(storage, key, on) {
+    if (!storage || typeof storage.setItem !== 'function') return;
+    try {
+      storage.setItem(key, on ? '1' : '0');
+    } catch (_) {
+      /* private mode / blocked storage */
+    }
+  }
+
+  function readAllScreens(storage) {
+    return readFlag(storage, ALL_SCREENS_LS);
+  }
+
+  function writeAllScreens(storage, on) {
+    writeFlag(storage, ALL_SCREENS_LS, !!on);
+  }
+
+  function readDocked(storage) {
+    return readFlag(storage, DOCKED_LS);
+  }
+
+  function writeDocked(storage, on) {
+    writeFlag(storage, DOCKED_LS, !!on);
+  }
+
+  var MIN_WIDTH = 280;
+  var MIN_HEIGHT = 160;
+  var DEFAULT_WIDTH = 340;
+
+  function clampSize(size, viewport) {
+    var vp = viewport || {};
+    var maxW = typeof vp.width === 'number' && vp.width > 0 ? vp.width - 16 : 720;
+    var maxH = typeof vp.height === 'number' && vp.height > 0 ? vp.height - 16 : 720;
+    var w = size && typeof size.width === 'number' ? size.width : DEFAULT_WIDTH;
+    var h = size && typeof size.height === 'number' ? size.height : null;
+    w = Math.max(MIN_WIDTH, Math.min(Math.round(w), maxW));
+    if (h == null) return { width: w, height: null };
+    h = Math.max(MIN_HEIGHT, Math.min(Math.round(h), maxH));
+    return { width: w, height: h };
+  }
+
+  function readSavedSize(storage) {
+    if (!storage || typeof storage.getItem !== 'function') return null;
+    try {
+      var raw = storage.getItem(SIZE_LS);
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      if (!p || typeof p.width !== 'number') return null;
+      return clampSize(p);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function writeSavedSize(storage, size) {
+    if (!storage || typeof storage.setItem !== 'function') return;
+    try {
+      var next = clampSize(size || {});
+      storage.setItem(SIZE_LS, JSON.stringify(next));
+    } catch (_) {
+      /* private mode / blocked storage */
+    }
+  }
+
+  // Only known patient-URL shapes — never a random UUID (appointment / task
+  // ids also look like this). Same two patterns detectMedicusContext uses.
+  function extractPatientUuidFromPath(pathname) {
+    var path = String(pathname || '');
+    var care = /\/care-record\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(path);
+    if (care) return care[1];
+    var pat = /\/patient\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i.exec(path);
+    if (pat) return pat[1];
+    return null;
+  }
+
+  function siteIdFromPath(pathname) {
+    var m = /^\/([0-9a-f]{4,})(?:\/|$)/i.exec(String(pathname || ''));
+    return m ? m[1] : null;
+  }
+
   var TASK_RE =
     /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
   var QUEUE_RE = /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)(?:\/task-list)?\/?$/i;
@@ -84,13 +176,20 @@
    * pageContext(pathname) → { kind, siteId, pageKey, ... } | null
    *
    * kind:
-   *   'task'   — task overview (not document-filing)
-   *   'record' — care-record (patient UUID in the URL)
-   *   'queue'  — task-list / queue root (no overview UUID)
-   * null      — leave the widget off (letters, unknown pages)
+   *   'task'      — task overview (not document-filing)
+   *   'record'    — care-record (patient UUID in the URL)
+   *   'queue'     — task-list / queue root (no overview UUID)
+   *   'elsewhere' — other patient-scoped page (opt-in all-screens only)
+   *   'practice'  — other Medicus page with no patient pin (opt-in only)
+   * null         — leave the widget off
+   *
+   * opts.allScreens — when true, unknown pages still return a context so
+   * the Companion can sit on the diary / letters / homepage if the user
+   * asked for that. Default off: those pages stay empty (don't annoy).
    */
-  function pageContext(pathname) {
+  function pageContext(pathname, opts) {
     var path = String(pathname || '');
+    var allScreens = !!(opts && opts.allScreens);
     var task = TASK_RE.exec(path);
     if (task) {
       if (String(task[2]).toLowerCase() === 'document') return null;
@@ -122,7 +221,23 @@
         pageKey: 'queue:' + slug,
       };
     }
-    return null;
+    if (!allScreens) return null;
+    var siteId = siteIdFromPath(path);
+    if (!siteId) return null;
+    var patientId = extractPatientUuidFromPath(path);
+    if (patientId) {
+      return {
+        kind: 'elsewhere',
+        siteId: siteId,
+        patientId: patientId,
+        pageKey: 'elsewhere:' + patientId,
+      };
+    }
+    return {
+      kind: 'practice',
+      siteId: siteId,
+      pageKey: 'practice:' + path,
+    };
   }
 
   /**
@@ -133,7 +248,7 @@
   function roleShows(role, kind) {
     role = normalizeRole(role);
     kind = kind || 'task';
-    var hasPatient = kind === 'task' || kind === 'record';
+    var hasPatient = kind === 'task' || kind === 'record' || kind === 'elsewhere';
     return {
       due: role !== 'triage' && hasPatient,
       desk: role === 'reception',
@@ -382,6 +497,12 @@
     ROLES: ROLES,
     ROLE_LABELS: ROLE_LABELS,
     ROLE_LS: ROLE_LS,
+    ALL_SCREENS_LS: ALL_SCREENS_LS,
+    DOCKED_LS: DOCKED_LS,
+    SIZE_LS: SIZE_LS,
+    MIN_WIDTH: MIN_WIDTH,
+    MIN_HEIGHT: MIN_HEIGHT,
+    DEFAULT_WIDTH: DEFAULT_WIDTH,
     ROLE_CAPTIONS: ROLE_CAPTIONS,
     normalizeRole: normalizeRole,
     dueVoiceForRole: dueVoiceForRole,
@@ -390,6 +511,15 @@
     suggestedRole: suggestedRole,
     readSavedRole: readSavedRole,
     writeSavedRole: writeSavedRole,
+    readAllScreens: readAllScreens,
+    writeAllScreens: writeAllScreens,
+    readDocked: readDocked,
+    writeDocked: writeDocked,
+    clampSize: clampSize,
+    readSavedSize: readSavedSize,
+    writeSavedSize: writeSavedSize,
+    extractPatientUuidFromPath: extractPatientUuidFromPath,
+    siteIdFromPath: siteIdFromPath,
     pageContext: pageContext,
     roleShows: roleShows,
     arrivedEntries: arrivedEntries,

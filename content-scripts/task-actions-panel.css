@@ -140,6 +140,111 @@
   outline-offset: 2px;
 }
 
+#ms-tap-widget .ms-tap-chrome-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font: 14px/1 var(--sans);
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-chrome-btn:hover {
+  background: var(--bg-hover);
+}
+
+#ms-tap-widget .ms-tap-chrome-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#ms-tap-widget.ms-tap-docked {
+  top: 40%;
+  right: 0;
+  left: auto;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  max-height: none;
+  box-shadow: -2px 4px 16px rgba(15, 23, 42, 0.18);
+  border-radius: 8px 0 0 8px;
+}
+
+#ms-tap-widget .ms-tap-dock-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 14px 8px;
+  border: 1px solid #c3cef5;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: #f0f4ff;
+  color: #1e3a8a;
+  font: 600 12px/1.2 var(--sans);
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-dock-tab:hover {
+  background: #e4ebff;
+}
+
+#ms-tap-widget .ms-tap-dock-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#ms-tap-widget .ms-tap-dock-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+#ms-tap-widget .ms-tap-chrome-footer {
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+#ms-tap-widget .ms-tap-everywhere {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-everywhere input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+#ms-tap-widget .ms-tap-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 0 55%, var(--border) 55% 65%, transparent 65% 75%, var(--border) 75% 85%, transparent 85%);
+}
+
+#ms-tap-widget.ms-tap-resizing {
+  user-select: none;
+}
+
+#ms-tap-widget:has(.ms-tap-body) {
+  position: fixed;
+}
+
 #ms-tap-widget.ms-tap-minimised {
   width: max-content;
   min-width: 0;

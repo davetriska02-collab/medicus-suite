@@ -622,6 +622,49 @@
   // actually originated here rather than being a foreign drag (selected
   // text, a dragged file) that happened to land on a tile. Same
   // provenance-via-dataTransfer technique contacts-canvas.js uses.
+  function uniqueIds(ids) {
+    var out = [];
+    var seen = {};
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(id);
+    });
+    return out;
+  }
+
+  function payloadIds(payload, primaryKey) {
+    var key = primaryKey || 'problemId';
+    if (!payload || typeof payload !== 'object') return [];
+    var extra = Array.isArray(payload.ids) ? payload.ids : [];
+    var primary = payload[key];
+    var list = extra.filter(function (id) {
+      return id && id !== primary;
+    });
+    if (primary) list.unshift(primary);
+    return uniqueIds(list);
+  }
+
+  function toggleSelectedIds(current, id, additive) {
+    if (!id) return additive ? uniqueIds(current) : [];
+    if (!additive) return [id];
+    var next = uniqueIds(current);
+    var i = next.indexOf(id);
+    if (i === -1) next.push(id);
+    else next.splice(i, 1);
+    return next;
+  }
+
+  function dragIdsFor(selectedIds, draggedId) {
+    if (!draggedId) return [];
+    if ((selectedIds || []).indexOf(draggedId) !== -1) return uniqueIds(selectedIds);
+    return [draggedId];
+  }
+
+  function isAdditiveClick(e) {
+    return !!(e && (e.metaKey || e.ctrlKey));
+  }
+
   function readDropPayload(e) {
     var raw = '';
     try {
@@ -633,6 +676,7 @@
     try {
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || !parsed.problemId) return null;
+      if (Array.isArray(parsed.ids)) parsed.ids = uniqueIds(parsed.ids);
       return parsed;
     } catch (_) {
       return null; // malformed, or plain dragged text that happens not to be JSON
@@ -987,6 +1031,11 @@
       computeLinkBusX: computeLinkBusX,
       relativeRect: relativeRect,
       readDropPayload: readDropPayload,
+      uniqueIds: uniqueIds,
+      payloadIds: payloadIds,
+      toggleSelectedIds: toggleSelectedIds,
+      dragIdsFor: dragIdsFor,
+      isAdditiveClick: isAdditiveClick,
       buildPendingLink: buildPendingLink,
       significanceLaneKey: significanceLaneKey,
       partitionProblemsBySignificance: partitionProblemsBySignificance,
@@ -1062,9 +1111,11 @@
   var _cycleError = null;
   var _dragPayload = null;
   var _lineUpdateScheduled = false;
-  // The one tile currently showing its action buttons (click to select,
-  // click again — or select another — to deselect). Tree-pane tiles only.
-  var _selectedTileId = null;
+  // Selected tiles (Ctrl/Cmd-click or the checkbox). Action buttons show
+  // only when exactly one is selected — same as the original click-to-
+  // select — so a multi-select never hides Edit/Remove-link under a pile
+  // of checkmarks. Dragging any selected tile carries the whole set.
+  var _selectedTileIds = [];
   // Keyboard equivalent of the drag payload (review finding: dragging was
   // the ONLY way to create a link — unreachable without a pointer). Enter/
   // Space on a focused tile "picks it up"; Enter/Space on another tile
@@ -1173,7 +1224,8 @@
         '</div>'
       : '';
     var addInfo = truncateText(node.additionalInformation, 70);
-    var selected = _selectedTileId === node.id;
+    var selected = _selectedTileIds.indexOf(node.id) !== -1;
+    var showActions = selected && _selectedTileIds.length === 1;
     // Two SEPARATE attributes (2026-08-19, was one combined data-candidate-ids)
     // — the line-drawer needs to tell a SNOMED-ancestry candidate apart from
     // a text-link match to flag each line's kind distinctly (Nick's
@@ -1206,10 +1258,19 @@
       (node.textLinkSuggestion ? ' data-textlink-id="' + esc(node.textLinkSuggestion.matchedProblemId) + '"' : '') +
       '>' +
       '<div class="ms-pnc-tile-main">' +
+      '<label class="ms-pnc-tile-check" title="Add to selection">' +
+      '<input type="checkbox" class="ms-pnc-tile-checkbox" data-select-id="' +
+      esc(node.id) +
+      '"' +
+      (selected ? ' checked' : '') +
+      ' />' +
+      '</label>' +
+      '<div class="ms-pnc-tile-copy">' +
       '<div class="ms-pnc-tile-desc">' +
       esc(node.description) +
       '</div>' +
       (node.displayDate ? '<div class="ms-pnc-tile-date">' + esc(node.displayDate) + '</div>' : '') +
+      '</div>' +
       '</div>' +
       (addInfo ? '<div class="ms-pnc-tile-info">' + esc(addInfo) + '</div>' : '') +
       (node.crossLaneParentDescription
@@ -1225,7 +1286,7 @@
       // hasOtherRelationship — the flag's tooltip doesn't need to repeat).
       (node.textLinkSuggestion ? textLinkHintHtml(node.textLinkSuggestion) : '') +
       '</div>' +
-      (selected ? tileActionsHtml(node) : '') +
+      (showActions ? tileActionsHtml(node) : '') +
       '</div>' +
       branch +
       '</div>'
@@ -1408,6 +1469,50 @@
         secondaryConfirmLabel = 'Confirm — link problems';
         secondaryBusyLabel = 'Linking…';
       }
+    } else if (d.kind === 'link-multi') {
+      var nestable = (d.items || []).filter(function (item) {
+        return item && item.nestAllowed !== false;
+      });
+      var flatOnly = (d.items || []).filter(function (item) {
+        return item && item.nestAllowed === false;
+      });
+      var names = (d.items || [])
+        .map(function (item) {
+          return esc(item.childDescription);
+        })
+        .join('; ');
+      if (!nestable.length) {
+        message =
+          'Nesting these under <strong>' +
+          esc(d.parentDescription) +
+          '</strong> would loop the hierarchy, so only a flat link is offered for ' +
+          (d.items || []).length +
+          ' problems (' +
+          names +
+          ').';
+        confirmLabel = 'Confirm — link all';
+        busyLabel = 'Linking…';
+      } else {
+        message =
+          '"Confirm — nest all" will nest <strong>' +
+          nestable.length +
+          '</strong> problem' +
+          (nestable.length === 1 ? '' : 's') +
+          ' under <strong>' +
+          esc(d.parentDescription) +
+          '</strong> (' +
+          names +
+          '). Each still confirms as a child of that parent. ' +
+          (flatOnly.length
+            ? flatOnly.length +
+              ' cannot nest (would loop) and will be flat-linked instead. '
+            : '') +
+          '"Confirm — link all" records a flat related-problems link for every selected tile instead.';
+        confirmLabel = 'Confirm — nest all';
+        busyLabel = 'Linking…';
+        secondaryConfirmLabel = 'Confirm — link all';
+        secondaryBusyLabel = 'Linking…';
+      }
     } else if (d.kind === 'textlink-linked') {
       message =
         'This will create a flat (non-hierarchical) link between <strong>' +
@@ -1582,10 +1687,16 @@
   function bodyHtml(laneTrees, endedProblems) {
     return (
       '<div class="ms-pnc-explainer">Drag a problem onto another to nest or link it (that still ' +
-      'confirms one pair at a time) — a dotted line marks a suggested pairing worth trying. Drop on ' +
+      'confirms before it writes) — a dotted line marks a suggested pairing worth trying. Drop on ' +
       '<strong>Major / Minor / Unresolved</strong> or <strong>End</strong> to stage the change — arrange as ' +
-      'many as you like, then <strong>Finalise</strong> to write them all. Drag a staged tile back out to ' +
-      'undo it. Click a tile to recode it or remove a nest.</div>' +
+      'many as you like, then <strong>Finalise</strong> to write them all. Tick several tiles, or ' +
+      'Ctrl/⌘-click, then drag the set together. Drag a staged tile back out to undo it. Click a tile to ' +
+      'recode it or remove a nest.</div>' +
+      (_selectedTileIds.length > 1
+        ? '<div class="ms-pnc-selection-hint">' +
+          _selectedTileIds.length +
+          ' selected — drop them on a lane or End, or onto one problem to nest/link them all. Click a tile to keep only that one.</div>'
+        : '') +
       '<div class="ms-pnc-body">' +
       '<svg class="ms-pnc-lines" aria-hidden="true"></svg>' +
       '<div class="ms-pnc-lanes" id="ms-pnc-lanes">' +
@@ -1845,6 +1956,28 @@
           await window.ProblemNesting.commitParentLink(d.childId, d.parentId);
           announce('Nested ' + d.childDescription + ' under ' + d.parentDescription);
         }
+      } else if (d.kind === 'link-multi') {
+        var nestAsFlat = commitAs === 'flatlink';
+        var done = 0;
+        for (var i = 0; i < (d.items || []).length; i++) {
+          var item = d.items[i];
+          if (!item) continue;
+          if (nestAsFlat || item.nestAllowed === false) {
+            await window.ProblemNesting.commitFlatLink(item.childId, item.parentId);
+          } else {
+            await window.ProblemNesting.commitParentLink(item.childId, item.parentId);
+          }
+          done++;
+        }
+        announce(
+          (nestAsFlat ? 'Linked ' : 'Nested ') +
+            done +
+            ' problem' +
+            (done === 1 ? '' : 's') +
+            ' with ' +
+            d.parentDescription
+        );
+        _selectedTileIds = [];
       } else if (d.kind === 'textlink-linked') {
         await window.ProblemNesting.commitFlatLink(d.problemId, d.matchedId);
         announce('Linked ' + d.problemDescription + ' with ' + d.matchedDescription);
@@ -2037,6 +2170,34 @@
     render();
   }
 
+  function proposeLinkMany(childIds, parentId, snap, descById) {
+    var ids = uniqueIds(childIds).filter(function (id) {
+      return id && id !== parentId;
+    });
+    if (!ids.length) return;
+    if (ids.length === 1) {
+      proposeLink(ids[0], parentId, snap, descById);
+      return;
+    }
+    var items = ids.map(function (childId) {
+      _draft = unstageEnd(_draft, childId, snap.parentIdByProblemId);
+      var pending = buildPendingLink(childId, parentId, descById, snap.parentIdByProblemId);
+      if (window.ProblemNesting && window.ProblemNesting.wouldCreateCycle(childId, parentId, snap.parentIdByProblemId)) {
+        pending.nestAllowed = false;
+      }
+      return pending;
+    });
+    _pendingAction = {
+      kind: 'link-multi',
+      parentId: parentId,
+      parentDescription: (descById && descById[parentId]) || parentId,
+      items: items,
+      linking: false,
+      error: null,
+    };
+    render();
+  }
+
   function proposeSignificance(problemId, targetKey, snap, descById) {
     if (!problemId || !targetKey || !snap) return;
     var liveKey = liveLaneKey(snap.infoById, problemId);
@@ -2181,17 +2342,36 @@
     // SNOMED-ancestry suggestion alone does NOT block the shortcut — that's
     // confirmed by dragging the tile, not a button, so Edit problem is
     // still the only click-driven action on a root tile with no text-link.
+    root.querySelectorAll('.ms-pnc-tile-checkbox').forEach(function (box) {
+      box.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+      box.addEventListener('change', function (e) {
+        e.stopPropagation();
+        var id = box.getAttribute('data-select-id');
+        if (!id) return;
+        _selectedTileIds = toggleSelectedIds(_selectedTileIds, id, true);
+        render();
+      });
+    });
+
     root.querySelectorAll('.ms-pnc-lane .ms-pnc-tile[data-problem-id]').forEach(function (tile) {
-      tile.addEventListener('click', function () {
+      tile.addEventListener('click', function (e) {
+        if (e.target && e.target.closest && e.target.closest('.ms-pnc-tile-check')) return;
         var id = tile.getAttribute('data-problem-id');
+        if (isAdditiveClick(e)) {
+          _selectedTileIds = toggleSelectedIds(_selectedTileIds, id, true);
+          render();
+          return;
+        }
         var parentId = snap.parentIdByProblemId[id];
         var hasRealParent = !!(parentId && Object.prototype.hasOwnProperty.call(descById, parentId));
-        if (!hasRealParent && !tile.hasAttribute('data-textlink-id')) {
-          _selectedTileId = null;
+        if (!hasRealParent && !tile.hasAttribute('data-textlink-id') && _selectedTileIds.length <= 1) {
+          _selectedTileIds = [];
           openEditPanel(id, descById[id]);
           return;
         }
-        _selectedTileId = _selectedTileId === id ? null : id;
+        _selectedTileIds = _selectedTileIds.length === 1 && _selectedTileIds[0] === id ? [] : [id];
         render();
       });
     });
@@ -2202,7 +2382,7 @@
         var childId = btn.getAttribute('data-target-id');
         var parentId = snap.parentIdByProblemId[childId];
         if (!childId || !parentId) return;
-        _selectedTileId = null;
+        _selectedTileIds = [];
         _pendingAction = {
           kind: 'unlink',
           childId: childId,
@@ -2254,17 +2434,26 @@
     root.querySelectorAll('[draggable="true"][data-problem-id]').forEach(function (tile) {
       tile.addEventListener('dragstart', function (e) {
         var id = tile.getAttribute('data-problem-id');
-        _dragPayload = { problemId: id };
+        var ids = dragIdsFor(_selectedTileIds, id);
+        _dragPayload = { problemId: id, ids: ids };
         e.dataTransfer.setData('text/plain', JSON.stringify(_dragPayload));
         e.dataTransfer.effectAllowed = 'move';
+        if (ids.length > 1) {
+          tile.classList.add('ms-pnc-tile-dragging-multi');
+        }
       });
-      tile.addEventListener('dragend', clearDrag);
+      tile.addEventListener('dragend', function () {
+        tile.classList.remove('ms-pnc-tile-dragging-multi');
+        clearDrag();
+      });
     });
     root.querySelectorAll('[data-problem-id]').forEach(function (tile) {
       tile.addEventListener('dragover', function (e) {
         if (!_dragPayload) return;
         var targetId = tile.getAttribute('data-problem-id');
-        if (targetId === _dragPayload.problemId) return; // can't drop a tile on itself
+        if (payloadIds(_dragPayload, 'problemId').indexOf(targetId) !== -1 && payloadIds(_dragPayload, 'problemId').length === 1)
+          return; // can't drop a lone tile on itself
+        if (targetId === _dragPayload.problemId && payloadIds(_dragPayload, 'problemId').length === 1) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         e.stopPropagation(); // innermost tile under the pointer decides — a parent tile's own tree ancestor must not also claim this drop
@@ -2272,10 +2461,10 @@
       tile.addEventListener('drop', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        var payload = readDropPayload(e);
+        var payload = readDropPayload(e) || _dragPayload;
         _dragPayload = null;
         if (!payload) return;
-        proposeLink(payload.problemId, tile.getAttribute('data-problem-id'), snap, descById);
+        applyClassifiedDrop(payload, { type: 'tile', id: tile.getAttribute('data-problem-id') });
       });
     });
 
@@ -2285,15 +2474,22 @@
     }
 
     function applyClassifiedDrop(payload, dropTarget) {
-      var classified = classifyDrop(payload, dropTarget, currentLaneOf(payload.problemId));
-      if (!classified) return;
-      if (classified.kind === 'link') {
-        proposeLink(classified.childId, classified.parentId, snap, descById);
-      } else if (classified.kind === 'end') {
-        proposeEnd(classified.problemId, snap, descById);
-      } else if (classified.targetKey) {
-        proposeSignificance(classified.problemId, classified.targetKey, snap, descById);
+      var ids = payloadIds(payload, 'problemId');
+      if (!ids.length || !dropTarget) return;
+      if (dropTarget.type === 'tile') {
+        var children = ids.filter(function (id) {
+          return id && id !== dropTarget.id;
+        });
+        if (children.length === 1) proposeLink(children[0], dropTarget.id, snap, descById);
+        else if (children.length > 1) proposeLinkMany(children, dropTarget.id, snap, descById);
+        return;
       }
+      ids.forEach(function (id) {
+        var classified = classifyDrop({ problemId: id }, dropTarget, currentLaneOf(id));
+        if (!classified) return;
+        if (classified.kind === 'end') proposeEnd(classified.problemId, snap, descById);
+        else if (classified.targetKey) proposeSignificance(classified.problemId, classified.targetKey, snap, descById);
+      });
     }
 
     root.querySelectorAll('[data-sig-lane]').forEach(function (lane) {
@@ -2310,7 +2506,7 @@
       lane.addEventListener('drop', function (e) {
         e.preventDefault();
         lane.classList.remove('ms-pnc-drop-hover');
-        var payload = readDropPayload(e);
+        var payload = readDropPayload(e) || _dragPayload;
         _dragPayload = null;
         if (!payload) return;
         applyClassifiedDrop(payload, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
@@ -2333,7 +2529,7 @@
         e.preventDefault();
         e.stopPropagation();
         bin.classList.remove('ms-pnc-drop-hover');
-        var payload = readDropPayload(e);
+        var payload = readDropPayload(e) || _dragPayload;
         _dragPayload = null;
         if (!payload) return;
         applyClassifiedDrop(payload, { type: 'bin' });
@@ -2359,9 +2555,11 @@
         if (!id) return;
         if (!_kbPickedId) {
           _kbPickedId = id;
+          if (_selectedTileIds.indexOf(id) === -1) _selectedTileIds = [id];
           announce(
             'Picked up ' +
               (descById[id] || 'problem') +
+              (_selectedTileIds.length > 1 ? ' and ' + (_selectedTileIds.length - 1) + ' more' : '') +
               '. Move focus to the problem to nest it under and press Enter. Press Escape to cancel.'
           );
           render();
@@ -2373,32 +2571,32 @@
           render();
           return;
         }
-        var childId = _kbPickedId;
+        var ids = dragIdsFor(_selectedTileIds, _kbPickedId);
         _kbPickedId = null;
-        proposeLink(childId, id, snap, descById);
+        applyClassifiedDrop({ problemId: ids[0], ids: ids }, { type: 'tile', id: id });
       });
     });
 
     root.querySelectorAll('[data-sig-lane]').forEach(function (lane) {
       lane.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ') return;
-        if (!_kbPickedId) return;
+        if (!_kbPickedId && !_selectedTileIds.length) return;
         if (e.target !== lane) return; // a focused tile inside the lane handles its own Enter
         e.preventDefault();
         e.stopPropagation();
-        var childId = _kbPickedId;
+        var ids = _kbPickedId ? dragIdsFor(_selectedTileIds, _kbPickedId) : _selectedTileIds.slice();
         _kbPickedId = null;
-        applyClassifiedDrop({ problemId: childId }, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
+        applyClassifiedDrop({ problemId: ids[0], ids: ids }, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
       });
     });
     root.querySelector('[data-end-bin]')?.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter' && e.key !== ' ') return;
-      if (!_kbPickedId) return;
+      if (!_kbPickedId && !_selectedTileIds.length) return;
       e.preventDefault();
       e.stopPropagation();
-      var childId = _kbPickedId;
+      var ids = _kbPickedId ? dragIdsFor(_selectedTileIds, _kbPickedId) : _selectedTileIds.slice();
       _kbPickedId = null;
-      applyClassifiedDrop({ problemId: childId }, { type: 'bin' });
+      applyClassifiedDrop({ problemId: ids[0], ids: ids }, { type: 'bin' });
     });
 
     root.querySelectorAll('.ms-pnc-lane').forEach(function (pane) {
@@ -2436,6 +2634,7 @@
     _draft = emptyDraft();
     _cycleError = null;
     _kbPickedId = null;
+    _selectedTileIds = [];
     _linkedCount = 0;
     _dismissedTextLinkProblemIds = new Set();
     // Pin this canvas to the patient it opened against — see render()'s
@@ -2544,7 +2743,7 @@
     _pendingAction = null;
     _draft = emptyDraft();
     _cycleError = null;
-    _selectedTileId = null;
+    _selectedTileIds = [];
     _kbPickedId = null;
     _openedPatientId = null;
   }
