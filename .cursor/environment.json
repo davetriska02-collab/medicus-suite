@@ -1,0 +1,4 @@
+{
+  "name": "Medicus Suite",
+  "install": "npm install --no-audit --no-fund"
+}
