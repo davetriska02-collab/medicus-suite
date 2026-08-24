@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.240.3] — 2026-08-24
+
+### Companion HUD — dedicated minimise
+
+The floating Companion box now has a **Minimise / Restore** button on the title row (`−` / `+`). Minimised, it shrinks to a compact bar that still shows the due-count badge. The choice persists in `localStorage` (`ms-companion-collapsed`) so a page change or reload does not pop it back open. Title-click still toggles the same state.
+
 ## [v3.240.2] — 2026-08-24
 
 ### Companion HUD — Practice panel to a realistic 8/10

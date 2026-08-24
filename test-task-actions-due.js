@@ -100,6 +100,11 @@ check(
 );
 check(/slotsFromOverview/.test(panel), 'slots glance maps the overview through the tested helper');
 check(/<span>Companion<\/span>/.test(panel), 'header title is Companion');
+check(/ms-tap-minimise/.test(panel), 'header has a dedicated Minimise / Restore button');
+check(/ms-companion-collapsed/.test(panel), 'minimise state is persisted in localStorage');
+check(/function readCollapsed/.test(panel) && /function writeCollapsed/.test(panel), 'collapsed persist helpers exist');
+check(/function setCollapsed/.test(panel), 'title click and minimise both go through setCollapsed');
+check(/ms-tap-minimised/.test(css), 'minimised chrome shrinks to a compact bar');
 
 console.log('\n--- snapshot ping ---');
 check(/ms-sentinel-snapshot/.test(panel), 'panel listens for the same-page snapshot ping');

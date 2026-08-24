@@ -53,7 +53,7 @@
       <p>
         Fixture data, same CSS and due-mini wording as the live widget. Click the role pills.
         On Medicus, load this branch as an unpacked extension and open a task, the care record, or
-        the medical queue.
+        the medical queue. Use − to minimise the box to a compact bar (persists on the live page).
       </p>
       <div class="preview-note">
         This page does not talk to Medicus. Desk / slot / pulse numbers here are labelled as
@@ -101,6 +101,7 @@
 
       const roleApi = window.MsCompanionRole;
       let role = 'clinic';
+      let collapsed = false;
 
       function esc(s) {
         return String(s == null ? '' : s)
@@ -229,20 +230,50 @@
             '</button>'
           );
         }).join('');
+        const minLabel = collapsed ? 'Restore Companion' : 'Minimise Companion';
+        const badge = collapsed
+          ? '<span class="ms-tap-due-count ms-tap-due-count-red" aria-label="5 overdue">5</span>'
+          : '';
+        const roles = collapsed
+          ? ''
+          : '<div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' +
+            pills +
+            '</div><p class="ms-tap-role-caption">' +
+            esc(roleApi.roleCaption(role)) +
+            '</p>';
+        const body = collapsed ? '' : '<div class="ms-tap-body">' + bodyFor(role) + '</div>';
         host.innerHTML =
-          '<div id="ms-tap-widget" lang="en-GB"><div class="ms-tap-header"><span class="ms-tap-grip" aria-hidden="true"></span><div class="ms-tap-header-main"><span class="ms-tap-header-toggle"><span class="ms-tap-chevron">▾</span><span>Companion</span></span><div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' +
-          pills +
-          '</div><p class="ms-tap-role-caption">' +
-          esc(roleApi.roleCaption(role)) +
-          '</p></div></div><div class="ms-tap-body">' +
-          bodyFor(role) +
-          '</div></div>';
+          '<div id="ms-tap-widget" lang="en-GB"' +
+          (collapsed ? ' class="ms-tap-collapsed ms-tap-minimised"' : '') +
+          '><div class="ms-tap-header"><span class="ms-tap-grip" aria-hidden="true"></span><div class="ms-tap-header-main"><div class="ms-tap-header-row"><span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
+          !collapsed +
+          '"><span class="ms-tap-chevron">' +
+          (collapsed ? '▸' : '▾') +
+          '</span><span>Companion</span>' +
+          badge +
+          '</span><button type="button" class="ms-tap-minimise" id="ms-tap-minimise" aria-label="' +
+          minLabel +
+          '" title="' +
+          minLabel +
+          '">' +
+          (collapsed ? '+' : '−') +
+          '</button></div>' +
+          roles +
+          '</div></div>' +
+          body +
+          '</div>';
         host.querySelectorAll('.ms-tap-role').forEach(function (btn) {
           btn.addEventListener('click', function () {
             role = btn.getAttribute('data-role');
             render();
           });
         });
+        function toggleCollapsed() {
+          collapsed = !collapsed;
+          render();
+        }
+        host.querySelector('#ms-tap-minimise')?.addEventListener('click', toggleCollapsed);
+        host.querySelector('#ms-tap-toggle')?.addEventListener('click', toggleCollapsed);
       }
 
       render();

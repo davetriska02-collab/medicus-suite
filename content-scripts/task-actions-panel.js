@@ -27,6 +27,7 @@
 
   const WIDGET_ID = 'ms-tap-widget';
   const POS_KEY = 'ms-tap-pos';
+  const COLLAPSED_KEY = 'ms-companion-collapsed';
 
   function roleApi() {
     return window.MsCompanionRole || null;
@@ -287,7 +288,7 @@
     return {
       taskUuid: null,
       pageKey: null,
-      collapsed: false,
+      collapsed: readCollapsed(),
       bk: blankBookingState(),
       tk: blankTaskState(),
       rec: blankRecordState(),
@@ -500,6 +501,22 @@
     }
   }
 
+  function readCollapsed() {
+    try {
+      return localStorage.getItem(COLLAPSED_KEY) === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function writeCollapsed(on) {
+    try {
+      localStorage.setItem(COLLAPSED_KEY, on ? '1' : '0');
+    } catch (_) {
+      /* private mode / blocked storage — minimise just isn't remembered */
+    }
+  }
+
   function applyLeftTop(el, left, top) {
     if (!el) return;
     const wr = el.getBoundingClientRect();
@@ -528,8 +545,11 @@
     }
     // Default dock: top-right, same convention as document-codes-to-problems.js
     // — clear of Medicus's own top bar/breadcrumb, and applyLeftTop's own
-    // clamp keeps it on-screen at any viewport size.
-    applyLeftTop(el, window.innerWidth - 340 - 20, 72);
+    // clamp keeps it on-screen at any viewport size. Measure the live width
+    // so a minimised bar docks flush right rather than leaving a 340px gap.
+    const wr = el.getBoundingClientRect();
+    const w = wr.width || 340;
+    applyLeftTop(el, window.innerWidth - w - 20, 72);
   }
 
   function enableDrag(el) {
@@ -615,6 +635,8 @@
 
   function renderInto(el) {
     if (!el.getAttribute('lang')) el.setAttribute('lang', 'en-GB');
+    el.classList.toggle('ms-tap-collapsed', !!s.collapsed);
+    el.classList.toggle('ms-tap-minimised', !!s.collapsed);
     el.innerHTML = buildHtml();
     bindEvents(el);
   }
@@ -622,6 +644,15 @@
   function rerender() {
     const w = document.getElementById(WIDGET_ID);
     if (w) renderInto(w);
+  }
+
+  function setCollapsed(on, focusId) {
+    s.collapsed = !!on;
+    writeCollapsed(s.collapsed);
+    rerender();
+    const w = document.getElementById(WIDGET_ID);
+    if (w && !_userDragged) placePanel(w);
+    document.getElementById(focusId || 'ms-tap-toggle')?.focus();
   }
 
   // Collapsing the whole panel hides the section detail, not the fact that
@@ -672,10 +703,12 @@
   }
 
   function outerHeaderHtml() {
+    const minLabel = s.collapsed ? 'Restore Companion' : 'Minimise Companion';
     return (
       '<div class="ms-tap-header">' +
       '<span class="ms-tap-grip" title="Drag to move" aria-hidden="true"></span>' +
       '<div class="ms-tap-header-main">' +
+      '<div class="ms-tap-header-row">' +
       '<span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
       !s.collapsed +
       '">' +
@@ -685,6 +718,14 @@
       '<span>Companion</span>' +
       outerCollapsedDueBadge() +
       '</span>' +
+      '<button type="button" class="ms-tap-minimise" id="ms-tap-minimise" aria-label="' +
+      minLabel +
+      '" title="' +
+      minLabel +
+      '">' +
+      (s.collapsed ? '+' : '−') +
+      '</button>' +
+      '</div>' +
       roleToggleHtml() +
       '</div>' +
       '</div>'
@@ -2108,11 +2149,7 @@
           e.stopPropagation();
           return;
         }
-        s.collapsed = !s.collapsed;
-        rerender();
-        const w = document.getElementById(WIDGET_ID);
-        if (w && !_userDragged) placePanel(w);
-        document.getElementById('ms-tap-toggle')?.focus();
+        setCollapsed(!s.collapsed, 'ms-tap-toggle');
       });
       outerToggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -2121,6 +2158,16 @@
         }
       });
     }
+
+    el.querySelector('#ms-tap-minimise')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_skipToggle) {
+        _skipToggle = false;
+        e.preventDefault();
+        return;
+      }
+      setCollapsed(!s.collapsed, 'ms-tap-minimise');
+    });
 
     const dueToggle = el.querySelector('#ms-tap-due-toggle');
     if (dueToggle) {

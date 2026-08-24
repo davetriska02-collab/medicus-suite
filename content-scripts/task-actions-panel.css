@@ -101,6 +101,12 @@
   flex: 1;
 }
 
+#ms-tap-widget .ms-tap-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 #ms-tap-widget .ms-tap-header-toggle {
   display: flex;
   align-items: center;
@@ -108,6 +114,36 @@
   cursor: pointer;
   user-select: none;
   min-width: 0;
+  flex: 1;
+}
+
+#ms-tap-widget .ms-tap-minimise {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font: 16px/1 var(--sans);
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-minimise:hover {
+  background: var(--bg-hover);
+}
+
+#ms-tap-widget .ms-tap-minimise:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#ms-tap-widget.ms-tap-minimised {
+  width: auto;
+  min-width: 0;
+  max-height: none;
 }
 
 #ms-tap-widget .ms-tap-roles {
