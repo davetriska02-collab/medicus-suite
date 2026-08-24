@@ -172,7 +172,7 @@
    *
    * state:
    *   'pending' — no trusted match yet (loading / wrong patient / empty snap)
-   *   'ready'   — mini is safe to show for this patient
+   *   'ready'   — mini belongs to this patient and may be rendered
    */
   function dueFromSnapshot(snapshot, patientId) {
     if (!snapshot || snapshot.unavailable === true || !Array.isArray(snapshot.chips)) {

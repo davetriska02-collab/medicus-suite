@@ -56,7 +56,7 @@ check(
 
 console.log('\n--- no completion / all-clear claim ---');
 {
-  const dueChunk = panel.slice(panel.indexOf('function dueDegradedHtml'), panel.indexOf('function recordSectionHtml'));
+  const dueChunk = panel.slice(panel.indexOf('function dueDegradedHtml'), panel.indexOf('function apptStatusLabel'));
   check(dueChunk.length > 200, 'due HTML helpers are present');
   check(!/\ball clear\b/i.test(dueChunk), 'due UI never says "all clear"');
   check(!/\bsafe to\b/i.test(dueChunk), 'due UI never says "safe to"');
