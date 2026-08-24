@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.241.1] — 2026-08-24
+
+### Companion chrome — instrument, not a chatbot
+
+Multi-critic design pass on the floating Companion (art director + token survey + a first-clinic GP reading screenshots). The collapse and pop-in controls were the loudest furniture on the box: a boxed `⌞` that rendered as a capital L, and a window-style `−`/`+` sitting next to a title chevron that already did the same job.
+
+- **Stroke icons, ghost at rest.** Pop-in is a side-panel mark (park on the edge); minimise / restore are minus and plus strokes. They lift on hover, press, and keyboard focus — no more filled white squares competing with the due count.
+- **A small Companion mark**, not a mascot. Overlapping panels on the title and the docked tab, plus a 2px accent hairline. When the box is minimised or docked and something is due, that hairline becomes the red/amber rail so the count — not the product name — is what you see in the corner.
+- **Docked tab says how to come back.** Chevron-left, then the due count, then the mark and the word Companion. Hover slides it out 2px.
+- **Lavender chrome retired** for the slate token field the rest of the suite uses. Role pills finally contrast against the header. Try again is a ghost button so amber stays an alert hue, not a click-me wash.
+
+Personality here is craft and honesty, not Grok-style asides next to a lithium line. Title click and minimise still both collapse (persisted). Due-list salience is unchanged.
+
+Regression-guarded by `test-task-actions-due.js`.
+
 ## [v3.241.0] — 2026-08-24
 
 ### Organise problems / allergies — multi-select drag-and-drop
