@@ -1,0 +1,1 @@
+85afd62ec66a9be624ee12936cb5acb7697f0f78faacba50e3c32e84ca11ceb1  /opt/cursor/artifacts/medicus-suite-v3.240.0-companion-test.zip
