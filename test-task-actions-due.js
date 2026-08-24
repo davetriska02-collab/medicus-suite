@@ -1,9 +1,10 @@
-// Medicus Suite — floating Patient-actions "What's due" source invariants
+// Medicus Suite — floating Companion "What's due" source invariants
 // Run with: node test-task-actions-due.js
 //
 // The due strip lives inside the task-actions IIFE and can't be imported, so
-// these are source-level safety pins: identity gate, no all-clear claim, and
-// the snapshot is read (never re-evaluated with a partial ruleset).
+// these are source-level safety pins: identity gate, no all-clear claim, the
+// snapshot is read (never re-evaluated with a partial ruleset), and the
+// Companion role toggle does not bypass those controls.
 
 'use strict';
 
@@ -28,12 +29,14 @@ const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-action
 const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
 const sentinel = fs.readFileSync(path.join(__dirname, 'content-scripts', 'sentinel.js'), 'utf8');
 
-console.log('--- manifest wires due-mini before the panel ---');
+console.log('--- manifest wires due-mini + companion-role before the panel ---');
 {
   const tapBlock = manifest.slice(manifest.indexOf('shared/due-mini.js'));
   const dueIdx = tapBlock.indexOf('shared/due-mini.js');
+  const roleIdx = tapBlock.indexOf('shared/companion-role.js');
   const panelIdx = tapBlock.indexOf('content-scripts/task-actions-panel.js');
   check(dueIdx !== -1 && panelIdx !== -1 && dueIdx < panelIdx, 'due-mini.js is injected before task-actions-panel.js');
+  check(roleIdx !== -1 && roleIdx < panelIdx, 'companion-role.js is injected before task-actions-panel.js');
 }
 
 console.log('\n--- identity gate ---');
@@ -44,8 +47,8 @@ check(
 check(/__msReadSentinelSnapshot/.test(panel), 'panel reads the live snapshot via __msReadSentinelSnapshot');
 check(/st !== s\.due/.test(panel), 'loadWhatsDue pins due sub-state across the patient-id await');
 check(
-  /getTaskInfo\(\)\.taskUuid !== info\.taskUuid/.test(panel),
-  'loadWhatsDue re-checks the live task UUID after the resolve await'
+  /live\.pageKey !== ctx\.pageKey/.test(panel),
+  'loadWhatsDue re-checks the live pageKey after the resolve await'
 );
 check(/stopDuePoll\(\)/.test(panel), 'SPA navigation / pagehide stops the due poll');
 check(/state === 'pending' && s\.due\.mini/.test(panel), 'a pending snapshot clears any painted chips immediately');
@@ -68,6 +71,40 @@ check(/function retryWhatsDue/.test(panel) && /ms-tap-due-retry/.test(panel), 'e
 check(/scheduleDueRetry/.test(panel), 'resolve failure schedules an automatic retry');
 check(/function countInt/.test(panel), 'due counts are coerced to integers before HTML interpolation');
 check(!/evaluatePatient/.test(panel), 'panel does not re-evaluate rules itself (would risk a partial ruleset)');
+check(/function setRole/.test(panel) && /ms-tap-role/.test(panel), 'Companion role toggle is wired');
+check(/dueVoiceForRole/.test(panel), 'role change rebuilds due-mini with the matching voice');
+check(/writeSavedRole/.test(panel), 'chosen role is persisted (never yanked mid-clinic)');
+check(/Pulse is on the medical queue/.test(panel), 'triage off the queue stays honest (no invented counts)');
+check(!/Open the medical queue for the pulse/.test(panel), 'off-queue pulse copy is not a fake button');
+check(/moreLineText/.test(panel), '+N more uses the tested moreLineText helper ("of them overdue")');
+check(/ms-tap-due-show-all/.test(panel), 'overflow expands in the widget (default still 4)');
+check(/Open Monitoring/.test(panel), 'Monitoring is a real open-panel control');
+check(/Open Slot Counter/.test(panel), 'Slot Counter is a real open-panel control');
+check(/Already booked/.test(panel), 'reception sees this-patient future appointments');
+check(/ms-open-panel/.test(panel), 'panel open goes through the allow-listed SW action');
+check(/suggestedBookHint/.test(panel), 'reception due rows carry a book-type hint');
+check(/roleCaption/.test(panel), 'role pills have a one-line caption');
+check(/lang.*en-GB/.test(panel), 'widget is en-GB so the date field is not US-formatted');
+{
+  const sw = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
+  check(/case 'ms-open-panel'/.test(sw), 'service worker handles ms-open-panel');
+  check(
+    /mod !== 'sentinel' && mod !== 'slots'/.test(sw),
+    'ms-open-panel allow-lists only Monitoring and Slot Counter'
+  );
+}
+check(/Couldn't load the desk glance/.test(panel), 'desk fetch failure is named, not painted as zero');
+check(
+  /appointment-book\/embedded-overview/.test(panel),
+  'slots glance uses the Slot Counter embedded-overview scrape, not the first two finder types'
+);
+check(/slotsFromOverview/.test(panel), 'slots glance maps the overview through the tested helper');
+check(/<span>Companion<\/span>/.test(panel), 'header title is Companion');
+check(/ms-tap-minimise/.test(panel), 'header has a dedicated Minimise / Restore button');
+check(/ms-companion-collapsed/.test(panel), 'minimise state is persisted in localStorage');
+check(/function readCollapsed/.test(panel) && /function writeCollapsed/.test(panel), 'collapsed persist helpers exist');
+check(/function setCollapsed/.test(panel), 'title click and minimise both go through setCollapsed');
+check(/ms-tap-minimised/.test(css), 'minimised chrome shrinks to a compact bar');
 
 console.log('\n--- snapshot ping ---');
 check(/ms-sentinel-snapshot/.test(panel), 'panel listens for the same-page snapshot ping');

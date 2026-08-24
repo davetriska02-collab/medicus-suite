@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Companion HUD — preview</title>
+    <link rel="stylesheet" href="content-scripts/task-actions-panel.css" />
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #e8eef6;
+        color: #0f172a;
+      }
+      .preview-page {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 28px 20px 80px;
+      }
+      .preview-page h1 {
+        font-size: 22px;
+        margin: 0 0 8px;
+      }
+      .preview-page p {
+        margin: 0 0 12px;
+        color: #334155;
+        line-height: 1.45;
+      }
+      .preview-note {
+        padding: 10px 12px;
+        background: #fffbeb;
+        border: 1px solid #fcd34d;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #92400e;
+        margin-bottom: 20px;
+      }
+      #preview-host {
+        position: relative;
+        min-height: 480px;
+      }
+      #ms-tap-widget {
+        position: relative;
+        top: auto;
+        right: auto;
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="preview-page">
+      <h1>Companion HUD preview</h1>
+      <p>
+        Fixture data, same CSS and due-mini wording as the live widget. Click the role pills.
+        On Medicus, load this branch as an unpacked extension and open a task, the care record, or
+        the medical queue. Use − to minimise the box to a compact bar (persists on the live page).
+      </p>
+      <div class="preview-note">
+        This page does not talk to Medicus. Desk / slot / pulse numbers here are labelled as
+        fixtures so they cannot be mistaken for a live practice.
+      </div>
+      <div id="preview-host"></div>
+    </div>
+    <script src="shared/due-mini.js"></script>
+    <script src="shared/companion-role.js"></script>
+    <script>
+      const chips = [
+        {
+          type: 'drug-monitoring',
+          status: 'overdue',
+          drugName: 'Methotrexate',
+          tests: [
+            { name: 'FBC', status: 'overdue' },
+            { name: 'LFT', status: 'overdue' },
+          ],
+        },
+        {
+          type: 'drug-monitoring',
+          status: 'stale',
+          drugName: 'Lithium',
+          tests: [{ name: 'Lithium level', status: 'stale' }],
+        },
+        {
+          type: 'qof-indicator',
+          status: 'not_met',
+          indicatorCode: 'DM006',
+          indicatorName: 'HbA1c ≤58 mmol/mol',
+        },
+        {
+          type: 'qof-indicator',
+          status: 'due_soon',
+          indicatorCode: 'HYP001',
+          indicatorName: 'BP measured',
+        },
+        {
+          type: 'drug-combo',
+          status: 'alert',
+          displayName: 'Serotonin syndrome risk',
+        },
+      ];
+
+      const roleApi = window.MsCompanionRole;
+      let role = 'clinic';
+      let collapsed = false;
+
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function tagWord(status, r) {
+        if (r === 'reception') {
+          if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
+          if (status === 'no_data') return 'No recent';
+          return 'Overdue';
+        }
+        if (status === 'stale') return 'Severely overdue';
+        if (status === 'no_data') return 'No recent';
+        if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
+        return 'Overdue';
+      }
+
+      function dueHtml(r) {
+        const voice = roleApi.dueVoiceForRole(r);
+        const mini = window.MsDueMini.buildDueMini(chips, { voice: voice });
+        const slotLines = [
+          { label: 'HCA bloods' },
+          { label: 'Diabetes clinic' },
+          { label: 'Nurse treatment room' },
+        ];
+        const items = mini.items
+          .map(function (item) {
+            const sev = item.severity === 'red' ? 'red' : 'amber';
+            const hint =
+              r === 'reception'
+                ? roleApi.suggestedBookHint(item.label, slotLines)
+                : '';
+            return (
+              '<li class="ms-tap-due-item ms-tap-due-' +
+              sev +
+              '"><span class="ms-tap-due-dot" aria-hidden="true"></span><span class="ms-tap-due-text">' +
+              esc(item.label) +
+              (hint ? '<span class="ms-tap-due-hint">Try: ' + esc(hint) + '</span>' : '') +
+              '</span><span class="ms-tap-due-tag">' +
+              tagWord(item.status, r) +
+              '</span></li>'
+            );
+          })
+          .join('');
+        const moreText = window.MsDueMini.moreLineText(mini.moreCount, mini.moreRed);
+        const more = moreText
+          ? '<div class="ms-tap-due-more">' +
+            moreText +
+            ' — show all here · Open Monitoring</div>'
+          : '<div class="ms-tap-due-more">Open Monitoring</div>';
+        const title = r === 'reception' ? 'To book' : 'What’s due';
+        const count = mini.redCount + mini.amberCount;
+        return (
+          '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>' +
+          title +
+          '</span><span class="ms-tap-due-count ms-tap-due-count-red">' +
+          count +
+          '</span></div><div class="ms-tap-section-body"><ul class="ms-tap-due-list">' +
+          items +
+          '</ul>' +
+          more +
+          '</div></div>'
+        );
+      }
+
+      function bodyFor(r) {
+        const shows = roleApi.roleShows(r, 'task');
+        let html = '';
+        if (shows.due) html += dueHtml(r);
+        if (shows.desk) {
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>Desk</span></div><div class="ms-tap-section-body"><ul class="ms-tap-glance-list"><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">Waiting room</span><span class="ms-tap-glance-value">4 arrived (fixture)</span></li><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">Requests today</span><span class="ms-tap-glance-value">12 medical, 3 admin (fixture)</span></li></ul></div></div>';
+        }
+        if (shows.slots) {
+          const title = r === 'nursing' ? 'Nurse slots' : 'Slots today';
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>' +
+            title +
+            '</span></div><div class="ms-tap-section-body"><div class="ms-tap-glance-lead">' +
+            (r === 'nursing'
+              ? '6 left on today’s appointment book across 2 types (fixture)'
+              : '18 left on today’s appointment book across 5 types (fixture)') +
+            '</div><ul class="ms-tap-glance-list"><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
+            (r === 'nursing' ? 'Nurse treatment room' : 'GP telephone') +
+            '</span><span class="ms-tap-glance-value">' +
+            (r === 'nursing' ? '4 left · next 14:20' : '8 left · next 14:20') +
+            ' (fixture)</span></li><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
+            (r === 'nursing' ? 'HCA bloods' : 'Acute GP') +
+            '</span><span class="ms-tap-glance-value">' +
+            (r === 'nursing' ? '2 left · next 15:05' : '5 left · next 11:10') +
+            ' (fixture)</span></li></ul></div></div>';
+        }
+        if (shows.pulse) {
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header" id="ms-tap-pulse-head"><span>Queue pulse</span></div><div class="ms-tap-section-body"><div class="ms-tap-due-empty"><div>Pulse is on the medical queue.</div><div class="ms-tap-due-empty-sub">This preview is a task page, not the queue — counts stay unknown here. Open that list in Medicus.</div></div></div></div>';
+        }
+        if (shows.record && r === 'reception') {
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>Already booked</span></div><div class="ms-tap-section-body"><div class="ms-tap-rec-empty">No future appointments. (fixture)</div></div></div>';
+        }
+        if (shows.book) {
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▸</span><span>Book appointment for this patient</span></div></div>';
+        }
+        if (shows.task) {
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▸</span><span>Create task for this patient</span></div></div>';
+        }
+        return html;
+      }
+
+      function render() {
+        const host = document.getElementById('preview-host');
+        const pills = roleApi.ROLES.map(function (r) {
+          return (
+            '<button type="button" class="ms-tap-role' +
+            (r === role ? ' is-selected' : '') +
+            '" data-role="' +
+            r +
+            '">' +
+            roleApi.ROLE_LABELS[r] +
+            '</button>'
+          );
+        }).join('');
+        const minLabel = collapsed ? 'Restore Companion' : 'Minimise Companion';
+        const badge = collapsed
+          ? '<span class="ms-tap-due-count ms-tap-due-count-red" aria-label="5 overdue">5</span>'
+          : '';
+        const roles = collapsed
+          ? ''
+          : '<div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' +
+            pills +
+            '</div><p class="ms-tap-role-caption">' +
+            esc(roleApi.roleCaption(role)) +
+            '</p>';
+        const body = collapsed ? '' : '<div class="ms-tap-body">' + bodyFor(role) + '</div>';
+        host.innerHTML =
+          '<div id="ms-tap-widget" lang="en-GB"' +
+          (collapsed ? ' class="ms-tap-collapsed ms-tap-minimised"' : '') +
+          '><div class="ms-tap-header"><span class="ms-tap-grip" aria-hidden="true"></span><div class="ms-tap-header-main"><div class="ms-tap-header-row"><span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
+          !collapsed +
+          '"><span class="ms-tap-chevron">' +
+          (collapsed ? '▸' : '▾') +
+          '</span><span>Companion</span>' +
+          badge +
+          '</span><button type="button" class="ms-tap-minimise" id="ms-tap-minimise" aria-label="' +
+          minLabel +
+          '" title="' +
+          minLabel +
+          '">' +
+          (collapsed ? '+' : '−') +
+          '</button></div>' +
+          roles +
+          '</div></div>' +
+          body +
+          '</div>';
+        host.querySelectorAll('.ms-tap-role').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            role = btn.getAttribute('data-role');
+            render();
+          });
+        });
+        function toggleCollapsed() {
+          collapsed = !collapsed;
+          render();
+        }
+        host.querySelector('#ms-tap-minimise')?.addEventListener('click', toggleCollapsed);
+        host.querySelector('#ms-tap-toggle')?.addEventListener('click', toggleCollapsed);
+      }
+
+      render();
+    </script>
+  </body>
+</html>

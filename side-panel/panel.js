@@ -1084,6 +1084,9 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
   if (msg?.type === 'slots:refresh') {
     document.dispatchEvent(new CustomEvent('suite:slots:refresh'));
   }
+  if (msg?.type === 'ms-open-panel' && (msg.module === 'sentinel' || msg.module === 'slots')) {
+    switchModule(msg.module);
+  }
 });
 
 // ── Alert roll-up (groups elevated demand strips into one summary bar) ────────
