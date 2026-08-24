@@ -106,6 +106,13 @@ check(/function readCollapsed/.test(panel) && /function writeCollapsed/.test(pan
 check(/function setCollapsed/.test(panel), 'title click and minimise both go through setCollapsed');
 check(/ms-tap-minimised/.test(css), 'minimised chrome shrinks to a compact bar');
 check(/ms-tap-dock-tab/.test(panel) && /ms-tap-docked/.test(css), 'Companion can pop in to an edge tab');
+{
+  const dockFn = panel.slice(panel.indexOf('function setDocked'), panel.indexOf('function outerCollapsedDueBadge'));
+  check(
+    dockFn.length > 80 && /apiReleaseReservation/.test(dockFn),
+    'popping in releases any held booking reservation'
+  );
+}
 check(/ms-tap-resize/.test(panel) && /nwse-resize/.test(css), 'Companion has a resize handle');
 check(/Show on every Medicus screen/.test(panel), 'all-screens opt-in is in the widget, not forced on');
 {

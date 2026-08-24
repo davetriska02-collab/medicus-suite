@@ -904,6 +904,10 @@ console.log(
   check(src.includes("kind === 'finalise'"), 'the confirm path finalises the staged canvas draft');
   check(src.includes('orderEndsForCommit'), 'finalise commits ends children-first');
   check(src.includes('ms-pnc-tile-checkbox') && src.includes('proposeLinkMany'), 'multi-select checkboxes and multi-nest confirm exist');
+  check(
+    (src.match(/readDropPayload\(e\) \|\| _dragPayload/g) || []).length >= 3,
+    'drop handlers fall back to the in-memory payload when dataTransfer is empty'
+  );
 }
 
 console.log('--- multi-select helpers ---');

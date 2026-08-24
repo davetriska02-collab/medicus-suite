@@ -2461,7 +2461,7 @@
       tile.addEventListener('drop', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        var payload = readDropPayload(e);
+        var payload = readDropPayload(e) || _dragPayload;
         _dragPayload = null;
         if (!payload) return;
         applyClassifiedDrop(payload, { type: 'tile', id: tile.getAttribute('data-problem-id') });
@@ -2506,7 +2506,7 @@
       lane.addEventListener('drop', function (e) {
         e.preventDefault();
         lane.classList.remove('ms-pnc-drop-hover');
-        var payload = readDropPayload(e);
+        var payload = readDropPayload(e) || _dragPayload;
         _dragPayload = null;
         if (!payload) return;
         applyClassifiedDrop(payload, { type: 'lane', key: lane.getAttribute('data-sig-lane') });
@@ -2529,7 +2529,7 @@
         e.preventDefault();
         e.stopPropagation();
         bin.classList.remove('ms-pnc-drop-hover');
-        var payload = readDropPayload(e);
+        var payload = readDropPayload(e) || _dragPayload;
         _dragPayload = null;
         if (!payload) return;
         applyClassifiedDrop(payload, { type: 'bin' });

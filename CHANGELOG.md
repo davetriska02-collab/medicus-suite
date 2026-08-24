@@ -10,7 +10,7 @@ Tick several tiles (or Ctrl/⌘-click) and drag the set together. Dropping on a 
 
 ### Companion — every screen if you want, resize, pop in / out
 
-The Companion box can now sit on **every Medicus screen** when you tick **Show on every Medicus screen** (off by default, so the diary does not suddenly grow a panel). Turning that on parks it as an edge tab; **Pop out** restores the floating box, **Pop in** (⌞) docks it again, **−** still minimises. Drag the bottom-right corner to resize. What's due still only paints when a patient UUID is on the URL (or a task resolve); practice pages without a patient show desk/slots by role and never invent a due list. Booking on an elsewhere patient page re-checks that same URL UUID at commit (H-001).
+The Companion box can now sit on **every Medicus screen** when you tick **Show on every Medicus screen** (off by default, so the diary does not suddenly grow a panel). Turning that on parks it as an edge tab; **Pop out** restores the floating box, **Pop in** (⌞) docks it again, **−** still minimises. Drag the bottom-right corner to resize. Popping in releases any held booking reservation so a slot is not locked with the confirm UI hidden. What's due still only paints when a patient UUID is on the URL (or a task resolve); practice pages without a patient show desk/slots by role and never invent a due list. Booking on an elsewhere patient page re-checks that same URL UUID at commit (H-001).
 
 Regression-guarded by `test-companion-role.js`, `test-task-actions-due.js`, `test-problem-nesting-canvas.js` and `test-allergy-cleanup-canvas.js`. Hazard-log v3.35 (H-001 control (o)).
 

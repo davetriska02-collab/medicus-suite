@@ -767,7 +767,17 @@
 
   function setDocked(on) {
     writeDocked(!!on);
-    if (on) s.collapsed = false;
+    if (on) {
+      s.collapsed = false;
+      // Docking hides the booking confirm step — release any held slot so
+      // it is not locked until the backend TTL with no cancel control.
+      if (s.bk.reservationId) apiReleaseReservation(s.bk.reservationId);
+      s.bk.reservationId = null;
+      if (s.bk.step === 'confirm') {
+        s.bk.step = 'browse';
+        s.bk.selectedSlot = null;
+      }
+    }
     rerender();
     const w = document.getElementById(WIDGET_ID);
     if (w) {

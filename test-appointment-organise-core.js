@@ -2026,9 +2026,12 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
   }
 
   // 7j. The rebook miss reason names the board day, not a hard-coded Sunday.
+  // Board date must not be todayISO() — longestFreeRun treats today's past
+  // slots as gone, so a same-day 14:00 fixture flakes after 14:00 UTC
+  // (2026-08-24 was both "today" and a Monday when this first failed).
   {
     const mondayBoard = core.parseBoard({
-      date: '2026-08-24',
+      date: '2028-01-03',
       staffSchedules: [
         {
           name: 'Short Tiles',
@@ -2037,8 +2040,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
             {
               scheduleType: 'diary',
               id: 'short-d',
-              startDateTime: '2026-08-24 14:00:00',
-              endDateTime: '2026-08-24 15:00:00',
+              startDateTime: '2028-01-03 14:00:00',
+              endDateTime: '2028-01-03 15:00:00',
               summary: {
                 status: { isCancelled: false },
                 usualAppointmentDuration: 15,
@@ -2048,8 +2051,8 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
               entries: [
                 {
                   diaryEntryType: { value: 'slot' },
-                  startDateTime: '2026-08-24 14:00:00',
-                  endDateTime: '2026-08-24 14:15:00',
+                  startDateTime: '2028-01-03 14:00:00',
+                  endDateTime: '2028-01-03 14:15:00',
                   duration: 15,
                 },
               ],
