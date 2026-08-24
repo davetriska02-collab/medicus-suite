@@ -10,6 +10,7 @@
 # Build artefacts (the GitHub Actions workflow creates these)
 *.zip
 !medicus-suite-baseline.zip
+!dist/medicus-suite-v3.240.0-companion-test.zip
 
 # Local dev scratch
 node_modules/
