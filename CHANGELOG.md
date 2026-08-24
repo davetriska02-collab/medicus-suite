@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.239.3] — 2026-08-24
+## [v3.241.1] — 2026-08-24
 
 ### Signed .crx packaging for managed (IT policy) installs
 
@@ -17,6 +17,63 @@ policy-deployed installs auto-update from
 (Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
 `git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
 into a package.
+
+## [v3.241.0] — 2026-08-24
+
+### Organise problems / allergies — multi-select drag-and-drop
+
+Tick several tiles (or Ctrl/⌘-click) and drag the set together. Dropping on a significance lane or End stages every selected problem; the same gesture on allergies stages End / Dual-coded tidy for every selected row that the existing rules allow. Nesting several problems under one parent still goes through the confirm bar and names every child. Merge is still never guessed — a multi-drop onto a tile only opens the existing duplicate-group review.
+
+### Companion — every screen if you want, resize, pop in / out
+
+The Companion box can now sit on **every Medicus screen** when you tick **Show on every Medicus screen** (off by default, so the diary does not suddenly grow a panel). Turning that on parks it as an edge tab; **Pop out** restores the floating box, **Pop in** (⌞) docks it again, **−** still minimises. Drag the bottom-right corner to resize. Popping in releases any held booking reservation so a slot is not locked with the confirm UI hidden. What's due still only paints when a patient UUID is on the URL (or a task resolve); practice pages without a patient show desk/slots by role and never invent a due list. Booking on an elsewhere patient page re-checks that same URL UUID at commit (H-001).
+
+Regression-guarded by `test-companion-role.js`, `test-task-actions-due.js`, `test-problem-nesting-canvas.js` and `test-allergy-cleanup-canvas.js`. Hazard-log v3.35 (H-001 control (o)).
+
+## [v3.240.3] — 2026-08-24
+
+### Companion HUD — dedicated minimise
+
+The floating Companion box now has a **Minimise / Restore** button on the title row (`−` / `+`). Minimised, it shrinks to a compact bar that still shows the due-count badge. The choice persists in `localStorage` (`ms-companion-collapsed`) so a page change or reload does not pop it back open. Title-click still toggles the same state.
+
+## [v3.240.2] — 2026-08-24
+
+### Companion HUD — Practice panel to a realistic 8/10
+
+Synthetic practice panel of the four role views (not real user research). The floor was 4/10 because people mistrusted the red number and Nursing still spoke Clinic.
+
+- **“+3 more (1 of them overdue)”** — no longer reads as “only one thing is overdue”. Show-all expands in the widget; default stays four lines.
+- **Red-severity wins the visible four** so lithium-stale cannot lose to a QOF review.
+- **Nursing voice** — bloods / reviews / vaccines, no FBC/LFT or combo alerts. Identity gate unchanged.
+- **Role caption** under the pills (“GP due list…”, “What to book…”) so the four hats are not a test.
+- **Open Monitoring / Open Slot Counter** are real controls (allow-listed `ms-open-panel`).
+- **Reception** — “Try: HCA bloods” hint (never auto-books) and **Already booked** (this patient’s future appointments).
+- **Triage** — off-queue copy is not a fake button; on-queue pulse names **oldest N min** when the chips show a wait.
+- Slots lead says “left on today’s appointment book”. Failed What’s due header shows **Unknown**. Widget `lang=en-GB`.
+
+Regression-guarded by `test-due-mini.js`, `test-companion-role.js` and `test-task-actions-due.js`. Hazard-log v3.34 (H-001 (n), H-002 (u)).
+
+## [v3.240.1] — 2026-08-24
+
+### Companion slots glance uses the real appointment-book scrape
+
+Reception / Nursing “Slots today” was only asking the booking finder for the first two appointment types, so most of the day’s free slots never appeared. It now uses the same `embedded-overview` scrape as Slot Counter: one fetch, every remaining slot on today’s book, grouped by type (past-today slots dropped), with a “+N more types” overflow into Slot Counter.
+
+## [v3.240.0] — 2026-08-24
+
+### Companion HUD — role toggle on the floating box
+
+The Patient-actions floater is now **Companion**: one box, four persisted roles (Clinic / Reception / Triage / Nursing). The page may suggest a role when none is saved; a saved choice is never yanked mid-clinic.
+
+- **Clinic** — this patient's What's due (clinical voice) + Book + Create task.
+- **Reception** — the same due list in booking voice ("Methotrexate bloods", "Book a diabetes review"; no lithium-level / combo-alert jargon) plus a desk glance (waiting-room arrived + today's requests) and a first-available slots line, plus Book.
+- **Triage** — queue pulse from live chips/rows when you are on the queue; honest "Open the medical queue for the pulse" on a single task. Create task stays; no slots, no MTX lines.
+- **Nursing** — clinic-voice What's due + next nurse-ish slot + Book.
+- Still **no second clinical fetch**. Identity gate and path-change clear are unchanged (H-001). Desk / slots / pulse stay unknown on fetch or DOM failure — never a fake zero.
+- Also injects on the **care-record** (due + book, patient UUID from the URL) and the **queue** (pulse). Document-filing pages still skip the widget.
+- Preview the four views without Medicus: open `companion-preview.html`.
+
+Regression-guarded by `test-due-mini.js`, `test-companion-role.js` and `test-task-actions-due.js`. Hazard-log v3.33 (H-001 control (m), H-002 control (t)).
 
 ## [v3.239.2] — 2026-08-24
 

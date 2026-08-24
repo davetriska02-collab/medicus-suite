@@ -4,7 +4,7 @@
 // Pins the miniaturised "What's due" builder used by the floating
 // Patient-actions panel:
 //   • action-needed filter (STATUS_RANK <= 2, plus drug-monitoring no_data)
-//   • red-before-amber, drug-before-QOF ordering
+//   • red-before-amber, drug-before-QOF (visual red, then type, then rank)
 //   • max-4 cap + moreCount / moreRed
 //   • drug signal lists only due tests
 //   • identity gate: dueFromSnapshot never returns chips for the wrong patient
@@ -160,6 +160,45 @@ console.log('\n--- ordering + cap ---');
     'first four are the reds (4 reds exist)'
   );
   check(mini.moreRed === 0, 'hidden items are the two ambers (moreRed 0)');
+}
+
+console.log('\n--- more line names hidden overdue, not the list total ---');
+{
+  check(due.moreLineText(3, 1) === '+3 more (1 of them overdue)', 'hidden red is "of them overdue"');
+  check(due.moreLineText(2, 0) === '+2 more', 'no hidden red → no overdue clause');
+  check(due.moreLineText(0, 1) === '', 'zero more → empty string');
+}
+
+console.log('\n--- lithium stale wins the visible four over a QOF review ---');
+{
+  const lithiumStale = {
+    type: 'drug-monitoring',
+    status: 'stale',
+    drugName: 'Lithium',
+    tests: [{ name: 'Lithium level', status: 'stale' }],
+  };
+  const asthma = {
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'AST001',
+    indicatorName: 'Asthma review',
+  };
+  const extraQof = {
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'CKD001',
+    indicatorName: 'Kidney review',
+  };
+  const extraQof2 = {
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'HF001',
+    indicatorName: 'Heart failure review',
+  };
+  const mini = due.buildDueMini([asthma, extraQof, extraQof2, lithiumStale, mtxChip]);
+  check(mini.items.some((i) => /Lithium/.test(i.text)), 'severely-overdue lithium is in the visible four');
+  check(mini.items[0] && /Methotrexate/.test(mini.items[0].text), 'overdue MTX still ranks first among red drugs');
+  check(mini.allItems.length === 5, 'allItems keeps the uncapped list');
 }
 
 console.log('\n--- hidden red is counted ---');
@@ -380,6 +419,102 @@ console.log('\n--- identity gate (dueFromSnapshot) ---');
   check(
     journalWrongPatient.state === 'pending' && journalWrongPatient.journalAugmentFailed == null,
     'journal flag never leaks across a patient mismatch'
+  );
+}
+
+console.log('\n--- reception voice (booking list, no clinical jargon) ---');
+{
+  const clinic = due.buildDueMini([mtxChip, dmChip]);
+  check(clinic.voice === 'clinic', 'default voice is clinic');
+  check(/FBC, LFT/.test(clinic.items[0].text), 'clinic drug line still names tests');
+
+  const rec = due.buildDueMini([mtxChip, dmChip, fluChip], { voice: 'reception' });
+  check(rec.voice === 'reception', 'opts.voice reception is recorded');
+  const mtx = rec.items.find((i) => /Methotrexate/.test(i.text));
+  check(!!mtx, 'reception still lists methotrexate (as a booking line)');
+  check(mtx.text === 'Methotrexate bloods', `reception drug is "Methotrexate bloods" (got ${JSON.stringify(mtx.text)})`);
+  check(!/FBC|LFT|overdue/.test(mtx.text), 'reception drug line drops test names and overdue jargon');
+  const dm = rec.items.find((i) => /diabetes/i.test(i.text));
+  check(dm && dm.text === 'Book a diabetes review', `reception QOF is a booking verb (got ${JSON.stringify(dm && dm.text)})`);
+  const flu = rec.items.find((i) => /Flu/.test(i.text));
+  check(flu && flu.text === 'Book Flu vaccine', `reception vaccine is a booking line (got ${JSON.stringify(flu && flu.text)})`);
+
+  const combo = {
+    type: 'drug-combo',
+    status: 'alert',
+    displayName: 'Serotonin syndrome risk',
+  };
+  const lithiumStale = {
+    type: 'drug-monitoring',
+    status: 'stale',
+    drugName: 'Lithium',
+    tests: [{ name: 'Lithium level', status: 'stale' }],
+  };
+  const recFilter = due.buildDueMini([combo, lithiumStale, dmChip], { voice: 'reception' });
+  check(
+    !recFilter.items.some((i) => /[Ss]erotonin|[Ss]yndrome/.test(i.text)),
+    'reception voice drops combo/alert chips (not a booking)'
+  );
+  check(
+    recFilter.items.some((i) => i.text === 'Lithium bloods'),
+    'reception lithium is "Lithium bloods", not a level/severely-overdue line'
+  );
+  check(
+    !recFilter.items.some((i) => /severely overdue|Lithium level/.test(i.text + i.label)),
+    'reception lithium line has no clinical test jargon'
+  );
+
+  const pid = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const other = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const snap = { chips: [mtxChip], patientContext: { patientUuid: pid } };
+  const voiced = due.dueFromSnapshot(snap, pid, { voice: 'reception' });
+  check(voiced.state === 'ready' && voiced.mini.voice === 'reception', 'dueFromSnapshot forwards voice after the identity gate');
+  check(voiced.mini.items[0].text === 'Methotrexate bloods', 'ready reception mini uses booking wording');
+  check(
+    due.dueFromSnapshot(snap, other, { voice: 'reception' }).state === 'pending',
+    'reception voice never bypasses the wrong-patient gate'
+  );
+}
+
+console.log('\n--- nursing voice (treatment room, no clinical jargon / no Book) ---');
+{
+  const combo = {
+    type: 'drug-combo',
+    status: 'alert',
+    displayName: 'Serotonin syndrome risk',
+  };
+  const nurse = due.buildDueMini([mtxChip, dmChip, fluChip, combo], { voice: 'nursing' });
+  check(nurse.voice === 'nursing', 'opts.voice nursing is recorded');
+  check(
+    nurse.items.some((i) => i.text === 'Methotrexate bloods'),
+    'nursing drug is "Methotrexate bloods", not FBC/LFT'
+  );
+  check(
+    !nurse.items.some((i) => /FBC|LFT|serotonin/i.test(i.text + i.label)),
+    'nursing drops test names and combo alerts'
+  );
+  check(
+    nurse.items.some((i) => i.text === 'Diabetes review'),
+    'nursing QOF names the review, not "Book a …"'
+  );
+  check(
+    !nurse.items.some((i) => /^Book /.test(i.text)),
+    'nursing voice never uses the booking verb'
+  );
+  check(
+    nurse.items.some((i) => /Flu/.test(i.text)),
+    'nursing still lists a due vaccine'
+  );
+  const pid = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const other = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const snap = { chips: [mtxChip], patientContext: { patientUuid: pid } };
+  check(
+    due.dueFromSnapshot(snap, pid, { voice: 'nursing' }).state === 'ready',
+    'dueFromSnapshot forwards nursing voice after the identity gate'
+  );
+  check(
+    due.dueFromSnapshot(snap, other, { voice: 'nursing' }).state === 'pending',
+    'nursing voice never bypasses the wrong-patient gate'
   );
 }
 
