@@ -43,8 +43,30 @@ check(
 );
 check(/__msReadSentinelSnapshot/.test(panel), 'panel reads the live snapshot via __msReadSentinelSnapshot');
 check(/st !== s\.due/.test(panel), 'loadWhatsDue pins due sub-state across the patient-id await');
+check(
+  /getTaskInfo\(\)\.taskUuid !== info\.taskUuid/.test(panel),
+  'loadWhatsDue re-checks the live task UUID after the resolve await'
+);
 check(/stopDuePoll\(\)/.test(panel), 'SPA navigation / pagehide stops the due poll');
 check(/state === 'pending' && s\.due\.mini/.test(panel), 'a pending snapshot clears any painted chips immediately');
+check(/function clearDuePaint/.test(panel), 'path change clears painted due chips synchronously');
+check(
+  /if \(pathChanged\) clearDuePaint\(\)/.test(panel),
+  'scheduleInject calls clearDuePaint on path change before the inject throttle'
+);
+check(
+  /if \(_throttle\) return/.test(panel) &&
+    panel.indexOf('if (pathChanged) clearDuePaint()') < panel.indexOf('if (_throttle) return'),
+  'path-change clear runs even when a throttle is already armed'
+);
+check(
+  /st\.loadedForTask = info\.taskUuid/.test(panel) &&
+    !/due\.loadedForTask = info\.taskUuid/.test(panel.split('async function loadWhatsDue')[1].split('function retryWhatsDue')[0]),
+  'loadedForTask is set only after a successful patient resolve (one-shot fail is retryable)'
+);
+check(/function retryWhatsDue/.test(panel) && /ms-tap-due-retry/.test(panel), 'error state offers Try again');
+check(/scheduleDueRetry/.test(panel), 'resolve failure schedules an automatic retry');
+check(/function countInt/.test(panel), 'due counts are coerced to integers before HTML interpolation');
 check(!/evaluatePatient/.test(panel), 'panel does not re-evaluate rules itself (would risk a partial ruleset)');
 
 console.log('\n--- snapshot ping ---');
@@ -62,8 +84,16 @@ console.log('\n--- no completion / all-clear claim ---');
   check(!/\bsafe to\b/i.test(dueChunk), 'due UI never says "safe to"');
   check(!/\b(Done|Sent|Booked|Submitted)\b/.test(dueChunk), 'due UI never claims completion');
   check(/Nothing due right now/.test(dueChunk), 'empty state is bounded ("nothing due right now")');
+  check(
+    /Couldn\\u2019t verify everything that\\u2019s due/.test(dueChunk),
+    'journal / unmatched-high-risk empty state does not claim nothing due'
+  );
+  check(/Journal data unavailable/.test(dueChunk), 'journal-augment failure is named on the strip');
+  check(/high-risk medicine/.test(dueChunk), 'unmatched high-risk drugs are named on the strip');
+  check(/Couldn\\u2019t classify alerts/.test(dueChunk), 'unrecognised chip statuses fail closed, not as nothing due');
   check(/Monitoring/.test(dueChunk), 'overflow / empty points at Monitoring for the full list');
   check(/moreRed/.test(dueChunk), 'hidden reds are named in the "+N more" line');
+  check(/No recent/.test(dueChunk), 'no_data drug-monitoring gets a No recent tag, not Overdue');
 }
 
 console.log('\n--- CSS: hue is never the only signal ---');

@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.239.2] — 2026-08-24
+
+### Floating What’s due — red-team hardening
+
+Authorised red-team of the v3.239.x strip. XSS / MAIN-world spoofing / write-path held; these close the clinical false-negatives and the two reliability holes.
+
+- **Journal-augment failure and unmatched high-risk drugs no longer paint “Nothing due right now.”** The strip forwards `journalAugmentFailed` and `unmatchedHighRisk` from the Sentinel snapshot, names them in amber, and uses “Couldn’t verify everything that’s due” when the list is empty. Unrecognised chip statuses fail closed (“Couldn’t classify alerts”) instead of a quiet empty state.
+- **Drug-monitoring `no_data` is now listed** (HUD-aligned: “Leflunomide — no recent FBC, LFT” + **No recent** tag, red). QOF `no_data` stays out of the action list, same as the Monitoring brief.
+- **Resolve is retryable.** `loadedForTask` is set only after a successful task→patient resolve; a network blip shows **Try again**, retries on tab-focus, and auto-retries after 8s. A 12s resolve timeout stops an indefinite spinner.
+- **H-001 residual closed:** path change clears painted due chips *synchronously* (and replaces the due-state object so an in-flight resolve cannot land on the next task), even if the 350ms inject throttle is already armed.
+- **MH011 glances as “Lipid profile (SMI)”**, not “Mental health review”. QOF prefixes require a following digit so `LD` cannot steal `LDL…`.
+- **Stale (severely overdue) is a filled red dot**, matching the tag. Bidi overrides are stripped from chip text. Due counts are coerced to integers before HTML interpolation; `esc()` now also encodes `'`.
+
+Regression-guarded by `test-due-mini.js` and `test-task-actions-due.js`. Hazard-log v3.32 (H-001 control (l), H-002 control (s)).
+
 ## [v3.239.1] — 2026-08-24
 
 ### Floating What’s due — design-crit polish

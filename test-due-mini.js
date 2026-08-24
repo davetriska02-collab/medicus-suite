@@ -3,12 +3,13 @@
 //
 // Pins the miniaturised "What's due" builder used by the floating
 // Patient-actions panel:
-//   • action-needed filter (STATUS_RANK <= 2)
+//   • action-needed filter (STATUS_RANK <= 2, plus drug-monitoring no_data)
 //   • red-before-amber, drug-before-QOF ordering
 //   • max-4 cap + moreCount / moreRed
 //   • drug signal lists only due tests
 //   • identity gate: dueFromSnapshot never returns chips for the wrong patient
 //   • STATUS_RANK lock-step with the engine
+//   • journal-augment / unmatched-high-risk flags; QOF glance collisions; bidi strip
 
 'use strict';
 
@@ -188,7 +189,7 @@ console.log('\n--- QOF + vaccine wording ---');
   check(vax.severity === 'amber', 'vax_due is amber (rank 1)');
 }
 
-console.log('\n--- lithium stale label never reads "due soon" ---');
+console.log('\n--- lithium stale is red (hue matches Severely overdue) ---');
 {
   const lithiumStale = {
     type: 'drug-monitoring',
@@ -199,9 +200,114 @@ console.log('\n--- lithium stale label never reads "due soon" ---');
   };
   const mini = due.buildDueMini([lithiumStale]);
   check(mini.items[0].status === 'stale', 'lithium item carries status stale');
-  check(mini.items[0].severity === 'amber', 'stale ranks amber (rank 1)');
+  check(mini.items[0].severity === 'red', 'stale is red so the filled dot matches Severely overdue');
+  check(mini.redCount === 1 && mini.amberCount === 0, 'stale counts as red, not amber');
   check(/severely overdue/.test(mini.items[0].text), 'line still says severely overdue');
   check(!/overdue/.test(mini.items[0].label), 'label strips the trailing "severely overdue" wording entirely');
+}
+
+console.log('\n--- drug-monitoring no_data is action-needed (HUD-aligned) ---');
+{
+  const leflunomide = {
+    type: 'drug-monitoring',
+    ruleId: 'leflunomide-maintenance',
+    status: 'no_data',
+    drugName: 'Leflunomide',
+    tests: [
+      { name: 'FBC', status: 'no_data' },
+      { name: 'LFT', status: 'no_data' },
+      { name: 'Weight', status: 'in_date' },
+    ],
+  };
+  const qofNoData = {
+    type: 'qof-indicator',
+    status: 'no_data',
+    indicatorCode: 'AST007',
+    indicatorName: 'Asthma review',
+  };
+  const mini = due.buildDueMini([leflunomide, qofNoData, achievedChip]);
+  check(mini.items.length === 1, 'only drug-monitoring no_data is included (QOF no_data stays out)');
+  check(mini.items[0].severity === 'red', 'drug-monitoring no_data is red');
+  check(
+    mini.items[0].text === 'Leflunomide — no recent FBC, LFT',
+    `no_data uses HUD wording (got ${JSON.stringify(mini.items[0].text)})`
+  );
+  check(
+    mini.items[0].label === 'Leflunomide — FBC, LFT',
+    `label drops "no recent" in favour of the tag (got ${JSON.stringify(mini.items[0].label)})`
+  );
+  check(!mini.items.some((i) => /AST007|Asthma/.test(i.text)), 'QOF no_data is not listed as due');
+}
+
+console.log('\n--- QOF glance: MH011 is lipids, prefixes need a digit ---');
+{
+  const mh011 = {
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'MH011',
+    indicatorName: 'Lipid profile recorded in SMI (preceding 12 months)',
+  };
+  const mh002 = {
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'MH002',
+    indicatorName: 'Comprehensive care plan in SMI',
+  };
+  const ldl = {
+    type: 'qof-indicator',
+    status: 'not_met',
+    indicatorCode: 'LDL99',
+    indicatorName: 'LDL cholesterol',
+  };
+  const mh = due.buildDueMini([mh011]);
+  check(
+    mh.items[0].text === 'Lipid profile (SMI)',
+    `MH011 is lipid profile, not a mental-health review (got ${JSON.stringify(mh.items[0].text)})`
+  );
+  const mhReview = due.buildDueMini([mh002]);
+  check(
+    mhReview.items[0].text === 'Mental health review',
+    `MH002 still glances as mental health review (got ${JSON.stringify(mhReview.items[0].text)})`
+  );
+  const ldlMini = due.buildDueMini([ldl]);
+  check(
+    ldlMini.items[0].text === 'LDL cholesterol',
+    `LD prefix does not steal LDL… codes (got ${JSON.stringify(ldlMini.items[0].text)})`
+  );
+}
+
+console.log('\n--- bidi controls stripped from labels ---');
+{
+  const poisoned = {
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: 'Methotrexate\u202E',
+    tests: [{ name: 'FBC', status: 'overdue' }],
+  };
+  const mini = due.buildDueMini([poisoned]);
+  check(!/[\u202A-\u202E\u2066-\u2069]/.test(mini.items[0].text), 'bidi controls stripped from text');
+  check(!/[\u202A-\u202E\u2066-\u2069]/.test(mini.items[0].label), 'bidi controls stripped from label');
+}
+
+console.log('\n--- XSS payloads stay in the string (esc is the render boundary) ---');
+{
+  const xss = {
+    type: 'drug-monitoring',
+    status: 'overdue',
+    drugName: '<img onerror=alert(1)>',
+    tests: [{ name: '<script>alert(1)</script>', status: 'overdue' }],
+  };
+  const mini = due.buildDueMini([xss]);
+  check(/<img onerror/.test(mini.items[0].label), 'payload survives as text for the panel to escape');
+}
+
+console.log('\n--- unclassified statuses fail closed ---');
+{
+  const junk = due.buildDueMini([{ type: 'drug-monitoring', status: 'totally_unknown', drugName: 'X' }]);
+  check(junk.unclassified === true, 'unknown status → unclassified (not nothingDue)');
+  check(junk.nothingDue === false, 'unknown status is not painted as nothing due');
+  const mixed = due.buildDueMini([achievedChip, { type: 'qof-indicator', status: '???', indicatorCode: 'Z' }]);
+  check(mixed.unclassified === true && mixed.nothingDue === false, 'achieved + unknown → unclassified, not all-clear');
 }
 
 console.log('\n--- identity gate (dueFromSnapshot) ---');
@@ -246,6 +352,34 @@ console.log('\n--- identity gate (dueFromSnapshot) ---');
   check(
     degraded.state === 'ready' && degraded.degraded === true,
     'degraded snapshot still ready (caller surfaces the warning, does not hide due items)'
+  );
+
+  const journal = due.dueFromSnapshot(
+    { chips: [], patientContext: { patientUuid: pid }, journalAugmentFailed: true },
+    pid
+  );
+  check(journal.state === 'ready', 'journal-failed empty snapshot is still ready (identity matched)');
+  check(journal.journalAugmentFailed === true, 'journalAugmentFailed is forwarded');
+  check(journal.mini && journal.mini.nothingDue === true, 'empty chips still produce nothingDue for the caller to override');
+
+  const highRisk = due.dueFromSnapshot(
+    {
+      chips: [],
+      patientContext: { patientUuid: pid },
+      unmatchedHighRisk: [{ name: 'Jaylamine 100mg', riskClass: 'DMARD' }],
+    },
+    pid
+  );
+  check(highRisk.unmatchedHighRisk && highRisk.unmatchedHighRisk.length === 1, 'unmatchedHighRisk is forwarded');
+  check(highRisk.unmatchedHighRisk[0].name === 'Jaylamine 100mg', 'high-risk name preserved');
+
+  const journalWrongPatient = due.dueFromSnapshot(
+    { chips: [], patientContext: { patientUuid: other }, journalAugmentFailed: true },
+    pid
+  );
+  check(
+    journalWrongPatient.state === 'pending' && journalWrongPatient.journalAugmentFailed == null,
+    'journal flag never leaks across a patient mismatch'
   );
 }
 

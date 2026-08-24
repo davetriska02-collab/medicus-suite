@@ -54,7 +54,15 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Counts that land in HTML must be numbers — never string-concat into markup.
+  function countInt(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v) || v < 0) return 0;
+    return Math.floor(v);
   }
 
   function slotTime(dt) {
@@ -199,7 +207,10 @@
       loadedForTask: null,
       mini: null, // DueMini | null until a matching snapshot lands
       degraded: false,
+      journalFailed: false,
+      unmatchedHighRisk: [],
       waitStartedAt: 0,
+      retryAfter: 0,
     };
   }
 
@@ -545,10 +556,12 @@
     if (!s.collapsed) return '';
     const mini = s.due.mini;
     if (!mini) return '';
-    const total = mini.redCount + mini.amberCount;
+    const red = countInt(mini.redCount);
+    const amber = countInt(mini.amberCount);
+    const total = red + amber;
     if (total <= 0) return '';
-    const cls = mini.redCount > 0 ? ' ms-tap-due-count-red' : ' ms-tap-due-count-amber';
-    const label = (mini.redCount > 0 ? total + ' overdue' : total + ' due').toString();
+    const cls = red > 0 ? ' ms-tap-due-count-red' : ' ms-tap-due-count-amber';
+    const label = (red > 0 ? total + ' overdue' : total + ' due').toString();
     return '<span class="ms-tap-due-count' + cls + '" aria-label="' + esc(label) + '">' + total + '</span>';
   }
 
@@ -596,22 +609,70 @@
   // (STATUS_RANK <= 2), so this covers the full set.
   function dueTagWord(status) {
     if (status === 'stale') return 'Severely overdue';
+    if (status === 'no_data') return 'No recent';
     if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
     return 'Overdue';
+  }
+
+  function dueIncomplete(due) {
+    return !!(due.journalFailed || (due.unmatchedHighRisk && due.unmatchedHighRisk.length));
+  }
+
+  function dueWarningsHtml(due) {
+    let html = '';
+    if (due.degraded) html += dueDegradedHtml();
+    if (due.journalFailed) {
+      html +=
+        '<div class="ms-tap-due-degraded">Journal data unavailable — some QOF items may be missing. Check Monitoring.</div>';
+    }
+    const risk = Array.isArray(due.unmatchedHighRisk) ? due.unmatchedHighRisk : [];
+    if (risk.length) {
+      const names = risk
+        .slice(0, 3)
+        .map(function (h) {
+          return h && h.name ? esc(h.name) : '';
+        })
+        .filter(Boolean);
+      const n = countInt(risk.length);
+      html +=
+        '<div class="ms-tap-due-degraded">' +
+        n +
+        ' high-risk medicine' +
+        (n === 1 ? '' : 's') +
+        ' with no monitoring rule' +
+        (names.length ? ' \u2014 ' + names.join(', ') : '') +
+        '. Verify in the record.</div>';
+    }
+    return html;
   }
 
   // Content only — no outer wrapper. dueSectionHtml owns the single
   // aria-live/aria-busy "ms-tap-section-body" wrapper for every due state
   // (loading / error / list / empty) so a screen reader gets one region,
   // not a fresh one per state.
-  function renderDueBody(mini, degraded) {
+  function renderDueBody(mini, due) {
+    const warnings = dueWarningsHtml(due);
+    if (mini.unclassified) {
+      return (
+        '<div class="ms-tap-due-error">Couldn\u2019t classify alerts \u2014 check Monitoring.</div>' + warnings
+      );
+    }
     if (mini.nothingDue) {
+      if (dueIncomplete(due)) {
+        return (
+          '<div class="ms-tap-due-empty">' +
+          '<div>Couldn\u2019t verify everything that\u2019s due.</div>' +
+          '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
+          '</div>' +
+          warnings
+        );
+      }
       return (
         '<div class="ms-tap-due-empty">' +
         '<div>Nothing due right now.</div>' +
         '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
         '</div>' +
-        (degraded ? dueDegradedHtml() : '')
+        warnings
       );
     }
     const items = mini.items
@@ -634,29 +695,25 @@
       })
       .join('');
     let more = '';
-    if (mini.moreCount > 0) {
-      const redBit = mini.moreRed > 0 ? ', <span class="ms-tap-due-more-red">' + mini.moreRed + ' overdue</span>' : '';
+    const moreCount = countInt(mini.moreCount);
+    const moreRed = countInt(mini.moreRed);
+    if (moreCount > 0) {
+      const redBit = moreRed > 0 ? ', <span class="ms-tap-due-more-red">' + moreRed + ' overdue</span>' : '';
       more =
-        '<div class="ms-tap-due-more">+' +
-        mini.moreCount +
-        ' more' +
-        redBit +
-        ' \u2014 full list is in Monitoring.</div>';
+        '<div class="ms-tap-due-more">+' + moreCount + ' more' + redBit + ' \u2014 full list is in Monitoring.</div>';
     }
-    return '<ul class="ms-tap-due-list">' + items + '</ul>' + more + (degraded ? dueDegradedHtml() : '');
+    return '<ul class="ms-tap-due-list">' + items + '</ul>' + more + warnings;
   }
 
   function dueSectionHtml() {
     const due = s.due;
     const mini = due.mini;
-    const count = mini ? mini.redCount + mini.amberCount : null;
+    const red = mini ? countInt(mini.redCount) : 0;
+    const amber = mini ? countInt(mini.amberCount) : 0;
+    const count = mini ? red + amber : null;
     const countClass =
-      mini && mini.redCount > 0
-        ? ' ms-tap-due-count-red'
-        : mini && mini.amberCount > 0
-          ? ' ms-tap-due-count-amber'
-          : '';
-    const countLabel = count != null && count > 0 ? (mini.redCount > 0 ? count + ' overdue' : count + ' due') : '';
+      mini && red > 0 ? ' ms-tap-due-count-red' : mini && amber > 0 ? ' ms-tap-due-count-amber' : '';
+    const countLabel = count != null && count > 0 ? (red > 0 ? count + ' overdue' : count + ' due') : '';
     const badge =
       count != null && count > 0
         ? '<span class="ms-tap-due-count' + countClass + '" aria-label="' + esc(countLabel) + '">' + count + '</span>'
@@ -666,9 +723,13 @@
       if (due.resolving || (due.waiting && !mini && !due.error)) {
         inner = '<div class="ms-tap-due-loading">Checking what\u2019s due\u2026</div>';
       } else if (due.error && !mini) {
-        inner = '<div class="ms-tap-due-error">' + esc(due.error) + '</div>';
+        inner =
+          '<div class="ms-tap-due-error">' +
+          esc(due.error) +
+          '</div>' +
+          '<button type="button" class="ms-tap-due-retry" id="ms-tap-due-retry">Try again</button>';
       } else if (mini) {
-        inner = renderDueBody(mini, due.degraded);
+        inner = renderDueBody(mini, due);
       }
     }
     const busy = due.resolving || due.waiting;
@@ -1022,14 +1083,48 @@
   // still evaluating after a task switch.
 
   let _duePoll = null;
+  let _dueRetry = null;
   const DUE_WAIT_MS = 20000;
   const DUE_POLL_MS = 800;
+  const DUE_RETRY_MS = 8000;
+  const DUE_RESOLVE_MS = 12000;
 
   function stopDuePoll() {
     if (_duePoll) {
       clearInterval(_duePoll);
       _duePoll = null;
     }
+  }
+
+  function stopDueRetry() {
+    if (_dueRetry) {
+      clearTimeout(_dueRetry);
+      _dueRetry = null;
+    }
+  }
+
+  function scheduleDueRetry() {
+    if (_dueRetry) return;
+    _dueRetry = setTimeout(function () {
+      _dueRetry = null;
+      s.due.retryAfter = 0;
+      const info = getTaskInfo();
+      if (!info || info.typeSlug === 'document') return;
+      if (s.due.resolving) return;
+      if (s.due.loadedForTask === info.taskUuid) return;
+      loadWhatsDue(info);
+    }, DUE_RETRY_MS);
+  }
+
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, reject) {
+        setTimeout(function () {
+          reject(new Error('timeout'));
+        }, ms);
+      }),
+    ]);
   }
 
   function applyDueFromSnapshot() {
@@ -1041,6 +1136,8 @@
     if (result.state !== 'ready') return 'pending';
     s.due.mini = result.mini;
     s.due.degraded = !!result.degraded;
+    s.due.journalFailed = !!result.journalAugmentFailed;
+    s.due.unmatchedHighRisk = Array.isArray(result.unmatchedHighRisk) ? result.unmatchedHighRisk : [];
     s.due.waiting = false;
     s.due.error = null;
     return 'ready';
@@ -1068,26 +1165,36 @@
   async function loadWhatsDue(info) {
     const due = s.due;
     if (due.loadedForTask === info.taskUuid) return;
-    due.loadedForTask = info.taskUuid;
+    if (due.resolving) return;
+    if (due.retryAfter && Date.now() < due.retryAfter) return;
     due.resolving = true;
     due.error = null;
     due.mini = null;
+    due.patientId = null;
     due.degraded = false;
+    due.journalFailed = false;
+    due.unmatchedHighRisk = [];
     due.waiting = true;
     due.waitStartedAt = Date.now();
     rerender();
     const st = due;
     try {
-      const patientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      const patientId = await withTimeout(resolvePatientId(info.typeSlug, info.taskUuid), DUE_RESOLVE_MS);
       if (st !== s.due) return;
+      if (!getTaskInfo() || getTaskInfo().taskUuid !== info.taskUuid) return;
       st.resolving = false;
       if (!patientId) {
         st.waiting = false;
         st.error = "Couldn't check what's due \u2014 treat as unknown.";
+        st.retryAfter = Date.now() + DUE_RETRY_MS;
+        scheduleDueRetry();
         rerender();
         return;
       }
+      st.loadedForTask = info.taskUuid;
       st.patientId = patientId;
+      st.retryAfter = 0;
+      stopDueRetry();
       if (applyDueFromSnapshot() === 'ready') {
         stopDuePoll();
       } else {
@@ -1099,8 +1206,19 @@
       st.resolving = false;
       st.waiting = false;
       st.error = "Couldn't check what's due \u2014 treat as unknown.";
+      st.retryAfter = Date.now() + DUE_RETRY_MS;
+      scheduleDueRetry();
       rerender();
     }
+  }
+
+  function retryWhatsDue() {
+    stopDueRetry();
+    s.due.retryAfter = 0;
+    s.due.loadedForTask = null;
+    s.due.error = null;
+    const info = getTaskInfo();
+    if (info && info.typeSlug !== 'document') loadWhatsDue(info);
   }
 
   document.addEventListener('ms-sentinel-snapshot', function () {
@@ -1117,6 +1235,8 @@
     // the 350ms inject-throttle window (H-001).
     if (state === 'pending' && s.due.mini) {
       s.due.mini = null;
+      s.due.journalFailed = false;
+      s.due.unmatchedHighRisk = [];
       s.due.waiting = true;
       s.due.waitStartedAt = Date.now();
       startDuePoll();
@@ -1493,6 +1613,15 @@
       });
     }
 
+    const dueRetry = el.querySelector('#ms-tap-due-retry');
+    if (dueRetry) {
+      dueRetry.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        retryWhatsDue();
+      });
+    }
+
     // Patient-record section — display toggle only, does not affect loading
     // (which is eager and independent of whether the section is expanded).
     const recToggle = el.querySelector('#ms-tap-rec-toggle');
@@ -1678,14 +1807,31 @@
     scheduleInject();
   }
 
+  function clearDuePaint() {
+    stopDuePoll();
+    stopDueRetry();
+    // Replace the object so an in-flight loadWhatsDue pin (`st !== s.due`)
+    // drops the previous task's resolve instead of writing it onto the next.
+    const stillOpen = s.due.open;
+    s.due = blankDueState();
+    s.due.open = stillOpen;
+    const w = document.getElementById(WIDGET_ID);
+    if (w) renderInto(w);
+  }
+
   function scheduleInject() {
-    if (_throttle) return;
     // Document-filing task pages have Medicus's own direct /task and
     // /appointment access already (confirmed with Dave, 2026-08-19) — this
     // panel would only be a redundant duplicate there.
     const info = getTaskInfo();
     const onTaskPage = !!info && info.typeSlug !== 'document';
     const pathChanged = location.pathname !== _lastPath;
+    // H-001: drop painted due chips the instant the path changes, before
+    // the 350ms inject throttle — so P1's badge cannot sit on P2's task.
+    // Must run even when a throttle is already armed (a prior mutation
+    // must not swallow the navigation clear).
+    if (pathChanged) clearDuePaint();
+    if (_throttle) return;
     if (!onTaskPage && !pathChanged) return;
     if (onTaskPage && !pathChanged) {
       const existing = document.getElementById(WIDGET_ID);
@@ -1701,6 +1847,7 @@
       _lastPath = currentPath;
       if (s.bk.reservationId) apiReleaseReservation(s.bk.reservationId);
       stopDuePoll();
+      stopDueRetry();
       s = blankState();
     }
     if (document.hidden) return;
@@ -1740,7 +1887,12 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) scheduleInject();
+    if (document.hidden) return;
+    if (s.due.error && !s.due.mini && !s.due.resolving) {
+      s.due.retryAfter = 0;
+      s.due.loadedForTask = null;
+    }
+    scheduleInject();
   });
 
   window.addEventListener('resize', () => {
@@ -1754,6 +1906,7 @@
   window.addEventListener('pagehide', () => {
     if (s.bk.reservationId) apiReleaseReservation(s.bk.reservationId);
     stopDuePoll();
+    stopDueRetry();
   });
 
   if (document.readyState === 'loading') {

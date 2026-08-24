@@ -597,3 +597,26 @@
   color: var(--amber);
   line-height: 1.35;
 }
+
+#ms-tap-widget .ms-tap-due-degraded + .ms-tap-due-degraded {
+  margin-top: 4px;
+}
+
+#ms-tap-widget .ms-tap-due-retry {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  background: var(--amber-dim);
+  color: var(--amber-ink, var(--amber));
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-due-retry:focus {
+  outline: 2px solid var(--amber);
+  outline-offset: 1px;
+}

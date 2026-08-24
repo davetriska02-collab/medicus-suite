@@ -3,7 +3,8 @@
 //
 // Used by the floating Patient-actions panel on task pages
 // (content-scripts/task-actions-panel.js). Same action-needed threshold as
-// sentinel-core.js / brief-core.js (STATUS_RANK <= 2). Signal wording mirrors
+// sentinel-core.js / brief-core.js (STATUS_RANK <= 2), plus drug-monitoring
+// `no_data` so TAP matches the on-page HUD (H-002). Signal wording mirrors
 // brief-core.js so the strip reads as a pocket Sentinel brief, not a second
 // invented voice. Max 4 lines + "+N more" — same cap as the side-panel brief.
 //
@@ -51,28 +52,68 @@
 
   var MAX_ITEMS = 4;
 
+  // Trojan Source / bidi overrides in EHR text must not reverse a due line.
+  var BIDI_RE = /[\u202A-\u202E\u2066-\u2069]/g;
+
+  function stripBidi(s) {
+    return String(s == null ? '' : s).replace(BIDI_RE, '');
+  }
+
   function isChipActionNeeded(status) {
     return (STATUS_RANK[status] ?? 99) <= 2;
+  }
+
+  // TAP action list: brief threshold PLUS drug-monitoring no_data (HUD-aligned).
+  function isDueMiniActionNeeded(chip) {
+    if (!chip) return false;
+    if (isChipActionNeeded(chip.status)) return true;
+    return chip.type === 'drug-monitoring' && chip.status === 'no_data';
   }
 
   function typeRank(type) {
     return TYPE_RANK[type] ?? 4;
   }
 
+  // Visual severity. Rank 0 is red; stale (severely overdue) and drug-monitoring
+  // no_data are also red so hue matches the tag, not a "due soon" hollow ring.
   function chipSeverity(chip) {
+    if (!chip) return 'amber';
+    if (chip.status === 'stale') return 'red';
+    if (chip.type === 'drug-monitoring' && chip.status === 'no_data') return 'red';
     var rank = STATUS_RANK[chip.status] ?? 99;
     return rank === 0 ? 'red' : 'amber';
   }
 
+  function isDueMiniRed(chip) {
+    return chipSeverity(chip) === 'red';
+  }
+
+  function missingTestNames(chip) {
+    return (chip.tests || [])
+      .filter(function (t) {
+        return t && t.status === 'no_data';
+      })
+      .map(function (t) {
+        return stripBidi(t.testName || t.name);
+      })
+      .filter(Boolean);
+  }
+
   // Mirrors brief-core.js drugSignalText — do not drift independently.
+  // no_data uses the HUD wording ("no recent FBC, LFT"), never "overdue".
   function drugSignalText(chip) {
-    var drug = chip.drugName || chip.ruleId || 'Drug';
+    var drug = stripBidi(chip.drugName || chip.ruleId || 'Drug');
+    if (chip.status === 'no_data') {
+      var missing = missingTestNames(chip);
+      var missingPart = missing.length > 0 ? missing.join(', ') : 'monitoring';
+      return drug + ' — no recent ' + missingPart;
+    }
     var dueTests = (chip.tests || [])
       .filter(function (t) {
         return t && isChipActionNeeded(t.status);
       })
       .map(function (t) {
-        return t.testName || t.name;
+        return stripBidi(t.testName || t.name);
       })
       .filter(Boolean);
     var testsPart = dueTests.length > 0 ? dueTests.join(', ') : 'monitoring';
@@ -84,6 +125,12 @@
   // being read as "her HbA1c is currently over 58". Prefix map matches
   // sentinel-core QOF_ACTION_BY_PREFIX (admin audience) but names the
   // review, not the booking verb — this strip is a due-list, not a script.
+  // Explicit codes beat prefixes (MH011 is a lipid indicator, not an MH review).
+  // Prefix match requires a digit (or end) after the letters so LD ≠ LDL.
+  var QOF_GLANCE_BY_CODE = {
+    MH011: 'Lipid profile (SMI)',
+  };
+
   var QOF_GLANCE_BY_PREFIX = [
     ['HYP', 'Blood pressure check'],
     ['DM', 'Diabetes review'],
@@ -102,22 +149,33 @@
     ['OB', 'Weight review'],
     ['SMOK', 'Stop-smoking review'],
     ['LD', 'Annual health check'],
-  ];
+  ].slice().sort(function (a, b) {
+    return b[0].length - a[0].length;
+  });
+
+  function qofPrefixMatches(code, prefix) {
+    if (code.indexOf(prefix) !== 0) return false;
+    if (code.length === prefix.length) return true;
+    var next = code.charAt(prefix.length);
+    return next >= '0' && next <= '9';
+  }
 
   function qofSignalText(chip) {
-    var code = String(chip.indicatorCode || chip.ruleId || '').toUpperCase();
+    var code = stripBidi(String(chip.indicatorCode || chip.ruleId || '')).toUpperCase();
+    if (QOF_GLANCE_BY_CODE[code]) return QOF_GLANCE_BY_CODE[code];
     var hit = QOF_GLANCE_BY_PREFIX.find(function (row) {
-      return code.indexOf(row[0]) === 0;
+      return qofPrefixMatches(code, row[0]);
     });
     if (hit) return hit[1];
-    if (chip.indicatorName) return String(chip.indicatorName).slice(0, 40);
-    return chip.indicatorCode || chip.ruleId || 'Review';
+    if (chip.indicatorName) return stripBidi(String(chip.indicatorName)).slice(0, 40);
+    return stripBidi(chip.indicatorCode || chip.ruleId || 'Review');
   }
 
   // Mirrors brief-core.js genericSignalText.
   function genericSignalText(chip) {
-    var label =
-      chip.displayName || chip.label || chip.drugName || chip.indicatorCode || chip.ruleName || chip.ruleId || 'Alert';
+    var label = stripBidi(
+      chip.displayName || chip.label || chip.drugName || chip.indicatorCode || chip.ruleName || chip.ruleId || 'Alert'
+    );
     var word = chip.status ? String(chip.status).replace(/_/g, ' ') : '';
     return word ? label + ' — ' + word : label;
   }
@@ -131,12 +189,16 @@
   // Strips the trailing status word from a signal line so it can be shown
   // next to a tag (which already names the state) without saying it twice.
   // Drug lines end in "… severely overdue"/"… overdue"/"… due soon" (see
-  // drugSignalText); generic lines end in " — {status with _ -> space}" (see
-  // genericSignalText). QOF lines (qofSignalText) carry no trailing status
-  // word at all, so they pass through unchanged — ruling L, brief-aligned.
+  // drugSignalText); no_data lines use " — no recent {tests}"; generic lines
+  // end in " — {status with _ -> space}" (see genericSignalText). QOF lines
+  // (qofSignalText) carry no trailing status word at all, so they pass
+  // through unchanged — ruling L, brief-aligned.
   function stripTrailingStatusWord(text, status) {
     var stripped = text.replace(/ (severely overdue|overdue|due soon)$/, '');
     if (stripped !== text) return stripped;
+    if (status === 'no_data' && text.indexOf(' — no recent ') !== -1) {
+      return text.replace(' — no recent ', ' — ');
+    }
     var genericWord = status ? String(status).replace(/_/g, ' ') : '';
     if (genericWord) {
       var suffix = ' \u2014 ' + genericWord;
@@ -157,19 +219,20 @@
    *   moreRed: number,
    *   redCount: number,
    *   amberCount: number,
-   *   nothingDue: boolean
+   *   nothingDue: boolean,
+   *   unclassified: boolean
    * }}
    */
   function buildDueMini(chips) {
-    var list = Array.isArray(chips)
-      ? chips.filter(function (c) {
-          return c && isChipActionNeeded(c.status);
-        })
-      : [];
+    var raw = Array.isArray(chips) ? chips.filter(Boolean) : [];
+    var list = raw.filter(isDueMiniActionNeeded);
+    var hasUnrecognised = raw.some(function (c) {
+      return c.status && !Object.prototype.hasOwnProperty.call(STATUS_RANK, c.status);
+    });
     var redCount = 0;
     var amberCount = 0;
     for (var i = 0; i < list.length; i++) {
-      if ((STATUS_RANK[list[i].status] ?? 99) === 0) redCount++;
+      if (isDueMiniRed(list[i])) redCount++;
       else amberCount++;
     }
     var sorted = list.slice().sort(function (a, b) {
@@ -190,12 +253,11 @@
         };
       }),
       moreCount: hidden.length,
-      moreRed: hidden.filter(function (c) {
-        return (STATUS_RANK[c.status] ?? 99) === 0;
-      }).length,
+      moreRed: hidden.filter(isDueMiniRed).length,
       redCount: redCount,
       amberCount: amberCount,
-      nothingDue: list.length === 0,
+      nothingDue: list.length === 0 && !hasUnrecognised,
+      unclassified: list.length === 0 && hasUnrecognised,
     };
   }
 
@@ -210,8 +272,23 @@
     return String(a).toLowerCase() === String(b).toLowerCase();
   }
 
+  function unmatchedHighRiskList(snapshot) {
+    var list = snapshot && snapshot.unmatchedHighRisk;
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter(function (h) {
+        return h && (h.name || h.riskClass);
+      })
+      .map(function (h) {
+        return {
+          name: stripBidi(h.name || ''),
+          riskClass: stripBidi(h.riskClass || ''),
+        };
+      });
+  }
+
   /**
-   * dueFromSnapshot(snapshot, patientId) → { state, mini?, degraded? }
+   * dueFromSnapshot(snapshot, patientId) → { state, mini?, degraded?, journalAugmentFailed?, unmatchedHighRisk? }
    *
    * Identity gate. Returns state 'pending' (do not render chips) unless the
    * snapshot carries chips for THIS patientId. A previous patient's snapshot,
@@ -234,6 +311,8 @@
       state: 'ready',
       mini: buildDueMini(snapshot.chips),
       degraded: !!snapshot.degraded,
+      journalAugmentFailed: snapshot.journalAugmentFailed === true,
+      unmatchedHighRisk: unmatchedHighRiskList(snapshot),
     };
   }
 
@@ -241,10 +320,12 @@
     STATUS_RANK: STATUS_RANK,
     MAX_ITEMS: MAX_ITEMS,
     isChipActionNeeded: isChipActionNeeded,
+    isDueMiniActionNeeded: isDueMiniActionNeeded,
     buildDueMini: buildDueMini,
     snapshotPatientUuid: snapshotPatientUuid,
     samePatientId: samePatientId,
     dueFromSnapshot: dueFromSnapshot,
+    stripBidi: stripBidi,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
