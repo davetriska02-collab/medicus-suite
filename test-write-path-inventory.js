@@ -134,7 +134,7 @@ const CLICK_MACRO_MAP = {
   },
   'content-scripts/task-actions-panel.js': {
     reason:
-      'keyboard-accessibility self-click on its OWN widget toggles only (outer collapse, booking section, task section); the W2/W5 Medicus writes are POSTs, caught by the verb scanner',
+      'keyboard-accessibility self-click on its OWN widget toggles only (outer collapse, what\'s due, patient record, booking section, task section); the W2/W5 Medicus writes are POSTs, caught by the verb scanner',
   },
   'content-scripts/reception-quick-actions.js': {
     reason:

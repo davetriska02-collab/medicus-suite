@@ -43,7 +43,11 @@ async function run() {
   const coreRank = coreMod.STATUS_RANK;
   check(coreRank && typeof coreRank === 'object', 'sentinel-core.js exports STATUS_RANK');
 
-  if (!engineRank || !coreRank) {
+  const dueMini = require(path.join(__dirname, 'shared', 'due-mini.js'));
+  const dueRank = dueMini.STATUS_RANK;
+  check(dueRank && typeof dueRank === 'object', 'due-mini.js exports STATUS_RANK');
+
+  if (!engineRank || !coreRank || !dueRank) {
     console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
     if (failed > 0) process.exit(1);
     return;
@@ -51,10 +55,13 @@ async function run() {
 
   const engineKeys = Object.keys(engineRank).sort();
   const coreKeys = Object.keys(coreRank).sort();
+  const dueKeys = Object.keys(dueRank).sort();
 
   console.log('\n--- key-set parity ---');
   const missingFromCore = engineKeys.filter((k) => !(k in coreRank));
   const missingFromEngine = coreKeys.filter((k) => !(k in engineRank));
+  const missingFromDue = engineKeys.filter((k) => !(k in dueRank));
+  const extraInDue = dueKeys.filter((k) => !(k in engineRank));
   check(
     missingFromCore.length === 0,
     `every engine status is ranked in sentinel-core.js${
@@ -67,6 +74,16 @@ async function run() {
       missingFromEngine.length ? ` (extra: ${missingFromEngine.join(', ')})` : ''
     }`
   );
+  check(
+    missingFromDue.length === 0,
+    `every engine status is ranked in due-mini.js${
+      missingFromDue.length ? ` (missing: ${missingFromDue.join(', ')})` : ''
+    }`
+  );
+  check(
+    extraInDue.length === 0,
+    `due-mini.js has no extra statuses${extraInDue.length ? ` (extra: ${extraInDue.join(', ')})` : ''}`
+  );
 
   console.log('\n--- value parity ---');
   for (const k of engineKeys) {
@@ -75,6 +92,12 @@ async function run() {
       engineRank[k] === coreRank[k],
       `rank for "${k}" matches across surfaces (engine=${engineRank[k]}, core=${coreRank[k]})`
     );
+    if (k in dueRank) {
+      check(
+        engineRank[k] === dueRank[k],
+        `rank for "${k}" matches due-mini (engine=${engineRank[k]}, due=${dueRank[k]})`
+      );
+    }
   }
 
   // Sanity floor: the worst-first contract (0 = most urgent) must hold so the

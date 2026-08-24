@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.238.5] — 2026-08-24
+## [v3.239.3] — 2026-08-24
 
 ### Signed .crx packaging for managed (IT policy) installs
 
@@ -17,6 +17,42 @@ policy-deployed installs auto-update from
 (Chrome + Edge), and the Web Store ID-continuity note. Packed files are enumerated via
 `git ls-files`, so untracked local files (patient data, keys, scratch) can never leak
 into a package.
+
+## [v3.239.2] — 2026-08-24
+
+### Floating What’s due — red-team hardening
+
+Authorised red-team of the v3.239.x strip. XSS / MAIN-world spoofing / write-path held; these close the clinical false-negatives and the two reliability holes.
+
+- **Journal-augment failure and unmatched high-risk drugs no longer paint “Nothing due right now.”** The strip forwards `journalAugmentFailed` and `unmatchedHighRisk` from the Sentinel snapshot, names them in amber, and uses “Couldn’t verify everything that’s due” when the list is empty. Unrecognised chip statuses fail closed (“Couldn’t classify alerts”) instead of a quiet empty state.
+- **Drug-monitoring `no_data` is now listed** (HUD-aligned: “Leflunomide — no recent FBC, LFT” + **No recent** tag, red). QOF `no_data` stays out of the action list, same as the Monitoring brief.
+- **Resolve is retryable.** `loadedForTask` is set only after a successful task→patient resolve; a network blip shows **Try again**, retries on tab-focus, and auto-retries after 8s. A 12s resolve timeout stops an indefinite spinner.
+- **H-001 residual closed:** path change clears painted due chips *synchronously* (and replaces the due-state object so an in-flight resolve cannot land on the next task), even if the 350ms inject throttle is already armed.
+- **MH011 glances as “Lipid profile (SMI)”**, not “Mental health review”. QOF prefixes require a following digit so `LD` cannot steal `LDL…`.
+- **Stale (severely overdue) is a filled red dot**, matching the tag. Bidi overrides are stripped from chip text. Due counts are coerced to integers before HTML interpolation; `esc()` now also encodes `'`.
+
+Regression-guarded by `test-due-mini.js` and `test-task-actions-due.js`. Hazard-log v3.32 (H-001 control (l), H-002 control (s)). Clinical Safety Notice product pin and feature-list version moved to 3.239.2 so the safety-doc version guard tracks this minor.
+
+## [v3.239.1] — 2026-08-24
+
+### Floating What’s due — design-crit polish
+
+From a three-critic review (art director / token surveyor / fresh-eyes GP) of the v3.239.0 strip:
+
+- **Rows are calm cards with a sharp left rail**, not a wall of red/amber wash. Filled red dot vs hollow amber ring stays; tags use darker ink at 10px.
+- **The tag owns state.** Line text no longer repeats “overdue”; Lithium-stale no longer reads “severely overdue” next to a Due soon tag — it now says **Severely overdue**.
+- **QOF lines name the review** (“Diabetes review”, “Blood pressure check”) instead of `DM006 — HbA1c ≤58`, which was being read as a current out-of-range result.
+- **Collapsed “Patient actions” keeps the count badge** so tidying the widget cannot hide that something is due.
+- Hidden overdue items in “+N more” are named in red. Load/error/degraded states use the amber triad (system failure ≠ clinical red). Empty copy is bounded and no longer pretends “open Monitoring” is a button.
+
+## [v3.239.0] — 2026-08-24
+
+### Floating Patient actions — miniaturised “What’s due”
+
+- **The floating Patient-actions panel on task pages now carries a pocket Sentinel “What’s due” strip** at the top of the box: the same action-needed chips the Monitoring brief uses (drug monitoring, QOF, vaccines, alerts), capped at four lines plus “+N more”, with overdue vs due-soon named in text as well as colour.
+- **No second clinical fetch.** The strip reads the in-memory Sentinel snapshot already evaluated for the task’s patient (`window.__msReadSentinelSnapshot`) and formats it via `shared/due-mini.js`. Wording is the clinician glance from the brief (“Methotrexate — FBC, LFT overdue”), not the patient-facing passport voice.
+- **Wrong-patient gate (H-001).** Chips only render when `snapshot.patientContext` matches the patient UUID resolved from this task. A snapshot for someone else, or an invalidated/`unavailable` snapshot, stays in “Checking what’s due…”. If a painted list stops matching mid-navigation, it is cleared immediately rather than sitting on the next task for the inject-throttle window. Empty state is bounded (“Nothing due right now”) and never claims all-clear.
+- Regression-guarded by `test-due-mini.js`, `test-task-actions-due.js`, and the STATUS_RANK lock-step extension in `test-status-rank-sync.js`.
 
 ## [v3.238.4] — 2026-08-24
 

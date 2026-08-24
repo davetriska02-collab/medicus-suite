@@ -15,7 +15,10 @@
 // be unmounted by, so it survives any in-page pane-switching. The two
 // features keep their own independent open/loading/step state (each is
 // unrelated to the other) but now share one draggable, collapsible, position-
-// persisted floating box instead of two separately-anchored ones.
+// persisted floating box instead of two separately-anchored ones. A third
+// read-only section — miniaturised Sentinel "What's due" — sits above them
+// and consumes the already-published snapshot (shared/due-mini.js), identity-
+// gated to this task's patient.
 //
 // Booking API contract identical to the retired booking-inline.js (still the
 // suite's only OTHER copy of this flow — shared/booking-core.js is the
@@ -51,7 +54,15 @@
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Counts that land in HTML must be numbers — never string-concat into markup.
+  function countInt(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v) || v < 0) return 0;
+    return Math.floor(v);
   }
 
   function slotTime(dt) {
@@ -181,6 +192,28 @@
     };
   }
 
+  // Miniaturised Sentinel "What's due" — eager-loaded on every task page
+  // (not just triage). Reads the in-memory Sentinel snapshot already
+  // evaluated for this task's patient; never fetches a second clinical
+  // bundle. Identity-gated by shared/due-mini.js dueFromSnapshot: chips
+  // for a different patient stay hidden (H-001).
+  function blankDueState() {
+    return {
+      open: true,
+      resolving: false,
+      waiting: false,
+      error: null,
+      patientId: null,
+      loadedForTask: null,
+      mini: null, // DueMini | null until a matching snapshot lands
+      degraded: false,
+      journalFailed: false,
+      unmatchedHighRisk: [],
+      waitStartedAt: 0,
+      retryAfter: 0,
+    };
+  }
+
   function blankState() {
     return {
       taskUuid: null,
@@ -188,6 +221,7 @@
       bk: blankBookingState(),
       tk: blankTaskState(),
       rec: blankRecordState(),
+      due: blankDueState(),
     };
   }
 
@@ -515,6 +549,22 @@
     if (w) renderInto(w);
   }
 
+  // Collapsing the whole panel hides the section detail, not the fact that
+  // something is due — when collapsed and the due section is carrying a
+  // count, the outer header wears the same red/amber count badge (ruling D).
+  function outerCollapsedDueBadge() {
+    if (!s.collapsed) return '';
+    const mini = s.due.mini;
+    if (!mini) return '';
+    const red = countInt(mini.redCount);
+    const amber = countInt(mini.amberCount);
+    const total = red + amber;
+    if (total <= 0) return '';
+    const cls = red > 0 ? ' ms-tap-due-count-red' : ' ms-tap-due-count-amber';
+    const label = (red > 0 ? total + ' overdue' : total + ' due').toString();
+    return '<span class="ms-tap-due-count' + cls + '" aria-label="' + esc(label) + '">' + total + '</span>';
+  }
+
   function outerHeaderHtml() {
     return (
       '<div class="ms-tap-header">' +
@@ -522,10 +572,11 @@
       '<span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
       !s.collapsed +
       '">' +
-      '<span class="ms-tap-chevron">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
       (s.collapsed ? '▸' : '▾') +
       '</span>' +
       '<span>Patient actions</span>' +
+      outerCollapsedDueBadge() +
       '</span>' +
       '</div>'
     );
@@ -537,9 +588,170 @@
     return (
       outerHeaderHtml() +
       '<div class="ms-tap-body">' +
+      dueSectionHtml() +
       (showRecord ? recordSectionHtml() : '') +
       bookingSectionHtml() +
       taskSectionHtml() +
+      '</div>'
+    );
+  }
+
+  // ── What's due (miniaturised Sentinel brief) ────────────────────────────────
+
+  function dueDegradedHtml() {
+    return '<div class="ms-tap-due-degraded">Some record data may be missing — verify in the record.</div>';
+  }
+
+  // Tag wording follows the chip's own status (ruling A) — never just red vs
+  // amber severity. `stale` (e.g. lithium's "severely overdue" line) reads
+  // as Overdue, never Due soon, even though it ranks amber for row colour.
+  // Every status reaching here has already passed isChipActionNeeded
+  // (STATUS_RANK <= 2), so this covers the full set.
+  function dueTagWord(status) {
+    if (status === 'stale') return 'Severely overdue';
+    if (status === 'no_data') return 'No recent';
+    if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
+    return 'Overdue';
+  }
+
+  function dueIncomplete(due) {
+    return !!(due.journalFailed || (due.unmatchedHighRisk && due.unmatchedHighRisk.length));
+  }
+
+  function dueWarningsHtml(due) {
+    let html = '';
+    if (due.degraded) html += dueDegradedHtml();
+    if (due.journalFailed) {
+      html +=
+        '<div class="ms-tap-due-degraded">Journal data unavailable — some QOF items may be missing. Check Monitoring.</div>';
+    }
+    const risk = Array.isArray(due.unmatchedHighRisk) ? due.unmatchedHighRisk : [];
+    if (risk.length) {
+      const names = risk
+        .slice(0, 3)
+        .map(function (h) {
+          return h && h.name ? esc(h.name) : '';
+        })
+        .filter(Boolean);
+      const n = countInt(risk.length);
+      html +=
+        '<div class="ms-tap-due-degraded">' +
+        n +
+        ' high-risk medicine' +
+        (n === 1 ? '' : 's') +
+        ' with no monitoring rule' +
+        (names.length ? ' \u2014 ' + names.join(', ') : '') +
+        '. Verify in the record.</div>';
+    }
+    return html;
+  }
+
+  // Content only — no outer wrapper. dueSectionHtml owns the single
+  // aria-live/aria-busy "ms-tap-section-body" wrapper for every due state
+  // (loading / error / list / empty) so a screen reader gets one region,
+  // not a fresh one per state.
+  function renderDueBody(mini, due) {
+    const warnings = dueWarningsHtml(due);
+    if (mini.unclassified) {
+      return (
+        '<div class="ms-tap-due-error">Couldn\u2019t classify alerts \u2014 check Monitoring.</div>' + warnings
+      );
+    }
+    if (mini.nothingDue) {
+      if (dueIncomplete(due)) {
+        return (
+          '<div class="ms-tap-due-empty">' +
+          '<div>Couldn\u2019t verify everything that\u2019s due.</div>' +
+          '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
+          '</div>' +
+          warnings
+        );
+      }
+      return (
+        '<div class="ms-tap-due-empty">' +
+        '<div>Nothing due right now.</div>' +
+        '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
+        '</div>' +
+        warnings
+      );
+    }
+    const items = mini.items
+      .map(function (item) {
+        const sev = item.severity === 'red' ? 'red' : 'amber';
+        const word = dueTagWord(item.status);
+        return (
+          '<li class="ms-tap-due-item ms-tap-due-' +
+          sev +
+          '">' +
+          '<span class="ms-tap-due-dot" aria-hidden="true"></span>' +
+          '<span class="ms-tap-due-text">' +
+          esc(item.label) +
+          '</span>' +
+          '<span class="ms-tap-due-tag">' +
+          word +
+          '</span>' +
+          '</li>'
+        );
+      })
+      .join('');
+    let more = '';
+    const moreCount = countInt(mini.moreCount);
+    const moreRed = countInt(mini.moreRed);
+    if (moreCount > 0) {
+      const redBit = moreRed > 0 ? ', <span class="ms-tap-due-more-red">' + moreRed + ' overdue</span>' : '';
+      more =
+        '<div class="ms-tap-due-more">+' + moreCount + ' more' + redBit + ' \u2014 full list is in Monitoring.</div>';
+    }
+    return '<ul class="ms-tap-due-list">' + items + '</ul>' + more + warnings;
+  }
+
+  function dueSectionHtml() {
+    const due = s.due;
+    const mini = due.mini;
+    const red = mini ? countInt(mini.redCount) : 0;
+    const amber = mini ? countInt(mini.amberCount) : 0;
+    const count = mini ? red + amber : null;
+    const countClass =
+      mini && red > 0 ? ' ms-tap-due-count-red' : mini && amber > 0 ? ' ms-tap-due-count-amber' : '';
+    const countLabel = count != null && count > 0 ? (red > 0 ? count + ' overdue' : count + ' due') : '';
+    const badge =
+      count != null && count > 0
+        ? '<span class="ms-tap-due-count' + countClass + '" aria-label="' + esc(countLabel) + '">' + count + '</span>'
+        : '';
+    let inner = '';
+    if (due.open) {
+      if (due.resolving || (due.waiting && !mini && !due.error)) {
+        inner = '<div class="ms-tap-due-loading">Checking what\u2019s due\u2026</div>';
+      } else if (due.error && !mini) {
+        inner =
+          '<div class="ms-tap-due-error">' +
+          esc(due.error) +
+          '</div>' +
+          '<button type="button" class="ms-tap-due-retry" id="ms-tap-due-retry">Try again</button>';
+      } else if (mini) {
+        inner = renderDueBody(mini, due);
+      }
+    }
+    const busy = due.resolving || due.waiting;
+    const body = due.open
+      ? '<div class="ms-tap-section-body" aria-live="polite" aria-busy="' +
+        (busy ? 'true' : 'false') +
+        '">' +
+        inner +
+        '</div>'
+      : '';
+    return (
+      '<div class="ms-tap-section">' +
+      '<div class="ms-tap-section-header" id="ms-tap-due-toggle" role="button" tabindex="0" aria-expanded="' +
+      due.open +
+      '">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
+      (due.open ? '▾' : '▸') +
+      '</span>' +
+      '<span>What\u2019s due</span>' +
+      badge +
+      '</div>' +
+      body +
       '</div>'
     );
   }
@@ -861,6 +1073,176 @@
       </div>
     `;
   }
+
+  // ── Actions: what's due ──────────────────────────────────────────────────────
+  // Read-only. Pins the due sub-state across the patient-id resolve (same
+  // discipline as loadPatientRecord) and refuses to paint chips unless
+  // MsDueMini.dueFromSnapshot says the live Sentinel snapshot belongs to
+  // that patient. A previous patient's chips stay hidden — never "close
+  // enough". Poll + same-page event cover the window while Sentinel is
+  // still evaluating after a task switch.
+
+  let _duePoll = null;
+  let _dueRetry = null;
+  const DUE_WAIT_MS = 20000;
+  const DUE_POLL_MS = 800;
+  const DUE_RETRY_MS = 8000;
+  const DUE_RESOLVE_MS = 12000;
+
+  function stopDuePoll() {
+    if (_duePoll) {
+      clearInterval(_duePoll);
+      _duePoll = null;
+    }
+  }
+
+  function stopDueRetry() {
+    if (_dueRetry) {
+      clearTimeout(_dueRetry);
+      _dueRetry = null;
+    }
+  }
+
+  function scheduleDueRetry() {
+    if (_dueRetry) return;
+    _dueRetry = setTimeout(function () {
+      _dueRetry = null;
+      s.due.retryAfter = 0;
+      const info = getTaskInfo();
+      if (!info || info.typeSlug === 'document') return;
+      if (s.due.resolving) return;
+      if (s.due.loadedForTask === info.taskUuid) return;
+      loadWhatsDue(info);
+    }, DUE_RETRY_MS);
+  }
+
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise(function (_, reject) {
+        setTimeout(function () {
+          reject(new Error('timeout'));
+        }, ms);
+      }),
+    ]);
+  }
+
+  function applyDueFromSnapshot() {
+    const dueApi = window.MsDueMini;
+    if (!dueApi || !s.due.patientId) return 'skip';
+    const reader = window.__msReadSentinelSnapshot;
+    const snap = typeof reader === 'function' ? reader() : null;
+    const result = dueApi.dueFromSnapshot(snap, s.due.patientId);
+    if (result.state !== 'ready') return 'pending';
+    s.due.mini = result.mini;
+    s.due.degraded = !!result.degraded;
+    s.due.journalFailed = !!result.journalAugmentFailed;
+    s.due.unmatchedHighRisk = Array.isArray(result.unmatchedHighRisk) ? result.unmatchedHighRisk : [];
+    s.due.waiting = false;
+    s.due.error = null;
+    return 'ready';
+  }
+
+  function startDuePoll() {
+    if (_duePoll) return;
+    _duePoll = setInterval(function () {
+      if (applyDueFromSnapshot() === 'ready') {
+        stopDuePoll();
+        rerender();
+        return;
+      }
+      if (s.due.waitStartedAt && Date.now() - s.due.waitStartedAt > DUE_WAIT_MS) {
+        stopDuePoll();
+        if (s.due.mini == null) {
+          s.due.waiting = false;
+          s.due.error = "Couldn't check what's due \u2014 treat as unknown.";
+          rerender();
+        }
+      }
+    }, DUE_POLL_MS);
+  }
+
+  async function loadWhatsDue(info) {
+    const due = s.due;
+    if (due.loadedForTask === info.taskUuid) return;
+    if (due.resolving) return;
+    if (due.retryAfter && Date.now() < due.retryAfter) return;
+    due.resolving = true;
+    due.error = null;
+    due.mini = null;
+    due.patientId = null;
+    due.degraded = false;
+    due.journalFailed = false;
+    due.unmatchedHighRisk = [];
+    due.waiting = true;
+    due.waitStartedAt = Date.now();
+    rerender();
+    const st = due;
+    try {
+      const patientId = await withTimeout(resolvePatientId(info.typeSlug, info.taskUuid), DUE_RESOLVE_MS);
+      if (st !== s.due) return;
+      if (!getTaskInfo() || getTaskInfo().taskUuid !== info.taskUuid) return;
+      st.resolving = false;
+      if (!patientId) {
+        st.waiting = false;
+        st.error = "Couldn't check what's due \u2014 treat as unknown.";
+        st.retryAfter = Date.now() + DUE_RETRY_MS;
+        scheduleDueRetry();
+        rerender();
+        return;
+      }
+      st.loadedForTask = info.taskUuid;
+      st.patientId = patientId;
+      st.retryAfter = 0;
+      stopDueRetry();
+      if (applyDueFromSnapshot() === 'ready') {
+        stopDuePoll();
+      } else {
+        startDuePoll();
+      }
+      rerender();
+    } catch (_) {
+      if (st !== s.due) return;
+      st.resolving = false;
+      st.waiting = false;
+      st.error = "Couldn't check what's due \u2014 treat as unknown.";
+      st.retryAfter = Date.now() + DUE_RETRY_MS;
+      scheduleDueRetry();
+      rerender();
+    }
+  }
+
+  function retryWhatsDue() {
+    stopDueRetry();
+    s.due.retryAfter = 0;
+    s.due.loadedForTask = null;
+    s.due.error = null;
+    const info = getTaskInfo();
+    if (info && info.typeSlug !== 'document') loadWhatsDue(info);
+  }
+
+  document.addEventListener('ms-sentinel-snapshot', function () {
+    if (!s.due.patientId) return;
+    const state = applyDueFromSnapshot();
+    if (state === 'ready') {
+      stopDuePoll();
+      rerender();
+      return;
+    }
+    // Snapshot no longer matches this patient (nav invalidate, or a
+    // different patient landed). Drop any painted chips immediately so
+    // the previous patient's due list cannot sit on the new task for
+    // the 350ms inject-throttle window (H-001).
+    if (state === 'pending' && s.due.mini) {
+      s.due.mini = null;
+      s.due.journalFailed = false;
+      s.due.unmatchedHighRisk = [];
+      s.due.waiting = true;
+      s.due.waitStartedAt = Date.now();
+      startDuePoll();
+      rerender();
+    }
+  });
 
   // ── Actions: patient record ───────────────────────────────────────────────────
   // Read-only — no wrong-patient WRITE guard needed (nothing is written), but
@@ -1206,12 +1588,37 @@
         rerender();
         const w = document.getElementById(WIDGET_ID);
         if (w && !_userDragged) placePanel(w);
+        document.getElementById('ms-tap-toggle')?.focus();
       });
       outerToggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           outerToggle.click();
         }
+      });
+    }
+
+    const dueToggle = el.querySelector('#ms-tap-due-toggle');
+    if (dueToggle) {
+      dueToggle.addEventListener('click', () => {
+        s.due.open = !s.due.open;
+        rerender();
+        document.getElementById('ms-tap-due-toggle')?.focus();
+      });
+      dueToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          dueToggle.click();
+        }
+      });
+    }
+
+    const dueRetry = el.querySelector('#ms-tap-due-retry');
+    if (dueRetry) {
+      dueRetry.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        retryWhatsDue();
       });
     }
 
@@ -1400,14 +1807,31 @@
     scheduleInject();
   }
 
+  function clearDuePaint() {
+    stopDuePoll();
+    stopDueRetry();
+    // Replace the object so an in-flight loadWhatsDue pin (`st !== s.due`)
+    // drops the previous task's resolve instead of writing it onto the next.
+    const stillOpen = s.due.open;
+    s.due = blankDueState();
+    s.due.open = stillOpen;
+    const w = document.getElementById(WIDGET_ID);
+    if (w) renderInto(w);
+  }
+
   function scheduleInject() {
-    if (_throttle) return;
     // Document-filing task pages have Medicus's own direct /task and
     // /appointment access already (confirmed with Dave, 2026-08-19) — this
     // panel would only be a redundant duplicate there.
     const info = getTaskInfo();
     const onTaskPage = !!info && info.typeSlug !== 'document';
     const pathChanged = location.pathname !== _lastPath;
+    // H-001: drop painted due chips the instant the path changes, before
+    // the 350ms inject throttle — so P1's badge cannot sit on P2's task.
+    // Must run even when a throttle is already armed (a prior mutation
+    // must not swallow the navigation clear).
+    if (pathChanged) clearDuePaint();
+    if (_throttle) return;
     if (!onTaskPage && !pathChanged) return;
     if (onTaskPage && !pathChanged) {
       const existing = document.getElementById(WIDGET_ID);
@@ -1422,6 +1846,8 @@
     if (currentPath !== _lastPath) {
       _lastPath = currentPath;
       if (s.bk.reservationId) apiReleaseReservation(s.bk.reservationId);
+      stopDuePoll();
+      stopDueRetry();
       s = blankState();
     }
     if (document.hidden) return;
@@ -1431,6 +1857,9 @@
       return;
     }
     s.taskUuid = info.taskUuid;
+    if (s.due.loadedForTask !== info.taskUuid && !s.due.resolving) {
+      loadWhatsDue(info);
+    }
     if (
       isCommunicationThreadSlug(info.typeSlug) &&
       s.rec.loadedForTask !== info.taskUuid &&
@@ -1458,7 +1887,12 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) scheduleInject();
+    if (document.hidden) return;
+    if (s.due.error && !s.due.mini && !s.due.resolving) {
+      s.due.retryAfter = 0;
+      s.due.loadedForTask = null;
+    }
+    scheduleInject();
   });
 
   window.addEventListener('resize', () => {
@@ -1471,6 +1905,8 @@
   // lets the POST complete past teardown.
   window.addEventListener('pagehide', () => {
     if (s.bk.reservationId) apiReleaseReservation(s.bk.reservationId);
+    stopDuePoll();
+    stopDueRetry();
   });
 
   if (document.readyState === 'loading') {
