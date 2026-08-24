@@ -15,7 +15,7 @@ Authorised red-team of the v3.239.x strip. XSS / MAIN-world spoofing / write-pat
 - **MH011 glances as “Lipid profile (SMI)”**, not “Mental health review”. QOF prefixes require a following digit so `LD` cannot steal `LDL…`.
 - **Stale (severely overdue) is a filled red dot**, matching the tag. Bidi overrides are stripped from chip text. Due counts are coerced to integers before HTML interpolation; `esc()` now also encodes `'`.
 
-Regression-guarded by `test-due-mini.js` and `test-task-actions-due.js`. Hazard-log v3.32 (H-001 control (l), H-002 control (s)).
+Regression-guarded by `test-due-mini.js` and `test-task-actions-due.js`. Hazard-log v3.32 (H-001 control (l), H-002 control (s)). Clinical Safety Notice product pin and feature-list version moved to 3.239.2 so the safety-doc version guard tracks this minor.
 
 ## [v3.239.1] — 2026-08-24
 
