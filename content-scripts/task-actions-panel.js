@@ -1,24 +1,13 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — "Book appointment" / "Create task" floating panel for task pages.
+// Medicus Suite — Companion HUD (book / create task / what's due / desk).
 //
-// Replaces the two separate inline widgets that used to anchor below the
-// "Codes & actions" card (booking-inline.js, task-inline.js) with ONE
-// fixed-position floating panel, appended directly to document.body — the
-// same pattern document-codes-to-problems.js established for the
-// document-filing task page (2026-08-13) and is now being carried over here
-// for the same reason: inline anchoring depends on finding a card that may
-// not exist yet (a race with Medicus's own Vue render) or may not exist at
-// all on some task types (prescribing overviews have no "Codes & actions"
-// card), and the anchor-search machinery (findHeading/findCard/
-// findActionRow, three gates deep) existed only to work around that. A
-// body-level panel has nothing to find, so it always renders, and nothing to
-// be unmounted by, so it survives any in-page pane-switching. The two
-// features keep their own independent open/loading/step state (each is
-// unrelated to the other) but now share one draggable, collapsible, position-
-// persisted floating box instead of two separately-anchored ones. A third
-// read-only section — miniaturised Sentinel "What's due" — sits above them
-// and consumes the already-published snapshot (shared/due-mini.js), identity-
-// gated to this task's patient.
+// One floating box on task overviews, the care-record, and the medical/
+// admin queue. A persisted Clinic | Reception | Triage | Nursing toggle
+// picks the sections — the page may *suggest* a role when none is saved,
+// never yank a choice mid-clinic. What's due still consumes the already-
+// published Sentinel snapshot (shared/due-mini.js), identity-gated to this
+// page's patient; reception uses the booking voice. Desk / slots / pulse
+// are operational glances and stay honest on fetch/DOM failure.
 //
 // Booking API contract identical to the retired booking-inline.js (still the
 // suite's only OTHER copy of this flow — shared/booking-core.js is the
@@ -37,6 +26,36 @@
 
   const WIDGET_ID = 'ms-tap-widget';
   const POS_KEY = 'ms-tap-pos';
+
+  function roleApi() {
+    return window.MsCompanionRole || null;
+  }
+
+  function normalizeRole(v) {
+    const api = roleApi();
+    return api ? api.normalizeRole(v) : 'clinic';
+  }
+
+  // Role lives outside blankState so an SPA navigation cannot reset it.
+  let _role = null;
+
+  function currentRole() {
+    if (_role) return _role;
+    const api = roleApi();
+    const saved = api ? api.readSavedRole(localStorage) : null;
+    const ctx = getPageContext();
+    _role = api ? api.suggestedRole(ctx && ctx.kind, saved) : 'clinic';
+    return _role;
+  }
+
+  function currentShows() {
+    const api = roleApi();
+    const ctx = getPageContext();
+    if (!api) {
+      return { due: true, desk: false, slots: false, pulse: false, book: true, task: true, record: true };
+    }
+    return api.roleShows(currentRole(), (ctx && ctx.kind) || 'task');
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,12 +90,21 @@
 
   // ── URL detection ─────────────────────────────────────────────────────────────
 
+  function getPageContext() {
+    const api = roleApi();
+    if (api && typeof api.pageContext === 'function') return api.pageContext(location.pathname);
+    return null;
+  }
+
   function getTaskInfo() {
-    const m = location.pathname.match(
-      /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-    );
-    if (!m) return null;
-    return { siteId: m[1], typeSlug: m[2], taskUuid: m[3] };
+    const ctx = getPageContext();
+    if (!ctx || ctx.kind !== 'task') return null;
+    return { siteId: ctx.siteId, typeSlug: ctx.typeSlug, taskUuid: ctx.taskUuid };
+  }
+
+  function pageKey() {
+    const ctx = getPageContext();
+    return ctx ? ctx.pageKey : null;
   }
 
   // The queue-list slugs (medical_patient_request_task / admin_patient_
@@ -214,14 +242,50 @@
     };
   }
 
+  function blankDeskState() {
+    return {
+      open: true,
+      loading: false,
+      error: null,
+      waiting: null,
+      medical: null,
+      admin: null,
+      loadedForPage: null,
+    };
+  }
+
+  function blankSlotsState() {
+    return {
+      open: true,
+      loading: false,
+      error: null,
+      lines: [],
+      loadedForPage: null,
+    };
+  }
+
+  function blankPulseState() {
+    return {
+      kind: 'not_queue',
+      count: 0,
+      redFlags: 0,
+      resultRed: 0,
+      worst: [],
+    };
+  }
+
   function blankState() {
     return {
       taskUuid: null,
+      pageKey: null,
       collapsed: false,
       bk: blankBookingState(),
       tk: blankTaskState(),
       rec: blankRecordState(),
       due: blankDueState(),
+      desk: blankDeskState(),
+      slots: blankSlotsState(),
+      pulse: blankPulseState(),
     };
   }
 
@@ -565,33 +629,67 @@
     return '<span class="ms-tap-due-count' + cls + '" aria-label="' + esc(label) + '">' + total + '</span>';
   }
 
+  function roleToggleHtml() {
+    if (s.collapsed) return '';
+    const api = roleApi();
+    const roles = (api && api.ROLES) || ['clinic', 'reception', 'triage', 'nursing'];
+    const labels = (api && api.ROLE_LABELS) || {};
+    const selected = currentRole();
+    const buttons = roles
+      .map(function (r) {
+        const on = r === selected;
+        return (
+          '<button type="button" class="ms-tap-role' +
+          (on ? ' is-selected' : '') +
+          '" data-role="' +
+          esc(r) +
+          '" role="radio" aria-checked="' +
+          (on ? 'true' : 'false') +
+          '">' +
+          esc(labels[r] || r) +
+          '</button>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' + buttons + '</div>'
+    );
+  }
+
   function outerHeaderHtml() {
     return (
       '<div class="ms-tap-header">' +
       '<span class="ms-tap-grip" title="Drag to move" aria-hidden="true"></span>' +
+      '<div class="ms-tap-header-main">' +
       '<span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
       !s.collapsed +
       '">' +
       '<span class="ms-tap-chevron" aria-hidden="true">' +
       (s.collapsed ? '▸' : '▾') +
       '</span>' +
-      '<span>Patient actions</span>' +
+      '<span>Companion</span>' +
       outerCollapsedDueBadge() +
       '</span>' +
+      roleToggleHtml() +
+      '</div>' +
       '</div>'
     );
   }
 
   function buildHtml() {
     if (s.collapsed) return outerHeaderHtml();
-    const showRecord = s.rec.applicable === true;
+    const shows = currentShows();
+    const showRecord = shows.record && s.rec.applicable === true;
     return (
       outerHeaderHtml() +
       '<div class="ms-tap-body">' +
-      dueSectionHtml() +
+      (shows.due ? dueSectionHtml() : '') +
+      (shows.desk ? deskSectionHtml() : '') +
+      (shows.slots ? slotsGlanceHtml() : '') +
+      (shows.pulse ? pulseSectionHtml() : '') +
       (showRecord ? recordSectionHtml() : '') +
-      bookingSectionHtml() +
-      taskSectionHtml() +
+      (shows.book ? bookingSectionHtml() : '') +
+      (shows.task ? taskSectionHtml() : '') +
       '</div>'
     );
   }
@@ -608,6 +706,11 @@
   // Every status reaching here has already passed isChipActionNeeded
   // (STATUS_RANK <= 2), so this covers the full set.
   function dueTagWord(status) {
+    if (currentRole() === 'reception') {
+      if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
+      if (status === 'no_data') return 'No recent';
+      return 'Overdue';
+    }
     if (status === 'stale') return 'Severely overdue';
     if (status === 'no_data') return 'No recent';
     if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
@@ -637,9 +740,9 @@
       html +=
         '<div class="ms-tap-due-degraded">' +
         n +
-        ' high-risk medicine' +
-        (n === 1 ? '' : 's') +
-        ' with no monitoring rule' +
+        (currentRole() === 'reception'
+          ? ' medicine' + (n === 1 ? '' : 's') + ' we couldn\u2019t match to a booking'
+          : ' high-risk medicine' + (n === 1 ? '' : 's') + ' with no monitoring rule') +
         (names.length ? ' \u2014 ' + names.join(', ') : '') +
         '. Verify in the record.</div>';
     }
@@ -667,13 +770,19 @@
           warnings
         );
       }
+      const emptyLine =
+        currentRole() === 'reception'
+          ? 'Nothing to book from this record right now.'
+          : 'Nothing due right now.';
       return (
-        '<div class="ms-tap-due-empty">' +
-        '<div>Nothing due right now.</div>' +
-        '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
-        '</div>' +
-        warnings
-      );
+          '<div class="ms-tap-due-empty">' +
+          '<div>' +
+          emptyLine +
+          '</div>' +
+          '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
+          '</div>' +
+          warnings
+        );
     }
     const items = mini.items
       .map(function (item) {
@@ -748,10 +857,151 @@
       '<span class="ms-tap-chevron" aria-hidden="true">' +
       (due.open ? '▾' : '▸') +
       '</span>' +
-      '<span>What\u2019s due</span>' +
+      '<span>' +
+      (currentRole() === 'reception' ? 'To book' : 'What\u2019s due') +
+      '</span>' +
       badge +
       '</div>' +
       body +
+      '</div>'
+    );
+  }
+
+  function glanceCountOrUnknown(n, unknownWord) {
+    if (n == null) return unknownWord || 'couldn\u2019t load';
+    return String(countInt(n));
+  }
+
+  function deskSectionHtml() {
+    const desk = s.desk;
+    let inner = '';
+    if (desk.open) {
+      if (desk.loading && desk.loadedForPage == null) {
+        inner = '<div class="ms-tap-due-loading">Checking the desk\u2026</div>';
+      } else if (desk.error && desk.loadedForPage == null) {
+        inner = '<div class="ms-tap-due-error">' + esc(desk.error) + '</div>';
+      } else {
+        inner =
+          '<ul class="ms-tap-glance-list">' +
+          '<li class="ms-tap-glance-row"><span class="ms-tap-glance-label">Waiting room</span><span class="ms-tap-glance-value">' +
+          esc(desk.waiting == null ? 'Couldn\u2019t load' : countInt(desk.waiting) + ' arrived') +
+          '</span></li>' +
+          '<li class="ms-tap-glance-row"><span class="ms-tap-glance-label">Requests today</span><span class="ms-tap-glance-value">' +
+          esc(
+            desk.medical == null && desk.admin == null
+              ? 'Couldn\u2019t load'
+              : glanceCountOrUnknown(desk.medical, '?') +
+                  ' medical, ' +
+                  glanceCountOrUnknown(desk.admin, '?') +
+                  ' admin'
+          ) +
+          '</span></li>' +
+          '</ul>';
+      }
+    }
+    const body = desk.open ? '<div class="ms-tap-section-body">' + inner + '</div>' : '';
+    return (
+      '<div class="ms-tap-section">' +
+      '<div class="ms-tap-section-header" id="ms-tap-desk-toggle" role="button" tabindex="0" aria-expanded="' +
+      desk.open +
+      '">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
+      (desk.open ? '▾' : '▸') +
+      '</span>' +
+      '<span>Desk</span>' +
+      '</div>' +
+      body +
+      '</div>'
+    );
+  }
+
+  function slotsGlanceHtml() {
+    const slots = s.slots;
+    const nurse = currentRole() === 'nursing';
+    let inner = '';
+    if (slots.open) {
+      if (slots.loading && slots.loadedForPage == null) {
+        inner = '<div class="ms-tap-due-loading">Checking slots\u2026</div>';
+      } else if (slots.error && !slots.lines.length) {
+        inner = '<div class="ms-tap-due-error">' + esc(slots.error) + '</div>';
+      } else if (!slots.lines.length) {
+        inner =
+          '<div class="ms-tap-due-empty">No appointment types to glance. Open Book to search.</div>';
+      } else {
+        inner =
+          '<ul class="ms-tap-glance-list">' +
+          slots.lines
+            .map(function (line) {
+              let value = 'Couldn\u2019t check';
+              if (line.unknown) value = 'Couldn\u2019t check';
+              else if (line.none) value = 'None left today';
+              else if (line.time) value = line.time + ' today';
+              return (
+                '<li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
+                esc(line.label) +
+                '</span><span class="ms-tap-glance-value">' +
+                esc(value) +
+                '</span></li>'
+              );
+            })
+            .join('') +
+          '</ul>';
+      }
+    }
+    const body = slots.open ? '<div class="ms-tap-section-body">' + inner + '</div>' : '';
+    return (
+      '<div class="ms-tap-section">' +
+      '<div class="ms-tap-section-header" id="ms-tap-slots-toggle" role="button" tabindex="0" aria-expanded="' +
+      slots.open +
+      '">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
+      (slots.open ? '▾' : '▸') +
+      '</span>' +
+      '<span>' +
+      (nurse ? 'Nurse slots' : 'Slots today') +
+      '</span>' +
+      '</div>' +
+      body +
+      '</div>'
+    );
+  }
+
+  function pulseSectionHtml() {
+    const pulse = s.pulse;
+    const onQueue = pulse.kind === 'queue';
+    let inner;
+    if (onQueue) {
+      const bits = [countInt(pulse.count) + ' on this queue'];
+      if (countInt(pulse.redFlags) > 0) bits.push(countInt(pulse.redFlags) + ' red-flag');
+      if (countInt(pulse.resultRed) > 0) bits.push(countInt(pulse.resultRed) + ' red result');
+      let worst = '';
+      if (pulse.worst && pulse.worst.length) {
+        worst =
+          '<ul class="ms-tap-glance-list">' +
+          pulse.worst
+            .slice(0, 2)
+            .map(function (t) {
+              return '<li class="ms-tap-glance-row ms-tap-due-red"><span class="ms-tap-due-text">' + esc(t) + '</span></li>';
+            })
+            .join('') +
+          '</ul>';
+      }
+      inner = '<div class="ms-tap-glance-lead">' + esc(bits.join(' · ')) + '</div>' + worst;
+    } else {
+      inner =
+        '<div class="ms-tap-due-empty">' +
+        '<div>Open the medical queue for the pulse.</div>' +
+        '<div class="ms-tap-due-empty-sub">This page is one task, not the queue \u2014 counts stay unknown here.</div>' +
+        '</div>';
+    }
+    return (
+      '<div class="ms-tap-section">' +
+      '<div class="ms-tap-section-header" id="ms-tap-pulse-head">' +
+      '<span>Queue pulse</span>' +
+      '</div>' +
+      '<div class="ms-tap-section-body">' +
+      inner +
+      '</div>' +
       '</div>'
     );
   }
@@ -1108,11 +1358,11 @@
     _dueRetry = setTimeout(function () {
       _dueRetry = null;
       s.due.retryAfter = 0;
-      const info = getTaskInfo();
-      if (!info || info.typeSlug === 'document') return;
+      const ctx = getPageContext();
+      if (!ctx || !currentShows().due) return;
       if (s.due.resolving) return;
-      if (s.due.loadedForTask === info.taskUuid) return;
-      loadWhatsDue(info);
+      if (s.due.loadedForTask === ctx.pageKey) return;
+      loadWhatsDue(ctx);
     }, DUE_RETRY_MS);
   }
 
@@ -1132,7 +1382,8 @@
     if (!dueApi || !s.due.patientId) return 'skip';
     const reader = window.__msReadSentinelSnapshot;
     const snap = typeof reader === 'function' ? reader() : null;
-    const result = dueApi.dueFromSnapshot(snap, s.due.patientId);
+    const voice = roleApi() ? roleApi().dueVoiceForRole(currentRole()) : 'clinic';
+    const result = dueApi.dueFromSnapshot(snap, s.due.patientId, { voice: voice });
     if (result.state !== 'ready') return 'pending';
     s.due.mini = result.mini;
     s.due.degraded = !!result.degraded;
@@ -1162,9 +1413,10 @@
     }, DUE_POLL_MS);
   }
 
-  async function loadWhatsDue(info) {
+  async function loadWhatsDue(ctx) {
     const due = s.due;
-    if (due.loadedForTask === info.taskUuid) return;
+    if (!ctx || !ctx.pageKey) return;
+    if (due.loadedForTask === ctx.pageKey) return;
     if (due.resolving) return;
     if (due.retryAfter && Date.now() < due.retryAfter) return;
     due.resolving = true;
@@ -1179,9 +1431,13 @@
     rerender();
     const st = due;
     try {
-      const patientId = await withTimeout(resolvePatientId(info.typeSlug, info.taskUuid), DUE_RESOLVE_MS);
+      let patientId = ctx.patientId || null;
+      if (!patientId && ctx.kind === 'task') {
+        patientId = await withTimeout(resolvePatientId(ctx.typeSlug, ctx.taskUuid), DUE_RESOLVE_MS);
+      }
       if (st !== s.due) return;
-      if (!getTaskInfo() || getTaskInfo().taskUuid !== info.taskUuid) return;
+      const live = getPageContext();
+      if (!live || live.pageKey !== ctx.pageKey) return;
       st.resolving = false;
       if (!patientId) {
         st.waiting = false;
@@ -1191,7 +1447,7 @@
         rerender();
         return;
       }
-      st.loadedForTask = info.taskUuid;
+      st.loadedForTask = ctx.pageKey;
       st.patientId = patientId;
       st.retryAfter = 0;
       stopDueRetry();
@@ -1217,8 +1473,141 @@
     s.due.retryAfter = 0;
     s.due.loadedForTask = null;
     s.due.error = null;
-    const info = getTaskInfo();
-    if (info && info.typeSlug !== 'document') loadWhatsDue(info);
+    const ctx = getPageContext();
+    if (ctx && currentShows().due) loadWhatsDue(ctx);
+  }
+
+  function refreshPulseIfVisible() {
+    const api = roleApi();
+    if (!api || currentRole() !== 'triage') return;
+    const ctx = getPageContext();
+    if (ctx && ctx.kind === 'queue') {
+      s.pulse = api.queuePulseFromDom(document);
+    } else {
+      s.pulse = blankPulseState();
+    }
+  }
+
+  async function loadDeskGlance() {
+    const desk = s.desk;
+    const key = pageKey();
+    if (!key) return;
+    if (desk.loading || desk.loadedForPage === key) return;
+    desk.loading = true;
+    desk.error = null;
+    rerender();
+    const st = desk;
+    const today = todayISO();
+    try {
+      const results = await Promise.allSettled([
+        apiFetch('/scheduling/data/homepage/my-appointments'),
+        apiFetch(
+          '/tasks/data/medical_patient_request_task/task-list?createdAt_startDate=' + today + '&createdAt_endDate=' + today
+        ),
+        apiFetch(
+          '/tasks/data/admin_patient_request_task/task-list?createdAt_startDate=' + today + '&createdAt_endDate=' + today
+        ),
+      ]);
+      if (st !== s.desk) return;
+      const api = roleApi();
+      const mapped = api
+        ? api.deskFromPayloads(
+            results[0].status === 'fulfilled' ? results[0].value : null,
+            results[1].status === 'fulfilled' ? results[1].value : null,
+            results[2].status === 'fulfilled' ? results[2].value : null
+          )
+        : { waiting: null, medical: null, admin: null };
+      st.waiting = mapped.waiting;
+      st.medical = mapped.medical;
+      st.admin = mapped.admin;
+      if (results.every(function (r) { return r.status === 'rejected'; })) {
+        st.error = "Couldn't load the desk glance.";
+      } else {
+        st.loadedForPage = key;
+      }
+    } catch (_) {
+      if (st !== s.desk) return;
+      st.error = "Couldn't load the desk glance.";
+    } finally {
+      if (st === s.desk) {
+        st.loading = false;
+        rerender();
+      }
+    }
+  }
+
+  async function loadSlotsGlance() {
+    const slots = s.slots;
+    const key = pageKey();
+    if (!key) return;
+    if (slots.loading || slots.loadedForPage === key) return;
+    slots.loading = true;
+    slots.error = null;
+    rerender();
+    const st = slots;
+    try {
+      const finder = await apiFetchFinder();
+      if (st !== s.slots) return;
+      const providerId = finder.localOrganisationDetails && finder.localOrganisationDetails.id;
+      const types = [];
+      for (const svc of (finder.localOrganisationDetails && finder.localOrganisationDetails.services) || []) {
+        for (const t of svc.appointmentTypes || []) {
+          if (!types.some((e) => e.value === t.value)) types.push({ value: t.value, label: t.label });
+        }
+      }
+      const api = roleApi();
+      let picked = types;
+      if (currentRole() === 'nursing' && api) {
+        picked = types.filter((t) => api.nurseTypeMatch(t.label));
+        if (!picked.length) picked = types.slice(0, 1);
+      }
+      picked = picked.slice(0, 2);
+      const withSlots = [];
+      for (const t of picked) {
+        if (!providerId) {
+          withSlots.push({ label: t.label, slots: null });
+          continue;
+        }
+        try {
+          const found = await apiFetchSlots({
+            providerId: providerId,
+            appointmentTypeId: t.value,
+            date: todayISO(),
+          });
+          if (st !== s.slots) return;
+          withSlots.push({ label: t.label, slots: found });
+        } catch (_) {
+          if (st !== s.slots) return;
+          withSlots.push({ label: t.label, slots: null });
+        }
+      }
+      st.lines = api ? api.slotsGlanceLines(withSlots, currentRole()) : [];
+      st.loadedForPage = key;
+    } catch (_) {
+      if (st !== s.slots) return;
+      st.error = "Couldn't check today's slots.";
+    } finally {
+      if (st === s.slots) {
+        st.loading = false;
+        rerender();
+      }
+    }
+  }
+
+  function maybeLoadGlances() {
+    const shows = currentShows();
+    refreshPulseIfVisible();
+    if (shows.desk) loadDeskGlance();
+    if (shows.slots) loadSlotsGlance();
+  }
+
+  function setRole(next) {
+    _role = normalizeRole(next);
+    const api = roleApi();
+    if (api) api.writeSavedRole(localStorage, _role);
+    if (s.due.patientId) applyDueFromSnapshot();
+    maybeLoadGlances();
+    rerender();
   }
 
   document.addEventListener('ms-sentinel-snapshot', function () {
@@ -1329,11 +1718,15 @@
     // task no longer on screen and are discarded.
     const st = s.bk;
     try {
-      const info = getTaskInfo();
+      const ctx = getPageContext();
       // patient-id resolution and the appointment finder are independent —
       // run them in parallel so open latency is one round-trip, not two.
       const [patientId, finder] = await Promise.all([
-        info ? resolvePatientId(info.typeSlug, info.taskUuid) : Promise.resolve(null),
+        ctx && ctx.kind === 'record'
+          ? Promise.resolve(ctx.patientId)
+          : ctx && ctx.kind === 'task'
+            ? resolvePatientId(ctx.typeSlug, ctx.taskUuid)
+            : Promise.resolve(null),
         apiFetchFinder(),
       ]);
       if (st !== s.bk) return;
@@ -1431,14 +1824,24 @@
     // a clinical WRITE; it must never fire off a stale identity.
     const st = s.bk;
     try {
-      const info = getTaskInfo();
-      if (!info || s.taskUuid !== info.taskUuid || st !== s.bk) {
-        throw new Error('Task changed — reopen the booking panel.');
+      const ctx = getPageContext();
+      if (!ctx || st !== s.bk) {
+        throw new Error('Page changed — reopen the booking panel.');
       }
-      const verifiedPatientId = await resolvePatientId(info.typeSlug, info.taskUuid);
+      let verifiedPatientId = null;
+      if (ctx.kind === 'task') {
+        if (s.taskUuid !== ctx.taskUuid) {
+          throw new Error('Task changed — reopen the booking panel.');
+        }
+        verifiedPatientId = await resolvePatientId(ctx.typeSlug, ctx.taskUuid);
+      } else if (ctx.kind === 'record') {
+        verifiedPatientId = ctx.patientId || null;
+      } else {
+        throw new Error('Open a task or the record to book.');
+      }
       if (st !== s.bk) return; // navigated during verification — abort silently
       if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
-        throw new Error('Patient could not be re-verified for this task — reopen the booking panel.');
+        throw new Error('Patient could not be re-verified — reopen the booking panel.');
       }
       const formData = await apiFetchCreateForm({
         slotReservationId: st.reservationId,
@@ -1619,6 +2022,43 @@
         e.preventDefault();
         e.stopPropagation();
         retryWhatsDue();
+      });
+    }
+
+    el.querySelectorAll('.ms-tap-role').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const next = btn.getAttribute('data-role');
+        if (next && next !== currentRole()) setRole(next);
+      });
+    });
+
+    const deskToggle = el.querySelector('#ms-tap-desk-toggle');
+    if (deskToggle) {
+      deskToggle.addEventListener('click', () => {
+        s.desk.open = !s.desk.open;
+        rerender();
+      });
+      deskToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          deskToggle.click();
+        }
+      });
+    }
+
+    const slotsToggle = el.querySelector('#ms-tap-slots-toggle');
+    if (slotsToggle) {
+      slotsToggle.addEventListener('click', () => {
+        s.slots.open = !s.slots.open;
+        rerender();
+      });
+      slotsToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          slotsToggle.click();
+        }
       });
     }
 
@@ -1823,8 +2263,8 @@
     // Document-filing task pages have Medicus's own direct /task and
     // /appointment access already (confirmed with Dave, 2026-08-19) — this
     // panel would only be a redundant duplicate there.
-    const info = getTaskInfo();
-    const onTaskPage = !!info && info.typeSlug !== 'document';
+    const ctx = getPageContext();
+    const onPage = !!ctx;
     const pathChanged = location.pathname !== _lastPath;
     // H-001: drop painted due chips the instant the path changes, before
     // the 350ms inject throttle — so P1's badge cannot sit on P2's task.
@@ -1832,10 +2272,13 @@
     // must not swallow the navigation clear).
     if (pathChanged) clearDuePaint();
     if (_throttle) return;
-    if (!onTaskPage && !pathChanged) return;
-    if (onTaskPage && !pathChanged) {
+    if (!onPage && !pathChanged) return;
+    if (onPage && !pathChanged) {
       const existing = document.getElementById(WIDGET_ID);
-      if (existing && existing.isConnected) return;
+      if (existing && existing.isConnected) {
+        refreshPulseIfVisible();
+        return;
+      }
     }
     _throttle = setTimeout(runInject, 350);
   }
@@ -1851,23 +2294,26 @@
       s = blankState();
     }
     if (document.hidden) return;
-    const info = getTaskInfo();
-    if (!info || info.typeSlug === 'document') {
+    const ctx = getPageContext();
+    if (!ctx) {
       removeWidget();
       return;
     }
-    s.taskUuid = info.taskUuid;
-    if (s.due.loadedForTask !== info.taskUuid && !s.due.resolving) {
-      loadWhatsDue(info);
+    s.pageKey = ctx.pageKey;
+    s.taskUuid = ctx.taskUuid || null;
+    if (currentShows().due && s.due.loadedForTask !== ctx.pageKey && !s.due.resolving) {
+      loadWhatsDue(ctx);
     }
     if (
-      isCommunicationThreadSlug(info.typeSlug) &&
-      s.rec.loadedForTask !== info.taskUuid &&
+      ctx.kind === 'task' &&
+      isCommunicationThreadSlug(ctx.typeSlug) &&
+      s.rec.loadedForTask !== ctx.taskUuid &&
       !s.rec.checking &&
       !s.rec.loading
     ) {
-      loadPatientRecord(info);
+      loadPatientRecord({ siteId: ctx.siteId, typeSlug: ctx.typeSlug, taskUuid: ctx.taskUuid });
     }
+    maybeLoadGlances();
     const existing = document.getElementById(WIDGET_ID);
     if (existing && existing.isConnected) return;
     requestAnimationFrame(() => {

@@ -1,12 +1,14 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Shared — miniaturised "What's due" list from Sentinel chips.
 //
-// Used by the floating Patient-actions panel on task pages
+// Used by the floating Companion widget
 // (content-scripts/task-actions-panel.js). Same action-needed threshold as
 // sentinel-core.js / brief-core.js (STATUS_RANK <= 2), plus drug-monitoring
-// `no_data` so TAP matches the on-page HUD (H-002). Signal wording mirrors
-// brief-core.js so the strip reads as a pocket Sentinel brief, not a second
-// invented voice. Max 4 lines + "+N more" — same cap as the side-panel brief.
+// `no_data` so TAP matches the on-page HUD (H-002). Clinic/nursing wording
+// mirrors brief-core.js (pocket Sentinel brief). Reception voice is a
+// booking list — drug names + "bloods"/"tests", QOF as "Book a … review" —
+// and drops combo/alert chips that are not something reception books.
+// Max 4 lines + "+N more" — same cap as the side-panel brief.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.MsDueMini.<fn>(...)
@@ -180,7 +182,57 @@
     return word ? label + ' — ' + word : label;
   }
 
-  function chipSignalText(chip) {
+  function isBloodishTestName(name) {
+    return /fbc|lft|u\s*&\s*e|tft|egfr|creat|crp|hb|plt|platelet|alt|ast|inr|lithium|level|cholest|lipid|hba1c|glucose/i.test(
+      String(name || '')
+    );
+  }
+
+  function drugReceptionText(chip) {
+    var drug = stripBidi(chip.drugName || chip.ruleId || 'Medicine');
+    var names = chip.status === 'no_data' ? missingTestNames(chip) : [];
+    if (chip.status !== 'no_data') {
+      names = (chip.tests || [])
+        .filter(function (t) {
+          return t && isChipActionNeeded(t.status);
+        })
+        .map(function (t) {
+          return stripBidi(t.testName || t.name);
+        })
+        .filter(Boolean);
+    }
+    var bloodish = names.length === 0 || names.some(isBloodishTestName);
+    return bloodish ? drug + ' bloods' : drug + ' tests';
+  }
+
+  function articleFor(phrase) {
+    return /^[aeiou]/i.test(String(phrase || '')) ? 'an' : 'a';
+  }
+
+  function qofReceptionText(chip) {
+    var glance = qofSignalText(chip);
+    var lower = glance.charAt(0).toLowerCase() + glance.slice(1);
+    return 'Book ' + articleFor(lower) + ' ' + lower;
+  }
+
+  function vaccineReceptionText(chip) {
+    var name = stripBidi(chip.displayName || chip.label || 'vaccination');
+    return 'Book ' + name;
+  }
+
+  function isReceptionDueChip(chip) {
+    if (!isDueMiniActionNeeded(chip)) return false;
+    var t = chip.type;
+    return t === 'drug-monitoring' || t === 'qof-indicator' || t === 'qof-process-indicator' || t === 'vaccine';
+  }
+
+  function chipSignalText(chip, voice) {
+    if (voice === 'reception') {
+      if (chip.type === 'drug-monitoring') return drugReceptionText(chip);
+      if (chip.type === 'qof-indicator' || chip.type === 'qof-process-indicator') return qofReceptionText(chip);
+      if (chip.type === 'vaccine') return vaccineReceptionText(chip);
+      return genericSignalText(chip);
+    }
     if (chip.type === 'drug-monitoring') return drugSignalText(chip);
     if (chip.type === 'qof-indicator' || chip.type === 'qof-process-indicator') return qofSignalText(chip);
     return genericSignalText(chip);
@@ -210,9 +262,10 @@
   }
 
   /**
-   * buildDueMini(chips) → DueMini
+   * buildDueMini(chips, opts) → DueMini
    *
    * @param {Array|null} chips — Sentinel chip array (or null)
+   * @param {{ voice?: 'clinic'|'reception' }} [opts]
    * @returns {{
    *   items: Array<{ severity: 'red'|'amber', text: string, label: string, status: string }>,
    *   moreCount: number,
@@ -220,12 +273,14 @@
    *   redCount: number,
    *   amberCount: number,
    *   nothingDue: boolean,
-   *   unclassified: boolean
+   *   unclassified: boolean,
+   *   voice: 'clinic'|'reception'
    * }}
    */
-  function buildDueMini(chips) {
+  function buildDueMini(chips, opts) {
+    var voice = opts && opts.voice === 'reception' ? 'reception' : 'clinic';
     var raw = Array.isArray(chips) ? chips.filter(Boolean) : [];
-    var list = raw.filter(isDueMiniActionNeeded);
+    var list = raw.filter(voice === 'reception' ? isReceptionDueChip : isDueMiniActionNeeded);
     var hasUnrecognised = raw.some(function (c) {
       return c.status && !Object.prototype.hasOwnProperty.call(STATUS_RANK, c.status);
     });
@@ -244,11 +299,11 @@
     var hidden = sorted.slice(MAX_ITEMS);
     return {
       items: shown.map(function (chip) {
-        var text = chipSignalText(chip);
+        var text = chipSignalText(chip, voice);
         return {
           severity: chipSeverity(chip),
           text: text,
-          label: stripTrailingStatusWord(text, chip.status),
+          label: voice === 'reception' ? text : stripTrailingStatusWord(text, chip.status),
           status: chip.status,
         };
       }),
@@ -258,6 +313,7 @@
       amberCount: amberCount,
       nothingDue: list.length === 0 && !hasUnrecognised,
       unclassified: list.length === 0 && hasUnrecognised,
+      voice: voice,
     };
   }
 
@@ -288,18 +344,21 @@
   }
 
   /**
-   * dueFromSnapshot(snapshot, patientId) → { state, mini?, degraded?, journalAugmentFailed?, unmatchedHighRisk? }
+   * dueFromSnapshot(snapshot, patientId, opts) → { state, mini?, degraded?, journalAugmentFailed?, unmatchedHighRisk? }
    *
    * Identity gate. Returns state 'pending' (do not render chips) unless the
    * snapshot carries chips for THIS patientId. A previous patient's snapshot,
    * an unavailable/invalidated snapshot, or a missing patientId must never
    * produce a due list — that is the H-001 control for this surface.
    *
+   * opts.voice — 'clinic' (default) or 'reception'. Voice never bypasses
+   * the identity gate; it only changes wording / which chip types list.
+   *
    * state:
    *   'pending' — no trusted match yet (loading / wrong patient / empty snap)
    *   'ready'   — mini belongs to this patient and may be rendered
    */
-  function dueFromSnapshot(snapshot, patientId) {
+  function dueFromSnapshot(snapshot, patientId, opts) {
     if (!snapshot || snapshot.unavailable === true || !Array.isArray(snapshot.chips)) {
       return { state: 'pending' };
     }
@@ -309,7 +368,7 @@
     }
     return {
       state: 'ready',
-      mini: buildDueMini(snapshot.chips),
+      mini: buildDueMini(snapshot.chips, opts),
       degraded: !!snapshot.degraded,
       journalAugmentFailed: snapshot.journalAugmentFailed === true,
       unmatchedHighRisk: unmatchedHighRiskList(snapshot),
@@ -326,6 +385,7 @@
     samePatientId: samePatientId,
     dueFromSnapshot: dueFromSnapshot,
     stripBidi: stripBidi,
+    isReceptionDueChip: isReceptionDueChip,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

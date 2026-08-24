@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.240.0] — 2026-08-24
+
+### Companion HUD — role toggle on the floating box
+
+The Patient-actions floater is now **Companion**: one box, four persisted roles (Clinic / Reception / Triage / Nursing). The page may suggest a role when none is saved; a saved choice is never yanked mid-clinic.
+
+- **Clinic** — this patient's What's due (clinical voice) + Book + Create task.
+- **Reception** — the same due list in booking voice ("Methotrexate bloods", "Book a diabetes review"; no lithium-level / combo-alert jargon) plus a desk glance (waiting-room arrived + today's requests) and a first-available slots line, plus Book.
+- **Triage** — queue pulse from live chips/rows when you are on the queue; honest "Open the medical queue for the pulse" on a single task. Create task stays; no slots, no MTX lines.
+- **Nursing** — clinic-voice What's due + next nurse-ish slot + Book.
+- Still **no second clinical fetch**. Identity gate and path-change clear are unchanged (H-001). Desk / slots / pulse stay unknown on fetch or DOM failure — never a fake zero.
+- Also injects on the **care-record** (due + book, patient UUID from the URL) and the **queue** (pulse). Document-filing pages still skip the widget.
+- Preview the four views without Medicus: open `companion-preview.html`.
+
+Regression-guarded by `test-due-mini.js`, `test-companion-role.js` and `test-task-actions-due.js`. Hazard-log v3.33 (H-001 control (m), H-002 control (t)).
+
 ## [v3.239.2] — 2026-08-24
 
 ### Floating What’s due — red-team hardening

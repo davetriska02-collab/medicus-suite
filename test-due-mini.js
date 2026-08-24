@@ -383,6 +383,60 @@ console.log('\n--- identity gate (dueFromSnapshot) ---');
   );
 }
 
+console.log('\n--- reception voice (booking list, no clinical jargon) ---');
+{
+  const clinic = due.buildDueMini([mtxChip, dmChip]);
+  check(clinic.voice === 'clinic', 'default voice is clinic');
+  check(/FBC, LFT/.test(clinic.items[0].text), 'clinic drug line still names tests');
+
+  const rec = due.buildDueMini([mtxChip, dmChip, fluChip], { voice: 'reception' });
+  check(rec.voice === 'reception', 'opts.voice reception is recorded');
+  const mtx = rec.items.find((i) => /Methotrexate/.test(i.text));
+  check(!!mtx, 'reception still lists methotrexate (as a booking line)');
+  check(mtx.text === 'Methotrexate bloods', `reception drug is "Methotrexate bloods" (got ${JSON.stringify(mtx.text)})`);
+  check(!/FBC|LFT|overdue/.test(mtx.text), 'reception drug line drops test names and overdue jargon');
+  const dm = rec.items.find((i) => /diabetes/i.test(i.text));
+  check(dm && dm.text === 'Book a diabetes review', `reception QOF is a booking verb (got ${JSON.stringify(dm && dm.text)})`);
+  const flu = rec.items.find((i) => /Flu/.test(i.text));
+  check(flu && flu.text === 'Book Flu vaccine', `reception vaccine is a booking line (got ${JSON.stringify(flu && flu.text)})`);
+
+  const combo = {
+    type: 'drug-combo',
+    status: 'alert',
+    displayName: 'Serotonin syndrome risk',
+  };
+  const lithiumStale = {
+    type: 'drug-monitoring',
+    status: 'stale',
+    drugName: 'Lithium',
+    tests: [{ name: 'Lithium level', status: 'stale' }],
+  };
+  const recFilter = due.buildDueMini([combo, lithiumStale, dmChip], { voice: 'reception' });
+  check(
+    !recFilter.items.some((i) => /[Ss]erotonin|[Ss]yndrome/.test(i.text)),
+    'reception voice drops combo/alert chips (not a booking)'
+  );
+  check(
+    recFilter.items.some((i) => i.text === 'Lithium bloods'),
+    'reception lithium is "Lithium bloods", not a level/severely-overdue line'
+  );
+  check(
+    !recFilter.items.some((i) => /severely overdue|Lithium level/.test(i.text + i.label)),
+    'reception lithium line has no clinical test jargon'
+  );
+
+  const pid = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const other = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const snap = { chips: [mtxChip], patientContext: { patientUuid: pid } };
+  const voiced = due.dueFromSnapshot(snap, pid, { voice: 'reception' });
+  check(voiced.state === 'ready' && voiced.mini.voice === 'reception', 'dueFromSnapshot forwards voice after the identity gate');
+  check(voiced.mini.items[0].text === 'Methotrexate bloods', 'ready reception mini uses booking wording');
+  check(
+    due.dueFromSnapshot(snap, other, { voice: 'reception' }).state === 'pending',
+    'reception voice never bypasses the wrong-patient gate'
+  );
+}
+
 console.log('\n--- nothingDue is not an all-clear claim ---');
 {
   const src = require('fs').readFileSync(path.join(__dirname, 'shared', 'due-mini.js'), 'utf8');

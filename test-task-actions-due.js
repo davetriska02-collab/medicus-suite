@@ -1,9 +1,10 @@
-// Medicus Suite — floating Patient-actions "What's due" source invariants
+// Medicus Suite — floating Companion "What's due" source invariants
 // Run with: node test-task-actions-due.js
 //
 // The due strip lives inside the task-actions IIFE and can't be imported, so
-// these are source-level safety pins: identity gate, no all-clear claim, and
-// the snapshot is read (never re-evaluated with a partial ruleset).
+// these are source-level safety pins: identity gate, no all-clear claim, the
+// snapshot is read (never re-evaluated with a partial ruleset), and the
+// Companion role toggle does not bypass those controls.
 
 'use strict';
 
@@ -28,12 +29,14 @@ const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-action
 const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
 const sentinel = fs.readFileSync(path.join(__dirname, 'content-scripts', 'sentinel.js'), 'utf8');
 
-console.log('--- manifest wires due-mini before the panel ---');
+console.log('--- manifest wires due-mini + companion-role before the panel ---');
 {
   const tapBlock = manifest.slice(manifest.indexOf('shared/due-mini.js'));
   const dueIdx = tapBlock.indexOf('shared/due-mini.js');
+  const roleIdx = tapBlock.indexOf('shared/companion-role.js');
   const panelIdx = tapBlock.indexOf('content-scripts/task-actions-panel.js');
   check(dueIdx !== -1 && panelIdx !== -1 && dueIdx < panelIdx, 'due-mini.js is injected before task-actions-panel.js');
+  check(roleIdx !== -1 && roleIdx < panelIdx, 'companion-role.js is injected before task-actions-panel.js');
 }
 
 console.log('\n--- identity gate ---');
@@ -44,8 +47,8 @@ check(
 check(/__msReadSentinelSnapshot/.test(panel), 'panel reads the live snapshot via __msReadSentinelSnapshot');
 check(/st !== s\.due/.test(panel), 'loadWhatsDue pins due sub-state across the patient-id await');
 check(
-  /getTaskInfo\(\)\.taskUuid !== info\.taskUuid/.test(panel),
-  'loadWhatsDue re-checks the live task UUID after the resolve await'
+  /live\.pageKey !== ctx\.pageKey/.test(panel),
+  'loadWhatsDue re-checks the live pageKey after the resolve await'
 );
 check(/stopDuePoll\(\)/.test(panel), 'SPA navigation / pagehide stops the due poll');
 check(/state === 'pending' && s\.due\.mini/.test(panel), 'a pending snapshot clears any painted chips immediately');
@@ -68,6 +71,12 @@ check(/function retryWhatsDue/.test(panel) && /ms-tap-due-retry/.test(panel), 'e
 check(/scheduleDueRetry/.test(panel), 'resolve failure schedules an automatic retry');
 check(/function countInt/.test(panel), 'due counts are coerced to integers before HTML interpolation');
 check(!/evaluatePatient/.test(panel), 'panel does not re-evaluate rules itself (would risk a partial ruleset)');
+check(/function setRole/.test(panel) && /ms-tap-role/.test(panel), 'Companion role toggle is wired');
+check(/dueVoiceForRole/.test(panel), 'role change rebuilds due-mini with the matching voice');
+check(/writeSavedRole/.test(panel), 'chosen role is persisted (never yanked mid-clinic)');
+check(/Open the medical queue for the pulse/.test(panel), 'triage off the queue stays honest (no invented counts)');
+check(/Couldn't load the desk glance/.test(panel), 'desk fetch failure is named, not painted as zero');
+check(/<span>Companion<\/span>/.test(panel), 'header title is Companion');
 
 console.log('\n--- snapshot ping ---');
 check(/ms-sentinel-snapshot/.test(panel), 'panel listens for the same-page snapshot ping');
