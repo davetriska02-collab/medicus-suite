@@ -6,6 +6,31 @@
    without depending on finding a card that may not exist yet (or at all).
    See the file header comment in task-actions-panel.js. */
 #ms-tap-widget {
+  /* Self-contained token block — light-theme canon (host page is light).
+     See .claude/skills/ui-design/TOKENS.md §Injected surfaces. New due-list
+     rules consume these; pre-existing panel chrome keeps its hexes. */
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --text-4: #556377;
+  --text-5: #5f6f85;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --border: #cbd5e1;
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.09);
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-pill: 999px;
+  --mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
   position: fixed;
   top: 72px;
   right: 20px;
@@ -16,7 +41,7 @@
   max-height: calc(100vh - 92px);
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
   color: #1a2030;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
@@ -106,6 +131,12 @@
 
 #ms-tap-widget .ms-tap-section-header:hover {
   background: #f7f9ff;
+}
+
+#ms-tap-widget .ms-tap-section-header:focus-visible,
+#ms-tap-widget .ms-tap-header-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
 }
 
 #ms-tap-widget .ms-tap-section-body {
@@ -404,4 +435,126 @@
   justify-content: center;
   font-size: 18px;
   font-weight: bold;
+}
+
+/* What's due — miniaturised Sentinel brief. Hue is never the only signal:
+   red dot is filled, amber is a hollow ring, plus an Overdue / Due soon tag. */
+#ms-tap-widget .ms-tap-due-count {
+  margin-left: auto;
+  min-width: 1.4em;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  background: var(--bg-mid);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+#ms-tap-widget .ms-tap-due-count-red {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red-line);
+}
+
+#ms-tap-widget .ms-tap-due-count-amber {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber-line);
+}
+
+#ms-tap-widget .ms-tap-due-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-tap-widget .ms-tap-due-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+
+#ms-tap-widget .ms-tap-due-red {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+
+#ms-tap-widget .ms-tap-due-amber {
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+
+#ms-tap-widget .ms-tap-due-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+#ms-tap-widget .ms-tap-due-red .ms-tap-due-dot {
+  background: var(--red);
+  border: 2px solid var(--red);
+}
+
+#ms-tap-widget .ms-tap-due-amber .ms-tap-due-dot {
+  background: transparent;
+  border: 2px solid var(--amber);
+}
+
+#ms-tap-widget .ms-tap-due-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+#ms-tap-widget .ms-tap-due-tag {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding-top: 2px;
+}
+
+#ms-tap-widget .ms-tap-due-red .ms-tap-due-tag {
+  color: var(--red);
+}
+
+#ms-tap-widget .ms-tap-due-amber .ms-tap-due-tag {
+  color: var(--amber);
+}
+
+#ms-tap-widget .ms-tap-due-more {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 2px 2px 0;
+}
+
+#ms-tap-widget .ms-tap-due-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+#ms-tap-widget .ms-tap-due-degraded {
+  font-size: 11px;
+  color: var(--amber);
+  line-height: 1.35;
 }

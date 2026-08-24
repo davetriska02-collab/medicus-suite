@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.239.0] — 2026-08-24
+
+### Floating Patient actions — miniaturised “What’s due”
+
+- **The floating Patient-actions panel on task pages now carries a pocket Sentinel “What’s due” strip** at the top of the box: the same action-needed chips the Monitoring brief uses (drug monitoring, QOF, vaccines, alerts), capped at four lines plus “+N more”, with overdue vs due-soon named in text as well as colour.
+- **No second clinical fetch.** The strip reads the in-memory Sentinel snapshot already evaluated for the task’s patient (`window.__msReadSentinelSnapshot`) and formats it via `shared/due-mini.js`. Wording is the clinician glance from the brief (“Methotrexate — FBC, LFT overdue”), not the patient-facing passport voice.
+- **Wrong-patient gate (H-001).** Chips only render when `snapshot.patientContext` matches the patient UUID resolved from this task. A snapshot for someone else, or an invalidated/`unavailable` snapshot, stays in “Checking what’s due…”. If a painted list stops matching mid-navigation, it is cleared immediately rather than sitting on the next task for the inject-throttle window. Empty state is bounded (“Nothing due right now”) and never claims all-clear.
+- Regression-guarded by `test-due-mini.js`, `test-task-actions-due.js`, and the STATUS_RANK lock-step extension in `test-status-rank-sync.js`.
+
 ## [v3.238.4] — 2026-08-24
 
 ### Contacts canvas — always-expanded slots + drag-to-reclassify
