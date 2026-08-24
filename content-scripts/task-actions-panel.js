@@ -6,8 +6,9 @@
 // picks the sections — the page may *suggest* a role when none is saved,
 // never yank a choice mid-clinic. What's due still consumes the already-
 // published Sentinel snapshot (shared/due-mini.js), identity-gated to this
-// page's patient; reception uses the booking voice. Desk / slots / pulse
-// are operational glances and stay honest on fetch/DOM failure.
+// page's patient; reception uses the booking voice and nursing uses the
+// treatment-room voice. Desk / slots / pulse are operational glances and
+// stay honest on fetch/DOM failure.
 //
 // Booking API contract identical to the retired booking-inline.js (still the
 // suite's only OTHER copy of this flow — shared/booking-core.js is the
@@ -239,6 +240,7 @@
       unmatchedHighRisk: [],
       waitStartedAt: 0,
       retryAfter: 0,
+      showAll: false,
     };
   }
 
@@ -264,6 +266,8 @@
       typeCount: 0,
       moreCount: 0,
       moreSlots: 0,
+      allLines: [],
+      showAll: false,
       loadedForPage: null,
     };
   }
@@ -275,6 +279,7 @@
       redFlags: 0,
       resultRed: 0,
       worst: [],
+      oldestMinutes: null,
     };
   }
 
@@ -590,6 +595,7 @@
     if (document.getElementById(WIDGET_ID)) return;
     const w = document.createElement('div');
     w.id = WIDGET_ID;
+    w.setAttribute('lang', 'en-GB');
     renderInto(w);
     withObserverPaused(() => document.body.appendChild(w));
     requestAnimationFrame(() => placePanel(w));
@@ -608,6 +614,7 @@
   // ── Render ────────────────────────────────────────────────────────────────────
 
   function renderInto(el) {
+    if (!el.getAttribute('lang')) el.setAttribute('lang', 'en-GB');
     el.innerHTML = buildHtml();
     bindEvents(el);
   }
@@ -655,8 +662,12 @@
         );
       })
       .join('');
+    const caption = api && api.roleCaption ? api.roleCaption(selected) : '';
     return (
-      '<div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' + buttons + '</div>'
+      '<div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' +
+      buttons +
+      '</div>' +
+      (caption ? '<p class="ms-tap-role-caption">' + esc(caption) + '</p>' : '')
     );
   }
 
@@ -757,11 +768,37 @@
   // aria-live/aria-busy "ms-tap-section-body" wrapper for every due state
   // (loading / error / list / empty) so a screen reader gets one region,
   // not a fresh one per state.
+  function openPanelLink(moduleName, label) {
+    return (
+      '<button type="button" class="ms-tap-text-btn ms-tap-open-panel" data-module="' +
+      esc(moduleName) +
+      '">' +
+      esc(label) +
+      '</button>'
+    );
+  }
+
+  function openSuitePanel(moduleName) {
+    const allowed = { sentinel: true, slots: true };
+    if (!allowed[moduleName]) return;
+    try {
+      if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) {
+        chrome.runtime.sendMessage({ action: 'ms-open-panel', module: moduleName });
+      }
+    } catch (_) {
+      /* no extension runtime in the preview page */
+    }
+  }
+
   function renderDueBody(mini, due) {
     const warnings = dueWarningsHtml(due);
     if (mini.unclassified) {
       return (
-        '<div class="ms-tap-due-error">Couldn\u2019t classify alerts \u2014 check Monitoring.</div>' + warnings
+        '<div class="ms-tap-due-error">Couldn\u2019t classify alerts \u2014 check Monitoring.</div>' +
+        '<div class="ms-tap-due-more">' +
+        openPanelLink('sentinel', 'Open Monitoring') +
+        '</div>' +
+        warnings
       );
     }
     if (mini.nothingDue) {
@@ -769,7 +806,9 @@
         return (
           '<div class="ms-tap-due-empty">' +
           '<div>Couldn\u2019t verify everything that\u2019s due.</div>' +
-          '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
+          '<div class="ms-tap-due-empty-sub">' +
+          openPanelLink('sentinel', 'Open Monitoring for the full picture') +
+          '</div>' +
           '</div>' +
           warnings
         );
@@ -779,19 +818,31 @@
           ? 'Nothing to book from this record right now.'
           : 'Nothing due right now.';
       return (
-          '<div class="ms-tap-due-empty">' +
-          '<div>' +
-          emptyLine +
-          '</div>' +
-          '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
-          '</div>' +
-          warnings
-        );
+        '<div class="ms-tap-due-empty">' +
+        '<div>' +
+        emptyLine +
+        '</div>' +
+        '<div class="ms-tap-due-empty-sub">' +
+        openPanelLink('sentinel', 'Open Monitoring for the full picture') +
+        '</div>' +
+        '</div>' +
+        warnings
+      );
     }
-    const items = mini.items
+    const showAll = !!due.showAll && Array.isArray(mini.allItems) && mini.allItems.length;
+    const list = showAll ? mini.allItems : mini.items;
+    const slotLines =
+      s.slots && (s.slots.allLines && s.slots.allLines.length ? s.slots.allLines : s.slots.lines);
+    const hintApi = currentRole() === 'reception' ? roleApi() : null;
+    const items = (list || [])
       .map(function (item) {
         const sev = item.severity === 'red' ? 'red' : 'amber';
         const word = dueTagWord(item.status);
+        let hint = '';
+        if (hintApi && hintApi.suggestedBookHint) {
+          const h = hintApi.suggestedBookHint(item.label || item.text, slotLines);
+          if (h) hint = '<span class="ms-tap-due-hint">Try: ' + esc(h) + '</span>';
+        }
         return (
           '<li class="ms-tap-due-item ms-tap-due-' +
           sev +
@@ -799,6 +850,7 @@
           '<span class="ms-tap-due-dot" aria-hidden="true"></span>' +
           '<span class="ms-tap-due-text">' +
           esc(item.label) +
+          hint +
           '</span>' +
           '<span class="ms-tap-due-tag">' +
           word +
@@ -810,10 +862,31 @@
     let more = '';
     const moreCount = countInt(mini.moreCount);
     const moreRed = countInt(mini.moreRed);
-    if (moreCount > 0) {
-      const redBit = moreRed > 0 ? ', <span class="ms-tap-due-more-red">' + moreRed + ' overdue</span>' : '';
+    const dueApi = window.MsDueMini;
+    const moreText =
+      dueApi && dueApi.moreLineText
+        ? dueApi.moreLineText(moreCount, moreRed)
+        : moreCount
+          ? '+' + moreCount + ' more'
+          : '';
+    if (showAll) {
       more =
-        '<div class="ms-tap-due-more">+' + moreCount + ' more' + redBit + ' \u2014 full list is in Monitoring.</div>';
+        '<div class="ms-tap-due-more">' +
+        '<button type="button" class="ms-tap-text-btn" id="ms-tap-due-show-less">Show first 4</button>' +
+        ' \u00b7 ' +
+        openPanelLink('sentinel', 'Open Monitoring') +
+        '</div>';
+    } else if (moreCount > 0) {
+      more =
+        '<div class="ms-tap-due-more">' +
+        '<button type="button" class="ms-tap-text-btn" id="ms-tap-due-show-all">' +
+        esc(moreText) +
+        ' \u2014 show all here</button>' +
+        ' \u00b7 ' +
+        openPanelLink('sentinel', 'Open Monitoring') +
+        '</div>';
+    } else {
+      more = '<div class="ms-tap-due-more">' + openPanelLink('sentinel', 'Open Monitoring') + '</div>';
     }
     return '<ul class="ms-tap-due-list">' + items + '</ul>' + more + warnings;
   }
@@ -825,12 +898,20 @@
     const amber = mini ? countInt(mini.amberCount) : 0;
     const count = mini ? red + amber : null;
     const countClass =
-      mini && red > 0 ? ' ms-tap-due-count-red' : mini && amber > 0 ? ' ms-tap-due-count-amber' : '';
+      mini && red > 0
+        ? ' ms-tap-due-count-red'
+        : mini && amber > 0
+          ? ' ms-tap-due-count-amber'
+          : due.error && !mini
+            ? ' ms-tap-due-count-amber'
+            : '';
     const countLabel = count != null && count > 0 ? (red > 0 ? count + ' overdue' : count + ' due') : '';
     const badge =
       count != null && count > 0
         ? '<span class="ms-tap-due-count' + countClass + '" aria-label="' + esc(countLabel) + '">' + count + '</span>'
-        : '';
+        : due.error && !mini
+          ? '<span class="ms-tap-due-count ms-tap-due-count-amber" aria-label="Could not check">Unknown</span>'
+          : '';
     let inner = '';
     if (due.open) {
       if (due.resolving || (due.waiting && !mini && !due.error)) {
@@ -936,23 +1017,39 @@
           '<div class="ms-tap-glance-lead">' +
           esc(
             countInt(slots.total) +
-              ' left today' +
+              ' left on today\u2019s appointment book' +
               (countInt(slots.typeCount) > 1 ? ' across ' + countInt(slots.typeCount) + ' types' : '')
           ) +
           '</div>';
         const moreCount = countInt(slots.moreCount);
-        const more =
-          moreCount > 0
-            ? '<div class="ms-tap-due-more">+' +
-              moreCount +
-              ' more types (' +
-              countInt(slots.moreSlots) +
-              ' slots) \u2014 full list is in Slot Counter.</div>'
-            : '';
+        const showAll = !!slots.showAll && Array.isArray(slots.allLines) && slots.allLines.length;
+        const slotRows = showAll ? slots.allLines : slots.lines;
+        let more = '';
+        if (showAll) {
+          more =
+            '<div class="ms-tap-due-more">' +
+            '<button type="button" class="ms-tap-text-btn" id="ms-tap-slots-show-less">Show first 10 types</button>' +
+            ' \u00b7 ' +
+            openPanelLink('slots', 'Open Slot Counter') +
+            '</div>';
+        } else if (moreCount > 0) {
+          more =
+            '<div class="ms-tap-due-more">' +
+            '<button type="button" class="ms-tap-text-btn" id="ms-tap-slots-show-all">+' +
+            moreCount +
+            ' more types (' +
+            countInt(slots.moreSlots) +
+            ' slots) \u2014 show all here</button>' +
+            ' \u00b7 ' +
+            openPanelLink('slots', 'Open Slot Counter') +
+            '</div>';
+        } else {
+          more = '<div class="ms-tap-due-more">' + openPanelLink('slots', 'Open Slot Counter') + '</div>';
+        }
         inner =
           lead +
           '<ul class="ms-tap-glance-list">' +
-          slots.lines
+          slotRows
             .map(function (line) {
               let value = 'Couldn\u2019t check';
               if (line.unknown) value = 'Couldn\u2019t check';
@@ -1001,6 +1098,7 @@
       const bits = [countInt(pulse.count) + ' on this queue'];
       if (countInt(pulse.redFlags) > 0) bits.push(countInt(pulse.redFlags) + ' red-flag');
       if (countInt(pulse.resultRed) > 0) bits.push(countInt(pulse.resultRed) + ' red result');
+      if (pulse.oldestMinutes != null) bits.push('oldest ' + countInt(pulse.oldestMinutes) + ' min');
       let worst = '';
       if (pulse.worst && pulse.worst.length) {
         worst =
@@ -1017,8 +1115,8 @@
     } else {
       inner =
         '<div class="ms-tap-due-empty">' +
-        '<div>Open the medical queue for the pulse.</div>' +
-        '<div class="ms-tap-due-empty-sub">This page is one task, not the queue \u2014 counts stay unknown here.</div>' +
+        '<div>Pulse is on the medical queue.</div>' +
+        '<div class="ms-tap-due-empty-sub">This page is one task, not the queue \u2014 counts stay unknown here. Open that list in Medicus.</div>' +
         '</div>';
     }
     return (
@@ -1093,6 +1191,16 @@
     const apptsHtml = rec.appointments.length
       ? '<ul class="ms-tap-rec-list">' + rec.appointments.map(renderApptRow).join('') + '</ul>'
       : '<div class="ms-tap-rec-empty">No future appointments.</div>';
+    if (currentRole() === 'reception') {
+      return (
+        '<div class="ms-tap-section-body">' +
+        '<div class="ms-tap-rec-group">' +
+        '<div class="ms-tap-rec-heading">Future appointments</div>' +
+        apptsHtml +
+        '</div>' +
+        '</div>'
+      );
+    }
     const linksHtml = rec.bookingLinks.length
       ? '<ul class="ms-tap-rec-list">' + rec.bookingLinks.map(renderLinkRow).join('') + '</ul>'
       : '<div class="ms-tap-rec-empty">No unused booking links.</div>';
@@ -1130,7 +1238,9 @@
       '<span class="ms-tap-chevron">' +
       (rec.open ? '▾' : '▸') +
       '</span>' +
-      '<span>Patient record</span>' +
+      '<span>' +
+      (currentRole() === 'reception' ? 'Already booked' : 'Patient record') +
+      '</span>' +
       '</div>' +
       body +
       '</div>'
@@ -1184,7 +1294,7 @@
         </div>
         <div class="ms-tap-row">
           <label class="ms-tap-label" for="ms-tap-bk-date">Date</label>
-          <input type="date" class="ms-tap-date-input" id="ms-tap-bk-date" value="${esc(bk.date)}" max="2099-12-31" />
+          <input type="date" class="ms-tap-date-input" id="ms-tap-bk-date" lang="en-GB" value="${esc(bk.date)}" max="2099-12-31" />
         </div>
         <button class="ms-tap-btn" id="ms-tap-bk-find"${canSearch ? '' : ' disabled'}>Find slots</button>
         ${slotsHtml}
@@ -1585,6 +1695,7 @@
         ? api.slotsFromOverview(raw, { todayISO: todayISO(), nowMs: Date.now(), role: currentRole() })
         : { total: 0, typeCount: 0, moreCount: 0, moreSlots: 0, lines: [] };
       st.lines = glance.lines || [];
+      st.allLines = glance.allLines || glance.lines || [];
       st.total = glance.total || 0;
       st.typeCount = glance.typeCount || 0;
       st.moreCount = glance.moreCount || 0;
@@ -1613,6 +1724,8 @@
     const api = roleApi();
     if (api) api.writeSavedRole(localStorage, _role);
     if (s.due.patientId) applyDueFromSnapshot();
+    s.due.showAll = false;
+    s.slots.showAll = false;
     s.slots.loadedForPage = null;
     maybeLoadGlances();
     rerender();
@@ -2032,6 +2145,50 @@
         retryWhatsDue();
       });
     }
+
+    const dueShowAll = el.querySelector('#ms-tap-due-show-all');
+    if (dueShowAll) {
+      dueShowAll.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        s.due.showAll = true;
+        rerender();
+      });
+    }
+    const dueShowLess = el.querySelector('#ms-tap-due-show-less');
+    if (dueShowLess) {
+      dueShowLess.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        s.due.showAll = false;
+        rerender();
+      });
+    }
+    const slotsShowAll = el.querySelector('#ms-tap-slots-show-all');
+    if (slotsShowAll) {
+      slotsShowAll.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        s.slots.showAll = true;
+        rerender();
+      });
+    }
+    const slotsShowLess = el.querySelector('#ms-tap-slots-show-less');
+    if (slotsShowLess) {
+      slotsShowLess.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        s.slots.showAll = false;
+        rerender();
+      });
+    }
+    el.querySelectorAll('.ms-tap-open-panel').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openSuitePanel(btn.getAttribute('data-module'));
+      });
+    });
 
     el.querySelectorAll('.ms-tap-role').forEach((btn) => {
       btn.addEventListener('click', (e) => {

@@ -4,11 +4,15 @@
 // Used by the floating Companion widget
 // (content-scripts/task-actions-panel.js). Same action-needed threshold as
 // sentinel-core.js / brief-core.js (STATUS_RANK <= 2), plus drug-monitoring
-// `no_data` so TAP matches the on-page HUD (H-002). Clinic/nursing wording
-// mirrors brief-core.js (pocket Sentinel brief). Reception voice is a
-// booking list — drug names + "bloods"/"tests", QOF as "Book a … review" —
-// and drops combo/alert chips that are not something reception books.
-// Max 4 lines + "+N more" — same cap as the side-panel brief.
+// `no_data` so TAP matches the on-page HUD (H-002). Clinic wording mirrors
+// brief-core.js (pocket Sentinel brief). Reception voice is a booking list
+// — drug names + "bloods"/"tests", QOF as "Book a … review" — and drops
+// combo/alert chips that are not something reception books. Nursing voice
+// uses the same filter (drops combo) and names the treatment-room work
+// (bloods / reviews / vaccines) without the booking verb. Visible four
+// are red-severity first so a lithium-stale line cannot lose to a QOF
+// review. Max 4 lines + "+N more (K of them overdue)" — same cap as the
+// side-panel brief.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.MsDueMini.<fn>(...)
@@ -233,9 +237,39 @@
       if (chip.type === 'vaccine') return vaccineReceptionText(chip);
       return genericSignalText(chip);
     }
+    // Treatment-room voice: same chip filter as reception (no combo/alerts)
+    // but names the work, not the booking. "Methotrexate bloods", "Diabetes
+    // review", "Flu vaccination" — never FBC/LFT or serotonin-syndrome.
+    if (voice === 'nursing') {
+      if (chip.type === 'drug-monitoring') return drugReceptionText(chip);
+      if (chip.type === 'qof-indicator' || chip.type === 'qof-process-indicator') return qofSignalText(chip);
+      if (chip.type === 'vaccine') return stripBidi(chip.displayName || chip.label || 'Vaccination');
+      return genericSignalText(chip);
+    }
     if (chip.type === 'drug-monitoring') return drugSignalText(chip);
     if (chip.type === 'qof-indicator' || chip.type === 'qof-process-indicator') return qofSignalText(chip);
     return genericSignalText(chip);
+  }
+
+  function toDueItem(chip, voice) {
+    var text = chipSignalText(chip, voice);
+    var plainLabel = voice === 'reception' || voice === 'nursing';
+    return {
+      severity: chipSeverity(chip),
+      text: text,
+      label: plainLabel ? text : stripTrailingStatusWord(text, chip.status),
+      status: chip.status,
+    };
+  }
+
+  // "+3 more (1 of them overdue)" — never "+3, 1 overdue", which readers
+  // take as "only one thing is overdue" (the badge is the list total).
+  function moreLineText(moreCount, moreRed) {
+    var n = moreCount == null ? 0 : moreCount;
+    if (n <= 0) return '';
+    var red = moreRed == null ? 0 : moreRed;
+    if (red > 0) return '+' + n + ' more (' + red + ' of them overdue)';
+    return '+' + n + ' more';
   }
 
   // Strips the trailing status word from a signal line so it can be shown
@@ -265,22 +299,27 @@
    * buildDueMini(chips, opts) → DueMini
    *
    * @param {Array|null} chips — Sentinel chip array (or null)
-   * @param {{ voice?: 'clinic'|'reception' }} [opts]
+   * @param {{ voice?: 'clinic'|'reception'|'nursing' }} [opts]
    * @returns {{
    *   items: Array<{ severity: 'red'|'amber', text: string, label: string, status: string }>,
+   *   allItems: Array<{ severity: 'red'|'amber', text: string, label: string, status: string }>,
    *   moreCount: number,
    *   moreRed: number,
    *   redCount: number,
    *   amberCount: number,
    *   nothingDue: boolean,
    *   unclassified: boolean,
-   *   voice: 'clinic'|'reception'
+   *   voice: 'clinic'|'reception'|'nursing'
    * }}
    */
   function buildDueMini(chips, opts) {
-    var voice = opts && opts.voice === 'reception' ? 'reception' : 'clinic';
+    var voice = 'clinic';
+    if (opts && opts.voice === 'reception') voice = 'reception';
+    else if (opts && opts.voice === 'nursing') voice = 'nursing';
     var raw = Array.isArray(chips) ? chips.filter(Boolean) : [];
-    var list = raw.filter(voice === 'reception' ? isReceptionDueChip : isDueMiniActionNeeded);
+    var filtered =
+      voice === 'reception' || voice === 'nursing' ? isReceptionDueChip : isDueMiniActionNeeded;
+    var list = raw.filter(filtered);
     var hasUnrecognised = raw.some(function (c) {
       return c.status && !Object.prototype.hasOwnProperty.call(STATUS_RANK, c.status);
     });
@@ -290,23 +329,22 @@
       if (isDueMiniRed(list[i])) redCount++;
       else amberCount++;
     }
+    // Visual red first (so lithium-stale is not buried under a QOF not_met),
+    // then type (drug before combo before QOF), then engine STATUS_RANK.
     var sorted = list.slice().sort(function (a, b) {
-      var rankDiff = (STATUS_RANK[a.status] ?? 99) - (STATUS_RANK[b.status] ?? 99);
-      if (rankDiff !== 0) return rankDiff;
-      return typeRank(a.type) - typeRank(b.type);
+      var sevDiff = (isDueMiniRed(a) ? 0 : 1) - (isDueMiniRed(b) ? 0 : 1);
+      if (sevDiff !== 0) return sevDiff;
+      var typeDiff = typeRank(a.type) - typeRank(b.type);
+      if (typeDiff !== 0) return typeDiff;
+      return (STATUS_RANK[a.status] ?? 99) - (STATUS_RANK[b.status] ?? 99);
     });
-    var shown = sorted.slice(0, MAX_ITEMS);
     var hidden = sorted.slice(MAX_ITEMS);
+    var allItems = sorted.map(function (chip) {
+      return toDueItem(chip, voice);
+    });
     return {
-      items: shown.map(function (chip) {
-        var text = chipSignalText(chip, voice);
-        return {
-          severity: chipSeverity(chip),
-          text: text,
-          label: voice === 'reception' ? text : stripTrailingStatusWord(text, chip.status),
-          status: chip.status,
-        };
-      }),
+      items: allItems.slice(0, MAX_ITEMS),
+      allItems: allItems,
       moreCount: hidden.length,
       moreRed: hidden.filter(isDueMiniRed).length,
       redCount: redCount,
@@ -351,8 +389,8 @@
    * an unavailable/invalidated snapshot, or a missing patientId must never
    * produce a due list — that is the H-001 control for this surface.
    *
-   * opts.voice — 'clinic' (default) or 'reception'. Voice never bypasses
-   * the identity gate; it only changes wording / which chip types list.
+   * opts.voice — 'clinic' (default), 'reception', or 'nursing'. Voice never
+   * bypasses the identity gate; it only changes wording / which chip types list.
    *
    * state:
    *   'pending' — no trusted match yet (loading / wrong patient / empty snap)
@@ -381,6 +419,7 @@
     isChipActionNeeded: isChipActionNeeded,
     isDueMiniActionNeeded: isDueMiniActionNeeded,
     buildDueMini: buildDueMini,
+    moreLineText: moreLineText,
     snapshotPatientUuid: snapshotPatientUuid,
     samePatientId: samePatientId,
     dueFromSnapshot: dueFromSnapshot,

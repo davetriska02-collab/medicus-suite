@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.240.2] — 2026-08-24
+
+### Companion HUD — Practice panel to a realistic 8/10
+
+Synthetic practice panel of the four role views (not real user research). The floor was 4/10 because people mistrusted the red number and Nursing still spoke Clinic.
+
+- **“+3 more (1 of them overdue)”** — no longer reads as “only one thing is overdue”. Show-all expands in the widget; default stays four lines.
+- **Red-severity wins the visible four** so lithium-stale cannot lose to a QOF review.
+- **Nursing voice** — bloods / reviews / vaccines, no FBC/LFT or combo alerts. Identity gate unchanged.
+- **Role caption** under the pills (“GP due list…”, “What to book…”) so the four hats are not a test.
+- **Open Monitoring / Open Slot Counter** are real controls (allow-listed `ms-open-panel`).
+- **Reception** — “Try: HCA bloods” hint (never auto-books) and **Already booked** (this patient’s future appointments).
+- **Triage** — off-queue copy is not a fake button; on-queue pulse names **oldest N min** when the chips show a wait.
+- Slots lead says “left on today’s appointment book”. Failed What’s due header shows **Unknown**. Widget `lang=en-GB`.
+
+Regression-guarded by `test-due-mini.js`, `test-companion-role.js` and `test-task-actions-due.js`. Hazard-log v3.34 (H-001 (n), H-002 (u)).
+
 ## [v3.240.1] — 2026-08-24
 
 ### Companion slots glance uses the real appointment-book scrape

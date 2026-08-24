@@ -6,6 +6,8 @@
 // valid, which sections that role shows, how a Medicus URL maps to a page
 // kind, and honest desk / pulse / slot-glance mapping. The widget owns
 // fetch + DOM; this file never fetches and never touches chrome.*.
+// Nursing What's due uses the nursing voice (treatment-room wording).
+// Reception also sees this-patient future appointments (Already booked).
 //
 // Dual-mode export (same pattern as shared/due-mini.js):
 //   Browser (classic script): window.MsCompanionRole.<fn>(...)
@@ -22,6 +24,12 @@
     nursing: 'Nursing',
   };
   var ROLE_LS = 'ms-companion-role';
+  var ROLE_CAPTIONS = {
+    clinic: 'GP due list for this patient',
+    reception: 'What to book, plus the desk',
+    triage: 'The medical queue, not this one task',
+    nursing: 'Bloods, BP, jabs and nurse slots',
+  };
 
   function normalizeRole(v) {
     var r = String(v == null ? '' : v).toLowerCase();
@@ -29,7 +37,14 @@
   }
 
   function dueVoiceForRole(role) {
-    return normalizeRole(role) === 'reception' ? 'reception' : 'clinic';
+    var r = normalizeRole(role);
+    if (r === 'reception') return 'reception';
+    if (r === 'nursing') return 'nursing';
+    return 'clinic';
+  }
+
+  function roleCaption(role) {
+    return ROLE_CAPTIONS[normalizeRole(role)] || ROLE_CAPTIONS.clinic;
   }
 
   // A page may *suggest* a role when the user has never chosen one.
@@ -126,7 +141,7 @@
       pulse: role === 'triage',
       book: (role === 'clinic' || role === 'reception' || role === 'nursing') && hasPatient,
       task: (role === 'clinic' || role === 'triage') && kind === 'task',
-      record: role === 'clinic' && kind === 'task',
+      record: (role === 'clinic' || role === 'reception') && kind === 'task',
     };
   }
 
@@ -163,6 +178,41 @@
     var medical = medicalRaw == null ? null : extractTaskArray(medicalRaw).length;
     var admin = adminRaw == null ? null : extractTaskArray(adminRaw).length;
     return { waiting: waiting, medical: medical, admin: admin };
+  }
+
+  /**
+   * Hint for a Reception due line: which slot type to offer, never a
+   * committed booking. Prefers a live type name from today's glance.
+   */
+  function suggestedBookHint(dueLabel, slotLines) {
+    var text = String(dueLabel || '').toLowerCase();
+    var lines = Array.isArray(slotLines) ? slotLines : [];
+    function findType(re) {
+      for (var i = 0; i < lines.length; i++) {
+        var label = lines[i] && lines[i].label;
+        if (label && re.test(String(label))) return String(label);
+      }
+      return '';
+    }
+    if (/blood|lithium|methotrexate|phlebot|azathioprine|leflunomide|sulfasalazine|mercaptopurine/.test(text)) {
+      return findType(/blood|phlebot/i) || 'a bloods slot';
+    }
+    if (/blood pressure|bp check|\bbp\b/.test(text)) {
+      return findType(/blood pressure|\bbp\b|treatment room|nurse/i) || 'a nurse or BP slot';
+    }
+    if (/diabetes/.test(text)) {
+      return findType(/diabetes/i) || 'a diabetes or nurse review slot';
+    }
+    if (/asthma|copd/.test(text)) {
+      return findType(/asthma|copd/i) || 'an asthma / COPD or nurse slot';
+    }
+    if (/vaccin|flu|imms|immunis|jab/.test(text)) {
+      return findType(/vaccin|imms|flu|nurse/i) || 'a nurse or immunisation slot';
+    }
+    if (/book a |book an |review/.test(text)) {
+      return findType(/nurse|review|clinic/i) || 'a review slot';
+    }
+    return '';
   }
 
   function nurseTypeMatch(label) {
@@ -257,20 +307,23 @@
     var hidden = lines.slice(MAX_SLOT_LINES);
     var moreSlots = 0;
     for (var h = 0; h < hidden.length; h++) moreSlots += hidden[h].count;
+    function toLine(l) {
+      return {
+        label: l.label,
+        time: l.next,
+        count: l.count,
+        none: l.count === 0,
+        unknown: false,
+      };
+    }
+    var allLines = lines.map(toLine);
     return {
       total: total,
       typeCount: lines.length,
       moreCount: hidden.length,
       moreSlots: moreSlots,
-      lines: lines.slice(0, MAX_SLOT_LINES).map(function (l) {
-        return {
-          label: l.label,
-          time: l.next,
-          count: l.count,
-          none: l.count === 0,
-          unknown: false,
-        };
-      }),
+      lines: allLines.slice(0, MAX_SLOT_LINES),
+      allLines: allLines,
     };
   }
 
@@ -278,13 +331,20 @@
    * Honest pulse from live queue DOM. Counts only what is on screen —
    * never invents a queue length. kind 'not_queue' when there is no grid.
    */
+  function oldestMinutesFromText(text) {
+    var m = String(text || '').match(/(\d+)\s*min/i);
+    if (!m) return 0;
+    var n = parseInt(m[1], 10);
+    return n > 0 ? n : 0;
+  }
+
   function queuePulseFromDom(root) {
     if (!root || typeof root.querySelectorAll !== 'function') {
-      return { kind: 'not_queue', count: 0, redFlags: 0, resultRed: 0, worst: [] };
+      return { kind: 'not_queue', count: 0, redFlags: 0, resultRed: 0, worst: [], oldestMinutes: null };
     }
     var rows = root.querySelectorAll('.ag-center-cols-container .ag-row[row-index]');
     if (!rows.length) {
-      return { kind: 'not_queue', count: 0, redFlags: 0, resultRed: 0, worst: [] };
+      return { kind: 'not_queue', count: 0, redFlags: 0, resultRed: 0, worst: [], oldestMinutes: null };
     }
     var count = 0;
     for (var i = 0; i < rows.length; i++) {
@@ -296,9 +356,17 @@
     var flagNodes = root.querySelectorAll('.ch-queue-chips .ch-chip-red');
     var resultReds = root.querySelectorAll('.ch-q-result .ch-chip-red');
     var worst = [];
+    var oldest = 0;
     for (var w = 0; w < resultReds.length && worst.length < 2; w++) {
       var text = (resultReds[w].textContent || '').replace(/\s+/g, ' ').trim();
-      if (text) worst.push(text);
+      if (text) {
+        worst.push(text);
+        oldest = Math.max(oldest, oldestMinutesFromText(text));
+      }
+    }
+    var ageNodes = root.querySelectorAll('.ch-queue-chips .ch-chip, .ch-chip-age');
+    for (var a = 0; a < ageNodes.length; a++) {
+      oldest = Math.max(oldest, oldestMinutesFromText(ageNodes[a].textContent));
     }
     return {
       kind: 'queue',
@@ -306,6 +374,7 @@
       redFlags: flagNodes.length,
       resultRed: resultReds.length,
       worst: worst,
+      oldestMinutes: oldest > 0 ? oldest : null,
     };
   }
 
@@ -313,8 +382,11 @@
     ROLES: ROLES,
     ROLE_LABELS: ROLE_LABELS,
     ROLE_LS: ROLE_LS,
+    ROLE_CAPTIONS: ROLE_CAPTIONS,
     normalizeRole: normalizeRole,
     dueVoiceForRole: dueVoiceForRole,
+    roleCaption: roleCaption,
+    suggestedBookHint: suggestedBookHint,
     suggestedRole: suggestedRole,
     readSavedRole: readSavedRole,
     writeSavedRole: writeSavedRole,

@@ -494,6 +494,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     // activateSectionFromHash() accepts (#sect-<a-z->) before it is interpolated
     // into the URL — a content script must never be able to steer this anywhere
     // other than a section of our own options page.
+    // Companion HUD: open the side panel onto Monitoring or Slot Counter.
+    // Module name is allow-listed — a content script must not steer this
+    // at an arbitrary storage key or URL.
+    case 'ms-open-panel': {
+      const mod = String((msg && msg.module) || '');
+      if (mod !== 'sentinel' && mod !== 'slots') break;
+      const tabId = sender.tab && sender.tab.id;
+      chrome.storage.local.set({ 'panel.activeModule': mod }, () => {
+        if (tabId != null) {
+          chrome.sidePanel.open({ tabId }).catch(() => {});
+        }
+        chrome.runtime.sendMessage({ type: 'ms-open-panel', module: mod }).catch(() => {});
+      });
+      break;
+    }
+
     case 'ms-open-options': {
       const section = String((msg && msg.section) || '');
       const suffix = /^[a-z-]+$/.test(section) ? `#sect-${section}` : '';

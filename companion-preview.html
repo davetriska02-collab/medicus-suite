@@ -125,23 +125,36 @@
       function dueHtml(r) {
         const voice = roleApi.dueVoiceForRole(r);
         const mini = window.MsDueMini.buildDueMini(chips, { voice: voice });
+        const slotLines = [
+          { label: 'HCA bloods' },
+          { label: 'Diabetes clinic' },
+          { label: 'Nurse treatment room' },
+        ];
         const items = mini.items
           .map(function (item) {
             const sev = item.severity === 'red' ? 'red' : 'amber';
+            const hint =
+              r === 'reception'
+                ? roleApi.suggestedBookHint(item.label, slotLines)
+                : '';
             return (
               '<li class="ms-tap-due-item ms-tap-due-' +
               sev +
               '"><span class="ms-tap-due-dot" aria-hidden="true"></span><span class="ms-tap-due-text">' +
               esc(item.label) +
+              (hint ? '<span class="ms-tap-due-hint">Try: ' + esc(hint) + '</span>' : '') +
               '</span><span class="ms-tap-due-tag">' +
               tagWord(item.status, r) +
               '</span></li>'
             );
           })
           .join('');
-        const more = mini.moreCount
-          ? '<div class="ms-tap-due-more">+' + mini.moreCount + ' more — full list is in Monitoring.</div>'
-          : '';
+        const moreText = window.MsDueMini.moreLineText(mini.moreCount, mini.moreRed);
+        const more = moreText
+          ? '<div class="ms-tap-due-more">' +
+            moreText +
+            ' — show all here · Open Monitoring</div>'
+          : '<div class="ms-tap-due-more">Open Monitoring</div>';
         const title = r === 'reception' ? 'To book' : 'What’s due';
         const count = mini.redCount + mini.amberCount;
         return (
@@ -171,7 +184,9 @@
             '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>' +
             title +
             '</span></div><div class="ms-tap-section-body"><div class="ms-tap-glance-lead">' +
-            (r === 'nursing' ? '6 left today across 2 types (fixture)' : '18 left today across 5 types (fixture)') +
+            (r === 'nursing'
+              ? '6 left on today’s appointment book across 2 types (fixture)'
+              : '18 left on today’s appointment book across 5 types (fixture)') +
             '</div><ul class="ms-tap-glance-list"><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
             (r === 'nursing' ? 'Nurse treatment room' : 'GP telephone') +
             '</span><span class="ms-tap-glance-value">' +
@@ -184,15 +199,19 @@
         }
         if (shows.pulse) {
           html +=
-            '<div class="ms-tap-section"><div class="ms-tap-section-header" id="ms-tap-pulse-head"><span>Queue pulse</span></div><div class="ms-tap-section-body"><div class="ms-tap-due-empty"><div>Open the medical queue for the pulse.</div><div class="ms-tap-due-empty-sub">This preview is a task page, not the queue — counts stay unknown here.</div></div></div></div>';
+            '<div class="ms-tap-section"><div class="ms-tap-section-header" id="ms-tap-pulse-head"><span>Queue pulse</span></div><div class="ms-tap-section-body"><div class="ms-tap-due-empty"><div>Pulse is on the medical queue.</div><div class="ms-tap-due-empty-sub">This preview is a task page, not the queue — counts stay unknown here. Open that list in Medicus.</div></div></div></div>';
+        }
+        if (shows.record && r === 'reception') {
+          html +=
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>Already booked</span></div><div class="ms-tap-section-body"><div class="ms-tap-rec-empty">No future appointments. (fixture)</div></div></div>';
         }
         if (shows.book) {
           html +=
-            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▸</span><span>Book appointment</span></div></div>';
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▸</span><span>Book appointment for this patient</span></div></div>';
         }
         if (shows.task) {
           html +=
-            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▸</span><span>Create task</span></div></div>';
+            '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▸</span><span>Create task for this patient</span></div></div>';
         }
         return html;
       }
@@ -211,9 +230,11 @@
           );
         }).join('');
         host.innerHTML =
-          '<div id="ms-tap-widget"><div class="ms-tap-header"><span class="ms-tap-grip" aria-hidden="true"></span><div class="ms-tap-header-main"><span class="ms-tap-header-toggle"><span class="ms-tap-chevron">▾</span><span>Companion</span></span><div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' +
+          '<div id="ms-tap-widget" lang="en-GB"><div class="ms-tap-header"><span class="ms-tap-grip" aria-hidden="true"></span><div class="ms-tap-header-main"><span class="ms-tap-header-toggle"><span class="ms-tap-chevron">▾</span><span>Companion</span></span><div class="ms-tap-roles" role="radiogroup" aria-label="Companion role">' +
           pills +
-          '</div></div></div><div class="ms-tap-body">' +
+          '</div><p class="ms-tap-role-caption">' +
+          esc(roleApi.roleCaption(role)) +
+          '</p></div></div><div class="ms-tap-body">' +
           bodyFor(role) +
           '</div></div>';
         host.querySelectorAll('.ms-tap-role').forEach(function (btn) {

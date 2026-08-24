@@ -30,8 +30,10 @@ check(role.ROLES.join(',') === 'clinic,reception,triage,nursing', 'four roles in
 check(role.normalizeRole('Reception') === 'reception', 'normalizeRole folds case');
 check(role.normalizeRole('nope') === 'clinic', 'unknown role falls back to clinic');
 check(role.dueVoiceForRole('reception') === 'reception', 'reception uses booking voice');
-check(role.dueVoiceForRole('nursing') === 'clinic', 'nursing keeps clinic voice');
+check(role.dueVoiceForRole('nursing') === 'nursing', 'nursing uses treatment-room voice');
 check(role.dueVoiceForRole('triage') === 'clinic', 'triage voice unused (due is hidden)');
+check(role.roleCaption('clinic') === 'GP due list for this patient', 'clinic caption is plain English');
+check(/treatment room|Bloods/.test(role.roleCaption('nursing')), 'nursing caption names the work');
 check(role.suggestedRole('queue', null) === 'triage', 'unsaved queue visit suggests triage');
 check(role.suggestedRole('queue', 'clinic') === 'clinic', 'saved clinic is never yanked on the queue');
 check(role.suggestedRole('task', null) === 'clinic', 'unsaved task visit suggests clinic');
@@ -88,6 +90,7 @@ console.log('\n--- roleShows ---');
 
   const recTask = role.roleShows('reception', 'task');
   check(recTask.due && recTask.desk && recTask.slots && recTask.book, 'reception task: due + desk + slots + book');
+  check(recTask.record, 'reception task: already-booked appointments (same fetch as clinic)');
   check(!recTask.task && !recTask.pulse, 'reception task: no create-task, no pulse');
 
   const triageQ = role.roleShows('triage', 'queue');
@@ -173,6 +176,7 @@ console.log('\n--- slotsFromOverview (Slot Counter scrape) ---');
   check(rec.lines[0].label === 'GP telephone' && rec.lines[0].count === 2, 'types ranked by remaining count');
   check(rec.lines[0].time === '14:20', 'next time is the earliest remaining slot');
   check(rec.lines.some((l) => l.label === 'HCA bloods'), 'overview includes every remaining type, not the first two finder types');
+  check(Array.isArray(rec.allLines) && rec.allLines.length === rec.lines.length, 'allLines is present for in-widget expand');
   check(!rec.lines.some((l) => l.label === 'Nurse treatment room'), 'past-today slots are excluded');
 
   const nurse = role.slotsFromOverview(raw, { todayISO: '2026-08-24', nowMs: now, role: 'nursing' });
@@ -250,6 +254,54 @@ console.log('\n--- queuePulseFromDom ---');
   check(pulse.redFlags === 2, 'red-flag chips counted from .ch-queue-chips');
   check(pulse.resultRed === 2 && pulse.worst.length === 2, 'worst two red results are named');
   check(pulse.worst[0] === 'K 6.4', 'result text is trimmed');
+  check(pulse.oldestMinutes == null, 'no minute chips → oldest stays unknown (not a fake 0)');
+}
+
+console.log('\n--- suggestedBookHint ---');
+{
+  const lines = [
+    { label: 'HCA bloods', count: 2 },
+    { label: 'Diabetes clinic', count: 1 },
+    { label: 'GP telephone', count: 8 },
+  ];
+  check(
+    role.suggestedBookHint('Methotrexate bloods', lines) === 'HCA bloods',
+    'bloods due line maps to a live bloods type'
+  );
+  check(
+    role.suggestedBookHint('Book a diabetes review', lines) === 'Diabetes clinic',
+    'diabetes due line maps to a live diabetes type'
+  );
+  check(
+    role.suggestedBookHint('Methotrexate bloods', []) === 'a bloods slot',
+    'without a live match the hint stays generic — never a committed type'
+  );
+  check(role.suggestedBookHint('Serotonin syndrome risk', lines) === '', 'combo/alert lines get no book hint');
+}
+
+console.log('\n--- queuePulse oldest wait ---');
+{
+  function fakeList(items) {
+    const arr = items.slice();
+    arr.length = items.length;
+    return arr;
+  }
+  const root = {
+    querySelectorAll(sel) {
+      if (sel.indexOf('.ag-row') !== -1) {
+        return fakeList([{ classList: { contains: () => false }, getAttribute: () => null }]);
+      }
+      if (sel.indexOf('ch-q-result') !== -1) {
+        return fakeList([{ textContent: 'Chest pain — 41 min' }]);
+      }
+      if (sel.indexOf('ch-queue-chips') !== -1 || sel.indexOf('ch-chip-age') !== -1) {
+        return fakeList([{ textContent: '18 min' }]);
+      }
+      return [];
+    },
+  };
+  const pulse = role.queuePulseFromDom(root);
+  check(pulse.oldestMinutes === 41, 'oldest wait is the largest on-screen minute count');
 }
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

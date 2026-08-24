@@ -8,7 +8,14 @@ Nursing). Not the side-panel modules.
 **SYNTHETIC PANEL:** every reaction below is from a synthetic persona
 (`.claude/skills/the-practice/PERSONAS.md`), a heuristic device. This is
 not real user research and must never be quoted as a real clinician's
-view. Report-only: this run does not change product code.
+view.
+
+**Shipped in v3.240.2** (after this report): more-line wording, red-first
+visible four, nursing voice, role captions, in-widget show-all, Open
+Monitoring / Slot Counter, reception book-type hint + Already booked,
+triage copy + oldest wait, slots source line, Unknown header, en-GB.
+Default four-line cap, Companion name, and visible role pills kept
+(judgement calls). Not a second panel run.
 
 ## Verdict
 

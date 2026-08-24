@@ -74,7 +74,25 @@ check(!/evaluatePatient/.test(panel), 'panel does not re-evaluate rules itself (
 check(/function setRole/.test(panel) && /ms-tap-role/.test(panel), 'Companion role toggle is wired');
 check(/dueVoiceForRole/.test(panel), 'role change rebuilds due-mini with the matching voice');
 check(/writeSavedRole/.test(panel), 'chosen role is persisted (never yanked mid-clinic)');
-check(/Open the medical queue for the pulse/.test(panel), 'triage off the queue stays honest (no invented counts)');
+check(/Pulse is on the medical queue/.test(panel), 'triage off the queue stays honest (no invented counts)');
+check(!/Open the medical queue for the pulse/.test(panel), 'off-queue pulse copy is not a fake button');
+check(/moreLineText/.test(panel), '+N more uses the tested moreLineText helper ("of them overdue")');
+check(/ms-tap-due-show-all/.test(panel), 'overflow expands in the widget (default still 4)');
+check(/Open Monitoring/.test(panel), 'Monitoring is a real open-panel control');
+check(/Open Slot Counter/.test(panel), 'Slot Counter is a real open-panel control');
+check(/Already booked/.test(panel), 'reception sees this-patient future appointments');
+check(/ms-open-panel/.test(panel), 'panel open goes through the allow-listed SW action');
+check(/suggestedBookHint/.test(panel), 'reception due rows carry a book-type hint');
+check(/roleCaption/.test(panel), 'role pills have a one-line caption');
+check(/lang.*en-GB/.test(panel), 'widget is en-GB so the date field is not US-formatted');
+{
+  const sw = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
+  check(/case 'ms-open-panel'/.test(sw), 'service worker handles ms-open-panel');
+  check(
+    /mod !== 'sentinel' && mod !== 'slots'/.test(sw),
+    'ms-open-panel allow-lists only Monitoring and Slot Counter'
+  );
+}
 check(/Couldn't load the desk glance/.test(panel), 'desk fetch failure is named, not painted as zero');
 check(
   /appointment-book\/embedded-overview/.test(panel),
