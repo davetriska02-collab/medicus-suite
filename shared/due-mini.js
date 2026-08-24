@@ -80,11 +80,38 @@
     return drug + ' — ' + testsPart + ' ' + word;
   }
 
-  // Mirrors brief-core.js qofSignalText.
+  // Clinician glance, not QOF-code + threshold. DM006 + "≤58 OVERDUE" was
+  // being read as "her HbA1c is currently over 58". Prefix map matches
+  // sentinel-core QOF_ACTION_BY_PREFIX (admin audience) but names the
+  // review, not the booking verb — this strip is a due-list, not a script.
+  var QOF_GLANCE_BY_PREFIX = [
+    ['HYP', 'Blood pressure check'],
+    ['DM', 'Diabetes review'],
+    ['AST', 'Asthma review'],
+    ['COPD', 'COPD review'],
+    ['CHD', 'Heart disease review'],
+    ['AF', 'Atrial fibrillation review'],
+    ['CKD', 'Kidney review'],
+    ['HF', 'Heart failure review'],
+    ['MH', 'Mental health review'],
+    ['DEP', 'Depression review'],
+    ['EP', 'Epilepsy review'],
+    ['PAD', 'Circulation review'],
+    ['STIA', 'Stroke or TIA review'],
+    ['RA', 'Rheumatoid arthritis review'],
+    ['OB', 'Weight review'],
+    ['SMOK', 'Stop-smoking review'],
+    ['LD', 'Annual health check'],
+  ];
+
   function qofSignalText(chip) {
-    var code = chip.indicatorCode || chip.ruleId || 'QOF';
-    var name = chip.indicatorName ? String(chip.indicatorName).slice(0, 40) : null;
-    return name ? code + ' — ' + name : code;
+    var code = String(chip.indicatorCode || chip.ruleId || '').toUpperCase();
+    var hit = QOF_GLANCE_BY_PREFIX.find(function (row) {
+      return code.indexOf(row[0]) === 0;
+    });
+    if (hit) return hit[1];
+    if (chip.indicatorName) return String(chip.indicatorName).slice(0, 40);
+    return chip.indicatorCode || chip.ruleId || 'Review';
   }
 
   // Mirrors brief-core.js genericSignalText.
@@ -101,12 +128,31 @@
     return genericSignalText(chip);
   }
 
+  // Strips the trailing status word from a signal line so it can be shown
+  // next to a tag (which already names the state) without saying it twice.
+  // Drug lines end in "… severely overdue"/"… overdue"/"… due soon" (see
+  // drugSignalText); generic lines end in " — {status with _ -> space}" (see
+  // genericSignalText). QOF lines (qofSignalText) carry no trailing status
+  // word at all, so they pass through unchanged — ruling L, brief-aligned.
+  function stripTrailingStatusWord(text, status) {
+    var stripped = text.replace(/ (severely overdue|overdue|due soon)$/, '');
+    if (stripped !== text) return stripped;
+    var genericWord = status ? String(status).replace(/_/g, ' ') : '';
+    if (genericWord) {
+      var suffix = ' \u2014 ' + genericWord;
+      if (text.slice(-suffix.length) === suffix) {
+        return text.slice(0, -suffix.length);
+      }
+    }
+    return text;
+  }
+
   /**
    * buildDueMini(chips) → DueMini
    *
    * @param {Array|null} chips — Sentinel chip array (or null)
    * @returns {{
-   *   items: Array<{ severity: 'red'|'amber', text: string, status: string }>,
+   *   items: Array<{ severity: 'red'|'amber', text: string, label: string, status: string }>,
    *   moreCount: number,
    *   moreRed: number,
    *   redCount: number,
@@ -135,9 +181,11 @@
     var hidden = sorted.slice(MAX_ITEMS);
     return {
       items: shown.map(function (chip) {
+        var text = chipSignalText(chip);
         return {
           severity: chipSeverity(chip),
-          text: chipSignalText(chip),
+          text: text,
+          label: stripTrailingStatusWord(text, chip.status),
           status: chip.status,
         };
       }),

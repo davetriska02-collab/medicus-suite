@@ -62,7 +62,7 @@ console.log('\n--- no completion / all-clear claim ---');
   check(!/\bsafe to\b/i.test(dueChunk), 'due UI never says "safe to"');
   check(!/\b(Done|Sent|Booked|Submitted)\b/.test(dueChunk), 'due UI never claims completion');
   check(/Nothing due right now/.test(dueChunk), 'empty state is bounded ("nothing due right now")');
-  check(/open Monitoring/.test(dueChunk), 'overflow / empty points at Monitoring for the full list');
+  check(/Monitoring/.test(dueChunk), 'overflow / empty points at Monitoring for the full list');
   check(/moreRed/.test(dueChunk), 'hidden reds are named in the "+N more" line');
 }
 

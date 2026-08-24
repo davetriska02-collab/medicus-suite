@@ -113,6 +113,10 @@ console.log('\n--- drug signal lists only due tests ---');
     `drug text lists only due tests (got ${JSON.stringify(mini.items[0].text)})`
   );
   check(!/U&E/.test(mini.items[0].text), 'in-date U&E is not listed');
+  check(
+    mini.items[0].label === 'Methotrexate — FBC, LFT',
+    `label strips the trailing status word (got ${JSON.stringify(mini.items[0].label)})`
+  );
 }
 
 console.log('\n--- empty / all-clear ---');
@@ -174,10 +178,30 @@ console.log('\n--- hidden red is counted ---');
 console.log('\n--- QOF + vaccine wording ---');
 {
   const mini = due.buildDueMini([dmChip, fluChip]);
-  check(mini.items[0].text === 'DM006 — HbA1c ≤58 mmol/mol', `QOF text (got ${JSON.stringify(mini.items[0].text)})`);
+  check(
+    mini.items[0].text === 'Diabetes review',
+    `QOF glance is the review, not the code+threshold (got ${JSON.stringify(mini.items[0].text)})`
+  );
+  check(mini.items[0].label === mini.items[0].text, 'QOF label matches text — no trailing status word to strip');
   const vax = mini.items.find((i) => /Flu/.test(i.text));
   check(!!vax, 'vaccine item present');
   check(vax.severity === 'amber', 'vax_due is amber (rank 1)');
+}
+
+console.log('\n--- lithium stale label never reads "due soon" ---');
+{
+  const lithiumStale = {
+    type: 'drug-monitoring',
+    ruleId: 'lithium-maintenance',
+    status: 'stale',
+    drugName: 'Lithium',
+    tests: [{ name: 'Lithium level', status: 'stale' }],
+  };
+  const mini = due.buildDueMini([lithiumStale]);
+  check(mini.items[0].status === 'stale', 'lithium item carries status stale');
+  check(mini.items[0].severity === 'amber', 'stale ranks amber (rank 1)');
+  check(/severely overdue/.test(mini.items[0].text), 'line still says severely overdue');
+  check(!/overdue/.test(mini.items[0].label), 'label strips the trailing "severely overdue" wording entirely');
 }
 
 console.log('\n--- identity gate (dueFromSnapshot) ---');

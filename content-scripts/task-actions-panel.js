@@ -538,6 +538,20 @@
     if (w) renderInto(w);
   }
 
+  // Collapsing the whole panel hides the section detail, not the fact that
+  // something is due — when collapsed and the due section is carrying a
+  // count, the outer header wears the same red/amber count badge (ruling D).
+  function outerCollapsedDueBadge() {
+    if (!s.collapsed) return '';
+    const mini = s.due.mini;
+    if (!mini) return '';
+    const total = mini.redCount + mini.amberCount;
+    if (total <= 0) return '';
+    const cls = mini.redCount > 0 ? ' ms-tap-due-count-red' : ' ms-tap-due-count-amber';
+    const label = (mini.redCount > 0 ? total + ' overdue' : total + ' due').toString();
+    return '<span class="ms-tap-due-count' + cls + '" aria-label="' + esc(label) + '">' + total + '</span>';
+  }
+
   function outerHeaderHtml() {
     return (
       '<div class="ms-tap-header">' +
@@ -545,10 +559,11 @@
       '<span class="ms-tap-header-toggle" id="ms-tap-toggle" role="button" tabindex="0" aria-expanded="' +
       !s.collapsed +
       '">' +
-      '<span class="ms-tap-chevron">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
       (s.collapsed ? '▸' : '▾') +
       '</span>' +
       '<span>Patient actions</span>' +
+      outerCollapsedDueBadge() +
       '</span>' +
       '</div>'
     );
@@ -574,26 +589,42 @@
     return '<div class="ms-tap-due-degraded">Some record data may be missing — verify in the record.</div>';
   }
 
+  // Tag wording follows the chip's own status (ruling A) — never just red vs
+  // amber severity. `stale` (e.g. lithium's "severely overdue" line) reads
+  // as Overdue, never Due soon, even though it ranks amber for row colour.
+  // Every status reaching here has already passed isChipActionNeeded
+  // (STATUS_RANK <= 2), so this covers the full set.
+  function dueTagWord(status) {
+    if (status === 'stale') return 'Severely overdue';
+    if (status === 'due_soon' || status === 'caution' || status === 'vax_due') return 'Due soon';
+    return 'Overdue';
+  }
+
+  // Content only — no outer wrapper. dueSectionHtml owns the single
+  // aria-live/aria-busy "ms-tap-section-body" wrapper for every due state
+  // (loading / error / list / empty) so a screen reader gets one region,
+  // not a fresh one per state.
   function renderDueBody(mini, degraded) {
     if (mini.nothingDue) {
       return (
-        '<div class="ms-tap-section-body">' +
-        '<div class="ms-tap-due-empty">Nothing due right now — open Monitoring if you need the full picture.</div>' +
-        (degraded ? dueDegradedHtml() : '') +
-        '</div>'
+        '<div class="ms-tap-due-empty">' +
+        '<div>Nothing due right now.</div>' +
+        '<div class="ms-tap-due-empty-sub">The full picture is in Monitoring.</div>' +
+        '</div>' +
+        (degraded ? dueDegradedHtml() : '')
       );
     }
     const items = mini.items
       .map(function (item) {
         const sev = item.severity === 'red' ? 'red' : 'amber';
-        const word = item.severity === 'red' ? 'Overdue' : 'Due soon';
+        const word = dueTagWord(item.status);
         return (
           '<li class="ms-tap-due-item ms-tap-due-' +
           sev +
           '">' +
           '<span class="ms-tap-due-dot" aria-hidden="true"></span>' +
           '<span class="ms-tap-due-text">' +
-          esc(item.text) +
+          esc(item.label) +
           '</span>' +
           '<span class="ms-tap-due-tag">' +
           word +
@@ -604,19 +635,15 @@
       .join('');
     let more = '';
     if (mini.moreCount > 0) {
-      const redBit = mini.moreRed > 0 ? ' (' + mini.moreRed + ' overdue)' : '';
+      const redBit = mini.moreRed > 0 ? ', <span class="ms-tap-due-more-red">' + mini.moreRed + ' overdue</span>' : '';
       more =
-        '<div class="ms-tap-due-more">+' + mini.moreCount + ' more' + redBit + ' — open Monitoring for the rest</div>';
+        '<div class="ms-tap-due-more">+' +
+        mini.moreCount +
+        ' more' +
+        redBit +
+        ' \u2014 full list is in Monitoring.</div>';
     }
-    return (
-      '<div class="ms-tap-section-body">' +
-      '<ul class="ms-tap-due-list">' +
-      items +
-      '</ul>' +
-      more +
-      (degraded ? dueDegradedHtml() : '') +
-      '</div>'
-    );
+    return '<ul class="ms-tap-due-list">' + items + '</ul>' + more + (degraded ? dueDegradedHtml() : '');
   }
 
   function dueSectionHtml() {
@@ -629,25 +656,35 @@
         : mini && mini.amberCount > 0
           ? ' ms-tap-due-count-amber'
           : '';
+    const countLabel = count != null && count > 0 ? (mini.redCount > 0 ? count + ' overdue' : count + ' due') : '';
     const badge =
-      count != null && count > 0 ? '<span class="ms-tap-due-count' + countClass + '">' + count + '</span>' : '';
-    let body = '';
+      count != null && count > 0
+        ? '<span class="ms-tap-due-count' + countClass + '" aria-label="' + esc(countLabel) + '">' + count + '</span>'
+        : '';
+    let inner = '';
     if (due.open) {
       if (due.resolving || (due.waiting && !mini && !due.error)) {
-        body =
-          '<div class="ms-tap-section-body"><div class="ms-tap-loading">Checking what\u2019s due\u2026</div></div>';
+        inner = '<div class="ms-tap-due-loading">Checking what\u2019s due\u2026</div>';
       } else if (due.error && !mini) {
-        body = '<div class="ms-tap-section-body"><div class="ms-tap-error">' + esc(due.error) + '</div></div>';
+        inner = '<div class="ms-tap-due-error">' + esc(due.error) + '</div>';
       } else if (mini) {
-        body = renderDueBody(mini, due.degraded);
+        inner = renderDueBody(mini, due.degraded);
       }
     }
+    const busy = due.resolving || due.waiting;
+    const body = due.open
+      ? '<div class="ms-tap-section-body" aria-live="polite" aria-busy="' +
+        (busy ? 'true' : 'false') +
+        '">' +
+        inner +
+        '</div>'
+      : '';
     return (
       '<div class="ms-tap-section">' +
       '<div class="ms-tap-section-header" id="ms-tap-due-toggle" role="button" tabindex="0" aria-expanded="' +
       due.open +
       '">' +
-      '<span class="ms-tap-chevron">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
       (due.open ? '▾' : '▸') +
       '</span>' +
       '<span>What\u2019s due</span>' +
@@ -1021,7 +1058,7 @@
         stopDuePoll();
         if (s.due.mini == null) {
           s.due.waiting = false;
-          s.due.error = 'Could not load what\u2019s due yet \u2014 open Monitoring if you need the full list.';
+          s.due.error = "Couldn't check what's due \u2014 treat as unknown.";
           rerender();
         }
       }
@@ -1046,7 +1083,7 @@
       st.resolving = false;
       if (!patientId) {
         st.waiting = false;
-        st.error = 'Could not determine the patient for this task.';
+        st.error = "Couldn't check what's due \u2014 treat as unknown.";
         rerender();
         return;
       }
@@ -1061,7 +1098,7 @@
       if (st !== s.due) return;
       st.resolving = false;
       st.waiting = false;
-      st.error = 'Could not load what\u2019s due.';
+      st.error = "Couldn't check what's due \u2014 treat as unknown.";
       rerender();
     }
   }
@@ -1431,6 +1468,7 @@
         rerender();
         const w = document.getElementById(WIDGET_ID);
         if (w && !_userDragged) placePanel(w);
+        document.getElementById('ms-tap-toggle')?.focus();
       });
       outerToggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -1445,6 +1483,7 @@
       dueToggle.addEventListener('click', () => {
         s.due.open = !s.due.open;
         rerender();
+        document.getElementById('ms-tap-due-toggle')?.focus();
       });
       dueToggle.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {

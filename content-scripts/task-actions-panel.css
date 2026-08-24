@@ -23,8 +23,12 @@
   --red: #dc2626;
   --red-dim: rgba(220, 38, 38, 0.08);
   --red-line: rgba(220, 38, 38, 0.3);
+  --red-ink: #b91c1c;
+  --amber-ink: #92400e;
   --green: #16a34a;
   --green-dim: rgba(22, 163, 74, 0.09);
+  --accent: #2563eb;
+  --bg-hover: #e2eaf5;
   --r-sm: 4px;
   --r-md: 6px;
   --r-pill: 999px;
@@ -135,8 +139,12 @@
 
 #ms-tap-widget .ms-tap-section-header:focus-visible,
 #ms-tap-widget .ms-tap-header-toggle:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+#ms-tap-widget .ms-tap-section-header:active {
+  background: var(--bg-hover);
 }
 
 #ms-tap-widget .ms-tap-section-body {
@@ -480,19 +488,20 @@
   align-items: flex-start;
   gap: 8px;
   padding: 6px 8px;
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  background: var(--bg-elev);
 }
 
+/* Calm field, sharp signal: the row itself stays a plain card — full-strength
+   red/amber salience lives on the 3px left rail, the dot and the tag, never
+   as a wash across the whole row. */
 #ms-tap-widget .ms-tap-due-red {
-  background: var(--red-dim);
-  border-color: var(--red-line);
+  border-left: 3px solid var(--red);
 }
 
 #ms-tap-widget .ms-tap-due-amber {
-  background: var(--amber-dim);
-  border-color: var(--amber-line);
+  border-left: 3px solid var(--amber);
 }
 
 #ms-tap-widget .ms-tap-due-dot {
@@ -526,7 +535,7 @@
 #ms-tap-widget .ms-tap-due-tag {
   flex-shrink: 0;
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -534,11 +543,11 @@
 }
 
 #ms-tap-widget .ms-tap-due-red .ms-tap-due-tag {
-  color: var(--red);
+  color: var(--red-ink);
 }
 
 #ms-tap-widget .ms-tap-due-amber .ms-tap-due-tag {
-  color: var(--amber);
+  color: var(--amber-ink);
 }
 
 #ms-tap-widget .ms-tap-due-more {
@@ -547,13 +556,43 @@
   padding: 2px 2px 0;
 }
 
+#ms-tap-widget .ms-tap-due-more-red {
+  color: var(--red);
+  font-weight: 600;
+}
+
 #ms-tap-widget .ms-tap-due-empty {
   font-size: 12px;
   color: var(--text-3);
   line-height: 1.4;
 }
 
+#ms-tap-widget .ms-tap-due-empty-sub {
+  margin-top: 2px;
+  color: var(--text-4);
+}
+
+#ms-tap-widget .ms-tap-due-loading {
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--text-4);
+  font-style: normal;
+}
+
+#ms-tap-widget .ms-tap-due-error {
+  padding: 8px 10px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  color: var(--amber);
+}
+
 #ms-tap-widget .ms-tap-due-degraded {
+  padding: 3px 8px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
   font-size: 11px;
   color: var(--amber);
   line-height: 1.35;

@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.239.1] — 2026-08-24
+
+### Floating What’s due — design-crit polish
+
+From a three-critic review (art director / token surveyor / fresh-eyes GP) of the v3.239.0 strip:
+
+- **Rows are calm cards with a sharp left rail**, not a wall of red/amber wash. Filled red dot vs hollow amber ring stays; tags use darker ink at 10px.
+- **The tag owns state.** Line text no longer repeats “overdue”; Lithium-stale no longer reads “severely overdue” next to a Due soon tag — it now says **Severely overdue**.
+- **QOF lines name the review** (“Diabetes review”, “Blood pressure check”) instead of `DM006 — HbA1c ≤58`, which was being read as a current out-of-range result.
+- **Collapsed “Patient actions” keeps the count badge** so tidying the widget cannot hide that something is due.
+- Hidden overdue items in “+N more” are named in red. Load/error/degraded states use the amber triad (system failure ≠ clinical red). Empty copy is bounded and no longer pretends “open Monitoring” is a button.
+
 ## [v3.239.0] — 2026-08-24
 
 ### Floating Patient actions — miniaturised “What’s due”
