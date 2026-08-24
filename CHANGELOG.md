@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.240.1] — 2026-08-24
+
+### Companion slots glance uses the real appointment-book scrape
+
+Reception / Nursing “Slots today” was only asking the booking finder for the first two appointment types, so most of the day’s free slots never appeared. It now uses the same `embedded-overview` scrape as Slot Counter: one fetch, every remaining slot on today’s book, grouped by type (past-today slots dropped), with a “+N more types” overflow into Slot Counter.
+
 ## [v3.240.0] — 2026-08-24
 
 ### Companion HUD — role toggle on the floating box

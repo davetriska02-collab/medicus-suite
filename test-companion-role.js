@@ -126,7 +126,67 @@ console.log('\n--- deskFromPayloads is honest ---');
   check(missing.admin === 0, 'successful empty list is a real 0');
 }
 
-console.log('\n--- slotsGlanceLines ---');
+console.log('\n--- slotsFromOverview (Slot Counter scrape) ---');
+{
+  const raw = {
+    staffSchedules: [
+      {
+        name: 'Dr A',
+        schedule: [
+          {
+            entries: [
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'GP telephone' },
+                startDateTime: '2026-08-24 14:20:00',
+              },
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'GP telephone' },
+                startDateTime: '2026-08-24 14:40:00',
+              },
+              {
+                diaryEntryType: { value: 'appointment' },
+                appointmentType: { name: 'GP telephone' },
+                startDateTime: '2026-08-24 15:00:00',
+              },
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'Nurse treatment room' },
+                startDateTime: '2026-08-24 09:05:00',
+              },
+              {
+                diaryEntryType: { value: 'slot' },
+                appointmentType: { name: 'HCA bloods' },
+                startDateTime: '2026-08-24 16:00:00',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const now = new Date('2026-08-24T10:00:00').getTime();
+  const rec = role.slotsFromOverview(raw, { todayISO: '2026-08-24', nowMs: now, role: 'reception' });
+  check(rec.total === 3, `past morning nurse slot is dropped (got total ${rec.total})`);
+  check(rec.typeCount === 2, 'booked appointments are not counted as free slots');
+  check(rec.lines[0].label === 'GP telephone' && rec.lines[0].count === 2, 'types ranked by remaining count');
+  check(rec.lines[0].time === '14:20', 'next time is the earliest remaining slot');
+  check(rec.lines.some((l) => l.label === 'HCA bloods'), 'overview includes every remaining type, not the first two finder types');
+  check(!rec.lines.some((l) => l.label === 'Nurse treatment room'), 'past-today slots are excluded');
+
+  const nurse = role.slotsFromOverview(raw, { todayISO: '2026-08-24', nowMs: now, role: 'nursing' });
+  check(
+    nurse.lines.every((l) => /nurse|bloods/i.test(l.label)),
+    'nursing glance filters to nurse-ish types from the same scrape'
+  );
+  check(nurse.total === 1 && nurse.lines[0].label === 'HCA bloods', 'nursing still sees remaining HCA bloods');
+
+  const empty = role.slotsFromOverview({ staffSchedules: [] }, { role: 'reception' });
+  check(empty.total === 0 && empty.lines.length === 0, 'empty book → zero types, not a fake list');
+}
+
+console.log('\n--- slotsGlanceLines fallback ---');
 {
   const types = [
     { label: 'GP telephone', slots: [{ startDateTime: '2026-08-24 14:20:00' }] },
@@ -134,13 +194,12 @@ console.log('\n--- slotsGlanceLines ---');
     { label: 'HCA bloods', slots: [] },
   ];
   const rec = role.slotsGlanceLines(types, 'reception');
-  check(rec.length === 2, 'reception glance is first two types');
+  check(rec.length === 3, 'fallback no longer silently drops types after the first two');
   check(rec[0].time === '14:20' && rec[0].none === false, 'first available time is HH:mm');
   const nurse = role.slotsGlanceLines(types, 'nursing');
-  check(nurse.length === 2, 'nursing picks nurse-ish types');
   check(
     nurse.every((l) => /nurse|bloods/i.test(l.label)),
-    'nursing glance does not include the GP telephone type'
+    'nursing fallback does not include the GP telephone type'
   );
   check(nurse[1].none === true, 'a type with no slots today is named as none, not hidden');
 }

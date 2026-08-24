@@ -170,9 +170,17 @@
           html +=
             '<div class="ms-tap-section"><div class="ms-tap-section-header"><span class="ms-tap-chevron">▾</span><span>' +
             title +
-            '</span></div><div class="ms-tap-section-body"><ul class="ms-tap-glance-list"><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
+            '</span></div><div class="ms-tap-section-body"><div class="ms-tap-glance-lead">' +
+            (r === 'nursing' ? '6 left today across 2 types (fixture)' : '18 left today across 5 types (fixture)') +
+            '</div><ul class="ms-tap-glance-list"><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
             (r === 'nursing' ? 'Nurse treatment room' : 'GP telephone') +
-            '</span><span class="ms-tap-glance-value">14:20 today (fixture)</span></li></ul></div></div>';
+            '</span><span class="ms-tap-glance-value">' +
+            (r === 'nursing' ? '4 left · next 14:20' : '8 left · next 14:20') +
+            ' (fixture)</span></li><li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
+            (r === 'nursing' ? 'HCA bloods' : 'Acute GP') +
+            '</span><span class="ms-tap-glance-value">' +
+            (r === 'nursing' ? '2 left · next 15:05' : '5 left · next 11:10') +
+            ' (fixture)</span></li></ul></div></div>';
         }
         if (shows.pulse) {
           html +=

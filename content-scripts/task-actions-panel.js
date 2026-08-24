@@ -260,6 +260,10 @@
       loading: false,
       error: null,
       lines: [],
+      total: 0,
+      typeCount: 0,
+      moreCount: 0,
+      moreSlots: 0,
       loadedForPage: null,
     };
   }
@@ -926,16 +930,38 @@
         inner = '<div class="ms-tap-due-error">' + esc(slots.error) + '</div>';
       } else if (!slots.lines.length) {
         inner =
-          '<div class="ms-tap-due-empty">No appointment types to glance. Open Book to search.</div>';
+          '<div class="ms-tap-due-empty">No free slots left today on the appointment book.</div>';
       } else {
+        const lead =
+          '<div class="ms-tap-glance-lead">' +
+          esc(
+            countInt(slots.total) +
+              ' left today' +
+              (countInt(slots.typeCount) > 1 ? ' across ' + countInt(slots.typeCount) + ' types' : '')
+          ) +
+          '</div>';
+        const moreCount = countInt(slots.moreCount);
+        const more =
+          moreCount > 0
+            ? '<div class="ms-tap-due-more">+' +
+              moreCount +
+              ' more types (' +
+              countInt(slots.moreSlots) +
+              ' slots) \u2014 full list is in Slot Counter.</div>'
+            : '';
         inner =
+          lead +
           '<ul class="ms-tap-glance-list">' +
           slots.lines
             .map(function (line) {
               let value = 'Couldn\u2019t check';
               if (line.unknown) value = 'Couldn\u2019t check';
               else if (line.none) value = 'None left today';
-              else if (line.time) value = line.time + ' today';
+              else {
+                const n = countInt(line.count);
+                value = (n ? n + ' left' : '') + (line.time ? (n ? ' · next ' : '') + line.time : '');
+                if (!value) value = 'Available';
+              }
               return (
                 '<li class="ms-tap-glance-row"><span class="ms-tap-glance-label">' +
                 esc(line.label) +
@@ -945,7 +971,8 @@
               );
             })
             .join('') +
-          '</ul>';
+          '</ul>' +
+          more;
       }
     }
     const body = slots.open ? '<div class="ms-tap-section-body">' + inner + '</div>' : '';
@@ -1546,46 +1573,26 @@
     rerender();
     const st = slots;
     try {
-      const finder = await apiFetchFinder();
+      // Same scrape as Slot Counter — one embedded-overview, every remaining
+      // slot on today's book. The finder + first-two-types path missed most
+      // of the book.
+      const raw = await apiFetch(
+        '/scheduling/data/appointment-book/embedded-overview?date=' + todayISO() + '&filterByUsualLocation=false'
+      );
       if (st !== s.slots) return;
-      const providerId = finder.localOrganisationDetails && finder.localOrganisationDetails.id;
-      const types = [];
-      for (const svc of (finder.localOrganisationDetails && finder.localOrganisationDetails.services) || []) {
-        for (const t of svc.appointmentTypes || []) {
-          if (!types.some((e) => e.value === t.value)) types.push({ value: t.value, label: t.label });
-        }
-      }
       const api = roleApi();
-      let picked = types;
-      if (currentRole() === 'nursing' && api) {
-        picked = types.filter((t) => api.nurseTypeMatch(t.label));
-        if (!picked.length) picked = types.slice(0, 1);
-      }
-      picked = picked.slice(0, 2);
-      const withSlots = [];
-      for (const t of picked) {
-        if (!providerId) {
-          withSlots.push({ label: t.label, slots: null });
-          continue;
-        }
-        try {
-          const found = await apiFetchSlots({
-            providerId: providerId,
-            appointmentTypeId: t.value,
-            date: todayISO(),
-          });
-          if (st !== s.slots) return;
-          withSlots.push({ label: t.label, slots: found });
-        } catch (_) {
-          if (st !== s.slots) return;
-          withSlots.push({ label: t.label, slots: null });
-        }
-      }
-      st.lines = api ? api.slotsGlanceLines(withSlots, currentRole()) : [];
+      const glance = api
+        ? api.slotsFromOverview(raw, { todayISO: todayISO(), nowMs: Date.now(), role: currentRole() })
+        : { total: 0, typeCount: 0, moreCount: 0, moreSlots: 0, lines: [] };
+      st.lines = glance.lines || [];
+      st.total = glance.total || 0;
+      st.typeCount = glance.typeCount || 0;
+      st.moreCount = glance.moreCount || 0;
+      st.moreSlots = glance.moreSlots || 0;
       st.loadedForPage = key;
     } catch (_) {
       if (st !== s.slots) return;
-      st.error = "Couldn't check today's slots.";
+      st.error = "Couldn't check today's appointment book.";
     } finally {
       if (st === s.slots) {
         st.loading = false;
@@ -1606,6 +1613,7 @@
     const api = roleApi();
     if (api) api.writeSavedRole(localStorage, _role);
     if (s.due.patientId) applyDueFromSnapshot();
+    s.slots.loadedForPage = null;
     maybeLoadGlances();
     rerender();
   }

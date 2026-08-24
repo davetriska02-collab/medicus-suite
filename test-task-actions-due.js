@@ -76,6 +76,11 @@ check(/dueVoiceForRole/.test(panel), 'role change rebuilds due-mini with the mat
 check(/writeSavedRole/.test(panel), 'chosen role is persisted (never yanked mid-clinic)');
 check(/Open the medical queue for the pulse/.test(panel), 'triage off the queue stays honest (no invented counts)');
 check(/Couldn't load the desk glance/.test(panel), 'desk fetch failure is named, not painted as zero');
+check(
+  /appointment-book\/embedded-overview/.test(panel),
+  'slots glance uses the Slot Counter embedded-overview scrape, not the first two finder types'
+);
+check(/slotsFromOverview/.test(panel), 'slots glance maps the overview through the tested helper');
 check(/<span>Companion<\/span>/.test(panel), 'header title is Companion');
 
 console.log('\n--- snapshot ping ---');

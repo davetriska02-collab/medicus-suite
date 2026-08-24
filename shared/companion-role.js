@@ -177,19 +177,19 @@
 
   /**
    * Compact first-available lines from finder types + today's slots.
-   * typesAndSlots: [{ label, slots: [{ startDateTime }] }]
-   * role 'nursing' prefers nurse-ish types; reception takes the first two.
+   * Kept for tests / fallback. The live glance uses slotsFromOverview
+   * (the Slot Counter's embedded-overview scrape), not the first two
+   * finder types.
    */
   function slotsGlanceLines(typesAndSlots, role) {
     var list = Array.isArray(typesAndSlots) ? typesAndSlots : [];
     var wantNurse = normalizeRole(role) === 'nursing';
     var picked = wantNurse ? list.filter(function (t) { return nurseTypeMatch(t && t.label); }) : list;
     if (wantNurse && picked.length === 0) picked = list.slice(0, 1);
-    picked = picked.slice(0, 2);
     return picked.map(function (t) {
       var label = String((t && t.label) || 'Appointment');
       if (!t || t.slots == null) {
-        return { label: label, time: '', none: false, unknown: true };
+        return { label: label, time: '', none: false, unknown: true, count: 0 };
       }
       var slots = t.slots || [];
       var first = slots[0];
@@ -199,8 +199,79 @@
         time: time,
         none: !time,
         unknown: false,
+        count: slots.length,
       };
     });
+  }
+
+  var MAX_SLOT_LINES = 10;
+
+  /**
+   * Remaining free slots from the appointment-book embedded-overview —
+   * the same scrape Slot Counter uses (staffSchedules → session entries
+   * with diaryEntryType.value === 'slot'). One payload, every type.
+   *
+   * opts: { todayISO, nowMs, role }
+   */
+  function slotsFromOverview(raw, opts) {
+    opts = opts || {};
+    var today = opts.todayISO || null;
+    var nowMs = opts.nowMs != null ? opts.nowMs : Date.now();
+    var role = normalizeRole(opts.role);
+    var byType = {};
+    var staffSchedules = (raw && raw.staffSchedules) || [];
+    for (var i = 0; i < staffSchedules.length; i++) {
+      var sessions = (staffSchedules[i] && staffSchedules[i].schedule) || [];
+      for (var j = 0; j < sessions.length; j++) {
+        var entries = (sessions[j] && sessions[j].entries) || [];
+        for (var k = 0; k < entries.length; k++) {
+          var entry = entries[k];
+          if (!entry || !entry.diaryEntryType || entry.diaryEntryType.value !== 'slot') continue;
+          if (today && entry.startDateTime) {
+            var start = new Date(entry.startDateTime);
+            if (!isNaN(start.getTime()) && start.getTime() < nowMs) continue;
+          }
+          var name = (entry.appointmentType && entry.appointmentType.name) || 'Unknown';
+          if (!byType[name]) byType[name] = { label: name, count: 0, next: '' };
+          byType[name].count += 1;
+          var hm = slotTime(entry.startDateTime);
+          if (hm && (!byType[name].next || hm < byType[name].next)) byType[name].next = hm;
+        }
+      }
+    }
+    var lines = Object.keys(byType).map(function (key) {
+      return byType[key];
+    });
+    if (role === 'nursing') {
+      var nurseOnly = lines.filter(function (l) {
+        return nurseTypeMatch(l.label);
+      });
+      if (nurseOnly.length) lines = nurseOnly;
+    }
+    lines.sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      return String(a.label).localeCompare(String(b.label));
+    });
+    var total = 0;
+    for (var n = 0; n < lines.length; n++) total += lines[n].count;
+    var hidden = lines.slice(MAX_SLOT_LINES);
+    var moreSlots = 0;
+    for (var h = 0; h < hidden.length; h++) moreSlots += hidden[h].count;
+    return {
+      total: total,
+      typeCount: lines.length,
+      moreCount: hidden.length,
+      moreSlots: moreSlots,
+      lines: lines.slice(0, MAX_SLOT_LINES).map(function (l) {
+        return {
+          label: l.label,
+          time: l.next,
+          count: l.count,
+          none: l.count === 0,
+          unknown: false,
+        };
+      }),
+    };
   }
 
   /**
@@ -254,6 +325,8 @@
     deskFromPayloads: deskFromPayloads,
     nurseTypeMatch: nurseTypeMatch,
     slotsGlanceLines: slotsGlanceLines,
+    slotsFromOverview: slotsFromOverview,
+    MAX_SLOT_LINES: MAX_SLOT_LINES,
     queuePulseFromDom: queuePulseFromDom,
   };
 
