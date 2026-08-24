@@ -105,6 +105,14 @@ check(/ms-companion-collapsed/.test(panel), 'minimise state is persisted in loca
 check(/function readCollapsed/.test(panel) && /function writeCollapsed/.test(panel), 'collapsed persist helpers exist');
 check(/function setCollapsed/.test(panel), 'title click and minimise both go through setCollapsed');
 check(/ms-tap-minimised/.test(css), 'minimised chrome shrinks to a compact bar');
+check(/ms-tap-dock-tab/.test(panel) && /ms-tap-docked/.test(css), 'Companion can pop in to an edge tab');
+check(/ms-tap-resize/.test(panel) && /nwse-resize/.test(css), 'Companion has a resize handle');
+check(/Show on every Medicus screen/.test(panel), 'all-screens opt-in is in the widget, not forced on');
+{
+  const roleSrc = fs.readFileSync(path.join(__dirname, 'shared', 'companion-role.js'), 'utf8');
+  check(/ms-companion-all-screens/.test(roleSrc), 'all-screens preference is persisted');
+  check(/kind: 'elsewhere'/.test(roleSrc), 'all-screens patient pages are a distinct elsewhere kind');
+}
 
 console.log('\n--- snapshot ping ---');
 check(/ms-sentinel-snapshot/.test(panel), 'panel listens for the same-page snapshot ping');

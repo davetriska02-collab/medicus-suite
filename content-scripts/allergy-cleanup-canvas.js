@@ -278,6 +278,49 @@
     return null;
   }
 
+  function uniqueIds(ids) {
+    var out = [];
+    var seen = {};
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(id);
+    });
+    return out;
+  }
+
+  function payloadIds(payload, primaryKey) {
+    var key = primaryKey || 'allergyId';
+    if (!payload || typeof payload !== 'object') return [];
+    var extra = Array.isArray(payload.ids) ? payload.ids : [];
+    var primary = payload[key];
+    var list = extra.filter(function (id) {
+      return id && id !== primary;
+    });
+    if (primary) list.unshift(primary);
+    return uniqueIds(list);
+  }
+
+  function toggleSelectedIds(current, id, additive) {
+    if (!id) return additive ? uniqueIds(current) : [];
+    if (!additive) return [id];
+    var next = uniqueIds(current);
+    var i = next.indexOf(id);
+    if (i === -1) next.push(id);
+    else next.splice(i, 1);
+    return next;
+  }
+
+  function dragIdsFor(selectedIds, draggedId) {
+    if (!draggedId) return [];
+    if ((selectedIds || []).indexOf(draggedId) !== -1) return uniqueIds(selectedIds);
+    return [draggedId];
+  }
+
+  function isAdditiveClick(e) {
+    return !!(e && (e.metaKey || e.ctrlKey));
+  }
+
   function readDropPayload(e) {
     var raw = '';
     try {
@@ -289,6 +332,7 @@
     try {
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object' || !parsed.allergyId) return null;
+      if (Array.isArray(parsed.ids)) parsed.ids = uniqueIds(parsed.ids);
       return parsed;
     } catch (_) {
       return null;
@@ -413,6 +457,11 @@
       diffFinaliseOutcome: WriteCore.diffFinaliseOutcome,
       classifyDrop: classifyDrop,
       readDropPayload: readDropPayload,
+      uniqueIds: uniqueIds,
+      payloadIds: payloadIds,
+      toggleSelectedIds: toggleSelectedIds,
+      dragIdsFor: dragIdsFor,
+      isAdditiveClick: isAdditiveClick,
       relativeRect: relativeRect,
       buildElbowConnectorPath: buildElbowConnectorPath,
       computeLinkBusX: computeLinkBusX,
@@ -450,7 +499,7 @@
   var _draft = emptyDraft();
   var _dragPayload = null;
   var _lineUpdateScheduled = false;
-  var _selectedTileId = null;
+  var _selectedTileIds = [];
   var _kbPickedId = null;
   var _openedPatientId = null;
   var _stageError = null;
@@ -521,7 +570,8 @@
     var conv = flags.convertById[id];
     var dual = flags.dualById[id];
     var stagedTidy = opts.tidyIds && opts.tidyIds.indexOf(id) !== -1;
-    var selected = opts.selectedId === id;
+    var selected = (opts.selectedIds || []).indexOf(id) !== -1;
+    var showActions = selected && (opts.selectedIds || []).length === 1;
     var picked = opts.pickedId === id;
     var displayDate = allergy.onsetDate || allergy.recordDate || null;
     var info = truncateText(allergy.additionalInformation, 70);
@@ -562,14 +612,23 @@
       (groupIdx !== -1 ? ' data-dup-group="' + esc(groupIdx) + '"' : '') +
       '>' +
       '<div class="ms-acc-tile-main">' +
+      '<label class="ms-acc-tile-check" title="Add to selection">' +
+      '<input type="checkbox" class="ms-acc-tile-checkbox" data-select-id="' +
+      esc(id) +
+      '"' +
+      (selected ? ' checked' : '') +
+      ' />' +
+      '</label>' +
+      '<div class="ms-acc-tile-copy">' +
       '<div class="ms-acc-tile-desc">' +
       esc(allergy.description || id) +
       '</div>' +
       (displayDate ? '<div class="ms-acc-tile-date">' + esc(displayDate) + '</div>' : '') +
       '</div>' +
+      '</div>' +
       hints.join('') +
       '</div>' +
-      (selected ? tileActionsHtml(allergy, flags, groups) : '') +
+      (showActions ? tileActionsHtml(allergy, flags, groups) : '') +
       '</div>'
     );
   }
@@ -749,9 +808,15 @@
     return (
       '<div class="ms-acc-explainer">Drag a junk or not-an-allergy row onto <strong>End</strong> to stage ' +
       'removal; drop a dual-coded tile onto <strong>Dual-coded</strong> to stage clearing the stale legacy ' +
-      'code; drop one duplicate onto its pair to review a merge. Convert tiles open the existing review. ' +
-      'Arrange as many as you like, then <strong>Finalise</strong>. Genuine allergies cannot be ended from ' +
-      'this canvas. The last “No known allergies” copy cannot be ended.</div>' +
+      'code; drop one duplicate onto its pair to review a merge. Tick several tiles, or Ctrl/⌘-click, then ' +
+      'drag the set together. Convert tiles open the existing review. Arrange as many as you like, then ' +
+      '<strong>Finalise</strong>. Genuine allergies cannot be ended from this canvas. The last “No known ' +
+      'allergies” copy cannot be ended.</div>' +
+      (_selectedTileIds.length > 1
+        ? '<div class="ms-acc-selection-hint">' +
+          _selectedTileIds.length +
+          ' selected — drop them on End or Dual-coded. Click a tile to keep only that one.</div>'
+        : '') +
       (_stageError ? '<div class="ms-acc-stage-error">' + esc(_stageError) + '</div>' : '') +
       '<div class="ms-acc-body">' +
       '<svg class="ms-acc-lines" aria-hidden="true"></svg>' +
@@ -1034,16 +1099,35 @@
 
     var flags = flagsOf(snap);
 
+    root.querySelectorAll('.ms-acc-tile-checkbox').forEach(function (box) {
+      box.addEventListener('click', function (e) {
+        e.stopPropagation();
+      });
+      box.addEventListener('change', function (e) {
+        e.stopPropagation();
+        var id = box.getAttribute('data-select-id');
+        if (!id) return;
+        _selectedTileIds = toggleSelectedIds(_selectedTileIds, id, true);
+        render();
+      });
+    });
+
     root.querySelectorAll('.ms-acc-lane .ms-acc-tile[data-allergy-id]').forEach(function (tile) {
-      tile.addEventListener('click', function () {
+      tile.addEventListener('click', function (e) {
+        if (e.target && e.target.closest && e.target.closest('.ms-acc-tile-check')) return;
         var id = tile.getAttribute('data-allergy-id');
+        if (isAdditiveClick(e)) {
+          _selectedTileIds = toggleSelectedIds(_selectedTileIds, id, true);
+          render();
+          return;
+        }
         var conv = flags.convertById[id];
-        if (conv && !isNotAnAllergy(conv)) {
-          _selectedTileId = null;
+        if (conv && !isNotAnAllergy(conv) && _selectedTileIds.length <= 1) {
+          _selectedTileIds = [];
           proposeConvert(id);
           return;
         }
-        _selectedTileId = _selectedTileId === id ? null : id;
+        _selectedTileIds = _selectedTileIds.length === 1 && _selectedTileIds[0] === id ? [] : [id];
         render();
       });
     });
@@ -1067,7 +1151,8 @@
     root.querySelectorAll('[draggable="true"][data-allergy-id]').forEach(function (tile) {
       tile.addEventListener('dragstart', function (e) {
         var id = tile.getAttribute('data-allergy-id');
-        _dragPayload = { allergyId: id };
+        var ids = dragIdsFor(_selectedTileIds, id);
+        _dragPayload = { allergyId: id, ids: ids };
         e.dataTransfer.setData('text/plain', JSON.stringify(_dragPayload));
         e.dataTransfer.effectAllowed = 'move';
       });
@@ -1075,26 +1160,45 @@
     });
 
     function applyClassifiedDrop(payload, dropTarget) {
-      var classified = classifyDrop(payload, dropTarget, flags, snap.duplicateGroups);
-      if (!classified) {
-        if (dropTarget && dropTarget.type === 'tile') {
-          _stageError = 'Those two rows are not a detected duplicate pair — a merge is never guessed.';
-          announce(_stageError);
-          render();
+      var ids = payloadIds(payload, 'allergyId');
+      if (!ids.length || !dropTarget) return;
+      if (dropTarget.type === 'tile') {
+        var mergeFrom = null;
+        ids.forEach(function (id) {
+          if (id === dropTarget.id) return;
+          var classified = classifyDrop({ allergyId: id }, dropTarget, flags, snap.duplicateGroups);
+          if (classified && classified.kind === 'merge' && !mergeFrom) mergeFrom = classified.a;
+        });
+        if (mergeFrom) {
+          proposeMerge(mergeFrom);
+          return;
         }
+        _stageError = 'Those rows are not a detected duplicate pair — a merge is never guessed.';
+        announce(_stageError);
+        render();
         return;
       }
-      if (classified.kind === 'merge') proposeMerge(classified.a);
-      else if (classified.kind === 'end') proposeEnd(classified.allergyId, snap);
-      else if (classified.kind === 'tidy') proposeTidy(classified.allergyId, snap);
-      else if (classified.kind === 'unstage-tidy') proposeUnstageTidy(classified.allergyId);
+      var any = false;
+      ids.forEach(function (id) {
+        var classified = classifyDrop({ allergyId: id }, dropTarget, flags, snap.duplicateGroups);
+        if (!classified) return;
+        any = true;
+        if (classified.kind === 'end') proposeEnd(classified.allergyId, snap);
+        else if (classified.kind === 'tidy') proposeTidy(classified.allergyId, snap);
+        else if (classified.kind === 'unstage-tidy') proposeUnstageTidy(classified.allergyId);
+      });
+      if (!any && dropTarget.type === 'bin') {
+        _stageError = 'None of the selected rows can be ended from this canvas.';
+        announce(_stageError);
+        render();
+      }
     }
 
     root.querySelectorAll('.ms-acc-lane .ms-acc-tile[data-allergy-id]').forEach(function (tile) {
       tile.addEventListener('dragover', function (e) {
         if (!_dragPayload) return;
         var targetId = tile.getAttribute('data-allergy-id');
-        if (targetId === _dragPayload.allergyId) return;
+        if (targetId === _dragPayload.allergyId && payloadIds(_dragPayload, 'allergyId').length === 1) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         e.stopPropagation();
@@ -1162,9 +1266,11 @@
         if (!id) return;
         if (!_kbPickedId) {
           _kbPickedId = id;
+          if (_selectedTileIds.indexOf(id) === -1) _selectedTileIds = [id];
           announce(
             'Picked up ' +
               (descById[id] || 'allergy') +
+              (_selectedTileIds.length > 1 ? ' and ' + (_selectedTileIds.length - 1) + ' more' : '') +
               '. Move focus to a duplicate, the Dual-coded lane, or End, then press Enter. Press Escape to cancel.'
           );
           render();
@@ -1176,32 +1282,32 @@
           render();
           return;
         }
-        var childId = _kbPickedId;
+        var ids = dragIdsFor(_selectedTileIds, _kbPickedId);
         _kbPickedId = null;
-        applyClassifiedDrop({ allergyId: childId }, { type: 'tile', id: id });
+        applyClassifiedDrop({ allergyId: ids[0], ids: ids }, { type: 'tile', id: id });
       });
     });
 
     root.querySelectorAll('[data-acc-lane]').forEach(function (lane) {
       lane.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter' && e.key !== ' ') return;
-        if (!_kbPickedId) return;
+        if (!_kbPickedId && !_selectedTileIds.length) return;
         if (e.target !== lane) return;
         e.preventDefault();
         e.stopPropagation();
-        var childId = _kbPickedId;
+        var ids = _kbPickedId ? dragIdsFor(_selectedTileIds, _kbPickedId) : _selectedTileIds.slice();
         _kbPickedId = null;
-        applyClassifiedDrop({ allergyId: childId }, { type: 'lane', key: lane.getAttribute('data-acc-lane') });
+        applyClassifiedDrop({ allergyId: ids[0], ids: ids }, { type: 'lane', key: lane.getAttribute('data-acc-lane') });
       });
     });
     root.querySelector('[data-end-bin]')?.addEventListener('keydown', function (e) {
       if (e.key !== 'Enter' && e.key !== ' ') return;
-      if (!_kbPickedId) return;
+      if (!_kbPickedId && !_selectedTileIds.length) return;
       e.preventDefault();
       e.stopPropagation();
-      var childId = _kbPickedId;
+      var ids = _kbPickedId ? dragIdsFor(_selectedTileIds, _kbPickedId) : _selectedTileIds.slice();
       _kbPickedId = null;
-      applyClassifiedDrop({ allergyId: childId }, { type: 'bin' });
+      applyClassifiedDrop({ allergyId: ids[0], ids: ids }, { type: 'bin' });
     });
 
     root.querySelectorAll('.ms-acc-lane, .ms-acc-bin').forEach(function (pane) {
@@ -1229,7 +1335,7 @@
     _pendingAction = null;
     _draft = emptyDraft();
     _kbPickedId = null;
-    _selectedTileId = null;
+    _selectedTileIds = [];
     _stageError = null;
     _openedPatientId = window.AllergyCleanup.getSnapshot().patientId;
     var el = document.createElement('div');
@@ -1265,7 +1371,7 @@
     document.removeEventListener('keydown', onKeydown);
     _pendingAction = null;
     _draft = emptyDraft();
-    _selectedTileId = null;
+    _selectedTileIds = [];
     _kbPickedId = null;
     _openedPatientId = null;
     _stageError = null;
@@ -1317,7 +1423,7 @@
     });
     var draftSummary = summariseDraft(_draft, descById);
     var opts = {
-      selectedId: _selectedTileId,
+      selectedIds: _selectedTileIds,
       pickedId: _kbPickedId,
       tidyIds: _draft.tidyIds,
     };

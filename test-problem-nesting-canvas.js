@@ -31,6 +31,11 @@ const {
   computeLinkBusX,
   relativeRect,
   readDropPayload,
+  uniqueIds,
+  payloadIds,
+  toggleSelectedIds,
+  dragIdsFor,
+  isAdditiveClick,
   buildPendingLink,
   significanceLaneKey,
   partitionProblemsBySignificance,
@@ -898,6 +903,26 @@ console.log(
   check(src.includes('data-sig-lane') && src.includes('data-end-bin'), 'lanes and the End bin are drop targets');
   check(src.includes("kind === 'finalise'"), 'the confirm path finalises the staged canvas draft');
   check(src.includes('orderEndsForCommit'), 'finalise commits ends children-first');
+  check(src.includes('ms-pnc-tile-checkbox') && src.includes('proposeLinkMany'), 'multi-select checkboxes and multi-nest confirm exist');
+}
+
+console.log('--- multi-select helpers ---');
+{
+  check(uniqueIds(['a', 'a', '', 'b']).join(',') === 'a,b', 'uniqueIds drops blanks and dupes');
+  check(payloadIds({ problemId: 'a', ids: ['b', 'a'] }, 'problemId').join(',') === 'a,b', 'payloadIds keeps the dragged id first');
+  check(payloadIds({ problemId: 'a' }, 'problemId').join(',') === 'a', 'payloadIds works without ids[]');
+  check(toggleSelectedIds(['a'], 'b', true).join(',') === 'a,b', 'additive click adds');
+  check(toggleSelectedIds(['a', 'b'], 'a', true).join(',') === 'b', 'additive click removes');
+  check(toggleSelectedIds(['a', 'b'], 'c', false).join(',') === 'c', 'plain click replaces');
+  check(dragIdsFor(['a', 'b'], 'a').join(',') === 'a,b', 'drag of a selected tile carries the set');
+  check(dragIdsFor(['a', 'b'], 'c').join(',') === 'c', 'drag of an unselected tile is only itself');
+  check(isAdditiveClick({ ctrlKey: true }) === true, 'Ctrl-click is additive');
+  check(isAdditiveClick({ metaKey: true }) === true, '⌘-click is additive');
+  check(isAdditiveClick({}) === false, 'plain click is not additive');
+  const multi = readDropPayload({
+    dataTransfer: { getData: () => JSON.stringify({ problemId: 'a', ids: ['a', 'b'] }) },
+  });
+  check(multi && multi.ids.join(',') === 'a,b', 'readDropPayload keeps the multi-select id list');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

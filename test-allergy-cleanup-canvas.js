@@ -29,6 +29,11 @@ const {
   diffFinaliseOutcome,
   classifyDrop,
   readDropPayload,
+  uniqueIds,
+  payloadIds,
+  toggleSelectedIds,
+  dragIdsFor,
+  isAdditiveClick,
   relativeRect,
   buildElbowConnectorPath,
   computeLinkBusX,
@@ -308,6 +313,20 @@ console.log('--- diffFinaliseOutcome: success is only what the bridge confirms -
   check(none.allWritten === true && none.wanted === 0, 'nothing wanted -> vacuously all written');
   const nullSafe = diffFinaliseOutcome(['j1'], null, null, null);
   check(nullSafe.failed === 1 && nullSafe.failedEnds[0] === 'j1', 'null lists never throw');
+}
+
+console.log('--- multi-select helpers ---');
+{
+  check(uniqueIds(['a', 'a', 'b']).join(',') === 'a,b', 'uniqueIds drops dupes');
+  check(payloadIds({ allergyId: 'j1', ids: ['j2', 'j1'] }, 'allergyId').join(',') === 'j1,j2', 'payloadIds keeps the dragged id first');
+  check(toggleSelectedIds([], 'j1', true).join(',') === 'j1', 'additive click on empty starts a set');
+  check(dragIdsFor(['j1', 'j2'], 'j2').join(',') === 'j1,j2', 'drag of a selected tile carries the set');
+  check(dragIdsFor(['j1'], 'x').join(',') === 'x', 'drag of an unselected tile is only itself');
+  check(isAdditiveClick({ ctrlKey: true }) && !isAdditiveClick({}), 'Ctrl-click is additive, plain click is not');
+  const multi = readDropPayload({
+    dataTransfer: { getData: () => JSON.stringify({ allergyId: 'j1', ids: ['j1', 'j2'] }) },
+  });
+  check(multi && multi.ids.join(',') === 'j1,j2', 'readDropPayload keeps the multi-select id list');
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

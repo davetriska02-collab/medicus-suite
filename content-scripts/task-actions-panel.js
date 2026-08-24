@@ -2,13 +2,16 @@
 // Medicus Suite — Companion HUD (book / create task / what's due / desk).
 //
 // One floating box on task overviews, the care-record, and the medical/
-// admin queue. A persisted Clinic | Reception | Triage | Nursing toggle
-// picks the sections — the page may *suggest* a role when none is saved,
-// never yank a choice mid-clinic. What's due still consumes the already-
-// published Sentinel snapshot (shared/due-mini.js), identity-gated to this
-// page's patient; reception uses the booking voice and nursing uses the
-// treatment-room voice. Desk / slots / pulse are operational glances and
-// stay honest on fetch/DOM failure.
+// admin queue — and, when the user opts in, every other Medicus screen
+// (docked to the edge by default so it does not cover the diary). A
+// persisted Clinic | Reception | Triage | Nursing toggle picks the
+// sections — the page may *suggest* a role when none is saved, never yank
+// a choice mid-clinic. The box can be resized, minimised, or popped in
+// (edge tab) / popped out (floating). What's due still consumes the
+// already-published Sentinel snapshot (shared/due-mini.js), identity-gated
+// to this page's patient; reception uses the booking voice and nursing
+// uses the treatment-room voice. Desk / slots / pulse are operational
+// glances and stay honest on fetch/DOM failure.
 //
 // Booking API contract identical to the retired booking-inline.js (still the
 // suite's only OTHER copy of this flow — shared/booking-core.js is the
@@ -92,9 +95,35 @@
 
   // ── URL detection ─────────────────────────────────────────────────────────────
 
+  function chromeApi() {
+    return roleApi();
+  }
+
+  function readAllScreens() {
+    const api = chromeApi();
+    return api && api.readAllScreens ? api.readAllScreens(localStorage) : false;
+  }
+
+  function writeAllScreens(on) {
+    const api = chromeApi();
+    if (api && api.writeAllScreens) api.writeAllScreens(localStorage, on);
+  }
+
+  function readDocked() {
+    const api = chromeApi();
+    return api && api.readDocked ? api.readDocked(localStorage) : false;
+  }
+
+  function writeDocked(on) {
+    const api = chromeApi();
+    if (api && api.writeDocked) api.writeDocked(localStorage, on);
+  }
+
   function getPageContext() {
     const api = roleApi();
-    if (api && typeof api.pageContext === 'function') return api.pageContext(location.pathname);
+    if (api && typeof api.pageContext === 'function') {
+      return api.pageContext(location.pathname, { allScreens: readAllScreens() });
+    }
     return null;
   }
 
@@ -536,7 +565,7 @@
   let _skipToggle = false;
 
   function placePanel(el) {
-    if (!el) return;
+    if (!el || readDocked()) return;
     const saved = readSavedPos();
     if (saved && saved.dragged) _userDragged = true;
     if (_userDragged && saved) {
@@ -550,6 +579,60 @@
     const wr = el.getBoundingClientRect();
     const w = wr.width || 340;
     applyLeftTop(el, window.innerWidth - w - 20, 72);
+  }
+
+  function enableResize(el) {
+    const handle = el.querySelector('#ms-tap-resize');
+    if (!handle || handle.dataset.msTapResize === '1') return;
+    handle.dataset.msTapResize = '1';
+    let resizing = false;
+    let sx = 0;
+    let sy = 0;
+    let sw = 0;
+    let sh = 0;
+
+    function onMove(e) {
+      if (!resizing) return;
+      const api = chromeApi();
+      const next = {
+        width: sw + (e.clientX - sx),
+        height: sh + (e.clientY - sy),
+      };
+      const clamped = api && api.clampSize ? api.clampSize(next, { width: window.innerWidth, height: window.innerHeight }) : next;
+      el.style.width = clamped.width + 'px';
+      el.style.height = clamped.height + 'px';
+      el.style.maxHeight = 'none';
+    }
+
+    function endResize() {
+      if (!resizing) return;
+      resizing = false;
+      el.classList.remove('ms-tap-resizing');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', endResize);
+      window.removeEventListener('blur', endResize);
+      const api = chromeApi();
+      if (api && api.writeSavedSize) {
+        const r = el.getBoundingClientRect();
+        api.writeSavedSize(localStorage, { width: r.width, height: r.height });
+      }
+    }
+
+    handle.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = el.getBoundingClientRect();
+      sx = e.clientX;
+      sy = e.clientY;
+      sw = rect.width;
+      sh = rect.height;
+      resizing = true;
+      el.classList.add('ms-tap-resizing');
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', endResize);
+      window.addEventListener('blur', endResize);
+    });
   }
 
   function enableDrag(el) {
@@ -633,11 +716,37 @@
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
+  function currentSize() {
+    const api = chromeApi();
+    return api && api.readSavedSize ? api.readSavedSize(localStorage) : null;
+  }
+
+  function applySavedSize(el) {
+    if (!el || s.collapsed || readDocked()) {
+      el.style.width = '';
+      el.style.height = '';
+      el.style.maxHeight = '';
+      return;
+    }
+    const api = chromeApi();
+    const size = currentSize();
+    const clamped = api && api.clampSize ? api.clampSize(size || { width: 340 }, { width: window.innerWidth, height: window.innerHeight }) : size;
+    if (!clamped) return;
+    el.style.width = clamped.width + 'px';
+    if (clamped.height) {
+      el.style.height = clamped.height + 'px';
+      el.style.maxHeight = 'none';
+    }
+  }
+
   function renderInto(el) {
     if (!el.getAttribute('lang')) el.setAttribute('lang', 'en-GB');
-    el.classList.toggle('ms-tap-collapsed', !!s.collapsed);
-    el.classList.toggle('ms-tap-minimised', !!s.collapsed);
+    const docked = readDocked();
+    el.classList.toggle('ms-tap-collapsed', !!s.collapsed && !docked);
+    el.classList.toggle('ms-tap-minimised', !!s.collapsed && !docked);
+    el.classList.toggle('ms-tap-docked', !!docked);
     el.innerHTML = buildHtml();
+    applySavedSize(el);
     bindEvents(el);
   }
 
@@ -647,6 +756,7 @@
   }
 
   function setCollapsed(on, focusId) {
+    if (readDocked()) return;
     s.collapsed = !!on;
     writeCollapsed(s.collapsed);
     rerender();
@@ -655,11 +765,30 @@
     document.getElementById(focusId || 'ms-tap-toggle')?.focus();
   }
 
+  function setDocked(on) {
+    writeDocked(!!on);
+    if (on) s.collapsed = false;
+    rerender();
+    const w = document.getElementById(WIDGET_ID);
+    if (w) {
+      if (on) {
+        w.style.left = '';
+        w.style.top = '';
+        w.style.right = '';
+        w.style.width = '';
+        w.style.height = '';
+      } else {
+        placePanel(w);
+      }
+    }
+    document.getElementById(on ? 'ms-tap-dock-tab' : 'ms-tap-toggle')?.focus();
+  }
+
   // Collapsing the whole panel hides the section detail, not the fact that
   // something is due — when collapsed and the due section is carrying a
   // count, the outer header wears the same red/amber count badge (ruling D).
   function outerCollapsedDueBadge() {
-    if (!s.collapsed) return '';
+    if (!s.collapsed && !readDocked()) return '';
     const mini = s.due.mini;
     if (!mini) return '';
     const red = countInt(mini.redCount);
@@ -718,6 +847,9 @@
       '<span>Companion</span>' +
       outerCollapsedDueBadge() +
       '</span>' +
+      '<button type="button" class="ms-tap-chrome-btn" id="ms-tap-dock" aria-label="Pop Companion in — park it on the edge" title="Pop in (park on the edge)">' +
+      '⌞' +
+      '</button>' +
       '<button type="button" class="ms-tap-minimise" id="ms-tap-minimise" aria-label="' +
       minLabel +
       '" title="' +
@@ -732,7 +864,31 @@
     );
   }
 
+  function dockedHtml() {
+    return (
+      '<button type="button" class="ms-tap-dock-tab" id="ms-tap-dock-tab" aria-label="Pop Companion out" title="Pop out Companion">' +
+      '<span class="ms-tap-dock-label">Companion</span>' +
+      outerCollapsedDueBadge() +
+      '</button>'
+    );
+  }
+
+  function chromeFooterHtml() {
+    const everywhere = readAllScreens();
+    return (
+      '<div class="ms-tap-chrome-footer">' +
+      '<label class="ms-tap-everywhere">' +
+      '<input type="checkbox" id="ms-tap-everywhere"' +
+      (everywhere ? ' checked' : '') +
+      ' />' +
+      '<span>Show on every Medicus screen</span>' +
+      '</label>' +
+      '</div>'
+    );
+  }
+
   function buildHtml() {
+    if (readDocked()) return dockedHtml();
     if (s.collapsed) return outerHeaderHtml();
     const shows = currentShows();
     const showRecord = shows.record && s.rec.applicable === true;
@@ -746,7 +902,9 @@
       (showRecord ? recordSectionHtml() : '') +
       (shows.book ? bookingSectionHtml() : '') +
       (shows.task ? taskSectionHtml() : '') +
-      '</div>'
+      chromeFooterHtml() +
+      '</div>' +
+      '<div class="ms-tap-resize" id="ms-tap-resize" role="separator" aria-orientation="horizontal" aria-label="Resize Companion"></div>'
     );
   }
 
@@ -1884,7 +2042,7 @@
       // patient-id resolution and the appointment finder are independent —
       // run them in parallel so open latency is one round-trip, not two.
       const [patientId, finder] = await Promise.all([
-        ctx && ctx.kind === 'record'
+        ctx && (ctx.kind === 'record' || ctx.kind === 'elsewhere')
           ? Promise.resolve(ctx.patientId)
           : ctx && ctx.kind === 'task'
             ? resolvePatientId(ctx.typeSlug, ctx.taskUuid)
@@ -1996,7 +2154,7 @@
           throw new Error('Task changed — reopen the booking panel.');
         }
         verifiedPatientId = await resolvePatientId(ctx.typeSlug, ctx.taskUuid);
-      } else if (ctx.kind === 'record') {
+      } else if (ctx.kind === 'record' || ctx.kind === 'elsewhere') {
         verifiedPatientId = ctx.patientId || null;
       } else {
         throw new Error('Open a task or the record to book.');
@@ -2168,6 +2326,31 @@
       }
       setCollapsed(!s.collapsed, 'ms-tap-minimise');
     });
+
+    el.querySelector('#ms-tap-dock')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_skipToggle) {
+        _skipToggle = false;
+        e.preventDefault();
+        return;
+      }
+      setDocked(true);
+    });
+
+    el.querySelector('#ms-tap-dock-tab')?.addEventListener('click', (e) => {
+      e.preventDefault();
+      setDocked(false);
+    });
+
+    const everywhere = el.querySelector('#ms-tap-everywhere');
+    if (everywhere) {
+      everywhere.addEventListener('change', () => {
+        const on = !!everywhere.checked;
+        writeAllScreens(on);
+        if (on) setDocked(true);
+        else scheduleInject();
+      });
+    }
 
     const dueToggle = el.querySelector('#ms-tap-due-toggle');
     if (dueToggle) {
@@ -2407,7 +2590,10 @@
       rerender();
     });
 
-    enableDrag(el);
+    if (!readDocked()) {
+      enableDrag(el);
+      enableResize(el);
+    }
   }
 
   // ── SPA navigation & re-injection ─────────────────────────────────────────────
