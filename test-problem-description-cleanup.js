@@ -43,6 +43,8 @@ const {
   groupCandidatesByConcept,
   normalizedSearchResults,
   findLegacyReadCodeOrigin,
+  extractGp2gpOnsetDateCandidate,
+  buildGp2gpOnsetPayload,
   descendantSearchTargetConceptId,
   stripGenericAdditionalInfoLines,
   literalTextsFromEntries,
@@ -302,6 +304,24 @@ console.log('--- buildEditProblemPayload: overrideAdditionalInformation (2026-07
   );
 }
 
+console.log('--- buildEditProblemPayload: overrideOnsetDate (2026-08-20 GP2GP-onset-date confirm path) ---');
+{
+  const payloadWithOnsetOverride = buildEditProblemPayload(prefill, newCode, undefined, '1995-11-25');
+  check(
+    payloadWithOnsetOverride.onsetDate === '1995-11-25',
+    'overrideOnsetDate replaces the (null) prefill value — the real live case this fixes'
+  );
+  check(
+    buildEditProblemPayload(prefill, newCode).onsetDate === null,
+    'omitting the fourth argument entirely preserves the original behaviour — every existing caller is unaffected'
+  );
+  check(
+    buildEditProblemPayload(Object.assign({}, prefill, { onsetDate: '2015-03-10' }), newCode, undefined, '1995-11-25')
+      .onsetDate === '1995-11-25',
+    'an explicit override still wins even when the prefill already has SOME onset date (the caller is trusted to have gated this correctly)'
+  );
+}
+
 console.log(
   '--- buildChangeNotePayload: POST /clinical/note/change-note (confirmed live via 3 HAR captures, 2026-08-13) ---'
 );
@@ -385,9 +405,7 @@ console.log(
     'orphan note (no consultation) produces the IDENTICAL payload shape as the nested case — confirmed live, no special-casing needed'
   );
 
-  console.log(
-    '--- buildChangeNotePayload: recordedAtAnotherOrganisation note (bug found live 2026-08-19, HAR) ---'
-  );
+  console.log('--- buildChangeNotePayload: recordedAtAnotherOrganisation note (bug found live 2026-08-19, HAR) ---');
   {
     // Modelled EXACTLY on the real live capture that surfaced the bug: a
     // note recorded at a different organisation carries recordedByOrganisation
@@ -427,7 +445,10 @@ console.log(
     const flatOrgPayload = buildChangeNotePayload(
       Object.assign({}, nestedNotePrefill, {
         recordedAtAnotherOrganisation: true,
-        recordedByOrganisation: { organisationName: 'Park Road Surgery', organisationIdentifierType: 'nhs-england-ods-code' },
+        recordedByOrganisation: {
+          organisationName: 'Park Road Surgery',
+          organisationIdentifierType: 'nhs-england-ods-code',
+        },
       }),
       sameConceptRelabel
     );
@@ -1314,6 +1335,70 @@ console.log('--- findLegacyReadCodeOrigin: structural Read-code-origin detection
 }
 
 console.log(
+  '--- extractGp2gpOnsetDateCandidate: real 2026-08-20 capture (Morbid obesity, onsetDate/recordDate both null) ---'
+);
+{
+  // The exact real overview Nick pasted live — createdDateTime (2024, when
+  // this record entered Medicus) is deliberately NOT the field read here;
+  // createdInOriginalSystemDateTime (1995, the original system's own
+  // creation stamp) is.
+  const realOverview = {
+    id: '019236e2-7890-72ab-8687-efba44f7be5d',
+    problemCode: { conceptId: '238136002', description: 'Morbid obesity' },
+    onsetDate: null,
+    recordDate: null,
+    createdDateTime: '2024-09-28 05:27:44',
+    createdInOriginalSystemDateTime: '1995-11-25 11:23:53',
+  };
+  check(
+    extractGp2gpOnsetDateCandidate(realOverview) === '1995-11-25',
+    'the original system creation date is extracted, just the date portion — the real live case this fixes'
+  );
+  check(
+    extractGp2gpOnsetDateCandidate({ createdInOriginalSystemDateTime: '2020-01-05T00:00:00' }) === '2020-01-05',
+    'a T-separated ISO datetime is also recognised, not just the space-separated shape seen live'
+  );
+  check(
+    extractGp2gpOnsetDateCandidate({ createdDateTime: '2024-09-28 05:27:44' }) === null,
+    'createdDateTime (the Medicus-side migration timestamp) is never read — only the original-system field'
+  );
+  check(
+    extractGp2gpOnsetDateCandidate({ createdInOriginalSystemDateTime: 'not-a-date' }) === null,
+    'an unrecognised format -> null, never guessed at'
+  );
+  check(extractGp2gpOnsetDateCandidate({}) === null, 'no timestamp field at all -> null');
+  check(extractGp2gpOnsetDateCandidate(null) === null, 'null overview -> null, never throws');
+}
+
+console.log('--- buildGp2gpOnsetPayload: the live 500 fix (HAR 73-api500-settingdate.har, 2026-08-20) ---');
+{
+  const gp2gpCode = { description: 'Morbid obesity', conceptId: '238136002', descriptionId: null };
+  // The real live failure: recordDate genuinely null, onsetDate being set
+  // for the first time -> 500'd. Confirmed-working captures always pair a
+  // non-null onsetDate with a non-null recordDate.
+  const nullRecordDatePrefill = Object.assign({}, prefill, { onsetDate: null, recordDate: null });
+  const backfilledPayload = buildGp2gpOnsetPayload(nullRecordDatePrefill, gp2gpCode, '1995-11-25');
+  check(backfilledPayload.onsetDate === '1995-11-25', 'onsetDate is set to the confirmed date');
+  check(
+    backfilledPayload.recordDate === '1995-11-25',
+    'recordDate is backfilled to the SAME date — the actual fix for the live 500'
+  );
+  // An existing real recordDate must never be overwritten by this apply
+  // path — it may carry its own, separately-correct value.
+  const realRecordDatePrefill = Object.assign({}, prefill, { onsetDate: null, recordDate: '2010-06-01' });
+  const preservedPayload = buildGp2gpOnsetPayload(realRecordDatePrefill, gp2gpCode, '1995-11-25');
+  check(preservedPayload.onsetDate === '1995-11-25', 'onsetDate is still set');
+  check(
+    preservedPayload.recordDate === '2010-06-01',
+    'an existing real recordDate is left untouched, not overwritten by the onset-date backfill'
+  );
+  check(
+    buildGp2gpOnsetPayload(null, gp2gpCode, '1995-11-25').recordDate === '1995-11-25',
+    'a null prefill is treated the same as recordDate == null — backfills rather than throwing'
+  );
+}
+
+console.log(
   '--- descendantSearchTargetConceptId: retired-concept pivot to the confirmed replacement (2026-07-29, 179304004 investigation) ---'
 );
 {
@@ -1359,6 +1444,25 @@ console.log('--- rules/generic-additional-info-text.json: the imported list itse
   check(
     genericAdditionalInfoText.entries.some((e) => e.text === 'Problem severity: Minor'),
     '"Problem severity: Minor" is present (added 2026-07-26)'
+  );
+  check(
+    genericAdditionalInfoText.entries.some((e) => e.text === 'SUMMARY=Y'),
+    '"SUMMARY=Y" is present (added 2026-08-20)'
+  );
+}
+
+console.log('--- stripGenericAdditionalInfoLines: "SUMMARY=Y" (2026-08-20 addition) ---');
+{
+  const genericTexts = literalTextsFromEntries(genericAdditionalInfoText.entries);
+  const result = stripGenericAdditionalInfoLines('cough\nSUMMARY=Y', genericTexts);
+  check(result.cleaned === 'cough', 'the genuine free-text line survives, SUMMARY=Y is stripped');
+  check(
+    result.removed.length === 1 && result.removed[0] === 'SUMMARY=Y',
+    'the removed line is reported (got ' + JSON.stringify(result.removed) + ')'
+  );
+  check(
+    stripGenericAdditionalInfoLines('summary=y', genericTexts).removed.length === 1,
+    'matching is case-insensitive, same as every other literal entry'
   );
 }
 
