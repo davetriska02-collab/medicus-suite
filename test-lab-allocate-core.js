@@ -346,7 +346,7 @@ console.log('\n--- canvas + manifest source locks ---');
     'test chip counts intersect the live filter subset'
   );
   check(
-    /emptyPoolHtml/.test(canvas) && (canvas.match(/emptyPoolHtml/g) || []).length >= 2,
+    /body \|\| emptyPoolHtml\(pool\.count\)/.test(canvas) && !/Nothing left unallocated/.test(canvas),
     'the icon empty state is used consistently, not an alternate iconless branch'
   );
   check(
@@ -382,7 +382,7 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/labAllocate\.favourites/.test(canvas), 'favourites persist under labAllocate.favourites');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
-  check(/Why this will not write/.test(canvas), 'a blocked write is a visible action, not a dead button');
+  check(/Why reassignment is blocked/.test(canvas), 'a blocked reassignment is a visible action, not a dead button');
   check(
     /requestStage\(ids, key, btn\.closest/.test(canvas),
     'clicking a field stages the active selection — no drag needed'
@@ -607,8 +607,9 @@ console.log('\n--- absence warning at allocation ---');
   check(/annual leave until 29 Aug 2026/.test(away.label), 'warning names the leave and the return date');
   const copy = C.absenceWarningCopy(away, 4, 'Dr Jane Cole');
   check(
-    /does not mean they will see them today/.test(copy),
-    'allocation warning states they will not see the labs today'
+    /If you confirm, 4 results will be reassigned to Dr Jane Cole/.test(copy) &&
+      /may sit until that person is back/.test(copy),
+    'allocation warning states the consequence of confirming the reassignment'
   );
   check(!/\b(Done|Sent|Allocated|Submitted|Booked)\b/.test(copy), 'absence copy has no completion verbs');
   check(

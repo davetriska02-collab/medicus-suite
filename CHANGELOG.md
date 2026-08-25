@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.1] — 2026-08-25
+
+### Lab allocation canvas — critical-lens polish
+
+A second multi-lens review (art direction, code/accessibility and a
+fresh-eyes GP) found that the feature set was sound but the final decision
+still asked the clinician to decode too much.
+
+- **Filters now explain themselves:** labelled Availability and Test axes,
+  intersecting test counts, disabled zero-count choices, one global
+  `Select all shown`, and compact `Select N` group actions.
+- **Destinations are explicit:** a wider clinician rail, `Plan N here`
+  instead of a bare `+N`, and truthful card arithmetic separating work
+  already with someone, work planned here, and work they ordered that is
+  still unallocated.
+- **Review is now a real modal:** the heading names the task count and
+  destination, every row retains patient and test context, and the action
+  says `Reassign tasks in Medicus` rather than the ambiguous `Write`.
+- **The absence gate is unmistakable:** the safe route is primary,
+  the risky route is an amber ghost, and the target remains visibly tied
+  to the warning. Hard failures use the red triad.
+- Keyboard list navigation, search focus, active states, sticky-header
+  measurement and the zero-unallocated state received the same pass.
+
+W23 / H-064 is unchanged: unique staff UUID or refuse; reassignment does
+not file the result. Patch release, so the CSN remains current at 3.244.0
+(doc v3.31).
+
 ## [v3.244.0] — 2026-08-25
 
 ### Lab allocation canvas — filter the pile, favourite destinations

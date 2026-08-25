@@ -548,7 +548,7 @@
     if (existingTiles.length) {
       body +=
         '<div class="ms-lac-drawer-sub">Already with them</div>' +
-        '<div class="ms-lac-drawer-note">View-only — already with them in Medicus, not staged here.</div>' +
+        '<div class="ms-lac-drawer-note">View-only — already with them in Medicus, not part of this plan.</div>' +
         existingTiles
           .map(function (t) {
             return tileHtml(t, { showWho: false, showAssignee: false, quiet: true });
@@ -654,7 +654,7 @@
           ' still waiting — clear the filter to see them.</div>' +
           '<button type="button" class="ms-lac-ghost" id="ms-lac-filter-clear">Clear filter</button>'
         : '<div class="ms-lac-empty-title">No unallocated reports — nothing is waiting</div>' +
-          '<div class="ms-lac-empty-sub">Work already sitting with a clinician is in their field on the right.</div>') +
+          '<div class="ms-lac-empty-sub">Tasks already assigned are listed with each clinician on the right.</div>') +
       '</div>'
     );
   }
@@ -762,11 +762,6 @@
       shownCount += g.count;
     });
     var body = shownGroups.length ? shownGroups.map(groupHtml).join('') : '';
-    if (!body && board.count > 0 && !pool.count) {
-      body =
-        '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left unallocated</div>' +
-        '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or planned onto one on this canvas</div></div>';
-    }
     var sections = railSections(board.clinicians);
     var railBody = sections.length
       ? sections
@@ -808,7 +803,7 @@
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Choose a clinician to plan these ' + selCount + ' result' + (selCount === 1 ? '' : 's')
-        : 'Favourites first. Drag onto a field — hover near the edge to scroll') +
+        : 'Favourites first. Drag work onto a clinician, or click to inspect') +
       '</span>' +
       '</div>' +
       railBody +
@@ -914,15 +909,15 @@
       : canWrite
         ? 'Review the patient → clinician list, then confirm'
         : blockReason;
-    var writeLabel = sum.count && !canWrite ? 'Why this will not write' : 'Review reassignments…';
+    var writeLabel = sum.count && !canWrite ? 'Why reassignment is blocked' : 'Review reassignments…';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
       '">' +
       '<span class="ms-lac-confirmbar-note">' +
       (blockReason
-        ? '<strong>Cannot write these yet.</strong> ' + esc(blockReason)
-        : '<strong>Planning board.</strong> Planned moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
+        ? '<strong>Cannot reassign these yet.</strong> ' + esc(blockReason)
+        : '<strong>Planning board.</strong> Planned moves live on this canvas until you review and confirm. Reassigning changes who the task sits with — it does not file the result' +
           (sum.count ? ' (' + sum.count + ' planned so far)' : '') +
           '.') +
       '</span>' +
@@ -1512,7 +1507,6 @@
           key: key,
           copy: C.absenceWarningCopy(abs, ids.length, title),
         };
-        announce('Absence check before planning onto ' + title);
         render();
         return;
       }

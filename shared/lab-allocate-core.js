@@ -599,8 +599,8 @@
           : t.namedGp
             ? ' · registered GP ' + t.namedGp + ' (not confirmed as the requester)'
             : '';
-        var staged = t.staged ? ' · staged on this canvas only' : '';
-        lines.push('  - ' + (t.patientName || 'Unknown') + (t.summary ? ' · ' + t.summary : '') + hint + staged);
+        var planned = t.staged ? ' · planned on this canvas only' : '';
+        lines.push('  - ' + (t.patientName || 'Unknown') + (t.summary ? ' · ' + t.summary : '') + hint + planned);
       });
       lines.push('');
     });
@@ -824,8 +824,8 @@
       return {
         ok: false,
         reason: refused.length
-          ? 'Cannot write — no unique staff match for the staged clinician fields. They stay on this canvas.'
-          : 'Nothing staged to write.',
+          ? 'Cannot reassign — no unique staff match for the planned clinicians. They stay on this canvas.'
+          : 'Nothing planned to reassign.',
         batches: [],
         refused: refused,
         items: [],
@@ -1223,30 +1223,30 @@
     if (absence.state === 'away') {
       return (
         absence.label +
-        ' Staging ' +
+        ' If you confirm, ' +
         noun +
-        ' onto ' +
+        ' will be reassigned to ' +
         who +
-        ' does not mean they will see them today. They will sit until that person is back, unless someone else files them.'
+        '. They may sit until that person is back unless someone else reviews them.'
       );
     }
     if (absence.state === 'away-pending') {
       return (
         absence.label +
-        ' Staging ' +
+        ' If you confirm, ' +
         noun +
-        ' onto ' +
+        ' will be reassigned to ' +
         who +
-        ' still risks them being away — the leave is requested, not yet approved.'
+        ', but they may still be away — the leave is requested, not yet approved.'
       );
     }
     return (
       absence.label +
-      ' Staging ' +
+      ' If you confirm, ' +
       noun +
-      ' onto ' +
+      ' will be reassigned to ' +
       who +
-      ' does not mean they are in today. Absence was not checked against a matching rota row.'
+      '. This does not mean they are in today; absence was not checked against a matching rota row.'
     );
   }
 
@@ -1401,7 +1401,7 @@
         return {
           ok: false,
           reason:
-            'The queue changed — at least one staged result is no longer on the list. Nothing was written. Reload and check Medicus.',
+            'The queue changed — at least one planned result is no longer on the list. Nothing was written. Reload and check Medicus.',
           written: 0,
           vanished: vanished,
           refused: plan.refused || [],

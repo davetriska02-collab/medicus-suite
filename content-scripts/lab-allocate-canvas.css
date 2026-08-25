@@ -332,9 +332,9 @@
 }
 
 .ms-lac-filter-axis-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text-4);
+  color: var(--text-2);
 }
 
 .ms-lac-filters,
@@ -658,7 +658,7 @@
 /* Resting cards stay neutral — presence is carried by the dot/flag and the
    rail sections, not by tinting the whole card. */
 .ms-lac-chip-away {
-  border-color: var(--amber-line);
+  border-color: var(--border);
   background: var(--bg-elev);
 }
 
@@ -667,7 +667,7 @@
 }
 
 .ms-lac-chip-in {
-  border-color: var(--green-line);
+  border-color: var(--border);
   background: var(--bg-elev);
 }
 
@@ -694,7 +694,6 @@
 .ms-lac-chip-drawer {
   padding: 8px;
   margin: 0 6px 6px;
-  border-top: 0;
   max-height: 40vh;
   overflow: auto;
   background: var(--bg-mid);
@@ -734,7 +733,7 @@
 }
 
 .ms-lac-col-in {
-  color: var(--green);
+  color: var(--text-2);
   background: var(--green-dim);
   border: 1px solid var(--green-line);
 }
@@ -831,7 +830,7 @@
 }
 
 .ms-lac-group-picked {
-  margin-left: auto;
+  margin-left: 0;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-size: 10.5px;
@@ -855,7 +854,7 @@
 }
 
 .ms-lac-group-select {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .ms-lac-group-select:hover,
@@ -1045,10 +1044,6 @@
   text-align: center;
 }
 
-.ms-lac-empty svg {
-  color: var(--text-4);
-}
-
 .ms-lac-empty-title {
   font-size: 13px;
   font-weight: 600;
@@ -1117,6 +1112,14 @@
   align-items: flex-start;
   background: var(--amber-dim);
   border-top-color: var(--amber-line);
+  color: var(--amber);
+}
+
+.ms-lac-confirmbar-absence .ms-lac-confirmbar-note {
+  color: var(--text-1);
+}
+
+.ms-lac-confirmbar-absence strong {
   color: var(--amber);
 }
 
