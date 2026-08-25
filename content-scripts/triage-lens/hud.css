@@ -35,7 +35,6 @@
 .ch-detail-verdict,
 .ch-q-pulse,
 .ch-q-why,
-.ch-q-act,
 .ch-row-pulse-red,
 .ch-row-pulse-amber,
 .ch-row-pulse-on {
@@ -355,49 +354,18 @@
   color: var(--text-2);
   cursor: default;
 }
-.ch-q-pulse-act {
-  width: auto;
-  height: 24px;
-  padding: 0 8px;
-  font-family: var(--mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-3);
-  background: transparent;
-  border: 1px solid var(--border-hi);
-  border-radius: var(--r-md);
-  cursor: pointer;
-}
-.ch-q-pulse-act[aria-expanded='true'] {
-  background: var(--accent-dim);
-  border-color: var(--accent-line);
-  color: var(--text-2);
-}
 /* Interaction states for every pulse control (same pattern as
    .ch-action-menu-item:hover/:focus-visible above). */
 .ch-q-pulse-head:hover .ch-chip {
   filter: brightness(0.96);
 }
 .ch-q-pulse-head:focus-visible,
-.ch-q-pulse-more:focus-visible,
-.ch-q-pulse-act:focus-visible,
-.ch-q-act-row button:focus-visible {
+.ch-q-pulse-more:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 .ch-q-pulse-more:hover {
   background: var(--bg-hover);
-}
-.ch-q-pulse-act:hover {
-  border-color: var(--accent);
-  background: var(--accent-dim);
-  color: var(--text-2);
-}
-.ch-q-act-row button:hover:not(:disabled) {
-  background: var(--accent-dim);
-  border-color: var(--accent);
 }
 .ch-q-pulse-head[aria-expanded='true'] .ch-chip,
 .ch-q-pulse-more[aria-expanded='true'] {
@@ -406,8 +374,7 @@
 
 /* Inline in-row tray, not a floating modal — shadow-2 (raised content lift),
    never shadow-3 (that's reserved for modals/HUD). */
-.ch-q-why,
-.ch-q-act {
+.ch-q-why {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -415,15 +382,14 @@
   padding: 8px 12px;
   max-width: 520px;
 }
-/* Expanded why/act sit on the viewport (same idea as .ch-action-menu), not
+/* Expanded why sits on the viewport (same idea as .ch-action-menu), not
    inside the AG-Grid cell — expanding in-cell grew the row and forced a
    scroll on tasks/investigations. */
 .ch-q-pulse-float {
   box-shadow: var(--shadow-3);
   box-sizing: border-box;
 }
-.ch-q-why h3,
-.ch-q-act h3 {
+.ch-q-why h3 {
   margin: 0 0 6px;
   font-size: 11px;
   font-weight: 650;
@@ -488,44 +454,6 @@
   font-size: 11px;
   color: var(--text-3);
   font-style: normal;
-}
-.ch-q-act-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-.ch-q-act-row button {
-  font-family: var(--sans);
-  font-size: 12px;
-  padding: 6px 8px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--accent-line);
-  background: var(--bg-elev);
-  color: var(--text-1);
-  cursor: pointer;
-  text-align: left;
-}
-.ch-q-act-row button small {
-  display: block;
-  font-size: 10px;
-  color: var(--text-3);
-  font-weight: 400;
-}
-.ch-q-act-row button:disabled {
-  background: var(--bg-mid);
-  border-color: var(--border);
-  color: var(--text-3);
-  cursor: not-allowed;
-}
-.ch-q-act-row button:disabled small {
-  color: var(--text-3);
-}
-.ch-q-act-note {
-  margin: 6px 0 0;
-  font-size: 11px;
-  color: var(--text-3);
-  border-top: 1px solid var(--border);
-  padding-top: 6px;
 }
 
 /* ---- Keyboard-triage cursor (item 4.6, TRIAGE-LENS-2026-07-02.md) ----

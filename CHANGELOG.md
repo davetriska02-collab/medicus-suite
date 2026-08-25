@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.2] — 2026-08-25
+
+### Triage Lens — remove the pulse Act tray
+
+The compressed queue pulse no longer shows **Act ›**. The `a` shortcut, the
+four-button stage tray (Book / Pharmacy First / Ask-back / Park), and the
+options copy that pointed at them are gone. Space still opens why. Pharmacy
+First and Ask-back stay on their existing row chips when a pathway matches.
+
 ## [v3.242.1] — 2026-08-25
 
 ### Lab allocation canvas — group by who ordered, warn on absence

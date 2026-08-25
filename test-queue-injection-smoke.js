@@ -750,7 +750,6 @@ if (!parts.some((p) => !p)) {
     // Pulse v1 lives outside this harness (own unit tests). Stub the free
     // variables decorateOneRow / inject* / onQueueKeydown now close over so
     // the extracted injection functions still compile and run.
-    _pulseActByRow: new Map(),
     _pulseOpenByKey: new Map(),
     refreshPulseOnRow: () => {},
     pulseOpenKey: () => null,

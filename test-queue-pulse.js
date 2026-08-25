@@ -105,7 +105,8 @@ check(/queuePulseCompress/.test(content), 'content.js reads the pulse pref');
 check(/data-pref="queuePulseCompress"/.test(options), 'options has a pulse checkbox');
 check(/\.ch-q-pulse/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-pulse');
 check(/\.ch-q-why/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-why');
-check(/\.ch-q-act/.test(hud.split('{')[0]), 'hud.css token-block lists .ch-q-act');
+check(!/\.ch-q-act/.test(hud.split('{')[0]), 'hud.css token-block no longer lists retired .ch-q-act');
+check(!/\.ch-q-pulse-act/.test(hud) && !/\.ch-q-act-row/.test(hud), 'act-button and act-tray CSS are retired');
 check(
   /\.ch-queue-chips, \.ch-q-mon, \.ch-q-result, \.ch-q-pa, \.ch-q-pending, \.ch-q-repeat, \.ch-q-carry, \.ch-q-pulse/.test(
     content
@@ -114,14 +115,17 @@ check(
 );
 check(/cl\.contains\('ch-q-pulse'\)/.test(content), 'observer self-write filter includes pulse');
 check(/reapplyQueuePulses\(\)/.test(content), 'refreshQueueChips re-applies pulses after reinjects');
-const actFn = content.match(/const buildPulseActTray = \([\s\S]*?\n  \};/);
-check(!!actFn, 'buildPulseActTray found');
-if (actFn) {
-  check(
-    !/\bDone\b|\bSent\b|\bBooked\b|\bSubmitted\b/.test(actFn[0]),
-    'act tray copy-ban: no Done/Sent/Booked/Submitted'
-  );
-}
+check(!/buildPulseActTray/.test(content), 'buildPulseActTray is gone');
+check(!/_pulseActByRow/.test(content), '_pulseActByRow map is gone');
+check(!/ch-q-pulse-act/.test(content), 'Act › pulse button is gone');
+check(!/Act ›/.test(content), 'Act › label is gone');
+check(
+  !/else if \(key === 'a' \|\| key === 'A'\)/.test(content),
+  'keyboard a no longer opens an act tray'
+);
+check(!/a act-tray/.test(content), '? help no longer mentions an act tray');
+check(!/a opens act tray/.test(options), 'options keyboard help no longer mentions an act tray');
+check(!/› stages a/.test(options), 'options pulse help no longer mentions staging from ›');
 check(/Not a score/.test(content), 'why-tray footer refuses the score reading');
 // Amber gets a rail in the same column as red (hollow, not solid) — severity
 // lives on ONE axis (the rail column), distinguished by fill density/shape,
@@ -192,7 +196,7 @@ check(
   /\[col-id='patientName'\] > \.ch-q-pulse \{[\s\S]*?flex: 0 1 auto/.test(hud),
   'pulse inside patientName does not take 100% of the cell'
 );
-check(/positionPulseFloat/.test(content), 'why/act trays are positioned as viewport popovers');
+check(/positionPulseFloat/.test(content), 'why tray is positioned as a viewport popover');
 check(/ch-q-pulse-float/.test(content) && /\.ch-q-pulse-float \{/.test(hud), 'float class is styled');
 check(/document\.body\.appendChild\(tray\)/.test(content), 'expanded tray is appended to body, not the grid cell');
 check(
