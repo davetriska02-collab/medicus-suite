@@ -619,7 +619,11 @@
 
   function extractTaskListToken(body) {
     if (!body || typeof body !== 'object') return undefined;
-    return body.taskList;
+    if (body.taskList !== undefined) return body.taskList;
+    if (body.data && typeof body.data === 'object' && body.data.taskList !== undefined) {
+      return body.data.taskList;
+    }
+    return undefined;
   }
 
   function canWriteAllocations(ctx) {
@@ -663,19 +667,24 @@
     return { id: id, name: name };
   }
 
+  function harvestNamedStaffList(dir, list, source) {
+    if (!Array.isArray(list)) return;
+    list.forEach(function (item) {
+      var p = pickStaffFields(item);
+      if (p) addStaffToDirectory(dir, p.id, p.name, source);
+    });
+  }
+
   function harvestAssigneeOptionsInto(dir, payload) {
     if (!payload || typeof payload !== 'object') return;
     function consider(node) {
-      if (!node || typeof node !== 'object') return;
+      if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+      // Today-book root carries staffOptions (91 on the 2026-08-25 capture).
+      // Same id/name shape as assigneeOptions.staff — harvest, never invent.
+      harvestNamedStaffList(dir, node.staffOptions, 'staff-options');
       var opts = node.assigneeOptions;
       if (!opts || typeof opts !== 'object') return;
-      var staff = opts.staff;
-      if (Array.isArray(staff)) {
-        staff.forEach(function (item) {
-          var p = pickStaffFields(item);
-          if (p) addStaffToDirectory(dir, p.id, p.name, 'assignee-options');
-        });
-      }
+      harvestNamedStaffList(dir, opts.staff, 'assignee-options');
       var teams = opts.teams;
       if (Array.isArray(teams)) {
         teams.forEach(function (item) {
@@ -1340,7 +1349,9 @@
           encodeURIComponent(day) +
           '&filterByUsualLocation=false'
       );
-      return parseTodayBook(body);
+      var parsed = parseTodayBook(body);
+      parsed.source = body && typeof body === 'object' ? body : null;
+      return parsed;
     }
 
     async function fetchStaffScheduleAbsences() {

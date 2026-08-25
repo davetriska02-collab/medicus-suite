@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.2] — 2026-08-25
+
+### Lab allocation canvas — write blocker, drag-scroll, In today first
+
+The write button no longer dies silently. Staging still works when
+Requested By is already on the task-list, but that used to skip the
+overview fetch that supplies `assigneeOptions.staff` — so the staff
+directory was empty and **Review then write** was a disabled no-op.
+The canvas now harvests staff UUIDs from a few overviews *and* from
+the appointment-book `staffOptions` we already GET, and a blocked
+write names who has no unique staff id instead of doing nothing.
+
+Also: the clinician rail auto-scrolls while you drag near its edge;
+In today fields sort to the top; the unallocated pile is an inbox
+well (dashed, list sections) so it no longer reads as a second stack
+of person cards.
+
+Review fix, same theme: a batch that stopped part-way had already
+written its earlier groups, but the canvas left those rows showing as
+staged — so the board claimed work Medicus had in fact taken, and a
+second **Review then write** would re-send them. The failure path now
+re-reads the queue when anything was written, and restores the
+"Medicus accepted the first N" message afterwards (`loadBoard()`
+clears `_error`). Write contract (W23 / H-064) unchanged.
+
 ## [v3.243.1] — 2026-08-25
 
 ### Lab allocation canvas — unallocated box, allocated fields

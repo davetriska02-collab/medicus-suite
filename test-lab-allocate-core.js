@@ -237,6 +237,10 @@ console.log('\n--- write contract is the captured bulk-reassign ---');
   );
   check(C.canWriteAllocations({ taskList: '' }).ok === false, 'empty string is not a token');
   check(C.canWriteAllocations({ taskList: {} }).ok === false, 'empty object is not a token');
+  check(
+    C.extractTaskListToken({ data: { taskList: 'nested-token' } }) === 'nested-token',
+    'taskList token may sit on data.taskList'
+  );
   const src = require('fs').readFileSync(require('path').join(__dirname, 'shared/lab-allocate-core.js'), 'utf8');
   check(/method:\s*['"]POST['"]/.test(src), 'core POSTs the captured bulk-reassign');
   check(src.indexOf('/tasks/task-list/bulk-reassign') !== -1, 'core uses the captured path');
@@ -269,6 +273,16 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/commitAllocations/.test(canvas), 'canvas commits through the core client');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
   check(/Keep planning/.test(canvas), 'confirm defaults the clinician back to planning');
+  // A part-written batch leaves the board claiming work Medicus already took.
+  // The failure path must re-read before it tells anyone to check the queue.
+  check(
+    /result\.written > 0[\s\S]{0,200}?await loadBoard\(\)/.test(canvas),
+    'a partly-written batch re-reads the queue instead of leaving stale staged tiles'
+  );
+  check(
+    /await loadBoard\(\);\s*_error = failReason;/.test(canvas),
+    'the partial-write reason survives that reload — loadBoard clears _error'
+  );
   check(!/\.click\(\)/.test(canvas), 'canvas does not synthesise Medicus clicks');
   check(!/Write to Medicus — not available/.test(canvas), 'Finalise is no longer hard-disabled');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated)\b/.test(canvas), 'canvas copy has no completion verbs');
@@ -285,6 +299,10 @@ console.log('\n--- canvas + manifest source locks ---');
     'canvas is an unallocated pool plus clinician fields'
   );
   check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
+  check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
+  check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
+  check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
+  check(/Why this will not write/.test(canvas), 'a blocked write is a visible action, not a dead button');
   check(
     /requestStage\(ids, key, btn\.closest/.test(canvas),
     'clicking a field stages the active selection — no drag needed'
@@ -649,6 +667,13 @@ console.log('\n--- staff directory + unique UUID resolve ---');
   });
   check(dir.byId[azadianId] && dir.byId[coleId], 'directory keeps both staff UUIDs');
   check(!dir.byId[teamId], 'team assigneeOptions are not people');
+  const fromBook = C.harvestStaffDirectory([], {
+    staffOptions: [
+      { id: azadianId, name: 'Dr Natalie Azadian' },
+      { value: coleId, label: 'Dr Jane Cole' },
+    ],
+  });
+  check(fromBook.byId[azadianId] && fromBook.byId[coleId], 'today-book staffOptions populate the staff directory');
   const hit = C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', dir);
   check(hit.ok && hit.staff.id === azadianId, 'AZADIAN N resolves to the Azadian UUID');
   const miss = C.resolveStaffForColumn(C.clinicianColumnKey('Dr Mystery'), 'Dr Mystery', dir);
