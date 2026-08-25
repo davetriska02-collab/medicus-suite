@@ -231,10 +231,13 @@
   overflow: auto;
 }
 
+/* Inbox well — a pile, not a stack of person cards. */
 .ms-lac-pool {
   flex: 1 1 auto;
   min-width: 0;
   padding: 0 8px 8px;
+  background: var(--bg-mid);
+  border: 1px dashed var(--border-hi);
 }
 
 .ms-lac-pool-head {
@@ -244,10 +247,10 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 10px 8px;
+  padding: 10px 8px 8px;
   margin: 0 -8px;
-  background: var(--bg-elev);
-  border-bottom: 1px solid var(--border);
+  background: var(--bg-mid);
+  border-bottom: 1px dashed var(--border-hi);
 }
 
 .ms-lac-pool-titles {
@@ -257,10 +260,20 @@
   min-width: 0;
 }
 
-.ms-lac-pool-sub {
-  font-size: 11px;
-  font-weight: 500;
+.ms-lac-pool-eyebrow {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-4);
+}
+
+.ms-lac-pool-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
 }
 
 .ms-lac-pool-count {
@@ -271,12 +284,12 @@
 }
 
 .ms-lac-rail {
-  flex: 0 0 300px;
-  min-width: 248px;
-  max-width: 340px;
+  flex: 0 0 280px;
+  min-width: 232px;
+  max-width: 320px;
   overflow: auto;
   padding: 8px;
-  background: var(--bg-mid);
+  background: var(--bg-deep);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
 }
@@ -297,15 +310,14 @@
   color: var(--text-4);
 }
 
-/* Clinician fields — right-hand boxes that hold what sits with them.
-   Drop targets, deliberately NOT the tile recipe. */
+/* Clinician fields — compact person cards, not a second inbox list. */
 .ms-lac-chip-wrap,
 .ms-lac-field {
-  margin-bottom: 8px;
-  min-height: 88px;
-  border: 1px solid var(--border-hi);
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
   transition:
     border-color 150ms var(--ease),
     background 150ms var(--ease);
@@ -329,8 +341,8 @@
   align-items: center;
   column-gap: 8px;
   width: 100%;
-  min-height: 88px;
-  padding: 10px 12px;
+  min-height: 44px;
+  padding: 8px 10px;
   border: 0;
   background: transparent;
   font-family: inherit;
@@ -338,10 +350,6 @@
   cursor: pointer;
   color: var(--text-1);
   transition: background 150ms var(--ease);
-}
-
-.ms-lac-chip-open .ms-lac-chip {
-  min-height: 0;
 }
 
 .ms-lac-chip:hover,
@@ -469,28 +477,28 @@
   border-color: var(--accent);
 }
 
-/* Requester groups — sticky headers are the select-all + drag anchors. */
+/* Requester groups — list sections inside the inbox well, not person cards. */
 .ms-lac-group {
-  margin-top: 8px;
+  margin-top: 2px;
 }
 
 .ms-lac-group-head {
   position: sticky;
-  top: 52px;
+  top: 54px;
   z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 7px 6px 6px;
   background: var(--bg-mid);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
   cursor: grab;
-  transition: border-color 150ms var(--ease);
+  transition: background 150ms var(--ease);
 }
 
 .ms-lac-group-head:hover {
-  border-color: var(--accent-line);
   background: var(--accent-dim);
 }
 

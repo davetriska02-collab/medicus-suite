@@ -65,6 +65,26 @@
     }, 0);
   }
 
+  function scrollNearEdge(e) {
+    if (!_dragIds || !_open || !e) return;
+    var nodes = [
+      document.querySelector('#' + OVERLAY_ID + ' .ms-lac-rail'),
+      document.querySelector('#' + OVERLAY_ID + ' .ms-lac-pool'),
+    ];
+    for (var i = 0; i < nodes.length; i++) {
+      var scroller = nodes[i];
+      if (!scroller) continue;
+      var rect = scroller.getBoundingClientRect();
+      if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+        continue;
+      }
+      var edge = 56;
+      var step = 24;
+      if (e.clientY < rect.top + edge) scroller.scrollTop -= step;
+      else if (e.clientY > rect.bottom - edge) scroller.scrollTop += step;
+    }
+  }
+
   function currentRoute() {
     return C.parseResultsQueueRoute(location.pathname, location.search);
   }
@@ -117,17 +137,29 @@
     setProgress('');
   }
 
-  async function harvestStaffFromOneOverview(rows) {
+  // Requested By on the task-list means enrichRequesters skips overviews —
+  // and that used to skip assigneeOptions.staff too, so the write had no
+  // UUIDs and the button silently did nothing. Always read a few overviews
+  // for the staff directory, even when who ordered is already known.
+  async function harvestStaffFromOverviews(rows) {
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
-    })[0];
-    if (!withUrl) return;
-    try {
-      var payload = await client().fetchOverview(withUrl.overviewURL);
-      _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, payload));
-    } catch (_) {
-      /* directory stays whatever the task-list already gave us */
+    });
+    var cap = Math.min(withUrl.length, 4);
+    for (var i = 0; i < cap; i++) {
+      try {
+        var payload = await client().fetchOverview(withUrl[i].overviewURL);
+        _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, payload));
+        if (_staffDir.list && _staffDir.list.length >= 8) return;
+      } catch (_) {
+        /* try the next overview */
+      }
     }
+  }
+
+  function harvestStaffFromBook(book) {
+    if (!book || !book.source) return;
+    _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, book.source));
   }
 
   async function loadBoard() {
@@ -143,8 +175,9 @@
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       render();
       await presenceP;
+      harvestStaffFromBook(_book);
       render();
-      await harvestStaffFromOneOverview(_rows);
+      await harvestStaffFromOverviews(_rows);
       await enrichRequesters(_rows);
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read the results queue.';
@@ -199,6 +232,27 @@
       absences: _absences,
       staffList: _rota.staff,
       leaveList: _rota.leave,
+    });
+  }
+
+  function presenceRank(col) {
+    var p = presenceForClinician(col);
+    if (p.state === 'present' && p.reason === 'in-today') return 0;
+    if (col.count > 0 || col.stagedCount > 0) return 1;
+    if (p.state === 'away' || p.state === 'away-pending') return 3;
+    return 2;
+  }
+
+  function sortClinicianFields(cols) {
+    return (cols || []).slice().sort(function (a, b) {
+      var ra = presenceRank(a);
+      var rb = presenceRank(b);
+      if (ra !== rb) return ra - rb;
+      var na = C.displayClinicianName(a.title).toLowerCase();
+      var nb = C.displayClinicianName(b.title).toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
     });
   }
 
@@ -395,6 +449,7 @@
         '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left unallocated</div>' +
         '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or staged onto one on this canvas</div></div>';
     }
+    var clinicians = sortClinicianFields(board.clinicians);
     return (
       '<div class="ms-lac-workspace">' +
       '<div class="ms-lac-col ms-lac-pool" data-col-key="' +
@@ -402,17 +457,17 @@
       '" data-col-kind="pool">' +
       '<div class="ms-lac-pool-head">' +
       '<div class="ms-lac-pool-titles">' +
-      '<h3 class="ms-lac-col-heading">' +
+      '<p class="ms-lac-pool-eyebrow">' +
       esc(pool.title) +
-      '</h3>' +
-      '<span class="ms-lac-pool-sub">Unallocated reports</span>' +
+      '</p>' +
+      '<h3 class="ms-lac-pool-title">Unallocated reports</h3>' +
       '</div>' +
       '<span class="ms-lac-pool-count">' +
       pool.count +
       ' of ' +
       board.count +
       '</span>' +
-      '<span class="ms-lac-col-meta">Multiselect — drop here to keep unallocated</span>' +
+      '<span class="ms-lac-col-meta">Inbox pile — multiselect, then drag onto a clinician</span>' +
       '</div>' +
       (body || emptyPoolHtml()) +
       '</div>' +
@@ -422,11 +477,11 @@
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Click a field to stage the selection'
-        : 'Drag onto a field — click to expand and see what sits with them') +
+        : 'In today at the top. Drag onto a field — hover near the edge to scroll') +
       '</span>' +
       '</div>' +
-      (board.clinicians.length
-        ? board.clinicians
+      (clinicians.length
+        ? clinicians
             .map(function (col) {
               return fieldHtml(col, selCount);
             })
@@ -536,19 +591,37 @@
     var gate = C.canWriteAllocations({ taskList: _taskList });
     var plan = sum.count ? C.planBulkReassign(_rows, _draft, _taskList, _staffDir) : null;
     var canWrite = !!(gate.ok && plan && plan.ok && plan.batches && plan.batches.length);
-    var writeTitle = !gate.ok
-      ? gate.reason
-      : !sum.count
-        ? 'Stage at least one result onto a clinician field first'
-        : canWrite
-          ? 'Review the patient → clinician list, then confirm'
-          : (plan && plan.reason) || 'Cannot write these staged moves';
-    var writeLabel = canWrite ? 'Review then write…' : sum.count ? 'Cannot write — no staff match' : 'Write to Medicus';
+    var blockReason = '';
+    if (sum.count && !canWrite) {
+      if (!gate.ok) blockReason = gate.reason;
+      else if (plan && plan.refused && plan.refused.length) {
+        blockReason =
+          'No unique staff id for ' +
+          plan.refused
+            .map(function (r) {
+              return C.displayClinicianName(r.toTitle);
+            })
+            .join(', ') +
+          '. They stay on this canvas. The canvas is still reading staff, or that name is not in Medicus’s staff list.';
+      } else blockReason = (plan && plan.reason) || 'Cannot write these staged moves.';
+    }
+    var writeTitle = !sum.count
+      ? 'Stage at least one result onto a clinician field first'
+      : canWrite
+        ? 'Review the patient → clinician list, then confirm'
+        : blockReason;
+    var writeLabel = canWrite ? 'Review then write…' : sum.count ? 'Why this will not write' : 'Write to Medicus';
     return (
-      '<div class="ms-lac-confirmbar">' +
-      '<span class="ms-lac-confirmbar-note"><strong>Planning board.</strong> Staged moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
-      (sum.count ? ' (' + sum.count + ' staged so far)' : '') +
-      '.</span>' +
+      '<div class="ms-lac-confirmbar' +
+      (blockReason ? ' ms-lac-confirmbar-warn' : '') +
+      '">' +
+      '<span class="ms-lac-confirmbar-note">' +
+      (blockReason
+        ? '<strong>Cannot write these yet.</strong> ' + esc(blockReason)
+        : '<strong>Planning board.</strong> Staged moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
+          (sum.count ? ' (' + sum.count + ' staged so far)' : '') +
+          '.') +
+      '</span>' +
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '<div class="ms-lac-confirmbar-actions">' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-copy">Copy working list</button>' +
@@ -556,7 +629,7 @@
       (sum.count ? '' : ' disabled') +
       '>Clear staged moves</button>' +
       '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-finalise"' +
-      (canWrite ? '' : ' disabled') +
+      (sum.count ? '' : ' disabled') +
       ' title="' +
       esc(writeTitle) +
       '">' +
@@ -811,6 +884,7 @@
       el.addEventListener('dragover', function (e) {
         e.preventDefault();
         el.classList.add('ms-lac-drop-hover');
+        scrollNearEdge(e);
       });
       el.addEventListener('dragleave', function (e) {
         if (e.relatedTarget && el.contains(e.relatedTarget)) return;
@@ -1073,6 +1147,16 @@
       document.documentElement.appendChild(launch);
     }
   }
+
+  document.addEventListener(
+    'dragover',
+    function (e) {
+      if (!_dragIds || !_open) return;
+      e.preventDefault();
+      scrollNearEdge(e);
+    },
+    true
+  );
 
   document.addEventListener(
     'keydown',
