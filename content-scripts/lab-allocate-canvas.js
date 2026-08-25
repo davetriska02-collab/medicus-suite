@@ -57,6 +57,9 @@
   var _dragGhost = null;
   var _expandedChip = '';
   var _collapsed = {};
+  var _addOpen = false;
+  var _focusConfirm = false;
+  var _focusAdd = false;
 
   function announce(text) {
     setTimeout(function () {
@@ -260,8 +263,13 @@
   // in the unknown pile, where it varies per row and is load-bearing.
   function tileHtml(tile, opts) {
     opts = opts || {};
-    var selected = !!_selected[tile.id];
-    var cls = 'ms-lac-tile' + (tile.staged ? ' ms-lac-tile-staged' : '') + (selected ? ' ms-lac-tile-picked' : '');
+    var quiet = !!opts.quiet && !tile.staged;
+    var selected = !quiet && !!_selected[tile.id];
+    var cls =
+      'ms-lac-tile' +
+      (quiet ? ' ms-lac-tile-quiet' : '') +
+      (tile.staged ? ' ms-lac-tile-staged' : '') +
+      (selected ? ' ms-lac-tile-picked' : '');
     var assignedPerson =
       opts.showAssignee && tile.assignedTo && !C.isTeamAssignee(tile.assignedTo)
         ? '<span class="ms-lac-tile-token">with ' + esc(C.displayClinicianName(tile.assignedTo)) + '</span>'
@@ -275,17 +283,31 @@
           : 'Who ordered this is not recorded on the task';
       whoLine = '<span class="ms-lac-tile-who">' + esc(who) + '</span>';
     }
+    var attrs;
+    if (quiet) {
+      attrs = 'role="listitem"';
+    } else if (tile.staged) {
+      attrs =
+        'role="option" tabindex="0" aria-selected="false" draggable="true" data-task-id="' +
+        esc(tile.id) +
+        '" data-unstage="1" aria-label="' +
+        esc(tile.patientName + ' — staged — press Enter to return to unallocated') +
+        '"';
+    } else {
+      attrs =
+        'role="option" tabindex="0" aria-selected="' +
+        (selected ? 'true' : 'false') +
+        '" draggable="true" data-task-id="' +
+        esc(tile.id) +
+        '"';
+    }
     return (
       '<div class="' +
       cls +
-      '" role="option" tabindex="0" aria-selected="' +
-      (selected ? 'true' : 'false') +
-      '" draggable="true" data-task-id="' +
-      esc(tile.id) +
-      '">' +
-      '<span class="ms-lac-tile-check" aria-hidden="true">' +
-      (selected ? '✓' : '') +
-      '</span>' +
+      '" ' +
+      attrs +
+      '>' +
+      (quiet ? '' : '<span class="ms-lac-tile-check" aria-hidden="true">' + (selected ? '✓' : '') + '</span>') +
       '<span class="ms-lac-tile-name">' +
       esc(tile.patientName) +
       '</span>' +
@@ -294,6 +316,7 @@
       '</span>' +
       assignedPerson +
       whoLine +
+      (tile.staged ? '<span class="ms-lac-tile-staged-mark">STAGED</span>' : '') +
       '</div>'
     );
   }
@@ -311,15 +334,13 @@
       '" data-group-key="' +
       esc(group.key) +
       '">' +
-      '<div class="ms-lac-group-head" role="button" tabindex="0" draggable="true" data-group-ids="' +
+      '<div class="ms-lac-group-head" draggable="true" data-group-ids="' +
       idsAttr +
       '" data-group-key="' +
       esc(group.key) +
-      '" aria-label="Select all ' +
-      group.count +
-      (group.known ? ' ordered by ' + esc(title) : ' with unknown requester') +
       '">' +
       '<span class="ms-lac-group-grip" aria-hidden="true">⠿</span>' +
+      '<span class="ms-lac-group-role">Ordered by</span>' +
       '<span class="ms-lac-group-title">' +
       esc(title) +
       '</span>' +
@@ -328,7 +349,7 @@
       '</span>' +
       (selectedInGroup
         ? '<span class="ms-lac-group-picked">' + selectedInGroup + ' selected</span>'
-        : '<span class="ms-lac-group-hint">Select all</span>') +
+        : '<button type="button" class="ms-lac-group-select" data-group-ids="' + idsAttr + '">Select all</button>') +
       '<button type="button" class="ms-lac-group-toggle" data-toggle-key="' +
       esc(group.key) +
       '" aria-expanded="' +
@@ -354,11 +375,15 @@
     );
   }
 
-  function fieldCounts(col) {
+  function fieldCountsHtml(col) {
     var bits = [];
-    bits.push(col.count + ' sitting with them');
-    if (col.stagedCount) bits.push(col.stagedCount + ' staged on this canvas');
-    if (col.inPoolCount) bits.push(col.inPoolCount + ' still unallocated');
+    bits.push(esc(col.count + ' results sitting with them'));
+    if (col.stagedCount) {
+      bits.push(
+        '<span class="ms-lac-chip-count-staged">' + esc(col.stagedCount + ' staged on this canvas') + '</span>'
+      );
+    }
+    if (col.inPoolCount) bits.push(esc(col.inPoolCount + ' still unallocated'));
     return bits.join(' · ');
   }
 
@@ -369,13 +394,13 @@
     var open = _expandedChip === col.key;
     var body = col.tiles
       .map(function (t) {
-        return tileHtml(t, { showWho: false, showAssignee: false });
+        return tileHtml(t, { showWho: false, showAssignee: false, quiet: true });
       })
       .join('');
     var flag = away
       ? '<span class="ms-lac-chip-flag">AWAY</span>'
       : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In today</span>'
+        ? '<span class="ms-lac-chip-in-dot" aria-hidden="true"></span><span class="ms-lac-chip-in-label">In today</span>'
         : '';
     var note = '';
     if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
@@ -398,22 +423,23 @@
       (open ? 'true' : 'false') +
       '" aria-controls="ms-lac-drawer-' +
       esc(col.key).replace(/[^a-z0-9]/gi, '_') +
-      '" aria-label="' +
-      esc(selCount ? 'Stage ' + selCount + ' selected results onto ' + name : name + '. ' + expandHint) +
       '">' +
       '<span class="ms-lac-chip-name">' +
       esc(name) +
       '</span>' +
       flag +
       '<span class="ms-lac-chip-count">' +
-      esc(fieldCounts(col)) +
+      fieldCountsHtml(col) +
       '</span>' +
       (selCount
-        ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>'
+        ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' results here</span>'
         : '<span class="ms-lac-field-expand">' + esc(open ? 'Hide' : 'Expand') + '</span>') +
+      '<span class="ms-lac-vh">' +
+      esc(selCount ? 'Stage ' + selCount + ' results onto ' + name : expandHint) +
+      '</span>' +
       '</button>' +
       (open
-        ? '<div class="ms-lac-chip-drawer" role="listbox" aria-label="Sitting with ' +
+        ? '<div class="ms-lac-chip-drawer" role="list" aria-label="Sitting with ' +
           esc(name) +
           '" id="ms-lac-drawer-' +
           esc(col.key).replace(/[^a-z0-9]/gi, '_') +
@@ -433,8 +459,8 @@
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
-      '<div class="ms-lac-empty-title">No unallocated reports on this queue</div>' +
-      '<div class="ms-lac-empty-sub">Inbox results appear here. Work already sitting with a clinician is in their field on the right.</div>' +
+      '<div class="ms-lac-empty-title">No unallocated reports — nothing is waiting</div>' +
+      '<div class="ms-lac-empty-sub">Work already sitting with a clinician is in their field on the right.</div>' +
       '</div>'
     );
   }
@@ -457,17 +483,15 @@
       '" data-col-kind="pool">' +
       '<div class="ms-lac-pool-head">' +
       '<div class="ms-lac-pool-titles">' +
-      '<p class="ms-lac-pool-eyebrow">' +
-      esc(pool.title) +
-      '</p>' +
       '<h3 class="ms-lac-pool-title">Unallocated reports</h3>' +
       '</div>' +
-      '<span class="ms-lac-pool-count">' +
+      '<span class="ms-lac-pool-count' +
+      (pool.count ? ' is-hot' : '') +
+      '">' +
       pool.count +
       ' of ' +
       board.count +
       '</span>' +
-      '<span class="ms-lac-col-meta">Inbox pile — multiselect, then drag onto a clinician</span>' +
       '</div>' +
       (body || emptyPoolHtml()) +
       '</div>' +
@@ -487,10 +511,12 @@
             })
             .join('')
         : '<div class="ms-lac-empty-sm">No clinician fields yet — add one below if you need a drop target.</div>') +
-      '<div class="ms-lac-add-row">' +
-      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a clinician field — e.g. Dr Jane Cole" aria-label="Add a clinician field">' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add clinician</button>' +
-      '</div>' +
+      (_addOpen
+        ? '<div class="ms-lac-add-row">' +
+          '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="e.g. Dr Jane Cole" aria-label="Add a clinician field">' +
+          '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add</button>' +
+          '</div>'
+        : '<button type="button" class="ms-lac-ghost ms-lac-add-reveal" id="ms-lac-add-reveal">Add a clinician field…</button>') +
       '</aside></div>'
     );
   }
@@ -515,14 +541,14 @@
   function confirmBarHtml() {
     if (_error) {
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-error">' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-error" role="alert">' +
         esc(_error) +
         ' <button type="button" class="ms-lac-ghost" id="ms-lac-error-dismiss">Dismiss</button></div>'
       );
     }
     if (_writing) {
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn" tabindex="-1" id="ms-lac-confirm-sheet">' +
         '<strong>Writing to Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
         '</div>'
       );
@@ -575,15 +601,15 @@
           '. Those stay on this canvas.</p>';
       }
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
-        '<strong>Medicus will reassign these tasks.</strong> This changes who the task sits with — it does not file the result.' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-sheet" role="region" tabindex="-1" id="ms-lac-confirm-sheet" aria-labelledby="ms-lac-confirm-heading">' +
+        '<strong class="ms-lac-confirm-heading" id="ms-lac-confirm-heading">Medicus will reassign these tasks.</strong> This changes who the task sits with — it does not file the result.' +
         '<ul class="ms-lac-writelist">' +
         lines +
         '</ul>' +
         refusedNote +
         '<div class="ms-lac-confirmbar-actions">' +
-        '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
-        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-write-go">Write to Medicus</button>' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Go back</button>' +
+        '<button type="button" class="ms-lac-confirm-btn-primary" id="ms-lac-write-go">Write to Medicus</button>' +
         '</div></div>'
       );
     }
@@ -645,13 +671,19 @@
       return g.known;
     }).length;
     var counts = _rows.length
-      ? _rows.length +
-        ' results · ' +
+      ? '<span>' +
+        _rows.length +
+        ' results</span>' +
+        '<span class="ms-lac-header-unalloc' +
+        (board.pool.count ? '' : ' is-zero') +
+        '">' +
         board.pool.count +
-        ' unallocated · ' +
+        ' unallocated</span>' +
+        '<span>' +
         requesterGroups +
         ' requester group' +
-        (requesterGroups === 1 ? '' : 's')
+        (requesterGroups === 1 ? '' : 's') +
+        '</span>'
       : '';
     return (
       '<div class="ms-lac-panel' +
@@ -660,16 +692,20 @@
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>' +
       '<span class="ms-lac-header-counts">' +
-      esc(counts) +
+      counts +
       '</span>' +
-      '<span class="ms-lac-header-note">Unallocated on the left. Drag onto a clinician field — or select, then click the field. Writing happens only when you confirm.</span>' +
+      '<span class="ms-lac-header-note">Writing happens only when you confirm.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
-      '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
+      '<button type="button" class="ms-lac-close" id="ms-lac-close"' +
+      (_writing ? ' disabled' : '') +
+      '>Close</button>' +
       '</div>' +
       selectionBarHtml() +
-      '<div class="ms-lac-body"><div class="ms-lac-board" id="ms-lac-board">' +
+      '<div class="ms-lac-body"' +
+      (_writing ? ' inert' : '') +
+      '><div class="ms-lac-board" id="ms-lac-board">' +
       (_loading && !_rows.length ? '<div class="ms-lac-msg">Reading the results queue…</div>' : boardHtml()) +
       '</div></div>' +
       confirmBarHtml() +
@@ -685,8 +721,24 @@
       (el.getAttribute('data-chip-key') && '[data-chip-key="' + el.getAttribute('data-chip-key') + '"]') ||
       (el.getAttribute('data-group-key') &&
         '.ms-lac-group-head[data-group-key="' + el.getAttribute('data-group-key') + '"]') ||
+      (el.classList && el.classList.contains('ms-lac-group-select') && '.ms-lac-group-select') ||
       ''
     );
+  }
+
+  function focusableIn(panel) {
+    if (!panel) return [];
+    return Array.prototype.slice
+      .call(
+        panel.querySelectorAll(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      )
+      .filter(function (node) {
+        if (node.closest('[inert]')) return false;
+        if (node.getAttribute('aria-hidden') === 'true') return false;
+        return true;
+      });
   }
 
   function render() {
@@ -697,6 +749,22 @@
     var focusKey = focusKeyOf(document.activeElement);
     shell.innerHTML = shellHtml();
     bindOverlay(shell);
+    if (_focusConfirm) {
+      _focusConfirm = false;
+      var sheet = shell.querySelector('#ms-lac-confirm-sheet');
+      if (sheet) {
+        sheet.focus();
+        return;
+      }
+    }
+    if (_focusAdd) {
+      _focusAdd = false;
+      var inp = shell.querySelector('#ms-lac-add-name');
+      if (inp) {
+        inp.focus();
+        return;
+      }
+    }
     if (focusKey) {
       var again = shell.querySelector(focusKey);
       if (again) again.focus();
@@ -719,6 +787,7 @@
     var name = input && input.value;
     if (!name || !String(name).trim()) return;
     _draft = C.addColumn(_draft, name);
+    _addOpen = false;
     announce('Added clinician field ' + String(name).trim());
     render();
   }
@@ -740,6 +809,13 @@
       });
     var discardBtn = root.querySelector('#ms-lac-close-discard');
     if (discardBtn) discardBtn.addEventListener('click', closeOverlay);
+    var addReveal = root.querySelector('#ms-lac-add-reveal');
+    if (addReveal)
+      addReveal.addEventListener('click', function () {
+        _addOpen = true;
+        _focusAdd = true;
+        render();
+      });
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
     var addName = root.querySelector('#ms-lac-add-name');
@@ -791,7 +867,7 @@
     if (writeKeep)
       writeKeep.addEventListener('click', function () {
         _confirmWrite = null;
-        announce('Kept planning. Nothing was written.');
+        announce('Nothing was written. Back on the planning board.');
         render();
       });
     var writeGo = root.querySelector('#ms-lac-write-go');
@@ -821,8 +897,8 @@
         _dragGhost = null;
       }
     }
-    function selectGroup(head) {
-      var ids = String(head.getAttribute('data-group-ids') || '')
+    function selectGroup(el) {
+      var ids = String(el.getAttribute('data-group-ids') || '')
         .split(',')
         .filter(Boolean);
       _selected = {};
@@ -831,6 +907,27 @@
       });
       announce('Selected ' + ids.length + ' — click a clinician field to stage them, or drag');
       render();
+    }
+    var panel = root.querySelector('.ms-lac-panel');
+    if (panel) {
+      panel.addEventListener('keydown', function (e) {
+        if (e.key !== 'Tab') return;
+        var nodes = focusableIn(panel);
+        if (!nodes.length) {
+          e.preventDefault();
+          return;
+        }
+        var first = nodes[0];
+        var last = nodes[nodes.length - 1];
+        var active = document.activeElement;
+        if (e.shiftKey && (active === first || !panel.contains(active))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      });
     }
     root.querySelectorAll('.ms-lac-group-toggle').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
@@ -841,18 +938,16 @@
         render();
       });
     });
-    root.querySelectorAll('.ms-lac-group-head').forEach(function (head) {
-      head.addEventListener('click', function (e) {
+    root.querySelectorAll('.ms-lac-group-select').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
         e.stopPropagation();
-        selectGroup(head);
+        selectGroup(btn);
       });
-      head.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectGroup(head);
-        }
-      });
+    });
+    root.querySelectorAll('.ms-lac-group-head').forEach(function (head) {
       head.addEventListener('dragstart', function (e) {
+        if (e.target && e.target.closest && e.target.closest('button')) return;
         var ids = String(head.getAttribute('data-group-ids') || '')
           .split(',')
           .filter(Boolean);
@@ -861,16 +956,26 @@
       head.addEventListener('dragend', endDrag);
     });
     root.querySelectorAll('.ms-lac-tile').forEach(function (tile) {
+      if (tile.classList.contains('ms-lac-tile-quiet')) return;
       tile.addEventListener('click', function (e) {
         var id = tile.getAttribute('data-task-id');
         if (!id) return;
+        if (tile.getAttribute('data-unstage')) {
+          unstageIds([id]);
+          return;
+        }
         toggleSelect(id, e.metaKey || e.ctrlKey);
       });
       tile.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           var id = tile.getAttribute('data-task-id');
-          if (id) toggleSelect(id, true);
+          if (!id) return;
+          if (tile.getAttribute('data-unstage')) {
+            unstageIds([id]);
+            return;
+          }
+          toggleSelect(id, true);
         }
       });
       tile.addEventListener('dragstart', function (e) {
@@ -963,6 +1068,22 @@
     render();
   }
 
+  function unstageIds(ids) {
+    if (_writing || !ids || !ids.length) return;
+    _draft = C.stageMoves(_draft, ids, C.POOL);
+    _selected = {};
+    _pendingAbsence = null;
+    _dragIds = null;
+    announce(
+      'Returned ' +
+        ids.length +
+        ' result' +
+        (ids.length === 1 ? '' : 's') +
+        ' to unallocated. Still only on this canvas.'
+    );
+    render();
+  }
+
   function copyWorkingList() {
     var text = C.copyList(C.buildBoard(_rows, _draft));
     var done = function (ok) {
@@ -1012,6 +1133,7 @@
       return;
     }
     _confirmWrite = plan;
+    _focusConfirm = true;
     announce('Review the list, then confirm. Medicus will reassign those tasks.');
     render();
   }
@@ -1020,6 +1142,7 @@
     if (_writing || !_confirmWrite) return;
     _writing = true;
     _error = null;
+    _focusConfirm = true;
     render();
     try {
       var result = await client().commitAllocations({
@@ -1075,7 +1198,7 @@
     if (_writing) return;
     if (_confirmWrite) {
       _confirmWrite = null;
-      announce('Kept planning. Nothing was written.');
+      announce('Nothing was written. Back on the planning board.');
       render();
       return;
     }
@@ -1102,6 +1225,9 @@
     _taskList = undefined;
     _staffDir = C.harvestStaffDirectory([], null);
     _collapsed = {};
+    _addOpen = false;
+    _focusConfirm = false;
+    _focusAdd = false;
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1123,6 +1249,9 @@
     _copyNote = '';
     _error = null;
     _collapsed = {};
+    _addOpen = false;
+    _focusConfirm = false;
+    _focusAdd = false;
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');
@@ -1179,7 +1308,7 @@
         if (_writing) return;
         if (_confirmWrite) {
           _confirmWrite = null;
-          announce('Kept planning. Nothing was written.');
+          announce('Nothing was written. Back on the planning board.');
           render();
           return;
         }

@@ -272,7 +272,12 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/method:\s*['"]POST['"]/.test(canvas), 'canvas has no POST — the core client writes');
   check(/commitAllocations/.test(canvas), 'canvas commits through the core client');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
-  check(/Keep planning/.test(canvas), 'confirm defaults the clinician back to planning');
+  check(/Go back/.test(canvas), 'confirm defaults the clinician back to planning');
+  check(/Stage .+ results here/.test(canvas), 'stage hint names results after the count — not Stage N');
+  check(/ms-lac-confirm-btn-primary/.test(canvas), 'confirm write is a primary action');
+  check(/unstageIds/.test(canvas), 'a staged drawer row can return to unallocated');
+  check(/\binert\b/.test(canvas), 'the board is inert while a write is in flight');
+  check(/Add a clinician field…/.test(canvas), 'add-clinician starts behind a disclosure');
   // A part-written batch leaves the board claiming work Medicus already took.
   // The failure path must re-read before it tells anyone to check the queue.
   check(
@@ -299,6 +304,10 @@ console.log('\n--- canvas + manifest source locks ---');
     'canvas is an unallocated pool plus clinician fields'
   );
   check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
+  check(/Ordered by/.test(canvas), 'group heads prefix Ordered by so surnames are not destinations');
+  check(/results sitting with them/.test(canvas), 'clinician fields count results sitting with them');
+  check(/STAGED/.test(canvas), 'staged tiles wear a STAGED marker');
+  check(!/ms-lac-pool-eyebrow/.test(canvas), 'the pool no longer wears a second Investigation reports eyebrow');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
   check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');

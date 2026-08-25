@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.3] — 2026-08-25
+
+### Lab allocation canvas — unallocated identity (design crit)
+
+The left pile and the right-hand clinician fields were reading as the
+same kind of list, so unassigned work disappeared into the board.
+A three-critic pass (pixels / tokens / fresh-eyes GP) plus a Fable
+judgement settled the visual contract:
+
+- **Unallocated** is named once and marked in amber — masthead chip
+  and pile count — not on every row.
+- Requester groups are **Ordered by**; clinician fields count
+  **results sitting with them**. Staged rows keep their name colour
+  and wear a trailing **STAGED** chip; click or Enter returns them
+  to the pile.
+- Confirm is a sheet: amber heading, primary **Write to Medicus**,
+  **Go back**. The board is `inert` while a write is in flight.
+- Instruction diet: one header sentence. Add-clinician sits behind
+  a disclosure. Drawers cap at 40vh.
+
+Write contract (W23 / H-064) unchanged. The canvas still does not
+file a result.
+
 ## [v3.243.2] — 2026-08-25
 
 ### Lab allocation canvas — write blocker, drag-scroll, In today first

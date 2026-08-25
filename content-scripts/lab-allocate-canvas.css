@@ -23,7 +23,7 @@
 
 #ms-lac-launch:hover {
   border-color: #2563eb;
-  background: #eff4fd;
+  background: #e2eaf5;
 }
 
 /* The launcher is appended to <html>, NOT inside #ms-lac-overlay, so the
@@ -46,11 +46,14 @@
   --text-2: #1e3a5f;
   --text-3: #475569;
   --text-4: #556377;
+  --text-5: #5f6f85;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-dim: rgba(37, 99, 235, 0.09);
   --accent-line: rgba(37, 99, 235, 0.3);
   --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
   --amber: #b45309;
   --amber-dim: rgba(180, 83, 9, 0.09);
   --amber-line: rgba(180, 83, 9, 0.32);
@@ -63,15 +66,20 @@
   --r-pill: 999px;
   --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  --scrim: rgba(15, 23, 42, 0.55);
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  --med: 200ms;
   position: fixed;
   inset: 0;
   z-index: 2147483000;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-.ms-lac-live {
+.ms-lac-live,
+.ms-lac-vh {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -115,11 +123,33 @@
 }
 
 .ms-lac-header-counts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
+}
+
+.ms-lac-header-unalloc {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+}
+
+.ms-lac-header-unalloc.is-zero {
+  color: var(--text-4);
+  background: transparent;
+  border-color: var(--border);
+  font-weight: 600;
 }
 
 .ms-lac-header-note {
@@ -137,15 +167,15 @@
   padding: 4px 12px;
   background: transparent;
   border: 1px solid var(--border-hi);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-md);
   font-size: 12px;
   font-weight: 600;
   font-family: inherit;
   color: var(--text-2);
   cursor: pointer;
   transition:
-    background 150ms var(--ease),
-    border-color 150ms var(--ease);
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 
 .ms-lac-close:hover,
@@ -162,13 +192,19 @@
 .ms-lac-close:focus-visible,
 .ms-lac-ghost:focus-visible,
 .ms-lac-confirm-btn:focus-visible,
-#ms-lac-add-name:focus-visible {
+.ms-lac-confirm-btn-primary:focus-visible,
+#ms-lac-add-name:focus-visible,
+.ms-lac-group-select:focus-visible,
+.ms-lac-group-toggle:focus-visible,
+#ms-lac-confirm-sheet:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .ms-lac-ghost:disabled,
-.ms-lac-confirm-btn:disabled {
+.ms-lac-confirm-btn:disabled,
+.ms-lac-confirm-btn-primary:disabled,
+.ms-lac-close:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -237,7 +273,7 @@
   min-width: 0;
   padding: 0 8px 8px;
   background: var(--bg-mid);
-  border: 1px dashed var(--border-hi);
+  border: 1px solid var(--border);
 }
 
 .ms-lac-pool-head {
@@ -250,7 +286,7 @@
   padding: 10px 8px 8px;
   margin: 0 -8px;
   background: var(--bg-mid);
-  border-bottom: 1px dashed var(--border-hi);
+  border-bottom: 1px solid var(--border);
 }
 
 .ms-lac-pool-titles {
@@ -258,15 +294,6 @@
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-}
-
-.ms-lac-pool-eyebrow {
-  margin: 0;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-4);
 }
 
 .ms-lac-pool-title {
@@ -280,7 +307,12 @@
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--text-3);
+  color: var(--text-4);
+}
+
+.ms-lac-pool-count.is-hot {
+  color: var(--amber);
+  font-weight: 700;
 }
 
 .ms-lac-rail {
@@ -319,8 +351,8 @@
   background: var(--bg-elev);
   box-shadow: var(--shadow-1);
   transition:
-    border-color 150ms var(--ease),
-    background 150ms var(--ease);
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
 }
 
 .ms-lac-field-has {
@@ -349,7 +381,7 @@
   text-align: left;
   cursor: pointer;
   color: var(--text-1);
-  transition: background 150ms var(--ease);
+  transition: background var(--fast) var(--ease);
 }
 
 .ms-lac-chip:hover,
@@ -380,9 +412,14 @@
   color: var(--text-4);
 }
 
+.ms-lac-chip-count-staged {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .ms-lac-chip-flag {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--amber);
@@ -392,18 +429,33 @@
   padding: 1px 5px;
 }
 
-.ms-lac-chip-flag-in {
-  color: var(--green);
-  background: var(--green-dim);
-  border-color: var(--green-line);
+.ms-lac-chip-in-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex: 0 0 6px;
+}
+
+.ms-lac-chip-in-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
 }
 
 .ms-lac-chip-stagehint {
   margin-left: auto;
   font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
+  font-weight: 600;
+  color: var(--text-3);
   white-space: nowrap;
+}
+
+.ms-lac-chip-wrap:hover .ms-lac-chip-stagehint,
+.ms-lac-chip:focus-visible .ms-lac-chip-stagehint,
+.ms-lac-chip-wrap.ms-lac-drop-hover .ms-lac-chip-stagehint {
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .ms-lac-chip-away {
@@ -432,6 +484,8 @@
 .ms-lac-chip-drawer {
   padding: 0 8px 8px;
   border-top: 1px solid var(--border);
+  max-height: 40vh;
+  overflow: auto;
 }
 
 .ms-lac-col-absence,
@@ -461,6 +515,11 @@
   margin-top: 10px;
 }
 
+.ms-lac-add-reveal {
+  width: 100%;
+  margin-top: 10px;
+}
+
 #ms-lac-add-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -479,12 +538,12 @@
 
 /* Requester groups — list sections inside the inbox well, not person cards. */
 .ms-lac-group {
-  margin-top: 2px;
+  margin-top: 10px;
 }
 
 .ms-lac-group-head {
   position: sticky;
-  top: 54px;
+  top: 44px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -495,7 +554,7 @@
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   cursor: grab;
-  transition: background 150ms var(--ease);
+  transition: background var(--fast) var(--ease);
 }
 
 .ms-lac-group-head:hover {
@@ -506,14 +565,15 @@
   cursor: grabbing;
 }
 
-.ms-lac-group-head:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
 .ms-lac-group-grip {
   color: var(--border-hi);
   font-size: 11px;
+}
+
+.ms-lac-group-role {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-4);
 }
 
 .ms-lac-group-title {
@@ -529,12 +589,6 @@
   color: var(--text-3);
 }
 
-.ms-lac-group-hint {
-  margin-left: auto;
-  font-size: 10.5px;
-  color: var(--text-4);
-}
-
 .ms-lac-group-picked {
   margin-left: auto;
   font-family: var(--mono);
@@ -544,18 +598,30 @@
   color: var(--accent);
 }
 
+.ms-lac-group-select,
 .ms-lac-group-toggle {
-  padding: 0 4px;
+  min-height: 24px;
+  padding: 0 6px;
   border: 0;
   background: transparent;
-  font-size: 11px;
-  color: var(--text-3);
+  font-family: inherit;
+  font-size: 10.5px;
+  color: var(--text-4);
   cursor: pointer;
 }
 
-.ms-lac-group-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.ms-lac-group-select {
+  margin-left: auto;
+}
+
+.ms-lac-group-select:hover,
+.ms-lac-group-toggle:hover {
+  color: var(--accent);
+}
+
+.ms-lac-group-toggle {
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* One-line rows: the pile must read at 73 results. */
@@ -564,10 +630,11 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+  min-height: 24px;
   padding: 4px 8px 4px 4px;
   border-bottom: 1px solid var(--bg-mid);
   cursor: grab;
-  transition: background 120ms var(--ease);
+  transition: background var(--fast) var(--ease);
 }
 
 .ms-lac-tile:hover {
@@ -592,6 +659,9 @@
 }
 
 .ms-lac-tile-name {
+  flex: 0 1 11em;
+  min-width: 8em;
+  max-width: 14em;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-1);
@@ -632,8 +702,47 @@
   background: var(--accent-dim);
 }
 
+/* Sitting-with rows: quieter, not a second inbox. */
+.ms-lac-tile-quiet {
+  cursor: default;
+}
+
+.ms-lac-tile-quiet:hover {
+  background: transparent;
+}
+
+.ms-lac-tile-quiet:active {
+  cursor: default;
+}
+
+.ms-lac-tile-quiet .ms-lac-tile-name {
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.ms-lac-tile-staged {
+  background: var(--accent-dim);
+  box-shadow: inset 2px 0 0 var(--accent-line);
+  cursor: pointer;
+}
+
+.ms-lac-tile-staged:hover {
+  background: var(--accent-dim);
+}
+
 .ms-lac-tile-staged .ms-lac-tile-name {
-  color: var(--text-4);
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.ms-lac-tile-staged-mark {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
 }
 
 .ms-lac-drop-hover {
@@ -678,9 +787,9 @@
 }
 
 .ms-lac-empty-title {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-3);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 .ms-lac-empty-sub {
@@ -737,6 +846,24 @@
   color: var(--text-1);
 }
 
+.ms-lac-confirmbar-sheet {
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  border-top: 2px solid var(--amber-line);
+  color: var(--text-2);
+}
+
+.ms-lac-confirm-heading {
+  display: inline-block;
+  margin: 0 0 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-radius: var(--r-sm);
+}
+
 .ms-lac-confirmbar-actions {
   display: flex;
   gap: 8px;
@@ -747,12 +874,12 @@
 .ms-lac-writelist {
   margin: 8px 0 0;
   padding-left: 18px;
-  max-height: 160px;
+  max-height: 40vh;
   overflow: auto;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.ms-lac-panel-writing .ms-lac-body,
 .ms-lac-panel-writing .ms-lac-close {
   pointer-events: none;
 }
@@ -760,7 +887,7 @@
 .ms-lac-confirm-btn {
   padding: 4px 14px;
   border: 1px solid var(--border-hi);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-md);
   background: var(--bg-mid);
   font-size: 12px;
   font-weight: 600;
@@ -768,13 +895,34 @@
   color: var(--text-2);
   cursor: pointer;
   transition:
-    background 150ms var(--ease),
-    border-color 150ms var(--ease);
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 
 .ms-lac-confirm-btn:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--accent-dim);
+}
+
+.ms-lac-confirm-btn-primary {
+  padding: 4px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--bg-deep);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.ms-lac-confirm-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--bg-deep);
 }
 
 @media (prefers-reduced-motion: reduce) {
