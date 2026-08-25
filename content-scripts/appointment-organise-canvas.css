@@ -93,6 +93,7 @@
 }
 
 .ms-aoc-panel {
+  position: relative;
   background: var(--bg-elev);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
@@ -102,6 +103,18 @@
   flex-direction: column;
   overflow: hidden;
   color: var(--text-1);
+}
+
+.ms-aoc-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
 }
 
 .ms-aoc-header {

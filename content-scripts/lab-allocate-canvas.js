@@ -67,6 +67,7 @@
   var _poolCaret = null;
   var _roving = {};
   var _guideOpen = false;
+  var _launchPoolCount = null;
 
   function announce(text) {
     setTimeout(function () {
@@ -195,6 +196,7 @@
     } finally {
       _loading = false;
       _overviewProgress = '';
+      rememberLaunchCount();
       render();
     }
   }
@@ -398,7 +400,7 @@
         'role="option" tabindex="0" aria-selected="false" draggable="true" data-task-id="' +
         esc(tile.id) +
         '" data-unstage="1" aria-label="' +
-        esc(tile.patientName + ' — staged — press Enter to return to unallocated') +
+        esc(tile.patientName + ' — planned here — press Enter to return to unallocated') +
         '"';
     } else {
       attrs =
@@ -425,7 +427,7 @@
       '</span>' +
       assignedPerson +
       whoLine +
-      (tile.staged ? '<span class="ms-lac-tile-staged-mark">STAGED</span>' : '') +
+      (tile.staged ? '<span class="ms-lac-tile-staged-mark">Planned</span>' : '') +
       '</div>'
     );
   }
@@ -559,7 +561,7 @@
     }
     if (stagedTiles.length) {
       body +=
-        '<div class="ms-lac-drawer-sub">Planned on this canvas</div>' +
+        '<div class="ms-lac-drawer-sub">Planned on this board</div>' +
         stagedTiles
           .map(function (t) {
             return tileHtml(t, { showWho: false, showAssignee: false, quiet: true });
@@ -805,7 +807,7 @@
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Choose a clinician to plan these ' + selCount + ' result' + (selCount === 1 ? '' : 's')
-        : 'Favourites first. Drag work onto a clinician, or click to inspect') +
+        : 'Favourites first. Select reports, then Plan N here — or drag. Click a clinician to inspect') +
       '</span>' +
       '</div>' +
       railBody +
@@ -851,7 +853,7 @@
     if (_writing) {
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn" tabindex="-1" id="ms-lac-confirm-sheet">' +
-        '<strong>Reassigning in Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
+        '<strong>Reassigning in Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this board is a working copy.' +
         '</div>'
       );
     }
@@ -863,7 +865,7 @@
         nClose +
         ' planned move' +
         (nClose === 1 ? '' : 's') +
-        ' exist only on this canvas — closing forgets them. The Medicus queue itself is untouched either way.' +
+        ' exist only on this board — closing forgets them. The Medicus queue itself is untouched either way.' +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-close-keep">Keep working</button>' +
         '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-close-discard">Discard and close</button>' +
@@ -903,15 +905,19 @@
               return C.displayClinicianName(r.toTitle);
             })
             .join(', ') +
-          '. They stay on this canvas. The canvas is still reading staff, or that name is not in Medicus’s staff list.';
+          '. They stay on this board. The board is still reading staff, or that name is not in Medicus’s staff list.';
       } else blockReason = (plan && plan.reason) || 'Cannot plan these moves yet.';
     }
+    var earlyBlock = !_loading && !gate.ok;
+    if (earlyBlock && !blockReason) blockReason = gate.reason;
     var writeTitle = !sum.count
-      ? 'Plan at least one result onto a clinician first'
+      ? earlyBlock
+        ? blockReason
+        : 'Plan at least one result onto a clinician first'
       : canWrite
         ? 'Review the patient → clinician list, then confirm'
         : blockReason;
-    var writeLabel = sum.count && !canWrite ? 'Why reassignment is blocked' : 'Review reassignments…';
+    var writeLabel = (sum.count && !canWrite) || earlyBlock ? 'Why reassignment is blocked' : 'Review reassignments…';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
@@ -919,13 +925,14 @@
       '<span class="ms-lac-confirmbar-note">' +
       (blockReason
         ? '<strong>Cannot reassign these yet.</strong> ' + esc(blockReason)
-        : '<strong>Planning board.</strong> Planned moves live on this canvas until you review and confirm. Reassigning changes who the task sits with — it does not file the result' +
+        : '<strong>Planning board.</strong> Planned moves live on this board until you review and confirm. Reassigning changes who the task sits with — it does not file the result' +
           (sum.count ? ' (' + sum.count + ' planned so far)' : '') +
           '.') +
       '</span>' +
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '<div class="ms-lac-confirmbar-actions">' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-copy">Copy working list</button>' +
+      (earlyBlock ? '<button type="button" class="ms-lac-ghost" id="ms-lac-reload">Reload this board</button>' : '') +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-copy" title="Copies a plain-text snapshot of this board to the clipboard. Does not change Medicus.">Copy working list</button>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-clear"' +
       (sum.count ? '' : ' disabled') +
       '>Clear planned moves</button>' +
@@ -991,7 +998,7 @@
             })
             .join(', ')
         ) +
-        '. Those stay on this canvas.</p>';
+        '. Those stay on this board.</p>';
     }
     return (
       '<div class="ms-lac-modal-scrim">' +
@@ -1035,25 +1042,39 @@
       '<h4 class="ms-lac-guide-subhead">Favourites and absence warnings</h4>' +
       '<p class="ms-lac-guide-p">Star a clinician to keep them pinned at the top of the list. Planning work onto someone the rota or Medicus shows as away or on leave shows a warning first — choose someone else, or plan it there anyway.</p>' +
       '<h4 class="ms-lac-guide-subhead">What “Copy working list” does</h4>' +
-      '<p class="ms-lac-guide-p">It copies a plain-text snapshot of the whole board to your clipboard — the unallocated pool, work already sitting with clinicians, and anything staged on this canvas. It does not write anything to Medicus. The text contains patient names, so only paste it into an approved practice system.</p>' +
+      '<p class="ms-lac-guide-p">It copies a plain-text snapshot of the whole board to your clipboard — the unallocated pool, work already sitting with clinicians, and anything planned on this board. It does not write anything to Medicus. The text contains patient names, so only paste it into an approved practice system.</p>' +
       '<h4 class="ms-lac-guide-subhead">Where the test names come from</h4>' +
-      '<p class="ms-lac-guide-p">Test names and counts come from the results queue Medicus returns when this canvas loads. The filter chips show the most common test types in that queue; search matches any test name Medicus reports, chip or not.</p>' +
+      '<p class="ms-lac-guide-p">Test names and counts come from the results queue Medicus returns when this board loads. The filter chips show the most common test types in that queue; search matches any test name Medicus reports, chip or not.</p>' +
       '</div>' +
       '</div>' +
       '</div>'
     );
   }
 
+  function howToHtml() {
+    return (
+      '<nav class="ms-lac-howto" aria-label="How to allocate labs">' +
+      '<span class="ms-lac-howto-step"><span class="ms-lac-howto-n">1</span> Select reports</span>' +
+      '<span class="ms-lac-howto-step"><span class="ms-lac-howto-n">2</span> Choose a clinician</span>' +
+      '<span class="ms-lac-howto-step"><span class="ms-lac-howto-n">3</span> Review before Medicus changes</span>' +
+      '</nav>'
+    );
+  }
+
   function shellHtml() {
     var board = C.buildWorkspace(_rows, _draft);
+    var planned = C.draftSummary(_rows, _draft).count;
+    var countBadge = _rows.length
+      ? '<span class="ms-lac-header-num" aria-hidden="true">' + board.pool.count + '</span>'
+      : '';
     var lead = _rows.length
-      ? '<span class="ms-lac-header-lead">' +
-        '<span class="ms-lac-header-num">' +
+      ? '<span class="ms-lac-header-lead-label">' +
         board.pool.count +
-        '</span>' +
-        '<span class="ms-lac-header-lead-label">unallocated · ' +
+        ' unallocated in Medicus' +
+        (planned ? ' · ' + planned + ' planned here' : '') +
+        ' · ' +
         _rows.length +
-        ' in the queue</span></span>'
+        ' in the queue</span>'
       : '';
     return (
       '<div class="ms-lac-panel' +
@@ -1067,8 +1088,13 @@
       (_confirmWrite || _guideOpen ? ' inert' : '') +
       '>' +
       '<div class="ms-lac-header">' +
-      lead +
+      '<div class="ms-lac-header-main">' +
+      '<div class="ms-lac-header-row">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>' +
+      countBadge +
+      '</div>' +
+      lead +
+      '</div>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1079,6 +1105,7 @@
       (_writing ? ' disabled' : '') +
       '>Close</button>' +
       '</div>' +
+      howToHtml() +
       selectionBarHtml() +
       '<div class="ms-lac-body"' +
       (_writing ? ' inert' : '') +
@@ -1219,6 +1246,8 @@
     if (close) close.addEventListener('click', requestClose);
     var help = root.querySelector('#ms-lac-help');
     if (help) help.addEventListener('click', openGuide);
+    var reloadBtn = root.querySelector('#ms-lac-reload');
+    if (reloadBtn) reloadBtn.addEventListener('click', loadBoard);
     var guideClose = root.querySelector('#ms-lac-guide-close');
     if (guideClose) guideClose.addEventListener('click', closeGuide);
     var dismiss = root.querySelector('#ms-lac-error-dismiss');
@@ -1562,7 +1591,7 @@
     _pendingAbsence = null;
     _dragIds = null;
     if (key && key.indexOf('clinician:') === 0) _expandedChip = key;
-    announce('Planned ' + ids.length + ' result' + (ids.length === 1 ? '' : 's') + ' on this canvas only');
+    announce('Planned ' + ids.length + ' result' + (ids.length === 1 ? '' : 's') + ' on this board only');
     render();
   }
 
@@ -1577,7 +1606,7 @@
         ids.length +
         ' result' +
         (ids.length === 1 ? '' : 's') +
-        ' to unallocated. Still only on this canvas.'
+        ' to unallocated. Still only on this board.'
     );
     render();
   }
@@ -1681,7 +1710,7 @@
         n +
         ' reassignment' +
         (n === 1 ? '' : 's') +
-        '. Check the queue — this canvas is a working copy.';
+        '. Check the queue — this board is a working copy.';
       _writing = false;
       announce(_copyNote);
       await loadBoard();
@@ -1754,6 +1783,7 @@
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
+    paintLauncher(launch);
     if (launch) launch.focus();
   }
 
@@ -1796,6 +1826,33 @@
     loadBoard();
   }
 
+  function rememberLaunchCount() {
+    if (_rows && _rows.length) {
+      _launchPoolCount = C.buildWorkspace(_rows, C.emptyDraft()).pool.count;
+    } else if (!_loading) {
+      _launchPoolCount = 0;
+    }
+    paintLauncher(document.getElementById(LAUNCH_ID));
+  }
+
+  function paintLauncher(launch) {
+    if (!launch) return;
+    var n = _launchPoolCount;
+    launch.replaceChildren();
+    launch.appendChild(document.createTextNode('Allocate labs'));
+    if (n != null && n > 0) {
+      var badge = document.createElement('span');
+      badge.className = 'ms-lac-launch-count';
+      badge.textContent = String(n);
+      launch.appendChild(badge);
+    }
+    launch.setAttribute(
+      'aria-label',
+      n == null ? 'Allocate incoming labs' : 'Allocate incoming labs, ' + n + ' unallocated in Medicus'
+    );
+    launch.classList.toggle('ms-lac-launch-has-count', n != null && n > 0);
+  }
+
   function ensureLauncher() {
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1809,7 +1866,6 @@
       launch = document.createElement('button');
       launch.type = 'button';
       launch.id = LAUNCH_ID;
-      launch.textContent = 'Allocate labs on canvas…';
       launch.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -1817,6 +1873,7 @@
       });
       document.documentElement.appendChild(launch);
     }
+    paintLauncher(launch);
   }
 
   document.addEventListener(

@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.3] — 2026-08-25
+
+### Companion visual language — lab board and injected workbenches
+
+Companion (the floating Book / Create widget) is the suite's visual north
+star for injected chrome. This pass applies that language without flattening
+Sentinel chips, HUD severity colours, or the visualiser's NHS palette.
+
+- **Lab allocation** now reads as a Companion surface: title-then-badge
+  header, numbered how-to pills, pill filter chips, hairline+shadow cards,
+  a 3px left rail for away/selected/planned rows, and a collapsed launcher
+  with an accent count (operational, not a clinical alert).
+- First-use copy is plainer: **Planned** instead of STAGED, **this board**
+  instead of canvas jargon, Medicus-labelled counts, an early reload when
+  the results list is not yet confirmed, and a tooltip on Copy working list.
+- The same 2px accent hairline now sits on the allergy, problem-nesting,
+  appointment-organise and contacts workbench shells. Companion's own leftover
+  form hexes consume the canon tokens.
+
+W23 / H-064 is unchanged: unique staff UUID or refuse; reassignment does
+not file the result. Patch release, so the CSN remains current at 3.244.0
+(doc v3.31).
+
 ## [v3.244.2] — 2026-08-25
 
 ### Lab allocation canvas — in-context guide

@@ -40,7 +40,7 @@
   var ASSIGNEE_TYPE_STAFF = 'staff';
   var BULK_REASSIGN_PATH = '/tasks/task-list/bulk-reassign';
   var WRITE_NEEDS_TOKEN =
-    'Need Medicus’s queue token before anything can be written. Reload the results list and open the canvas again.';
+    'Need Medicus to confirm this results list before anything can be written. Reload the results list and open this board again.';
   var WRITE_BLOCKED = WRITE_NEEDS_TOKEN;
 
   // Field names seen on journal investigation-requests (`requestedBy`) plus

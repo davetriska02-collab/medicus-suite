@@ -3,27 +3,55 @@
    contacts-link-button.css / task-inline.css). */
 
 #ms-contacts-canvas-overlay {
+  --bg-deep: #f8fafc;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --accent: #2563eb;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
+  --r-lg: 8px;
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  --scrim: rgba(15, 23, 42, 0.55);
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.45);
+  background: var(--scrim);
   z-index: 2147483000;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
-  color: #1a2030;
+  color: var(--text-1);
 }
 
 #ms-contacts-canvas-overlay .ms-cv-panel {
-  background: #fff;
-  border-radius: 8px;
+  position: relative;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
   width: min(1100px, 94vw);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-3);
+}
+
+#ms-contacts-canvas-overlay .ms-cv-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  z-index: 2;
+  pointer-events: none;
 }
 
 #ms-contacts-canvas-overlay .ms-cv-header {
@@ -31,10 +59,10 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 18px;
-  background: #f0f4ff;
-  border-bottom: 1px solid #c3cef5;
-  font-weight: 700;
-  color: #1e3a8a;
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-2);
 }
 
 #ms-contacts-canvas-overlay .ms-cv-header-actions {

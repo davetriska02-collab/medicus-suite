@@ -168,6 +168,25 @@ copy buttons, tour/tabs CTAs).
 border: 1px solid var(--<c>-line); border-radius: var(--r-sm);` mono 10px.
 Pair every chip hue with a glyph or label — hue is never the only signal.
 
+**Companion card (reference implementation — `content-scripts/task-actions-panel.css`)**
+The floating Companion widget is the suite's visual north star for injected
+chrome. Copy these moves, do not flatten module-specific clinical colour
+(Sentinel chips, HUD severity, visualiser NHS):
+
+- **Top accent hairline** — 2px `--accent` on the open surface; 2px `--red`
+  or `--amber` only when a real overdue/due signal is present (collapsed
+  and docked states).
+- **Status row** — calm white card, hairline `--border`, `--r-md`,
+  `--shadow-1`. Salience lives on a **3px left rail** (`--red` / `--amber`)
+  plus a labelled tag and a filled (red) or hollow (amber) dot. Never wash
+  the whole row in status colour.
+- **Role / filter tabs** — pill buttons (`--r-pill`), inactive white +
+  hairline, active `--accent-dim` fill and `--accent` ink.
+- **Count badge** — pill, mono tabular numerals. Solid `--red` / `--amber`
+  only for a live overdue/due count. Operational counts (unallocated
+  backlog, queue size) use `--accent` fill and `--bg-deep` numerals so
+  they never spend the clinical alert palette.
+
 **Pill** (canonical — `.pill` in `panel.css`) — the suite-wide pill,
 generalised from the Slots per-type pills. Anatomy: a coloured **dot**
 (`.pill-dot`, category/severity carrier), a **name** (`.pill-name`, sans, human

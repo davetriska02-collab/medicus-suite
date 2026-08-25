@@ -338,8 +338,14 @@
   width: 16px;
   height: 16px;
   cursor: nwse-resize;
-  background:
-    linear-gradient(135deg, transparent 0 55%, var(--border) 55% 65%, transparent 65% 75%, var(--border) 75% 85%, transparent 85%);
+  background: linear-gradient(
+    135deg,
+    transparent 0 55%,
+    var(--border) 55% 65%,
+    transparent 65% 75%,
+    var(--border) 75% 85%,
+    transparent 85%
+  );
 }
 
 #ms-tap-widget.ms-tap-resizing {
@@ -515,7 +521,7 @@
 }
 
 #ms-tap-widget .ms-tap-section + .ms-tap-section {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid var(--border);
 }
 
 #ms-tap-widget .ms-tap-section-header {
@@ -560,7 +566,7 @@
 #ms-tap-widget .ms-tap-label {
   font-size: 11px;
   font-weight: 700;
-  color: #666;
+  color: var(--text-4);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -570,11 +576,11 @@
 #ms-tap-widget .ms-tap-text-input,
 #ms-tap-widget .ms-tap-textarea {
   padding: 7px 10px;
-  border: 1px solid #c8cdd6;
-  border-radius: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   font-size: 13px;
-  color: #1a2030;
-  background: #fff;
+  color: var(--text-1);
+  background: var(--bg-elev);
   width: 100%;
   box-sizing: border-box;
   font-family: inherit;
@@ -623,16 +629,16 @@
 #ms-tap-widget .ms-tap-btn-ghost {
   padding: 7px 14px;
   background: transparent;
-  color: #2563eb;
-  border: 1px solid #c3cef5;
-  border-radius: 5px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
 }
 
 #ms-tap-widget .ms-tap-btn-ghost:hover:not(:disabled) {
-  background: #f0f4ff;
+  background: var(--accent-dim);
 }
 
 #ms-tap-widget .ms-tap-btn-ghost:disabled {

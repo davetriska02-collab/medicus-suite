@@ -230,7 +230,7 @@ console.log('\n--- write contract is the captured bulk-reassign ---');
 {
   const closed = C.canWriteAllocations();
   check(closed.ok === false, 'canWriteAllocations is false without the queue token');
-  check(/queue token/.test(closed.reason), 'reason names the missing task-list token');
+  check(/confirm this results list/.test(closed.reason), 'reason names the missing results-list confirmation');
   check(
     C.canWriteAllocations({ taskList: 'review_investigation_results_task' }).ok === true,
     'token unlocks the write'
@@ -319,6 +319,24 @@ console.log('\n--- canvas + manifest source locks ---');
     'the rail helper names the plan action, not a generic instruction'
   );
   check(
+    /Select reports, then Plan N here/.test(canvas),
+    'the resting rail helper names select-then-plan, not only drag'
+  );
+  check(/ms-lac-howto/.test(canvas), 'a numbered how-to strip is always visible');
+  check(/Select reports/.test(canvas) && /Choose a clinician/.test(canvas), 'the how-to names the first two steps');
+  check(/Review before Medicus changes/.test(canvas), 'the how-to names the confirm boundary');
+  check(/unallocated in Medicus/.test(canvas), 'the header count is labelled as Medicus state, not the plan');
+  check(/planned here/.test(canvas), 'the header names planned-on-this-board separately');
+  check(/ms-lac-header-main/.test(canvas), 'the header uses Companion title-then-badge stacking');
+  check(
+    /Allocate labs'/.test(canvas) || /Allocate labs"/.test(canvas) || /'Allocate labs'/.test(canvas),
+    'the launcher drops the canvas jargon'
+  );
+  check(/ms-lac-launch-count/.test(canvas), 'the launcher can wear a Companion-style count badge');
+  check(!/Allocate labs on canvas/.test(canvas), 'the old Allocate labs on canvas… label is gone');
+  check(/id="ms-lac-reload">Reload this board/.test(canvas), 'a blocked write offers a one-click reload');
+  check(/earlyBlock/.test(canvas), 'missing results-list confirmation is shown before any plan is built');
+  check(
     !/away \? '.*disabled/.test(canvas),
     'away clinicians are never disabled — intentional reassignment stays possible behind the absence gate'
   );
@@ -366,8 +384,9 @@ console.log('\n--- canvas + manifest source locks ---');
     'existing count subtracts the staged share back out of col.count'
   );
   check(/Already with them/.test(canvas), 'the expanded drawer labels the view-only existing rows');
-  check(/Planned on this canvas/.test(canvas), 'the expanded drawer labels the staged rows separately');
-  check(/STAGED/.test(canvas), 'staged tiles wear a STAGED marker');
+  check(/Planned on this board/.test(canvas), 'the expanded drawer labels the staged rows separately');
+  check(/>Planned</.test(canvas), 'planned tiles wear a Planned marker, not STAGED');
+  check(!/>STAGED</.test(canvas), 'the old STAGED label is gone');
   check(!/ms-lac-pool-eyebrow/.test(canvas), 'the pool no longer wears a second Investigation reports eyebrow');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
   check(/railSections/.test(canvas), 'Favourites then In today are sectioned on the rail');
@@ -515,7 +534,7 @@ console.log('\n--- guide: help button, modal semantics, Escape, copy + dynamic-t
     'the guide has an explicit section headed What "Copy working list" does'
   );
   check(
-    /plain-text snapshot of the whole board[\s\S]{0,40}clipboard[\s\S]{0,40}unallocated pool[\s\S]{0,40}sitting with clinicians[\s\S]{0,40}staged on this canvas/.test(
+    /plain-text snapshot of the whole board[\s\S]{0,40}clipboard[\s\S]{0,40}unallocated pool[\s\S]{0,40}sitting with clinicians[\s\S]{0,40}planned on this board/.test(
       canvas
     ),
     'the copy explanation names the unallocated pool, work already with clinicians, and staged moves'
