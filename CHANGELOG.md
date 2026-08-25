@@ -33,7 +33,9 @@ in one place.
   `docs/learnings-lab-allocate.md`.
 
 `test-lab-allocate-core.js` locks the placement rules and the no-write
-contract.
+contract. Clinical Safety Notice product pin moved to 3.242.0 (doc v3.29,
+pending CSO review — not a new write) so the safety-doc version guard
+tracks this minor.
 
 ## [v3.241.3] — 2026-08-25
 
