@@ -433,6 +433,142 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/method:\s*['"]POST['"]/.test(labCap), 'lab-allocate capture does not POST');
 }
 
+console.log('\n--- guide: help button, modal semantics, Escape, copy + dynamic-test wording ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const canvas = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.js'), 'utf8');
+  const canvasCss = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.css'), 'utf8');
+
+  // A. a small, accessible help button that sits right before Close.
+  check(/id="ms-lac-help"/.test(canvas), 'a help button exists in the canvas header');
+  check(/aria-label="How to use lab allocation"/.test(canvas), 'the help button carries an explicit accessible name');
+  check(
+    /id="ms-lac-help"[\s\S]{0,260}id="ms-lac-close"/.test(canvas),
+    'the help button sits immediately before Close in the header markup'
+  );
+  check(/>\?<\/button>/.test(canvas), 'the help button label is a literal question mark, not an emoji/icon');
+  check(
+    !/ms-lac-help[\s\S]{0,120}(emoji|❓|🛈|ℹ)/i.test(canvas),
+    'the help button never uses an emoji or a second icon'
+  );
+  check(/\.ms-lac-help:hover/.test(canvasCss), 'the help button has a hover state');
+  check(/\.ms-lac-help:active/.test(canvasCss), 'the help button has an active state');
+  check(/\.ms-lac-help:focus-visible/.test(canvasCss), 'the help button has a visible focus ring');
+  check(/\.ms-lac-help:disabled/.test(canvasCss), 'the help button has a disabled state, matching Close');
+  const helpCssMatch = canvasCss.match(/\.ms-lac-help \{[\s\S]*?\.ms-lac-help:disabled \{[\s\S]*?\n\}/);
+  check(!!helpCssMatch, 'the help button CSS block can be isolated for a tokens-only check');
+  check(
+    !!helpCssMatch && !/#[0-9a-fA-F]{3,6}/.test(helpCssMatch[0]),
+    'the help button uses the scoped token block only, no new raw hex colours'
+  );
+
+  // B. a real, keyboard-contained modal dialog — board inert behind it.
+  check(/function guideModalHtml/.test(canvas), 'the guide renders through its own builder');
+  const guideTagMatch = canvas.match(/<div class="ms-lac-modal ms-lac-guide"[^>]*>/);
+  check(!!guideTagMatch, 'the guide dialog element can be isolated for an attribute check');
+  const guideTag = guideTagMatch ? guideTagMatch[0] : '';
+  check(
+    /role="dialog"/.test(guideTag) && /aria-modal="true"/.test(guideTag) && /id="ms-lac-guide-sheet"/.test(guideTag),
+    'the guide dialog carries role="dialog" and aria-modal="true" on its own element'
+  );
+  check(/aria-labelledby="ms-lac-guide-heading"/.test(guideTag), 'the guide dialog is labelled via aria-labelledby');
+  check(
+    /id="ms-lac-guide-heading">How to use lab allocation</.test(canvas),
+    'the guide has a visible heading matching that aria-labelledby target'
+  );
+  check(/id="ms-lac-guide-close">Close guide</.test(canvas), 'the guide offers an explicit Close guide action');
+  check(
+    /var sheet = document\.querySelector\('#' \+ OVERLAY_ID \+ ' #ms-lac-guide-sheet'\);\s*if \(sheet\) sheet\.focus\(\);/.test(
+      canvas
+    ),
+    'opening the guide moves focus onto it'
+  );
+  check(/function closeGuide/.test(canvas), 'a dedicated closeGuide function returns focus to the planning board');
+  check(/help\.focus\(\)/.test(canvas), 'closing the guide returns focus to the help button that opened it');
+  check(
+    /_confirmWrite \|\| _guideOpen \? ' inert' : ''/.test(canvas),
+    'the planning board is marked inert while the guide is open, same treatment as the write-confirm modal'
+  );
+  check(
+    (canvas.match(/_guideOpen = false;/g) || []).length >= 3,
+    'guide state is explicitly reset on close, and again whenever the overlay opens/closes'
+  );
+
+  // Escape closes the guide back to the planning board, and takes priority
+  // over the other Escape behaviours (filter clear, selection clear, close).
+  check(
+    /if \(e\.key === 'Escape'\) \{\s*e\.stopPropagation\(\);\s*if \(_writing\) return;\s*if \(_guideOpen\) \{\s*closeGuide\(\);\s*return;\s*\}/.test(
+      canvas
+    ),
+    'Escape closes an open guide first, ahead of the confirm-write/filter/selection/close checks'
+  );
+  check(
+    /e\.key === '\/' && !_guideOpen/.test(canvas),
+    'the / search shortcut is disabled while the guide is open, so it can never send focus behind it'
+  );
+
+  // D. the footer's Copy working list action is explained, and accurately —
+  // it must match LabAllocateCore.copyList's actual behaviour, not guesswork.
+  check(
+    /What “Copy working list” does<\/h4>/.test(canvas),
+    'the guide has an explicit section headed What "Copy working list" does'
+  );
+  check(
+    /plain-text snapshot of the whole board[\s\S]{0,40}clipboard[\s\S]{0,40}unallocated pool[\s\S]{0,40}sitting with clinicians[\s\S]{0,40}staged on this canvas/.test(
+      canvas
+    ),
+    'the copy explanation names the unallocated pool, work already with clinicians, and staged moves'
+  );
+  check(
+    /It does not write anything to Medicus\./.test(canvas),
+    'the copy explanation is explicit that Copy working list never writes to Medicus'
+  );
+  check(
+    /contains patient names, so only paste it into an approved practice system/.test(canvas),
+    'the copy explanation names the clipboard patient-data boundary'
+  );
+
+  // E. test types are explained as dynamic/Medicus-sourced, never hard-coded.
+  check(
+    /Test names and counts come from the results queue Medicus returns/.test(canvas),
+    'the guide explains that test names and counts come from the live Medicus results queue'
+  );
+  check(
+    /filter chips show the most common test types in that queue/.test(canvas),
+    'the guide explains the filter chips surface the most common test types from that queue'
+  );
+  check(
+    /search matches any test name Medicus reports, chip or not/.test(canvas),
+    'the guide explains search covers any Medicus-reported test name, not just the chip set'
+  );
+
+  // G. the guide itself never hard-codes an example clinical test name — the
+  // rest of the codebase (fixtures, capture scripts) legitimately does, so
+  // this check is scoped to the guide's own source, not the whole file.
+  const guideFnMatch = canvas.match(/function guideModalHtml\(\)[\s\S]*?\n  \}/);
+  check(!!guideFnMatch, 'guideModalHtml function body can be isolated for source inspection');
+  const guideSrc = guideFnMatch ? guideFnMatch[0] : '';
+  check(
+    !/\b(FBC|TSH|U&E|LFT|TFT|CRP|HbA1c|Lipid Profile|Full Blood Count|Full Lipid Profile)\b/i.test(guideSrc),
+    'the guide never hard-codes an example clinical test name'
+  );
+  check(!/\b(Done|Sent|Booked|Submitted|Allocated)\b/.test(guideSrc), 'the guide itself has no completion verbs');
+
+  const guideCssMatch = canvasCss.match(/\/\* Guide —[\s\S]*?\n@media \(prefers-reduced-motion/);
+  check(!!guideCssMatch, 'the guide CSS block can be isolated for a tokens-only check');
+  check(
+    !!guideCssMatch && !/#[0-9a-fA-F]{3,6}/.test(guideCssMatch[0]),
+    'the guide content classes use the scoped token block only, no new raw hex colours'
+  );
+  check(
+    /\.ms-lac-guide-steps/.test(canvasCss) &&
+      /\.ms-lac-guide-subhead/.test(canvasCss) &&
+      /\.ms-lac-guide-p/.test(canvasCss),
+    'the guide has its own content classes, distinct from the write-confirm modal rows'
+  );
+}
+
 console.log('\n--- grouping by who ordered ---');
 {
   const a = C.applyRequester(

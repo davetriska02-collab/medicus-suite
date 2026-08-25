@@ -66,6 +66,7 @@
   var _poolQuery = '';
   var _poolCaret = null;
   var _roving = {};
+  var _guideOpen = false;
 
   function announce(text) {
     setTimeout(function () {
@@ -1012,6 +1013,37 @@
     );
   }
 
+  // The guide is reference material, not a hazard state — it reuses the
+  // write-confirm modal's scrim/shell chrome (ms-lac-modal-scrim, ms-lac-modal)
+  // but every piece of its own content gets ms-lac-guide-* classes so it can
+  // be styled and tested independently of that modal's rows/actions.
+  function guideModalHtml() {
+    return (
+      '<div class="ms-lac-modal-scrim">' +
+      '<div class="ms-lac-modal ms-lac-guide" role="dialog" aria-modal="true" tabindex="-1" id="ms-lac-guide-sheet" aria-labelledby="ms-lac-guide-heading">' +
+      '<div class="ms-lac-guide-head">' +
+      '<h3 class="ms-lac-modal-heading ms-lac-guide-heading" id="ms-lac-guide-heading">How to use lab allocation</h3>' +
+      '<button type="button" class="ms-lac-ghost ms-lac-guide-close" id="ms-lac-guide-close">Close guide</button>' +
+      '</div>' +
+      '<div class="ms-lac-guide-body">' +
+      '<ol class="ms-lac-guide-steps">' +
+      '<li>Filter the unallocated pool by availability, test type or search to narrow down what you are looking at.</li>' +
+      '<li>Select what to plan — click one row, use a group’s Select N to take everyone a requester ordered, or select every currently shown result at once from the toolbar above the pool.</li>' +
+      '<li>Choose “Plan N here” on a clinician (or drag the selection onto their field, if you prefer) — nothing in Medicus changes yet.</li>' +
+      '<li>Review the patient, test and destination for every planned move, then explicitly confirm before Medicus is changed.</li>' +
+      '</ol>' +
+      '<h4 class="ms-lac-guide-subhead">Favourites and absence warnings</h4>' +
+      '<p class="ms-lac-guide-p">Star a clinician to keep them pinned at the top of the list. Planning work onto someone the rota or Medicus shows as away or on leave shows a warning first — choose someone else, or plan it there anyway.</p>' +
+      '<h4 class="ms-lac-guide-subhead">What “Copy working list” does</h4>' +
+      '<p class="ms-lac-guide-p">It copies a plain-text snapshot of the whole board to your clipboard — the unallocated pool, work already sitting with clinicians, and anything staged on this canvas. It does not write anything to Medicus. The text contains patient names, so only paste it into an approved practice system.</p>' +
+      '<h4 class="ms-lac-guide-subhead">Where the test names come from</h4>' +
+      '<p class="ms-lac-guide-p">Test names and counts come from the results queue Medicus returns when this canvas loads. The filter chips show the most common test types in that queue; search matches any test name Medicus reports, chip or not.</p>' +
+      '</div>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
   function shellHtml() {
     var board = C.buildWorkspace(_rows, _draft);
     var lead = _rows.length
@@ -1027,11 +1059,12 @@
       '<div class="ms-lac-panel' +
       (_writing || _confirmWrite ? ' ms-lac-panel-writing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
-      // While the write-confirmation modal is up, everything behind it —
-      // including the header's own Close button — sits under [inert]: no
-      // focus, no pointer events, and the modal scrim dims it visually too.
+      // While the write-confirmation modal or the guide is up, everything
+      // behind it — including the header's own Close button — sits under
+      // [inert]: no focus, no pointer events, and the modal scrim dims it
+      // visually too.
       '<div class="ms-lac-panel-inner"' +
-      (_confirmWrite ? ' inert' : '') +
+      (_confirmWrite || _guideOpen ? ' inert' : '') +
       '>' +
       '<div class="ms-lac-header">' +
       lead +
@@ -1039,6 +1072,9 @@
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
+      '<button type="button" class="ms-lac-help" id="ms-lac-help" aria-label="How to use lab allocation"' +
+      (_writing ? ' disabled' : '') +
+      '>?</button>' +
       '<button type="button" class="ms-lac-close" id="ms-lac-close"' +
       (_writing ? ' disabled' : '') +
       '>Close</button>' +
@@ -1052,6 +1088,7 @@
       confirmBarHtml() +
       '</div>' +
       (_confirmWrite ? confirmWriteModalHtml() : '') +
+      (_guideOpen ? guideModalHtml() : '') +
       '</div>'
     );
   }
@@ -1180,6 +1217,10 @@
   function bindOverlay(root) {
     var close = root.querySelector('#ms-lac-close');
     if (close) close.addEventListener('click', requestClose);
+    var help = root.querySelector('#ms-lac-help');
+    if (help) help.addEventListener('click', openGuide);
+    var guideClose = root.querySelector('#ms-lac-guide-close');
+    if (guideClose) guideClose.addEventListener('click', closeGuide);
     var dismiss = root.querySelector('#ms-lac-error-dismiss');
     if (dismiss)
       dismiss.addEventListener('click', function () {
@@ -1653,6 +1694,24 @@
     }
   }
 
+  function openGuide() {
+    if (_writing || _confirmWrite || _guideOpen) return;
+    _guideOpen = true;
+    announce('Guide open. Press Escape or Close guide to go back to the planning board.');
+    render();
+    var sheet = document.querySelector('#' + OVERLAY_ID + ' #ms-lac-guide-sheet');
+    if (sheet) sheet.focus();
+  }
+
+  function closeGuide() {
+    if (!_guideOpen) return;
+    _guideOpen = false;
+    announce('Guide closed. Back on the planning board.');
+    render();
+    var help = document.querySelector('#' + OVERLAY_ID + ' #ms-lac-help');
+    if (help) help.focus();
+  }
+
   function requestClose() {
     if (_writing) return;
     if (_confirmWrite) {
@@ -1691,6 +1750,7 @@
     _poolTest = '';
     _poolQuery = '';
     _poolCaret = null;
+    _guideOpen = false;
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1719,6 +1779,7 @@
     _poolTest = '';
     _poolQuery = '';
     _poolCaret = null;
+    _guideOpen = false;
     loadFavourites();
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
@@ -1772,7 +1833,9 @@
     'keydown',
     function (e) {
       if (!_open) return;
-      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // A guide open behind the search shortcut must never steal focus back
+      // to a hidden/inert board — the shortcut is simply off while it is up.
+      if (e.key === '/' && !_guideOpen && !e.ctrlKey && !e.metaKey && !e.altKey) {
         var tag = (e.target && e.target.tagName) || '';
         if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
           var q = document.getElementById('ms-lac-pool-q');
@@ -1786,6 +1849,10 @@
       if (e.key === 'Escape') {
         e.stopPropagation();
         if (_writing) return;
+        if (_guideOpen) {
+          closeGuide();
+          return;
+        }
         if (_confirmWrite) {
           _confirmWrite = null;
           announce('Nothing was written. Back on the planning board.');

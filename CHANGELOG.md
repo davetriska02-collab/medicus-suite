@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.2] — 2026-08-25
+
+### Lab allocation canvas — in-context guide
+
+- Added a keyboard-accessible `?` guide explaining the select → plan →
+  review workflow, favourite destinations and absence warnings.
+- Clarified that **Copy working list** puts a plain-text snapshot of the
+  whole board on the clipboard, including patient names, without changing
+  Medicus.
+- Documented the live filter behaviour: test names and counts are derived
+  from the results queue returned by Medicus; the common types appear as
+  chips and search covers every additional returned type.
+
+W23 and its four-key write contract are unchanged.
+
 ## [v3.244.1] — 2026-08-25
 
 ### Lab allocation canvas — critical-lens polish

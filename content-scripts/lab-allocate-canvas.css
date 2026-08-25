@@ -152,6 +152,46 @@
   color: var(--text-2);
 }
 
+.ms-lac-help {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-pill);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.ms-lac-help:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.ms-lac-help:active:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.ms-lac-help:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ms-lac-help:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .ms-lac-close,
 .ms-lac-ghost {
   padding: 4px 12px;
@@ -186,7 +226,8 @@
 #ms-lac-add-name:focus-visible,
 .ms-lac-group-select:focus-visible,
 .ms-lac-group-toggle:focus-visible,
-#ms-lac-confirm-sheet:focus-visible {
+#ms-lac-confirm-sheet:focus-visible,
+#ms-lac-guide-sheet:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1336,6 +1377,59 @@
 .ms-lac-modal-actions .ms-lac-confirm-btn-primary {
   width: 100%;
   text-align: center;
+}
+
+/* Guide — reuses the write-confirm modal's scrim/shell (ms-lac-modal-scrim,
+   ms-lac-modal) but every piece of its own content is ms-lac-guide-* so it
+   can be laid out and tested on its own terms; it is reference material,
+   not a hazard state, so it stays on the neutral/accent palette only. */
+.ms-lac-guide {
+  text-align: left;
+}
+
+.ms-lac-guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.ms-lac-guide-heading {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+.ms-lac-guide-close {
+  flex: 0 0 auto;
+}
+
+.ms-lac-guide-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 14px;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.ms-lac-guide-steps li {
+  line-height: 1.5;
+}
+
+.ms-lac-guide-subhead {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.ms-lac-guide-p {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 
 @media (prefers-reduced-motion: reduce) {
