@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.241.3] — 2026-08-25
+
+### Docs: two stale safety comments in the allergy canvas corrected
+
+Post-merge review findings on PR #325. **Comment-only — no behaviour
+change anywhere**, but in these two files the comments *are* the safety
+documentation, so a comment that describes a control which no longer
+exists is a real defect, not a typo.
+
+- **`content-scripts/allergy-cleanup-canvas.js` — `isConvertEligible`**
+  still told the reader that the "No known allergies" sentinel rows
+  "keep the select-then-'Stage end' flow (and the last-remaining-NKA
+  protection that only Stage end honours)". v3.241.2 deleted that
+  protection: `countLiveNka` is gone and `canStageEnd` no longer returns
+  `'last-nka'`. The comment now says plainly that the NKA exclusion from
+  click-to-review is the *only* thing still special-cased about an NKA
+  row — it is endable like any other, it simply is not convertible —
+  and points at `isEndableClassification` and H-060's addendum for the
+  reasoning.
+- **`content-scripts/allergy-cleanup.js` —
+  `fetchTopLevelSubstanceAncestor`** still carried its
+  `PENDING LIVE VERIFICATION (2026-08-23)` caveat after the walk was
+  confirmed working live in Medicus by the maintainer on the v3.241.2
+  build. The caveat is discharged and dated. The one caveat that
+  genuinely does still apply is now stated instead: the walk is a
+  heuristic on a multi-parent hierarchy (`parentConceptIds.find()` takes
+  the first unseen parent), which is exactly why its result is only ever
+  offered as an extra option and never auto-applied.
+
+No product code, rules file, payload builder or test expectation is
+touched; the full suite still passes 396/396.
+
 ## [v3.241.2] — 2026-08-24
 
 ### Fix: episodicitySuffix pattern missed the unbraced GP2GP wrapper variant
