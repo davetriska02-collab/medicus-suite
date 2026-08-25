@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.241.3",
+  "version": "3.242.2",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -109,6 +109,8 @@
         "content-scripts/problem-nesting-canvas.js",
         "shared/appointment-organise-core.js",
         "content-scripts/appointment-organise-canvas.js",
+        "shared/lab-allocate-core.js",
+        "content-scripts/lab-allocate-canvas.js",
         "content-scripts/allergy-cleanup.js",
         "shared/write-core.js",
         "content-scripts/allergy-cleanup-canvas.js",
@@ -127,6 +129,7 @@
         "content-scripts/problem-nesting.css",
         "content-scripts/problem-nesting-canvas.css",
         "content-scripts/appointment-organise-canvas.css",
+        "content-scripts/lab-allocate-canvas.css",
         "content-scripts/allergy-cleanup.css",
         "content-scripts/allergy-cleanup-canvas.css",
         "content-scripts/task-presence.css",

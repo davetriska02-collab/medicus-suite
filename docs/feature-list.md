@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.241.0
-**Generated:** 2026-08-24 (automated)
+**Version:** v3.242.2,
+**Generated:** 2026-08-25 (automated)
 
 ## What it is
 
@@ -143,6 +143,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with SNOMED- and text-based suggested links; tick several tiles (or Ctrl/⌘-click) and drag the set together; every change staged, then confirmed together.
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance; tick several tiles and drag the set onto End or Dual-coded.
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view.
+- **Lab allocation canvas** — on the investigation-results queue, a drag-and-drop board that groups incoming labs by who ordered them when that field is on the payload; moves are staged on the canvas only until Medicus's Reassign-task write is captured.
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch.
 - **Task presence** — shows a colleague's name on a queue row they already have open, backed by the practice's own shared folder; advisory only, never a lock.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker.

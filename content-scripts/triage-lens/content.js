@@ -6505,19 +6505,6 @@
         const whyEl = pulseTarget(row).target.querySelector('.ch-q-pulse-head');
         if (whyEl && whyEl.focus) whyEl.focus();
       }
-    } else if (key === 'a' || key === 'A') {
-      if (!PREF('queuePulseCompress', true)) return;
-      if (_kbdCursorRowIndex == null) return;
-      const row = queueScope().querySelector('.ag-row[row-index="' + _kbdCursorRowIndex + '"]:not(.ag-full-width-row)');
-      if (!row) return;
-      if (e.preventDefault) e.preventDefault();
-      const keyId = pulseOpenKey(row);
-      if (keyId) {
-        _pulseOpenByKey.set(keyId, _pulseOpenByKey.get(keyId) === 'act' ? null : 'act');
-        refreshPulseOnRow(row);
-        const actEl = pulseTarget(row).target.querySelector('.ch-q-pulse-act');
-        if (actEl && actEl.focus) actEl.focus();
-      }
     } else if (key === 'Escape') {
       if (!PREF('queuePulseCompress', true)) return;
       if (_kbdCursorRowIndex == null) return;
@@ -6529,8 +6516,7 @@
       if (e.preventDefault) e.preventDefault();
       _pulseOpenByKey.set(keyId, null);
       refreshPulseOnRow(row);
-      const cls = wasOpen === 'act' ? 'ch-q-pulse-act' : 'ch-q-pulse-head';
-      const trigEl = pulseTarget(row).target.querySelector('.' + cls);
+      const trigEl = pulseTarget(row).target.querySelector('.ch-q-pulse-head');
       if (trigEl && trigEl.focus) trigEl.focus();
     } else if (key === 'n' || key === 'N') {
       if (e.preventDefault) e.preventDefault();
@@ -6542,7 +6528,7 @@
         applyQueueKbdCursor();
       }
     } else if (key === '?') {
-      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, Space why-pulse, a act-tray, n jumps to next red/amber');
+      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, Space why-pulse, n jumps to next red/amber');
     }
   };
 
@@ -6953,7 +6939,7 @@
 
   // ---- Queue pulse (v3.236.4) — compress already-computed chips to one named weight ----
   // Composer is window.TriageQueuePulse (queue-pulse.js). This block is DOM-only:
-  // collect chips already on the row, render rail + headline + why/act trays,
+  // collect chips already on the row, render rail + headline + why tray,
   // PREPEND the host, re-run after every fetch-driven inject. Pref
   // queuePulseCompress (default on). Not a score — see PLAN.md.
   const PULSE_HOST = 'ch-q-pulse';
@@ -6961,8 +6947,7 @@
   const PULSE_RED = 'ch-row-pulse-red';
   const PULSE_AMBER = 'ch-row-pulse-amber';
   const PULSE_FLOAT = 'ch-q-pulse-float';
-  const _pulseActByRow = new Map(); // rowIndex → pathway context from decorateOneRow
-  const _pulseOpenByKey = new Map(); // taskUuid|ri → 'why' | 'act'
+  const _pulseOpenByKey = new Map(); // taskUuid|ri → 'why'
   // key → cleanup fn. Per-key (NOT a single slot): the reapplyQueuePulses
   // sweep calls refreshPulseOnRow for EVERY row, so a shared slot gets run by
   // whichever row refreshes next — before the deferred arm() has even added
@@ -7202,63 +7187,6 @@
     return tray;
   };
 
-  const buildPulseActTray = (row, act) => {
-    const tray = document.createElement('div');
-    tray.className = 'ch-q-act';
-    const h = document.createElement('h3');
-    h.textContent = '1 · Stage a next step — nothing is sent from here.';
-    tray.appendChild(h);
-    const rowEl = document.createElement('div');
-    rowEl.className = 'ch-q-act-row';
-    const addBtn = (n, label, detail, enabled, onClick) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.disabled = !enabled;
-      const title = document.createElement('span');
-      title.textContent = n ? n + '. ' + label : label;
-      const small = document.createElement('small');
-      small.textContent = detail;
-      b.appendChild(title);
-      b.appendChild(small);
-      if (enabled && onClick) {
-        b.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onClick(b);
-        });
-      }
-      rowEl.appendChild(b);
-    };
-    addBtn('', 'Book', 'Not in this first cut — open the request to book', false);
-    const pfOk = !!(act && act.pfElig && act.pfElig.eligible === true);
-    const askOk = !!(act && act.gapsData && (act.gapsData.gaps.length || act.gapsData.flaggedInText.length));
-    addBtn(
-      '',
-      'Pharmacy First',
-      pfOk ? 'Open the pathway draft (still not sent)' : 'Age or pathway not confirmed',
-      pfOk,
-      (anchor) => {
-        if (act) showPathwayMenu(anchor, act.pathway, act.previewText, act.pfElig, act.gapsData, act.closingQuestions);
-      }
-    );
-    addBtn(
-      '',
-      'Ask-back',
-      askOk ? 'Open the gap-question draft (still not sent)' : 'No pathway gaps on this request',
-      askOk,
-      (anchor) => {
-        if (act) showPathwayMenu(anchor, act.pathway, act.previewText, act.pfElig, act.gapsData, act.closingQuestions);
-      }
-    );
-    addBtn('', 'Park until…', 'Not in this first cut — Medicus status unchanged', false);
-    tray.appendChild(rowEl);
-    const note = document.createElement('p');
-    note.className = 'ch-q-act-note';
-    note.textContent = '2 · Open the request to finish — nothing reaches reception until you do.';
-    tray.appendChild(note);
-    return tray;
-  };
-
   const refreshPulseOnRow = (row) => {
     if (!row || !row.classList || !row.classList.contains('ag-row')) return;
     if (row.classList.contains('ag-full-width-row')) return;
@@ -7290,7 +7218,7 @@
     const open = key ? _pulseOpenByKey.get(key) : null;
     // Nothing to say and nothing summoned: no pulse chrome at all — a quiet
     // row keeps its chip pile untouched (applyPulseRail above) and gets no
-    // extra host. The keyboard Space/`a` paths still work: they set the open
+    // extra host. The keyboard Space path still works: it sets the open
     // state BEFORE calling refreshPulseOnRow, so the host appears on demand.
     if (!escalate && composed.signals.length === 0 && !open) {
       clearPulseClasses(row);
@@ -7298,7 +7226,6 @@
     }
     const ri = row.getAttribute('row-index');
     const whyTrayId = 'ch-q-why-' + ri;
-    const actTrayId = 'ch-q-act-' + ri;
     const host = document.createElement('span');
     // Flat queues (tasks / investigations) have no preview row — pulse is
     // PREPENDed into the patient-name cell. Inline class drops the
@@ -7355,15 +7282,6 @@
       more.setAttribute('aria-label', composed.overflowCount + ' more signals — show why');
       line.appendChild(more);
     }
-    const act = ri != null ? _pulseActByRow.get(Number(ri)) : null;
-    const actBtn = document.createElement('button');
-    actBtn.type = 'button';
-    actBtn.className = 'ch-q-pulse-act';
-    actBtn.textContent = 'Act ›';
-    actBtn.setAttribute('aria-label', 'Stage a next step — nothing is sent from here');
-    actBtn.setAttribute('aria-controls', actTrayId);
-    actBtn.setAttribute('aria-expanded', open === 'act' ? 'true' : 'false');
-    line.appendChild(actBtn);
     host.appendChild(line);
 
 
@@ -7395,18 +7313,13 @@
         if (e.key === 'Enter' || e.key === ' ') onWhy(e);
       });
     });
-    actBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggle('act', 'ch-q-pulse-act');
-    });
 
     target.insertBefore(host, target.firstChild);
 
-    if (open === 'why' || open === 'act') {
-      const tray = open === 'why' ? buildPulseWhyTray(composed) : buildPulseActTray(row, act);
+    if (open === 'why') {
+      const tray = buildPulseWhyTray(composed);
       // The triggers' aria-controls point at these ids (crit decision I).
-      tray.id = open === 'why' ? whyTrayId : actTrayId;
+      tray.id = whyTrayId;
       if (key) tray.setAttribute('data-pulse-key', key);
       tray.addEventListener('click', (e) => e.stopPropagation());
       tray.addEventListener('mousedown', (e) => e.stopPropagation());
@@ -7639,16 +7552,6 @@
             rqIdx: abIdx,
             ariaLabel: `Reception ask-back available — ${topPathway.title}` +
               (hasEscalation ? ', patient may have already mentioned a red flag — review before proceeding' : '')
-          });
-        }
-        const pulseRi = row.getAttribute('row-index');
-        if (pulseRi != null) {
-          _pulseActByRow.set(Number(pulseRi), {
-            pathway: topPathway,
-            previewText: previewText,
-            pfElig: pfElig,
-            gapsData: gapsData,
-            closingQuestions: closingQuestions
           });
         }
       }

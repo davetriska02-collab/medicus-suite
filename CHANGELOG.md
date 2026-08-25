@@ -2,6 +2,67 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.2] — 2026-08-25
+
+### Triage Lens — remove the pulse Act tray
+
+The compressed queue pulse no longer shows **Act ›**. The `a` shortcut, the
+four-button stage tray (Book / Pharmacy First / Ask-back / Park), and the
+options copy that pointed at them are gone. Space still opens why. Pharmacy
+First and Ask-back stay on their existing row chips when a pathway matches.
+
+## [v3.242.1] — 2026-08-25
+
+### Lab allocation canvas — group by who ordered, warn on absence
+
+Drag-and-drop now shows **who ordered the pile** and whether those
+results can move as one group. Same-requester tiles sit under a
+draggable group header (`Ordered by Dr X · N results`); the drag ghost
+repeats that label. Mixed or unknown requesters stay in their own pile
+and are labelled as not auto-groupable.
+
+Dropping onto a clinician column **always** runs an absence check
+against this machine’s `rota.staff` / `rota.leave` before anything is
+staged. Approved leave blocks behind “they will not see these today”;
+requested leave and an unmatched/empty rota still warn (absence
+unknown — never a silent all-clear). The column itself badges away
+clinicians. Staging after the warning is still only on the canvas.
+
+## [v3.242.0] — 2026-08-25
+
+### Lab allocation canvas — stage incoming results by who ordered them
+
+Incoming labs sit in a shared inbox and are walked one-by-one today:
+open the report, read the Outstanding Investigation Requests line
+(`Panel (Dr Name • date)`), hit Medicus's own **Reassign task**, repeat.
+This release adds a results-queue canvas so that walk can be *planned*
+in one place.
+
+- Launch **Allocate labs on canvas…** on an investigation-results
+  task-list (same slug family the result-triage chips already treat as
+  a results queue).
+- Columns are Unallocated, the current team inbox, and one clinician
+  column per requester we can actually read. Drag (or multi-select and
+  drag) stages a move. Add a named column when the person is not yet
+  on the board.
+- Auto-placement is **requester evidence only** — `requestedBy` / usual
+  aliases on the overview, or an OIR-style label if it appears in the
+  payload. The patient's registered GP is a caption, never a column
+  the tile is dropped into. Task `status` is not treated as "who
+  ordered" (on the confirmed request-queue capture it is a workflow
+  state, not a clinician list).
+- **No write.** The Reassign-task endpoint has not been captured live;
+  Finalise stays disabled and the working list can be copied. Capture
+  the missing contract with `scripts/lab-allocate-capture.js` while
+  reassigning one dummy result by hand — same discipline as the
+  appointment-organise learnings. Analysis:
+  `docs/learnings-lab-allocate.md`.
+
+`test-lab-allocate-core.js` locks the placement rules and the no-write
+contract. Clinical Safety Notice product pin moved to 3.242.0 (doc v3.29,
+pending CSO review — not a new write) so the safety-doc version guard
+tracks this minor.
+
 ## [v3.241.3] — 2026-08-25
 
 ### Docs: two stale safety comments in the allergy canvas corrected
