@@ -131,13 +131,15 @@ Until that paste-back, the canvas is a **planning board**.
 
 ---
 
-## Grouping and absences (v3.242.1 / v3.242.4)
+## Grouping and absences (v3.242.1 / v3.242.5)
 
 The canvas is one **Investigation reports** pool, grouped by who
-requested the test, plus small **clinician chips** on the right. A
-requester does not auto-move out of the pool — drag the group onto
-their chip. Click a chip to see anything already assigned to them in
-Medicus, or staged onto them on this canvas.
+requested the test, plus small **clinician chips** on the right. Every
+row on this queue starts in the pool — including rows whose
+`assignedTo` is the inbox name "Investigation Reports" (that is not a
+person). Drag or multi-select onto a chip. Who requested is read from
+the task-list `requestedBy` field when present; overview fetch is the
+fallback.
 
 Same-requester tiles group under one header and drag as a set. The drag
 ghost names who ordered them. That only works when requester evidence
@@ -163,4 +165,5 @@ this machine's rota store.
   task-list, reports pool, clinician chips, copy working list.
 - `scripts/lab-allocate-capture.js` — live Reassign-path scoping.
 - `scripts/staff-scheduling-capture.js` — live Staff scheduling scoping.
+- `scripts/lab-requester-capture.js` — live Requested By / report-page scoping.
 - `test-lab-allocate-core.js` — placement rules, no-write lock, GET-only client.

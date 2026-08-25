@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.5] — 2026-08-25
+
+### Lab allocation canvas — put the reports back in the pool
+
+The live queue names its inbox **Investigation Reports**. The canvas
+treated that as a person, parked most tiles on clinician chips, and
+left the pool empty.
+
+Every result on this queue now stays in the **Investigation reports**
+pile until you stage it onto a chip. The inbox name is never a
+clinician. Who requested it is read from the task-list `requestedBy`
+column when that field is on the row (the column is already on the
+Medicus grid); overview fetch remains a fallback.
+
+Chips no longer wear a standing “Absence unknown” badge. Away is
+shown only when this machine’s rota leave list says so.
+
+Paste `scripts/staff-scheduling-capture.js` on Medicus Staff
+scheduling, and `scripts/lab-requester-capture.js` on the results
+queue or one open report, then send the dumps back.
+
 ## [v3.242.4] — 2026-08-25
 
 ### Lab allocation canvas — reports pool + clinician chips

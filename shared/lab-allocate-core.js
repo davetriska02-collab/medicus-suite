@@ -27,7 +27,7 @@
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var RESULT_SLUG_RE = /investigation|result/i;
   var TEAM_ASSIGNEE_RE =
-    /\b(team|inbox|results?|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing)\b/i;
+    /\b(team|inbox|results?|reports?|investigation|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing)\b/i;
   var TITLE_RE = /\b(dr|doctor|prof|professor|mr|mrs|ms|miss)\b\.?/g;
   var WRITE_BLOCKED =
     'Writing allocations to Medicus is not enabled. The Reassign-task endpoint has not been captured live — do not invent a slug. Use scripts/lab-allocate-capture.js while you reassign one result by hand, then we can wire Finalise.';
@@ -245,6 +245,20 @@
     return { name: first.name, source: first.source, confidence: 'requester' };
   }
 
+  function pickRequesterFromTaskRow(item) {
+    if (!item || typeof item !== 'object') return null;
+    var keys = Object.keys(item);
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var lk = key.toLowerCase();
+      if (lk === 'namedgp' || lk === 'namedgpid' || lk === 'assignedto' || lk === 'assignedid') continue;
+      if (!REQUESTER_KEYS[lk]) continue;
+      var name = nameFromUnknown(item[key]);
+      if (name && !isTeamAssignee(name)) return { name: name, source: key, confidence: 'requester' };
+    }
+    return null;
+  }
+
   function normaliseTaskRow(item, slug) {
     if (!item || typeof item !== 'object') return null;
     var id = pickTaskId(item);
@@ -256,7 +270,7 @@
       : isStr(item.summaryLabel)
         ? clip(item.summaryLabel, 120)
         : '';
-    return {
+    var row = {
       id: id,
       patientName: isStr(item.patientName) ? clip(item.patientName, 80) : 'Unknown',
       summary: summary,
@@ -272,6 +286,7 @@
       requesterSource: '',
       requesterConfidence: '',
     };
+    return applyRequester(row, pickRequesterFromTaskRow(item));
   }
 
   function applyRequester(row, hint) {
@@ -284,15 +299,10 @@
   }
 
   function homeColumnKey(row) {
-    // Already sitting with a named person in Medicus — show on their chip.
-    // Requester evidence does NOT auto-place: those stay in the reports pool,
-    // grouped by who ordered, until someone stages them onto a chip.
-    if (row && row.assignedTo && !isTeamAssignee(row.assignedTo)) {
-      var key = clinicianColumnKey(row.assignedTo);
-      // A name that normalises to nothing has no chip to sit on — pool it
-      // rather than parking it on a key no column renders.
-      if (key !== UNALLOCATED) return key;
-    }
+    // Everything on this queue starts in the reports pool. assignedTo is a
+    // caption (often the inbox name "Investigation Reports"). Staging onto a
+    // chip is the only way a tile leaves the pool.
+    void row;
     return POOL;
   }
 
@@ -412,9 +422,6 @@
     });
     rows.forEach(function (row) {
       if (row.requester) remember(clinicianColumnKey(row.requester), row.requester);
-      if (row.assignedTo && !isTeamAssignee(row.assignedTo)) {
-        remember(clinicianColumnKey(row.assignedTo), row.assignedTo);
-      }
       remember(visualColumnKey(row, draft), null);
     });
     return { keys: Object.keys(seen).sort(), titles: titles };
@@ -834,6 +841,7 @@
     inboxColumnKey: inboxColumnKey,
     parseRequestLabel: parseRequestLabel,
     pickRequesterFromOverview: pickRequesterFromOverview,
+    pickRequesterFromTaskRow: pickRequesterFromTaskRow,
     normaliseTaskRow: normaliseTaskRow,
     applyRequester: applyRequester,
     homeColumnKey: homeColumnKey,

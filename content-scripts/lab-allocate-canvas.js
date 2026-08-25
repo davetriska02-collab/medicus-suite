@@ -195,7 +195,7 @@
   }
 
   function chipCountLabel(col) {
-    if (!col.count) return 'None on this canvas';
+    if (!col.count) return 'Drop a group here';
     var bits = [];
     if (col.stagedCount) bits.push(col.stagedCount + ' staged here');
     if (col.assignedCount) bits.push(col.assignedCount + ' already assigned in Medicus');
@@ -205,7 +205,6 @@
   function chipHtml(col) {
     var abs = absenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
-    var unknown = abs.state === 'unknown';
     var open = _expandedChip === col.key;
     var body =
       col.groups && col.groups.length ? col.groups.map(groupHtml).join('') : col.tiles.map(tileHtml).join('');
@@ -227,15 +226,13 @@
       '<span class="ms-lac-chip-count">' +
       esc(chipCountLabel(col)) +
       '</span>' +
-      (away ? '<span class="ms-lac-chip-flag">Away</span>' : unknown ? '<span class="ms-lac-chip-flag">Absence unknown</span>' : '') +
+      (away ? '<span class="ms-lac-chip-flag">Away</span>' : '') +
       '</button>' +
       (open
         ? '<div class="ms-lac-chip-drawer">' +
-          (away || unknown
-            ? '<div class="ms-lac-col-absence">' + esc(abs.label || 'Absence unknown.') + '</div>'
-            : '') +
+          (away ? '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>' : '') +
           (body ||
-            '<div class="ms-lac-empty">Nothing on this clinician on this canvas. Drop a group from Investigation reports to stage a move.</div>') +
+            '<div class="ms-lac-empty">Nothing staged onto this clinician. Drop a group from Investigation reports.</div>') +
           '</div>'
         : '') +
       '</div>'
@@ -317,10 +314,10 @@
       '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
       '</div>' +
       '<div class="ms-lac-explainer">' +
-      'The big pile is investigation reports, grouped by who requested them. ' +
-      'Clinician chips on the right are drop targets — click one to see anything already on them. ' +
+      'Every result on this queue sits in the pile on the left, grouped by who requested it. ' +
+      'Multi-select tiles or drag a group onto a clinician chip. ' +
       'A registered GP is a hint only. ' +
-      'Dropping onto a clinician always runs an absence check against this machine’s rota leave list before anything is staged. ' +
+      'Away is shown only when this machine’s rota leave list says they are off — Medicus Staff scheduling has not been captured yet. ' +
       'Nothing is written to Medicus from this canvas yet.' +
       (_overviewProgress ? ' ' + esc(_overviewProgress) : '') +
       '</div>' +
