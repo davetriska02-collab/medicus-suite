@@ -145,6 +145,22 @@ Same-requester tiles group under one header and drag as a set. The drag
 ghost names who ordered them. That only works when requester evidence
 is on the payload — unknown rows stay in their own pile.
 
+**One person, two wire formats (v3.242.8).** The task-list Requested By
+column carries `AZADIAN N` (surname then initial); the appointment book
+and rota carry `Dr Natalie Azadian`. `personNameKey` canonicalises both
+to `azadian|n`, so chips, pool groups, presence lookups and absence
+warnings all agree. Until this landed, rota leave and the today-book
+match silently failed on every caps-format chip — the Away flag simply
+never fired. A bare surname matches any initial; two clinicians sharing
+surname AND first initial would merge (documented trade — the canvas is
+stage-only and Medicus's Reassign remains the write).
+
+**Workbench UI (v3.242.8, from a three-critic design review).**
+Full-bleed, one-line rows under sticky group headers, group select-all,
+a selection bar, and click-a-chip-to-stage as the primary (and keyboard)
+path — drag is the shortcut, not the requirement. Closing with staged
+moves asks first.
+
 Dropping onto a **person** consults, in this order:
 
 1. A Medicus absence record that names them and overlaps today (only

@@ -1,4 +1,6 @@
-/* Lab allocation canvas. Tokens match the appointment-organise light canon. */
+/* Lab allocation canvas. Injected surface: #ms-lac-overlay carries its own
+   token block (panel.css :root is not available on Medicus pages) — values
+   mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
 #ms-lac-launch {
   position: fixed;
   top: 12px;
@@ -19,27 +21,50 @@
   cursor: pointer;
 }
 
+#ms-lac-launch:hover {
+  border-color: #2563eb;
+  background: #eff4fd;
+}
+
+/* The launcher is appended to <html>, NOT inside #ms-lac-overlay, so the
+   token block below is not an ancestor of it — var(--accent) would resolve
+   to nothing and invalidate the whole `outline` shorthand, leaving the
+   button with no keyboard focus ring. Literal value, same colour. */
+#ms-lac-launch:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 #ms-lac-overlay {
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
   --bg-elev: #ffffff;
+  --bg-hover: #e2eaf5;
   --border: #cbd5e1;
   --border-hi: #94a3b8;
   --text-1: #0f172a;
   --text-2: #1e3a5f;
   --text-3: #475569;
+  --text-4: #556377;
   --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
   --red: #dc2626;
   --amber: #b45309;
   --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
   --green: #16a34a;
   --green-dim: rgba(22, 163, 74, 0.09);
   --green-line: rgba(22, 163, 74, 0.3);
   --r-sm: 4px;
   --r-md: 6px;
-  --r-lg: 10px;
+  --r-lg: 8px;
   --r-pill: 999px;
-  --shadow-2: 0 12px 32px rgba(15, 23, 42, 0.28);
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   position: fixed;
   inset: 0;
   z-index: 2147483000;
@@ -54,42 +79,57 @@
   clip: rect(0 0 0 0);
 }
 
-.ms-lac-backdrop {
-  position: fixed;
+/* Full-bleed workbench — the user parks here for minutes moving 73 items;
+   there is nothing behind a scrim they need to see. */
+.ms-lac-shell,
+.ms-lac-panel {
+  position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.5);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .ms-lac-panel {
-  background: var(--bg-elev);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2);
-  width: min(1280px, 100%);
-  height: min(780px, 100%);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  background: var(--bg-deep);
   color: var(--text-1);
+  overflow: hidden;
 }
 
 .ms-lac-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
+  gap: 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-mid);
+  background: var(--bg-elev);
+  flex: 0 0 auto;
 }
 
 .ms-lac-title {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--text-2);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.ms-lac-header-counts {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.ms-lac-header-note {
+  font-size: 11.5px;
+  color: var(--text-4);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ms-lac-close,
@@ -103,6 +143,20 @@
   font-family: inherit;
   color: var(--text-2);
   cursor: pointer;
+  transition:
+    background 150ms var(--ease),
+    border-color 150ms var(--ease);
+}
+
+.ms-lac-close:hover,
+.ms-lac-ghost:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.ms-lac-close:active,
+.ms-lac-ghost:active:not(:disabled) {
+  background: var(--bg-hover);
 }
 
 .ms-lac-close:focus-visible,
@@ -113,53 +167,40 @@
   outline-offset: 2px;
 }
 
-/* The launcher is appended to <html>, NOT inside #ms-lac-overlay, so the
-   token block above is not an ancestor of it — var(--accent) would resolve
-   to nothing and invalidate the whole `outline` shorthand, leaving the
-   button with no keyboard focus ring. Literal value, same colour. */
-#ms-lac-launch:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-
 .ms-lac-ghost:disabled,
 .ms-lac-confirm-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.ms-lac-explainer {
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-deep);
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--text-3);
-}
-
-.ms-lac-filterbar {
+/* Selection bar — the visible next step after a group click. */
+.ms-lac-selectbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 8px 18px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
+  gap: 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--accent-line);
+  background: var(--accent-dim);
+  flex: 0 0 auto;
 }
 
-.ms-lac-add {
+.ms-lac-selectbar-count {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.ms-lac-selectbar-label {
   font-size: 12px;
   color: var(--text-2);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-#ms-lac-add-name {
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 8px;
-  min-width: 160px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ms-lac-body {
@@ -172,7 +213,7 @@
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
-  padding: 10px;
+  padding: 10px 16px;
 }
 
 .ms-lac-workspace {
@@ -180,26 +221,46 @@
   display: flex;
   min-height: 0;
   min-width: 0;
-  gap: 10px;
+  gap: 12px;
 }
 
 .ms-lac-col {
-  background: var(--bg-deep);
+  background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  padding: 8px;
   overflow: auto;
 }
 
 .ms-lac-pool {
   flex: 1 1 auto;
   min-width: 0;
+  padding: 0 8px 8px;
+}
+
+.ms-lac-pool-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px;
+  margin: 0 -8px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+}
+
+.ms-lac-pool-count {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .ms-lac-rail {
-  flex: 0 0 232px;
-  min-width: 200px;
-  max-width: 280px;
+  flex: 0 0 280px;
+  min-width: 232px;
+  max-width: 320px;
   overflow: auto;
   padding: 8px;
   background: var(--bg-mid);
@@ -207,38 +268,54 @@
   border-radius: var(--r-md);
 }
 
-.ms-lac-col-heading {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--text-2);
-  margin: 0 0 8px;
+.ms-lac-rail-head {
+  margin-bottom: 8px;
 }
 
+.ms-lac-col-heading {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.ms-lac-col-meta {
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+/* Clinician chips — drop targets, deliberately NOT the tile recipe. */
 .ms-lac-chip-wrap {
-  margin-bottom: 8px;
-  border: 1px solid var(--border);
+  margin-bottom: 6px;
+  border: 1px dashed var(--border-hi);
   border-radius: var(--r-md);
   background: var(--bg-elev);
+  transition: border-color 150ms var(--ease);
 }
 
 .ms-lac-chip {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 0;
   background: transparent;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
   color: var(--text-1);
+  transition: background 150ms var(--ease);
 }
 
 .ms-lac-chip:hover,
 .ms-lac-chip:focus-visible {
-  background: rgba(37, 99, 235, 0.09);
+  background: var(--accent-dim);
+}
+
+.ms-lac-chip:active {
+  background: var(--bg-hover);
 }
 
 .ms-lac-chip:focus-visible {
@@ -248,54 +325,69 @@
 
 .ms-lac-chip-name {
   font-size: 13px;
-  font-weight: 650;
-  color: var(--text-2);
+  font-weight: 600;
+  color: var(--text-1);
 }
 
 .ms-lac-chip-count {
-  font-size: 11px;
-  color: var(--text-3);
+  flex-basis: 100%;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+  color: var(--text-4);
 }
 
 .ms-lac-chip-flag {
-  font-size: 10px;
-  font-weight: 650;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
 }
 
 .ms-lac-chip-flag-in {
   color: var(--green);
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+
+.ms-lac-chip-stagehint {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .ms-lac-chip-away {
-  border-color: var(--amber);
+  border-color: var(--amber-line);
   background: var(--amber-dim);
+}
+
+.ms-lac-chip-away .ms-lac-chip-name {
+  color: var(--text-4);
 }
 
 .ms-lac-chip-in {
   border-color: var(--green-line);
-  background: var(--green-dim);
 }
 
 .ms-lac-chip-open {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  border-style: solid;
+  border-color: var(--accent-line);
+}
+
+.ms-lac-chip-target {
+  border-color: var(--accent-line);
 }
 
 .ms-lac-chip-drawer {
   padding: 0 8px 8px;
   border-top: 1px solid var(--border);
-}
-
-.ms-lac-col-meta {
-  font-size: 11px;
-  color: var(--text-3);
-  margin: -4px 0 8px;
-}
-
-.ms-lac-col-away {
-  border-color: var(--amber);
-  background: var(--amber-dim);
 }
 
 .ms-lac-col-absence,
@@ -304,13 +396,13 @@
   line-height: 1.4;
   border-radius: var(--r-sm);
   padding: 6px 7px;
-  margin-bottom: 8px;
+  margin: 8px 0;
 }
 
 .ms-lac-col-absence {
   color: var(--amber);
   background: var(--amber-dim);
-  border: 1px solid var(--amber);
+  border: 1px solid var(--amber-line);
 }
 
 .ms-lac-col-in {
@@ -319,131 +411,317 @@
   border: 1px solid var(--green-line);
 }
 
-.ms-lac-group {
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 6px;
-  margin-bottom: 8px;
-  background: rgba(255, 255, 255, 0.55);
+.ms-lac-add-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
 }
 
-.ms-lac-group-unknown {
-  border-style: dashed;
+#ms-lac-add-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  padding: 5px 8px;
+  color: var(--text-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+#ms-lac-add-name:focus {
+  border-color: var(--accent);
+}
+
+/* Requester groups — sticky headers are the select-all + drag anchors. */
+.ms-lac-group {
+  margin-top: 8px;
 }
 
 .ms-lac-group-head {
+  position: sticky;
+  top: 37px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
   cursor: grab;
-  margin-bottom: 6px;
-  padding: 4px 2px 6px;
-  border-bottom: 1px solid var(--border);
+  transition: border-color 150ms var(--ease);
+}
+
+.ms-lac-group-head:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+
+.ms-lac-group-head:active {
+  cursor: grabbing;
+}
+
+.ms-lac-group-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ms-lac-group-grip {
+  color: var(--border-hi);
+  font-size: 11px;
 }
 
 .ms-lac-group-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.ms-lac-group-count {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .ms-lac-group-hint {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 2px;
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--text-4);
 }
 
+.ms-lac-group-picked {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.ms-lac-group-toggle {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ms-lac-group-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* One-line rows: the pile must read at 73 results. */
+.ms-lac-tile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border-bottom: 1px solid var(--bg-mid);
+  cursor: grab;
+  transition: background 120ms var(--ease);
+}
+
+.ms-lac-tile:hover {
+  background: var(--bg-mid);
+}
+
+.ms-lac-tile:active {
+  cursor: grabbing;
+}
+
+.ms-lac-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ms-lac-tile-check {
+  flex: 0 0 14px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--accent);
+  text-align: center;
+}
+
+.ms-lac-tile-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-lac-tile-test {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.ms-lac-tile-token {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.ms-lac-tile-who {
+  flex-basis: 100%;
+  font-size: 10.5px;
+  color: var(--text-3);
+  padding-left: 22px;
+}
+
+.ms-lac-tile-picked {
+  background: var(--accent-dim);
+  border-bottom-color: var(--accent-line);
+}
+
+.ms-lac-tile-picked:hover {
+  background: var(--accent-dim);
+}
+
+.ms-lac-tile-staged .ms-lac-tile-name {
+  color: var(--text-4);
+}
+
+.ms-lac-drop-hover {
+  border-color: var(--accent) !important;
+  background: var(--accent-dim);
+}
+
+/* Drag ghost is appended to document.body — outside the token scope, so
+   literal values (same colours as the canon). */
 .ms-lac-drag-ghost {
   position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 2147483646;
-  padding: 6px 10px;
+  top: -200px;
+  left: -200px;
+  padding: 6px 12px;
   font:
-    600 12px/1.3 -apple-system,
+    600 12px/1.2 -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     Roboto,
     sans-serif;
   color: #fff;
   background: #1e3a5f;
-  border-radius: 999px;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.3);
   pointer-events: none;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.28);
+  z-index: 2147483001;
+  max-width: 320px;
 }
 
-.ms-lac-confirmbar-warn {
-  background: #fff7ed;
-  color: #9a3412;
+.ms-lac-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 24px;
+  color: var(--text-4);
+  text-align: center;
 }
 
-.ms-lac-tile {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 8px;
-  margin-bottom: 6px;
-  cursor: grab;
+.ms-lac-empty svg {
+  color: var(--text-4);
 }
 
-.ms-lac-tile-staged {
-  outline: 1px dashed var(--red);
-  outline-offset: -1px;
-}
-
-.ms-lac-tile-name {
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.ms-lac-tile-meta,
-.ms-lac-tile-draft,
-.ms-lac-tile-who,
-.ms-lac-hint,
-.ms-lac-empty,
-.ms-lac-msg {
+.ms-lac-empty-title {
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--text-3);
-  margin-top: 2px;
-  line-height: 1.4;
 }
 
-.ms-lac-tile-who {
-  color: var(--text-2);
-  margin-top: 4px;
+.ms-lac-empty-sub {
+  font-size: 11px;
+  color: var(--text-4);
 }
 
-.ms-lac-drop-hover,
-.ms-lac-tile-picked {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+.ms-lac-empty-sm {
+  font-size: 11px;
+  color: var(--text-4);
+  padding: 8px 4px;
 }
 
+.ms-lac-msg {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 24px;
+}
+
+.ms-lac-hint {
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+/* Footer confirm bar. */
 .ms-lac-confirmbar {
-  padding: 10px 18px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 9px 16px;
   border-top: 1px solid var(--border);
-  background: var(--bg-mid);
+  background: var(--bg-elev);
   font-size: 12px;
-  line-height: 1.45;
   color: var(--text-2);
+  flex: 0 0 auto;
+}
+
+.ms-lac-confirmbar-note {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .ms-lac-confirmbar-error {
-  color: var(--red);
+  background: var(--amber-dim);
+  border-top-color: var(--amber-line);
+  color: var(--amber);
+}
+
+.ms-lac-confirmbar-warn {
+  background: var(--amber-dim);
+  border-top-color: var(--amber-line);
+  color: var(--text-1);
 }
 
 .ms-lac-confirmbar-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  margin-left: auto;
+  align-items: center;
 }
 
 .ms-lac-confirm-btn {
-  padding: 4px 12px;
-  background: #fee2e2;
-  border: 1px solid var(--red);
+  padding: 4px 14px;
+  border: 1px solid var(--border-hi);
   border-radius: var(--r-pill);
+  background: var(--bg-mid);
   font-size: 12px;
   font-weight: 600;
   font-family: inherit;
-  color: var(--red);
-  cursor: not-allowed;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease),
+    border-color 150ms var(--ease);
+}
+
+.ms-lac-confirm-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ms-lac-overlay * {
+    transition: none !important;
+  }
 }
