@@ -25,7 +25,8 @@ allocate to sitting at the top of the rail.
   confirm dims the board; Review then write is the primary when a
   write is possible.
 
-Write contract (W23 / H-064) unchanged.
+Write contract (W23 / H-064) unchanged. CSN product pin moved to
+3.244.0 (doc v3.31); last CSO review version stays 3.237.1.
 
 ## [v3.243.3] — 2026-08-25
 
