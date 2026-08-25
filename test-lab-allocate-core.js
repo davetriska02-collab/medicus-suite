@@ -81,6 +81,26 @@ console.log('\n--- pickRequesterFromOverview ---');
     data: { namedGp: 'Dr Registered GP', investigationReport: {} },
   });
   check(namedOnly === null, 'namedGp is never treated as who ordered');
+  const fromRow = C.pickRequesterFromTaskRow({
+    requestedBy: 'TRISKA D',
+    namedGp: 'Dr Registered GP',
+    assignedTo: 'Investigation Reports',
+  });
+  check(fromRow && fromRow.name === 'TRISKA D', 'task-list requestedBy is who ordered');
+  check(C.pickRequesterFromTaskRow({ namedGp: 'Dr Registered GP' }) === null, 'namedGp on the row is still not who ordered');
+  const fromNorm = C.normaliseTaskRow(
+    {
+      id: uuid(11),
+      patientName: 'FORD, Michael',
+      assignedTo: 'Investigation Reports',
+      namedGp: 'Dr David Triska',
+      requestedBy: 'TRISKA D',
+      summary: 'Serum TSH level',
+    },
+    'review-investigation-report'
+  );
+  check(fromNorm && fromNorm.requester === 'TRISKA D', 'normaliseTaskRow reads Requested By off the task-list row');
+  check(fromNorm.namedGp === 'Dr David Triska', 'named GP stays a separate caption');
 }
 
 console.log('\n--- normaliseTaskRow / team vs person assignee ---');
@@ -102,11 +122,9 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
   check(person && person.patientName === 'SMITH, Jane', 'patient name clipped through');
   check(C.isTeamAssignee('Results inbox') === true, 'Results inbox is a team');
   check(C.isTeamAssignee('Triage Doctor') === true, 'Triage Doctor is a team-like inbox');
+  check(C.isTeamAssignee('Investigation Reports') === true, 'Investigation Reports is the results inbox, not a person');
   check(C.isTeamAssignee('Dr Jane Cole') === false, 'a named doctor is not a team');
-  check(
-    C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'),
-    'person assignee homes to that clinician chip'
-  );
+  check(C.homeColumnKey(person) === C.POOL, 'every queue row homes to the reports pool');
   check(C.placementReason(person) === 'current-assignee', 'no requester → current-assignee, not who-ordered');
 
   const inbox = C.normaliseTaskRow(
@@ -214,6 +232,10 @@ console.log('\n--- canvas + manifest source locks ---');
     /embedded-overview/.test(capture),
     'staff-scheduling capture may re-read the confirmed appointment-book overview'
   );
+  const reqCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-requester-capture.js'), 'utf8');
+  check(/REQUESTED-BY SCOPING capture/.test(reqCap), 'requester capture script is present');
+  check(!/method:\s*['"]POST['"]/.test(reqCap), 'requester capture does not POST');
+  check(!/Absence unknown<\/span>/.test(canvas), 'chips do not wear Absence unknown as a standing badge');
 }
 
 console.log('\n--- grouping by who ordered ---');
@@ -259,20 +281,28 @@ console.log('\n--- grouping by who ordered ---');
   check(mixed.mixed === true && mixed.canGroup === false, 'mixed requesters cannot auto-group');
 }
 
-console.log('\n--- already-assigned person sits on their chip ---');
+console.log('\n--- inbox name is never a clinician chip ---');
 {
-  const assigned = C.normaliseTaskRow(
-    { id: uuid(8), patientName: 'KERR, Mo', assignedTo: 'Dr Jane Cole', summary: 'TSH' },
+  const inboxRow = C.normaliseTaskRow(
+    {
+      id: uuid(8),
+      patientName: 'KERR, Mo',
+      assignedTo: 'Investigation Reports',
+      requestedBy: 'HEYLEN E',
+      summary: 'TSH',
+    },
     'x'
   );
-  const ws = C.buildWorkspace([assigned], C.emptyDraft());
-  check(ws.pool.tiles.length === 0, 'a person-assigned result is not in the reports pool');
-  const chip = ws.clinicians.find((c) => c.title === 'Dr Jane Cole');
+  const ws = C.buildWorkspace([inboxRow], C.emptyDraft());
+  check(ws.pool.tiles.length === 1, 'inbox-assigned result stays in the reports pool');
   check(
-    chip && chip.assignedCount === 1 && chip.stagedCount === 0,
-    'chip shows the Medicus assignment, not a staged move'
+    !ws.clinicians.some((c) => /investigation reports/i.test(c.title)),
+    'Investigation Reports is not a clinician chip'
   );
-  check(chip.tiles[0].staged === false, 'already-assigned tile is not marked staged');
+  check(
+    ws.clinicians.some((c) => c.title === 'HEYLEN E' && c.count === 0),
+    'the requester is an empty drop-target chip'
+  );
 }
 
 console.log('\n--- absence warning at allocation ---');
@@ -368,7 +398,7 @@ console.log('--- board keeps every row visible ---');
     return n + col.tiles.length;
   }, 0);
   check(shown === board.count, 'every row appears exactly once on the board');
-  check(board.pool.count === 3, 'unnamed, unassigned and team rows all sit in the pool');
+  check(board.pool.count === 4, 'every queue row sits in the pool until staged');
   const poolIds = board.pool.tiles.map(function (t) {
     return t.id;
   });
@@ -380,7 +410,7 @@ console.log('--- board keeps every row visible ---');
     return n + col.tiles.length;
   }, 0);
   check(shownAfter === after.count, 'staging a move does not drop a row');
-  check(after.pool.count === 2, 'staged row leaves the pool');
+  check(after.pool.count === 3, 'staged row leaves the pool');
 }
 
 testClient()

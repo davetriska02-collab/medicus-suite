@@ -209,7 +209,7 @@
     const note = document.createElement('span');
     note.style.cssText = 'font:12px system-ui;color:#555';
     note.textContent =
-      'Read-only. Click around Staff scheduling so its GETs appear, then Copy. No writes from this box.';
+      'STAFF SCHEDULING CAPTURE — read-only. Stay on this page, click around (who’s in, leave, sessions), then Copy.';
     bar.append(cp, cl, note);
     wrap.append(bar, ta);
     document.body.appendChild(wrap);
