@@ -40,6 +40,9 @@
   var _dragIds = null;
   var _copyNote = '';
   var _overviewProgress = '';
+  var _rota = { staff: [], leave: [], loaded: false };
+  var _pendingAbsence = null;
+  var _dragGhost = null;
 
   function announce(text) {
     setTimeout(function () {
@@ -97,6 +100,7 @@
     _error = null;
     render();
     try {
+      await loadRotaAbsences();
       var out = await client().fetchTaskList(_route.slug);
       _rows = out.rows || [];
       _route.slug = out.slug || _route.slug;
@@ -110,6 +114,26 @@
       _overviewProgress = '';
       render();
     }
+  }
+
+  async function loadRotaAbsences() {
+    _rota = { staff: [], leave: [], loaded: false };
+    if (!chrome.storage || !chrome.storage.local) return;
+    try {
+      var got = await chrome.storage.local.get(['rota.staff', 'rota.leave']);
+      _rota = {
+        staff: Array.isArray(got['rota.staff']) ? got['rota.staff'] : [],
+        leave: Array.isArray(got['rota.leave']) ? got['rota.leave'] : [],
+        loaded: true,
+      };
+    } catch (_) {
+      _rota = { staff: [], leave: [], loaded: false };
+    }
+  }
+
+  function absenceForColumn(col) {
+    if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
+    return C.absenceForName(_rota.staff, _rota.leave, col.title, C.todayISO());
   }
 
   function tileHtml(tile) {
@@ -142,13 +166,46 @@
     );
   }
 
+  function groupHtml(group) {
+    return (
+      '<div class="ms-lac-group' +
+      (group.known ? '' : ' ms-lac-group-unknown') +
+      '" data-group-key="' +
+      esc(group.key) +
+      '" data-group-ids="' +
+      esc(group.tileIds.join(',')) +
+      '">' +
+      '<div class="ms-lac-group-head" draggable="true" data-group-ids="' +
+      esc(group.tileIds.join(',')) +
+      '">' +
+      '<div class="ms-lac-group-title">' +
+      esc(group.label) +
+      '</div>' +
+      '<div class="ms-lac-group-hint">' +
+      esc(group.dragHint) +
+      '</div>' +
+      '</div>' +
+      group.tiles.map(tileHtml).join('') +
+      '</div>'
+    );
+  }
+
   function boardHtml() {
     var board = C.buildBoard(_rows, _draft);
     return board.columns
       .map(function (col) {
+        var abs = absenceForColumn(col);
+        var away = abs.state === 'away' || abs.state === 'away-pending';
+        var unknown = abs.state === 'unknown';
+        var body =
+          col.groups && col.groups.length ? col.groups.map(groupHtml).join('') : col.tiles.map(tileHtml).join('');
         return (
-          '<div class="ms-lac-col" data-col-key="' +
+          '<div class="ms-lac-col' +
+          (away ? ' ms-lac-col-away' : '') +
+          '" data-col-key="' +
           esc(col.key) +
+          '" data-col-kind="' +
+          esc(col.kind) +
           '">' +
           '<h3 class="ms-lac-col-heading">' +
           esc(col.title) +
@@ -159,9 +216,12 @@
             ? ' — drop here to leave unmarked'
             : col.kind === 'inbox'
               ? ' — shared inbox, not a person'
-              : '') +
+              : ' — drop here to mark as ordered by / for them') +
           '</div>' +
-          (col.tiles.map(tileHtml).join('') || '<div class="ms-lac-empty">No results in this column.</div>') +
+          (away || unknown
+            ? '<div class="ms-lac-col-absence">' + esc(abs.label || 'Absence unknown.') + '</div>'
+            : '') +
+          (body || '<div class="ms-lac-empty">No results in this column.</div>') +
           '</div>'
         );
       })
@@ -174,6 +234,17 @@
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-error">' +
         esc(_error) +
         ' <button type="button" class="ms-lac-ghost" id="ms-lac-error-dismiss">Dismiss</button></div>'
+      );
+    }
+    if (_pendingAbsence) {
+      return (
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<strong>Absence check before staging.</strong> ' +
+        esc(_pendingAbsence.copy) +
+        '<div class="ms-lac-confirmbar-actions">' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-abs-cancel">Keep them where they were</button>' +
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-abs-stage">Stage anyway</button>' +
+        '</div></div>'
       );
     }
     var write = C.canWriteAllocations();
@@ -204,9 +275,9 @@
       '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
       '</div>' +
       '<div class="ms-lac-explainer">' +
-      'Labs in the shared inbox, grouped by who ordered them when that field is actually on the payload. ' +
-      'Drag a tile (or select several, then drag) onto a clinician column to stage the allocation. ' +
-      'A registered GP is a hint only — it is not who ordered the test. ' +
+      'Results that share a requester sit in one pile — drag the group header to move them together. ' +
+      'The drag label names who ordered them. A registered GP is a hint only. ' +
+      'Dropping onto a clinician always runs an absence check against this machine’s rota leave list before anything is staged. ' +
       'Nothing is written to Medicus from this canvas yet.' +
       (_overviewProgress ? ' ' + esc(_overviewProgress) : '') +
       '</div>' +
@@ -285,9 +356,65 @@
       clearBtn.addEventListener('click', function () {
         _draft = C.emptyDraft();
         _copyNote = '';
+        _pendingAbsence = null;
         announce('Staged moves cleared. The queue itself is unchanged.');
         render();
       });
+    var absCancel = root.querySelector('#ms-lac-abs-cancel');
+    if (absCancel)
+      absCancel.addEventListener('click', function () {
+        _pendingAbsence = null;
+        announce('Not staged. They stayed where they were.');
+        render();
+      });
+    var absStage = root.querySelector('#ms-lac-abs-stage');
+    if (absStage)
+      absStage.addEventListener('click', function () {
+        if (!_pendingAbsence) return;
+        commitStage(_pendingAbsence.ids, _pendingAbsence.key);
+      });
+    function beginDrag(e, ids) {
+      _dragIds = ids;
+      var preview = C.dragPreview(_rows, ids);
+      if (e.dataTransfer) {
+        e.dataTransfer.setData('text/plain', ids.join(','));
+        e.dataTransfer.effectAllowed = 'move';
+        if (_dragGhost) _dragGhost.remove();
+        _dragGhost = document.createElement('div');
+        _dragGhost.className = 'ms-lac-drag-ghost';
+        _dragGhost.textContent = preview.label;
+        document.body.appendChild(_dragGhost);
+        e.dataTransfer.setDragImage(_dragGhost, 16, 16);
+      }
+      announce(preview.label);
+    }
+    function endDrag() {
+      _dragIds = null;
+      if (_dragGhost) {
+        _dragGhost.remove();
+        _dragGhost = null;
+      }
+    }
+    root.querySelectorAll('.ms-lac-group-head').forEach(function (head) {
+      head.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var ids = String(head.getAttribute('data-group-ids') || '')
+          .split(',')
+          .filter(Boolean);
+        _selected = {};
+        ids.forEach(function (id) {
+          _selected[id] = true;
+        });
+        render();
+      });
+      head.addEventListener('dragstart', function (e) {
+        var ids = String(head.getAttribute('data-group-ids') || '')
+          .split(',')
+          .filter(Boolean);
+        beginDrag(e, ids);
+      });
+      head.addEventListener('dragend', endDrag);
+    });
     root.querySelectorAll('.ms-lac-tile').forEach(function (tile) {
       tile.addEventListener('click', function (e) {
         var id = tile.getAttribute('data-task-id');
@@ -297,15 +424,9 @@
       tile.addEventListener('dragstart', function (e) {
         var id = tile.getAttribute('data-task-id');
         var ids = _selected[id] ? selectedIds() : [id];
-        _dragIds = ids;
-        if (e.dataTransfer) {
-          e.dataTransfer.setData('text/plain', ids.join(','));
-          e.dataTransfer.effectAllowed = 'move';
-        }
+        beginDrag(e, ids);
       });
-      tile.addEventListener('dragend', function () {
-        _dragIds = null;
-      });
+      tile.addEventListener('dragend', endDrag);
     });
     root.querySelectorAll('.ms-lac-col').forEach(function (col) {
       col.addEventListener('dragover', function (e) {
@@ -325,21 +446,39 @@
             .split(',')
             .filter(Boolean);
         }
+        endDrag();
         if (!key || !ids.length) return;
-        _draft = C.stageMoves(_draft, ids, key);
-        _selected = {};
-        _dragIds = null;
-        announce(
-          'Staged ' +
-            ids.length +
-            ' result' +
-            (ids.length === 1 ? '' : 's') +
-            ' onto ' +
-            (col.querySelector('.ms-lac-col-heading') || {}).textContent
-        );
-        render();
+        requestStage(ids, key, col);
       });
     });
+  }
+
+  function requestStage(ids, key, colEl) {
+    var kind = (colEl && colEl.getAttribute('data-col-kind')) || '';
+    var title = ((colEl && colEl.querySelector('.ms-lac-col-heading')) || {}).textContent || '';
+    if (kind === 'clinician') {
+      var abs = C.absenceForName(_rota.staff, _rota.leave, title, C.todayISO());
+      if (C.shouldWarnAbsence(abs)) {
+        _pendingAbsence = {
+          ids: ids,
+          key: key,
+          copy: C.absenceWarningCopy(abs, ids.length, title),
+        };
+        announce('Absence check before staging onto ' + title);
+        render();
+        return;
+      }
+    }
+    commitStage(ids, key);
+  }
+
+  function commitStage(ids, key) {
+    _draft = C.stageMoves(_draft, ids, key);
+    _selected = {};
+    _pendingAbsence = null;
+    _dragIds = null;
+    announce('Staged ' + ids.length + ' result' + (ids.length === 1 ? '' : 's') + ' on this canvas only');
+    render();
   }
 
   function copyWorkingList() {

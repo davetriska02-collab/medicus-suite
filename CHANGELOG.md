@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.1] — 2026-08-25
+
+### Lab allocation canvas — group by who ordered, warn on absence
+
+Drag-and-drop now shows **who ordered the pile** and whether those
+results can move as one group. Same-requester tiles sit under a
+draggable group header (`Ordered by Dr X · N results`); the drag ghost
+repeats that label. Mixed or unknown requesters stay in their own pile
+and are labelled as not auto-groupable.
+
+Dropping onto a clinician column **always** runs an absence check
+against this machine’s `rota.staff` / `rota.leave` before anything is
+staged. Approved leave blocks behind “they will not see these today”;
+requested leave and an unmatched/empty rota still warn (absence
+unknown — never a silent all-clear). The column itself badges away
+clinicians. Staging after the warning is still only on the canvas.
+
 ## [v3.242.0] — 2026-08-25
 
 ### Lab allocation canvas — stage incoming results by who ordered them

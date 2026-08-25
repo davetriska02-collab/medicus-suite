@@ -131,6 +131,20 @@ Until that paste-back, the canvas is a **planning board**.
 
 ---
 
+## Grouping and absences (v3.242.1)
+
+Same-requester tiles group under one header and drag as a set. The drag
+ghost names who ordered them. That only works when requester evidence
+is on the payload — unknown rows stay in their own pile.
+
+Allocation onto a **person** always consults `rota.staff` + `rota.leave`
+on this machine (approved and requested leave for today, matching
+`name` or `medicusName`). If they are away, or we cannot tell, the drop
+does not stage until the warning is acknowledged. An empty rota is
+**absence unknown**, not “everyone is in”.
+
+---
+
 ## Shipped in this pass
 
 - `shared/lab-allocate-core.js` — route, row, requester walker, board, draft.

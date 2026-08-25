@@ -191,6 +191,88 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/Write to Medicus — not available/.test(canvas), 'Finalise control is visibly unavailable');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(/not confirmed as the requester/.test(canvas), 'named GP caption refuses to claim who ordered');
+  check(/Absence check before staging/.test(canvas), 'clinician drop always offers an absence check');
+  check(/loadRotaAbsences/.test(canvas), 'canvas reads rota.leave before allocation');
+}
+
+console.log('\n--- grouping by who ordered ---');
+{
+  const a = C.applyRequester(
+    C.normaliseTaskRow({ id: uuid(1), patientName: 'A', assignedTo: 'Results', summary: 'FBC' }, 'x'),
+    {
+      name: 'Dr Cole',
+      source: 'requestedBy',
+      confidence: 'requester',
+    }
+  );
+  const b = C.applyRequester(
+    C.normaliseTaskRow({ id: uuid(2), patientName: 'B', assignedTo: 'Results', summary: 'U&E' }, 'x'),
+    {
+      name: 'Dr Cole',
+      source: 'requestedBy',
+      confidence: 'requester',
+    }
+  );
+  const c = C.normaliseTaskRow({ id: uuid(3), patientName: 'C', assignedTo: 'Results', summary: 'LFT' }, 'x');
+  const board = C.buildBoard([a, b, c], C.emptyDraft());
+  const cole = board.columns.find((col) => col.title === 'Dr Cole');
+  const inbox = board.columns.find((col) => col.title === 'Results');
+  check(cole && cole.groups.length === 1 && cole.groups[0].count === 2, 'requester column is one group of who ordered');
+  check(inbox && inbox.groups[0].known === false, 'inbox leftover is the unknown-who-ordered pile');
+  const groups = C.groupTiles([
+    { id: a.id, requester: 'Dr Cole' },
+    { id: b.id, requester: 'Dr Cole' },
+    { id: c.id, requester: '' },
+  ]);
+  check(groups[0].known === true && groups[0].count === 2, 'known requester group is first and counted');
+  check(groups[0].requester === 'Dr Cole', 'group names who ordered');
+  check(/Drag this group/.test(groups[0].dragHint), 'group is explicitly draggable');
+  check(groups[1].known === false && groups[1].count === 1, 'unknown requester stays in its own pile');
+  const preview = C.dragPreview([a, b, c], [a.id, b.id]);
+  check(preview.canGroup === true, 'two same-requester tiles can group');
+  check(preview.label === '2 results ordered by Dr Cole', 'drag label names who ordered');
+  const mixed = C.dragPreview([a, b, c], [a.id, c.id]);
+  check(mixed.mixed === true && mixed.canGroup === false, 'mixed requesters cannot auto-group');
+}
+
+console.log('\n--- absence warning at allocation ---');
+{
+  const staff = [
+    { id: 's1', name: 'Dr Jane Cole', medicusName: 'Jane Cole', notAPerson: false },
+    { id: 'lane', name: 'Results inbox', notAPerson: true },
+  ];
+  const leave = [{ staffId: 's1', status: 'approved', type: 'annual', startDate: '2026-08-24', endDate: '2026-08-29' }];
+  check(C.matchStaffByName(staff, 'Jane Cole').id === 's1', 'matches medicusName as well as name');
+  check(C.matchStaffByName(staff, 'Results inbox') === null, 'directory lanes are not a person');
+  const away = C.absenceForName(staff, leave, 'Dr Jane Cole', '2026-08-25');
+  check(away.state === 'away', 'approved leave → away');
+  check(C.shouldWarnAbsence(away) === true, 'away must warn at allocation');
+  check(/annual leave until 29 Aug 2026/.test(away.label), 'warning names the leave and the return date');
+  const copy = C.absenceWarningCopy(away, 4, 'Dr Jane Cole');
+  check(
+    /does not mean they will see them today/.test(copy),
+    'allocation warning states they will not see the labs today'
+  );
+  check(!/\b(Done|Sent|Allocated|Submitted|Booked)\b/.test(copy), 'absence copy has no completion verbs');
+  check(
+    C.shouldWarnAbsence(C.absenceForName([], [], 'Dr Jane Cole', '2026-08-25')) === true,
+    'empty rota still warns — absence unknown'
+  );
+  check(
+    C.shouldWarnAbsence(C.absenceForName(staff, [], 'Dr Reed', '2026-08-25')) === true,
+    'unmatched name still warns — absence unknown'
+  );
+  check(
+    C.shouldWarnAbsence(C.absenceForName(staff, [], 'Dr Jane Cole', '2026-08-25')) === false,
+    'matching staff with no leave is present — no warn'
+  );
+  const pending = C.absenceForName(
+    staff,
+    [{ staffId: 's1', status: 'requested', type: 'sick', startDate: '2026-08-25', endDate: '2026-08-26' }],
+    'Dr Jane Cole',
+    '2026-08-25'
+  );
+  check(pending.state === 'away-pending' && C.shouldWarnAbsence(pending), 'requested leave still warns');
 }
 
 async function testClient() {

@@ -412,6 +412,7 @@
         title: columnTitle(key, rows, titles),
         count: tiles.length,
         tiles: tiles,
+        groups: groupTiles(tiles),
       };
     });
     return { columns: columns, count: rows.length };
@@ -468,6 +469,221 @@
 
   function canWriteAllocations() {
     return { ok: false, reason: WRITE_BLOCKED };
+  }
+
+  var UNKNOWN_GROUP = 'unknown';
+  var LEAVE_TYPE_LABEL = {
+    annual: 'annual leave',
+    study: 'study leave',
+    toil: 'TOIL',
+    cpd: 'CPD',
+    sick: 'sickness',
+    parental: 'parental leave',
+    other: 'leave',
+  };
+
+  function todayISO() {
+    var d = new Date();
+    return (
+      d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+    );
+  }
+
+  function formatLeaveDate(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return String(iso || '');
+    var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return m[3].replace(/^0/, '') + ' ' + (months[+m[2] - 1] || '?') + ' ' + m[1];
+  }
+
+  function requesterGroupKey(tile) {
+    if (tile && tile.requester) return clinicianColumnKey(tile.requester);
+    return UNKNOWN_GROUP;
+  }
+
+  function groupTiles(tiles) {
+    var map = {};
+    var order = [];
+    (Array.isArray(tiles) ? tiles : []).forEach(function (tile) {
+      if (!tile) return;
+      var key = requesterGroupKey(tile);
+      if (!map[key]) {
+        map[key] = {
+          key: key,
+          requester: tile.requester || '',
+          known: key !== UNKNOWN_GROUP,
+          tileIds: [],
+          tiles: [],
+        };
+        order.push(key);
+      }
+      map[key].tileIds.push(tile.id);
+      map[key].tiles.push(tile);
+    });
+    return order
+      .map(function (key) {
+        var g = map[key];
+        g.count = g.tiles.length;
+        g.label = g.known
+          ? 'Ordered by ' + g.requester + ' · ' + g.count + ' result' + (g.count === 1 ? '' : 's')
+          : 'Who ordered unknown · ' + g.count + ' result' + (g.count === 1 ? '' : 's');
+        g.dragHint = g.known ? 'Drag this group onto that clinician' : 'Cannot auto-group — who ordered is missing';
+        return g;
+      })
+      .sort(function (a, b) {
+        if (a.known !== b.known) return a.known ? -1 : 1;
+        return b.count - a.count;
+      });
+  }
+
+  function dragPreview(rows, ids) {
+    var idSet = {};
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      idSet[id] = true;
+    });
+    var picked = (Array.isArray(rows) ? rows : []).filter(function (r) {
+      return r && idSet[r.id];
+    });
+    var requesters = [];
+    var unknown = 0;
+    picked.forEach(function (r) {
+      if (r.requester) {
+        var seen = false;
+        for (var i = 0; i < requesters.length; i++) {
+          if (sameClinician(requesters[i], r.requester)) seen = true;
+        }
+        if (!seen) requesters.push(r.requester);
+      } else unknown++;
+    });
+    var mixed = requesters.length > 1 || (requesters.length > 0 && unknown > 0);
+    var requester = !mixed && requesters.length === 1 ? requesters[0] : '';
+    var count = picked.length;
+    var label;
+    if (!count) label = 'No results';
+    else if (requester) label = count + ' result' + (count === 1 ? '' : 's') + ' ordered by ' + requester;
+    else if (!requesters.length) label = count + ' result' + (count === 1 ? '' : 's') + ' — who ordered unknown';
+    else label = count + ' results from mixed requesters';
+    return {
+      count: count,
+      requester: requester,
+      mixed: mixed,
+      unknown: unknown,
+      canGroup: !!requester && count > 1,
+      label: label,
+    };
+  }
+
+  function matchStaffByName(staffList, name) {
+    var list = Array.isArray(staffList) ? staffList : [];
+    var hits = [];
+    for (var i = 0; i < list.length; i++) {
+      var s = list[i];
+      if (!s || s.notAPerson) continue;
+      if (sameClinician(s.name, name) || sameClinician(s.medicusName, name)) hits.push(s);
+    }
+    if (hits.length === 1) return hits[0];
+    return null;
+  }
+
+  function leaveOnDate(leaveList, staffId, dateISO, status) {
+    var list = Array.isArray(leaveList) ? leaveList : [];
+    for (var i = 0; i < list.length; i++) {
+      var l = list[i];
+      if (!l || l.staffId !== staffId) continue;
+      if (status && l.status !== status) continue;
+      if (l.startDate <= dateISO && l.endDate >= dateISO) return l;
+    }
+    return null;
+  }
+
+  function absenceForName(staffList, leaveList, name, dateISO) {
+    var when = dateISO || todayISO();
+    var who = clip(name, 80);
+    if (!who || clinicianColumnKey(who) === UNALLOCATED) {
+      return { state: 'n/a', reason: 'not-a-person', label: '', staff: null, leave: null };
+    }
+    if (!Array.isArray(staffList) || !staffList.length) {
+      return {
+        state: 'unknown',
+        reason: 'no-rota',
+        label: 'Absence unknown — this machine has no rota staff list, so we cannot see who is away.',
+        staff: null,
+        leave: null,
+      };
+    }
+    var staff = matchStaffByName(staffList, who);
+    if (!staff) {
+      return {
+        state: 'unknown',
+        reason: 'no-match',
+        label: 'Absence unknown — no rota row matches ' + who + '.',
+        staff: null,
+        leave: null,
+      };
+    }
+    var approved = leaveOnDate(leaveList, staff.id, when, 'approved');
+    var requested = approved ? null : leaveOnDate(leaveList, staff.id, when, 'requested');
+    var rec = approved || requested;
+    if (rec) {
+      var type = LEAVE_TYPE_LABEL[rec.type] || 'leave';
+      var until = formatLeaveDate(rec.endDate);
+      return {
+        state: approved ? 'away' : 'away-pending',
+        reason: approved ? 'approved' : 'requested',
+        type: rec.type || '',
+        until: rec.endDate || '',
+        label:
+          who +
+          ' is on ' +
+          type +
+          (until ? ' until ' + until : '') +
+          (approved ? '' : ' (requested, not yet approved)') +
+          '.',
+        staff: staff,
+        leave: rec,
+      };
+    }
+    return { state: 'present', reason: 'in', label: '', staff: staff, leave: null };
+  }
+
+  function shouldWarnAbsence(absence) {
+    if (!absence) return false;
+    return absence.state === 'away' || absence.state === 'away-pending' || absence.state === 'unknown';
+  }
+
+  function absenceWarningCopy(absence, count, clinicianName) {
+    var n = Number(count) || 0;
+    var noun = n === 1 ? '1 result' : n + ' results';
+    var who = clip(clinicianName, 80) || 'this clinician';
+    if (!absence || absence.state === 'present' || absence.state === 'n/a') return '';
+    if (absence.state === 'away') {
+      return (
+        absence.label +
+        ' Staging ' +
+        noun +
+        ' onto ' +
+        who +
+        ' does not mean they will see them today. They will sit until that person is back, unless someone else files them.'
+      );
+    }
+    if (absence.state === 'away-pending') {
+      return (
+        absence.label +
+        ' Staging ' +
+        noun +
+        ' onto ' +
+        who +
+        ' still risks them being away — the leave is requested, not yet approved.'
+      );
+    }
+    return (
+      absence.label +
+      ' Staging ' +
+      noun +
+      ' onto ' +
+      who +
+      ' does not mean they are in today. Absence was not checked against a matching rota row.'
+    );
   }
 
   function createClient(apiBase, deps) {
@@ -568,6 +784,16 @@
     draftSummary: draftSummary,
     copyList: copyList,
     canWriteAllocations: canWriteAllocations,
+    todayISO: todayISO,
+    formatLeaveDate: formatLeaveDate,
+    requesterGroupKey: requesterGroupKey,
+    groupTiles: groupTiles,
+    dragPreview: dragPreview,
+    matchStaffByName: matchStaffByName,
+    leaveOnDate: leaveOnDate,
+    absenceForName: absenceForName,
+    shouldWarnAbsence: shouldWarnAbsence,
+    absenceWarningCopy: absenceWarningCopy,
     createClient: createClient,
   };
 
