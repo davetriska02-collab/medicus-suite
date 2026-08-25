@@ -228,6 +228,8 @@ console.log('\n--- canvas + manifest source locks ---');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
   check(/staff-scheduling SCOPING capture/.test(capture), 'staff-scheduling capture script is present');
   check(!/method:\s*['"]POST['"]/.test(capture), 'staff-scheduling capture does not POST');
+  check(!/inset:24px/.test(capture), 'staff-scheduling capture is a corner panel, not a full-page overlay');
+  check(/makeDraggable/.test(capture), 'staff-scheduling capture panel can be dragged');
   check(
     /embedded-overview/.test(capture),
     'staff-scheduling capture may re-read the confirmed appointment-book overview'
@@ -235,6 +237,7 @@ console.log('\n--- canvas + manifest source locks ---');
   const reqCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-requester-capture.js'), 'utf8');
   check(/REQUESTED-BY SCOPING capture/.test(reqCap), 'requester capture script is present');
   check(!/method:\s*['"]POST['"]/.test(reqCap), 'requester capture does not POST');
+  check(!/inset:24px/.test(reqCap), 'requester capture is a corner panel, not a full-page overlay');
   check(!/Absence unknown<\/span>/.test(canvas), 'chips do not wear Absence unknown as a standing badge');
 }
 

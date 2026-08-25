@@ -5,6 +5,7 @@
 // Paste the IIFE below into the PAGE console (DevTools) on Medicus
 // Staff scheduling (or any /scheduling/… page), then click around the
 // screen you want us to learn — who's in, leave, sessions, the staff list.
+// A small draggable panel sits in the corner so Medicus stays usable.
 // The script dumps:
 //   1. route + visible headings / tabs / table column labels (no cell values)
 //   2. every GET the page already fires that looks like staff / rota / leave /
@@ -180,19 +181,58 @@
     };
   }
 
+  function makeDraggable(el, handle) {
+    let down = false;
+    let sx = 0;
+    let sy = 0;
+    let ox = 0;
+    let oy = 0;
+    handle.style.cursor = 'move';
+    handle.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      down = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      const r = el.getBoundingClientRect();
+      ox = r.left;
+      oy = r.top;
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!down) return;
+      el.style.left = Math.max(8, Math.min(window.innerWidth - 80, ox + e.clientX - sx)) + 'px';
+      el.style.top = Math.max(8, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      down = false;
+    });
+  }
+
   function dump() {
     out.landmarks = landmarks();
-    const old = document.getElementById('__sscCapBox');
-    if (old) old.remove();
+    window.__sscCapture = out;
+    const json = JSON.stringify(out, null, 2);
+    const existing = document.getElementById('__sscCapBox');
+    if (existing) {
+      const ta = existing.querySelector('textarea');
+      if (ta) ta.value = json;
+      const note = existing.querySelector('[data-ssc-note]');
+      if (note)
+        note.textContent =
+          'Armed — ' + out.reads.length + ' read' + (out.reads.length === 1 ? '' : 's') + '. Drag the bar. Click Medicus.';
+      return;
+    }
     const wrap = document.createElement('div');
     wrap.id = '__sscCapBox';
     wrap.style.cssText =
-      'position:fixed;inset:24px;z-index:2147483647;background:#fff;border:2px solid #1e3a5f;border-radius:8px;padding:8px;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+      'position:fixed;right:16px;bottom:16px;width:360px;height:200px;z-index:2147483647;background:#fff;border:2px solid #1e3a5f;border-radius:8px;padding:8px;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)';
     const bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
+    bar.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-shrink:0';
     const ta = document.createElement('textarea');
-    ta.value = JSON.stringify(out, null, 2);
-    ta.style.cssText = 'flex:1;width:100%;font:12px monospace';
+    ta.value = json;
+    ta.style.cssText = 'flex:1;width:100%;min-height:0;font:11px monospace;resize:none';
     const cp = document.createElement('button');
     cp.textContent = 'Copy';
     cp.onclick = () => {
@@ -204,16 +244,16 @@
       } catch (e) {}
     };
     const cl = document.createElement('button');
-    cl.textContent = 'Close';
+    cl.textContent = 'Hide';
     cl.onclick = () => wrap.remove();
     const note = document.createElement('span');
-    note.style.cssText = 'font:12px system-ui;color:#555';
-    note.textContent =
-      'STAFF SCHEDULING CAPTURE — read-only. Stay on this page, click around (who’s in, leave, sessions), then Copy.';
+    note.setAttribute('data-ssc-note', '1');
+    note.style.cssText = 'font:11px system-ui;color:#555;flex:1';
+    note.textContent = 'Armed. Drag this bar. Medicus stays usable. Copy when done.';
     bar.append(cp, cl, note);
     wrap.append(bar, ta);
     document.body.appendChild(wrap);
-    window.__sscCapture = out;
+    makeDraggable(wrap, bar);
   }
 
   const siteId = siteIdFromPage();

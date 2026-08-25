@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.6] — 2026-08-25
+
+### Capture panels stay out of the way
+
+`scripts/staff-scheduling-capture.js` and `scripts/lab-requester-capture.js`
+used to cover the whole page, so you could not click Medicus. They now
+sit as a small draggable corner panel and update in place.
+
 ## [v3.242.5] — 2026-08-25
 
 ### Lab allocation canvas — put the reports back in the pool

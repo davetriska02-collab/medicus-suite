@@ -95,18 +95,53 @@
     .filter(Boolean)
     .slice(0, 40);
 
+  function makeDraggable(el, handle) {
+    let down = false;
+    let sx = 0;
+    let sy = 0;
+    let ox = 0;
+    let oy = 0;
+    handle.style.cursor = 'move';
+    handle.addEventListener('mousedown', (e) => {
+      if (e.target.closest('button')) return;
+      down = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      const r = el.getBoundingClientRect();
+      ox = r.left;
+      oy = r.top;
+      el.style.right = 'auto';
+      el.style.bottom = 'auto';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!down) return;
+      el.style.left = Math.max(8, Math.min(window.innerWidth - 80, ox + e.clientX - sx)) + 'px';
+      el.style.top = Math.max(8, Math.min(window.innerHeight - 40, oy + e.clientY - sy)) + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+      down = false;
+    });
+  }
+
   function dump() {
-    const old = document.getElementById('__lrcCapBox');
-    if (old) old.remove();
+    window.__lrcCapture = out;
+    const json = JSON.stringify(out, null, 2);
+    const existing = document.getElementById('__lrcCapBox');
+    if (existing) {
+      const ta = existing.querySelector('textarea');
+      if (ta) ta.value = json;
+      return;
+    }
     const wrap = document.createElement('div');
     wrap.id = '__lrcCapBox';
     wrap.style.cssText =
-      'position:fixed;inset:24px;z-index:2147483647;background:#fff;border:2px solid #1e3a5f;border-radius:8px;padding:8px;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+      'position:fixed;right:16px;bottom:16px;width:360px;height:200px;z-index:2147483647;background:#fff;border:2px solid #1e3a5f;border-radius:8px;padding:8px;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)';
     const bar = document.createElement('div');
-    bar.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
+    bar.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-shrink:0';
     const ta = document.createElement('textarea');
-    ta.value = JSON.stringify(out, null, 2);
-    ta.style.cssText = 'flex:1;width:100%;font:12px monospace';
+    ta.value = json;
+    ta.style.cssText = 'flex:1;width:100%;min-height:0;font:11px monospace;resize:none';
     const cp = document.createElement('button');
     cp.textContent = 'Copy';
     cp.onclick = () => {
@@ -118,16 +153,15 @@
       } catch (e) {}
     };
     const cl = document.createElement('button');
-    cl.textContent = 'Close';
+    cl.textContent = 'Hide';
     cl.onclick = () => wrap.remove();
     const note = document.createElement('span');
-    note.style.cssText = 'font:12px system-ui;color:#555';
-    note.textContent =
-      'Read-only. On the results queue this reads the task-list; on an open report it reads the overview. Copy and send it back.';
+    note.style.cssText = 'font:11px system-ui;color:#555;flex:1';
+    note.textContent = 'Armed. Drag this bar. Medicus stays usable.';
     bar.append(cp, cl, note);
     wrap.append(bar, ta);
     document.body.appendChild(wrap);
-    window.__lrcCapture = out;
+    makeDraggable(wrap, bar);
   }
 
   const ctx = out.context || {};
