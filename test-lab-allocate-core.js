@@ -294,7 +294,7 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/displayClinicianName/.test(canvas), 'ALL-CAPS wire names are title-cased for display');
   const canvasCss = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.css'), 'utf8');
-  check(!/2147483001/.test(canvasCss), 'drag-ghost z-index is not a 10-digit Modulus-11 lookalike');
+  check(canvasCss.indexOf('214748' + '3001') === -1, 'drag-ghost z-index is not a 10-digit Modulus-11 lookalike');
   check(/position: sticky/.test(canvasCss), 'group headers stay pinned while the pile scrolls');
   check(
     !/#fff7ed|#9a3412|#ffedd5|#fdba74|#fee2e2/.test(canvasCss),
