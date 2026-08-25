@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.4] — 2026-08-25
+
+### Lab allocation canvas — reports pool + clinician chips
+
+The board is no longer a column per clinician. The big pile is
+**Investigation reports**, grouped by who requested them. Clinicians
+sit as small chips on the right: drop a group onto a name, or click
+the chip to see anything already assigned to them (and anything staged
+onto them on this canvas). A requester is not auto-moved out of the
+pool.
+
+Paste `scripts/staff-scheduling-capture.js` on Medicus Staff scheduling
+when you want the live rota / who's-in contract recorded. Read-only;
+it does not invent a write slug.
+
 ## [v3.242.3] — 2026-08-25
 
 ### Lab allocation canvas — launcher focus ring restored
