@@ -1483,13 +1483,19 @@
   // can never hang — fails closed (null) rather than guessing past the
   // bound, same discipline as every other search here.
   //
-  // PENDING LIVE VERIFICATION (2026-08-23): assembled entirely from
-  // already-confirmed building blocks (outputParentConceptIds=1,
+  // LIVE-VERIFIED (2026-08-24, maintainer, on the v3.241.2 build): assembled
+  // from already-confirmed building blocks (outputParentConceptIds=1,
   // fetchSubstanceConceptById's bare-SCTID trick — both proven live
-  // elsewhere in this file), but the walk itself has not yet been
-  // HAR-captured against a real patient record. Confirm live with a real
-  // dose-specific entry (the "Penicillin V 250mg capsules" example) before
-  // trusting this beyond "looks right in principle".
+  // elsewhere in this file), and the walk itself has since been confirmed
+  // working against a real patient record in Medicus, alongside the rest of
+  // this card's search behaviour. The 2026-08-23 "pending live
+  // verification" caveat this note replaces is therefore discharged.
+  // Unchanged caveat: the walk is still a HEURISTIC on a multi-parent
+  // hierarchy — parentConceptIds.find() takes the first unseen parent, so a
+  // concept with several parents may surface a different (but still
+  // dose/form/brand-free) ancestor than a clinician would pick by hand.
+  // That is why the result is only ever OFFERED as an extra option and
+  // never auto-applied.
   async function fetchTopLevelSubstanceAncestor(current) {
     if (!current || !current.conceptId) return null;
     var seen = Object.create(null);

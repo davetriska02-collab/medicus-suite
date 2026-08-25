@@ -173,8 +173,14 @@
   //     unhelpful);
   //   - the "No known allergies" sentinel entry/entries (isNkaConcept) —
   //     structurally the OPPOSITE of an allergy, so there is no substance to
-  //     convert it to; these keep the select-then-"Stage end" flow (and the
-  //     last-remaining-NKA protection that only Stage end honours).
+  //     convert it to; these fall through to the ordinary
+  //     select-then-"Stage end" flow instead. NOTE (2026-08-25): this is the
+  //     ONLY thing still special-cased about an NKA row. The former
+  //     last-remaining-NKA staging block is GONE — canStageEnd no longer
+  //     returns 'last-nka' and countLiveNka no longer exists (relaxed
+  //     2026-08-23, see isEndableClassification's own comment and
+  //     docs/HAZARD-LOG.md H-060's dated addendum). An NKA row is endable
+  //     like any other; it simply is not convertible.
   // Every OTHER junk-lane row (a genuine but generically/badly-coded
   // allergy, e.g. "Allergic reaction") is now convert-eligible too — ending
   // it was never the only reasonable outcome, a clinician may equally judge
