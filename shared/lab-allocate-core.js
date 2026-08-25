@@ -288,7 +288,10 @@
     // Requester evidence does NOT auto-place: those stay in the reports pool,
     // grouped by who ordered, until someone stages them onto a chip.
     if (row && row.assignedTo && !isTeamAssignee(row.assignedTo)) {
-      return clinicianColumnKey(row.assignedTo);
+      var key = clinicianColumnKey(row.assignedTo);
+      // A name that normalises to nothing has no chip to sit on — pool it
+      // rather than parking it on a key no column renders.
+      if (key !== UNALLOCATED) return key;
     }
     return POOL;
   }
@@ -422,7 +425,19 @@
     rows = Array.isArray(rows) ? rows.filter(Boolean) : [];
     var collected = collectClinicianKeys(rows, draft);
     var titles = collected.titles;
-    var poolTiles = tilesOnKey(rows, draft, POOL);
+    var onChip = {};
+    collected.keys.forEach(function (key) {
+      onChip[key] = true;
+    });
+    // The pool is the catch-all. Every row is either on a clinician chip or
+    // in here — a result must never fall off the board.
+    var poolTiles = rows
+      .filter(function (row) {
+        return !onChip[visualColumnKey(row, draft)];
+      })
+      .map(function (row) {
+        return tileFromRow(row, draft, POOL);
+      });
     var pool = {
       key: POOL,
       kind: 'pool',

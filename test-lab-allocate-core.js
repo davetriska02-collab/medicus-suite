@@ -103,7 +103,10 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
   check(C.isTeamAssignee('Results inbox') === true, 'Results inbox is a team');
   check(C.isTeamAssignee('Triage Doctor') === true, 'Triage Doctor is a team-like inbox');
   check(C.isTeamAssignee('Dr Jane Cole') === false, 'a named doctor is not a team');
-  check(C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'), 'person assignee homes to that clinician chip');
+  check(
+    C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'),
+    'person assignee homes to that clinician chip'
+  );
   check(C.placementReason(person) === 'current-assignee', 'no requester → current-assignee, not who-ordered');
 
   const inbox = C.normaliseTaskRow(
@@ -145,10 +148,7 @@ console.log('\n--- board + draft moves ---');
     board0.clinicians.some((c) => c.title === 'Dr Cole' && c.count === 0),
     'requester appears as an empty clinician chip'
   );
-  check(
-    !board0.clinicians.some((c) => c.title === 'Results'),
-    'the shared inbox is not a clinician chip'
-  );
+  check(!board0.clinicians.some((c) => c.title === 'Results'), 'the shared inbox is not a clinician chip');
 
   let draft = C.addColumn(C.emptyDraft(), 'Dr Reed');
   draft = C.stageMove(draft, b.id, C.clinicianColumnKey('Dr Reed'));
@@ -210,7 +210,10 @@ console.log('\n--- canvas + manifest source locks ---');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
   check(/staff-scheduling SCOPING capture/.test(capture), 'staff-scheduling capture script is present');
   check(!/method:\s*['"]POST['"]/.test(capture), 'staff-scheduling capture does not POST');
-  check(/embedded-overview/.test(capture), 'staff-scheduling capture may re-read the confirmed appointment-book overview');
+  check(
+    /embedded-overview/.test(capture),
+    'staff-scheduling capture may re-read the confirmed appointment-book overview'
+  );
 }
 
 console.log('\n--- grouping by who ordered ---');
@@ -265,7 +268,10 @@ console.log('\n--- already-assigned person sits on their chip ---');
   const ws = C.buildWorkspace([assigned], C.emptyDraft());
   check(ws.pool.tiles.length === 0, 'a person-assigned result is not in the reports pool');
   const chip = ws.clinicians.find((c) => c.title === 'Dr Jane Cole');
-  check(chip && chip.assignedCount === 1 && chip.stagedCount === 0, 'chip shows the Medicus assignment, not a staged move');
+  check(
+    chip && chip.assignedCount === 1 && chip.stagedCount === 0,
+    'chip shows the Medicus assignment, not a staged move'
+  );
   check(chip.tiles[0].staged === false, 'already-assigned tile is not marked staged');
 }
 
@@ -345,6 +351,36 @@ async function testClient() {
   } catch (err) {
     check(/bad overviewURL/.test(err.message), 'absolute overviewURL rejected');
   }
+}
+
+console.log('--- board keeps every row visible ---');
+{
+  // A name that normalises to nothing ("Dr.") once landed on a key no column
+  // rendered, so the result vanished off the board while count still said N.
+  const rows = [
+    { id: uuid(70), patientName: 'A', assignedTo: 'Dr.', summary: 'FBC' },
+    { id: uuid(71), patientName: 'B', requester: 'Dr A Smith', summary: 'U&E' },
+    { id: uuid(72), patientName: 'C', assignedTo: 'Dr B Jones', summary: 'TFT' },
+    { id: uuid(73), patientName: 'D', assignedTo: 'Results Team', summary: 'HbA1c' },
+  ];
+  const board = C.buildBoard(rows, C.emptyDraft());
+  const shown = board.columns.reduce(function (n, col) {
+    return n + col.tiles.length;
+  }, 0);
+  check(shown === board.count, 'every row appears exactly once on the board');
+  check(board.pool.count === 3, 'unnamed, unassigned and team rows all sit in the pool');
+  const poolIds = board.pool.tiles.map(function (t) {
+    return t.id;
+  });
+  check(poolIds.indexOf(rows[0].id) !== -1, 'a name that normalises to nothing stays visible in the pool');
+
+  const staged = C.stageMove(C.emptyDraft(), rows[0].id, 'clinician:b jones');
+  const after = C.buildBoard(rows, staged);
+  const shownAfter = after.columns.reduce(function (n, col) {
+    return n + col.tiles.length;
+  }, 0);
+  check(shownAfter === after.count, 'staging a move does not drop a row');
+  check(after.pool.count === 2, 'staged row leaves the pool');
 }
 
 testClient()
