@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.0] — 2026-08-25
+
+### Lab allocation canvas — filter the pile, favourite destinations
+
+A pressured GP opening this between patients needs two things the board
+did not have: a way to isolate unallocated work (the example — ordered
+by someone who is **not in today**), and the people they actually
+allocate to sitting at the top of the rail.
+
+- **Filter** lives in the unallocated pile only — All / Not in today /
+  In today, plus test chips derived from the loaded pile, plus search.
+  `Select all shown` takes the visible set. The header count stays the
+  true backlog; the pile says `8 of 12 shown`. A filter that hides a
+  selected row is an amber warning, not a silent drop.
+- **Favourites** are an explicit star on a clinician field, persisted
+  as `labAllocate.favourites` and backed up. They become the first rail
+  section; In today / Holding work / Everyone else follow. Favourites
+  never hide a destination.
+- Opus glance pass on the same surface: the header now leads with the
+  unallocated number; amber is reserved for away and blocked writes;
+  confirm dims the board; Review then write is the primary when a
+  write is possible.
+
+Write contract (W23 / H-064) unchanged.
+
 ## [v3.243.3] — 2026-08-25
 
 ### Lab allocation canvas — unallocated identity (design crit)

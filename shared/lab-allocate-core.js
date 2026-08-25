@@ -929,7 +929,8 @@
     var count = picked.length;
     var label;
     if (!count) label = 'No results';
-    else if (requester) label = count + ' result' + (count === 1 ? '' : 's') + ' ordered by ' + requester;
+    else if (requester)
+      label = count + ' result' + (count === 1 ? '' : 's') + ' ordered by ' + displayClinicianName(requester);
     else if (!requesters.length) label = count + ' result' + (count === 1 ? '' : 's') + ' — who ordered unknown';
     else label = count + ' results from mixed requesters';
     return {
@@ -1472,6 +1473,137 @@
     };
   }
 
+  var FAVOURITE_CAP = 24;
+  var FAVOURITE_STORE_KEY = 'labAllocate.favourites';
+
+  function presenceBucket(presence) {
+    if (!presence) return 'not-in-today';
+    if (presence.state === 'present' && presence.reason === 'in-today') return 'in-today';
+    if (presence.state === 'away' || presence.state === 'away-pending') return 'away';
+    return 'not-in-today';
+  }
+
+  function favouriteKeyFrom(value) {
+    if (typeof value !== 'string') return '';
+    var raw = value.trim();
+    return isClinicianKey(raw) ? raw : '';
+  }
+
+  function sanitiseFavouriteStore(raw) {
+    var keys = [];
+    if (Array.isArray(raw)) keys = raw;
+    else if (raw && typeof raw === 'object' && Array.isArray(raw.keys)) keys = raw.keys;
+    var out = [];
+    var seen = {};
+    keys.forEach(function (item) {
+      var key = favouriteKeyFrom(item);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      out.push(key);
+    });
+    if (out.length > FAVOURITE_CAP) out = out.slice(0, FAVOURITE_CAP);
+    return { version: 1, keys: out };
+  }
+
+  function toggleFavouriteKey(store, key) {
+    var next = sanitiseFavouriteStore(store);
+    var canon = favouriteKeyFrom(key);
+    if (!canon) return next;
+    var i = next.keys.indexOf(canon);
+    if (i >= 0) next.keys.splice(i, 1);
+    else if (next.keys.length < FAVOURITE_CAP) next.keys.push(canon);
+    return next;
+  }
+
+  function isFavouriteKey(store, key) {
+    var canon = favouriteKeyFrom(key);
+    if (!canon) return false;
+    return sanitiseFavouriteStore(store).keys.indexOf(canon) !== -1;
+  }
+
+  function normTestLabel(s) {
+    return String(s || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function poolTestFacets(groups, cap) {
+    var counts = {};
+    (groups || []).forEach(function (g) {
+      (g.tiles || []).forEach(function (t) {
+        var label = normTestLabel(t.summary || t.statusText || '');
+        if (!label) return;
+        var k = label.toLowerCase();
+        if (!counts[k]) counts[k] = { label: label, count: 0 };
+        counts[k].count += 1;
+      });
+    });
+    var limit = typeof cap === 'number' ? cap : 6;
+    return Object.keys(counts)
+      .map(function (k) {
+        return counts[k];
+      })
+      .sort(function (a, b) {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.label.localeCompare(b.label);
+      })
+      .slice(0, limit);
+  }
+
+  function tileMatchesQuery(tile, query) {
+    var q = String(query || '')
+      .trim()
+      .toLowerCase();
+    if (!q) return true;
+    var hay = [tile.patientName, tile.summary, tile.statusText, tile.requester].join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
+  function filterPoolGroups(groups, filter, presenceByKey) {
+    filter = filter || {};
+    presenceByKey = presenceByKey || {};
+    var test = normTestLabel(filter.test || '').toLowerCase();
+    var query = filter.query || '';
+    var presence = filter.presence || 'all';
+    var out = [];
+    (groups || []).forEach(function (g) {
+      var bucket = presenceByKey[g.key] || 'not-in-today';
+      if (presence === 'not-in-today') {
+        if (bucket === 'in-today') return;
+      } else if (presence !== 'all' && bucket !== presence) return;
+      var tiles = (g.tiles || []).filter(function (t) {
+        if (test && normTestLabel(t.summary || t.statusText || '').toLowerCase() !== test) return false;
+        return tileMatchesQuery(t, query);
+      });
+      if (!tiles.length) return;
+      out.push({
+        key: g.key,
+        requester: g.requester,
+        known: g.known,
+        tiles: tiles,
+        tileIds: tiles.map(function (t) {
+          return t.id;
+        }),
+        count: tiles.length,
+        label: g.label,
+        dragHint: g.dragHint,
+      });
+    });
+    return out;
+  }
+
+  function hiddenSelectedCount(selectedIds, visibleIds) {
+    var vis = {};
+    (visibleIds || []).forEach(function (id) {
+      vis[id] = true;
+    });
+    var n = 0;
+    (selectedIds || []).forEach(function (id) {
+      if (id && !vis[id]) n += 1;
+    });
+    return n;
+  }
+
   var api = {
     UNALLOCATED: UNALLOCATED,
     POOL: POOL,
@@ -1533,6 +1665,15 @@
     absenceOnDate: absenceOnDate,
     presenceForName: presenceForName,
     createClient: createClient,
+    presenceBucket: presenceBucket,
+    sanitiseFavouriteStore: sanitiseFavouriteStore,
+    toggleFavouriteKey: toggleFavouriteKey,
+    isFavouriteKey: isFavouriteKey,
+    poolTestFacets: poolTestFacets,
+    filterPoolGroups: filterPoolGroups,
+    hiddenSelectedCount: hiddenSelectedCount,
+    FAVOURITE_CAP: FAVOURITE_CAP,
+    FAVOURITE_STORE_KEY: FAVOURITE_STORE_KEY,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

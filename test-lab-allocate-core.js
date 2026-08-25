@@ -273,7 +273,7 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/commitAllocations/.test(canvas), 'canvas commits through the core client');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
   check(/Go back/.test(canvas), 'confirm defaults the clinician back to planning');
-  check(/Stage .+ results here/.test(canvas), 'stage hint names results after the count — not Stage N');
+  check(/chip-stagehint/.test(canvas), 'a selection shows a +N stage token, not a repeated sentence');
   check(/ms-lac-confirm-btn-primary/.test(canvas), 'confirm write is a primary action');
   check(/unstageIds/.test(canvas), 'a staged drawer row can return to unallocated');
   check(/\binert\b/.test(canvas), 'the board is inert while a write is in flight');
@@ -309,7 +309,10 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/STAGED/.test(canvas), 'staged tiles wear a STAGED marker');
   check(!/ms-lac-pool-eyebrow/.test(canvas), 'the pool no longer wears a second Investigation reports eyebrow');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
-  check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
+  check(/railSections/.test(canvas), 'Favourites then In today are sectioned on the rail');
+  check(/filterPoolGroups/.test(canvas), 'the unallocated pile can be filtered');
+  check(/Select all shown/.test(canvas), 'group select only takes what the filter is showing');
+  check(/labAllocate\.favourites/.test(canvas), 'favourites persist under labAllocate.favourites');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
   check(/Why this will not write/.test(canvas), 'a blocked write is a visible action, not a dead button');
   check(
@@ -905,6 +908,51 @@ console.log('--- board keeps every row visible ---');
   }, 0);
   check(shownAfter === after.count, 'staging a move does not drop a row');
   check(after.pool.count === 2, 'staged row leaves the unallocated pool');
+}
+
+console.log('\n--- pool filter + favourites ---');
+{
+  const a = C.normaliseTaskRow(
+    { id: uuid(1), patientName: 'A', assignedTo: 'Investigation Reports', requestedBy: 'AZADIAN N', summary: 'HbA1c' },
+    'x'
+  );
+  const b = C.normaliseTaskRow(
+    { id: uuid(2), patientName: 'B', assignedTo: 'Investigation Reports', requestedBy: 'NICHOLLS E', summary: 'U&E' },
+    'x'
+  );
+  const groups = C.buildWorkspace([a, b], C.emptyDraft()).pool.groups;
+  const byKey = {};
+  groups.forEach((g) => {
+    byKey[g.key] = /azadian/i.test(g.requester) ? 'in-today' : 'not-in-today';
+  });
+  const notIn = C.filterPoolGroups(groups, { presence: 'not-in-today' }, byKey);
+  check(notIn.length === 1 && /nicholls/i.test(notIn[0].requester), 'not-in-today hides in-today requesters');
+  const hba1c = C.filterPoolGroups(groups, { test: 'HbA1c' }, byKey);
+  check(hba1c.length === 1 && hba1c[0].tiles[0].summary === 'HbA1c', 'test filter keeps matching rows');
+  const q = C.filterPoolGroups(groups, { query: 'khan' }, byKey);
+  check(q.length === 0, 'query that matches no patient empties the view');
+  const facets = C.poolTestFacets(groups, 6);
+  check(
+    facets.some((f) => f.label === 'HbA1c' && f.count === 1),
+    'test facets are derived from the loaded pile'
+  );
+  check(C.hiddenSelectedCount([a.id, b.id], [a.id]) === 1, 'hiddenSelectedCount names selected rows the filter hid');
+
+  const key = C.clinicianColumnKey('Dr Natalie Azadian');
+  const store = C.sanitiseFavouriteStore({ keys: [key, 'not-a-key', key] });
+  check(store.keys.length === 1 && store.keys[0] === key, 'favourite store keeps unique clinician keys');
+  const toggled = C.toggleFavouriteKey(store, key);
+  check(toggled.keys.length === 0, 'toggling a favourite off removes it');
+  check(C.isFavouriteKey(C.toggleFavouriteKey({ keys: [] }, key), key) === true, 'toggling on adds it');
+  check(C.presenceBucket({ state: 'present', reason: 'in-today' }) === 'in-today', 'in-today buckets as in-today');
+  check(C.presenceBucket({ state: 'unknown', reason: 'no-evidence' }) === 'not-in-today', 'unknown is not in today');
+  check(C.FAVOURITE_STORE_KEY === 'labAllocate.favourites', 'favourites use the backup key');
+
+  const io = require('./shared/io/lab-allocate-io.js');
+  check(
+    io.sanitiseFavouriteKeys(['clinician:azadian|n', 'pool', 'clinician:x']).length === 2,
+    'IO drops non-clinician keys'
+  );
 }
 
 testClient()

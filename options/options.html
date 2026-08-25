@@ -3292,6 +3292,20 @@
                 </div>
               </div>
               <div class="module-export-card">
+                <div class="mec-name">Lab allocate</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="labAllocate">Export</button>
+                  <button class="ghost" data-mod-import="labAllocate">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="labAllocate"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
                 <div class="mec-name">Rota</div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="rota">Export</button>
@@ -3400,6 +3414,7 @@
     <script src="../shared/io/fs-handle-store.js"></script>
     <script src="../shared/io/pdc-contribute.js"></script>
     <script src="../shared/io/rota-io.js"></script>
+    <script src="../shared/io/lab-allocate-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>

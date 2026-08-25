@@ -116,50 +116,33 @@
 
 .ms-lac-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-1);
-  white-space: nowrap;
-}
-
-.ms-lac-header-counts {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
+  flex: 1 1 auto;
 }
 
-.ms-lac-header-unalloc {
+.ms-lac-header-lead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.ms-lac-header-num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
+  font-size: 18px;
   font-weight: 700;
-  color: var(--amber);
-  background: var(--amber-dim);
-  border: 1px solid var(--amber-line);
-  border-radius: var(--r-sm);
-  padding: 2px 6px;
+  color: var(--text-1);
+  line-height: 1;
 }
 
-.ms-lac-header-unalloc.is-zero {
-  color: var(--text-4);
-  background: transparent;
-  border-color: var(--border);
+.ms-lac-header-lead-label {
+  font-size: 11px;
   font-weight: 600;
-}
-
-.ms-lac-header-note {
-  font-size: 11.5px;
-  color: var(--text-4);
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--text-2);
 }
 
 .ms-lac-close,
@@ -239,6 +222,17 @@
   white-space: nowrap;
 }
 
+.ms-lac-selectbar-hidden {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
 .ms-lac-body {
   flex: 1 1 auto;
   display: flex;
@@ -304,15 +298,78 @@
 }
 
 .ms-lac-pool-count {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
   font-size: 11px;
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
-.ms-lac-pool-count.is-hot {
-  color: var(--amber);
-  font-weight: 700;
+.ms-lac-pool-tools {
+  position: sticky;
+  top: 44px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  margin: 0 -8px 4px;
+  background: var(--bg-mid);
+  border-bottom: 1px solid var(--border);
+}
+
+.ms-lac-filters,
+.ms-lac-tests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ms-lac-filter-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg-mid);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ms-lac-filter-chip:hover {
+  background: var(--bg-hover);
+}
+
+.ms-lac-filter-chip.is-on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.ms-lac-filter-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ms-lac-pool-search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#ms-lac-pool-q {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  padding: 5px 8px;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+#ms-lac-pool-q:focus {
+  border-color: var(--accent);
 }
 
 .ms-lac-rail {
@@ -330,6 +387,19 @@
   margin-bottom: 8px;
 }
 
+.ms-lac-rail-sec + .ms-lac-rail-sec {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.ms-lac-rail-sub {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
 .ms-lac-col-heading {
   font-size: 12px;
   font-weight: 600;
@@ -345,6 +415,7 @@
 /* Clinician fields — compact person cards, not a second inbox list. */
 .ms-lac-chip-wrap,
 .ms-lac-field {
+  position: relative;
   margin-bottom: 6px;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -353,6 +424,46 @@
   transition:
     border-color var(--fast) var(--ease),
     background var(--fast) var(--ease);
+}
+
+.ms-lac-fav {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.ms-lac-fav svg {
+  display: block;
+  margin: 5px auto 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+
+.ms-lac-fav:hover {
+  color: var(--text-3);
+}
+
+.ms-lac-fav[aria-pressed='true'] {
+  color: var(--text-2);
+}
+
+.ms-lac-fav[aria-pressed='true'] svg {
+  fill: currentColor;
+}
+
+.ms-lac-fav:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .ms-lac-field-has {
@@ -374,7 +485,7 @@
   column-gap: 8px;
   width: 100%;
   min-height: 44px;
-  padding: 8px 10px;
+  padding: 8px 28px 8px 10px;
   border: 0;
   background: transparent;
   font-family: inherit;
@@ -406,10 +517,17 @@
 
 .ms-lac-chip-count {
   flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  padding-right: 20px;
+}
+
+.ms-lac-num {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 10px;
-  color: var(--text-4);
+  font-weight: 700;
+  color: var(--text-1);
 }
 
 .ms-lac-chip-count-staged {
@@ -445,17 +563,12 @@
 
 .ms-lac-chip-stagehint {
   margin-left: auto;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  white-space: nowrap;
-}
-
-.ms-lac-chip-wrap:hover .ms-lac-chip-stagehint,
-.ms-lac-chip:focus-visible .ms-lac-chip-stagehint,
-.ms-lac-chip-wrap.ms-lac-drop-hover .ms-lac-chip-stagehint {
-  color: var(--accent);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
   font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .ms-lac-chip-away {
@@ -469,6 +582,7 @@
 
 .ms-lac-chip-in {
   border-color: var(--green-line);
+  background: var(--green-dim);
 }
 
 .ms-lac-chip-open {
@@ -476,16 +590,21 @@
   border-color: var(--accent-line);
 }
 
-.ms-lac-chip-target {
+.ms-lac-chip-can-stage:hover,
+.ms-lac-chip-can-stage:focus-within,
+.ms-lac-chip-wrap.ms-lac-drop-hover {
   border-style: dashed;
   border-color: var(--accent-line);
 }
 
 .ms-lac-chip-drawer {
-  padding: 0 8px 8px;
-  border-top: 1px solid var(--border);
+  padding: 8px;
+  margin: 0 6px 6px;
+  border-top: 0;
   max-height: 40vh;
   overflow: auto;
+  background: var(--bg-mid);
+  border-radius: var(--r-sm);
 }
 
 .ms-lac-col-absence,
@@ -538,12 +657,12 @@
 
 /* Requester groups — list sections inside the inbox well, not person cards. */
 .ms-lac-group {
-  margin-top: 10px;
+  margin-top: 16px;
 }
 
 .ms-lac-group-head {
   position: sticky;
-  top: 44px;
+  top: 132px;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -554,6 +673,7 @@
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   cursor: grab;
+  box-shadow: inset 2px 0 0 var(--border-hi);
   transition: background var(--fast) var(--ease);
 }
 
@@ -573,13 +693,19 @@
 .ms-lac-group-role {
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .ms-lac-group-title {
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-1);
+}
+
+.ms-lac-group-out {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
 }
 
 .ms-lac-group-count {
@@ -638,7 +764,7 @@
 }
 
 .ms-lac-tile:hover {
-  background: var(--bg-mid);
+  background: var(--bg-hover);
 }
 
 .ms-lac-tile:active {
@@ -664,7 +790,7 @@
   max-width: 14em;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -696,6 +822,7 @@
 .ms-lac-tile-picked {
   background: var(--accent-dim);
   border-bottom-color: var(--accent-line);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .ms-lac-tile-picked:hover {
@@ -715,9 +842,14 @@
   cursor: default;
 }
 
+.ms-lac-tile-quiet {
+  font-size: 11.5px;
+}
+
 .ms-lac-tile-quiet .ms-lac-tile-name {
   font-weight: 500;
-  color: var(--text-2);
+  font-size: 11.5px;
+  color: var(--text-3);
 }
 
 .ms-lac-tile-staged {
@@ -846,11 +978,25 @@
   color: var(--text-1);
 }
 
+.ms-lac-body-dim {
+  position: relative;
+}
+
+.ms-lac-body-dim::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+  pointer-events: none;
+  z-index: 4;
+}
+
 .ms-lac-confirmbar-sheet {
   background: var(--bg-elev);
   box-shadow: var(--shadow-3);
-  border-top: 2px solid var(--amber-line);
+  border-top: 2px solid var(--accent-line);
   color: var(--text-2);
+  padding: 14px 16px;
 }
 
 .ms-lac-confirm-heading {

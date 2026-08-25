@@ -105,6 +105,7 @@ const VALID_SCOPES = [
   'problemDescriptionCleanup',
   'phrases',
   'rota',
+  'labAllocate',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -502,6 +503,14 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Rota');
+    if (m) lines.push(m);
+  }
+
+  if (mods.labAllocate) {
+    const n = Array.isArray((mods.labAllocate.favourites || {}).keys) ? mods.labAllocate.favourites.keys.length : 0;
+    lines.push(`Lab allocate: ${n} favourite clinician${n === 1 ? '' : 's'}`);
+  } else {
+    const m = missing('Lab allocate');
     if (m) lines.push(m);
   }
 

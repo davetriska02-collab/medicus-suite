@@ -125,6 +125,7 @@ const KEY_PREFIXES = [
   // for labfiling/patientAlerts/followups/practice above.
   'contactsCanvas',
   'rota',
+  'labAllocate',
 ];
 
 function hasKeyPrefix(k) {
