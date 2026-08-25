@@ -273,11 +273,14 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/commitAllocations/.test(canvas), 'canvas commits through the core client');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
   check(/Go back/.test(canvas), 'confirm defaults the clinician back to planning');
-  check(/chip-stagehint/.test(canvas), 'a selection shows a +N stage token, not a repeated sentence');
+  check(/chip-stagehint/.test(canvas), 'a selection shows a Plan N here token, not a repeated sentence');
+  check(/Plan ' \+ selCount \+ ' here/.test(canvas), 'the stage token names the destination action, not a bare +N');
+  check(!/">\+' \+ selCount/.test(canvas), 'no bare +N destination target remains');
   check(/ms-lac-confirm-btn-primary/.test(canvas), 'confirm write is a primary action');
   check(/unstageIds/.test(canvas), 'a staged drawer row can return to unallocated');
   check(/\binert\b/.test(canvas), 'the board is inert while a write is in flight');
-  check(/Add a clinician field…/.test(canvas), 'add-clinician starts behind a disclosure');
+  check(/Add clinician…/.test(canvas), 'add-clinician starts behind a disclosure, worded as a person not a form field');
+  check(!/Add a clinician field/.test(canvas), 'the developer term "clinician field" is not user-facing');
   // A part-written batch leaves the board claiming work Medicus already took.
   // The failure path must re-read before it tells anyone to check the queue.
   check(
@@ -292,7 +295,9 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/Write to Medicus — not available/.test(canvas), 'Finalise is no longer hard-disabled');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(/not confirmed as the requester/.test(canvas), 'named GP caption refuses to claim who ordered');
-  check(/Absence check before staging/.test(canvas), 'clinician drop always offers an absence check');
+  check(/Absence check before planning/.test(canvas), 'clinician drop always offers an absence check');
+  check(/Choose someone else/.test(canvas), 'the safe absence action is the sole primary');
+  check(/Plan here anyway/.test(canvas), 'the risky absence action reads as an amber ghost, not the default');
   check(/loadRotaAbsences/.test(canvas), 'canvas reads rota.leave before allocation');
   check(/fetchTodayBook/.test(canvas), 'canvas reads today’s appointment book');
   check(/fetchStaffScheduleAbsences/.test(canvas), 'canvas may parse GET staff-schedule for absences');
@@ -300,18 +305,81 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
   check(/In today/.test(canvas), 'chips can show In today from the appointment book');
   check(
+    !/dateOfBirth|nhsNumber/i.test(canvas),
+    'no patient DOB/NHS column — this is task routing, not clinical review'
+  );
+  check(/Already holding tasks/.test(canvas), 'the rail section is renamed from Holding work');
+  check(!/Holding work/.test(canvas), 'the old Holding work label is gone');
+  check(
+    /Choose a clinician on the right.{0,10}nothing changes in Medicus until review/.test(canvas),
+    'the selection bar removes destination ambiguity'
+  );
+  check(
+    /Choose a clinician to plan these ' \+ selCount/.test(canvas),
+    'the rail helper names the plan action, not a generic instruction'
+  );
+  check(
+    !/away \? '.*disabled/.test(canvas),
+    'away clinicians are never disabled — intentional reassignment stays possible behind the absence gate'
+  );
+  check(/ms-lac-modal-scrim/.test(canvas), 'write confirmation renders as a real scrimmed modal, not a footer band');
+  check(
+    /'Reassign <span class="ms-lac-modal-count">'[\s\S]{0,160}' to '/.test(canvas),
+    'single-destination confirm headline names the destination'
+  );
+  check(
+    /'Review <span class="ms-lac-modal-count">' \+ n \+ '<\/span> task reassignment'/.test(canvas),
+    'multi-destination confirm is a neutral review headline'
+  );
+  check(/Reassign tasks in Medicus/.test(canvas), 'the confirm primary action names the write honestly');
+  check(/Review reassignments…/.test(canvas), 'the footer action to open the confirm modal is Review reassignments…');
+  check(!/Write to Medicus/.test(canvas), 'the developer phrase Write to Medicus is gone from user-facing copy');
+  check(/aria-multiselectable="true"/.test(canvas), 'pool groups expose a valid multiselectable listbox');
+  check(/_roving/.test(canvas), 'roving tabindex tracks one tabbable option per group');
+  check(/ArrowDown.*ArrowUp|ArrowUp.*ArrowDown/.test(canvas), 'Up/Down arrow keys move focus within a group');
+  check(/updateStickyOffset/.test(canvas), 'sticky group offset is measured from the real rendered header height');
+  check(/ms-lac-sticky-offset/.test(canvas), 'the measured offset is applied as a CSS custom property');
+  check(/ms-lac-filter-axis-label/.test(canvas), 'Availability and Test filter axes carry explicit visual labels');
+  check(/>Availability</.test(canvas) && />Test</.test(canvas), 'the two filter axis labels are present');
+  check(
+    /poolTestFacets\(board\.pool\.groups, 6, countingGroups\)/.test(canvas),
+    'test chip counts intersect the live filter subset'
+  );
+  check(
+    /emptyPoolHtml/.test(canvas) && (canvas.match(/emptyPoolHtml/g) || []).length >= 2,
+    'the icon empty state is used consistently, not an alternate iconless branch'
+  );
+  check(
     /ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas) && /ms-lac-chip/.test(canvas),
     'canvas is an unallocated pool plus clinician fields'
   );
   check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
   check(/Ordered by/.test(canvas), 'group heads prefix Ordered by so surnames are not destinations');
-  check(/results sitting with them/.test(canvas), 'clinician fields count results sitting with them');
+  check(/already with them/.test(canvas), 'clinician fields count what already sits with them, distinct from planned');
+  check(/planned here/.test(canvas), 'clinician fields separately count what is planned on this canvas');
+  check(
+    /they ordered still unallocated/.test(canvas),
+    'clinician fields count what that person ordered but is unallocated'
+  );
+  check(
+    /col\.count - \(col\.stagedCount \|\| 0\)/.test(canvas),
+    'existing count subtracts the staged share back out of col.count'
+  );
+  check(/Already with them/.test(canvas), 'the expanded drawer labels the view-only existing rows');
+  check(/Planned on this canvas/.test(canvas), 'the expanded drawer labels the staged rows separately');
   check(/STAGED/.test(canvas), 'staged tiles wear a STAGED marker');
   check(!/ms-lac-pool-eyebrow/.test(canvas), 'the pool no longer wears a second Investigation reports eyebrow');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
   check(/railSections/.test(canvas), 'Favourites then In today are sectioned on the rail');
   check(/filterPoolGroups/.test(canvas), 'the unallocated pile can be filtered');
-  check(/Select all shown/.test(canvas), 'group select only takes what the filter is showing');
+  check(
+    /id="ms-lac-select-visible">Select all shown/.test(canvas),
+    'the toolbar keeps a single Select all shown action'
+  );
+  check(
+    (canvas.match(/Select all shown/g) || []).length === 1,
+    'Select all shown appears exactly once — the toolbar action, never repeated per group'
+  );
   check(/labAllocate\.favourites/.test(canvas), 'favourites persist under labAllocate.favourites');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
   check(/Why this will not write/.test(canvas), 'a blocked write is a visible action, not a dead button');
@@ -322,7 +390,11 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/tabindex="0"/.test(canvas), 'tiles and group heads are keyboard focusable');
   check(/aria-selected/.test(canvas), 'selection state is exposed to assistive tech');
   check(/ms-lac-selectbar/.test(canvas), 'an active selection shows a visible count bar');
-  check(/Select all/.test(canvas), 'group headers name their select-all affordance');
+  check(/aria-label="Select ' \+/.test(canvas), 'group action carries an explicit aria-label naming the group');
+  check(
+    /'">Select ' \+[\s\S]{0,20}group\.count[\s\S]{0,20}'<\/button>'/.test(canvas),
+    'group action button reads Select {N}'
+  );
   check(/_confirmClose/.test(canvas), 'closing with staged moves asks before discarding');
   check(!/do not invent a slug/.test(canvas), 'footer no longer shows developer jargon');
   check(
@@ -937,6 +1009,42 @@ console.log('\n--- pool filter + favourites ---');
     'test facets are derived from the loaded pile'
   );
   check(C.hiddenSelectedCount([a.id, b.id], [a.id]) === 1, 'hiddenSelectedCount names selected rows the filter hid');
+
+  // poolTestFacets(groups, cap, countingGroups) — the base top-N choices come
+  // from the full pile, but when a countingGroups intersection is supplied
+  // the digit beside each chip reflects that narrower subset, not the base.
+  const facetsNoCounting = C.poolTestFacets(groups, 6);
+  check(
+    facetsNoCounting.find((f) => f.label === 'HbA1c').count === 1 &&
+      facetsNoCounting.find((f) => f.label === 'U&E').count === 1,
+    'without countingGroups, counts come from the same groups as the choices (old call shape, backward compatible)'
+  );
+  const notInGroups = C.filterPoolGroups(groups, { presence: 'not-in-today' }, byKey);
+  const facetsFiltered = C.poolTestFacets(groups, 6, notInGroups);
+  check(
+    facetsFiltered.find((f) => f.label === 'HbA1c').count === 0,
+    'a countingGroups intersection that excludes a test zeroes its count, even though it is still a top-N choice'
+  );
+  check(
+    facetsFiltered.find((f) => f.label === 'U&E').count === 1,
+    'a test still present in the countingGroups intersection keeps its live count'
+  );
+  check(
+    facetsFiltered
+      .map((f) => f.label)
+      .sort()
+      .join(',') ===
+      facetsNoCounting
+        .map((f) => f.label)
+        .sort()
+        .join(','),
+    'the top-N choice set itself does not reshuffle when only the counting subset narrows'
+  );
+  const emptyIntersection = C.poolTestFacets(groups, 6, []);
+  check(
+    emptyIntersection.every((f) => f.count === 0),
+    'an empty countingGroups intersection zeroes every chip, but the chips themselves stay visible'
+  );
 
   const key = C.clinicianColumnKey('Dr Natalie Azadian');
   const store = C.sanitiseFavouriteStore({ keys: [key, 'not-a-key', key] });

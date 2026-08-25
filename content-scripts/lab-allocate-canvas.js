@@ -65,6 +65,7 @@
   var _poolTest = '';
   var _poolQuery = '';
   var _poolCaret = null;
+  var _roving = {};
 
   function announce(text) {
     setTimeout(function () {
@@ -281,7 +282,7 @@
     return [
       { id: 'fav', title: 'Favourites', cols: fav },
       { id: 'in', title: 'In today', cols: inToday },
-      { id: 'hold', title: 'Holding work', cols: holding },
+      { id: 'hold', title: 'Already holding tasks', cols: holding },
       { id: 'else', title: 'Everyone else', cols: rest },
     ].filter(function (s) {
       return s.cols.length;
@@ -354,6 +355,16 @@
     }
   }
 
+  // Roving tabindex: exactly one option per listbox group is tabbable.
+  // Falls back to the group's first tile until focus/arrow-key navigation
+  // names a different one; stays valid across re-renders by checking the
+  // remembered id is still in this group.
+  function activeRovingId(group) {
+    var remembered = _roving[group.key];
+    if (remembered && group.tileIds.indexOf(remembered) !== -1) return remembered;
+    return group.tileIds[0] || null;
+  }
+
   // One-line row. Group headers carry who ordered; the row only repeats it
   // in the unknown pile, where it varies per row and is load-bearing.
   function tileHtml(tile, opts) {
@@ -390,7 +401,9 @@
         '"';
     } else {
       attrs =
-        'role="option" tabindex="0" aria-selected="' +
+        'role="option" tabindex="' +
+        (opts.roving === false ? '-1' : '0') +
+        '" aria-selected="' +
         (selected ? 'true' : 'false') +
         '" draggable="true" data-task-id="' +
         esc(tile.id) +
@@ -428,6 +441,13 @@
     return '<span class="ms-lac-group-out">Not in today</span>';
   }
 
+  var GRIP_SVG =
+    '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><circle cx="5" cy="3" r="1.1"/><circle cx="9" cy="3" r="1.1"/><circle cx="5" cy="7" r="1.1"/><circle cx="9" cy="7" r="1.1"/><circle cx="5" cy="11" r="1.1"/><circle cx="9" cy="11" r="1.1"/></svg>';
+  var CHEVRON_SVG =
+    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>';
+  var ALERT_TRIANGLE_SVG =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
   function groupHtml(group) {
     var collapsed = !!_collapsed[group.key];
     var title = group.known ? C.displayClinicianName(group.requester) : 'Who ordered is unknown';
@@ -435,6 +455,7 @@
     var selectedInGroup = group.tiles.filter(function (t) {
       return _selected[t.id];
     }).length;
+    var activeId = activeRovingId(group);
     return (
       '<section class="ms-lac-group' +
       (collapsed ? ' ms-lac-group-collapsed' : '') +
@@ -446,7 +467,9 @@
       '" data-group-key="' +
       esc(group.key) +
       '">' +
-      '<span class="ms-lac-group-grip" aria-hidden="true">⠿</span>' +
+      '<span class="ms-lac-group-grip" aria-hidden="true">' +
+      GRIP_SVG +
+      '</span>' +
       '<span class="ms-lac-group-role">Ordered by</span>' +
       '<span class="ms-lac-group-title">' +
       esc(title) +
@@ -459,7 +482,14 @@
         ? '<span class="ms-lac-group-picked">' + selectedInGroup + ' selected</span>'
         : '<button type="button" class="ms-lac-group-select" data-group-ids="' +
           idsAttr +
-          '">Select all shown</button>') +
+          '" aria-label="Select ' +
+          group.count +
+          ' result' +
+          (group.count === 1 ? '' : 's') +
+          (group.known ? ' ordered by ' + esc(title) : ' with who ordered unknown') +
+          '">Select ' +
+          group.count +
+          '</button>') +
       '<button type="button" class="ms-lac-group-toggle" data-toggle-key="' +
       esc(group.key) +
       '" aria-expanded="' +
@@ -467,17 +497,17 @@
       '" aria-label="' +
       (collapsed ? 'Show' : 'Hide') +
       ' this group">' +
-      (collapsed ? '▸' : '▾') +
+      CHEVRON_SVG +
       '</button>' +
       '</div>' +
       (collapsed
         ? ''
-        : '<div class="ms-lac-group-body" role="listbox" aria-label="' +
+        : '<div class="ms-lac-group-body" role="listbox" aria-multiselectable="true" aria-label="' +
           esc(title) +
           '">' +
           group.tiles
             .map(function (t) {
-              return tileHtml(t, { showWho: !group.known, showAssignee: true });
+              return tileHtml(t, { showWho: !group.known, showAssignee: true, roving: t.id === activeId });
             })
             .join('') +
           '</div>') +
@@ -489,15 +519,17 @@
     return '<span class="ms-lac-num">' + n + '</span> ' + esc(after);
   }
 
+  // col.count already includes staged rows (buildBoard counts everything
+  // visually on this key) — the pre-existing amount is what is left once
+  // the staged share is taken back out.
   function fieldCountsHtml(col) {
+    var existing = Math.max(0, col.count - (col.stagedCount || 0));
     var bits = [];
-    bits.push(countPhrase(col.count, 'results sitting with them'));
+    bits.push(countPhrase(existing, 'already with them'));
     if (col.stagedCount) {
-      bits.push(
-        '<span class="ms-lac-chip-count-staged">' + countPhrase(col.stagedCount, 'staged on this canvas') + '</span>'
-      );
+      bits.push('<span class="ms-lac-chip-count-staged">' + countPhrase(col.stagedCount, 'planned here') + '</span>');
     }
-    if (col.inPoolCount) bits.push(countPhrase(col.inPoolCount, 'still unallocated'));
+    if (col.inPoolCount) bits.push(countPhrase(col.inPoolCount, 'they ordered still unallocated'));
     return bits.join(' · ');
   }
 
@@ -506,11 +538,32 @@
     var away = abs.state === 'away' || abs.state === 'away-pending';
     var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var open = _expandedChip === col.key;
-    var body = col.tiles
-      .map(function (t) {
-        return tileHtml(t, { showWho: false, showAssignee: false, quiet: true });
-      })
-      .join('');
+    var existingTiles = col.tiles.filter(function (t) {
+      return !t.staged;
+    });
+    var stagedTiles = col.tiles.filter(function (t) {
+      return t.staged;
+    });
+    var body = '';
+    if (existingTiles.length) {
+      body +=
+        '<div class="ms-lac-drawer-sub">Already with them</div>' +
+        '<div class="ms-lac-drawer-note">View-only — already with them in Medicus, not staged here.</div>' +
+        existingTiles
+          .map(function (t) {
+            return tileHtml(t, { showWho: false, showAssignee: false, quiet: true });
+          })
+          .join('');
+    }
+    if (stagedTiles.length) {
+      body +=
+        '<div class="ms-lac-drawer-sub">Planned on this canvas</div>' +
+        stagedTiles
+          .map(function (t) {
+            return tileHtml(t, { showWho: false, showAssignee: false, quiet: true });
+          })
+          .join('');
+    }
     var flag = away
       ? '<span class="ms-lac-chip-flag">AWAY</span>'
       : inToday
@@ -522,6 +575,10 @@
     var name = C.displayClinicianName(col.title);
     var expandHint = open ? 'Hide what sits with them' : 'Click to expand and see what sits with them';
     var fav = C.isFavouriteKey(_favourites, col.key);
+    // Keeps the target field visually welded to the absence warning below
+    // it — the amber line/wash is the only thing telling the clinician
+    // which field the pending decision is even about.
+    var pendingTarget = !!(_pendingAbsence && _pendingAbsence.key === col.key);
     return (
       '<div class="ms-lac-chip-wrap ms-lac-field' +
       (away ? ' ms-lac-chip-away' : '') +
@@ -529,6 +586,7 @@
       (open ? ' ms-lac-chip-open' : '') +
       (selCount ? ' ms-lac-chip-can-stage' : '') +
       (col.count ? ' ms-lac-field-has' : '') +
+      (pendingTarget ? ' ms-lac-chip-pending-warn' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="clinician">' +
@@ -557,10 +615,10 @@
       fieldCountsHtml(col) +
       '</span>' +
       (selCount
-        ? '<span class="ms-lac-chip-stagehint">+' + selCount + '</span>'
+        ? '<span class="ms-lac-chip-stagehint">Plan ' + selCount + ' here</span>'
         : '<span class="ms-lac-field-expand">' + esc(open ? 'Hide' : 'Expand') + '</span>') +
       '<span class="ms-lac-vh">' +
-      esc(selCount ? 'Stage ' + selCount + ' results onto ' + name : expandHint) +
+      esc(selCount ? 'Plan ' + selCount + ' result' + (selCount === 1 ? '' : 's') + ' onto ' + name : expandHint) +
       '</span>' +
       '</button>' +
       (open
@@ -571,32 +629,32 @@
           '">' +
           note +
           (body ||
-            '<div class="ms-lac-empty-sm">Nothing sitting with them yet. Drag from the unallocated box, or select there and click this field.</div>') +
+            '<div class="ms-lac-empty-sm">Nothing sitting with them yet. Drag from the unallocated box, or select there and click this clinician.</div>') +
           '</div>'
         : '') +
       '</div>'
     );
   }
 
+  // Zero results is one designed state, never a bare sentence — whether
+  // the pile itself is empty or a filter has narrowed it to nothing, the
+  // icon empty state shows, and the (single) Clear filter control lives
+  // inside it so the toolbar's own Clear filter never duplicates it.
   function emptyPoolHtml(poolCount) {
-    if (filterActive() && poolCount > 0) {
-      return (
-        '<div class="ms-lac-empty">' +
-        '<div class="ms-lac-empty-title">No unallocated reports match this filter</div>' +
-        '<div class="ms-lac-empty-sub">' +
-        poolCount +
-        ' still waiting — clear the filter to see them.</div>' +
-        '<button type="button" class="ms-lac-ghost" id="ms-lac-filter-clear">Clear filter</button>' +
-        '</div>'
-      );
-    }
+    var filtered = filterActive() && poolCount > 0;
     return (
       '<div class="ms-lac-empty">' +
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
-      '<div class="ms-lac-empty-title">No unallocated reports — nothing is waiting</div>' +
-      '<div class="ms-lac-empty-sub">Work already sitting with a clinician is in their field on the right.</div>' +
+      (filtered
+        ? '<div class="ms-lac-empty-title">No unallocated reports match this filter</div>' +
+          '<div class="ms-lac-empty-sub">' +
+          poolCount +
+          ' still waiting — clear the filter to see them.</div>' +
+          '<button type="button" class="ms-lac-ghost" id="ms-lac-filter-clear">Clear filter</button>'
+        : '<div class="ms-lac-empty-title">No unallocated reports — nothing is waiting</div>' +
+          '<div class="ms-lac-empty-sub">Work already sitting with a clinician is in their field on the right.</div>') +
       '</div>'
     );
   }
@@ -617,31 +675,57 @@
     );
   }
 
-  function poolToolsHtml(board, shown) {
-    var facets = C.poolTestFacets(board.pool.groups, 6);
+  function testFilterChip(label, count, pressed, disabled) {
+    return (
+      '<button type="button" class="ms-lac-filter-chip' +
+      (pressed ? ' is-on' : '') +
+      '" data-filter-test="' +
+      esc(label) +
+      '" aria-pressed="' +
+      (pressed ? 'true' : 'false') +
+      '"' +
+      (disabled ? ' disabled aria-disabled="true"' : '') +
+      '>' +
+      '<span class="ms-lac-filter-chip-label">' +
+      esc(label) +
+      '</span>' +
+      '<span class="ms-lac-filter-chip-count">' +
+      count +
+      '</span>' +
+      '</button>'
+    );
+  }
+
+  function poolToolsHtml(board, shown, countingGroups) {
+    var facets = C.poolTestFacets(board.pool.groups, 6, countingGroups);
     var tests =
-      filterChip('test', '', 'All tests', !_poolTest) +
+      filterChip('test', '', 'All', !_poolTest) +
       facets
         .map(function (f) {
-          return filterChip('test', f.label, f.label + ' ' + f.count, normEq(_poolTest, f.label));
+          var pressed = normEq(_poolTest, f.label);
+          return testFilterChip(f.label, f.count, pressed, !f.count && !pressed);
         })
         .join('');
     return (
       '<div class="ms-lac-pool-tools">' +
-      '<div class="ms-lac-filters" role="group" aria-label="Who ordered">' +
+      '<div class="ms-lac-filter-axis">' +
+      '<span class="ms-lac-filter-axis-label" id="ms-lac-axis-availability">Availability</span>' +
+      '<div class="ms-lac-filters ms-lac-segmented" role="group" aria-labelledby="ms-lac-axis-availability">' +
       filterChip('presence', 'all', 'All', _poolPresence === 'all') +
       filterChip('presence', 'not-in-today', 'Not in today', _poolPresence === 'not-in-today') +
       filterChip('presence', 'in-today', 'In today', _poolPresence === 'in-today') +
-      '</div>' +
-      '<div class="ms-lac-tests" role="group" aria-label="Test">' +
+      '</div></div>' +
+      '<div class="ms-lac-filter-axis">' +
+      '<span class="ms-lac-filter-axis-label" id="ms-lac-axis-test">Test</span>' +
+      '<div class="ms-lac-tests" role="group" aria-labelledby="ms-lac-axis-test">' +
       tests +
-      '</div>' +
+      '</div></div>' +
       '<div class="ms-lac-pool-search-row">' +
       '<input type="search" id="ms-lac-pool-q" value="' +
       esc(_poolQuery) +
       '" placeholder="Patient, test or who ordered" aria-label="Filter unallocated reports">' +
       (shown ? '<button type="button" class="ms-lac-ghost" id="ms-lac-select-visible">Select all shown</button>' : '') +
-      (filterActive()
+      (filterActive() && shown
         ? '<button type="button" class="ms-lac-ghost" id="ms-lac-filter-clear">Clear filter</button>'
         : '') +
       '</div></div>'
@@ -664,6 +748,15 @@
     var pool = board.pool;
     var selCount = selectedIds().length;
     var shownGroups = visiblePool(board);
+    // Same intersection minus the test axis itself — this is what the test
+    // chip counts should reflect (availability + search only), so the
+    // digits move with the other two filters while the six chip choices
+    // themselves stay fixed (poolTestFacets picks those from the full pile).
+    var countingGroups = C.filterPoolGroups(
+      pool.groups,
+      { presence: _poolPresence, query: _poolQuery },
+      presenceByGroupKey(pool.groups)
+    );
     var shownCount = 0;
     shownGroups.forEach(function (g) {
       shownCount += g.count;
@@ -672,7 +765,7 @@
     if (!body && board.count > 0 && !pool.count) {
       body =
         '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left unallocated</div>' +
-        '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or staged onto one on this canvas</div></div>';
+        '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or planned onto one on this canvas</div></div>';
     }
     var sections = railSections(board.clinicians);
     var railBody = sections.length
@@ -692,7 +785,7 @@
             );
           })
           .join('')
-      : '<div class="ms-lac-empty-sm">No clinician fields yet — add one below if you need a drop target.</div>';
+      : '<div class="ms-lac-empty-sm">No clinicians yet — add one below if you need a drop target.</div>';
     return (
       '<div class="ms-lac-workspace">' +
       '<div class="ms-lac-col ms-lac-pool" data-col-key="' +
@@ -703,28 +796,28 @@
       '<h3 class="ms-lac-pool-title">Unallocated reports</h3>' +
       '</div>' +
       '<span class="ms-lac-pool-count">' +
-      (filterActive() ? shownCount + ' of ' + pool.count + ' shown' : pool.count + ' of ' + board.count) +
+      (filterActive() ? shownCount + ' of ' + pool.count + ' shown' : pool.count + ' waiting') +
       '</span>' +
       '</div>' +
-      (pool.count ? poolToolsHtml(board, shownCount) : '') +
+      (pool.count ? poolToolsHtml(board, shownCount, countingGroups) : '') +
       (body || emptyPoolHtml(pool.count)) +
       '</div>' +
-      '<aside class="ms-lac-rail" aria-label="Clinician fields">' +
+      '<aside class="ms-lac-rail" aria-label="Clinicians">' +
       '<div class="ms-lac-rail-head">' +
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
       '<span class="ms-lac-col-meta">' +
       (selCount
-        ? 'Click a field to stage the selection'
+        ? 'Choose a clinician to plan these ' + selCount + ' result' + (selCount === 1 ? '' : 's')
         : 'Favourites first. Drag onto a field — hover near the edge to scroll') +
       '</span>' +
       '</div>' +
       railBody +
       (_addOpen
         ? '<div class="ms-lac-add-row">' +
-          '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="e.g. Dr Jane Cole" aria-label="Add a clinician field">' +
+          '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="e.g. Dr Jane Cole" aria-label="Add clinician">' +
           '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add</button>' +
           '</div>'
-        : '<button type="button" class="ms-lac-ghost ms-lac-add-reveal" id="ms-lac-add-reveal">Add a clinician field…</button>') +
+        : '<button type="button" class="ms-lac-ghost ms-lac-add-reveal" id="ms-lac-add-reveal">Add clinician…</button>') +
       '</aside></div>'
     );
   }
@@ -732,16 +825,13 @@
   function selectionBarHtml() {
     var n = selectedIds().length;
     if (!n) return '';
-    var preview = C.dragPreview(_rows, selectedIds());
     var hidden = C.hiddenSelectedCount(selectedIds(), visibleTileIds(visiblePool(C.buildWorkspace(_rows, _draft))));
     return (
       '<div class="ms-lac-selectbar">' +
       '<span class="ms-lac-selectbar-count">' +
       n +
       ' selected</span>' +
-      '<span class="ms-lac-selectbar-label">' +
-      esc(preview.label) +
-      ' — click a clinician field to stage them, or drag</span>' +
+      '<span class="ms-lac-selectbar-label">Choose a clinician on the right — nothing changes in Medicus until review.</span>' +
       (hidden
         ? '<span class="ms-lac-selectbar-hidden" role="status">' +
           hidden +
@@ -764,7 +854,7 @@
     if (_writing) {
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn" tabindex="-1" id="ms-lac-confirm-sheet">' +
-        '<strong>Writing to Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
+        '<strong>Reassigning in Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
         '</div>'
       );
     }
@@ -774,7 +864,7 @@
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
         '<strong>Close and discard?</strong> ' +
         nClose +
-        ' staged move' +
+        ' planned move' +
         (nClose === 1 ? '' : 's') +
         ' exist only on this canvas — closing forgets them. The Medicus queue itself is untouched either way.' +
         '<div class="ms-lac-confirmbar-actions">' +
@@ -784,47 +874,20 @@
       );
     }
     if (_pendingAbsence) {
+      // Full amber triad + icon — this is a genuine hazard gate, not the
+      // neutral planning chrome around it. The safe choice is the sole
+      // primary; the risky one reads as an amber ghost, never the default.
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
-        '<strong>Absence check before staging.</strong> ' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-absence" role="alert">' +
+        '<span class="ms-lac-absence-icon" aria-hidden="true">' +
+        ALERT_TRIANGLE_SVG +
+        '</span>' +
+        '<span class="ms-lac-confirmbar-note"><strong>Absence check before planning.</strong> ' +
         esc(_pendingAbsence.copy) +
+        '</span>' +
         '<div class="ms-lac-confirmbar-actions">' +
-        '<button type="button" class="ms-lac-ghost" id="ms-lac-abs-cancel">Keep them where they were</button>' +
-        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-abs-stage">Stage anyway</button>' +
-        '</div></div>'
-      );
-    }
-    if (_confirmWrite) {
-      var lines = (_confirmWrite.items || [])
-        .map(function (item) {
-          return (
-            '<li>' + esc(item.patientName || 'Unknown') + ' → ' + esc(C.displayClinicianName(item.toTitle)) + '</li>'
-          );
-        })
-        .join('');
-      var refusedNote = '';
-      if (_confirmWrite.refused && _confirmWrite.refused.length) {
-        refusedNote =
-          '<p class="ms-lac-confirmbar-note">Not included — no unique staff match: ' +
-          esc(
-            _confirmWrite.refused
-              .map(function (r) {
-                return C.displayClinicianName(r.toTitle);
-              })
-              .join(', ')
-          ) +
-          '. Those stay on this canvas.</p>';
-      }
-      return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-sheet" role="region" tabindex="-1" id="ms-lac-confirm-sheet" aria-labelledby="ms-lac-confirm-heading">' +
-        '<strong class="ms-lac-confirm-heading" id="ms-lac-confirm-heading">Medicus will reassign these tasks.</strong> This changes who the task sits with — it does not file the result.' +
-        '<ul class="ms-lac-writelist">' +
-        lines +
-        '</ul>' +
-        refusedNote +
-        '<div class="ms-lac-confirmbar-actions">' +
-        '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Go back</button>' +
-        '<button type="button" class="ms-lac-confirm-btn-primary" id="ms-lac-write-go">Write to Medicus</button>' +
+        '<button type="button" class="ms-lac-confirm-btn-primary" id="ms-lac-abs-cancel">Choose someone else</button>' +
+        '<button type="button" class="ms-lac-ghost-amber" id="ms-lac-abs-stage">Plan here anyway</button>' +
         '</div></div>'
       );
     }
@@ -844,14 +907,14 @@
             })
             .join(', ') +
           '. They stay on this canvas. The canvas is still reading staff, or that name is not in Medicus’s staff list.';
-      } else blockReason = (plan && plan.reason) || 'Cannot write these staged moves.';
+      } else blockReason = (plan && plan.reason) || 'Cannot plan these moves yet.';
     }
     var writeTitle = !sum.count
-      ? 'Stage at least one result onto a clinician field first'
+      ? 'Plan at least one result onto a clinician first'
       : canWrite
         ? 'Review the patient → clinician list, then confirm'
         : blockReason;
-    var writeLabel = canWrite ? 'Review then write…' : sum.count ? 'Why this will not write' : 'Write to Medicus';
+    var writeLabel = sum.count && !canWrite ? 'Why this will not write' : 'Review reassignments…';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
@@ -859,8 +922,8 @@
       '<span class="ms-lac-confirmbar-note">' +
       (blockReason
         ? '<strong>Cannot write these yet.</strong> ' + esc(blockReason)
-        : '<strong>Planning board.</strong> Staged moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
-          (sum.count ? ' (' + sum.count + ' staged so far)' : '') +
+        : '<strong>Planning board.</strong> Planned moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
+          (sum.count ? ' (' + sum.count + ' planned so far)' : '') +
           '.') +
       '</span>' +
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
@@ -868,7 +931,7 @@
       '<button type="button" class="ms-lac-ghost" id="ms-lac-copy">Copy working list</button>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-clear"' +
       (sum.count ? '' : ' disabled') +
-      '>Clear staged moves</button>' +
+      '>Clear planned moves</button>' +
       '<button type="button" class="' +
       (canWrite ? 'ms-lac-confirm-btn-primary' : 'ms-lac-confirm-btn') +
       '" id="ms-lac-finalise"' +
@@ -879,6 +942,77 @@
       esc(writeLabel) +
       '</button>' +
       '</div></div>'
+    );
+  }
+
+  // A real centred modal, not another footer band — reassignment is the
+  // one action in this canvas that actually reaches Medicus, so it gets
+  // full-viewport focus, not a strip competing with the planning chrome.
+  function confirmWriteModalHtml() {
+    var items = (_confirmWrite && _confirmWrite.items) || [];
+    var n = items.length;
+    var destTitles = [];
+    items.forEach(function (item) {
+      var t = C.displayClinicianName(item.toTitle);
+      if (destTitles.indexOf(t) === -1) destTitles.push(t);
+    });
+    var headline =
+      destTitles.length === 1
+        ? 'Reassign <span class="ms-lac-modal-count">' +
+          n +
+          '</span> task' +
+          (n === 1 ? '' : 's') +
+          ' to ' +
+          esc(destTitles[0])
+        : 'Review <span class="ms-lac-modal-count">' + n + '</span> task reassignment' + (n === 1 ? '' : 's');
+    var rows = items
+      .map(function (item) {
+        return (
+          '<div class="ms-lac-modal-row">' +
+          '<span class="ms-lac-modal-row-patient">' +
+          esc(item.patientName || 'Unknown') +
+          '</span>' +
+          '<span class="ms-lac-modal-row-test">' +
+          esc(item.summary || '') +
+          '</span>' +
+          '<span class="ms-lac-modal-row-arrow" aria-hidden="true">→</span>' +
+          '<span class="ms-lac-modal-row-dest">' +
+          esc(C.displayClinicianName(item.toTitle)) +
+          '</span>' +
+          '</div>'
+        );
+      })
+      .join('');
+    var refusedNote = '';
+    if (_confirmWrite.refused && _confirmWrite.refused.length) {
+      refusedNote =
+        '<p class="ms-lac-modal-refused">Not included — no unique staff match: ' +
+        esc(
+          _confirmWrite.refused
+            .map(function (r) {
+              return C.displayClinicianName(r.toTitle);
+            })
+            .join(', ')
+        ) +
+        '. Those stay on this canvas.</p>';
+    }
+    return (
+      '<div class="ms-lac-modal-scrim">' +
+      '<div class="ms-lac-modal" role="dialog" aria-modal="true" tabindex="-1" id="ms-lac-confirm-sheet" aria-labelledby="ms-lac-modal-heading">' +
+      '<h3 class="ms-lac-modal-heading" id="ms-lac-modal-heading">' +
+      headline +
+      '</h3>' +
+      '<p class="ms-lac-modal-sub">This changes who the task sits with — it does not file the result.</p>' +
+      '<div class="ms-lac-modal-rows">' +
+      rows +
+      '</div>' +
+      refusedNote +
+      '<div class="ms-lac-modal-actions">' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Go back</button>' +
+      '<button type="button" class="ms-lac-confirm-btn-primary" id="ms-lac-write-go">Reassign tasks in Medicus</button>' +
+      '</div>' +
+      '</div>' +
+      '</div>'
     );
   }
 
@@ -897,6 +1031,12 @@
       '<div class="ms-lac-panel' +
       (_writing || _confirmWrite ? ' ms-lac-panel-writing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
+      // While the write-confirmation modal is up, everything behind it —
+      // including the header's own Close button — sits under [inert]: no
+      // focus, no pointer events, and the modal scrim dims it visually too.
+      '<div class="ms-lac-panel-inner"' +
+      (_confirmWrite ? ' inert' : '') +
+      '>' +
       '<div class="ms-lac-header">' +
       lead +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>' +
@@ -908,14 +1048,14 @@
       '>Close</button>' +
       '</div>' +
       selectionBarHtml() +
-      '<div class="ms-lac-body' +
-      (_confirmWrite ? ' ms-lac-body-dim' : '') +
-      '"' +
-      (_writing || _confirmWrite ? ' inert' : '') +
+      '<div class="ms-lac-body"' +
+      (_writing ? ' inert' : '') +
       '><div class="ms-lac-board" id="ms-lac-board">' +
       (_loading && !_rows.length ? '<div class="ms-lac-msg">Reading the results queue…</div>' : boardHtml()) +
       '</div></div>' +
       confirmBarHtml() +
+      '</div>' +
+      (_confirmWrite ? confirmWriteModalHtml() : '') +
       '</div>'
     );
   }
@@ -948,6 +1088,19 @@
       });
   }
 
+  // The group headers stick just below the pool head + filter tools —
+  // but that combined height is not a constant: wrapped filter chips grow
+  // it. Measuring the real rendered height (rather than hardcoding it)
+  // means a wrap never lets a group slide out from under the sticky bar.
+  function updateStickyOffset() {
+    var pool = document.querySelector('#' + OVERLAY_ID + ' .ms-lac-pool');
+    if (!pool) return;
+    var head = pool.querySelector('.ms-lac-pool-head');
+    var tools = pool.querySelector('.ms-lac-pool-tools');
+    var h = (head ? head.offsetHeight : 0) + (tools ? tools.offsetHeight : 0);
+    if (h) pool.style.setProperty('--ms-lac-sticky-offset', h + 'px');
+  }
+
   function render() {
     var el = document.getElementById(OVERLAY_ID);
     if (!el || !_open) return;
@@ -956,6 +1109,7 @@
     var focusKey = focusKeyOf(document.activeElement);
     shell.innerHTML = shellHtml();
     bindOverlay(shell);
+    updateStickyOffset();
     if (_focusConfirm) {
       _focusConfirm = false;
       var sheet = shell.querySelector('#ms-lac-confirm-sheet');
@@ -1002,7 +1156,7 @@
     ids.forEach(function (id) {
       _selected[id] = true;
     });
-    announce('Selected ' + ids.length + ' shown — click a clinician field to stage them, or drag');
+    announce('Selected ' + ids.length + ' shown — choose a clinician to plan them, or drag');
     render();
   }
 
@@ -1023,7 +1177,7 @@
     if (!name || !String(name).trim()) return;
     _draft = C.addColumn(_draft, name);
     _addOpen = false;
-    announce('Added clinician field ' + String(name).trim());
+    announce('Added clinician ' + String(name).trim());
     render();
   }
 
@@ -1120,14 +1274,14 @@
         _draft = C.emptyDraft();
         _copyNote = '';
         _pendingAbsence = null;
-        announce('Staged moves cleared. The queue itself is unchanged.');
+        announce('Planned moves cleared. The queue itself is unchanged.');
         render();
       });
     var absCancel = root.querySelector('#ms-lac-abs-cancel');
     if (absCancel)
       absCancel.addEventListener('click', function () {
         _pendingAbsence = null;
-        announce('Not staged. They stayed where they were.');
+        announce('Selection kept. Nothing was planned onto them.');
         render();
       });
     var absStage = root.querySelector('#ms-lac-abs-stage');
@@ -1183,7 +1337,7 @@
       ids.forEach(function (id) {
         _selected[id] = true;
       });
-      announce('Selected ' + ids.length + ' — click a clinician field to stage them, or drag');
+      announce('Selected ' + ids.length + ' — choose a clinician to plan them, or drag');
       render();
     }
     var panel = root.querySelector('.ms-lac-panel');
@@ -1263,6 +1417,36 @@
       });
       tile.addEventListener('dragend', endDrag);
     });
+    // Roving tabindex within each pool listbox — Up/Down move focus among
+    // that group's options only, Enter/Space still select (unchanged
+    // above). Whichever tile last held focus becomes the group's single
+    // tabbable option so Tab lands there next time.
+    root.querySelectorAll('.ms-lac-group-body[role="listbox"]').forEach(function (box) {
+      var sect = box.closest('.ms-lac-group');
+      var groupKey = sect && sect.getAttribute('data-group-key');
+      function opts() {
+        return Array.prototype.slice.call(box.querySelectorAll('[role="option"]'));
+      }
+      box.querySelectorAll('[role="option"]').forEach(function (opt) {
+        opt.addEventListener('focus', function () {
+          if (groupKey) _roving[groupKey] = opt.getAttribute('data-task-id');
+          opts().forEach(function (o) {
+            o.tabIndex = o === opt ? 0 : -1;
+          });
+        });
+      });
+      box.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        var list = opts();
+        if (!list.length) return;
+        var idx = list.indexOf(document.activeElement);
+        if (idx === -1) idx = 0;
+        var next = e.key === 'ArrowDown' ? Math.min(idx + 1, list.length - 1) : Math.max(idx - 1, 0);
+        if (next === idx) return;
+        e.preventDefault();
+        list[next].focus();
+      });
+    });
     function bindDropTarget(el) {
       el.addEventListener('dragover', function (e) {
         e.preventDefault();
@@ -1328,7 +1512,7 @@
           key: key,
           copy: C.absenceWarningCopy(abs, ids.length, title),
         };
-        announce('Absence check before staging onto ' + title);
+        announce('Absence check before planning onto ' + title);
         render();
         return;
       }
@@ -1342,7 +1526,7 @@
     _pendingAbsence = null;
     _dragIds = null;
     if (key && key.indexOf('clinician:') === 0) _expandedChip = key;
-    announce('Staged ' + ids.length + ' result' + (ids.length === 1 ? '' : 's') + ' on this canvas only');
+    announce('Planned ' + ids.length + ' result' + (ids.length === 1 ? '' : 's') + ' on this canvas only');
     render();
   }
 
@@ -1405,8 +1589,9 @@
     if (_writing) return;
     var plan = C.planBulkReassign(_rows, _draft, _taskList, _staffDir);
     if (!plan.ok || !plan.batches.length) {
-      _error = plan.reason || 'Cannot write these staged moves.';
-      announce(_error);
+      // The error banner below renders role="alert" — it announces itself;
+      // calling announce() here too would read the same sentence twice.
+      _error = plan.reason || 'Cannot plan these moves yet.';
       render();
       return;
     }
@@ -1435,7 +1620,8 @@
           (result && result.reason) || 'Medicus did not accept the reassignment. Nothing further was written.';
         _confirmWrite = null;
         _writing = false;
-        announce(failReason);
+        // The error banner below renders role="alert" and announces itself
+        // on insertion — an explicit announce() here would read it twice.
         // A batch that stopped part-way DID write the earlier groups. The
         // board is stale the moment that happens: those rows still show as
         // staged, so the count says work is pending that Medicus already
@@ -1466,8 +1652,8 @@
     } catch (err) {
       _writing = false;
       _confirmWrite = null;
+      // role="alert" on the banner below announces this on its own.
       _error = err && err.message ? err.message : 'Medicus did not accept the reassignment.';
-      announce(_error);
       render();
     }
   }
@@ -1482,7 +1668,7 @@
     }
     if (C.draftSummary(_rows, _draft).count > 0) {
       _confirmClose = true;
-      announce('Close and discard staged moves? Confirm below.');
+      announce('Close and discard planned moves? Confirm below.');
       render();
       return;
     }
@@ -1636,6 +1822,9 @@
   });
   _mo.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('popstate', ensureLauncher);
+  window.addEventListener('resize', function () {
+    if (_open) updateStickyOffset();
+  });
   setInterval(ensureLauncher, 1500);
   ensureLauncher();
 })();

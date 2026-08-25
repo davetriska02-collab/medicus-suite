@@ -1527,27 +1527,44 @@
       .trim();
   }
 
-  function poolTestFacets(groups, cap) {
-    var counts = {};
+  function tallyTestLabels(groups, into) {
     (groups || []).forEach(function (g) {
       (g.tiles || []).forEach(function (t) {
         var label = normTestLabel(t.summary || t.statusText || '');
         if (!label) return;
         var k = label.toLowerCase();
-        if (!counts[k]) counts[k] = { label: label, count: 0 };
-        counts[k].count += 1;
+        if (!into[k]) into[k] = { label: label, count: 0 };
+        into[k].count += 1;
       });
     });
+    return into;
+  }
+
+  // The top-N test choices are derived from the full unfiltered pile so the
+  // chip row does not reshuffle as the availability/search filters change —
+  // only the digit beside each chip should move. Pass countingGroups (the
+  // availability+query intersection, test itself excluded) to make the
+  // counts live while keeping that base six stable. Omit it and both the
+  // choice and the count come from the same groups (old, still-valid call
+  // shape — backward compatible).
+  function poolTestFacets(groups, cap, countingGroups) {
+    var base = tallyTestLabels(groups, {});
     var limit = typeof cap === 'number' ? cap : 6;
-    return Object.keys(counts)
+    var top = Object.keys(base)
       .map(function (k) {
-        return counts[k];
+        return base[k];
       })
       .sort(function (a, b) {
         if (b.count !== a.count) return b.count - a.count;
         return a.label.localeCompare(b.label);
       })
       .slice(0, limit);
+    if (!countingGroups) return top;
+    var live = tallyTestLabels(countingGroups, {});
+    return top.map(function (f) {
+      var k = f.label.toLowerCase();
+      return { label: f.label, count: (live[k] && live[k].count) || 0 };
+    });
   }
 
   function tileMatchesQuery(tile, query) {
