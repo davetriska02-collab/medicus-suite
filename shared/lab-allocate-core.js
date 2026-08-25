@@ -158,14 +158,52 @@
       .trim();
   }
 
+  // One person, two wire formats: the task-list Requested By column carries
+  // "AZADIAN N" (surname then initial) while the appointment book and rota
+  // carry "Dr Natalie Azadian". Canonical form is "surname|initial" —
+  // "azadian|n" from either side — so chips, groups, and presence all agree.
+  // A bare surname ("Anstead") keys as "anstead" and matches any initial.
+  // Known limit: two clinicians sharing surname AND first initial would
+  // merge; this is a stage-only planning board and Medicus's own Reassign
+  // remains the write, so the trade is documented rather than guarded.
+  function personNameKey(name) {
+    var n = normClinicianName(name);
+    if (!n) return '';
+    var toks = n.split(' ');
+    if (toks.length === 1) return toks[0];
+    var last = toks[toks.length - 1];
+    if (last.length === 1) return toks.slice(0, -1).join(' ') + '|' + last;
+    return toks.slice(1).join(' ') + '|' + toks[0].charAt(0);
+  }
+
+  function samePerson(a, b) {
+    var ka = personNameKey(a);
+    var kb = personNameKey(b);
+    if (!ka || !kb) return false;
+    if (ka === kb) return true;
+    var sa = ka.split('|');
+    var sb = kb.split('|');
+    if (sa[0] !== sb[0]) return false;
+    return sa.length === 1 || sb.length === 1;
+  }
+
   function sameClinician(a, b) {
     var na = normClinicianName(a);
     var nb = normClinicianName(b);
-    return !!na && na === nb;
+    if (!!na && na === nb) return true;
+    return samePerson(a, b);
+  }
+
+  // Title-case an ALL-CAPS wire token for display ("AZADIAN N" → "Azadian N").
+  // Mixed-case names pass through untouched.
+  function displayClinicianName(name) {
+    return String(name || '').replace(/\b([A-Z])([A-Z]+)\b/g, function (_, first, rest) {
+      return first + rest.toLowerCase();
+    });
   }
 
   function clinicianColumnKey(name) {
-    var n = normClinicianName(name);
+    var n = personNameKey(name);
     return n ? 'clinician:' + n : UNALLOCATED;
   }
 
@@ -342,7 +380,7 @@
           return r.assignedTo;
         }
       }
-      return key.slice('clinician:'.length);
+      return key.slice('clinician:'.length).replace('|', ' ');
     }
     return key;
   }
@@ -453,13 +491,17 @@
       tiles: poolTiles,
       groups: groupTiles(poolTiles),
     };
+    // How much of the pile each person ordered — the chip's workload signal
+    // and the "take their pile" affordance both read this.
+    var poolCountByKey = {};
+    pool.groups.forEach(function (g) {
+      if (g.known) poolCountByKey[g.key] = g.count;
+    });
     var clinicians = collected.keys.map(function (key) {
       var tiles = tilesOnKey(rows, draft, key);
       var stagedCount = 0;
-      var assignedCount = 0;
       tiles.forEach(function (t) {
         if (t.staged) stagedCount++;
-        else assignedCount++;
       });
       return {
         key: key,
@@ -467,7 +509,7 @@
         title: columnTitle(key, rows, titles),
         count: tiles.length,
         stagedCount: stagedCount,
-        assignedCount: assignedCount,
+        inPoolCount: poolCountByKey[key] || 0,
         tiles: tiles,
         groups: groupTiles(tiles),
       };
@@ -585,6 +627,10 @@
       }
       map[key].tileIds.push(tile.id);
       map[key].tiles.push(tile);
+      // Variants of one person merge into one group; show the fullest name.
+      if (tile.requester && String(tile.requester).length > String(map[key].requester).length) {
+        map[key].requester = tile.requester;
+      }
     });
     return order
       .map(function (key) {
@@ -1050,7 +1096,10 @@
     overviewUrlFor: overviewUrlFor,
     isTeamAssignee: isTeamAssignee,
     normClinicianName: normClinicianName,
+    personNameKey: personNameKey,
+    samePerson: samePerson,
     sameClinician: sameClinician,
+    displayClinicianName: displayClinicianName,
     clinicianColumnKey: clinicianColumnKey,
     inboxColumnKey: inboxColumnKey,
     parseRequestLabel: parseRequestLabel,

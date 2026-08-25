@@ -173,7 +173,7 @@ console.log('\n--- board + draft moves ---');
   const board1 = C.buildWorkspace([a, b], draft);
   const reed = board1.clinicians.find((c) => c.title === 'Dr Reed');
   check(reed && reed.tiles.length === 1 && reed.tiles[0].staged === true, 'drag stages onto a clinician chip');
-  check(reed.stagedCount === 1 && reed.assignedCount === 0, 'chip counts staged vs already-assigned separately');
+  check(reed.stagedCount === 1, 'chip counts what is staged onto it');
   check(
     board1.pool.tiles.length === 1 && board1.pool.tiles[0].patientName === 'A',
     'unstaged requester group stays in the reports pool'
@@ -231,6 +231,23 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
   check(/In today/.test(canvas), 'chips can show In today from the appointment book');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-chip/.test(canvas), 'canvas is a reports pool plus clinician chips');
+  check(/requestStage\(ids, key, btn\.closest/.test(canvas), 'clicking a chip stages the active selection — no drag needed');
+  check(/tabindex="0"/.test(canvas), 'tiles and group heads are keyboard focusable');
+  check(/aria-selected/.test(canvas), 'selection state is exposed to assistive tech');
+  check(/ms-lac-selectbar/.test(canvas), 'an active selection shows a visible count bar');
+  check(/Select all/.test(canvas), 'group headers name their select-all affordance');
+  check(/_confirmClose/.test(canvas), 'closing with staged moves asks before discarding');
+  check(!/do not invent a slug/.test(canvas), 'footer no longer shows developer jargon');
+  check(
+    !/on the payload|Reassign-task endpoint has not been captured live/.test(canvas),
+    'user-facing copy avoids developer vocabulary'
+  );
+  check(/displayClinicianName/.test(canvas), 'ALL-CAPS wire names are title-cased for display');
+  const canvasCss = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.css'), 'utf8');
+  check(/position: sticky/.test(canvasCss), 'group headers stay pinned while the pile scrolls');
+  check(!/#fff7ed|#9a3412|#ffedd5|#fdba74|#fee2e2/.test(canvasCss), 'warn/red surfaces use the token triads, not raw hexes');
+  check(/prefers-reduced-motion/.test(canvasCss), 'motion respects prefers-reduced-motion');
+  check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
   check(!/Add clinician column/.test(canvas), 'clinicians are chips, not full columns');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
   check(/staff-scheduling SCOPING capture/.test(capture), 'staff-scheduling capture script is present');
@@ -277,6 +294,7 @@ console.log('\n--- grouping by who ordered ---');
   check(unknownGroup && unknownGroup.count === 1, 'unknown requester stays in its own pile inside the pool');
   const coleChip = board.clinicians.find((col) => col.title === 'Dr Cole');
   check(coleChip && coleChip.count === 0, 'requester chip stays empty until something is staged onto it');
+  check(coleChip && coleChip.inPoolCount === 2, 'chip counts how much of the pile that person ordered');
   const groups = C.groupTiles([
     { id: a.id, requester: 'Dr Cole' },
     { id: b.id, requester: 'Dr Cole' },
@@ -291,6 +309,59 @@ console.log('\n--- grouping by who ordered ---');
   check(preview.label === '2 results ordered by Dr Cole', 'drag label names who ordered');
   const mixed = C.dragPreview([a, b, c], [a.id, c.id]);
   check(mixed.mixed === true && mixed.canGroup === false, 'mixed requesters cannot auto-group');
+}
+
+console.log('\n--- one person, two wire formats ---');
+{
+  check(C.personNameKey('AZADIAN N') === 'azadian|n', 'caps SURNAME INITIAL keys as surname|initial');
+  check(C.personNameKey('Dr Natalie Azadian') === 'azadian|n', 'full name keys the same');
+  check(C.personNameKey('Anstead') === 'anstead', 'bare surname keys alone');
+  check(C.personNameKey('Subancely Heelas-Ebance') === 'heelas ebance|s', 'hyphenated surname keeps both parts');
+  check(C.personNameKey('HEELAS-EBANCE S') === 'heelas ebance|s', 'caps hyphenated format matches it');
+  check(C.samePerson('AZADIAN N', 'Dr Natalie Azadian') === true, 'caps and full form are one person');
+  check(C.samePerson('Anstead', 'Claire Anstead') === true, 'bare surname matches any initial');
+  check(C.samePerson('AZADIAN N', 'Dr Amy Azadian') === false, 'different initials stay different people');
+  check(C.samePerson('OFFER A', 'Dr Amy Offer') === true, 'sameClinician family covers presence lookups');
+  check(
+    C.clinicianColumnKey('AZADIAN N') === C.clinicianColumnKey('Dr Natalie Azadian'),
+    'both formats land the same chip key'
+  );
+  check(C.displayClinicianName('AZADIAN N') === 'Azadian N', 'ALL-CAPS wire names are title-cased for display');
+  check(
+    C.displayClinicianName('Dr Georgina BLANCO') === 'Dr Georgina Blanco',
+    'mixed names only fix the shouting token'
+  );
+
+  // Two requester formats for one person merge into ONE pool group and chip.
+  const r1 = C.applyRequester(
+    C.normaliseTaskRow({ id: uuid(41), patientName: 'A', assignedTo: 'Investigation Reports', summary: 'FBC' }, 'x'),
+    { name: 'AZADIAN N', source: 'requestedBy', confidence: 'requester' }
+  );
+  const r2 = C.applyRequester(
+    C.normaliseTaskRow({ id: uuid(42), patientName: 'B', assignedTo: 'Investigation Reports', summary: 'TSH' }, 'x'),
+    { name: 'Dr Natalie Azadian', source: 'requestedBy', confidence: 'requester' }
+  );
+  const ws2 = C.buildWorkspace([r1, r2], C.emptyDraft());
+  const azChips = ws2.clinicians.filter((c) => /azadian/i.test(c.title));
+  check(azChips.length === 1, 'one chip for one person, not one per name format');
+  const azGroup = ws2.pool.groups.filter((g) => /azadian/i.test(g.requester));
+  check(azGroup.length === 1 && azGroup[0].count === 2, 'both formats share one pool group');
+  check(azGroup[0].requester === 'Dr Natalie Azadian', 'the group shows the fullest name variant');
+
+  // The caps chip title now matches the appointment book and rota.
+  const book = C.parseTodayBook({
+    date: '2026-08-25',
+    staffSchedules: [{ name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] }],
+  });
+  const pres = C.presenceForName({ name: 'AZADIAN N', dateISO: '2026-08-25', book: book });
+  check(pres.state === 'present' && pres.reason === 'in-today', 'caps chip reads In today off the book');
+  const rotaAway = C.presenceForName({
+    name: 'AZADIAN N',
+    dateISO: '2026-08-25',
+    staffList: [{ id: 's9', name: 'Dr Natalie Azadian', notAPerson: false }],
+    leaveList: [{ staffId: 's9', status: 'approved', type: 'annual', startDate: '2026-08-01', endDate: '2026-09-01' }],
+  });
+  check(rotaAway.state === 'away', 'caps chip reads Away off the rota leave list');
 }
 
 console.log('\n--- inbox name is never a clinician chip ---');
