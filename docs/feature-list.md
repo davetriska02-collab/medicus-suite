@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.242.3
+**Version:** v3.242.4
 **Generated:** 2026-08-25 (automated)
 
 ## What it is
@@ -136,6 +136,7 @@ The full **Rota Manager** (separate browser tab) additionally covers working-pat
 These run directly on live Medicus pages, on top of Medicus's own UI:
 
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue; compresses into a compact "pulse" display on busy queues.
+- **Lab allocation canvas** — on the investigation-results queue, a stage-only board: the reports pile grouped by who requested them, with clinician chips on the right. Does not write to Medicus until the Reassign path is captured live.
 - **Inline booking and task creation** — appointment-booking and create-task panels injected directly on patient and task pages, using Medicus's own scheduling and task-creation controls. The same floating **Companion** box (Clinic / Reception / Triage / Nursing) carries a read-only pocket Sentinel **What’s due** strip (drug monitoring, QOF, vaccines) identity-gated to this page’s patient — reception in booking voice, nursing in treatment-room voice — plus honest desk / slots / pulse glances by role. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab.
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document; a checklist that turns a document's coded journal entries into new Problems.
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit.
@@ -143,7 +144,6 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with SNOMED- and text-based suggested links; tick several tiles (or Ctrl/⌘-click) and drag the set together; every change staged, then confirmed together.
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance; tick several tiles and drag the set onto End or Dual-coded.
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view.
-- **Lab allocation canvas** — on the investigation-results queue, a drag-and-drop board that groups incoming labs by who ordered them when that field is on the payload; moves are staged on the canvas only until Medicus's Reassign-task write is captured.
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch.
 - **Task presence** — shows a colleague's name on a queue row they already have open, backed by the practice's own shared folder; advisory only, never a lock.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker.

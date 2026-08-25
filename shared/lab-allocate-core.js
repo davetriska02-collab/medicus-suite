@@ -10,7 +10,7 @@
 //   - reads a results-queue task-list (same envelopes as task-bulk-action)
 //   - extracts a requester when the overview / OIR-style label actually
 //     names one (never treats named GP as "who ordered")
-//   - builds a clinician-column board and stages drag-and-drop moves
+//   - builds a reports-pool + clinician-chip workspace and stages moves
 //
 // WRITE CONTRACT: not captured. canWriteAllocations() is always false.
 // Do not invent a reassign slug. Capture it live with
@@ -23,6 +23,7 @@
 
 (function (global) {
   var UNALLOCATED = 'unallocated';
+  var POOL = 'pool';
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var RESULT_SLUG_RE = /investigation|result/i;
   var TEAM_ASSIGNEE_RE =
@@ -283,11 +284,16 @@
   }
 
   function homeColumnKey(row) {
-    if (row && row.requester) return clinicianColumnKey(row.requester);
-    if (row && row.assignedTo) {
-      return isTeamAssignee(row.assignedTo) ? inboxColumnKey(row.assignedTo) : clinicianColumnKey(row.assignedTo);
+    // Already sitting with a named person in Medicus — show on their chip.
+    // Requester evidence does NOT auto-place: those stay in the reports pool,
+    // grouped by who ordered, until someone stages them onto a chip.
+    if (row && row.assignedTo && !isTeamAssignee(row.assignedTo)) {
+      var key = clinicianColumnKey(row.assignedTo);
+      // A name that normalises to nothing has no chip to sit on — pool it
+      // rather than parking it on a key no column renders.
+      if (key !== UNALLOCATED) return key;
     }
-    return UNALLOCATED;
+    return POOL;
   }
 
   function placementReason(row) {
@@ -311,7 +317,7 @@
 
   function columnTitle(key, rows, titles) {
     if (titles && titles[key]) return titles[key];
-    if (key === UNALLOCATED) return 'Unallocated';
+    if (key === POOL || key === UNALLOCATED) return 'Investigation reports';
     if (key.indexOf('inbox:') === 0) {
       for (var i = 0; i < rows.length; i++) {
         if (inboxColumnKey(rows[i].assignedTo) === key) return rows[i].assignedTo || 'Inbox';
@@ -360,62 +366,115 @@
     return staged || homeColumnKey(row);
   }
 
+  function isClinicianKey(key) {
+    return typeof key === 'string' && key.indexOf('clinician:') === 0;
+  }
+
+  function tileFromRow(row, draft, key) {
+    return {
+      id: row.id,
+      patientName: row.patientName,
+      summary: row.summary,
+      assignedTo: row.assignedTo,
+      namedGp: row.namedGp,
+      statusText: row.statusText || row.status,
+      requester: row.requester,
+      requesterSource: row.requesterSource,
+      createdAt: row.createdAt,
+      overviewURL: row.overviewURL,
+      homeKey: homeColumnKey(row),
+      columnKey: key,
+      staged: !!(draft.moves && draft.moves[row.id] && draft.moves[row.id] !== homeColumnKey(row)),
+      reason: placementReason(row),
+    };
+  }
+
+  function tilesOnKey(rows, draft, key) {
+    return rows
+      .filter(function (row) {
+        return visualColumnKey(row, draft) === key;
+      })
+      .map(function (row) {
+        return tileFromRow(row, draft, key);
+      });
+  }
+
+  function collectClinicianKeys(rows, draft) {
+    var seen = {};
+    var titles = Object.assign({}, (draft && draft.columnTitles) || {});
+    function remember(key, title) {
+      if (!isClinicianKey(key)) return;
+      seen[key] = true;
+      if (title && !titles[key]) titles[key] = clip(title, 80);
+    }
+    ((draft && draft.extraColumns) || []).forEach(function (k) {
+      remember(k, titles[k]);
+    });
+    rows.forEach(function (row) {
+      if (row.requester) remember(clinicianColumnKey(row.requester), row.requester);
+      if (row.assignedTo && !isTeamAssignee(row.assignedTo)) {
+        remember(clinicianColumnKey(row.assignedTo), row.assignedTo);
+      }
+      remember(visualColumnKey(row, draft), null);
+    });
+    return { keys: Object.keys(seen).sort(), titles: titles };
+  }
+
   function buildBoard(rows, draft) {
     draft = draft || emptyDraft();
     rows = Array.isArray(rows) ? rows.filter(Boolean) : [];
-    var keys = {};
-    keys[UNALLOCATED] = true;
-    (draft.extraColumns || []).forEach(function (k) {
-      keys[k] = true;
+    var collected = collectClinicianKeys(rows, draft);
+    var titles = collected.titles;
+    var onChip = {};
+    collected.keys.forEach(function (key) {
+      onChip[key] = true;
     });
-    rows.forEach(function (row) {
-      keys[homeColumnKey(row)] = true;
-      keys[visualColumnKey(row, draft)] = true;
-    });
-    var clinician = [];
-    var inboxes = [];
-    Object.keys(keys).forEach(function (key) {
-      if (key === UNALLOCATED) return;
-      if (key.indexOf('inbox:') === 0) inboxes.push(key);
-      else clinician.push(key);
-    });
-    clinician.sort();
-    inboxes.sort();
-    var order = [UNALLOCATED].concat(inboxes, clinician);
-    var titles = Object.assign({}, draft.columnTitles || {});
-    var columns = order.map(function (key) {
-      var tiles = rows
-        .filter(function (row) {
-          return visualColumnKey(row, draft) === key;
-        })
-        .map(function (row) {
-          return {
-            id: row.id,
-            patientName: row.patientName,
-            summary: row.summary,
-            assignedTo: row.assignedTo,
-            namedGp: row.namedGp,
-            statusText: row.statusText || row.status,
-            requester: row.requester,
-            requesterSource: row.requesterSource,
-            createdAt: row.createdAt,
-            overviewURL: row.overviewURL,
-            homeKey: homeColumnKey(row),
-            columnKey: key,
-            staged: !!(draft.moves && draft.moves[row.id] && draft.moves[row.id] !== homeColumnKey(row)),
-            reason: placementReason(row),
-          };
-        });
+    // The pool is the catch-all. Every row is either on a clinician chip or
+    // in here — a result must never fall off the board.
+    var poolTiles = rows
+      .filter(function (row) {
+        return !onChip[visualColumnKey(row, draft)];
+      })
+      .map(function (row) {
+        return tileFromRow(row, draft, POOL);
+      });
+    var pool = {
+      key: POOL,
+      kind: 'pool',
+      title: columnTitle(POOL, rows, titles),
+      count: poolTiles.length,
+      tiles: poolTiles,
+      groups: groupTiles(poolTiles),
+    };
+    var clinicians = collected.keys.map(function (key) {
+      var tiles = tilesOnKey(rows, draft, key);
+      var stagedCount = 0;
+      var assignedCount = 0;
+      tiles.forEach(function (t) {
+        if (t.staged) stagedCount++;
+        else assignedCount++;
+      });
       return {
         key: key,
-        kind: key === UNALLOCATED ? 'unallocated' : key.indexOf('inbox:') === 0 ? 'inbox' : 'clinician',
+        kind: 'clinician',
         title: columnTitle(key, rows, titles),
         count: tiles.length,
+        stagedCount: stagedCount,
+        assignedCount: assignedCount,
         tiles: tiles,
         groups: groupTiles(tiles),
       };
     });
-    return { columns: columns, count: rows.length };
+    return {
+      pool: pool,
+      clinicians: clinicians,
+      columns: [pool].concat(clinicians),
+      count: rows.length,
+    };
+  }
+
+  function buildWorkspace(rows, draft) {
+    return buildBoard(rows, draft);
   }
 
   function draftSummary(rows, draft) {
@@ -525,9 +584,11 @@
         var g = map[key];
         g.count = g.tiles.length;
         g.label = g.known
-          ? 'Ordered by ' + g.requester + ' · ' + g.count + ' result' + (g.count === 1 ? '' : 's')
-          : 'Who ordered unknown · ' + g.count + ' result' + (g.count === 1 ? '' : 's');
-        g.dragHint = g.known ? 'Drag this group onto that clinician' : 'Cannot auto-group — who ordered is missing';
+          ? 'Requested by ' + g.requester + ' · ' + g.count + ' result' + (g.count === 1 ? '' : 's')
+          : 'Who requested unknown · ' + g.count + ' result' + (g.count === 1 ? '' : 's');
+        g.dragHint = g.known
+          ? 'Drag this group onto that clinician’s chip'
+          : 'Cannot auto-group — who requested is missing';
         return g;
       })
       .sort(function (a, b) {
@@ -758,6 +819,7 @@
 
   var api = {
     UNALLOCATED: UNALLOCATED,
+    POOL: POOL,
     WRITE_BLOCKED: WRITE_BLOCKED,
     isResultsQueueSlug: isResultsQueueSlug,
     parseResultsQueueRoute: parseResultsQueueRoute,
@@ -781,6 +843,7 @@
     stageMove: stageMove,
     stageMoves: stageMoves,
     buildBoard: buildBoard,
+    buildWorkspace: buildWorkspace,
     draftSummary: draftSummary,
     copyList: copyList,
     canWriteAllocations: canWriteAllocations,

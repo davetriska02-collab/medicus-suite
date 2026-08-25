@@ -102,7 +102,7 @@ else stays in Unallocated or the current inbox column.
 | List every incoming lab | Yes | Same task-list GET the bulk-action widget already uses |
 | See current assignee / status / named GP | Yes, if the results queue matches the confirmed row keys | Fail-open if a field is missing |
 | See who ordered | **Sometimes** | Overview walker for `requestedBy` / aliases; OIR-style `Panel (Dr X • date)` strings if they appear in the payload. Not confirmed. |
-| Suggest a column | Yes, fail-closed | Requester → clinician column. Else inbox / unallocated. Named GP is a caption only. |
+| Suggest a column | Stage only | Requester groups the reports pool. Drag onto a clinician chip to stage. Named GP is a caption only. |
 | Drag / batch-mark on a canvas | Yes | Stage-only, same doctrine as appointment-organise |
 | Write the allocation back to Medicus | **No** | Reassign-task endpoint has not been captured. `canWriteAllocations()` is hard-false. |
 
@@ -120,7 +120,7 @@ On the live results queue, with a **dummy patient only**:
    whether anything already looks like a requester.
 3. Open one overview (the script fetches the first). Check
    `requesterShaped` — if `requestedBy` (or equivalent) is there, the
-   canvas will start auto-placing without any new code.
+   canvas can group the reports pool without any new code.
 4. In Medicus, reassign that one dummy result the native way. The script
    records the POST/PUT/PATCH path and body keys.
 5. Those bytes become the write contract — same discipline as
@@ -131,24 +131,36 @@ Until that paste-back, the canvas is a **planning board**.
 
 ---
 
-## Grouping and absences (v3.242.1)
+## Grouping and absences (v3.242.1 / v3.242.4)
+
+The canvas is one **Investigation reports** pool, grouped by who
+requested the test, plus small **clinician chips** on the right. A
+requester does not auto-move out of the pool — drag the group onto
+their chip. Click a chip to see anything already assigned to them in
+Medicus, or staged onto them on this canvas.
 
 Same-requester tiles group under one header and drag as a set. The drag
 ghost names who ordered them. That only works when requester evidence
 is on the payload — unknown rows stay in their own pile.
 
-Allocation onto a **person** always consults `rota.staff` + `rota.leave`
+Dropping onto a **person** always consults `rota.staff` + `rota.leave`
 on this machine (approved and requested leave for today, matching
 `name` or `medicusName`). If they are away, or we cannot tell, the drop
 does not stage until the warning is acknowledged. An empty rota is
 **absence unknown**, not “everyone is in”.
 
+Medicus's own Staff scheduling page is still a discovery gap. Paste
+`scripts/staff-scheduling-capture.js` on that screen and click around
+so we can see who's in / leave / sessions from the host app, not only
+this machine's rota store.
+
 ---
 
 ## Shipped in this pass
 
-- `shared/lab-allocate-core.js` — route, row, requester walker, board, draft.
+- `shared/lab-allocate-core.js` — route, row, requester walker, pool + chips, draft.
 - `content-scripts/lab-allocate-canvas.js` — launch button on a results
-  task-list, drag-and-drop, add-a-clinician-column, copy working list.
-- `scripts/lab-allocate-capture.js` — the live scoping tool above.
+  task-list, reports pool, clinician chips, copy working list.
+- `scripts/lab-allocate-capture.js` — live Reassign-path scoping.
+- `scripts/staff-scheduling-capture.js` — live Staff scheduling scoping.
 - `test-lab-allocate-core.js` — placement rules, no-write lock, GET-only client.
