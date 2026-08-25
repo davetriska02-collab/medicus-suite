@@ -13,7 +13,8 @@ Sentinel chips, HUD severity colours, or the visualiser's NHS palette.
 - **Lab allocation** now reads as a Companion surface: title-then-badge
   header, numbered how-to pills, pill filter chips, hairline+shadow cards,
   a 3px left rail for away/selected/planned rows, and a collapsed launcher
-  with an accent count (operational, not a clinical alert).
+  that prefetches the unallocated count onto an accent badge (operational,
+  not a clinical alert).
 - First-use copy is plainer: **Planned** instead of STAGED, **this board**
   instead of canvas jargon, Medicus-labelled counts, an early reload when
   the results list is not yet confirmed, and a tooltip on Copy working list.
