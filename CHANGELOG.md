@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.3] — 2026-08-25
+
+### Lab allocation canvas — launcher focus ring restored
+
+`#ms-lac-launch` is appended to `<html>`, outside `#ms-lac-overlay`, so the
+overlay's token block was never an ancestor of it. `outline: 2px solid
+var(--accent)` therefore resolved to an invalid value and the whole shorthand
+was dropped — the **Allocate labs on canvas…** button had no keyboard focus
+ring at all. Split into its own rule with a literal colour. Same
+token-scope trap as the injected-chip "white rectangle" class.
+
+Also: `docs/feature-list.md` carried a stray trailing comma on its version
+line (`v3.242.2,`).
+
 ## [v3.242.2] — 2026-08-25
 
 ### Triage Lens — remove the pulse Act tray

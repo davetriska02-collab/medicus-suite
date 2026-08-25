@@ -104,9 +104,17 @@
 .ms-lac-close:focus-visible,
 .ms-lac-ghost:focus-visible,
 .ms-lac-confirm-btn:focus-visible,
-#ms-lac-add-name:focus-visible,
-#ms-lac-launch:focus-visible {
+#ms-lac-add-name:focus-visible {
   outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The launcher is appended to <html>, NOT inside #ms-lac-overlay, so the
+   token block above is not an ancestor of it — var(--accent) would resolve
+   to nothing and invalidate the whole `outline` shorthand, leaving the
+   button with no keyboard focus ring. Literal value, same colour. */
+#ms-lac-launch:focus-visible {
+  outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
