@@ -151,14 +151,17 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
   check(C.isTeamAssignee('Triage Doctor') === true, 'Triage Doctor is a team-like inbox');
   check(C.isTeamAssignee('Investigation Reports') === true, 'Investigation Reports is the results inbox, not a person');
   check(C.isTeamAssignee('Dr Jane Cole') === false, 'a named doctor is not a team');
-  check(C.homeColumnKey(person) === C.POOL, 'every queue row homes to the reports pool');
+  check(
+    C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'),
+    'person assignee homes to that clinician field'
+  );
   check(C.placementReason(person) === 'current-assignee', 'no requester → current-assignee, not who-ordered');
 
   const inbox = C.normaliseTaskRow(
     { id: uuid(2), patientName: 'PATEL, Ali', assignedTo: 'Results', namedGp: 'Dr Registered GP' },
     'review-investigation-report'
   );
-  check(C.homeColumnKey(inbox) === C.POOL, 'team assignee stays in the investigation-reports pool');
+  check(C.homeColumnKey(inbox) === C.POOL, 'team assignee stays in the unallocated reports pool');
   check(C.placementReason(inbox) === 'inbox', 'inbox reason is still recorded');
   check(inbox.namedGp === 'Dr Registered GP', 'named GP kept as a hint only');
 }
@@ -170,7 +173,7 @@ console.log('\n--- requester placement never uses named GP ---');
     'review-investigation-report'
   );
   C.applyRequester(row, { name: 'Dr David Triska', source: 'requestedBy', confidence: 'requester' });
-  check(C.homeColumnKey(row) === C.POOL, 'requester stays in the reports pool — not auto-placed onto a column');
+  check(C.homeColumnKey(row) === C.POOL, 'requester stays in the unallocated pool — not auto-placed onto a field');
   check(C.placementReason(row) === 'requester', 'reason is requester');
   check(C.sameClinician('Dr David Triska', 'David Triska') === true, 'title-stripped name match');
 }
@@ -184,26 +187,26 @@ console.log('\n--- board + draft moves ---');
   const b = C.normaliseTaskRow({ id: uuid(2), patientName: 'B', assignedTo: 'Results', summary: 'U&E' }, 'x');
   const board0 = C.buildWorkspace([a, b], C.emptyDraft());
   check(board0.pool && board0.pool.title === 'Investigation reports', 'pool is the investigation-reports pile');
-  check(board0.pool.tiles.length === 2, 'requester and unknown both stay in the pool until staged');
+  check(board0.pool.tiles.length === 2, 'inbox requester and unknown both stay unallocated until staged');
   check(
     board0.pool.groups[0] && board0.pool.groups[0].requester === 'Dr Cole' && board0.pool.groups[0].count === 1,
-    'pool groups by who requested'
+    'unallocated pool groups by who requested'
   );
   check(
     board0.clinicians.some((c) => c.title === 'Dr Cole' && c.count === 0),
-    'requester appears as an empty clinician chip'
+    'requester appears as an empty clinician field'
   );
-  check(!board0.clinicians.some((c) => c.title === 'Results'), 'the shared inbox is not a clinician chip');
+  check(!board0.clinicians.some((c) => c.title === 'Results'), 'the shared inbox is not a clinician field');
 
   let draft = C.addColumn(C.emptyDraft(), 'Dr Reed');
   draft = C.stageMove(draft, b.id, C.clinicianColumnKey('Dr Reed'));
   const board1 = C.buildWorkspace([a, b], draft);
   const reed = board1.clinicians.find((c) => c.title === 'Dr Reed');
-  check(reed && reed.tiles.length === 1 && reed.tiles[0].staged === true, 'drag stages onto a clinician chip');
-  check(reed.stagedCount === 1, 'chip counts what is staged onto it');
+  check(reed && reed.tiles.length === 1 && reed.tiles[0].staged === true, 'drag stages onto a clinician field');
+  check(reed.stagedCount === 1, 'field counts what is staged onto it');
   check(
     board1.pool.tiles.length === 1 && board1.pool.tiles[0].patientName === 'A',
-    'unstaged requester group stays in the reports pool'
+    'unstaged requester group stays in the unallocated pool'
   );
   const sum = C.draftSummary([a, b], draft);
   check(sum.count === 1 && sum.items[0].toTitle === 'Dr Reed', 'draft summary names the destination');
@@ -277,10 +280,14 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/change-absence/.test(canvas), 'canvas never calls change-absence');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
   check(/In today/.test(canvas), 'chips can show In today from the appointment book');
-  check(/ms-lac-pool/.test(canvas) && /ms-lac-chip/.test(canvas), 'canvas is a reports pool plus clinician chips');
+  check(
+    /ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas) && /ms-lac-chip/.test(canvas),
+    'canvas is an unallocated pool plus clinician fields'
+  );
+  check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
   check(
     /requestStage\(ids, key, btn\.closest/.test(canvas),
-    'clicking a chip stages the active selection — no drag needed'
+    'clicking a field stages the active selection — no drag needed'
   );
   check(/tabindex="0"/.test(canvas), 'tiles and group heads are keyboard focusable');
   check(/aria-selected/.test(canvas), 'selection state is exposed to assistive tech');
@@ -302,7 +309,7 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/prefers-reduced-motion/.test(canvasCss), 'motion respects prefers-reduced-motion');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
-  check(!/Add clinician column/.test(canvas), 'clinicians are chips, not full columns');
+  check(!/Add clinician column/.test(canvas), 'clinicians are fields, not full-page columns');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
   check(/staff-scheduling SCOPING capture/.test(capture), 'staff-scheduling capture script is present');
   check(!/method:\s*['"]POST['"]/.test(capture), 'staff-scheduling capture does not POST');
@@ -344,14 +351,14 @@ console.log('\n--- grouping by who ordered ---');
   );
   const c = C.normaliseTaskRow({ id: uuid(3), patientName: 'C', assignedTo: 'Results', summary: 'LFT' }, 'x');
   const board = C.buildWorkspace([a, b, c], C.emptyDraft());
-  check(board.pool.tiles.length === 3, 'all inbox results start in the reports pool');
+  check(board.pool.tiles.length === 3, 'all inbox results start in the unallocated pool');
   const coleGroup = board.pool.groups.find((g) => g.requester === 'Dr Cole');
   const unknownGroup = board.pool.groups.find((g) => !g.known);
   check(coleGroup && coleGroup.count === 2, 'same-requester tiles share one pool group');
   check(unknownGroup && unknownGroup.count === 1, 'unknown requester stays in its own pile inside the pool');
   const coleChip = board.clinicians.find((col) => col.title === 'Dr Cole');
-  check(coleChip && coleChip.count === 0, 'requester chip stays empty until something is staged onto it');
-  check(coleChip && coleChip.inPoolCount === 2, 'chip counts how much of the pile that person ordered');
+  check(coleChip && coleChip.count === 0, 'requester field stays empty until something sits with them');
+  check(coleChip && coleChip.inPoolCount === 2, 'field counts how much of the unallocated pile that person ordered');
   const groups = C.groupTiles([
     { id: a.id, requester: 'Dr Cole' },
     { id: b.id, requester: 'Dr Cole' },
@@ -421,6 +428,44 @@ console.log('\n--- one person, two wire formats ---');
   check(rotaAway.state === 'away', 'caps chip reads Away off the rota leave list');
 }
 
+console.log('\n--- person-assigned sits on the clinician field ---');
+{
+  const assigned = C.normaliseTaskRow(
+    { id: uuid(21), patientName: 'A', assignedTo: 'Dr Jane Cole', summary: 'FBC' },
+    'x'
+  );
+  const inbox = C.normaliseTaskRow(
+    {
+      id: uuid(22),
+      patientName: 'B',
+      assignedTo: 'Investigation Reports',
+      requestedBy: 'COLE J',
+      namedGp: 'Dr Registered GP',
+      summary: 'U&E',
+    },
+    'x'
+  );
+  check(
+    C.homeColumnKey(assigned) === C.clinicianColumnKey('Dr Jane Cole'),
+    'already sitting with a person homes to that field'
+  );
+  check(C.homeColumnKey(inbox) === C.POOL, 'inbox work stays in the large unallocated box');
+  const board = C.buildWorkspace([assigned, inbox], C.emptyDraft());
+  check(
+    board.pool.tiles.length === 1 && board.pool.tiles[0].patientName === 'B',
+    'only unallocated sit in the large box'
+  );
+  const cole = board.clinicians.find((c) => /cole/i.test(c.title));
+  check(
+    cole && cole.tiles.some((t) => t.patientName === 'A' && t.staged === false),
+    'already-assigned sits on the clinician field, not staged'
+  );
+  check(inbox.requester === 'COLE J', 'requester is still read for grouping on the unallocated pile');
+  check(inbox.namedGp === 'Dr Registered GP', 'named GP stays a caption and does not move the row');
+  const back = C.stageMove(C.emptyDraft(), assigned.id, C.POOL);
+  check(C.draftSummary([assigned], back).count === 0, 'dropping a person-assigned row on the pool is not a write');
+}
+
 console.log('\n--- inbox name is never a clinician chip ---');
 {
   const inboxRow = C.normaliseTaskRow(
@@ -434,14 +479,14 @@ console.log('\n--- inbox name is never a clinician chip ---');
     'x'
   );
   const ws = C.buildWorkspace([inboxRow], C.emptyDraft());
-  check(ws.pool.tiles.length === 1, 'inbox-assigned result stays in the reports pool');
+  check(ws.pool.tiles.length === 1, 'inbox-assigned result stays in the unallocated pool');
   check(
     !ws.clinicians.some((c) => /investigation reports/i.test(c.title)),
-    'Investigation Reports is not a clinician chip'
+    'Investigation Reports is not a clinician field'
   );
   check(
     ws.clinicians.some((c) => c.title === 'HEYLEN E' && c.count === 0),
-    'the requester is an empty drop-target chip'
+    'the requester is an empty drop-target field'
   );
 }
 
@@ -671,8 +716,7 @@ async function testClient() {
                 {
                   id: uuid(1),
                   patientName: 'A',
-                  assignedTo: 'Dr Natalie Azadian',
-                  assignedId: uuid(21),
+                  assignedTo: 'Investigation Reports',
                   requestedBy: 'AZADIAN N',
                   overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(1),
                 },
@@ -740,7 +784,20 @@ async function testClient() {
   const row = out.rows[0];
   C.applyRequester(row, { name: 'AZADIAN N', source: 'requestedBy', confidence: 'requester' });
   const draft = C.stageMove(C.emptyDraft(), row.id, C.clinicianColumnKey('AZADIAN N'));
-  const dir = C.harvestStaffDirectory(out.rows, null);
+  const dir = C.harvestStaffDirectory(
+    [
+      C.normaliseTaskRow(
+        {
+          id: uuid(99),
+          patientName: 'Dir',
+          assignedTo: 'Dr Natalie Azadian',
+          assignedId: uuid(21),
+        },
+        'x'
+      ),
+    ],
+    null
+  );
   const written = await client.commitAllocations({
     slug: 'review-investigation-report',
     draft: draft,
@@ -796,19 +853,24 @@ console.log('--- board keeps every row visible ---');
     return n + col.tiles.length;
   }, 0);
   check(shown === board.count, 'every row appears exactly once on the board');
-  check(board.pool.count === 4, 'every queue row sits in the pool until staged');
+  check(board.pool.count === 3, 'unallocated / inbox / unkeyable names stay in the pool');
+  const jones = board.clinicians.find(function (c) {
+    return /jones/i.test(c.title);
+  });
+  check(jones && jones.count === 1, 'person-assigned work sits on that clinician field');
   const poolIds = board.pool.tiles.map(function (t) {
     return t.id;
   });
   check(poolIds.indexOf(rows[0].id) !== -1, 'a name that normalises to nothing stays visible in the pool');
+  check(poolIds.indexOf(rows[2].id) === -1, 'person-assigned work is not also in the unallocated box');
 
-  const staged = C.stageMove(C.emptyDraft(), rows[0].id, 'clinician:b jones');
+  const staged = C.stageMove(C.emptyDraft(), rows[0].id, C.clinicianColumnKey('Dr B Jones'));
   const after = C.buildBoard(rows, staged);
   const shownAfter = after.columns.reduce(function (n, col) {
     return n + col.tiles.length;
   }, 0);
   check(shownAfter === after.count, 'staging a move does not drop a row');
-  check(after.pool.count === 3, 'staged row leaves the pool');
+  check(after.pool.count === 2, 'staged row leaves the unallocated pool');
 }
 
 testClient()

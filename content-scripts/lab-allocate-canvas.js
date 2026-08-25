@@ -1,11 +1,12 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
 // Medicus Suite — lab allocation canvas (v2 workbench + captured write)
 //
-// Full-bleed workspace over the investigation-results task-list. The pile is
-// Investigation reports, grouped by who requested them — one-line rows under
-// sticky group headers so 73 results read at a glance. Clinicians are drop
-// chips on the right: select a group (click its header) then click a chip to
-// stage, or drag. Named GP is a hint, never auto-placement.
+// Full-bleed workspace over the investigation-results task-list. The large
+// left box is UNALLOCATED investigation reports only, grouped by who
+// requested them. Already-assigned work sits in the right-hand clinician
+// fields — click a field to expand and see what sits with them. Select in
+// the pile, then drag onto a field (or click the field). Named GP is a
+// hint, never auto-placement.
 //
 // Writing uses Medicus's own POST /tasks/task-list/bulk-reassign (captured
 // 2026-08-25). The canvas never POSTs itself — it calls LabAllocateCore's
@@ -208,7 +209,7 @@
     var selected = !!_selected[tile.id];
     var cls = 'ms-lac-tile' + (tile.staged ? ' ms-lac-tile-staged' : '') + (selected ? ' ms-lac-tile-picked' : '');
     var assignedPerson =
-      tile.assignedTo && !C.isTeamAssignee(tile.assignedTo)
+      opts.showAssignee && tile.assignedTo && !C.isTeamAssignee(tile.assignedTo)
         ? '<span class="ms-lac-tile-token">with ' + esc(C.displayClinicianName(tile.assignedTo)) + '</span>'
         : '';
     var whoLine = '';
@@ -291,7 +292,7 @@
           '">' +
           group.tiles
             .map(function (t) {
-              return tileHtml(t, { showWho: !group.known });
+              return tileHtml(t, { showWho: !group.known, showAssignee: true });
             })
             .join('') +
           '</div>') +
@@ -299,21 +300,22 @@
     );
   }
 
-  function chipCounts(col) {
+  function fieldCounts(col) {
     var bits = [];
-    if (col.stagedCount) bits.push(col.stagedCount + ' staged');
-    if (col.inPoolCount) bits.push(col.inPoolCount + ' in pile');
-    return bits.length ? bits.join(' · ') : 'none in pile';
+    bits.push(col.count + ' sitting with them');
+    if (col.stagedCount) bits.push(col.stagedCount + ' staged on this canvas');
+    if (col.inPoolCount) bits.push(col.inPoolCount + ' still unallocated');
+    return bits.join(' · ');
   }
 
-  function chipHtml(col, selCount) {
+  function fieldHtml(col, selCount) {
     var abs = presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
     var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var open = _expandedChip === col.key;
     var body = col.tiles
       .map(function (t) {
-        return tileHtml(t, { showWho: false });
+        return tileHtml(t, { showWho: false, showAssignee: false });
       })
       .join('');
     var flag = away
@@ -325,12 +327,14 @@
     if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
     else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
     var name = C.displayClinicianName(col.title);
+    var expandHint = open ? 'Hide what sits with them' : 'Click to expand and see what sits with them';
     return (
-      '<div class="ms-lac-chip-wrap' +
+      '<div class="ms-lac-chip-wrap ms-lac-field' +
       (away ? ' ms-lac-chip-away' : '') +
       (inToday ? ' ms-lac-chip-in' : '') +
       (open ? ' ms-lac-chip-open' : '') +
       (selCount ? ' ms-lac-chip-target' : '') +
+      (col.count ? ' ms-lac-field-has' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="clinician">' +
@@ -341,26 +345,28 @@
       '" aria-controls="ms-lac-drawer-' +
       esc(col.key).replace(/[^a-z0-9]/gi, '_') +
       '" aria-label="' +
-      esc(selCount ? 'Stage ' + selCount + ' selected results onto ' + name : name) +
+      esc(selCount ? 'Stage ' + selCount + ' selected results onto ' + name : name + '. ' + expandHint) +
       '">' +
       '<span class="ms-lac-chip-name">' +
       esc(name) +
       '</span>' +
       flag +
       '<span class="ms-lac-chip-count">' +
-      esc(chipCounts(col)) +
+      esc(fieldCounts(col)) +
       '</span>' +
-      (selCount ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>' : '') +
+      (selCount
+        ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>'
+        : '<span class="ms-lac-field-expand">' + esc(open ? 'Hide' : 'Expand') + '</span>') +
       '</button>' +
       (open
-        ? '<div class="ms-lac-chip-drawer" role="listbox" aria-label="Staged onto ' +
+        ? '<div class="ms-lac-chip-drawer" role="listbox" aria-label="Sitting with ' +
           esc(name) +
           '" id="ms-lac-drawer-' +
           esc(col.key).replace(/[^a-z0-9]/gi, '_') +
           '">' +
           note +
           (body ||
-            '<div class="ms-lac-empty-sm">Nothing staged onto them yet. Select a group in the pile, then click this chip.</div>') +
+            '<div class="ms-lac-empty-sm">Nothing sitting with them yet. Drag from the unallocated box, or select there and click this field.</div>') +
           '</div>'
         : '') +
       '</div>'
@@ -373,8 +379,8 @@
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
-      '<div class="ms-lac-empty-title">No investigation reports on this queue</div>' +
-      '<div class="ms-lac-empty-sub">New results appear here grouped by who requested them</div>' +
+      '<div class="ms-lac-empty-title">No unallocated reports on this queue</div>' +
+      '<div class="ms-lac-empty-sub">Inbox results appear here. Work already sitting with a clinician is in their field on the right.</div>' +
       '</div>'
     );
   }
@@ -386,8 +392,8 @@
     var body = pool.groups && pool.groups.length ? pool.groups.map(groupHtml).join('') : '';
     if (!body && board.count > 0) {
       body =
-        '<div class="ms-lac-empty"><div class="ms-lac-empty-title">The pile is clear</div>' +
-        '<div class="ms-lac-empty-sub">Every result is staged on a clinician chip — on this canvas only</div></div>';
+        '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left unallocated</div>' +
+        '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or staged onto one on this canvas</div></div>';
     }
     return (
       '<div class="ms-lac-workspace">' +
@@ -395,35 +401,40 @@
       esc(pool.key) +
       '" data-col-kind="pool">' +
       '<div class="ms-lac-pool-head">' +
+      '<div class="ms-lac-pool-titles">' +
       '<h3 class="ms-lac-col-heading">' +
       esc(pool.title) +
       '</h3>' +
+      '<span class="ms-lac-pool-sub">Unallocated reports</span>' +
+      '</div>' +
       '<span class="ms-lac-pool-count">' +
       pool.count +
       ' of ' +
       board.count +
       '</span>' +
-      '<span class="ms-lac-col-meta">Drop here to keep in the pile</span>' +
+      '<span class="ms-lac-col-meta">Multiselect — drop here to keep unallocated</span>' +
       '</div>' +
       (body || emptyPoolHtml()) +
       '</div>' +
-      '<aside class="ms-lac-rail" aria-label="Clinicians">' +
+      '<aside class="ms-lac-rail" aria-label="Clinician fields">' +
       '<div class="ms-lac-rail-head">' +
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
       '<span class="ms-lac-col-meta">' +
-      (selCount ? 'Click a name to stage the selection' : 'Drop targets — click a name to see what is on them') +
+      (selCount
+        ? 'Click a field to stage the selection'
+        : 'Drag onto a field — click to expand and see what sits with them') +
       '</span>' +
       '</div>' +
       (board.clinicians.length
         ? board.clinicians
             .map(function (col) {
-              return chipHtml(col, selCount);
+              return fieldHtml(col, selCount);
             })
             .join('')
-        : '<div class="ms-lac-empty-sm">No requester names read yet — add a clinician below if you need a drop target.</div>') +
+        : '<div class="ms-lac-empty-sm">No clinician fields yet — add one below if you need a drop target.</div>') +
       '<div class="ms-lac-add-row">' +
-      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add clinician chip — e.g. Dr Jane Cole" aria-label="Add clinician chip">' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add chip</button>' +
+      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a clinician field — e.g. Dr Jane Cole" aria-label="Add a clinician field">' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add clinician</button>' +
       '</div>' +
       '</aside></div>'
     );
@@ -440,7 +451,7 @@
       ' selected</span>' +
       '<span class="ms-lac-selectbar-label">' +
       esc(preview.label) +
-      ' — click a clinician chip to stage them, or drag</span>' +
+      ' — click a clinician field to stage them, or drag</span>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-sel-clear">Clear selection</button>' +
       '</div>'
     );
@@ -528,7 +539,7 @@
     var writeTitle = !gate.ok
       ? gate.reason
       : !sum.count
-        ? 'Stage at least one result onto a clinician chip first'
+        ? 'Stage at least one result onto a clinician field first'
         : canWrite
           ? 'Review the patient → clinician list, then confirm'
           : (plan && plan.reason) || 'Cannot write these staged moves';
@@ -560,7 +571,15 @@
     var requesterGroups = board.pool.groups.filter(function (g) {
       return g.known;
     }).length;
-    var counts = _rows.length ? _rows.length + ' results · ' + requesterGroups + ' requesters' : '';
+    var counts = _rows.length
+      ? _rows.length +
+        ' results · ' +
+        board.pool.count +
+        ' unallocated · ' +
+        requesterGroups +
+        ' requester group' +
+        (requesterGroups === 1 ? '' : 's')
+      : '';
     return (
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
@@ -570,7 +589,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Select a group, then click a clinician — or drag. Writing happens only when you confirm.</span>' +
+      '<span class="ms-lac-header-note">Unallocated on the left. Drag onto a clinician field — or select, then click the field. Writing happens only when you confirm.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -627,7 +646,7 @@
     var name = input && input.value;
     if (!name || !String(name).trim()) return;
     _draft = C.addColumn(_draft, name);
-    announce('Added clinician chip ' + String(name).trim());
+    announce('Added clinician field ' + String(name).trim());
     render();
   }
 
@@ -737,7 +756,7 @@
       ids.forEach(function (id) {
         _selected[id] = true;
       });
-      announce('Selected ' + ids.length + ' — click a clinician chip to stage them, or drag');
+      announce('Selected ' + ids.length + ' — click a clinician field to stage them, or drag');
       render();
     }
     root.querySelectorAll('.ms-lac-group-toggle').forEach(function (btn) {

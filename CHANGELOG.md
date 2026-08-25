@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.1] — 2026-08-25
+
+### Lab allocation canvas — unallocated box, allocated fields
+
+The large left box is **unallocated** investigation reports only.
+Work already sitting with a person (`assignedTo` is a clinician, not
+the team inbox) lives in that clinician’s right-hand field. Click the
+field to expand and see what sits with them; drag from the pile onto
+a field to stage.
+
+Who ordered is still a grouping caption on the unallocated pile —
+named GP and requester never auto-place a row. Staging and the
+captured bulk-reassign write are unchanged.
+
 ## [v3.243.0] — 2026-08-25
 
 ### Lab allocation canvas — write via captured bulk-reassign
