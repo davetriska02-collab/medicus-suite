@@ -333,6 +333,7 @@ console.log('\n--- canvas + manifest source locks ---');
     'the launcher drops the canvas jargon'
   );
   check(/ms-lac-launch-count/.test(canvas), 'the launcher can wear a Companion-style count badge');
+  check(/function prefetchLaunchCount/.test(canvas), 'the collapsed launcher prefetches the unallocated count');
   check(!/Allocate labs on canvas/.test(canvas), 'the old Allocate labs on canvas… label is gone');
   check(/id="ms-lac-reload">Reload this board/.test(canvas), 'a blocked write offers a one-click reload');
   check(/earlyBlock/.test(canvas), 'missing results-list confirmation is shown before any plan is built');

@@ -68,6 +68,7 @@
   var _roving = {};
   var _guideOpen = false;
   var _launchPoolCount = null;
+  var _launchPrefetchStarted = false;
 
   function announce(text) {
     setTimeout(function () {
@@ -1835,6 +1836,21 @@
     paintLauncher(document.getElementById(LAUNCH_ID));
   }
 
+  function prefetchLaunchCount() {
+    if (_launchPrefetchStarted || !_route) return;
+    _launchPrefetchStarted = true;
+    client()
+      .fetchTaskList(_route.slug)
+      .then(function (out) {
+        if (_open) return;
+        _launchPoolCount = C.buildWorkspace(out.rows || [], C.emptyDraft()).pool.count;
+        paintLauncher(document.getElementById(LAUNCH_ID));
+      })
+      .catch(function () {
+        _launchPrefetchStarted = false;
+      });
+  }
+
   function paintLauncher(launch) {
     if (!launch) return;
     var n = _launchPoolCount;
@@ -1857,6 +1873,8 @@
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
     if (!route) {
+      _launchPrefetchStarted = false;
+      _launchPoolCount = null;
       if (launch) launch.remove();
       if (_open) closeOverlay();
       return;
@@ -1874,6 +1892,7 @@
       document.documentElement.appendChild(launch);
     }
     paintLauncher(launch);
+    prefetchLaunchCount();
   }
 
   document.addEventListener(
