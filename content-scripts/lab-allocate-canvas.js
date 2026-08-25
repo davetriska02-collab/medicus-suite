@@ -475,11 +475,12 @@
       esc(title) +
       '</span>' +
       groupPresenceMark(group) +
-      '<span class="ms-lac-group-count">' +
-      group.count +
-      '</span>' +
       (selectedInGroup
-        ? '<span class="ms-lac-group-picked">' + selectedInGroup + ' selected</span>'
+        ? '<span class="ms-lac-group-picked">' +
+          (selectedInGroup === group.count
+            ? 'All ' + group.count + ' selected'
+            : selectedInGroup + ' of ' + group.count + ' selected') +
+          '</span>'
         : '<button type="button" class="ms-lac-group-select" data-group-ids="' +
           idsAttr +
           '" aria-label="Select ' +

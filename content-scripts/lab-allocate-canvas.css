@@ -822,13 +822,6 @@
   color: var(--text-3);
 }
 
-.ms-lac-group-count {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: var(--text-3);
-}
-
 .ms-lac-group-picked {
   margin-left: 0;
   font-family: var(--mono);
