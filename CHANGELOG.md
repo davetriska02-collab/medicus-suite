@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.242.7] — 2026-08-25
+
+### Lab allocation canvas — In today from Medicus
+
+The 2026-08-25 Staff scheduling capture confirmed
+`GET /scheduling/data/appointment-book/embedded-overview?date=YYYY-MM-DD&filterByUsualLocation=false`.
+Clinician chips now read that day’s `staffSchedules` and show **In today**
+when the name matches. Not being on today’s book is not absence — many
+people simply have no diary.
+
+**Away** is shown only when a parsed Medicus absence overlaps today, or
+this machine’s rota leave list says they are off. The drop warns only
+then. Empty rota / unmatched name no longer blocks staging.
+
+GET `/scheduling/data/staff-schedule` is read fail-open and walked for
+absence-shaped records. The canvas never POSTs `change-absence`,
+`calendar-resources`, or the assignment finder.
+
+The capture script now samples XHR JSON (Vue used XHR for
+absence-overview, which is why those bodies were missing) and re-reads
+GET staff-schedule.
+
 ## [v3.242.6] — 2026-08-25
 
 ### Capture panels stay out of the way

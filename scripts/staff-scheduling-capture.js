@@ -161,6 +161,23 @@
   XMLHttpRequest.prototype.send = function (body) {
     try {
       recordRead(this.__sscMethod || 'GET', this.__sscUrl, body);
+      this.addEventListener('load', function () {
+        try {
+          const method = String(this.__sscMethod || 'GET').toUpperCase();
+          if (method !== 'GET' && method !== 'HEAD') return;
+          const u = String(this.__sscUrl || '');
+          if (!INTEREST_RE.test(u) || IGNORE_RE.test(u)) return;
+          const text = this.responseText;
+          if (!text) return;
+          const j = JSON.parse(text);
+          const hit = out.reads.find((r) => u.indexOf(r.url) !== -1 || r.url.indexOf(u) !== -1);
+          if (hit && !hit.sample) {
+            hit.sample = sampleObject(j);
+            hit.staffShaped = staffShaped(j);
+            dump();
+          }
+        } catch (_) {}
+      });
     } catch (_) {}
     return origSend.apply(this, arguments);
   };
@@ -288,6 +305,21 @@
       })
       .catch((e) => {
         out.todayBook = { fetchError: String(e), path: '/scheduling/data/appointment-book/embedded-overview' };
+        dump();
+      });
+    const schedUrl = 'https://' + siteId + '.api.' + location.host + '/scheduling/data/staff-schedule';
+    fetch(schedUrl, { credentials: 'include', headers: { Accept: 'application/json' } })
+      .then((r) => r.json())
+      .then((j) => {
+        out.staffSchedule = {
+          path: '/scheduling/data/staff-schedule',
+          keys: j && typeof j === 'object' ? Object.keys(j).slice(0, 40) : [],
+          staffShaped: staffShaped(j).slice(0, 40),
+        };
+        dump();
+      })
+      .catch((e) => {
+        out.staffSchedule = { fetchError: String(e), path: '/scheduling/data/staff-schedule' };
         dump();
       });
   } else {

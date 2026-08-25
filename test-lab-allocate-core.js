@@ -205,6 +205,8 @@ console.log('\n--- write contract stays closed ---');
   check(!/method:\s*['"]POST['"]/.test(src), 'core has no POST');
   check(!/method:\s*['"]PUT['"]/.test(src), 'core has no PUT');
   check(!/method:\s*['"]PATCH['"]/.test(src), 'core has no PATCH');
+  check(!/change-absence/.test(src), 'core never mentions change-absence');
+  check(!/calendar-resources/.test(src), 'core never mentions calendar-resources');
 }
 
 console.log('\n--- canvas + manifest source locks ---');
@@ -223,6 +225,11 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/not confirmed as the requester/.test(canvas), 'named GP caption refuses to claim who ordered');
   check(/Absence check before staging/.test(canvas), 'clinician drop always offers an absence check');
   check(/loadRotaAbsences/.test(canvas), 'canvas reads rota.leave before allocation');
+  check(/fetchTodayBook/.test(canvas), 'canvas reads today’s appointment book');
+  check(/fetchStaffScheduleAbsences/.test(canvas), 'canvas may parse GET staff-schedule for absences');
+  check(!/change-absence/.test(canvas), 'canvas never calls change-absence');
+  check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
+  check(/In today/.test(canvas), 'chips can show In today from the appointment book');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-chip/.test(canvas), 'canvas is a reports pool plus clinician chips');
   check(!/Add clinician column/.test(canvas), 'clinicians are chips, not full columns');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
@@ -230,10 +237,12 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/method:\s*['"]POST['"]/.test(capture), 'staff-scheduling capture does not POST');
   check(!/inset:24px/.test(capture), 'staff-scheduling capture is a corner panel, not a full-page overlay');
   check(/makeDraggable/.test(capture), 'staff-scheduling capture panel can be dragged');
+  check(/responseText/.test(capture), 'staff-scheduling capture samples XHR JSON as well as fetch');
   check(
     /embedded-overview/.test(capture),
     'staff-scheduling capture may re-read the confirmed appointment-book overview'
   );
+  check(/\/scheduling\/data\/staff-schedule/.test(capture), 'staff-scheduling capture re-reads GET staff-schedule');
   const reqCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-requester-capture.js'), 'utf8');
   check(/REQUESTED-BY SCOPING capture/.test(reqCap), 'requester capture script is present');
   check(!/method:\s*['"]POST['"]/.test(reqCap), 'requester capture does not POST');
@@ -328,12 +337,12 @@ console.log('\n--- absence warning at allocation ---');
   );
   check(!/\b(Done|Sent|Allocated|Submitted|Booked)\b/.test(copy), 'absence copy has no completion verbs');
   check(
-    C.shouldWarnAbsence(C.absenceForName([], [], 'Dr Jane Cole', '2026-08-25')) === true,
-    'empty rota still warns — absence unknown'
+    C.shouldWarnAbsence(C.absenceForName([], [], 'Dr Jane Cole', '2026-08-25')) === false,
+    'empty rota does not warn — unknown is not away'
   );
   check(
-    C.shouldWarnAbsence(C.absenceForName(staff, [], 'Dr Reed', '2026-08-25')) === true,
-    'unmatched name still warns — absence unknown'
+    C.shouldWarnAbsence(C.absenceForName(staff, [], 'Dr Reed', '2026-08-25')) === false,
+    'unmatched name does not warn — unknown is not away'
   );
   check(
     C.shouldWarnAbsence(C.absenceForName(staff, [], 'Dr Jane Cole', '2026-08-25')) === false,
@@ -348,26 +357,137 @@ console.log('\n--- absence warning at allocation ---');
   check(pending.state === 'away-pending' && C.shouldWarnAbsence(pending), 'requested leave still warns');
 }
 
+console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
+{
+  const payload = {
+    date: '2026-08-25',
+    scheduleUnavailabilityPeriodType: 'unavailability-period',
+    staffSchedules: [
+      {
+        name: 'Nhs 111',
+        schedule: [
+          {
+            scheduleType: 'diary',
+            summary: { site: { name: 'Witley Surgery' }, service: { name: 'General Appointments' } },
+          },
+        ],
+      },
+      {
+        name: 'Dr Natalie Azadian',
+        schedule: [
+          { scheduleType: 'diary', summary: { site: { name: 'Witley Surgery' } } },
+          { scheduleType: 'diary', summary: { site: { name: 'Witley Surgery' } } },
+        ],
+      },
+      {
+        name: 'Dr David Triska',
+        schedule: [{ scheduleType: 'diary', summary: { status: { isCancelled: true } } }],
+      },
+    ],
+  };
+  const book = C.parseTodayBook(payload);
+  check(book.date === '2026-08-25', 'book date is the captured day');
+  check(
+    book.present.some((p) => p.name === 'Dr Natalie Azadian' && p.sessions === 2),
+    'Azadian is in today with two diaries'
+  );
+  check(!!C.bookPresenceForName(book, 'Natalie Azadian'), 'title-stripped name still matches the book');
+  check(!C.bookPresenceForName(book, 'Emma Heylen'), 'a clinician not on today’s book is not present');
+  check(!C.bookPresenceForName(book, 'Dr David Triska'), 'a cancelled-only diary is not In today');
+
+  const inToday = C.presenceForName({ name: 'Dr Natalie Azadian', dateISO: '2026-08-25', book: book });
+  check(inToday.state === 'present' && inToday.reason === 'in-today', 'book hit → In today');
+  check(C.shouldWarnAbsence(inToday) === false, 'In today does not warn');
+  check(/appointment book/.test(inToday.label), 'In today names the appointment book');
+
+  const quiet = C.presenceForName({ name: 'Emma Heylen', dateISO: '2026-08-25', book: book });
+  check(quiet.state === 'unknown' && quiet.reason === 'no-evidence', 'not on the book is not absence');
+  check(C.shouldWarnAbsence(quiet) === false, 'missing from today’s 11 does not warn');
+
+  const parsedAbs = C.parseAbsenceRecords({
+    items: [
+      {
+        absenceId: '019e8211-f3cf-715f-9996-ccbe4d0b2366',
+        staff: { name: 'Kate Downs' },
+        startDate: '2026-08-03',
+        endDate: '2026-09-03',
+        absenceType: { label: 'Annual leave' },
+      },
+      {
+        name: 'Dr Natalie Azadian',
+        startDateTime: '2026-08-25T08:00:00',
+        diaryEntryType: { value: 'slot', isSlot: true },
+      },
+    ],
+  });
+  check(parsedAbs.length === 1 && parsedAbs[0].name === 'Kate Downs', 'only absence-shaped records parse as away');
+  check(!C.absenceOnDate(parsedAbs, 'Dr Natalie Azadian', '2026-08-25'), 'a diary slot is not an absence');
+
+  const medicusAway = C.presenceForName({
+    name: 'Kate Downs',
+    dateISO: '2026-08-25',
+    book: book,
+    absences: parsedAbs,
+  });
+  check(medicusAway.state === 'away' && medicusAway.source === 'medicus', 'parsed Medicus absence wins');
+  check(C.shouldWarnAbsence(medicusAway) === true, 'Medicus absence warns');
+
+  const rotaWins = C.presenceForName({
+    name: 'Dr Jane Cole',
+    dateISO: '2026-08-25',
+    book: book,
+    staffList: staffForPresence(),
+    leaveList: [
+      { staffId: 's1', status: 'approved', type: 'annual', startDate: '2026-08-24', endDate: '2026-08-29' },
+    ],
+  });
+  check(rotaWins.state === 'away' && rotaWins.source === 'rota', 'rota leave still marks Away when Medicus has no row');
+}
+
+function staffForPresence() {
+  return [{ id: 's1', name: 'Dr Jane Cole', medicusName: 'Jane Cole', notAPerson: false }];
+}
+
 async function testClient() {
   console.log('\n--- createClient GET-only fetch ---');
   const calls = [];
   const client = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async (url, opts) => {
       calls.push({ url: url, method: opts.method });
+      let body = {};
+      if (/task-list/.test(url)) {
+        body = {
+          tasks: [
+            {
+              id: uuid(1),
+              patientName: 'A',
+              assignedTo: 'Results',
+              overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(1),
+            },
+          ],
+        };
+      } else if (/embedded-overview/.test(url)) {
+        body = {
+          date: '2026-08-25',
+          staffSchedules: [{ name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] }],
+        };
+      } else if (/staff-schedule/.test(url)) {
+        body = {
+          absences: [
+            {
+              absenceId: '019e8211-f3cf-715f-9996-ccbe4d0b2366',
+              staff: { name: 'Kate Downs' },
+              startDate: '2026-08-03',
+              endDate: '2026-09-03',
+            },
+          ],
+        };
+      }
       return {
         ok: true,
         status: 200,
         text: async function () {
-          return JSON.stringify({
-            tasks: [
-              {
-                id: uuid(1),
-                patientName: 'A',
-                assignedTo: 'Results',
-                overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(1),
-              },
-            ],
-          });
+          return JSON.stringify(body);
         },
       };
     },
@@ -384,6 +504,19 @@ async function testClient() {
   } catch (err) {
     check(/bad overviewURL/.test(err.message), 'absolute overviewURL rejected');
   }
+  const book = await client.fetchTodayBook('2026-08-25');
+  check(calls[2].method === 'GET', 'today-book fetch is GET');
+  check(
+    /\/scheduling\/data\/appointment-book\/embedded-overview\?date=2026-08-25&filterByUsualLocation=false$/.test(
+      calls[2].url
+    ),
+    'today-book uses the captured embedded-overview GET'
+  );
+  check(book.present.some((p) => p.name === 'Dr Natalie Azadian'), 'today-book parser runs through the client');
+  const abs = await client.fetchStaffScheduleAbsences();
+  check(calls[3].method === 'GET', 'staff-schedule fetch is GET');
+  check(/\/scheduling\/data\/staff-schedule$/.test(calls[3].url), 'staff-schedule uses the captured GET');
+  check(abs.some((a) => a.name === 'Kate Downs'), 'staff-schedule absences parse when the body is absence-shaped');
 }
 
 console.log('--- board keeps every row visible ---');

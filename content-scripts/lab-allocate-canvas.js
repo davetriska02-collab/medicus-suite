@@ -40,6 +40,8 @@
   var _copyNote = '';
   var _overviewProgress = '';
   var _rota = { staff: [], leave: [], loaded: false };
+  var _book = null;
+  var _absences = [];
   var _pendingAbsence = null;
   var _dragGhost = null;
   var _expandedChip = '';
@@ -100,10 +102,12 @@
     _error = null;
     render();
     try {
-      await loadRotaAbsences();
+      var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
       var out = await client().fetchTaskList(_route.slug);
       _rows = out.rows || [];
       _route.slug = out.slug || _route.slug;
+      render();
+      await presenceP;
       render();
       await enrichRequesters(_rows);
     } catch (err) {
@@ -131,9 +135,34 @@
     }
   }
 
-  function absenceForClinician(col) {
+  async function loadMedicusPresence() {
+    _book = null;
+    _absences = [];
+    if (!_route) return;
+    var cli = client();
+    var date = C.todayISO();
+    try {
+      _book = await cli.fetchTodayBook(date);
+    } catch (_) {
+      _book = null;
+    }
+    try {
+      _absences = await cli.fetchStaffScheduleAbsences();
+    } catch (_) {
+      _absences = [];
+    }
+  }
+
+  function presenceForClinician(col) {
     if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
-    return C.absenceForName(_rota.staff, _rota.leave, col.title, C.todayISO());
+    return C.presenceForName({
+      name: col.title,
+      dateISO: C.todayISO(),
+      book: _book,
+      absences: _absences,
+      staffList: _rota.staff,
+      leaveList: _rota.leave,
+    });
   }
 
   function tileHtml(tile) {
@@ -203,14 +232,24 @@
   }
 
   function chipHtml(col) {
-    var abs = absenceForClinician(col);
+    var abs = presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
+    var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var open = _expandedChip === col.key;
     var body =
       col.groups && col.groups.length ? col.groups.map(groupHtml).join('') : col.tiles.map(tileHtml).join('');
+    var flag = away
+      ? '<span class="ms-lac-chip-flag">Away</span>'
+      : inToday
+        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In today</span>'
+        : '';
+    var note = '';
+    if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
+    else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
     return (
       '<div class="ms-lac-chip-wrap' +
       (away ? ' ms-lac-chip-away' : '') +
+      (inToday ? ' ms-lac-chip-in' : '') +
       (open ? ' ms-lac-chip-open' : '') +
       '" data-col-key="' +
       esc(col.key) +
@@ -226,11 +265,11 @@
       '<span class="ms-lac-chip-count">' +
       esc(chipCountLabel(col)) +
       '</span>' +
-      (away ? '<span class="ms-lac-chip-flag">Away</span>' : '') +
+      flag +
       '</button>' +
       (open
         ? '<div class="ms-lac-chip-drawer">' +
-          (away ? '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>' : '') +
+          note +
           (body ||
             '<div class="ms-lac-empty">Nothing staged onto this clinician. Drop a group from Investigation reports.</div>') +
           '</div>'
@@ -317,7 +356,8 @@
       'Every result on this queue sits in the pile on the left, grouped by who requested it. ' +
       'Multi-select tiles or drag a group onto a clinician chip. ' +
       'A registered GP is a hint only. ' +
-      'Away is shown only when this machine’s rota leave list says they are off — Medicus Staff scheduling has not been captured yet. ' +
+      'Away is shown only when Medicus has an absence for them today, or this machine’s rota leave list says they are off. ' +
+      'In today is from today’s appointment book — not being on that book is not the same as being away. ' +
       'Nothing is written to Medicus from this canvas yet.' +
       (_overviewProgress ? ' ' + esc(_overviewProgress) : '') +
       '</div>' +
@@ -509,7 +549,14 @@
       (colEl && colEl.querySelector('.ms-lac-chip-name')) || (colEl && colEl.querySelector('.ms-lac-col-heading'));
     var title = (titleEl && titleEl.textContent) || '';
     if (kind === 'clinician') {
-      var abs = C.absenceForName(_rota.staff, _rota.leave, title, C.todayISO());
+      var abs = C.presenceForName({
+        name: title,
+        dateISO: C.todayISO(),
+        book: _book,
+        absences: _absences,
+        staffList: _rota.staff,
+        leaveList: _rota.leave,
+      });
       if (C.shouldWarnAbsence(abs)) {
         _pendingAbsence = {
           ids: ids,

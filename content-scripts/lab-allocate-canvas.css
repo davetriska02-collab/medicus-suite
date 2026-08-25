@@ -31,6 +31,10 @@
   --accent: #2563eb;
   --red: #dc2626;
   --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.09);
+  --green-line: rgba(22, 163, 74, 0.3);
   --r-sm: 4px;
   --r-md: 6px;
   --r-lg: 10px;
@@ -256,12 +260,21 @@
 .ms-lac-chip-flag {
   font-size: 10px;
   font-weight: 650;
-  color: #9a3412;
+  color: var(--amber);
+}
+
+.ms-lac-chip-flag-in {
+  color: var(--green);
 }
 
 .ms-lac-chip-away {
   border-color: var(--amber);
-  background: #fff7ed;
+  background: var(--amber-dim);
+}
+
+.ms-lac-chip-in {
+  border-color: var(--green-line);
+  background: var(--green-dim);
 }
 
 .ms-lac-chip-open {
@@ -282,18 +295,28 @@
 
 .ms-lac-col-away {
   border-color: var(--amber);
-  background: #fff7ed;
+  background: var(--amber-dim);
 }
 
-.ms-lac-col-absence {
+.ms-lac-col-absence,
+.ms-lac-col-in {
   font-size: 11px;
   line-height: 1.4;
-  color: #9a3412;
-  background: #ffedd5;
-  border: 1px solid #fdba74;
   border-radius: var(--r-sm);
   padding: 6px 7px;
   margin-bottom: 8px;
+}
+
+.ms-lac-col-absence {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber);
+}
+
+.ms-lac-col-in {
+  color: var(--green);
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
 }
 
 .ms-lac-group {
