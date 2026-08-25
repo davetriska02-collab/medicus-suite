@@ -22,7 +22,7 @@
 //      IS a write surface even with zero fetch calls.
 //
 // Every hit must map to a CSN W-id or a named allowlist reason, and every
-// W1–W22 row must still be present in the notice. A new allowlist entry is a
+// W1–W23 row must still be present in the notice. A new allowlist entry is a
 // deliberate exception, not a default.
 
 'use strict';
@@ -134,7 +134,7 @@ const CLICK_MACRO_MAP = {
   },
   'content-scripts/task-actions-panel.js': {
     reason:
-      'keyboard-accessibility self-click on its OWN widget toggles only (outer collapse, what\'s due, patient record, booking section, task section); the W2/W5 Medicus writes are POSTs, caught by the verb scanner',
+      "keyboard-accessibility self-click on its OWN widget toggles only (outer collapse, what's due, patient record, booking section, task section); the W2/W5 Medicus writes are POSTs, caught by the verb scanner",
   },
   'content-scripts/reception-quick-actions.js': {
     reason:
@@ -179,9 +179,10 @@ const FILE_TO_WIDS = {
   'content-scripts/privacy-officer-bulk-acknowledge.js': ['W21'],
   'content-scripts/eps-cancellation-bulk-discard.js': ['W21'],
   'content-scripts/triage-lens/content.js': ['W22'],
+  'shared/lab-allocate-core.js': ['W23'],
 };
 
-const LAST_WID = 22;
+const LAST_WID = 23;
 
 // W7/W8/W22 are DOM macros (may have no method:POST). W12 panel files and the
 // W1 slots shim may only re-export booking-core. W21 companions instantiate
@@ -303,7 +304,7 @@ for (const rel of Object.keys(CLICK_MACRO_MAP).sort()) {
   check(fs.existsSync(abs), `CLICK_MACRO_MAP entry ${rel} still exists`);
 }
 
-// ── 5. CSN §6.1 table rows W1–W22 ────────────────────────────────────────────
+// ── 5. CSN §6.1 table rows W1–W23 ────────────────────────────────────────────
 
 console.log('\n--- CSN §6.1 W-id table rows ---');
 const csnPath = path.join(ROOT, 'docs', 'CLINICAL-SAFETY-NOTICE.md');
@@ -340,7 +341,7 @@ for (const rel of EXISTENCE_EVEN_WITHOUT_POST) {
 }
 
 // Self-check: every W-id except W3 has ≥1 mapped file in this inventory.
-console.log('\n--- inventory map covers W1–W22 ---');
+console.log('\n--- inventory map covers W1–W23 ---');
 const widsWithFiles = new Set();
 for (const wids of Object.values(FILE_TO_WIDS)) {
   wids.forEach((w) => widsWithFiles.add(w));

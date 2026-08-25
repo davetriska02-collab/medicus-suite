@@ -2,6 +2,82 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.0] — 2026-08-25
+
+### Lab allocation canvas — write via captured bulk-reassign
+
+The 2026-08-25 live capture on Investigation Results unlocked
+Medicus's own write:
+
+`POST /tasks/task-list/bulk-reassign`
+keys: `assigneeId`, `assigneeType`, `taskList`, `taskIds`
+
+Finalise is no longer hard-disabled. Staging stays local; **Review then
+write** lists every patient → clinician pair and only that confirm
+POSTs. The body is exactly those four captured keys — nothing invented.
+`assigneeType` is `"staff"` (sibling-confirmed on create-task writes;
+the canvas only allocates to people). `taskList` is passed through from
+the GET task-list envelope; without that token the write stays closed.
+
+Staff UUIDs come from row `assignedTo`/`assignedId` (people only) and
+overview `assigneeOptions.staff`, matched by the same surname+initial
+key that already unifies `AZADIAN N` and `Dr Natalie Azadian`. No unique
+match, or two UUIDs for one chip, refuses that destination — it is not
+guessed. Immediately before the first POST the queue is re-read; a
+vanished taskId aborts the whole write. Failures stop the batch and say
+how many earlier groups Medicus accepted.
+
+This does **not** file the result. Named GP is still a caption. The
+lab/org `requester` object on the overview is not who ordered — the
+task-list `requestedBy` column is. Copy never claims Done / Sent /
+Allocated / Submitted / Booked.
+
+Also: drag-ghost `z-index` moved off a Modulus-11-valid 10-digit lookalike
+so `check-no-patient-data` stays green.
+
+CSN **W23**, hazard **H-064** (Proposed — pending CSO). Clinical Safety
+Notice product pin moved to 3.243.0 (doc v3.30).
+
+## [v3.242.8] — 2026-08-25
+
+### Lab allocation canvas — workbench rebuild after a three-critic design review
+
+A multi-critic design crit (art director on pixels, token/code surveyor
+on source, fresh-eyes GP on screenshots only) converged on the same
+sins: 4 of 73 results visible, a fixed small modal, invisible
+selection with no next step, chips without counts, and a name-format
+bug that silently killed the Away and In-today flags.
+
+**One person, two wire formats.** The task-list Requested By column
+says `AZADIAN N`; the appointment book and rota say
+`Dr Natalie Azadian`. The core now keys people by surname + initial,
+so both formats land on ONE chip, one pool group, and — critically —
+the Away / In today flags and the pre-stage absence warning now fire
+on caps-format chips. Before this, rota leave for a clinician was
+silently ignored when the chip title came off the wire in caps.
+
+**The pile reads at volume.** Full-bleed workspace (no more capped
+1280×780 modal), one-line rows, sticky group headers with mono counts,
+per-group collapse. ~27 rows visible where there were 4.
+
+**Selecting and staging is now first-class.** Click a group header →
+"14 selected" bar appears, every chip grows a "Stage 14 here" action,
+and clicking the chip stages them — no drag needed (drag still works).
+Tiles and group headers are keyboard-focusable (Enter/Space), selection
+is exposed via aria-selected, and focus survives re-renders.
+
+**Chips are drop targets now.** Dashed borders, mono "N staged · N in
+pile" counts, AWAY / In today status tokens, amber-demoted away chips.
+
+**No more silent data loss.** Closing (Esc, Close) with staged moves
+asks first. Esc clears the selection before it closes anything.
+
+Also: developer jargon removed from the footer ("endpoint", "slug",
+the capture-script path); the disabled Finalise button is neutral, not
+red (red is for clinical risk only); designed empty state; token drift
+fixed (raw ambers/reds → triads, canon radius/shadow, scrim,
+reduced-motion support).
+
 ## [v3.242.7] — 2026-08-25
 
 ### Lab allocation canvas — In today from Medicus

@@ -4,8 +4,9 @@
 ordered them. Can we automate batch-marking that — a canvas, drag and drop,
 move them — instead of allocating one result at a time?
 
-**Answer:** the *read and stage* half is possible now. The *write* half is
-not, until one live Reassign is captured. Do not invent a Medicus slug.
+**Answer:** both halves are possible. The write is Medicus's own
+`POST /tasks/task-list/bulk-reassign`, captured live on 2026-08-25.
+Do not invent extra keys or a different slug.
 
 Captured from the suite's own confirmed contracts (not a fresh live session):
 task-list row keys in `docs/learnings-task-presence.md` (2026-08-04), OIR
@@ -53,12 +54,19 @@ results queue is the same AG-Grid family; the canvas treats these fields
 as present-or-empty and never requires them:
 
 ```
+requestedBy                     ← who ordered (e.g. "AZADIAN N")
+investigations                  ← test names (used as the row summary)
 assignedTo, assignedId          ← routing (team or staff)
 status, statusValue, statusText ← task status, not "who ordered"
-namedGp, namedGpId              ← patient's registered GP
-patientName, summary, createdAt, overviewURL, id
+namedGp, namedGpId              ← patient's registered GP (caption only)
+patientName, dateOfBirth, createdAt, overviewURL, id
+receivedDateTime, priority, priorityDisplay, dueDate, isOverdue
 actionedBy, actionedById, actionedDateTime
+unmatchedToPatient, cellStyles
 ```
+
+The GET envelope also carries a **`taskList` token**. That value is
+what the write posts back — pass it through, do not invent a slug.
 
 `assignedTo` on the captured request was a **team**. Status vocabulary on
 that capture was `new-request` / `awaiting-recipient-response` / … — a
@@ -104,30 +112,47 @@ else stays in Unallocated or the current inbox column.
 | See who ordered | **Sometimes** | Overview walker for `requestedBy` / aliases; OIR-style `Panel (Dr X • date)` strings if they appear in the payload. Not confirmed. |
 | Suggest a column | Stage only | Requester groups the reports pool. Drag onto a clinician chip to stage. Named GP is a caption only. |
 | Drag / batch-mark on a canvas | Yes | Stage-only, same doctrine as appointment-organise |
-| Write the allocation back to Medicus | **No** | Reassign-task endpoint has not been captured. `canWriteAllocations()` is hard-false. |
+| Write the allocation back to Medicus | **Yes** | `POST /tasks/task-list/bulk-reassign` (`assigneeId`, `assigneeType`, `taskList`, `taskIds`). `canWriteAllocations()` is true only when the GET `taskList` token is present. Unique staff UUID or refuse. |
 
 A working list can be copied off the canvas so the current one-by-one
 Medicus reassign is at least ordered by clinician.
 
 ---
 
-## What would unlock Finalise
+## The captured write (2026-08-25T10:23Z)
 
-On the live results queue, with a **dummy patient only**:
+On Investigation Results
+(`/560b6c/tasks/review_investigation_results_task/task-list?…&masterAssignee=<team>`):
 
-1. Paste `scripts/lab-allocate-capture.js` into the page console.
-2. Confirm the task-list sample: `assignedTo`, `status*`, `namedGp`, and
-   whether anything already looks like a requester.
-3. Open one overview (the script fetches the first). Check
-   `requesterShaped` — if `requestedBy` (or equivalent) is there, the
-   canvas can group the reports pool without any new code.
-4. In Medicus, reassign that one dummy result the native way. The script
-   records the POST/PUT/PATCH path and body keys.
-5. Those bytes become the write contract — same discipline as
-   `docs/learnings-appointment-organise-api.md`. Then, and only then, a
-   confirmed Finalise can be wired, with a CSN W-row and a hazard.
+```
+POST https://560b6c.api.england.medicus.health/tasks/task-list/bulk-reassign
+keys: assigneeId, assigneeType, taskList, taskIds
+```
 
-Until that paste-back, the canvas is a **planning board**.
+This is Medicus's **task-list bulk reassign**, not a per-report
+"Reassign task" next-step. Values were not sampled — only keys.
+
+Inferred, fail-closed:
+
+- `assigneeId` — staff UUID. Sample row assigned to Azadian had
+  `assignedId: 019708e4-f1e5-73b0-b546-cdb5b6682631`.
+- `assigneeType` — `"staff"`. Sibling writes in this repo
+  (`shared/task-api.js`, `task-actions-panel.js`) use `"staff"` /
+  `"team"`. The canvas only allocates to people.
+- `taskList` — the GET `/tasks/data/{slug}/task-list` envelope already
+  has a `taskList` key. Pass that value through as-is.
+- `taskIds` — array of task UUIDs (`id` on the row).
+
+Overview notes from the same capture:
+
+- `investigationReport.requester` is
+  `{ organisationName, organisationOdsCode, departmentName, practitionerName }`
+  — the **lab/org**, not the GP. Task-list `requestedBy` wins.
+- `assigneeOptions: { teams, staff }` — harvest staff `{id,name}` /
+  `{value,label}` for the directory.
+
+The capture script should now also sample **types** of those four keys
+(not PHI values) so a future drift is visible.
 
 ---
 
@@ -144,6 +169,22 @@ fallback.
 Same-requester tiles group under one header and drag as a set. The drag
 ghost names who ordered them. That only works when requester evidence
 is on the payload — unknown rows stay in their own pile.
+
+**One person, two wire formats (v3.242.8).** The task-list Requested By
+column carries `AZADIAN N` (surname then initial); the appointment book
+and rota carry `Dr Natalie Azadian`. `personNameKey` canonicalises both
+to `azadian|n`, so chips, pool groups, presence lookups and absence
+warnings all agree. Until this landed, rota leave and the today-book
+match silently failed on every caps-format chip — the Away flag simply
+never fired. A bare surname matches any initial; two clinicians sharing
+surname AND first initial would merge on the board. The write refuses
+that destination unless the staff directory has exactly one UUID.
+
+**Workbench UI (v3.242.8, from a three-critic design review).**
+Full-bleed, one-line rows under sticky group headers, group select-all,
+a selection bar, and click-a-chip-to-stage as the primary (and keyboard)
+path — drag is the shortcut, not the requirement. Closing with staged
+moves asks first.
 
 Dropping onto a **person** consults, in this order:
 

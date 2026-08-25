@@ -1,11 +1,16 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
-// Medicus Suite — lab allocation canvas (v1, stage-only)
+// Medicus Suite — lab allocation canvas (v2 workbench + captured write)
 //
-// Overlay on the investigation-results task-list. The big pile is
-// Investigation reports, grouped by who requested them. Clinicians are
-// small chips on the right — drop targets, click to expand. Named GP is a
-// hint, never auto-placement. Finalise does not write — the Reassign
-// endpoint has not been captured (shared/lab-allocate-core.js WRITE_BLOCKED).
+// Full-bleed workspace over the investigation-results task-list. The pile is
+// Investigation reports, grouped by who requested them — one-line rows under
+// sticky group headers so 73 results read at a glance. Clinicians are drop
+// chips on the right: select a group (click its header) then click a chip to
+// stage, or drag. Named GP is a hint, never auto-placement.
+//
+// Writing uses Medicus's own POST /tasks/task-list/bulk-reassign (captured
+// 2026-08-25). The canvas never POSTs itself — it calls LabAllocateCore's
+// client. Confirm lists patient → clinician. UI copy never claims the
+// write finished.
 'use strict';
 
 (function () {
@@ -43,8 +48,14 @@
   var _book = null;
   var _absences = [];
   var _pendingAbsence = null;
+  var _confirmClose = false;
+  var _confirmWrite = null;
+  var _writing = false;
+  var _taskList = undefined;
+  var _staffDir = C.harvestStaffDirectory([], null);
   var _dragGhost = null;
   var _expandedChip = '';
+  var _collapsed = {};
 
   function announce(text) {
     setTimeout(function () {
@@ -68,6 +79,12 @@
     });
   }
 
+  function setProgress(text) {
+    _overviewProgress = text || '';
+    var node = document.getElementById('ms-lac-progress');
+    if (node) node.textContent = _overviewProgress;
+  }
+
   async function enrichRequesters(rows) {
     var pending = rows.filter(function (r) {
       return r && r.overviewURL && !r.requester;
@@ -76,25 +93,40 @@
     if (!pending.length) return;
     var cli = client();
     var i = 0;
+    var done = 0;
     async function worker() {
       while (i < pending.length) {
         var idx = i++;
         var row = pending[idx];
-        _overviewProgress = 'Reading who ordered… ' + (idx + 1) + '/' + pending.length;
-        render();
         try {
           var payload = await cli.fetchOverview(row.overviewURL);
+          _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, payload));
           var hint = C.pickRequesterFromOverview(payload);
           if (hint) C.applyRequester(row, hint);
         } catch (_) {
-          /* fail closed: leave unallocated */
+          /* fail closed: leave in the unknown pile */
         }
+        done++;
+        setProgress('Reading who ordered… ' + done + '/' + pending.length);
       }
     }
     var workers = [];
     for (var w = 0; w < OVERVIEW_CONCURRENCY; w++) workers.push(worker());
     await Promise.all(workers);
-    _overviewProgress = '';
+    setProgress('');
+  }
+
+  async function harvestStaffFromOneOverview(rows) {
+    var withUrl = (rows || []).filter(function (r) {
+      return r && r.overviewURL;
+    })[0];
+    if (!withUrl) return;
+    try {
+      var payload = await client().fetchOverview(withUrl.overviewURL);
+      _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, payload));
+    } catch (_) {
+      /* directory stays whatever the task-list already gave us */
+    }
   }
 
   async function loadBoard() {
@@ -106,9 +138,12 @@
       var out = await client().fetchTaskList(_route.slug);
       _rows = out.rows || [];
       _route.slug = out.slug || _route.slug;
+      _taskList = out.taskList;
+      _staffDir = C.harvestStaffDirectory(_rows, out.body);
       render();
       await presenceP;
       render();
+      await harvestStaffFromOneOverview(_rows);
       await enrichRequesters(_rows);
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read the results queue.';
@@ -155,8 +190,9 @@
 
   function presenceForClinician(col) {
     if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
+    // Display casing — matching is case-insensitive, labels are user-facing.
     return C.presenceForName({
-      name: col.title,
+      name: C.displayClinicianName(col.title),
       dateISO: C.todayISO(),
       book: _book,
       absences: _absences,
@@ -165,92 +201,136 @@
     });
   }
 
-  function tileHtml(tile) {
+  // One-line row. Group headers carry who ordered; the row only repeats it
+  // in the unknown pile, where it varies per row and is load-bearing.
+  function tileHtml(tile, opts) {
+    opts = opts || {};
     var selected = !!_selected[tile.id];
     var cls = 'ms-lac-tile' + (tile.staged ? ' ms-lac-tile-staged' : '') + (selected ? ' ms-lac-tile-picked' : '');
-    var who = tile.requester
-      ? 'Ordered by ' + tile.requester
-      : tile.namedGp
-        ? 'Registered GP ' + tile.namedGp + ' — not confirmed as the requester'
-        : 'Who ordered this is not on the payload we can read';
-    var inbox = tile.assignedTo ? 'Currently assigned: ' + tile.assignedTo : '';
+    var assignedPerson =
+      tile.assignedTo && !C.isTeamAssignee(tile.assignedTo)
+        ? '<span class="ms-lac-tile-token">with ' + esc(C.displayClinicianName(tile.assignedTo)) + '</span>'
+        : '';
+    var whoLine = '';
+    if (opts.showWho) {
+      var who = tile.requester
+        ? 'Ordered by ' + C.displayClinicianName(tile.requester)
+        : tile.namedGp
+          ? 'Registered GP ' + tile.namedGp + ' — not confirmed as the requester'
+          : 'Who ordered this is not recorded on the task';
+      whoLine = '<span class="ms-lac-tile-who">' + esc(who) + '</span>';
+    }
     return (
       '<div class="' +
       cls +
+      '" role="option" tabindex="0" aria-selected="' +
+      (selected ? 'true' : 'false') +
       '" draggable="true" data-task-id="' +
       esc(tile.id) +
       '">' +
-      '<div class="ms-lac-tile-name">' +
+      '<span class="ms-lac-tile-check" aria-hidden="true">' +
+      (selected ? '✓' : '') +
+      '</span>' +
+      '<span class="ms-lac-tile-name">' +
       esc(tile.patientName) +
-      '</div>' +
-      '<div class="ms-lac-tile-meta">' +
+      '</span>' +
+      '<span class="ms-lac-tile-test">' +
       esc(tile.summary || tile.statusText || 'Lab result') +
-      '</div>' +
-      '<div class="ms-lac-tile-who">' +
-      esc(who) +
-      '</div>' +
-      (inbox ? '<div class="ms-lac-tile-meta">' + esc(inbox) + '</div>' : '') +
-      (tile.staged
-        ? '<div class="ms-lac-tile-draft">Staged on this canvas only — not in Medicus yet</div>'
-        : tile.homeKey && tile.homeKey.indexOf('clinician:') === 0
-          ? '<div class="ms-lac-tile-meta">Already assigned in Medicus</div>'
-          : '') +
+      '</span>' +
+      assignedPerson +
+      whoLine +
       '</div>'
     );
   }
 
   function groupHtml(group) {
+    var collapsed = !!_collapsed[group.key];
+    var title = group.known ? C.displayClinicianName(group.requester) : 'Who ordered is unknown';
+    var idsAttr = esc(group.tileIds.join(','));
+    var selectedInGroup = group.tiles.filter(function (t) {
+      return _selected[t.id];
+    }).length;
     return (
-      '<div class="ms-lac-group' +
-      (group.known ? '' : ' ms-lac-group-unknown') +
+      '<section class="ms-lac-group' +
+      (collapsed ? ' ms-lac-group-collapsed' : '') +
       '" data-group-key="' +
       esc(group.key) +
-      '" data-group-ids="' +
-      esc(group.tileIds.join(',')) +
       '">' +
-      '<div class="ms-lac-group-head" draggable="true" data-group-ids="' +
-      esc(group.tileIds.join(',')) +
+      '<div class="ms-lac-group-head" role="button" tabindex="0" draggable="true" data-group-ids="' +
+      idsAttr +
+      '" data-group-key="' +
+      esc(group.key) +
+      '" aria-label="Select all ' +
+      group.count +
+      (group.known ? ' ordered by ' + esc(title) : ' with unknown requester') +
       '">' +
-      '<div class="ms-lac-group-title">' +
-      esc(group.label) +
+      '<span class="ms-lac-group-grip" aria-hidden="true">⠿</span>' +
+      '<span class="ms-lac-group-title">' +
+      esc(title) +
+      '</span>' +
+      '<span class="ms-lac-group-count">' +
+      group.count +
+      '</span>' +
+      (selectedInGroup
+        ? '<span class="ms-lac-group-picked">' + selectedInGroup + ' selected</span>'
+        : '<span class="ms-lac-group-hint">Select all</span>') +
+      '<button type="button" class="ms-lac-group-toggle" data-toggle-key="' +
+      esc(group.key) +
+      '" aria-expanded="' +
+      (collapsed ? 'false' : 'true') +
+      '" aria-label="' +
+      (collapsed ? 'Show' : 'Hide') +
+      ' this group">' +
+      (collapsed ? '▸' : '▾') +
+      '</button>' +
       '</div>' +
-      '<div class="ms-lac-group-hint">' +
-      esc(group.dragHint) +
-      '</div>' +
-      '</div>' +
-      group.tiles.map(tileHtml).join('') +
-      '</div>'
+      (collapsed
+        ? ''
+        : '<div class="ms-lac-group-body" role="listbox" aria-label="' +
+          esc(title) +
+          '">' +
+          group.tiles
+            .map(function (t) {
+              return tileHtml(t, { showWho: !group.known });
+            })
+            .join('') +
+          '</div>') +
+      '</section>'
     );
   }
 
-  function chipCountLabel(col) {
-    if (!col.count) return 'Drop a group here';
+  function chipCounts(col) {
     var bits = [];
-    if (col.stagedCount) bits.push(col.stagedCount + ' staged here');
-    if (col.assignedCount) bits.push(col.assignedCount + ' already assigned in Medicus');
-    return bits.join(' · ') || String(col.count);
+    if (col.stagedCount) bits.push(col.stagedCount + ' staged');
+    if (col.inPoolCount) bits.push(col.inPoolCount + ' in pile');
+    return bits.length ? bits.join(' · ') : 'none in pile';
   }
 
-  function chipHtml(col) {
+  function chipHtml(col, selCount) {
     var abs = presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
     var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var open = _expandedChip === col.key;
-    var body =
-      col.groups && col.groups.length ? col.groups.map(groupHtml).join('') : col.tiles.map(tileHtml).join('');
+    var body = col.tiles
+      .map(function (t) {
+        return tileHtml(t, { showWho: false });
+      })
+      .join('');
     var flag = away
-      ? '<span class="ms-lac-chip-flag">Away</span>'
+      ? '<span class="ms-lac-chip-flag">AWAY</span>'
       : inToday
         ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In today</span>'
         : '';
     var note = '';
     if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
     else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
+    var name = C.displayClinicianName(col.title);
     return (
       '<div class="ms-lac-chip-wrap' +
       (away ? ' ms-lac-chip-away' : '') +
       (inToday ? ' ms-lac-chip-in' : '') +
       (open ? ' ms-lac-chip-open' : '') +
+      (selCount ? ' ms-lac-chip-target' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="clinician">' +
@@ -258,22 +338,43 @@
       esc(col.key) +
       '" aria-expanded="' +
       (open ? 'true' : 'false') +
+      '" aria-controls="ms-lac-drawer-' +
+      esc(col.key).replace(/[^a-z0-9]/gi, '_') +
+      '" aria-label="' +
+      esc(selCount ? 'Stage ' + selCount + ' selected results onto ' + name : name) +
       '">' +
       '<span class="ms-lac-chip-name">' +
-      esc(col.title) +
-      '</span>' +
-      '<span class="ms-lac-chip-count">' +
-      esc(chipCountLabel(col)) +
+      esc(name) +
       '</span>' +
       flag +
+      '<span class="ms-lac-chip-count">' +
+      esc(chipCounts(col)) +
+      '</span>' +
+      (selCount ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>' : '') +
       '</button>' +
       (open
-        ? '<div class="ms-lac-chip-drawer">' +
+        ? '<div class="ms-lac-chip-drawer" role="listbox" aria-label="Staged onto ' +
+          esc(name) +
+          '" id="ms-lac-drawer-' +
+          esc(col.key).replace(/[^a-z0-9]/gi, '_') +
+          '">' +
           note +
           (body ||
-            '<div class="ms-lac-empty">Nothing staged onto this clinician. Drop a group from Investigation reports.</div>') +
+            '<div class="ms-lac-empty-sm">Nothing staged onto them yet. Select a group in the pile, then click this chip.</div>') +
           '</div>'
         : '') +
+      '</div>'
+    );
+  }
+
+  function emptyPoolHtml() {
+    return (
+      '<div class="ms-lac-empty">' +
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+      '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
+      '</svg>' +
+      '<div class="ms-lac-empty-title">No investigation reports on this queue</div>' +
+      '<div class="ms-lac-empty-sub">New results appear here grouped by who requested them</div>' +
       '</div>'
     );
   }
@@ -281,28 +382,67 @@
   function boardHtml() {
     var board = C.buildWorkspace(_rows, _draft);
     var pool = board.pool;
-    var body =
-      pool.groups && pool.groups.length ? pool.groups.map(groupHtml).join('') : pool.tiles.map(tileHtml).join('');
+    var selCount = selectedIds().length;
+    var body = pool.groups && pool.groups.length ? pool.groups.map(groupHtml).join('') : '';
+    if (!body && board.count > 0) {
+      body =
+        '<div class="ms-lac-empty"><div class="ms-lac-empty-title">The pile is clear</div>' +
+        '<div class="ms-lac-empty-sub">Every result is staged on a clinician chip — on this canvas only</div></div>';
+    }
     return (
       '<div class="ms-lac-workspace">' +
       '<div class="ms-lac-col ms-lac-pool" data-col-key="' +
       esc(pool.key) +
       '" data-col-kind="pool">' +
+      '<div class="ms-lac-pool-head">' +
       '<h3 class="ms-lac-col-heading">' +
       esc(pool.title) +
       '</h3>' +
-      '<div class="ms-lac-col-meta">' +
-      esc(String(pool.count)) +
-      ' — grouped by who requested them. Drop here to leave in the reports pile.</div>' +
-      (body || '<div class="ms-lac-empty">No investigation reports on this queue.</div>') +
+      '<span class="ms-lac-pool-count">' +
+      pool.count +
+      ' of ' +
+      board.count +
+      '</span>' +
+      '<span class="ms-lac-col-meta">Drop here to keep in the pile</span>' +
+      '</div>' +
+      (body || emptyPoolHtml()) +
       '</div>' +
       '<aside class="ms-lac-rail" aria-label="Clinicians">' +
+      '<div class="ms-lac-rail-head">' +
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
-      '<div class="ms-lac-col-meta">Small chips. Drop a group on a name, or click to see what is already on them.</div>' +
+      '<span class="ms-lac-col-meta">' +
+      (selCount ? 'Click a name to stage the selection' : 'Drop targets — click a name to see what is on them') +
+      '</span>' +
+      '</div>' +
       (board.clinicians.length
-        ? board.clinicians.map(chipHtml).join('')
-        : '<div class="ms-lac-empty">No requester names on the payload yet — add a clinician if you need a drop target.</div>') +
+        ? board.clinicians
+            .map(function (col) {
+              return chipHtml(col, selCount);
+            })
+            .join('')
+        : '<div class="ms-lac-empty-sm">No requester names read yet — add a clinician below if you need a drop target.</div>') +
+      '<div class="ms-lac-add-row">' +
+      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add clinician chip — e.g. Dr Jane Cole" aria-label="Add clinician chip">' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add chip</button>' +
+      '</div>' +
       '</aside></div>'
+    );
+  }
+
+  function selectionBarHtml() {
+    var n = selectedIds().length;
+    if (!n) return '';
+    var preview = C.dragPreview(_rows, selectedIds());
+    return (
+      '<div class="ms-lac-selectbar">' +
+      '<span class="ms-lac-selectbar-count">' +
+      n +
+      ' selected</span>' +
+      '<span class="ms-lac-selectbar-label">' +
+      esc(preview.label) +
+      ' — click a clinician chip to stage them, or drag</span>' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-sel-clear">Clear selection</button>' +
+      '</div>'
     );
   }
 
@@ -312,6 +452,28 @@
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-error">' +
         esc(_error) +
         ' <button type="button" class="ms-lac-ghost" id="ms-lac-error-dismiss">Dismiss</button></div>'
+      );
+    }
+    if (_writing) {
+      return (
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<strong>Writing to Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
+        '</div>'
+      );
+    }
+    if (_confirmClose) {
+      var nClose = C.draftSummary(_rows, _draft).count;
+      return (
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<strong>Close and discard?</strong> ' +
+        nClose +
+        ' staged move' +
+        (nClose === 1 ? '' : 's') +
+        ' exist only on this canvas — closing forgets them. The Medicus queue itself is untouched either way.' +
+        '<div class="ms-lac-confirmbar-actions">' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-close-keep">Keep working</button>' +
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-close-discard">Discard and close</button>' +
+        '</div></div>'
       );
     }
     if (_pendingAbsence) {
@@ -325,62 +487,128 @@
         '</div></div>'
       );
     }
-    var write = C.canWriteAllocations();
+    if (_confirmWrite) {
+      var lines = (_confirmWrite.items || [])
+        .map(function (item) {
+          return (
+            '<li>' + esc(item.patientName || 'Unknown') + ' → ' + esc(C.displayClinicianName(item.toTitle)) + '</li>'
+          );
+        })
+        .join('');
+      var refusedNote = '';
+      if (_confirmWrite.refused && _confirmWrite.refused.length) {
+        refusedNote =
+          '<p class="ms-lac-confirmbar-note">Not included — no unique staff match: ' +
+          esc(
+            _confirmWrite.refused
+              .map(function (r) {
+                return C.displayClinicianName(r.toTitle);
+              })
+              .join(', ')
+          ) +
+          '. Those stay on this canvas.</p>';
+      }
+      return (
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<strong>Medicus will reassign these tasks.</strong> This changes who the task sits with — it does not file the result.' +
+        '<ul class="ms-lac-writelist">' +
+        lines +
+        '</ul>' +
+        refusedNote +
+        '<div class="ms-lac-confirmbar-actions">' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-write-go">Write to Medicus</button>' +
+        '</div></div>'
+      );
+    }
     var sum = C.draftSummary(_rows, _draft);
+    var gate = C.canWriteAllocations({ taskList: _taskList });
+    var plan = sum.count ? C.planBulkReassign(_rows, _draft, _taskList, _staffDir) : null;
+    var canWrite = !!(gate.ok && plan && plan.ok && plan.batches && plan.batches.length);
+    var writeTitle = !gate.ok
+      ? gate.reason
+      : !sum.count
+        ? 'Stage at least one result onto a clinician chip first'
+        : canWrite
+          ? 'Review the patient → clinician list, then confirm'
+          : (plan && plan.reason) || 'Cannot write these staged moves';
+    var writeLabel = canWrite ? 'Review then write…' : sum.count ? 'Cannot write — no staff match' : 'Write to Medicus';
     return (
       '<div class="ms-lac-confirmbar">' +
-      '<strong>This canvas does not write.</strong> ' +
-      esc(write.reason) +
-      (sum.count ? ' ' + sum.count + ' staged move' + (sum.count === 1 ? '' : 's') + ' sit on this canvas only.' : '') +
-      (_copyNote ? '<div class="ms-lac-hint">' + esc(_copyNote) + '</div>' : '') +
+      '<span class="ms-lac-confirmbar-note"><strong>Planning board.</strong> Staged moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
+      (sum.count ? ' (' + sum.count + ' staged so far)' : '') +
+      '.</span>' +
+      (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '<div class="ms-lac-confirmbar-actions">' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-copy">Copy working list</button>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-clear"' +
       (sum.count ? '' : ' disabled') +
       '>Clear staged moves</button>' +
-      '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-finalise" disabled>Write to Medicus — not available</button>' +
+      '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-finalise"' +
+      (canWrite ? '' : ' disabled') +
+      ' title="' +
+      esc(writeTitle) +
+      '">' +
+      esc(writeLabel) +
+      '</button>' +
       '</div></div>'
     );
   }
 
-  function overlayHtml() {
+  function shellHtml() {
+    var board = C.buildWorkspace(_rows, _draft);
+    var requesterGroups = board.pool.groups.filter(function (g) {
+      return g.known;
+    }).length;
+    var counts = _rows.length ? _rows.length + ' results · ' + requesterGroups + ' requesters' : '';
     return (
-      '<div class="ms-lac-backdrop" id="ms-lac-backdrop">' +
-      '<div class="ms-lac-panel" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
-      '<div class="ms-lac-live" aria-live="polite"></div>' +
+      '<div class="ms-lac-panel' +
+      (_writing ? ' ms-lac-panel-writing' : '') +
+      '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>' +
+      '<span class="ms-lac-header-counts">' +
+      esc(counts) +
+      '</span>' +
+      '<span class="ms-lac-header-note">Select a group, then click a clinician — or drag. Writing happens only when you confirm.</span>' +
+      '<span class="ms-lac-hint" id="ms-lac-progress">' +
+      esc(_overviewProgress) +
+      '</span>' +
       '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
       '</div>' +
-      '<div class="ms-lac-explainer">' +
-      'Every result on this queue sits in the pile on the left, grouped by who requested it. ' +
-      'Multi-select tiles or drag a group onto a clinician chip. ' +
-      'A registered GP is a hint only. ' +
-      'Away is shown only when Medicus has an absence for them today, or this machine’s rota leave list says they are off. ' +
-      'In today is from today’s appointment book — not being on that book is not the same as being away. ' +
-      'Nothing is written to Medicus from this canvas yet.' +
-      (_overviewProgress ? ' ' + esc(_overviewProgress) : '') +
-      '</div>' +
-      '<div class="ms-lac-filterbar">' +
-      '<label class="ms-lac-add">Add clinician chip <input type="text" id="ms-lac-add-name" maxlength="80" placeholder="e.g. Dr Jane Cole"></label>' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add chip</button>' +
-      '<span class="ms-lac-hint">' +
-      esc(_rows.length ? _rows.length + ' results on the queue' : '') +
-      '</span>' +
-      '</div>' +
+      selectionBarHtml() +
       '<div class="ms-lac-body"><div class="ms-lac-board" id="ms-lac-board">' +
       (_loading && !_rows.length ? '<div class="ms-lac-msg">Reading the results queue…</div>' : boardHtml()) +
       '</div></div>' +
       confirmBarHtml() +
-      '</div></div>'
+      '</div>'
+    );
+  }
+
+  function focusKeyOf(el) {
+    if (!el || !el.getAttribute) return '';
+    return (
+      (el.id && '#' + el.id) ||
+      (el.getAttribute('data-task-id') && '[data-task-id="' + el.getAttribute('data-task-id') + '"]') ||
+      (el.getAttribute('data-chip-key') && '[data-chip-key="' + el.getAttribute('data-chip-key') + '"]') ||
+      (el.getAttribute('data-group-key') &&
+        '.ms-lac-group-head[data-group-key="' + el.getAttribute('data-group-key') + '"]') ||
+      ''
     );
   }
 
   function render() {
     var el = document.getElementById(OVERLAY_ID);
     if (!el || !_open) return;
-    el.innerHTML = overlayHtml();
-    bindOverlay(el);
+    var shell = el.querySelector('.ms-lac-shell');
+    if (!shell) return;
+    var focusKey = focusKeyOf(document.activeElement);
+    shell.innerHTML = shellHtml();
+    bindOverlay(shell);
+    if (focusKey) {
+      var again = shell.querySelector(focusKey);
+      if (again) again.focus();
+    }
   }
 
   function toggleSelect(id, additive) {
@@ -406,18 +634,20 @@
   function bindOverlay(root) {
     var close = root.querySelector('#ms-lac-close');
     if (close) close.addEventListener('click', requestClose);
-    var backdrop = root.querySelector('#ms-lac-backdrop');
-    if (backdrop) {
-      backdrop.addEventListener('click', function (e) {
-        if (e.target === backdrop) requestClose();
-      });
-    }
     var dismiss = root.querySelector('#ms-lac-error-dismiss');
     if (dismiss)
       dismiss.addEventListener('click', function () {
         _error = null;
         render();
       });
+    var keepBtn = root.querySelector('#ms-lac-close-keep');
+    if (keepBtn)
+      keepBtn.addEventListener('click', function () {
+        _confirmClose = false;
+        render();
+      });
+    var discardBtn = root.querySelector('#ms-lac-close-discard');
+    if (discardBtn) discardBtn.addEventListener('click', closeOverlay);
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
     var addName = root.querySelector('#ms-lac-add-name');
@@ -429,6 +659,13 @@
         }
       });
     }
+    var selClear = root.querySelector('#ms-lac-sel-clear');
+    if (selClear)
+      selClear.addEventListener('click', function () {
+        _selected = {};
+        announce('Selection cleared');
+        render();
+      });
     var copyBtn = root.querySelector('#ms-lac-copy');
     if (copyBtn) copyBtn.addEventListener('click', copyWorkingList);
     var clearBtn = root.querySelector('#ms-lac-clear');
@@ -453,6 +690,23 @@
         if (!_pendingAbsence) return;
         commitStage(_pendingAbsence.ids, _pendingAbsence.key);
       });
+    var reviewBtn = root.querySelector('#ms-lac-finalise');
+    if (reviewBtn)
+      reviewBtn.addEventListener('click', function () {
+        requestWrite();
+      });
+    var writeKeep = root.querySelector('#ms-lac-write-keep');
+    if (writeKeep)
+      writeKeep.addEventListener('click', function () {
+        _confirmWrite = null;
+        announce('Kept planning. Nothing was written.');
+        render();
+      });
+    var writeGo = root.querySelector('#ms-lac-write-go');
+    if (writeGo)
+      writeGo.addEventListener('click', function () {
+        commitWrite();
+      });
     function beginDrag(e, ids) {
       _dragIds = ids;
       var preview = C.dragPreview(_rows, ids);
@@ -475,17 +729,36 @@
         _dragGhost = null;
       }
     }
+    function selectGroup(head) {
+      var ids = String(head.getAttribute('data-group-ids') || '')
+        .split(',')
+        .filter(Boolean);
+      _selected = {};
+      ids.forEach(function (id) {
+        _selected[id] = true;
+      });
+      announce('Selected ' + ids.length + ' — click a clinician chip to stage them, or drag');
+      render();
+    }
+    root.querySelectorAll('.ms-lac-group-toggle').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var key = btn.getAttribute('data-toggle-key') || '';
+        _collapsed[key] = !_collapsed[key];
+        render();
+      });
+    });
     root.querySelectorAll('.ms-lac-group-head').forEach(function (head) {
       head.addEventListener('click', function (e) {
         e.stopPropagation();
-        var ids = String(head.getAttribute('data-group-ids') || '')
-          .split(',')
-          .filter(Boolean);
-        _selected = {};
-        ids.forEach(function (id) {
-          _selected[id] = true;
-        });
-        render();
+        selectGroup(head);
+      });
+      head.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectGroup(head);
+        }
       });
       head.addEventListener('dragstart', function (e) {
         var ids = String(head.getAttribute('data-group-ids') || '')
@@ -501,6 +774,13 @@
         if (!id) return;
         toggleSelect(id, e.metaKey || e.ctrlKey);
       });
+      tile.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          var id = tile.getAttribute('data-task-id');
+          if (id) toggleSelect(id, true);
+        }
+      });
       tile.addEventListener('dragstart', function (e) {
         var id = tile.getAttribute('data-task-id');
         var ids = _selected[id] ? selectedIds() : [id];
@@ -513,7 +793,8 @@
         e.preventDefault();
         el.classList.add('ms-lac-drop-hover');
       });
-      el.addEventListener('dragleave', function () {
+      el.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && el.contains(e.relatedTarget)) return;
         el.classList.remove('ms-lac-drop-hover');
       });
       el.addEventListener('drop', function (e) {
@@ -537,6 +818,13 @@
         e.preventDefault();
         e.stopPropagation();
         var key = btn.getAttribute('data-chip-key') || '';
+        var ids = selectedIds();
+        if (ids.length) {
+          // The non-drag path: an active selection makes every chip a
+          // one-click stage target.
+          requestStage(ids, key, btn.closest('.ms-lac-chip-wrap'));
+          return;
+        }
         _expandedChip = _expandedChip === key ? '' : key;
         render();
       });
@@ -544,10 +832,11 @@
   }
 
   function requestStage(ids, key, colEl) {
+    if (_writing) return;
     var kind = (colEl && colEl.getAttribute('data-col-kind')) || '';
     var titleEl =
       (colEl && colEl.querySelector('.ms-lac-chip-name')) || (colEl && colEl.querySelector('.ms-lac-col-heading'));
-    var title = (titleEl && titleEl.textContent) || '';
+    var title = C.displayClinicianName((titleEl && titleEl.textContent) || '');
     if (kind === 'clinician') {
       var abs = C.presenceForName({
         name: title,
@@ -620,7 +909,76 @@
     }
   }
 
+  function requestWrite() {
+    if (_writing) return;
+    var plan = C.planBulkReassign(_rows, _draft, _taskList, _staffDir);
+    if (!plan.ok || !plan.batches.length) {
+      _error = plan.reason || 'Cannot write these staged moves.';
+      announce(_error);
+      render();
+      return;
+    }
+    _confirmWrite = plan;
+    announce('Review the list, then confirm. Medicus will reassign those tasks.');
+    render();
+  }
+
+  async function commitWrite() {
+    if (_writing || !_confirmWrite) return;
+    _writing = true;
+    _error = null;
+    render();
+    try {
+      var result = await client().commitAllocations({
+        slug: _route && _route.slug,
+        draft: _draft,
+        rows: _rows,
+        taskList: _taskList,
+        directory: _staffDir,
+      });
+      if (!result || !result.ok) {
+        _error = (result && result.reason) || 'Medicus did not accept the reassignment. Nothing further was written.';
+        _confirmWrite = null;
+        _writing = false;
+        announce(_error);
+        render();
+        return;
+      }
+      var n = result.written || 0;
+      _draft = C.emptyDraft();
+      _confirmWrite = null;
+      _copyNote =
+        'Medicus accepted ' +
+        n +
+        ' reassignment' +
+        (n === 1 ? '' : 's') +
+        '. Check the queue — this canvas is a working copy.';
+      _writing = false;
+      announce(_copyNote);
+      await loadBoard();
+    } catch (err) {
+      _writing = false;
+      _confirmWrite = null;
+      _error = err && err.message ? err.message : 'Medicus did not accept the reassignment.';
+      announce(_error);
+      render();
+    }
+  }
+
   function requestClose() {
+    if (_writing) return;
+    if (_confirmWrite) {
+      _confirmWrite = null;
+      announce('Kept planning. Nothing was written.');
+      render();
+      return;
+    }
+    if (C.draftSummary(_rows, _draft).count > 0) {
+      _confirmClose = true;
+      announce('Close and discard staged moves? Confirm below.');
+      render();
+      return;
+    }
     closeOverlay();
   }
 
@@ -632,8 +990,16 @@
     _error = null;
     _copyNote = '';
     _expandedChip = '';
+    _confirmClose = false;
+    _confirmWrite = null;
+    _writing = false;
+    _taskList = undefined;
+    _staffDir = C.harvestStaffDirectory([], null);
+    _collapsed = {};
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) launch.focus();
   }
 
   function openOverlay() {
@@ -643,13 +1009,26 @@
     _draft = C.emptyDraft();
     _selected = {};
     _expandedChip = '';
+    _confirmClose = false;
+    _confirmWrite = null;
+    _writing = false;
+    _taskList = undefined;
+    _staffDir = C.harvestStaffDirectory([], null);
+    _copyNote = '';
+    _error = null;
+    _collapsed = {};
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');
       el.id = OVERLAY_ID;
+      // The live region is a stable sibling of the re-rendered shell so
+      // announcements survive re-renders.
+      el.innerHTML = '<div class="ms-lac-live" aria-live="polite"></div><div class="ms-lac-shell"></div>';
       document.documentElement.appendChild(el);
     }
     render();
+    var close = el.querySelector('#ms-lac-close');
+    if (close) close.focus();
     loadBoard();
   }
 
@@ -681,6 +1060,19 @@
     function (e) {
       if (e.key === 'Escape' && _open) {
         e.stopPropagation();
+        if (_writing) return;
+        if (_confirmWrite) {
+          _confirmWrite = null;
+          announce('Kept planning. Nothing was written.');
+          render();
+          return;
+        }
+        if (selectedIds().length) {
+          _selected = {};
+          announce('Selection cleared');
+          render();
+          return;
+        }
         requestClose();
       }
     },

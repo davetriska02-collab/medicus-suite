@@ -1,5 +1,5 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — lab-result batch-allocation core (read + stage only).
+// Medicus Suite — lab-result batch-allocation core (read, stage, then write).
 //
 // Incoming investigation-report tasks land in a shared inbox. The practice
 // then allocates each one to the clinician who ordered the test. Today that
@@ -8,13 +8,21 @@
 //
 // This core:
 //   - reads a results-queue task-list (same envelopes as task-bulk-action)
-//   - extracts a requester when the overview / OIR-style label actually
-//     names one (never treats named GP as "who ordered")
+//   - extracts a requester when the task-list Requested By column or an
+//     overview / OIR-style label actually names one (never treats named GP
+//     as "who ordered"; never treats the lab/org requester object as a GP)
 //   - builds a reports-pool + clinician-chip workspace and stages moves
+//   - writes via Medicus's own bulk-reassign (captured 2026-08-25)
 //
-// WRITE CONTRACT: not captured. canWriteAllocations() is always false.
-// Do not invent a reassign slug. Capture it live with
-// scripts/lab-allocate-capture.js while reassigning one dummy result by hand.
+// WRITE CONTRACT (live capture 2026-08-25T10:23Z, Investigation Results):
+//   POST /tasks/task-list/bulk-reassign
+//   keys (only these four — do not invent extras):
+//     assigneeId, assigneeType, taskList, taskIds
+//   assigneeType is "staff" (sibling-confirmed on create-task writes;
+//   the canvas only allocates to people, never teams).
+//   taskList is passed through from the GET task-list envelope — never
+//   invented. canWriteAllocations() is true only when that token is present.
+//   Destinations without a unique staff UUID are refused, not guessed.
 //
 // Dual-mode: module.exports for Node tests, window.LabAllocateCore in the
 // content-script canvas. Pure: no DOM, no chrome.*, no fetch.
@@ -29,8 +37,11 @@
   var TEAM_ASSIGNEE_RE =
     /\b(team|inbox|results?|reports?|investigation|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing)\b/i;
   var TITLE_RE = /\b(dr|doctor|prof|professor|mr|mrs|ms|miss)\b\.?/g;
-  var WRITE_BLOCKED =
-    'Writing allocations to Medicus is not enabled. The Reassign-task endpoint has not been captured live — do not invent a slug. Use scripts/lab-allocate-capture.js while you reassign one result by hand, then we can wire Finalise.';
+  var ASSIGNEE_TYPE_STAFF = 'staff';
+  var BULK_REASSIGN_PATH = '/tasks/task-list/bulk-reassign';
+  var WRITE_NEEDS_TOKEN =
+    'Need Medicus’s queue token before anything can be written. Reload the results list and open the canvas again.';
+  var WRITE_BLOCKED = WRITE_NEEDS_TOKEN;
 
   // Field names seen on journal investigation-requests (`requestedBy`) plus
   // the usual GP-system aliases. Compared case-insensitively. A hit is
@@ -158,14 +169,52 @@
       .trim();
   }
 
+  // One person, two wire formats: the task-list Requested By column carries
+  // "AZADIAN N" (surname then initial) while the appointment book and rota
+  // carry "Dr Natalie Azadian". Canonical form is "surname|initial" —
+  // "azadian|n" from either side — so chips, groups, and presence all agree.
+  // A bare surname ("Anstead") keys as "anstead" and matches any initial.
+  // Known limit: two clinicians sharing surname AND first initial would
+  // merge on the board. The write refuses that destination unless the
+  // staff directory has exactly one UUID for the chip.
+  function personNameKey(name) {
+    var n = normClinicianName(name);
+    if (!n) return '';
+    var toks = n.split(' ');
+    if (toks.length === 1) return toks[0];
+    var last = toks[toks.length - 1];
+    if (last.length === 1) return toks.slice(0, -1).join(' ') + '|' + last;
+    return toks.slice(1).join(' ') + '|' + toks[0].charAt(0);
+  }
+
+  function samePerson(a, b) {
+    var ka = personNameKey(a);
+    var kb = personNameKey(b);
+    if (!ka || !kb) return false;
+    if (ka === kb) return true;
+    var sa = ka.split('|');
+    var sb = kb.split('|');
+    if (sa[0] !== sb[0]) return false;
+    return sa.length === 1 || sb.length === 1;
+  }
+
   function sameClinician(a, b) {
     var na = normClinicianName(a);
     var nb = normClinicianName(b);
-    return !!na && na === nb;
+    if (!!na && na === nb) return true;
+    return samePerson(a, b);
+  }
+
+  // Title-case an ALL-CAPS wire token for display ("AZADIAN N" → "Azadian N").
+  // Mixed-case names pass through untouched.
+  function displayClinicianName(name) {
+    return String(name || '').replace(/\b([A-Z])([A-Z]+)\b/g, function (_, first, rest) {
+      return first + rest.toLowerCase();
+    });
   }
 
   function clinicianColumnKey(name) {
-    var n = normClinicianName(name);
+    var n = personNameKey(name);
     return n ? 'clinician:' + n : UNALLOCATED;
   }
 
@@ -210,6 +259,14 @@
     return null;
   }
 
+  // Live overview `investigationReport.requester` is the sending lab/org,
+  // not the GP who ordered the test. practitionerName on that object is
+  // still the lab side — do not promote it.
+  function isOrgRequester(v) {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+    return !!(v.organisationName || v.organisationOdsCode);
+  }
+
   function pickRequesterFromOverview(payload) {
     var found = [];
     function walk(node, depth) {
@@ -232,6 +289,10 @@
         if (SKIP_WALK_KEYS[lk]) continue;
         var val = node[key];
         if (REQUESTER_KEYS[lk]) {
+          // Lab/org requester { organisationName, organisationOdsCode,
+          // departmentName, practitionerName } is who the lab thinks
+          // requested the test — not the GP. Skip it.
+          if (isOrgRequester(val)) continue;
           var name = nameFromUnknown(val);
           if (name) found.push({ name: name, source: key });
         } else {
@@ -269,7 +330,9 @@
       ? clip(item.summary, 120)
       : isStr(item.summaryLabel)
         ? clip(item.summaryLabel, 120)
-        : '';
+        : isStr(item.investigations)
+          ? clip(item.investigations, 120)
+          : '';
     var row = {
       id: id,
       patientName: isStr(item.patientName) ? clip(item.patientName, 80) : 'Unknown',
@@ -342,7 +405,7 @@
           return r.assignedTo;
         }
       }
-      return key.slice('clinician:'.length);
+      return key.slice('clinician:'.length).replace('|', ' ');
     }
     return key;
   }
@@ -453,13 +516,17 @@
       tiles: poolTiles,
       groups: groupTiles(poolTiles),
     };
+    // How much of the pile each person ordered — the chip's workload signal
+    // and the "take their pile" affordance both read this.
+    var poolCountByKey = {};
+    pool.groups.forEach(function (g) {
+      if (g.known) poolCountByKey[g.key] = g.count;
+    });
     var clinicians = collected.keys.map(function (key) {
       var tiles = tilesOnKey(rows, draft, key);
       var stagedCount = 0;
-      var assignedCount = 0;
       tiles.forEach(function (t) {
         if (t.staged) stagedCount++;
-        else assignedCount++;
       });
       return {
         key: key,
@@ -467,7 +534,7 @@
         title: columnTitle(key, rows, titles),
         count: tiles.length,
         stagedCount: stagedCount,
-        assignedCount: assignedCount,
+        inPoolCount: poolCountByKey[key] || 0,
         tiles: tiles,
         groups: groupTiles(tiles),
       };
@@ -533,8 +600,221 @@
     return lines.join('\n').trim();
   }
 
-  function canWriteAllocations() {
-    return { ok: false, reason: WRITE_BLOCKED };
+  function hasTaskListToken(taskList) {
+    if (taskList === undefined || taskList === null) return false;
+    if (typeof taskList === 'string') return taskList.trim().length > 0;
+    if (typeof taskList === 'number' || typeof taskList === 'boolean') return true;
+    if (Array.isArray(taskList)) return taskList.length > 0;
+    if (typeof taskList === 'object') return Object.keys(taskList).length > 0;
+    return false;
+  }
+
+  function extractTaskListToken(body) {
+    if (!body || typeof body !== 'object') return undefined;
+    return body.taskList;
+  }
+
+  function canWriteAllocations(ctx) {
+    if (!ctx || !hasTaskListToken(ctx.taskList)) {
+      return { ok: false, reason: WRITE_NEEDS_TOKEN };
+    }
+    return { ok: true };
+  }
+
+  function emptyStaffDirectory() {
+    return { byId: {}, list: [] };
+  }
+
+  function addStaffToDirectory(dir, id, name, source) {
+    if (!dir) return dir;
+    if (!UUID_RE.test(String(id || ''))) return dir;
+    var nm = isStr(name) ? clip(name, 80) : '';
+    if (!nm || isTeamAssignee(nm)) return dir;
+    var existing = dir.byId[id];
+    if (existing && existing.name && existing.name.length >= nm.length) return dir;
+    dir.byId[id] = { id: id, name: nm, source: source || (existing && existing.source) || '' };
+    return dir;
+  }
+
+  function finaliseStaffDirectory(dir) {
+    dir = dir || emptyStaffDirectory();
+    dir.list = [];
+    Object.keys(dir.byId).forEach(function (id) {
+      dir.list.push(dir.byId[id]);
+    });
+    return dir;
+  }
+
+  function pickStaffFields(item) {
+    if (!item || typeof item !== 'object') return null;
+    var typ = isStr(item.type) ? String(item.type).toLowerCase() : '';
+    if (typ === 'team') return null;
+    var id = item.id || item.value || item.staffId || item.assigneeId || '';
+    var name = item.name || item.label || item.displayName || item.fullName || item.staffName || '';
+    if (!isStr(id) || !isStr(name)) return null;
+    return { id: id, name: name };
+  }
+
+  function harvestAssigneeOptionsInto(dir, payload) {
+    if (!payload || typeof payload !== 'object') return;
+    function consider(node) {
+      if (!node || typeof node !== 'object') return;
+      var opts = node.assigneeOptions;
+      if (!opts || typeof opts !== 'object') return;
+      var staff = opts.staff;
+      if (Array.isArray(staff)) {
+        staff.forEach(function (item) {
+          var p = pickStaffFields(item);
+          if (p) addStaffToDirectory(dir, p.id, p.name, 'assignee-options');
+        });
+      }
+      var teams = opts.teams;
+      if (Array.isArray(teams)) {
+        teams.forEach(function (item) {
+          if (!item) return;
+          var tid = item.id || item.value;
+          if (isStr(tid) && dir.byId[tid]) delete dir.byId[tid];
+        });
+      }
+    }
+    function walk(node, depth) {
+      if (!node || typeof node !== 'object' || depth > 6) return;
+      consider(node);
+      if (Array.isArray(node)) {
+        for (var i = 0; i < node.length && i < 40; i++) walk(node[i], depth + 1);
+        return;
+      }
+      var keys = Object.keys(node);
+      for (var k = 0; k < keys.length && k < 40; k++) {
+        if (SKIP_WALK_KEYS[keys[k].toLowerCase()]) continue;
+        walk(node[keys[k]], depth + 1);
+      }
+    }
+    walk(payload, 0);
+  }
+
+  function harvestStaffDirectory(rows, payload) {
+    var dir = emptyStaffDirectory();
+    (Array.isArray(rows) ? rows : []).forEach(function (row) {
+      if (!row) return;
+      if (row.assignedId && row.assignedTo && !isTeamAssignee(row.assignedTo)) {
+        addStaffToDirectory(dir, row.assignedId, row.assignedTo, 'assigned');
+      }
+      if (row.namedGpId && row.namedGp) {
+        addStaffToDirectory(dir, row.namedGpId, row.namedGp, 'named-gp');
+      }
+    });
+    harvestAssigneeOptionsInto(dir, payload);
+    return finaliseStaffDirectory(dir);
+  }
+
+  function mergeStaffDirectory(a, b) {
+    var dir = emptyStaffDirectory();
+    function absorb(src) {
+      if (!src || !src.byId) return;
+      Object.keys(src.byId).forEach(function (id) {
+        var e = src.byId[id];
+        addStaffToDirectory(dir, e.id, e.name, e.source);
+      });
+    }
+    absorb(a);
+    absorb(b);
+    return finaliseStaffDirectory(dir);
+  }
+
+  function resolveStaffForColumn(key, title, directory) {
+    var list = (directory && directory.list) || [];
+    var seen = {};
+    var hits = [];
+    list.forEach(function (s) {
+      if (!s) return;
+      var match = (key && clinicianColumnKey(s.name) === key) || (title && samePerson(s.name, title));
+      if (!match) return;
+      if (seen[s.id]) return;
+      seen[s.id] = true;
+      hits.push(s);
+    });
+    if (hits.length === 1) return { ok: true, staff: hits[0] };
+    if (!hits.length) return { ok: false, reason: 'no-unique-staff' };
+    return { ok: false, reason: 'ambiguous-staff' };
+  }
+
+  function buildBulkReassignBody(assigneeId, taskList, taskIds) {
+    if (!UUID_RE.test(String(assigneeId || ''))) return null;
+    if (!hasTaskListToken(taskList)) return null;
+    var ids = (Array.isArray(taskIds) ? taskIds : []).filter(function (id) {
+      return UUID_RE.test(String(id || ''));
+    });
+    if (!ids.length) return null;
+    return {
+      assigneeId: assigneeId,
+      assigneeType: ASSIGNEE_TYPE_STAFF,
+      taskList: taskList,
+      taskIds: ids,
+    };
+  }
+
+  function planBulkReassign(rows, draft, taskList, directory) {
+    var gate = canWriteAllocations({ taskList: taskList });
+    if (!gate.ok) {
+      return { ok: false, reason: gate.reason, batches: [], refused: [], items: [] };
+    }
+    var sum = draftSummary(rows, draft);
+    var byDest = {};
+    var destOrder = [];
+    var refused = [];
+    var refusedKeys = {};
+    var writableItems = [];
+    sum.items.forEach(function (item) {
+      var resolved = resolveStaffForColumn(item.toKey, item.toTitle, directory);
+      if (!resolved.ok) {
+        if (!refusedKeys[item.toKey]) {
+          refusedKeys[item.toKey] = true;
+          refused.push({
+            toKey: item.toKey,
+            toTitle: item.toTitle,
+            reason: resolved.reason,
+            taskIds: [],
+          });
+        }
+        for (var r = 0; r < refused.length; r++) {
+          if (refused[r].toKey === item.toKey) {
+            refused[r].taskIds.push(item.id);
+            break;
+          }
+        }
+        return;
+      }
+      var id = resolved.staff.id;
+      if (!byDest[id]) {
+        byDest[id] = {
+          assigneeId: id,
+          assigneeType: ASSIGNEE_TYPE_STAFF,
+          taskList: taskList,
+          taskIds: [],
+          toTitle: item.toTitle,
+          toKey: item.toKey,
+        };
+        destOrder.push(id);
+      }
+      byDest[id].taskIds.push(item.id);
+      writableItems.push(item);
+    });
+    var batches = destOrder.map(function (id) {
+      return byDest[id];
+    });
+    if (!batches.length) {
+      return {
+        ok: false,
+        reason: refused.length
+          ? 'Cannot write — no unique staff match for the staged clinician chips. They stay on this canvas.'
+          : 'Nothing staged to write.',
+        batches: [],
+        refused: refused,
+        items: [],
+      };
+    }
+    return { ok: true, batches: batches, refused: refused, items: writableItems };
   }
 
   var UNKNOWN_GROUP = 'unknown';
@@ -585,6 +865,10 @@
       }
       map[key].tileIds.push(tile.id);
       map[key].tiles.push(tile);
+      // Variants of one person merge into one group; show the fullest name.
+      if (tile.requester && String(tile.requester).length > String(map[key].requester).length) {
+        map[key].requester = tile.requester;
+      }
     });
     return order
       .map(function (key) {
@@ -978,6 +1262,31 @@
       }
     }
 
+    async function postJson(path, payload) {
+      var fn = fetchImpl || fetch;
+      var resp = await fn(url(path), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        var err = new Error('HTTP ' + resp.status);
+        err.status = resp.status;
+        throw err;
+      }
+      var text = await resp.text();
+      if (!text) return {};
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return {};
+      }
+    }
+
     async function fetchTaskList(slug) {
       var tried = [slug];
       var alt = altSlug(slug);
@@ -989,6 +1298,7 @@
           return {
             slug: tried[i],
             body: body,
+            taskList: extractTaskListToken(body),
             rows: extractTaskArray(body)
               .map(function (item) {
                 return normaliseTaskRow(item, tried[i]);
@@ -1030,11 +1340,116 @@
       return parseAbsenceRecords(body);
     }
 
+    async function commitAllocations(opts) {
+      opts = opts || {};
+      var taskList = opts.taskList;
+      var gate = canWriteAllocations({ taskList: taskList });
+      if (!gate.ok) return { ok: false, reason: gate.reason, written: 0, vanished: [], refused: [] };
+      var plan = planBulkReassign(opts.rows, opts.draft, taskList, opts.directory);
+      if (!plan.ok || !plan.batches.length) {
+        return {
+          ok: false,
+          reason: plan.reason,
+          written: 0,
+          vanished: [],
+          refused: plan.refused || [],
+        };
+      }
+      var fresh;
+      try {
+        fresh = await fetchTaskList(opts.slug);
+      } catch (e) {
+        return {
+          ok: false,
+          reason: 'Could not re-read the results queue before writing. Nothing was sent.',
+          written: 0,
+          vanished: [],
+          refused: plan.refused || [],
+        };
+      }
+      var freshIds = {};
+      (fresh.rows || []).forEach(function (r) {
+        if (r && r.id) freshIds[r.id] = true;
+      });
+      var vanished = [];
+      plan.batches.forEach(function (batch) {
+        batch.taskIds.forEach(function (id) {
+          if (!freshIds[id]) vanished.push(id);
+        });
+      });
+      if (vanished.length) {
+        return {
+          ok: false,
+          reason:
+            'The queue changed — at least one staged result is no longer on the list. Nothing was written. Reload and check Medicus.',
+          written: 0,
+          vanished: vanished,
+          refused: plan.refused || [],
+        };
+      }
+      var liveToken = hasTaskListToken(fresh.taskList) ? fresh.taskList : taskList;
+      var written = 0;
+      var writtenBatches = [];
+      for (var i = 0; i < plan.batches.length; i++) {
+        var batch = plan.batches[i];
+        var body = buildBulkReassignBody(batch.assigneeId, liveToken, batch.taskIds);
+        if (!body) {
+          return {
+            ok: false,
+            partial: written > 0,
+            written: written,
+            writtenBatches: writtenBatches,
+            refused: plan.refused || [],
+            reason:
+              written > 0
+                ? 'Medicus accepted the first ' +
+                  written +
+                  ' reassignment' +
+                  (written === 1 ? '' : 's') +
+                  '. A later group could not be built. Check the queue.'
+                : 'Could not build a reassignment body. Nothing was written.',
+          };
+        }
+        try {
+          await postJson(BULK_REASSIGN_PATH, body);
+          written += batch.taskIds.length;
+          writtenBatches.push(batch);
+        } catch (e) {
+          var status = e && e.status ? 'HTTP ' + e.status : e && e.message ? e.message : 'HTTP error';
+          return {
+            ok: false,
+            partial: written > 0,
+            written: written,
+            writtenBatches: writtenBatches,
+            failedBatch: batch,
+            refused: plan.refused || [],
+            reason:
+              written > 0
+                ? 'Medicus accepted the first ' +
+                  written +
+                  ' reassignment' +
+                  (written === 1 ? '' : 's') +
+                  '. The rest were not written: ' +
+                  status +
+                  '. Check the queue.'
+                : 'Medicus refused the reassignment (' + status + '). Nothing was written.',
+          };
+        }
+      }
+      return {
+        ok: true,
+        written: written,
+        writtenBatches: writtenBatches,
+        refused: plan.refused || [],
+      };
+    }
+
     return {
       fetchTaskList: fetchTaskList,
       fetchOverview: fetchOverview,
       fetchTodayBook: fetchTodayBook,
       fetchStaffScheduleAbsences: fetchStaffScheduleAbsences,
+      commitAllocations: commitAllocations,
     };
   }
 
@@ -1042,6 +1457,9 @@
     UNALLOCATED: UNALLOCATED,
     POOL: POOL,
     WRITE_BLOCKED: WRITE_BLOCKED,
+    WRITE_NEEDS_TOKEN: WRITE_NEEDS_TOKEN,
+    ASSIGNEE_TYPE_STAFF: ASSIGNEE_TYPE_STAFF,
+    BULK_REASSIGN_PATH: BULK_REASSIGN_PATH,
     isResultsQueueSlug: isResultsQueueSlug,
     parseResultsQueueRoute: parseResultsQueueRoute,
     altSlug: altSlug,
@@ -1050,7 +1468,10 @@
     overviewUrlFor: overviewUrlFor,
     isTeamAssignee: isTeamAssignee,
     normClinicianName: normClinicianName,
+    personNameKey: personNameKey,
+    samePerson: samePerson,
     sameClinician: sameClinician,
+    displayClinicianName: displayClinicianName,
     clinicianColumnKey: clinicianColumnKey,
     inboxColumnKey: inboxColumnKey,
     parseRequestLabel: parseRequestLabel,
@@ -1068,7 +1489,15 @@
     buildWorkspace: buildWorkspace,
     draftSummary: draftSummary,
     copyList: copyList,
+    isOrgRequester: isOrgRequester,
+    hasTaskListToken: hasTaskListToken,
+    extractTaskListToken: extractTaskListToken,
     canWriteAllocations: canWriteAllocations,
+    harvestStaffDirectory: harvestStaffDirectory,
+    mergeStaffDirectory: mergeStaffDirectory,
+    resolveStaffForColumn: resolveStaffForColumn,
+    buildBulkReassignBody: buildBulkReassignBody,
+    planBulkReassign: planBulkReassign,
     todayISO: todayISO,
     formatLeaveDate: formatLeaveDate,
     requesterGroupKey: requesterGroupKey,
