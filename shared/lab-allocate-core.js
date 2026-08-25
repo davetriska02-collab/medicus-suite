@@ -11,7 +11,7 @@
 //   - extracts a requester when the task-list Requested By column or an
 //     overview / OIR-style label actually names one (never treats named GP
 //     as "who ordered"; never treats the lab/org requester object as a GP)
-//   - builds a reports-pool + clinician-chip workspace and stages moves
+//   - builds an unallocated-reports pool + clinician-field workspace and stages moves
 //   - writes via Medicus's own bulk-reassign (captured 2026-08-25)
 //
 // WRITE CONTRACT (live capture 2026-08-25T10:23Z, Investigation Results):
@@ -362,10 +362,16 @@
   }
 
   function homeColumnKey(row) {
-    // Everything on this queue starts in the reports pool. assignedTo is a
-    // caption (often the inbox name "Investigation Reports"). Staging onto a
-    // chip is the only way a tile leaves the pool.
-    void row;
+    // Current assignment only. A person assignee lives on that clinician's
+    // right-hand field. Team inbox / Unassigned / a name that does not key
+    // as a person stay in the unallocated reports pool. Named GP and
+    // requester never auto-place — they are captions on the pile.
+    if (!row) return POOL;
+    var assigned = row.assignedTo;
+    if (assigned && assigned !== 'Unassigned' && !isTeamAssignee(assigned)) {
+      var key = clinicianColumnKey(assigned);
+      if (key && key.indexOf('clinician:') === 0) return key;
+    }
     return POOL;
   }
 
@@ -499,8 +505,8 @@
     collected.keys.forEach(function (key) {
       onChip[key] = true;
     });
-    // The pool is the catch-all. Every row is either on a clinician chip or
-    // in here — a result must never fall off the board.
+    // The pool is the unallocated box. Every row is either sitting on a
+    // clinician field or in here — a result must never fall off the board.
     var poolTiles = rows
       .filter(function (row) {
         return !onChip[visualColumnKey(row, draft)];
@@ -567,6 +573,8 @@
       var from = homeColumnKey(row);
       var to = draft.moves[id];
       if (!to || to === from) return;
+      // Pool / inbox destinations are visual only — the write is staff-only.
+      if (!isClinicianKey(to)) return;
       items.push({
         id: id,
         patientName: row.patientName,
@@ -807,7 +815,7 @@
       return {
         ok: false,
         reason: refused.length
-          ? 'Cannot write — no unique staff match for the staged clinician chips. They stay on this canvas.'
+          ? 'Cannot write — no unique staff match for the staged clinician fields. They stay on this canvas.'
           : 'Nothing staged to write.',
         batches: [],
         refused: refused,
@@ -878,7 +886,7 @@
           ? 'Requested by ' + g.requester + ' · ' + g.count + ' result' + (g.count === 1 ? '' : 's')
           : 'Who requested unknown · ' + g.count + ' result' + (g.count === 1 ? '' : 's');
         g.dragHint = g.known
-          ? 'Drag this group onto that clinician’s chip'
+          ? 'Drag this group onto that clinician’s field'
           : 'Cannot auto-group — who requested is missing';
         return g;
       })
