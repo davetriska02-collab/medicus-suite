@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.4] — 2026-08-25
+
+### Lab allocation — restore In today green
+
+The Companion pass had left **In today** as a 6px dot and a muted grey
+label, while Away kept a full amber rail. That flattened a presence
+signal clinicians actually use.
+
+- In today cards again use the green triad: `--green` label ink, a
+  `--green-line` border, and a 3px green left rail (same anatomy as Away,
+  not a wash across the card).
+- The expanded “in the book today” note is green ink again, matching
+  main before the 3.244.1 flatten.
+
+W23 / H-064 unchanged. CSN remains current at 3.244.0 (doc v3.31).
+
 ## [v3.244.3] — 2026-08-25
 
 ### Companion visual language — lab board and injected workbenches

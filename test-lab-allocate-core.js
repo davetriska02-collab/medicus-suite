@@ -429,6 +429,19 @@ console.log('\n--- canvas + manifest source locks ---');
     !/#fff7ed|#9a3412|#ffedd5|#fdba74|#fee2e2/.test(canvasCss),
     'warn/red surfaces use the token triads, not raw hexes'
   );
+  check(
+    /\.ms-lac-chip-in \{[\s\S]*?border-color: var\(--green-line\)/.test(canvasCss),
+    'In today clinician cards keep the green-line border'
+  );
+  check(
+    /\.ms-lac-chip-in \{[\s\S]*?inset 3px 0 0 var\(--green\)/.test(canvasCss),
+    'In today clinician cards keep a 3px green presence rail'
+  );
+  check(
+    /\.ms-lac-chip-in-label \{[\s\S]*?color: var\(--green\)/.test(canvasCss),
+    'the In today label is green ink, not muted grey'
+  );
+  check(/\.ms-lac-col-in \{[\s\S]*?color: var\(--green\)/.test(canvasCss), 'the expanded In today note uses green ink');
   check(/prefers-reduced-motion/.test(canvasCss), 'motion respects prefers-reduced-motion');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
   check(!/Add clinician column/.test(canvas), 'clinicians are fields, not full-page columns');

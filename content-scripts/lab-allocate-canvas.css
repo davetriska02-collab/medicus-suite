@@ -781,8 +781,8 @@
 
 .ms-lac-chip-in-label {
   font-size: 10px;
-  font-weight: 500;
-  color: var(--text-3);
+  font-weight: 600;
+  color: var(--green);
 }
 
 .ms-lac-chip-stagehint {
@@ -797,10 +797,11 @@
   white-space: nowrap;
 }
 
-/* Resting cards stay neutral — presence is carried by the dot/flag and the
-   rail sections, not by tinting the whole card. */
+/* Presence stays on the rail + labelled tag, not a wash across the card.
+   In today keeps the green triad (ink + line + 3px rail) — do not flatten
+   it to a grey label. Away is the matching amber treatment. */
 .ms-lac-chip-away {
-  border-color: var(--border);
+  border-color: var(--amber-line);
   background: var(--bg-elev);
   box-shadow:
     inset 3px 0 0 var(--amber),
@@ -812,8 +813,11 @@
 }
 
 .ms-lac-chip-in {
-  border-color: var(--border);
+  border-color: var(--green-line);
   background: var(--bg-elev);
+  box-shadow:
+    inset 3px 0 0 var(--green),
+    var(--shadow-1);
 }
 
 .ms-lac-chip-open {
@@ -878,7 +882,7 @@
 }
 
 .ms-lac-col-in {
-  color: var(--text-2);
+  color: var(--green);
   background: var(--green-dim);
   border: 1px solid var(--green-line);
 }
