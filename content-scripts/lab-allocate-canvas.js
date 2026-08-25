@@ -1030,10 +1030,23 @@
         directory: _staffDir,
       });
       if (!result || !result.ok) {
-        _error = (result && result.reason) || 'Medicus did not accept the reassignment. Nothing further was written.';
+        var failReason =
+          (result && result.reason) || 'Medicus did not accept the reassignment. Nothing further was written.';
         _confirmWrite = null;
         _writing = false;
-        announce(_error);
+        announce(failReason);
+        // A batch that stopped part-way DID write the earlier groups. The
+        // board is stale the moment that happens: those rows still show as
+        // staged, so the count says work is pending that Medicus already
+        // took. Re-read before telling the clinician to check the queue —
+        // loadBoard() clears _error, so restore the message after it.
+        if (result && result.written > 0) {
+          await loadBoard();
+          _error = failReason;
+          render();
+          return;
+        }
+        _error = failReason;
         render();
         return;
       }

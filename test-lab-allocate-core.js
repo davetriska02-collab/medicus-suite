@@ -273,6 +273,16 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/commitAllocations/.test(canvas), 'canvas commits through the core client');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
   check(/Keep planning/.test(canvas), 'confirm defaults the clinician back to planning');
+  // A part-written batch leaves the board claiming work Medicus already took.
+  // The failure path must re-read before it tells anyone to check the queue.
+  check(
+    /result\.written > 0[\s\S]{0,200}?await loadBoard\(\)/.test(canvas),
+    'a partly-written batch re-reads the queue instead of leaving stale staged tiles'
+  );
+  check(
+    /await loadBoard\(\);\s*_error = failReason;/.test(canvas),
+    'the partial-write reason survives that reload — loadBoard clears _error'
+  );
   check(!/\.click\(\)/.test(canvas), 'canvas does not synthesise Medicus clicks');
   check(!/Write to Medicus — not available/.test(canvas), 'Finalise is no longer hard-disabled');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated)\b/.test(canvas), 'canvas copy has no completion verbs');

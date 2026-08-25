@@ -19,6 +19,14 @@ In today fields sort to the top; the unallocated pile is an inbox
 well (dashed, list sections) so it no longer reads as a second stack
 of person cards.
 
+Review fix, same theme: a batch that stopped part-way had already
+written its earlier groups, but the canvas left those rows showing as
+staged — so the board claimed work Medicus had in fact taken, and a
+second **Review then write** would re-send them. The failure path now
+re-reads the queue when anything was written, and restores the
+"Medicus accepted the first N" message afterwards (`loadBoard()`
+clears `_error`). Write contract (W23 / H-064) unchanged.
+
 ## [v3.243.1] — 2026-08-25
 
 ### Lab allocation canvas — unallocated box, allocated fields
