@@ -184,17 +184,6 @@
     return !!entry && !entry.ended;
   }
 
-  // "No known allergies" (SNOMED 716186003) is a positive assertion, not
-  // import noise — duplicates may be ended, the LAST remaining copy must
-  // not (H-060). Matched by conceptId when the scan has one, else by the
-  // exact display string Medicus uses for that code.
-  var NKA_CONCEPT_ID = '716186003';
-  function isNkaAllergy(entry) {
-    if (!entry) return false;
-    if (String(entry.conceptId || '') === NKA_CONCEPT_ID) return true;
-    return normalizeAllergyDescription(entry.description || entry.allergyCodeDescription) === 'no known allergies';
-  }
-
   function normalizeAllergyDescription(desc) {
     return String(desc == null ? '' : desc)
       .trim()
@@ -428,6 +417,72 @@
       .map(function (x) {
         return x.r;
       });
+  }
+
+  // A display-only "% match" between a search query and one candidate's own
+  // description — same spirit as problem-description-cleanup.js's
+  // matchScore (a transparent ranking cue, never a second filter: Medicus's
+  // own search already decided relevance by returning the result at all),
+  // but SUBSTRING matching rather than that file's `\bword\b` boundary
+  // matching. Deliberately looser: dm+d substance names routinely embed the
+  // query as part of a longer compound word — e.g. a search for "penicillin"
+  // returns "Phenoxymethylpenicillin", which a strict word-boundary check
+  // would score 0% against despite it being the clinically obvious hit — so
+  // `indexOf` containment is used instead. Percentage = the share of the
+  // query's own distinct words found anywhere in the candidate's text.
+  function searchMatchPercent(queryText, candidateText) {
+    var words = String(queryText == null ? '' : queryText)
+      .toLowerCase()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!words.length) return null;
+    var c = String(candidateText == null ? '' : candidateText).toLowerCase();
+    var matched = words.filter(function (w) {
+      return c.indexOf(w) !== -1;
+    }).length;
+    return Math.round((100 * matched) / words.length);
+  }
+
+  // Top N of a results array, unchanged order — the review card shows only
+  // the top 5 (2026-08-23 request: "as in the problem checker", a short
+  // ranked list rather than every hit Medicus's search returned).
+  var CONVERSION_RESULT_CAP = 5;
+  function capResults(list) {
+    return (Array.isArray(list) ? list : []).slice(0, CONVERSION_RESULT_CAP);
+  }
+
+  // The first word of a multi-word query, or null when the query is already
+  // one word (nothing to strip down to). Medicus's own search requires
+  // EVERY query word present in a result (the same word-mismatch problem
+  // documented in problem-description-cleanup.js's SEARCH_PATH comment), so
+  // a multi-part drug name like "Tramadol hydrochloride" can never surface
+  // the plain base ingredient "Tramadol" from that one search — 2026-08-23
+  // request: also search the first word alone (mergeUniqueByConceptId below
+  // folds its results into the same pool before ranking).
+  function firstQueryWord(queryText) {
+    var words = String(queryText == null ? '' : queryText)
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    return words.length > 1 ? words[0] : null;
+  }
+
+  // Concatenates `extra` onto `base`, skipping anything whose conceptId is
+  // already present — same identity discipline normalizedConceptSearchResults
+  // already uses for its own dedup.
+  function mergeUniqueByConceptId(base, extra) {
+    var seen = Object.create(null);
+    (base || []).forEach(function (r) {
+      seen[r.conceptId] = true;
+    });
+    var merged = (base || []).slice();
+    (extra || []).forEach(function (r) {
+      if (r && !seen[r.conceptId]) {
+        seen[r.conceptId] = true;
+        merged.push(r);
+      }
+    });
+    return merged;
   }
 
   // Extracts a probable {substanceHint, reactionHint} pair from a legacy
@@ -947,8 +1002,6 @@
       resolveAllergyConceptId: resolveAllergyConceptId,
       buildEndAllergyPayload: buildEndAllergyPayload,
       isEndable: isEndable,
-      NKA_CONCEPT_ID: NKA_CONCEPT_ID,
-      isNkaAllergy: isNkaAllergy,
       normalizeAllergyDescription: normalizeAllergyDescription,
       activeNonDraftAllergies: activeNonDraftAllergies,
       reactionDescriptions: reactionDescriptions,
@@ -962,6 +1015,10 @@
       classifyConvertibleEntries: classifyConvertibleEntries,
       normalizedConceptSearchResults: normalizedConceptSearchResults,
       rankSubstanceResults: rankSubstanceResults,
+      searchMatchPercent: searchMatchPercent,
+      capResults: capResults,
+      firstQueryWord: firstQueryWord,
+      mergeUniqueByConceptId: mergeUniqueByConceptId,
       extractAllergenAndReactionHint: extractAllergenAndReactionHint,
       pickReactionSeed: pickReactionSeed,
       groupDuplicateAllergies: groupDuplicateAllergies,
@@ -977,6 +1034,10 @@
       buildAllergyProvenanceFields: buildAllergyProvenanceFields,
       buildMergeChangeAllergyPayload: buildMergeChangeAllergyPayload,
       buildConversionChangeAllergyPayload: buildConversionChangeAllergyPayload,
+      findGenericTextPatternMatch: findGenericTextPatternMatch,
+      removeGenericTextSpan: removeGenericTextSpan,
+      computeGenericTextRemoval: computeGenericTextRemoval,
+      buildCleanTextChangeAllergyPayload: buildCleanTextChangeAllergyPayload,
       normalizeOnsetDateForSubmit: normalizeOnsetDateForSubmit,
       parseCareRecordPath: parseCareRecordPath,
       parseTaskOverviewPath: parseTaskOverviewPath,
@@ -1170,6 +1231,145 @@
     return _conversionRulesPromise;
   }
 
+  // Loads rules/generic-additional-info-text.json ONCE per page load — SAME
+  // file problem-description-cleanup.js already draws on for its own "Clean
+  // up code" widget (2026-08-23 request: reuse it here too, since GP2GP
+  // import-text noise like "{Episodicity : code=255217005,
+  // displayName=First}" turns up on allergy additionalInformation too, not
+  // just problems — see that file's own header note: "PROBLEMS ARE THE TEST
+  // BED, not the only intended entity type"). Same "local extension
+  // resource, never throws, fails open to inert" discipline as
+  // ensureAllergyJunkCodesLoaded above.
+  var _genericAdditionalInfoRulesPromise = null;
+  function ensureGenericAdditionalInfoRulesLoaded() {
+    if (_genericAdditionalInfoRulesPromise) return _genericAdditionalInfoRulesPromise;
+    _genericAdditionalInfoRulesPromise = (async function () {
+      try {
+        var url = chrome.runtime.getURL('rules/generic-additional-info-text.json');
+        var doc = await fetch(url).then(function (r) {
+          return r.json();
+        });
+        return Array.isArray(doc && doc.entries) ? doc.entries : [];
+      } catch (e) {
+        return [];
+      }
+    })();
+    return _genericAdditionalInfoRulesPromise;
+  }
+
+  // Matches ONE pattern-kind entry against the WHOLE additionalInformation
+  // text — never split by line first, so the boilerplate is recognised
+  // whether it lands on separate lines or run together on one (same
+  // discipline as problem-description-cleanup.js's own findPatternMatch).
+  // Returns the exact matched substring, or null if the pattern doesn't
+  // match or the regex source is malformed (never throws).
+  function findGenericTextPatternMatch(text, entry) {
+    if (!entry || !entry.pattern) return null;
+    var re;
+    try {
+      re = new RegExp(entry.pattern, entry.flags || '');
+    } catch (e) {
+      return null;
+    }
+    var m = (text == null ? '' : String(text)).match(re);
+    return m ? m[0] : null;
+  }
+
+  // Removes ONE matched substring from the text, then collapses any
+  // now-blank line left behind — same "split by line, trim, filter, rejoin"
+  // discipline as problem-description-cleanup.js's own removeMatchedSpan, so
+  // genuine free text elsewhere in the field survives untouched.
+  function removeGenericTextSpan(text, raw) {
+    var str = text == null ? '' : String(text);
+    if (!raw) return str;
+    var idx = str.indexOf(raw);
+    if (idx === -1) return str;
+    var joined = str.slice(0, idx) + str.slice(idx + raw.length);
+    return joined
+      .split('\n')
+      .map(function (l) {
+        return l.trim();
+      })
+      .filter(Boolean)
+      .join('\n')
+      .trim();
+  }
+
+  // Strips every known GP2GP-import-noise entry from an allergy's own
+  // additionalInformation — mirrors HALF of
+  // problem-description-cleanup.js's computeAdditionalInfoFindings: pattern
+  // entries matched and stripped against the whole text FIRST (regardless
+  // of whether they carry an `action` — allergy has no significance to
+  // correct and no linked-problem concept to resolve against, so
+  // severityCorrection/reviewSeverity/linkSuggestion are deliberately never
+  // interpreted here, only the underlying noise-text is removed, same as
+  // that file's own "the boilerplate itself is still offered for removal
+  // either way" principle), THEN literal entries mop up per-line whatever's
+  // left. `removed` lists every stripped fragment/line (for display — the
+  // clinician sees exactly what's being taken out before confirming);
+  // `cleaned` is additionalInformation with all of it stripped and
+  // surrounding whitespace trimmed.
+  function computeGenericTextRemoval(additionalInformation, entries) {
+    var list = Array.isArray(entries) ? entries : [];
+    var workingText = additionalInformation == null ? '' : String(additionalInformation);
+    var removed = [];
+    list
+      .filter(function (e) {
+        return e && e.kind === 'pattern' && e.pattern;
+      })
+      .forEach(function (entry) {
+        var raw = findGenericTextPatternMatch(workingText, entry);
+        if (!raw) return;
+        removed.push(raw);
+        workingText = removeGenericTextSpan(workingText, raw);
+      });
+    var literalTexts = list
+      .filter(function (e) {
+        return e && e.kind !== 'pattern';
+      })
+      .map(function (e) {
+        return e && e.text;
+      })
+      .filter(Boolean);
+    var genericSet = literalTexts.map(function (t) {
+      return String(t).trim().toLowerCase();
+    });
+    var kept = [];
+    workingText.split('\n').forEach(function (line) {
+      var trimmed = line.trim();
+      if (trimmed && genericSet.indexOf(trimmed.toLowerCase()) !== -1) {
+        removed.push(trimmed);
+      } else {
+        kept.push(line);
+      }
+    });
+    return { cleaned: kept.join('\n').trim(), removed: removed };
+  }
+
+  // Rewrites ONLY additionalInformation — allergyCode/substance/allergyCodeType,
+  // severity/certainty/allergyReactions/onsetDate and every provenance field
+  // all carry through from the prefill exactly unchanged. Opposite invariant
+  // to buildConversionChangeAllergyPayload for the SAME reason that one
+  // exists (see its own comment): cleaning import-noise text is a different
+  // action from re-coding the substance, and must never accidentally change
+  // what the allergy IS or any other clinical fact about it.
+  function buildCleanTextChangeAllergyPayload(prefill, cleanedText) {
+    var p = prefill || {};
+    return Object.assign(
+      {
+        allergyCode: p.allergyCode ? unwrapSelectValue(p.allergyCode) : null,
+        substance: p.substance ? unwrapSelectValue(p.substance) : null,
+        additionalInformation: cleanedText || null,
+        severity: p.severity != null ? p.severity : null,
+        certainty: p.certainty != null ? p.certainty : null,
+        allergyReactions: Array.isArray(p.allergyReactions) ? p.allergyReactions : [],
+        onsetDate: p.onsetDate != null ? p.onsetDate : null,
+        allergyCodeType: p.allergyCodeType != null ? p.allergyCodeType : null,
+      },
+      buildAllergyProvenanceFields(p)
+    );
+  }
+
   // ── Concept-ancestry lookup (duplicate enrichment) ────────────────────────────
   // outputParentConceptIds=1 + a bare-SCTID query — same confirmed
   // mechanism already proven live for problem-type concepts
@@ -1225,6 +1425,90 @@
     return apiFetch(CONCEPT_SEARCH_PATH + encodeURIComponent(queryText)).then(function (data) {
       return (data && data.results) || [];
     });
+  }
+
+  // Fetches ONE substance concept's own {description, conceptId,
+  // descriptionId, parentConceptIds} by id — same bare-SCTID-as-query trick
+  // fetchAncestorConceptIds already uses, but against SUBSTANCE_SEARCH_PATH
+  // so it resolves dm+d substance-refset concepts (fetchAncestorConceptIds's
+  // own CONCEPT_SEARCH_PATH is scoped to clinical-finding concepts and won't
+  // find a substance). Needed because parentConceptIds only ever carries IDs
+  // (outputParentConceptIds=1), never the parent's own description text —
+  // this is how fetchTopLevelSubstanceAncestor below turns an id into
+  // something a clinician can read and pick. Cached and fail-closed (null),
+  // same discipline as _ancestorCache.
+  var _substanceConceptCache = Object.create(null);
+  async function fetchSubstanceConceptById(conceptId) {
+    if (!conceptId) return null;
+    var key = String(conceptId);
+    if (_substanceConceptCache[key] !== undefined) return _substanceConceptCache[key];
+    var result = null;
+    try {
+      var data = await apiFetch(SUBSTANCE_SEARCH_PATH + encodeURIComponent(key));
+      var results = (data && data.results) || [];
+      var match = results.find(function (r) {
+        return r && r.value && String(r.value.conceptId) === key;
+      });
+      if (match) {
+        result = {
+          description: match.value.description,
+          conceptId: key,
+          descriptionId: match.value.descriptionId || null,
+          parentConceptIds: Array.isArray(match.value.parentConceptIds) ? match.value.parentConceptIds.map(String) : [],
+        };
+      }
+    } catch (_) {
+      result = null;
+    }
+    _substanceConceptCache[key] = result;
+    return result;
+  }
+
+  // Walks UP from `current` (a {conceptId, …} the clinician is already
+  // looking at — the pre-filled current substance, or whatever they've since
+  // picked) through its OWN parentConceptIds chain until it reaches the
+  // FIRST ancestor whose own description does NOT look dose/form/brand-
+  // specific (DOSE_OR_BRAND_RE — the exact filter rankSubstanceResults
+  // already uses for its "best VTM guess"). That one ancestor is offered as
+  // the "top-level" substance option (2026-08-23 request — e.g. "Penicillin
+  // V 250mg capsules" -> "Penicillin"): useful because an allergy is often
+  // better recorded against the whole ingredient/class than one specific
+  // dose-form product, so cross-reactivity checks catch every sibling
+  // product too. Deliberately does NOT keep climbing past that first clean
+  // ancestor into the broader SNOMED substance-CLASS hierarchy (e.g. on to
+  // "Beta-lactam antibiotic") — stripping dose/form/brand is a well-defined
+  // question with one obvious answer; picking a clinically sensible class
+  // level above that is a different, much less obvious one. Bounded to 4
+  // hops so a data anomaly (a cycle, or an unexpectedly long dm+d chain)
+  // can never hang — fails closed (null) rather than guessing past the
+  // bound, same discipline as every other search here.
+  //
+  // PENDING LIVE VERIFICATION (2026-08-23): assembled entirely from
+  // already-confirmed building blocks (outputParentConceptIds=1,
+  // fetchSubstanceConceptById's bare-SCTID trick — both proven live
+  // elsewhere in this file), but the walk itself has not yet been
+  // HAR-captured against a real patient record. Confirm live with a real
+  // dose-specific entry (the "Penicillin V 250mg capsules" example) before
+  // trusting this beyond "looks right in principle".
+  async function fetchTopLevelSubstanceAncestor(current) {
+    if (!current || !current.conceptId) return null;
+    var seen = Object.create(null);
+    seen[String(current.conceptId)] = true;
+    var nodeId = current.conceptId;
+    for (var hop = 0; hop < 4; hop++) {
+      var node = await fetchSubstanceConceptById(nodeId);
+      if (!node || !node.parentConceptIds.length) return null;
+      var nextId = node.parentConceptIds.find(function (pid) {
+        return !seen[pid];
+      });
+      if (!nextId) return null;
+      seen[nextId] = true;
+      var parent = await fetchSubstanceConceptById(nextId);
+      if (!parent) return null;
+      if (!DOSE_OR_BRAND_RE.test(parent.description || '')) return parent;
+      nodeId = nextId;
+    }
+    return null;
   }
 
   // ── DOM: scoping to the Allergies card specifically ───────────────────────
@@ -1371,6 +1655,12 @@
         reactionError: null,
         reactionResults: null,
         pendingReactions: [], // 0+ — a real allergy can have more than one distinct reaction
+        topLevelSubstance: null, // {conceptId,description,descriptionId} | null — see fetchTopLevelSubstanceAncestor
+        topLevelSubstanceLoading: false,
+        genericTextRemoval: null, // {cleaned, removed} | null — see computeGenericTextRemoval
+        cleaningText: false,
+        cleanTextError: null,
+        textCleaned: false,
         saving: false,
         saveError: null,
         converted: false,
@@ -1611,59 +1901,69 @@
     }
   }
 
-  // Resolves canvas-staged ids to endable junk / not-an-allergy rows.
-  // Last remaining NKA is dropped here (not just hidden in the canvas) so a
-  // stale draft cannot destroy the "asked, none found" assertion.
+  // Resolves canvas-staged ids to endable rows. RELAXED 2026-08-23 (explicit
+  // product decision, see rules/allergy-junk-codes.json's own note on the
+  // "No known allergies" entry and docs/HAZARD-LOG.md H-060's dated
+  // addendum for the full reasoning): every currently-listed allergy is now
+  // endable from here, not just junk/low-relevance or confirmed
+  // "not-an-allergy" rows, and there is no special-case block on ending the
+  // LAST "No known allergies" copy. It is not this tool's place to restrict
+  // what a clinician can end in their own clinical system — the underlying
+  // SNOMED history stays in the patient's journal regardless of what the
+  // allergy list shows (that's where "was this ever checked/coded" belongs,
+  // not the allergy section), and a short, current, at-a-glance allergy
+  // list is the actual prescribing-safety goal. A junk-flagged row still
+  // carries its own curated reasonEnded/caution from
+  // rules/allergy-junk-codes.json; a genuinely convertible/"not-an-allergy"
+  // row still carries its rule's own notes; everything else gets a plain
+  // generic reason. Every row still needs an explicit stage + a named
+  // Finalise confirmation — the relaxation is about WHICH rows can be
+  // staged, not about removing confirmation.
   function resolveEndTargets(ids) {
     var junkById = {};
     _junkFlagged.forEach(function (f) {
       junkById[f.id] = f;
     });
-    var convertById = {};
-    _conversionFlagged.forEach(function (f) {
-      convertById[f.id] = f;
-    });
-    var allowed = (Array.isArray(ids) ? ids : []).filter(function (id) {
+    var out = [];
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      if (!id) return;
       var junk = junkById[id];
-      if (junk && isEndable(junk)) return true;
-      var conv = convertById[id];
-      return !!(conv && conv.rule && conv.rule.kind === 'not-an-allergy' && !conv.ended);
-    });
-    var liveNka = _junkFlagged.filter(function (f) {
-      return isNkaAllergy(f) && isEndable(f);
-    });
-    var endingNka = allowed.filter(function (id) {
-      return liveNka.some(function (f) {
-        return f.id === id;
-      });
-    });
-    if (liveNka.length && endingNka.length >= liveNka.length) {
-      allowed = allowed.filter(function (id) {
-        return endingNka.indexOf(id) === -1;
-      });
-    }
-    return allowed.map(function (id) {
-      var junk = junkById[id];
-      if (junk) return junk;
-      var conv = convertById[id];
-      return {
+      if (junk) {
+        if (isEndable(junk)) out.push(junk);
+        return;
+      }
+      // Not a scan-flagged junk row — reuse the SAME ad-hoc _conversionFlagged
+      // registration the canvas's generalised Convert… action already uses
+      // (findOrRegisterConversionEntry), so the persistent .ended/.endError
+      // this write sets lands on an object getSnapshot().convertById already
+      // exposes and the canvas's tile rendering already knows how to show —
+      // no second per-row state mechanism needed for a genuine/unflagged
+      // allergy.
+      var idx = findOrRegisterConversionEntry(id);
+      if (idx === -1) return; // not a currently-listed allergy at all
+      var conv = _conversionFlagged[idx];
+      if (!isEndable(conv)) return;
+      out.push({
         id: conv.id,
         description: conv.description,
         reasonEnded:
-          (conv.rule && conv.rule.notes) || 'Not a genuine allergy — ended rather than converted to a substance code',
+          (conv.rule && conv.rule.notes) || 'Ended by clinician via the Clean up allergies canvas',
         ended: !!conv.ended,
         endError: conv.endError || null,
         _conversion: conv,
-      };
+      });
     });
+    return out;
   }
 
-  // ── Junk / not-an-allergy end action (canvas Finalise, already confirmed) ──
+  // ── End-allergy action (canvas Finalise, already confirmed) — 2026-08-23:
+  // renamed from commitEndJunk now that resolveEndTargets accepts any
+  // currently-listed allergy, not just junk/low-relevance rows.
   // opts.deferReload: the canvas Finalise runs ends THEN tidies in one
   // gesture — the caller owns the single post-success reload, otherwise the
   // reload scheduled here can fire while the tidy writes are still in
   // flight and destroy their outcome.
-  async function commitEndJunk(ids, opts) {
+  async function commitEndAllergies(ids, opts) {
     var targets = resolveEndTargets(ids);
     if (!targets.length || _ending || !_endDate) return { ended: [], skipped: true };
     _ending = true;
@@ -1954,7 +2254,9 @@
     }
   }
 
-  // ── Per-entry conversion review (opt-in — only from a "Convert?" click) ──────
+  // ── Per-entry conversion review (opt-in — only from a "Convert?" click, or
+  // (2026-08-23) from the canvas's now-generalised "Convert…" tile action —
+  // see findOrRegisterConversionEntry) ─────────────────────────────────────
   async function openConversionReview(idx) {
     var f = _conversionFlagged[idx];
     if (!f) return;
@@ -1969,6 +2271,17 @@
     showModal('convert', idx);
     try {
       st.prefill = await fetchEditAllergyForm(f.id);
+      // GP2GP import-text noise (2026-08-23 request — real example:
+      // "{Episodicity : code=255217005, displayName=First}") — same
+      // rules/generic-additional-info-text.json problem-description-cleanup.js
+      // already draws on, computed independently of everything below since
+      // it's orthogonal to substance/reaction conversion. See
+      // computeGenericTextRemoval's own comment for what it does and
+      // deliberately does NOT do (no severity/link actions — allergy has no
+      // equivalent to a problem's significance or linked-problem concept).
+      var genericEntries = await ensureGenericAdditionalInfoRulesLoaded();
+      var textRemoval = computeGenericTextRemoval(st.prefill.additionalInformation, genericEntries);
+      st.genericTextRemoval = textRemoval.removed.length ? textRemoval : null;
       var rule = f.rule;
       var patternHint = null;
       if (rule && rule.substance) {
@@ -1977,6 +2290,54 @@
         // actually apply).
         st.pendingSubstance = rule.substance;
         st.substanceQuery = rule.substance.description;
+        st.reactionQuery = pickReactionSeed(
+          rule.reaction && rule.reaction.text,
+          null,
+          st.prefill && st.prefill.additionalInformation
+        );
+      } else if (f.adHoc) {
+        // Opened generically (findOrRegisterConversionEntry) for a tile the
+        // scan never flagged as a pre-defined-allergy code — it's already
+        // substance-coded, so there is no re-code to seed, and running the
+        // legacy-description pattern extractor below on an already-clean
+        // substance name (e.g. "Indapamide 2.5mg tablets") produces
+        // nonsense ("2.5mg tablets" as a "reaction"), not a real hint — it's
+        // built for decomposing legacy free-text descriptions, not for
+        // clean coded ones. Pull the entry's OWN current values through
+        // instead of guessing at either:
+        var currentSubstance = unwrapSelectValue(st.prefill.substance) || unwrapSelectValue(st.prefill.allergyCode);
+        if (currentSubstance && currentSubstance.conceptId) {
+          // Default the pending substance to what's already coded, so a
+          // clinician who only wants to add/fix reaction coding can hit
+          // Convert without an unwanted re-code — they can still search and
+          // pick a different substance below if they genuinely want one.
+          st.pendingSubstance = {
+            conceptId: currentSubstance.conceptId,
+            description: currentSubstance.description,
+            descriptionId: currentSubstance.descriptionId || null,
+          };
+          st.substanceQuery = currentSubstance.description;
+        }
+        var existingReactions = Array.isArray(st.prefill.allergyReactions)
+          ? st.prefill.allergyReactions.filter(function (r) {
+              return r && r.conceptId;
+            })
+          : [];
+        if (existingReactions.length) {
+          // Already coded — pull the existing reaction(s) through as the
+          // pending picks (same "carry through what's already there"
+          // default as the substance above), rather than re-guessing from
+          // text. The clinician can still remove one or search for another.
+          st.pendingReactions = existingReactions.map(function (r) {
+            return { conceptId: r.conceptId, description: r.description, descriptionId: r.descriptionId || null };
+          });
+        } else {
+          // No coded reaction yet — THIS is the "look at the free text and
+          // suggest a reaction code" case. additionalInformation is the only
+          // useful signal here (see pickReactionSeed's own comment — found
+          // live 2026-08-02, "shivering" was sitting right there unused).
+          st.reactionQuery = pickReactionSeed(null, null, st.prefill && st.prefill.additionalInformation);
+        }
       } else {
         // No reviewed match — fall back to the live pattern-extraction
         // heuristic rather than seeding the search with the full raw
@@ -1984,21 +2345,29 @@
         // clinician must run the search and pick a real result themselves.
         patternHint = extractAllergenAndReactionHint(f.description);
         st.substanceQuery = patternHint.substanceHint;
+        // Reaction seed priority: pattern-extracted hint > the patient's own
+        // additionalInformation free text.
+        st.reactionQuery = pickReactionSeed(
+          null,
+          patternHint && patternHint.reactionHint,
+          st.prefill && st.prefill.additionalInformation
+        );
       }
-      // Reaction seed priority: curated rule hint > pattern-extracted hint >
-      // the patient's own additionalInformation free text (see
-      // pickReactionSeed's own comment for why the last resort matters —
-      // found live 2026-08-02, "shivering" was sitting right there unused).
-      st.reactionQuery = pickReactionSeed(
-        rule && rule.reaction && rule.reaction.text,
-        patternHint && patternHint.reactionHint,
-        st.prefill && st.prefill.additionalInformation
-      );
     } catch (err) {
       st.error = (err && err.message) || 'Failed to load this allergy for conversion.';
     } finally {
       st.loading = false;
       showModal('convert', idx);
+      if (!st.error) {
+        // Preliminary search — auto-run immediately with whatever query got
+        // seeded above, so the clinician sees a ranked candidate list
+        // without an extra click ("as in the problem checker", 2026-08-23
+        // request). Fire-and-forget: each of these owns its own
+        // loading/refresh and the modal is already showing.
+        if (st.substanceQuery) runSubstanceSearch(idx);
+        if (st.reactionQuery) runReactionSearch(idx);
+        if (st.pendingSubstance) refreshTopLevelSubstanceSuggestion(idx);
+      }
     }
   }
 
@@ -2017,9 +2386,33 @@
     refreshModal('convert', idx);
     try {
       var results = await searchAllergySubstances(q);
-      // Ranked toward the VTM-level candidate — see rankSubstanceResults'
-      // own comment. Never discards a result, only reorders.
-      st.substanceResults = rankSubstanceResults(normalizedConceptSearchResults(results), q);
+      var pool = normalizedConceptSearchResults(results);
+      // Also search the plain first word of a multi-word drug name (see
+      // firstQueryWord's own comment — "Tramadol hydrochloride" can never
+      // return "Tramadol" from the full-query search alone) and fold its
+      // results in — a bonus pass, never blocks or fails the main result.
+      var firstWord = firstQueryWord(q);
+      if (firstWord) {
+        try {
+          var firstWordResults = await searchAllergySubstances(firstWord);
+          pool = mergeUniqueByConceptId(pool, normalizedConceptSearchResults(firstWordResults));
+        } catch (_) {
+          /* the first-word search is a bonus — the main query's own results still stand */
+        }
+      }
+      // Ranked toward the VTM-level candidate first — see rankSubstanceResults'
+      // own comment (now with a real chance of recognising "Tramadol" as an
+      // ancestor-of-sibling of "Tramadol hydrochloride", since merging the
+      // first-word search in makes them genuine siblings of one result set)
+      // — THEN capped to the top 5 with a display "% match" per result
+      // (searchMatchPercent) so the clinician sees a short, ranked list
+      // rather than scrolling every hit Medicus's search returned ("as in
+      // the problem checker" — 2026-08-23 request). The % is a ranking
+      // DISPLAY only, computed after rankSubstanceResults' own reorder,
+      // never used to re-sort on top of it.
+      st.substanceResults = capResults(rankSubstanceResults(pool, q)).map(function (r) {
+        return Object.assign({}, r, { matchPercent: searchMatchPercent(q, r.description) });
+      });
     } catch (err) {
       st.substanceError = (err && err.message) || 'Substance search failed — please try again.';
       st.substanceResults = null;
@@ -2029,10 +2422,36 @@
     }
   }
 
+  // Recomputes the "top-level substance" suggestion for whichever substance
+  // is currently pending — called after every pick (initial default AND a
+  // manual applySubstanceResult), never blocking the modal: it fires after
+  // the pick is already applied and refreshes the modal again once it
+  // resolves. See fetchTopLevelSubstanceAncestor's own comment for what it
+  // does and its live-verification caveat.
+  async function refreshTopLevelSubstanceSuggestion(idx) {
+    var st = conversionState(idx);
+    var target = st.pendingSubstance;
+    if (!target || !target.conceptId) {
+      st.topLevelSubstance = null;
+      return;
+    }
+    st.topLevelSubstanceLoading = true;
+    refreshModal('convert', idx);
+    try {
+      st.topLevelSubstance = await fetchTopLevelSubstanceAncestor(target);
+    } catch (_) {
+      st.topLevelSubstance = null;
+    } finally {
+      st.topLevelSubstanceLoading = false;
+      refreshModal('convert', idx);
+    }
+  }
+
   function applySubstanceResult(idx, conceptId, description, descriptionId) {
     var st = conversionState(idx);
     st.pendingSubstance = { conceptId: conceptId, description: description, descriptionId: descriptionId || null };
     refreshModal('convert', idx);
+    refreshTopLevelSubstanceSuggestion(idx);
   }
 
   async function runReactionSearch(idx) {
@@ -2044,7 +2463,19 @@
     refreshModal('convert', idx);
     try {
       var results = await searchAllergyReactions(q);
-      st.reactionResults = normalizedConceptSearchResults(results);
+      // No existing re-rank heuristic for reactions (unlike substances —
+      // there's no VTM-equivalent concept for a reaction), so sort by the
+      // same searchMatchPercent used for display, descending, then cap to
+      // the top 5 (see runSubstanceSearch's own comment for why).
+      st.reactionResults = capResults(
+        normalizedConceptSearchResults(results)
+          .map(function (r) {
+            return Object.assign({}, r, { matchPercent: searchMatchPercent(q, r.description) });
+          })
+          .sort(function (a, b) {
+            return (b.matchPercent || 0) - (a.matchPercent || 0);
+          })
+      );
     } catch (err) {
       st.reactionError = (err && err.message) || 'Reaction search failed — please try again.';
       st.reactionResults = null;
@@ -2101,6 +2532,32 @@
       st.saveError = (err && err.message) || 'Failed to convert this allergy — please try again.';
     } finally {
       st.saving = false;
+      refreshModal('convert', idx);
+    }
+  }
+
+  // Writes the cleaned additionalInformation (computeGenericTextRemoval) —
+  // an independent action from Convert, so it's offered and can be applied
+  // whether or not the clinician also picks a substance/reaction. Same
+  // explicit-confirm-then-reload discipline as every other write here.
+  async function cleanAdditionalInfoText(idx) {
+    var f = _conversionFlagged[idx];
+    var st = conversionState(idx);
+    if (!f || !st.prefill || !st.genericTextRemoval || st.cleaningText) return;
+    st.cleaningText = true;
+    st.cleanTextError = null;
+    refreshModal('convert', idx);
+    try {
+      var payload = buildCleanTextChangeAllergyPayload(st.prefill, st.genericTextRemoval.cleaned);
+      await postChangeAllergy(f.id, payload);
+      st.textCleaned = true;
+      setTimeout(function () {
+        location.reload();
+      }, 900);
+    } catch (err) {
+      st.cleanTextError = (err && err.message) || 'Failed to clean this text — please try again.';
+    } finally {
+      st.cleaningText = false;
       refreshModal('convert', idx);
     }
   }
@@ -2740,6 +3197,10 @@
       // 2026-08-02 live-testing feedback: Medicus's own search UI already
       // has a known problem showing several identically-labelled results
       // with no way to tell them apart; ours shouldn't repeat that.
+      // matchPercent (searchMatchPercent — see its own comment): a display
+      // ranking cue only, "N% match" against the search query, same idea as
+      // problem-description-cleanup.js's own matchScore badge. Omitted when
+      // null (an empty query never reaches here).
       resultsHtml = !opts.results.length
         ? '<div class="ms-ac-empty">No results.</div>'
         : '<div class="ms-ac-conv-results">' +
@@ -2760,7 +3221,11 @@
                 esc(r.description) +
                 ' <span class="ms-ac-conv-result-id">(' +
                 esc(r.conceptId) +
-                ')</span></button>'
+                ')</span>' +
+                (typeof r.matchPercent === 'number'
+                  ? ' <span class="ms-ac-conv-result-score">' + r.matchPercent + '% match</span>'
+                  : '') +
+                '</button>'
               );
             })
             .join('') +
@@ -2792,6 +3257,10 @@
       (opts.loading ? ' disabled' : '') +
       '>Search</button>' +
       '</div>' +
+      (Array.isArray(opts.results) && opts.results.length && !opts.loading
+        ? '<div class="ms-ac-conv-results-caption">Top ' + opts.results.length + ' ranked match' +
+          (opts.results.length === 1 ? '' : 'es') + ' — search again to widen or narrow it.</div>'
+        : '') +
       resultsHtml +
       '</div>'
     );
@@ -2802,7 +3271,9 @@
     var st = conversionState(idx);
     var header =
       '<div class="ms-ac-modal-header">' +
-      '<div><div class="ms-ac-modal-title">Convert to substance</div>' +
+      '<div><div class="ms-ac-modal-title">' +
+      (f && f.adHoc ? 'Review coding' : 'Convert to substance') +
+      '</div>' +
       '<div class="ms-ac-modal-subtitle">' +
       esc(f ? f.description : '') +
       '</div></div>' +
@@ -2850,6 +3321,40 @@
       (currentLines || '<div class="ms-ac-card-muted ms-ac-card-line">No other clinical detail recorded</div>') +
       '</div>';
 
+    // Import-text noise cleanup (2026-08-23 request) — an INDEPENDENT action
+    // from Convert: it only ever touches additionalInformation
+    // (buildCleanTextChangeAllergyPayload), so it's offered and can be
+    // applied whether or not the clinician also picks a substance/reaction.
+    var genericTextHtml = '';
+    if (st.textCleaned) {
+      genericTextHtml = '<div class="ms-ac-conv-text-clean ms-ac-done">Import text noise removed.</div>';
+    } else if (st.genericTextRemoval && st.genericTextRemoval.removed.length) {
+      genericTextHtml =
+        '<div class="ms-ac-conv-text-clean">' +
+        '<div class="ms-ac-conv-text-clean-title">Import text noise found in additional info:</div>' +
+        '<ul class="ms-ac-conv-text-clean-list">' +
+        st.genericTextRemoval.removed
+          .map(function (t) {
+            return '<li>' + esc(t) + '</li>';
+          })
+          .join('') +
+        '</ul>' +
+        (st.genericTextRemoval.cleaned
+          ? '<div class="ms-ac-card-line"><span class="ms-ac-card-line-label">Would become:</span> ' +
+            esc(st.genericTextRemoval.cleaned) +
+            '</div>'
+          : '<div class="ms-ac-card-muted ms-ac-card-line">Nothing else would remain in additional info.</div>') +
+        (st.cleanTextError ? '<div class="ms-ac-error">' + esc(st.cleanTextError) + '</div>' : '') +
+        '<button type="button" class="ms-ac-conv-clean-text-btn" data-idx="' +
+        esc(idx) +
+        '"' +
+        (st.cleaningText ? ' disabled' : '') +
+        '>' +
+        (st.cleaningText ? 'Cleaning…' : 'Clean up text') +
+        '</button>' +
+        '</div>';
+    }
+
     // Substance: single pending pick, shown/replaced as one line.
     var substancePendingHtml = st.pendingSubstance
       ? '<div class="ms-ac-conv-pending">Selected: <strong>' +
@@ -2858,6 +3363,40 @@
         esc(st.pendingSubstance.conceptId) +
         ')</div>'
       : '';
+    // "Top-level" substance option (2026-08-23 request — e.g. "Penicillin V
+    // 250mg capsules" -> "Penicillin"): a broader, dose/form/brand-stripped
+    // ancestor of whatever's currently pending, offered as an EXTRA pick,
+    // never auto-applied — see fetchTopLevelSubstanceAncestor's own comment
+    // (including its live-verification caveat). Hidden once it's already
+    // the pending pick (nothing to offer over itself).
+    var topLevelSubstanceHtml = '';
+    if (st.topLevelSubstanceLoading) {
+      topLevelSubstanceHtml =
+        '<div class="ms-ac-conv-toplevel ms-ac-loading">Checking for a broader, top-level substance option…</div>';
+    } else if (
+      st.topLevelSubstance &&
+      (!st.pendingSubstance || st.topLevelSubstance.conceptId !== st.pendingSubstance.conceptId)
+    ) {
+      topLevelSubstanceHtml =
+        '<div class="ms-ac-conv-toplevel">' +
+        '<span class="ms-ac-conv-toplevel-label">Broader, top-level option:</span> ' +
+        '<button type="button" class="ms-ac-conv-result ms-ac-conv-toplevel-btn" data-conv-pick="substance" data-idx="' +
+        esc(idx) +
+        '" data-concept-id="' +
+        esc(st.topLevelSubstance.conceptId) +
+        '" data-description-id="' +
+        esc(st.topLevelSubstance.descriptionId || '') +
+        '" data-description="' +
+        esc(st.topLevelSubstance.description) +
+        '">' +
+        esc(st.topLevelSubstance.description) +
+        ' <span class="ms-ac-conv-result-id">(' +
+        esc(st.topLevelSubstance.conceptId) +
+        ')</span></button>' +
+        '<div class="ms-ac-note">Covers the whole ingredient/class, not just this specific dose/form — useful ' +
+        'when the allergy applies beyond this one product.</div>' +
+        '</div>';
+    }
     // Reaction: 0+ pending picks (multi-select — see addReactionResult's own
     // comment), each its own removable chip.
     var reactionPendingHtml = st.pendingReactions.length
@@ -2889,10 +3428,18 @@
     // with both "shivering" and "bradycardia" to the same substance).
     var body =
       '<div class="ms-ac-modal-body">' +
-      '<div class="ms-ac-note">Pick the substance this allergy is really to. Severity, certainty, additional ' +
-      'info and (unless you pick a new reaction below) existing reactions are all carried through unchanged.</div>' +
+      '<div class="ms-ac-note">' +
+      (f.adHoc
+        ? 'Already coded as ' +
+          esc((st.pendingSubstance && st.pendingSubstance.description) || 'a substance') +
+          ' — kept unchanged unless you search and pick a different one. Search below for a reaction code the ' +
+          'free text suggests, or change the substance if it needs it.'
+        : 'Pick the substance this allergy is really to.') +
+      ' Severity, certainty, additional info and (unless you pick a new reaction below) existing reactions are ' +
+      'all carried through unchanged.</div>' +
       ruleNoteHtml +
       currentRecordHtml +
+      genericTextHtml +
       conceptSearchSectionHtml(idx, {
         fieldPrefix: 'substance',
         label: 'Substance',
@@ -2900,7 +3447,7 @@
         loading: st.substanceLoading,
         error: st.substanceError,
         results: st.substanceResults,
-        pendingHtml: substancePendingHtml,
+        pendingHtml: substancePendingHtml + topLevelSubstanceHtml,
       }) +
       conceptSearchSectionHtml(idx, {
         fieldPrefix: 'reaction',
@@ -2977,6 +3524,9 @@
     });
     root.querySelector('.ms-ac-conv-confirm-btn')?.addEventListener('click', function () {
       confirmConversion(idx);
+    });
+    root.querySelector('.ms-ac-conv-clean-text-btn')?.addEventListener('click', function () {
+      cleanAdditionalInfoText(idx);
     });
   }
 
@@ -3114,6 +3664,11 @@
         severity: ov.severity || null,
         certainty: ov.certainty || null,
         additionalInformation: ov.additionalInformation || null,
+        // Coded reaction(s), e.g. ["Nausea", "Diarrhoea"] — reuses the same
+        // reactionDescriptions helper the junk checklist already draws on;
+        // the canvas tile inlines these alongside the substance name
+        // (2026-08-23 request — "Tramadol - nausea").
+        reactions: reactionDescriptions(ov),
       };
     });
   }
@@ -3142,6 +3697,41 @@
     });
   }
 
+  // Generalises the conversion review to ANY currently-listed allergy, not
+  // just ones classifyConvertibleEntries already flagged (2026-08-23, canvas
+  // "Convert…" now available on every tile — see allergy-cleanup-canvas.js's
+  // own comment). Reuses classifyConvertibleEntries' own record shape so
+  // every existing idx-keyed piece of conversion machinery (state, modal,
+  // confirm/save) needs no separate code path — the ONLY new field is
+  // `adHoc: true`, which the canvas's liveLaneKey/tileHtml use to keep this
+  // entry from being mistaken for a scan-flagged Convert-lane match. Pushed
+  // onto the SAME _conversionFlagged array a real scan result lives in
+  // (rather than a parallel array) purely so every idx into it keeps meaning
+  // "one real array slot" — the trade-off is the old, already-dead
+  // renderConvertibleSection() fallback would double-count an ad-hoc entry
+  // too, which is harmless since that panel is never rendered (buildHtml()
+  // says so explicitly).
+  function findOrRegisterConversionEntry(allergyId) {
+    var idx = findConversionIndex(allergyId);
+    if (idx !== -1) return idx;
+    var entry = activeNonDraftAllergies(_allergiesCache).filter(function (a) {
+      return a.id === allergyId;
+    })[0];
+    if (!entry) return -1;
+    _conversionFlagged = _conversionFlagged.concat([
+      {
+        id: entry.id,
+        description: entry.allergyCodeDescription,
+        conceptId: null,
+        rule: null,
+        adHoc: true,
+        ended: false,
+        endError: null,
+      },
+    ]);
+    return _conversionFlagged.length - 1;
+  }
+
   // ── Bridge to allergy-cleanup-canvas.js ───────────────────────────────────
   // The ONLY way the canvas overlay touches this widget's state or writes to
   // Medicus — no scan/commit/classify logic is duplicated in the canvas file.
@@ -3163,7 +3753,7 @@
     ensureScanned: function () {
       if (_scanState === 'idle') runFullScan();
     },
-    commitEndJunk: commitEndJunk,
+    commitEndAllergies: commitEndAllergies,
     commitClearLegacy: commitClearLegacy,
     openReview: openReview,
     openConversionReview: openConversionReview,
@@ -3173,7 +3763,7 @@
       openReview(idx);
     },
     openConversionForAllergy: function (allergyId) {
-      var idx = findConversionIndex(allergyId);
+      var idx = findOrRegisterConversionEntry(allergyId);
       if (idx === -1) return;
       openConversionReview(idx);
     },

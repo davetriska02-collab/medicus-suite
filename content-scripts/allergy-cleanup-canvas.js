@@ -10,15 +10,38 @@
 // Dual-coded) plus an End bin.
 //
 // This file owns NO state and makes NO API calls of its own — every read
-// (the live scan) and every write (commitEndJunk, commitClearLegacy,
+// (the live scan) and every write (commitEndAllergies, commitClearLegacy,
 // openReview, openConversionReview) goes through window.AllergyCleanup.
 // Merge and convert stay the existing per-entry modals (H-060 control c).
 //
+// TILE ACTIONS (2026-08-23, mirrors problem-nesting-canvas.js's "Edit
+// problem…", but with no extra button — see isConvertEligible's own
+// comment): clicking any tile, in EVERY lane (Active, Junk/low-rel, Convert,
+// Dual-coded), opens the conversion/reaction-review card DIRECTLY. Only two
+// rows fall through to the ordinary select-and-show-Stage-end flow instead:
+// a confirmed "not-an-allergy" match, and the NKA sentinel entry — for both,
+// "convert to a substance" is simply the wrong action, not merely
+// undesirable. For a tile the scan never flagged,
+// window.AllergyCleanup.openConversionForAllergy registers an ad-hoc review
+// entry on demand and opens the SAME review panel as a flagged conversion —
+// pulling through what's ALREADY coded rather than guessing: the pending
+// substance defaults to the entry's own current substance, and if it already
+// carries coded reaction(s) those are pulled through as the pending picks
+// too. Only when there is no coded reaction yet does it fall back to
+// seeding the reaction search from the allergy's own additionalInformation
+// free text — see openConversionReview's own comment in allergy-cleanup.js.
+// An ad-hoc entry is marked `adHoc: true` and must never be treated as a
+// scan-flagged Convert-lane match (see liveLaneKey) — it exists only to give
+// that one review modal state to live in.
+//
 // LAYOUT is computed, never persisted x/y. An End bin drop stages
-// end-allergy ONLY for junk or not-an-allergy rows; the last "No known
-// allergies" copy cannot be staged. Dual-coded tidy is staged by dropping
-// onto the Dual-coded lane. Tile-on-tile is a no-op unless both tiles
-// already belong to the same duplicate group — that opens the merge modal.
+// end-allergy for ANY row, in any lane (2026-08-23, relaxed from the
+// original junk/not-an-allergy-only restriction — see
+// isEndableClassification's own comment for the reasoning; it is not this
+// tool's place to decide what a clinician can and cannot end in their own
+// clinical system). Dual-coded tidy is staged by dropping onto the
+// Dual-coded lane. Tile-on-tile is a no-op unless both tiles already
+// belong to the same duplicate group — that opens the merge modal.
 //
 // See docs/HAZARD-LOG.md H-060 / CLINICAL-SAFETY-NOTICE W13.
 'use strict';
@@ -71,11 +94,17 @@
   }
 
   // Live lane from the scan — junk wins (a junk-matched row is never also
-  // offered convert/dual), then convert, then dual-coded, else Active.
+  // offered convert/dual), then convert, then dual-coded, else Active. An
+  // `adHoc` convert entry (registered on-demand when the tile's own "Convert…"
+  // action is opened from a lane the scan never flagged — see
+  // openConversionForAllergy's generalisation in allergy-cleanup.js) must NOT
+  // move the tile into the Convert lane; it exists purely to give that one
+  // review modal somewhere to keep its state, not to reclassify the row.
   function liveLaneKey(allergyId, flags) {
     var f = flags || {};
     if (f.junkById && f.junkById[allergyId]) return 'junk';
-    if (f.convertById && f.convertById[allergyId]) return 'convert';
+    var conv = f.convertById && f.convertById[allergyId];
+    if (conv && !conv.adHoc) return 'convert';
     if (f.dualById && f.dualById[allergyId]) return 'dual';
     return 'active';
   }
@@ -129,36 +158,62 @@
     return !!(convertFlag && convertFlag.rule && convertFlag.rule.kind === 'not-an-allergy');
   }
 
+  // Every tile can open the conversion/reaction-review card — every LANE
+  // (2026-08-23: Active, Junk/low-rel and Dual-coded, not just Convert), and
+  // regardless of whether the scan itself ever flagged it (an ad-hoc
+  // convertById entry, `adHoc: true`, is registered on demand — see
+  // window.AllergyCleanup.openConversionForAllergy). A single tile click
+  // opens it directly (no separate "Convert…" button/step) — see the tile
+  // click handler in bindCommonEvents. Two — and only two — exclusions,
+  // both because "convert to a substance" is the wrong action for them, not
+  // because of which lane they happen to render in:
+  //   - a confirmed "not-an-allergy" match (its own hint already points at
+  //     ending it instead — coding a substance+reaction for something
+  //     that's not a genuine allergy would be actively wrong, not just
+  //     unhelpful);
+  //   - the "No known allergies" sentinel entry/entries (isNkaConcept) —
+  //     structurally the OPPOSITE of an allergy, so there is no substance to
+  //     convert it to; these keep the select-then-"Stage end" flow (and the
+  //     last-remaining-NKA protection that only Stage end honours).
+  // Every OTHER junk-lane row (a genuine but generically/badly-coded
+  // allergy, e.g. "Allergic reaction") is now convert-eligible too — ending
+  // it was never the only reasonable outcome, a clinician may equally judge
+  // it fixable and want to search for the real substance instead.
+  function isConvertEligible(allergyId, flags) {
+    var f = flags || {};
+    var junk = f.junkById && f.junkById[allergyId];
+    if (junk && isNkaConcept(junk.conceptId, junk.description)) return false;
+    var conv = f.convertById && f.convertById[allergyId];
+    return !isNotAnAllergy(conv);
+  }
+
+  // Every allergy is endable from this canvas — RELAXED 2026-08-23, a
+  // deliberate product decision, not a bug fix: it is not this tool's place
+  // to restrict what a clinician can end in their own clinical system. The
+  // underlying SNOMED history stays in the patient's journal regardless of
+  // what the allergy list shows — that's where "was this ever
+  // checked/coded" belongs, not the allergy section — and a short, current,
+  // at-a-glance allergy list is the actual prescribing-safety goal. This
+  // replaces the former hard block that only allowed ending junk-classified
+  // or confirmed "not-an-allergy" rows, and the separate hard block against
+  // ending the LAST "No known allergies" copy (see
+  // rules/allergy-junk-codes.json's own note on that code, and
+  // docs/HAZARD-LOG.md H-060's dated addendum for the full reasoning). The
+  // only thing this still guards against is re-staging a row THIS session
+  // already confirmed ended — junk/convert entries track `.ended` once a
+  // write succeeds (allergy-cleanup.js's commitEndAllergies); a row with no
+  // such flag yet has obviously not been ended.
   function isEndableClassification(allergyId, flags) {
     var f = flags || {};
-    if (f.junkById && f.junkById[allergyId] && !f.junkById[allergyId].ended) return true;
-    if (f.convertById && isNotAnAllergy(f.convertById[allergyId]) && !f.convertById[allergyId].ended) return true;
-    return false;
+    var junk = f.junkById && f.junkById[allergyId];
+    if (junk) return !junk.ended;
+    var conv = f.convertById && f.convertById[allergyId];
+    if (conv) return !conv.ended;
+    return true;
   }
 
-  function countLiveNka(allergies, flags, endIds) {
-    var ended = {};
-    (endIds || []).forEach(function (id) {
-      ended[id] = true;
-    });
-    var n = 0;
-    (Array.isArray(allergies) ? allergies : []).forEach(function (a) {
-      if (!a || !a.id || ended[a.id]) return;
-      var junk = flags && flags.junkById && flags.junkById[a.id];
-      if (isNkaConcept(junk && junk.conceptId, a.description)) n++;
-    });
-    return n;
-  }
-
-  // Last remaining NKA cannot be staged. Cautioned junk CAN be staged
-  // one-by-one (no "stage all" helper exists to ride).
-  function canStageEnd(allergyId, flags, allergies, endIds) {
+  function canStageEnd(allergyId, flags) {
     if (!allergyId || !isEndableClassification(allergyId, flags)) return { ok: false, error: 'not-endable' };
-    var junk = flags && flags.junkById && flags.junkById[allergyId];
-    if (isNkaConcept(junk && junk.conceptId, junk && junk.description)) {
-      var remaining = countLiveNka(allergies, flags, (endIds || []).concat([allergyId]));
-      if (remaining < 1) return { ok: false, error: 'last-nka' };
-    }
     return { ok: true, error: null };
   }
 
@@ -181,11 +236,11 @@
     return (draft.endIds && draft.endIds.length > 0) || (draft.tidyIds && draft.tidyIds.length > 0);
   }
 
-  function stageEnd(draft, allergyId, flags, allergies) {
+  function stageEnd(draft, allergyId, flags) {
     var next = cloneDraft(draft);
     if (!allergyId) return { draft: next, error: 'A row must be chosen.' };
     if (next.endIds.indexOf(allergyId) !== -1) return { draft: next, error: null };
-    var check = canStageEnd(allergyId, flags, allergies, next.endIds);
+    var check = canStageEnd(allergyId, flags);
     if (!check.ok) return { draft: draft || emptyDraft(), error: check.error };
     next.endIds.push(allergyId);
     next.tidyIds = next.tidyIds.filter(function (id) {
@@ -441,8 +496,8 @@
       sameDuplicateGroup: sameDuplicateGroup,
       buildDuplicatePairs: buildDuplicatePairs,
       isNotAnAllergy: isNotAnAllergy,
+      isConvertEligible: isConvertEligible,
       isEndableClassification: isEndableClassification,
-      countLiveNka: countLiveNka,
       canStageEnd: canStageEnd,
       canStageTidy: canStageTidy,
       emptyDraft: emptyDraft,
@@ -543,14 +598,9 @@
           '">Stage tidy</button>'
       );
     }
-    var conv = flags.convertById[id];
-    if (conv && !isNotAnAllergy(conv)) {
-      buttons.push(
-        '<button type="button" class="ms-acc-tile-action" data-action="convert" data-target-id="' +
-          esc(id) +
-          '">Convert…</button>'
-      );
-    }
+    // No "Convert…" button here (2026-08-23: removed as an unnecessary extra
+    // step) — every tile eligible for conversion opens the review card
+    // straight from a single click, see the tile click handler below.
     if (findDuplicateGroupIndex(id, groups) !== -1) {
       buttons.push(
         '<button type="button" class="ms-acc-tile-action" data-action="merge" data-target-id="' +
@@ -574,6 +624,12 @@
     var showActions = selected && (opts.selectedIds || []).length === 1;
     var picked = opts.pickedId === id;
     var displayDate = allergy.onsetDate || allergy.recordDate || null;
+    // Coded reaction(s) inline with the substance name (2026-08-23 request
+    // — "Tramadol - nausea", or "- nausea, diarrhoea, skin rash" for
+    // several) — additionalInformation free text stays a separate line
+    // underneath (the existing `info` hint below), unchanged.
+    var reactionsText =
+      allergy.reactions && allergy.reactions.length ? allergy.reactions.join(', ') : null;
     var info = truncateText(allergy.additionalInformation, 70);
     var groupIdx = findDuplicateGroupIndex(id, groups);
     var hints = [];
@@ -584,7 +640,7 @@
           esc((conv.rule && conv.rule.notes) || 'This may not be a genuine allergy — consider ending it.') +
           '</div>'
       );
-    } else if (conv) {
+    } else if (conv && !conv.adHoc) {
       hints.push('<div class="ms-acc-tile-hint">Pre-defined-allergy code — convert to a substance</div>');
     }
     if (dual) {
@@ -622,6 +678,9 @@
       '<div class="ms-acc-tile-copy">' +
       '<div class="ms-acc-tile-desc">' +
       esc(allergy.description || id) +
+      (reactionsText
+        ? ' <span class="ms-acc-tile-desc-reactions">- ' + esc(reactionsText) + '</span>'
+        : '') +
       '</div>' +
       (displayDate ? '<div class="ms-acc-tile-date">' + esc(displayDate) + '</div>' : '') +
       '</div>' +
@@ -692,7 +751,7 @@
             })
             .join('') +
           '</div>'
-        : '<div class="ms-acc-bin-hint">Drop junk or not-an-allergy rows here. Nothing is ended until you Finalise. Genuine allergies cannot be ended from this bin.</div>') +
+        : '<div class="ms-acc-bin-hint">Drop any allergy here to stage it for ending. Nothing is ended until you Finalise.</div>') +
       '</div>'
     );
   }
@@ -806,12 +865,11 @@
 
   function bodyHtml(lanes, endedAllergies, flags, groups, opts) {
     return (
-      '<div class="ms-acc-explainer">Drag a junk or not-an-allergy row onto <strong>End</strong> to stage ' +
-      'removal; drop a dual-coded tile onto <strong>Dual-coded</strong> to stage clearing the stale legacy ' +
-      'code; drop one duplicate onto its pair to review a merge. Tick several tiles, or Ctrl/⌘-click, then ' +
-      'drag the set together. Convert tiles open the existing review. Arrange as many as you like, then ' +
-      '<strong>Finalise</strong>. Genuine allergies cannot be ended from this canvas. The last “No known ' +
-      'allergies” copy cannot be ended.</div>' +
+      '<div class="ms-acc-explainer">Drag any row onto <strong>End</strong> to stage it for ending; drop a ' +
+      'dual-coded tile onto <strong>Dual-coded</strong> to stage clearing the stale legacy code; drop one ' +
+      'duplicate onto its pair to review a merge. Tick several tiles, or Ctrl/⌘-click, then drag the set ' +
+      'together. Click a tile to review or improve its coding. Arrange as many as you like, then ' +
+      '<strong>Finalise</strong>.</div>' +
       (_selectedTileIds.length > 1
         ? '<div class="ms-acc-selection-hint">' +
           _selectedTileIds.length +
@@ -909,16 +967,12 @@
 
   function proposeEnd(allergyId, snap) {
     var flags = flagsOf(snap);
-    var result = stageEnd(_draft, allergyId, flags, snap.allergies);
-    if (result.error === 'last-nka') {
-      _stageError =
-        'The last “No known allergies” copy cannot be ended — it records that allergy status was checked and found nil.';
-      announce(_stageError);
-      render();
-      return;
-    }
+    var result = stageEnd(_draft, allergyId, flags);
     if (result.error === 'not-endable') {
-      _stageError = 'Only junk, low-relevance, or “not an allergy” rows can be ended from this canvas.';
+      // Every allergy is endable now (see isEndableClassification's own
+      // comment) — this only fires for a row THIS session already
+      // confirmed ended.
+      _stageError = 'That row was already ended in this session.';
       announce(_stageError);
       render();
       return;
@@ -1023,7 +1077,7 @@
       var wantTidy = _draft.tidyIds.slice();
       var endResult = { ended: [], skipped: false };
       var tidyResult = { tidied: [], skipped: false };
-      if (wantEnd.length) endResult = await window.AllergyCleanup.commitEndJunk(wantEnd, { deferReload: true });
+      if (wantEnd.length) endResult = await window.AllergyCleanup.commitEndAllergies(wantEnd, { deferReload: true });
       if (window.AllergyCleanup.getSnapshot().patientId !== _openedPatientId) {
         close();
         return;
@@ -1121,8 +1175,13 @@
           render();
           return;
         }
-        var conv = flags.convertById[id];
-        if (conv && !isNotAnAllergy(conv) && _selectedTileIds.length <= 1) {
+        // 2026-08-23: no more "select tile, then click Convert…" — a single
+        // click on ANY convert-eligible tile opens the review card directly,
+        // in every lane (see isConvertEligible's own comment for the two
+        // exclusions: a confirmed "not-an-allergy" match, and the NKA
+        // sentinel entry). Those two fall through to the ordinary
+        // select-and-show-actions behaviour instead, e.g. Stage end.
+        if (isConvertEligible(id, flags)) {
           _selectedTileIds = [];
           proposeConvert(id);
           return;
@@ -1140,7 +1199,6 @@
         if (!id || !action) return;
         if (action === 'end') proposeEnd(id, snap);
         else if (action === 'tidy') proposeTidy(id, snap);
-        else if (action === 'convert') proposeConvert(id);
         else if (action === 'merge') proposeMerge(id);
       });
     });

@@ -13,8 +13,8 @@ const {
   sameDuplicateGroup,
   buildDuplicatePairs,
   isNotAnAllergy,
+  isConvertEligible,
   isEndableClassification,
-  countLiveNka,
   canStageEnd,
   canStageTidy,
   emptyDraft,
@@ -127,6 +127,27 @@ check(liveLaneKey('j1', flags) === 'junk', 'junk row is Junk');
 check(liveLaneKey('c1', flags) === 'convert', 'pre-defined is Convert');
 check(liveLaneKey('d1', flags) === 'dual', 'dual-coded is Dual');
 {
+  // findOrRegisterConversionEntry (allergy-cleanup.js) registers an ad-hoc
+  // convertById entry when the tile's generalised "Convert…" action is used
+  // on a row the scan never flagged — it must stay in its real lane, not
+  // jump to Convert (see liveLaneKey's own comment).
+  const adHocFlags = {
+    junkById: {},
+    convertById: { a1: { id: 'a1', description: 'Allergy to peanut', rule: null, adHoc: true } },
+    dualById: {},
+  };
+  check(liveLaneKey('a1', adHocFlags) === 'active', 'ad-hoc-registered convert entry stays in its real lane');
+}
+
+console.log('--- isConvertEligible: which tiles open the review card on a single click ---');
+check(isConvertEligible('a1', flags) === true, 'clean Active row is eligible');
+check(isConvertEligible('c1', flags) === true, 'scan-flagged convert row is eligible');
+check(isConvertEligible('d1', flags) === true, 'dual-coded row is eligible');
+check(isConvertEligible('j1', flags) === true, 'non-NKA junk row IS eligible — may be a real allergy, badly coded');
+check(isConvertEligible('c2', flags) === false, 'confirmed not-an-allergy row is NOT eligible — heads for End');
+check(isConvertEligible('nka1', flags) === false, 'NKA sentinel row is NOT eligible — nothing to convert it to');
+check(isConvertEligible('nka2', flags) === false, 'second NKA copy is also NOT eligible');
+{
   const parts = partitionAllergiesByLane(allergies, flags);
   check(parts.active.map((a) => a.id).join() === 'a1', 'Active holds only the clean row');
   check(
@@ -146,36 +167,51 @@ check(liveLaneKey('d1', flags) === 'dual', 'dual-coded is Dual');
   check(parts.dual.map((a) => a.id).join() === 'd1', 'Dual holds the dual-coded row');
 }
 
-console.log('--- NKA / end staging ---');
+console.log('--- NKA concept helper / end staging (RELAXED 2026-08-23 — every allergy is endable) ---');
 check(isNkaConcept(NKA_CONCEPT_ID, 'anything') === true, 'NKA by conceptId');
 check(isNkaConcept(null, 'No known allergies') === true, 'NKA by description');
 check(isNkaConcept('419076005', 'Allergic reaction') === false, 'generic junk is not NKA');
 check(isEndableClassification('j1', flags) === true, 'junk is endable');
 check(isEndableClassification('c2', flags) === true, 'not-an-allergy is endable');
-check(isEndableClassification('a1', flags) === false, 'clean allergy is not endable');
-check(isEndableClassification('c1', flags) === false, 'convertible substance is not endable');
-check(canStageEnd('a1', flags, allergies, []).error === 'not-endable', 'cannot stage a genuine allergy');
-check(canStageEnd('j1', flags, allergies, []).ok === true, 'can stage a junk row');
-check(canStageEnd('c2', flags, allergies, []).ok === true, 'can stage not-an-allergy');
-check(canStageEnd('nka1', flags, allergies, []).ok === true, 'can stage one of two NKA copies');
-check(canStageEnd('nka2', flags, allergies, ['nka1']).error === 'last-nka', 'cannot stage the last remaining NKA');
+check(isEndableClassification('a1', flags) === true, 'a clean, genuine allergy is endable too — no more hard block');
+check(isEndableClassification('c1', flags) === true, 'a convertible substance is endable too');
+check(isEndableClassification('d1', flags) === true, 'a dual-coded row is endable too');
+check(isEndableClassification('nka1', flags) === true, 'an NKA row is endable — including as the LAST copy');
 {
-  const onlyNka = [{ id: 'nka1', description: 'No known allergies' }];
-  const onlyFlags = { junkById: { nka1: junkNka }, convertById: {}, dualById: {} };
-  check(canStageEnd('nka1', onlyFlags, onlyNka, []).error === 'last-nka', 'the sole NKA copy cannot be staged');
+  // The only remaining guard: a row THIS session already confirmed ended
+  // (junk/convert entries track `.ended` once a write succeeds) cannot be
+  // re-staged.
+  const alreadyEndedFlags = {
+    junkById: { j1: Object.assign({}, junkPenicillin, { ended: true }) },
+    convertById: {},
+    dualById: {},
+  };
+  check(isEndableClassification('j1', alreadyEndedFlags) === false, 'a row already ended this session is not re-endable');
 }
-check(countLiveNka(allergies, flags, []) === 2, 'two live NKA');
-check(countLiveNka(allergies, flags, ['nka1']) === 1, 'one live NKA after staging one');
+check(canStageEnd('a1', flags).ok === true, 'can stage a genuine allergy');
+check(canStageEnd('j1', flags).ok === true, 'can stage a junk row');
+check(canStageEnd('c2', flags).ok === true, 'can stage not-an-allergy');
+check(canStageEnd('c1', flags).ok === true, 'can stage a convertible substance');
+check(canStageEnd('d1', flags).ok === true, 'can stage a dual-coded row');
+check(canStageEnd('nka1', flags).ok === true, 'can stage one NKA copy');
+check(canStageEnd('nka2', flags).ok === true, 'can stage the OTHER NKA copy too — both at once, no last-copy block');
 {
-  const first = stageEnd(emptyDraft(), 'j1', flags, allergies);
+  const onlyFlags = { junkById: { nka1: junkNka }, convertById: {}, dualById: {} };
+  check(canStageEnd('nka1', onlyFlags).ok === true, 'the SOLE NKA copy can now be staged too');
+}
+{
+  const first = stageEnd(emptyDraft(), 'j1', flags);
   check(first.error === null && first.draft.endIds.join() === 'j1', 'stage junk end');
-  const again = stageEnd(first.draft, 'j1', flags, allergies);
+  const again = stageEnd(first.draft, 'j1', flags);
   check(again.draft.endIds.join() === 'j1', 'staging twice is a no-op');
-  const nka = stageEnd(emptyDraft(), 'nka1', flags, allergies);
-  const last = stageEnd(nka.draft, 'nka2', flags, allergies);
-  check(last.error === 'last-nka' && last.draft.endIds.join() === 'nka1', 'last NKA leaves the draft unchanged');
-  const genuine = stageEnd(emptyDraft(), 'a1', flags, allergies);
-  check(genuine.error === 'not-endable' && genuine.draft.endIds.length === 0, 'genuine allergy is not staged');
+  const nka = stageEnd(emptyDraft(), 'nka1', flags);
+  const both = stageEnd(nka.draft, 'nka2', flags);
+  check(
+    both.error === null && both.draft.endIds.sort().join() === 'nka1,nka2',
+    'BOTH NKA copies can be staged together — ending the last one is no longer blocked'
+  );
+  const genuine = stageEnd(emptyDraft(), 'a1', flags);
+  check(genuine.error === null && genuine.draft.endIds.join() === 'a1', 'a genuine allergy IS staged now');
   const unstaged = unstageEnd(first.draft, 'j1');
   check(unstaged.endIds.length === 0, 'unstage end');
 }
@@ -195,10 +231,16 @@ check(canStageTidy('a1', flags) === false, 'clean row is not tidyable');
   const bad = stageTidy(emptyDraft(), 'a1', flags);
   check(bad.error === 'not-tidyable', 'cannot tidy a clean row');
   check(unstageTidy(s.draft, 'd1').tidyIds.length === 0, 'unstage tidy');
-  const endThenTidy = stageTidy(stageEnd(emptyDraft(), 'j1', flags, allergies).draft, 'd1', flags);
+  const endThenTidy = stageTidy(stageEnd(emptyDraft(), 'j1', flags).draft, 'd1', flags);
   check(endThenTidy.draft.endIds.join() === 'j1' && endThenTidy.draft.tidyIds.join() === 'd1', 'end + tidy coexist');
-  const swap = stageEnd(s.draft, 'd1', flags, allergies);
-  check(swap.error === 'not-endable', 'dual-coded cannot be ended');
+  // A dual-coded row can now be ENDED too (relaxed 2026-08-23) — doing so
+  // swaps it out of the tidy stage, since stageEnd clears any pending tidy
+  // for the same id (a row can only be staged for one outcome at a time).
+  const swap = stageEnd(s.draft, 'd1', flags);
+  check(
+    swap.error === null && swap.draft.endIds.join() === 'd1' && swap.draft.tidyIds.length === 0,
+    'dual-coded CAN be ended now, and doing so clears its pending tidy stage'
+  );
 }
 
 console.log('--- draft helpers ---');

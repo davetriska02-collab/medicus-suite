@@ -26,8 +26,6 @@ const {
   resolveAllergyConceptId,
   buildEndAllergyPayload,
   isEndable,
-  NKA_CONCEPT_ID,
-  isNkaAllergy,
   normalizeAllergyDescription,
   activeNonDraftAllergies,
   reactionDescriptions,
@@ -41,6 +39,10 @@ const {
   classifyConvertibleEntries,
   normalizedConceptSearchResults,
   rankSubstanceResults,
+  searchMatchPercent,
+  capResults,
+  firstQueryWord,
+  mergeUniqueByConceptId,
   extractAllergenAndReactionHint,
   pickReactionSeed,
   groupDuplicateAllergies,
@@ -56,6 +58,10 @@ const {
   buildAllergyProvenanceFields,
   buildMergeChangeAllergyPayload,
   buildConversionChangeAllergyPayload,
+  findGenericTextPatternMatch,
+  removeGenericTextSpan,
+  computeGenericTextRemoval,
+  buildCleanTextChangeAllergyPayload,
   normalizeOnsetDateForSubmit,
   parseCareRecordPath,
   parseTaskOverviewPath,
@@ -92,10 +98,18 @@ console.log('--- rules/allergy-junk-codes.json: the imported codes list itself -
   );
   // Pre-merge review must-fix A: a coded NKA entry is a positive "asked,
   // answer nil" assertion — the per-code caution keeps it out of 'Select
-  // all' so only surplus duplicates get removed, never the last copy.
+  // all' so removal is always an individual decision. RELAXED 2026-08-23
+  // (explicit user product decision — see docs/HAZARD-LOG.md H-060's dated
+  // addendum): the caution is now purely informational, pointing at the
+  // journal as the record of the historic check — it no longer argues
+  // against ending the last remaining copy.
   check(
-    typeof noKnown.caution === 'string' && /last remaining copy/i.test(noKnown.caution),
-    '716186003 carries a per-code caution warning against removing the last remaining copy'
+    typeof noKnown.caution === 'string' && /journal/i.test(noKnown.caution) && /historical/i.test(noKnown.caution),
+    '716186003 carries a per-code caution pointing at the journal, framed as informational not a restriction'
+  );
+  check(
+    !/last remaining copy/i.test(noKnown.caution),
+    'the caution no longer argues against ending the last remaining copy'
   );
   const hoNonDrug = allergyJunkCodes.codes.find((c) => c.conceptId === '161611007');
   // Pre-merge review must-fix B: the code's SNOMED semantics are a positive
@@ -362,14 +376,6 @@ console.log('--- isEndable ---');
   check(isEndable({ ended: true }) === false, 'already ended -> not endable');
   check(isEndable(null) === false, 'null entry -> not endable, never throws');
   check(isEndable(undefined) === false, 'undefined entry -> not endable, never throws');
-  check(NKA_CONCEPT_ID === '716186003', 'NKA concept id is the SNOMED code');
-  check(isNkaAllergy({ conceptId: '716186003' }) === true, 'NKA by conceptId');
-  check(isNkaAllergy({ description: 'No known allergies' }) === true, 'NKA by description');
-  check(isNkaAllergy({ allergyCodeDescription: 'No known allergies' }) === true, 'NKA by allergyCodeDescription');
-  check(
-    isNkaAllergy({ conceptId: '419076005', description: 'Allergic reaction' }) === false,
-    'generic junk is not NKA'
-  );
 }
 
 console.log('--- reactionDescriptions: real overview-allergy allergyReactions shapes ---');
@@ -600,11 +606,13 @@ console.log('--- classifyJunkEntries: real 2026-07-29 patient scenario, 5 duplic
   const flagged = classifyJunkEntries(candidates, overviewsById, allergyJunkCodes.codes);
   check(flagged.length === 5, 'every one of the five real duplicate entries is flagged for bulk-end');
   // Since the 2026-08-02 pre-merge review, every NKA instance carries the
-  // per-code caution (excluded from 'Select all') — the clinician removes the
-  // four surplus duplicates individually and keeps one, never bulk-ends to zero.
+  // per-code caution (excluded from 'Select all') — RELAXED 2026-08-23 (see
+  // docs/HAZARD-LOG.md H-060's dated addendum): removal is still an
+  // individual decision for each one, but the caution text is now purely
+  // informational, not an argument against ending every last copy.
   check(
-    flagged.every((f) => f.conceptId === '716186003' && /last remaining copy/i.test(f.caution)),
-    'all five resolve to the correct conceptId and every one carries the per-code keep-one caution'
+    flagged.every((f) => f.conceptId === '716186003' && /journal/i.test(f.caution)),
+    'all five resolve to the correct conceptId and every one carries the per-code informational caution'
   );
   check(
     flagged.every((f) => typeof f.reasonEnded === 'string' && f.reasonEnded.length > 0),
@@ -856,6 +864,73 @@ console.log(
   check(rankSubstanceResults(null, 'x').length === 0, 'null results -> empty array, never throws');
 }
 
+console.log('--- searchMatchPercent: display "% match" ranking cue (top-5 + likelihood, 2026-08-23 request) ---');
+{
+  check(
+    searchMatchPercent('penicillin', 'Phenoxymethylpenicillin') === 100,
+    'substring containment, not \\b-word matching -- "penicillin" is embedded in a longer compound word, ' +
+      'exactly the case a strict word-boundary check would score 0% despite being the obvious clinical match'
+  );
+  check(searchMatchPercent('indapamide', 'Indapamide 2.5mg tablets') === 100, 'single-word exact-ish match -> 100%');
+  check(
+    searchMatchPercent('penicillin v capsules', 'Penicillin V 250mg capsules') === 100,
+    'every query word found somewhere in the candidate -> 100%, dose text in between does not break it'
+  );
+  check(
+    searchMatchPercent('penicillin v capsules', 'Amoxicillin') === 0,
+    'no query word found anywhere -> 0%, not null (a real candidate always gets a score)'
+  );
+  check(searchMatchPercent('', 'Penicillin') === null, 'empty query -> null, not 0 -- there is nothing to score against');
+  check(searchMatchPercent(null, null) === null, 'null query -> null, never throws');
+  check(searchMatchPercent('foo', null) === 0, 'null candidate text -> 0%, never throws');
+}
+
+console.log('--- capResults: top-N cap (2026-08-23 request), order-preserving ---');
+{
+  const ten = Array.from({ length: 10 }, (_, i) => ({ conceptId: String(i) }));
+  const capped = capResults(ten);
+  check(capped.length === 5, 'caps to 5');
+  check(
+    capped.map((r) => r.conceptId).join(',') === '0,1,2,3,4',
+    'keeps the FIRST 5 in order -- the caller is responsible for ranking before capping, this never re-sorts'
+  );
+  check(capResults([{ conceptId: 'x' }]).length === 1, 'fewer than the cap -> unchanged');
+  check(capResults([]).length === 0, 'empty -> empty');
+  check(capResults(null).length === 0, 'null -> empty array, never throws');
+}
+
+console.log('--- firstQueryWord / mergeUniqueByConceptId: multi-part drug name single-word match (2026-08-23) ---');
+{
+  check(
+    firstQueryWord('tramadol hydrochloride') === 'tramadol',
+    'a two-word query -> its first word, so the plain base ingredient can be searched too'
+  );
+  check(
+    firstQueryWord('penicillin v capsules') === 'penicillin',
+    'a three-word query -> still just the first word'
+  );
+  check(firstQueryWord('tramadol') === null, 'a single-word query -> null, nothing to strip down to');
+  check(firstQueryWord('') === null, 'empty query -> null');
+  check(firstQueryWord(null) === null, 'null query -> null, never throws');
+  check(firstQueryWord('  tramadol   hydrochloride  ') === 'tramadol', 'extra whitespace is collapsed first');
+
+  const base = [{ conceptId: '1', description: 'Tramadol hydrochloride' }];
+  const extra = [
+    { conceptId: '2', description: 'Tramadol' },
+    { conceptId: '1', description: 'Tramadol hydrochloride (duplicate)' },
+  ];
+  const merged = mergeUniqueByConceptId(base, extra);
+  check(merged.length === 2, 'the duplicate conceptId from extra is dropped, only the genuinely new one is added');
+  check(merged[0].conceptId === '1' && merged[1].conceptId === '2', 'base results come first, in order, then new ones');
+  check(
+    merged[0].description === 'Tramadol hydrochloride',
+    "base's own copy of a shared conceptId wins over extra's copy, never overwritten"
+  );
+  check(mergeUniqueByConceptId([], extra).length === 2, 'empty base -> extra passes through, deduped against itself');
+  check(mergeUniqueByConceptId(base, []).length === 1, 'empty extra -> base unchanged');
+  check(mergeUniqueByConceptId(null, null).length === 0, 'null/null -> empty array, never throws');
+}
+
 console.log('--- pickReactionSeed: priority order (rule hint > pattern hint > additionalInformation) ---');
 {
   check(
@@ -1038,6 +1113,129 @@ console.log('--- buildConversionChangeAllergyPayload: the OPPOSITE invariant to 
   check(
     buildConversionChangeAllergyPayload(prefill, newSubstance, null).allergyReactions.length === 1,
     'null newReactions -> falls back to the prefill reactions unchanged, never throws'
+  );
+}
+
+console.log(
+  '--- computeGenericTextRemoval: GP2GP import-text noise on ALLERGY additionalInformation (2026-08-23 request, same rules/generic-additional-info-text.json problem-description-cleanup.js already draws on) ---'
+);
+{
+  const genericEntries = require('./rules/generic-additional-info-text.json').entries;
+
+  // The real motivating example: an allergy's additionalInformation was
+  // NOTHING but the GP2GP episodicity wrapper.
+  const episodicityOnly = computeGenericTextRemoval(
+    '{Episodicity : code=255217005, displayName=First}',
+    genericEntries
+  );
+  check(episodicityOnly.cleaned === '', 'the episodicity wrapper alone leaves nothing behind once stripped');
+  check(
+    episodicityOnly.removed.length === 1 && episodicityOnly.removed[0].indexOf('Episodicity') !== -1,
+    'the wrapper is reported in `removed` so the clinician sees exactly what would be taken out'
+  );
+
+  // Real bug found live 2026-08-23: the SAME fragment on a real allergy had
+  // NO surrounding braces at all -- "Episodicity : code=255217005,
+  // displayName=First" -- so the original braces-required pattern silently
+  // never matched. episodicitySuffix's regex is now an alternation covering
+  // both shapes.
+  const episodicityNoBraces = computeGenericTextRemoval(
+    'Episodicity : code=255217005, displayName=First',
+    genericEntries
+  );
+  check(episodicityNoBraces.cleaned === '', 'the UNBRACED episodicity wrapper is now recognised and stripped too');
+  check(
+    episodicityNoBraces.removed.length === 1 && episodicityNoBraces.removed[0] === 'Episodicity : code=255217005, displayName=First',
+    'the unbraced form is reported verbatim in `removed`'
+  );
+  const episodicityNoBracesMixed = computeGenericTextRemoval(
+    'reacted with facial swelling Episodicity : code=1, displayName=First then settled',
+    genericEntries
+  );
+  check(
+    episodicityNoBracesMixed.cleaned === 'reacted with facial swelling  then settled',
+    'the unbraced form is bounded (stops at the next word), so genuine free text before AND after it on the same line survives'
+  );
+
+  // Genuine free text sharing the field with noise must survive.
+  const mixed = computeGenericTextRemoval(
+    'reacted with facial swelling\n{Episodicity : code=255217005, displayName=First}',
+    genericEntries
+  );
+  check(
+    mixed.cleaned === 'reacted with facial swelling',
+    'genuine clinical free text sharing the field with GP2GP noise is preserved, only the noise is stripped'
+  );
+
+  check(
+    findGenericTextPatternMatch('{Episodicity : code=1, displayName=X}', {
+      pattern: '\\{Episodicity\\s*:[^}]*\\}',
+      flags: 'i',
+    }) === '{Episodicity : code=1, displayName=X}',
+    'findGenericTextPatternMatch returns the exact matched span'
+  );
+  check(findGenericTextPatternMatch('no noise here', { pattern: '\\{Episodicity[^}]*\\}' }) === null, 'no match -> null');
+  check(findGenericTextPatternMatch('x', { pattern: '(' }) === null, 'malformed regex source -> null, never throws');
+  check(findGenericTextPatternMatch('x', null) === null, 'null entry -> null, never throws');
+
+  check(
+    removeGenericTextSpan('before\n{X}\nafter', '{X}') === 'before\nafter',
+    'removeGenericTextSpan removes the matched span and collapses the now-blank line it leaves behind'
+  );
+  check(removeGenericTextSpan('only noise', 'only noise') === '', 'removing the entire text leaves an empty string');
+  check(removeGenericTextSpan('unchanged', '') === 'unchanged', 'an empty/falsy raw span is a no-op');
+  check(removeGenericTextSpan('unchanged', 'not present') === 'unchanged', 'a raw span not found in the text is a no-op');
+
+  check(computeGenericTextRemoval(null, genericEntries).removed.length === 0, 'null additionalInformation -> nothing removed');
+  check(computeGenericTextRemoval('', genericEntries).cleaned === '', 'empty additionalInformation -> empty cleaned text');
+  check(computeGenericTextRemoval('clean text', null).removed.length === 0, 'null entries -> nothing removed, never throws');
+  check(
+    computeGenericTextRemoval('genuinely free text, nothing generic here', genericEntries).removed.length === 0,
+    'ordinary free text with no known GP2GP boilerplate is left untouched'
+  );
+}
+
+console.log(
+  '--- buildCleanTextChangeAllergyPayload: the OPPOSITE invariant to buildConversionChangeAllergyPayload ---'
+);
+{
+  const prefill = {
+    allergyCode: null,
+    substance: { label: 'Tramadol', value: { conceptId: '387137007', description: 'Tramadol' } },
+    additionalInformation: 'nausea\n{Episodicity : code=255217005, displayName=First}',
+    severity: 'moderate',
+    certainty: 'confirmed',
+    allergyReactions: [{ conceptId: '422587007', description: 'Nausea' }],
+    onsetDate: '2020-05-01',
+    allergyCodeType: 'substances',
+    linkedProblemIds: [],
+    hiddenFromPatientFacingServices: false,
+    confidentialFromThirdParties: false,
+    endDate: null,
+    recordedAtAnotherOrganisation: false,
+    recordDate: '2024-11-08',
+    recordedByStaff: '0192351f-fd60-711f-bf55-176f0c1e5f1b',
+    linkedClinicalCase: { defaultClinicalCaseId: null },
+  };
+  const payload = buildCleanTextChangeAllergyPayload(prefill, 'nausea');
+  check(payload.additionalInformation === 'nausea', 'additionalInformation is rewritten to the cleaned text');
+  check(
+    payload.substance.conceptId === '387137007' && payload.allergyCodeType === 'substances',
+    'substance/allergyCodeType carried through UNCHANGED — cleaning text never re-codes the allergy'
+  );
+  check(payload.allergyCode === null, 'allergyCode carried through unchanged (unwrapped null stays null)');
+  check(
+    payload.severity === 'moderate' && payload.certainty === 'confirmed',
+    'severity/certainty carried through unchanged'
+  );
+  check(
+    payload.allergyReactions.length === 1 && payload.allergyReactions[0].description === 'Nausea',
+    'existing coded reactions carried through unchanged — this never touches them'
+  );
+  check(payload.onsetDate === '2020-05-01' && payload.recordDate === '2024-11-08', 'onset/provenance carried through');
+  check(
+    buildCleanTextChangeAllergyPayload(prefill, '').additionalInformation === null,
+    'an empty cleaned string submits as null, not an empty string'
   );
 }
 
