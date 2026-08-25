@@ -81,13 +81,30 @@ console.log('\n--- pickRequesterFromOverview ---');
     data: { namedGp: 'Dr Registered GP', investigationReport: {} },
   });
   check(namedOnly === null, 'namedGp is never treated as who ordered');
+  const orgReq = C.pickRequesterFromOverview({
+    data: {
+      investigationReport: {
+        requester: {
+          organisationName: 'Some Lab',
+          organisationOdsCode: 'ABC',
+          departmentName: 'Haem',
+          practitionerName: 'Lab Person',
+        },
+        requesterComments: 'Bloating, tiredness',
+      },
+    },
+  });
+  check(orgReq === null, 'lab/org requester object is not who ordered');
   const fromRow = C.pickRequesterFromTaskRow({
     requestedBy: 'TRISKA D',
     namedGp: 'Dr Registered GP',
     assignedTo: 'Investigation Reports',
   });
   check(fromRow && fromRow.name === 'TRISKA D', 'task-list requestedBy is who ordered');
-  check(C.pickRequesterFromTaskRow({ namedGp: 'Dr Registered GP' }) === null, 'namedGp on the row is still not who ordered');
+  check(
+    C.pickRequesterFromTaskRow({ namedGp: 'Dr Registered GP' }) === null,
+    'namedGp on the row is still not who ordered'
+  );
   const fromNorm = C.normaliseTaskRow(
     {
       id: uuid(11),
@@ -101,6 +118,16 @@ console.log('\n--- pickRequesterFromOverview ---');
   );
   check(fromNorm && fromNorm.requester === 'TRISKA D', 'normaliseTaskRow reads Requested By off the task-list row');
   check(fromNorm.namedGp === 'Dr David Triska', 'named GP stays a separate caption');
+  const fromInv = C.normaliseTaskRow(
+    {
+      id: uuid(12),
+      patientName: 'LEE, Pat',
+      investigations: 'TISSUE TRANSGLUTAMINASE IGA ANTIBOD, PROTEIN ELECTROPHORESIS',
+      requestedBy: 'AZADIAN N',
+    },
+    'review_investigation_results_task'
+  );
+  check(/TRANSGLUTAMINASE/.test(fromInv.summary), 'task-list investigations become the row summary');
 }
 
 console.log('\n--- normaliseTaskRow / team vs person assignee ---');
@@ -196,17 +223,34 @@ console.log('\n--- copy list is honest ---');
   check(!/\b(Done|Sent|Allocated|Submitted|Booked)\b/.test(text), 'no completion verbs');
 }
 
-console.log('\n--- write contract stays closed ---');
+console.log('\n--- write contract is the captured bulk-reassign ---');
 {
-  const w = C.canWriteAllocations();
-  check(w.ok === false, 'canWriteAllocations is false');
-  check(/not been captured live/.test(w.reason), 'reason names the missing capture');
+  const closed = C.canWriteAllocations();
+  check(closed.ok === false, 'canWriteAllocations is false without the queue token');
+  check(/queue token/.test(closed.reason), 'reason names the missing task-list token');
+  check(
+    C.canWriteAllocations({ taskList: 'review_investigation_results_task' }).ok === true,
+    'token unlocks the write'
+  );
+  check(C.canWriteAllocations({ taskList: '' }).ok === false, 'empty string is not a token');
+  check(C.canWriteAllocations({ taskList: {} }).ok === false, 'empty object is not a token');
   const src = require('fs').readFileSync(require('path').join(__dirname, 'shared/lab-allocate-core.js'), 'utf8');
-  check(!/method:\s*['"]POST['"]/.test(src), 'core has no POST');
+  check(/method:\s*['"]POST['"]/.test(src), 'core POSTs the captured bulk-reassign');
+  check(src.indexOf('/tasks/task-list/bulk-reassign') !== -1, 'core uses the captured path');
   check(!/method:\s*['"]PUT['"]/.test(src), 'core has no PUT');
   check(!/method:\s*['"]PATCH['"]/.test(src), 'core has no PATCH');
   check(!/change-absence/.test(src), 'core never mentions change-absence');
   check(!/calendar-resources/.test(src), 'core never mentions calendar-resources');
+  const body = C.buildBulkReassignBody(uuid(9), 'token-from-envelope', [uuid(1), uuid(2)]);
+  check(body.assigneeType === 'staff', 'assigneeType is the sibling-confirmed staff value');
+  check(body.taskList === 'token-from-envelope', 'taskList is passed through, not invented');
+  check(body.taskIds.length === 2 && body.assigneeId === uuid(9), 'taskIds and assigneeId are the captured keys');
+  check(
+    Object.keys(body).join(',') === 'assigneeId,assigneeType,taskList,taskIds',
+    'body has exactly the four captured keys'
+  );
+  check(C.buildBulkReassignBody('not-a-uuid', 'token', [uuid(1)]) === null, 'refuses a non-uuid assignee');
+  check(C.buildBulkReassignBody(uuid(9), '', [uuid(1)]) === null, 'refuses a missing taskList token');
 }
 
 console.log('\n--- canvas + manifest source locks ---');
@@ -218,9 +262,12 @@ console.log('\n--- canvas + manifest source locks ---');
   check(manifest.indexOf('shared/lab-allocate-core.js') !== -1, 'core is in the manifest');
   check(manifest.indexOf('content-scripts/lab-allocate-canvas.js') !== -1, 'canvas is in the manifest');
   check(manifest.indexOf('content-scripts/lab-allocate-canvas.css') !== -1, 'canvas CSS is in the manifest');
-  check(!/method:\s*['"]POST['"]/.test(canvas), 'canvas has no POST');
+  check(!/method:\s*['"]POST['"]/.test(canvas), 'canvas has no POST — the core client writes');
+  check(/commitAllocations/.test(canvas), 'canvas commits through the core client');
+  check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
+  check(/Keep planning/.test(canvas), 'confirm defaults the clinician back to planning');
   check(!/\.click\(\)/.test(canvas), 'canvas does not synthesise Medicus clicks');
-  check(/Write to Medicus — not available/.test(canvas), 'Finalise control is visibly unavailable');
+  check(!/Write to Medicus — not available/.test(canvas), 'Finalise is no longer hard-disabled');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(/not confirmed as the requester/.test(canvas), 'named GP caption refuses to claim who ordered');
   check(/Absence check before staging/.test(canvas), 'clinician drop always offers an absence check');
@@ -231,7 +278,10 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
   check(/In today/.test(canvas), 'chips can show In today from the appointment book');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-chip/.test(canvas), 'canvas is a reports pool plus clinician chips');
-  check(/requestStage\(ids, key, btn\.closest/.test(canvas), 'clicking a chip stages the active selection — no drag needed');
+  check(
+    /requestStage\(ids, key, btn\.closest/.test(canvas),
+    'clicking a chip stages the active selection — no drag needed'
+  );
   check(/tabindex="0"/.test(canvas), 'tiles and group heads are keyboard focusable');
   check(/aria-selected/.test(canvas), 'selection state is exposed to assistive tech');
   check(/ms-lac-selectbar/.test(canvas), 'an active selection shows a visible count bar');
@@ -244,8 +294,12 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/displayClinicianName/.test(canvas), 'ALL-CAPS wire names are title-cased for display');
   const canvasCss = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.css'), 'utf8');
+  check(!/2147483001/.test(canvasCss), 'drag-ghost z-index is not a 10-digit Modulus-11 lookalike');
   check(/position: sticky/.test(canvasCss), 'group headers stay pinned while the pile scrolls');
-  check(!/#fff7ed|#9a3412|#ffedd5|#fdba74|#fee2e2/.test(canvasCss), 'warn/red surfaces use the token triads, not raw hexes');
+  check(
+    !/#fff7ed|#9a3412|#ffedd5|#fdba74|#fee2e2/.test(canvasCss),
+    'warn/red surfaces use the token triads, not raw hexes'
+  );
   check(/prefers-reduced-motion/.test(canvasCss), 'motion respects prefers-reduced-motion');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
   check(!/Add clinician column/.test(canvas), 'clinicians are chips, not full columns');
@@ -265,6 +319,9 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/method:\s*['"]POST['"]/.test(reqCap), 'requester capture does not POST');
   check(!/inset:24px/.test(reqCap), 'requester capture is a corner panel, not a full-page overlay');
   check(!/Absence unknown<\/span>/.test(canvas), 'chips do not wear Absence unknown as a standing badge');
+  const labCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-allocate-capture.js'), 'utf8');
+  check(/describeWriteValue/.test(labCap), 'lab-allocate capture samples write-key types, not PHI values');
+  check(!/method:\s*['"]POST['"]/.test(labCap), 'lab-allocate capture does not POST');
 }
 
 console.log('\n--- grouping by who ordered ---');
@@ -508,9 +565,7 @@ console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
     dateISO: '2026-08-25',
     book: book,
     staffList: staffForPresence(),
-    leaveList: [
-      { staffId: 's1', status: 'approved', type: 'annual', startDate: '2026-08-24', endDate: '2026-08-29' },
-    ],
+    leaveList: [{ staffId: 's1', status: 'approved', type: 'annual', startDate: '2026-08-24', endDate: '2026-08-29' }],
   });
   check(rotaWins.state === 'away' && rotaWins.source === 'rota', 'rota leave still marks Away when Medicus has no row');
 }
@@ -519,23 +574,109 @@ function staffForPresence() {
   return [{ id: 's1', name: 'Dr Jane Cole', medicusName: 'Jane Cole', notAPerson: false }];
 }
 
+console.log('\n--- staff directory + unique UUID resolve ---');
+{
+  const azadianId = uuid(21);
+  const coleId = uuid(22);
+  const teamId = uuid(23);
+  const row = C.normaliseTaskRow(
+    {
+      id: uuid(1),
+      patientName: 'A',
+      requestedBy: 'AZADIAN N',
+      assignedTo: 'Dr Natalie Azadian',
+      assignedId: azadianId,
+      namedGp: 'Dr David Triska',
+      namedGpId: uuid(24),
+    },
+    'x'
+  );
+  const dir = C.harvestStaffDirectory([row], {
+    data: {
+      assigneeOptions: {
+        staff: [
+          { type: 'staff', value: coleId, label: 'Dr Jane Cole' },
+          { id: azadianId, name: 'Dr Natalie Azadian' },
+        ],
+        teams: [{ type: 'team', value: teamId, label: 'Investigation Reports' }],
+      },
+    },
+  });
+  check(dir.byId[azadianId] && dir.byId[coleId], 'directory keeps both staff UUIDs');
+  check(!dir.byId[teamId], 'team assigneeOptions are not people');
+  const hit = C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', dir);
+  check(hit.ok && hit.staff.id === azadianId, 'AZADIAN N resolves to the Azadian UUID');
+  const miss = C.resolveStaffForColumn(C.clinicianColumnKey('Dr Mystery'), 'Dr Mystery', dir);
+  check(miss.ok === false && miss.reason === 'no-unique-staff', 'unknown chip is refused');
+  const clash = C.mergeStaffDirectory(dir, {
+    byId: {
+      [uuid(31)]: { id: uuid(31), name: 'Dr Nora Azadian', source: 'clash' },
+    },
+    list: [{ id: uuid(31), name: 'Dr Nora Azadian' }],
+  });
+  const ambiguous = C.resolveStaffForColumn(C.clinicianColumnKey('Azadian N'), 'Azadian N', clash);
+  check(
+    ambiguous.ok === false && ambiguous.reason === 'ambiguous-staff',
+    'same surname+initial with two UUIDs is refused'
+  );
+}
+
+console.log('\n--- planBulkReassign groups by destination UUID ---');
+{
+  const azadianId = uuid(21);
+  const a = C.applyRequester(
+    C.normaliseTaskRow({ id: uuid(1), patientName: 'A', assignedTo: 'Results', summary: 'FBC' }, 'x'),
+    { name: 'AZADIAN N', source: 'requestedBy', confidence: 'requester' }
+  );
+  const b = C.normaliseTaskRow({ id: uuid(2), patientName: 'B', assignedTo: 'Results', summary: 'U&E' }, 'x');
+  let draft = C.stageMoves(C.emptyDraft(), [a.id, b.id], C.clinicianColumnKey('AZADIAN N'));
+  draft = C.addColumn(draft, 'Dr Mystery');
+  draft = C.stageMove(draft, b.id, C.clinicianColumnKey('Dr Mystery'));
+  const dir = C.harvestStaffDirectory(
+    [
+      C.normaliseTaskRow(
+        { id: uuid(9), patientName: 'X', assignedTo: 'Dr Natalie Azadian', assignedId: azadianId },
+        'x'
+      ),
+    ],
+    null
+  );
+  const plan = C.planBulkReassign([a, b], draft, 'envelope-token', dir);
+  check(plan.ok === true, 'plan is writable when one destination resolves');
+  check(plan.batches.length === 1 && plan.batches[0].assigneeId === azadianId, 'one POST per unique staff UUID');
+  check(plan.batches[0].taskIds.join(',') === String(a.id), 'only the matched destination is written');
+  check(plan.refused.length === 1 && /Mystery/.test(plan.refused[0].toTitle), 'unmatched chip is refused, not guessed');
+  const noToken = C.planBulkReassign([a, b], draft, '', dir);
+  check(noToken.ok === false, 'plan refuses without the queue token');
+}
+
 async function testClient() {
-  console.log('\n--- createClient GET-only fetch ---');
+  console.log('\n--- createClient GET + captured bulk-reassign POST ---');
   const calls = [];
+  let bodies = [];
+  let taskListGone = false;
   const client = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async (url, opts) => {
-      calls.push({ url: url, method: opts.method });
+      calls.push({ url: url, method: opts.method, body: opts.body });
       let body = {};
-      if (/task-list/.test(url)) {
+      if (/bulk-reassign/.test(url)) {
+        bodies.push(JSON.parse(opts.body || '{}'));
+        body = { ok: true };
+      } else if (/task-list/.test(url)) {
         body = {
-          tasks: [
-            {
-              id: uuid(1),
-              patientName: 'A',
-              assignedTo: 'Results',
-              overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(1),
-            },
-          ],
+          taskList: 'envelope-token',
+          tasks: taskListGone
+            ? []
+            : [
+                {
+                  id: uuid(1),
+                  patientName: 'A',
+                  assignedTo: 'Dr Natalie Azadian',
+                  assignedId: uuid(21),
+                  requestedBy: 'AZADIAN N',
+                  overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(1),
+                },
+              ],
         };
       } else if (/embedded-overview/.test(url)) {
         body = {
@@ -565,6 +706,7 @@ async function testClient() {
   });
   const out = await client.fetchTaskList('review-investigation-report');
   check(out.rows.length === 1, 'client maps the task-list');
+  check(out.taskList === 'envelope-token', 'client keeps the envelope taskList token');
   check(calls[0].method === 'GET', 'task-list fetch is GET');
   check(/\/tasks\/data\/review-investigation-report\/task-list$/.test(calls[0].url), 'confirmed task-list path family');
   await client.fetchOverview(out.rows[0].overviewURL);
@@ -583,11 +725,60 @@ async function testClient() {
     ),
     'today-book uses the captured embedded-overview GET'
   );
-  check(book.present.some((p) => p.name === 'Dr Natalie Azadian'), 'today-book parser runs through the client');
+  check(
+    book.present.some((p) => p.name === 'Dr Natalie Azadian'),
+    'today-book parser runs through the client'
+  );
   const abs = await client.fetchStaffScheduleAbsences();
   check(calls[3].method === 'GET', 'staff-schedule fetch is GET');
   check(/\/scheduling\/data\/staff-schedule$/.test(calls[3].url), 'staff-schedule uses the captured GET');
-  check(abs.some((a) => a.name === 'Kate Downs'), 'staff-schedule absences parse when the body is absence-shaped');
+  check(
+    abs.some((a) => a.name === 'Kate Downs'),
+    'staff-schedule absences parse when the body is absence-shaped'
+  );
+
+  const row = out.rows[0];
+  C.applyRequester(row, { name: 'AZADIAN N', source: 'requestedBy', confidence: 'requester' });
+  const draft = C.stageMove(C.emptyDraft(), row.id, C.clinicianColumnKey('AZADIAN N'));
+  const dir = C.harvestStaffDirectory(out.rows, null);
+  const written = await client.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(written.ok === true && written.written === 1, 'commit writes the staged row');
+  const posts = calls.filter(function (c) {
+    return c.method === 'POST';
+  });
+  check(posts.length === 1, 'exactly one POST for one destination');
+  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts[0].url), 'POST hits the captured bulk-reassign path');
+  check(bodies[0].assigneeType === 'staff', 'POST assigneeType is staff');
+  check(bodies[0].taskList === 'envelope-token', 'POST passes the envelope taskList through');
+  check(
+    Object.keys(bodies[0]).join(',') === 'assigneeId,assigneeType,taskList,taskIds',
+    'POST body is exactly the four captured keys'
+  );
+
+  taskListGone = true;
+  const vanished = await client.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(
+    vanished.ok === false && /no longer on the list/.test(vanished.reason),
+    'vanished task aborts with nothing written'
+  );
+  check(
+    calls.filter(function (c) {
+      return c.method === 'POST';
+    }).length === 1,
+    'vanished abort does not POST'
+  );
 }
 
 console.log('--- board keeps every row visible ---');

@@ -1,13 +1,16 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
-// Medicus Suite — lab allocation canvas (v2, stage-only workbench)
+// Medicus Suite — lab allocation canvas (v2 workbench + captured write)
 //
 // Full-bleed workspace over the investigation-results task-list. The pile is
 // Investigation reports, grouped by who requested them — one-line rows under
 // sticky group headers so 73 results read at a glance. Clinicians are drop
 // chips on the right: select a group (click its header) then click a chip to
-// stage, or drag. Named GP is a hint, never auto-placement. Finalise does not
-// write — the Reassign endpoint has not been captured
-// (shared/lab-allocate-core.js WRITE_BLOCKED).
+// stage, or drag. Named GP is a hint, never auto-placement.
+//
+// Writing uses Medicus's own POST /tasks/task-list/bulk-reassign (captured
+// 2026-08-25). The canvas never POSTs itself — it calls LabAllocateCore's
+// client. Confirm lists patient → clinician. UI copy never claims the
+// write finished.
 'use strict';
 
 (function () {
@@ -46,6 +49,10 @@
   var _absences = [];
   var _pendingAbsence = null;
   var _confirmClose = false;
+  var _confirmWrite = null;
+  var _writing = false;
+  var _taskList = undefined;
+  var _staffDir = C.harvestStaffDirectory([], null);
   var _dragGhost = null;
   var _expandedChip = '';
   var _collapsed = {};
@@ -93,6 +100,7 @@
         var row = pending[idx];
         try {
           var payload = await cli.fetchOverview(row.overviewURL);
+          _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, payload));
           var hint = C.pickRequesterFromOverview(payload);
           if (hint) C.applyRequester(row, hint);
         } catch (_) {
@@ -108,6 +116,19 @@
     setProgress('');
   }
 
+  async function harvestStaffFromOneOverview(rows) {
+    var withUrl = (rows || []).filter(function (r) {
+      return r && r.overviewURL;
+    })[0];
+    if (!withUrl) return;
+    try {
+      var payload = await client().fetchOverview(withUrl.overviewURL);
+      _staffDir = C.mergeStaffDirectory(_staffDir, C.harvestStaffDirectory(null, payload));
+    } catch (_) {
+      /* directory stays whatever the task-list already gave us */
+    }
+  }
+
   async function loadBoard() {
     _loading = true;
     _error = null;
@@ -117,9 +138,12 @@
       var out = await client().fetchTaskList(_route.slug);
       _rows = out.rows || [];
       _route.slug = out.slug || _route.slug;
+      _taskList = out.taskList;
+      _staffDir = C.harvestStaffDirectory(_rows, out.body);
       render();
       await presenceP;
       render();
+      await harvestStaffFromOneOverview(_rows);
       await enrichRequesters(_rows);
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read the results queue.';
@@ -430,14 +454,21 @@
         ' <button type="button" class="ms-lac-ghost" id="ms-lac-error-dismiss">Dismiss</button></div>'
       );
     }
+    if (_writing) {
+      return (
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<strong>Writing to Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
+        '</div>'
+      );
+    }
     if (_confirmClose) {
-      var n = C.draftSummary(_rows, _draft).count;
+      var nClose = C.draftSummary(_rows, _draft).count;
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
         '<strong>Close and discard?</strong> ' +
-        n +
+        nClose +
         ' staged move' +
-        (n === 1 ? '' : 's') +
+        (nClose === 1 ? '' : 's') +
         ' exist only on this canvas — closing forgets them. The Medicus queue itself is untouched either way.' +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-close-keep">Keep working</button>' +
@@ -456,19 +487,70 @@
         '</div></div>'
       );
     }
+    if (_confirmWrite) {
+      var lines = (_confirmWrite.items || [])
+        .map(function (item) {
+          return (
+            '<li>' + esc(item.patientName || 'Unknown') + ' → ' + esc(C.displayClinicianName(item.toTitle)) + '</li>'
+          );
+        })
+        .join('');
+      var refusedNote = '';
+      if (_confirmWrite.refused && _confirmWrite.refused.length) {
+        refusedNote =
+          '<p class="ms-lac-confirmbar-note">Not included — no unique staff match: ' +
+          esc(
+            _confirmWrite.refused
+              .map(function (r) {
+                return C.displayClinicianName(r.toTitle);
+              })
+              .join(', ')
+          ) +
+          '. Those stay on this canvas.</p>';
+      }
+      return (
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<strong>Medicus will reassign these tasks.</strong> This changes who the task sits with — it does not file the result.' +
+        '<ul class="ms-lac-writelist">' +
+        lines +
+        '</ul>' +
+        refusedNote +
+        '<div class="ms-lac-confirmbar-actions">' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-write-go">Write to Medicus</button>' +
+        '</div></div>'
+      );
+    }
     var sum = C.draftSummary(_rows, _draft);
+    var gate = C.canWriteAllocations({ taskList: _taskList });
+    var plan = sum.count ? C.planBulkReassign(_rows, _draft, _taskList, _staffDir) : null;
+    var canWrite = !!(gate.ok && plan && plan.ok && plan.batches && plan.batches.length);
+    var writeTitle = !gate.ok
+      ? gate.reason
+      : !sum.count
+        ? 'Stage at least one result onto a clinician chip first'
+        : canWrite
+          ? 'Review the patient → clinician list, then confirm'
+          : (plan && plan.reason) || 'Cannot write these staged moves';
+    var writeLabel = canWrite ? 'Review then write…' : sum.count ? 'Cannot write — no staff match' : 'Write to Medicus';
     return (
       '<div class="ms-lac-confirmbar">' +
-      '<span class="ms-lac-confirmbar-note"><strong>Planning board.</strong> Nothing is written to Medicus — staged moves live on this canvas only' +
+      '<span class="ms-lac-confirmbar-note"><strong>Planning board.</strong> Staged moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not file the result' +
       (sum.count ? ' (' + sum.count + ' staged so far)' : '') +
-      '. Copy the working list to reassign in Medicus.</span>' +
+      '.</span>' +
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '<div class="ms-lac-confirmbar-actions">' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-copy">Copy working list</button>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-clear"' +
       (sum.count ? '' : ' disabled') +
       '>Clear staged moves</button>' +
-      '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-finalise" disabled title="The Medicus Reassign endpoint has not been captured yet">Write to Medicus — not available</button>' +
+      '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-finalise"' +
+      (canWrite ? '' : ' disabled') +
+      ' title="' +
+      esc(writeTitle) +
+      '">' +
+      esc(writeLabel) +
+      '</button>' +
       '</div></div>'
     );
   }
@@ -480,13 +562,15 @@
     }).length;
     var counts = _rows.length ? _rows.length + ' results · ' + requesterGroups + ' requesters' : '';
     return (
-      '<div class="ms-lac-panel" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
+      '<div class="ms-lac-panel' +
+      (_writing ? ' ms-lac-panel-writing' : '') +
+      '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>' +
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Select a group, then click a clinician — or drag. Nothing is written to Medicus.</span>' +
+      '<span class="ms-lac-header-note">Select a group, then click a clinician — or drag. Writing happens only when you confirm.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -605,6 +689,23 @@
       absStage.addEventListener('click', function () {
         if (!_pendingAbsence) return;
         commitStage(_pendingAbsence.ids, _pendingAbsence.key);
+      });
+    var reviewBtn = root.querySelector('#ms-lac-finalise');
+    if (reviewBtn)
+      reviewBtn.addEventListener('click', function () {
+        requestWrite();
+      });
+    var writeKeep = root.querySelector('#ms-lac-write-keep');
+    if (writeKeep)
+      writeKeep.addEventListener('click', function () {
+        _confirmWrite = null;
+        announce('Kept planning. Nothing was written.');
+        render();
+      });
+    var writeGo = root.querySelector('#ms-lac-write-go');
+    if (writeGo)
+      writeGo.addEventListener('click', function () {
+        commitWrite();
       });
     function beginDrag(e, ids) {
       _dragIds = ids;
@@ -731,6 +832,7 @@
   }
 
   function requestStage(ids, key, colEl) {
+    if (_writing) return;
     var kind = (colEl && colEl.getAttribute('data-col-kind')) || '';
     var titleEl =
       (colEl && colEl.querySelector('.ms-lac-chip-name')) || (colEl && colEl.querySelector('.ms-lac-col-heading'));
@@ -807,7 +909,70 @@
     }
   }
 
+  function requestWrite() {
+    if (_writing) return;
+    var plan = C.planBulkReassign(_rows, _draft, _taskList, _staffDir);
+    if (!plan.ok || !plan.batches.length) {
+      _error = plan.reason || 'Cannot write these staged moves.';
+      announce(_error);
+      render();
+      return;
+    }
+    _confirmWrite = plan;
+    announce('Review the list, then confirm. Medicus will reassign those tasks.');
+    render();
+  }
+
+  async function commitWrite() {
+    if (_writing || !_confirmWrite) return;
+    _writing = true;
+    _error = null;
+    render();
+    try {
+      var result = await client().commitAllocations({
+        slug: _route && _route.slug,
+        draft: _draft,
+        rows: _rows,
+        taskList: _taskList,
+        directory: _staffDir,
+      });
+      if (!result || !result.ok) {
+        _error = (result && result.reason) || 'Medicus did not accept the reassignment. Nothing further was written.';
+        _confirmWrite = null;
+        _writing = false;
+        announce(_error);
+        render();
+        return;
+      }
+      var n = result.written || 0;
+      _draft = C.emptyDraft();
+      _confirmWrite = null;
+      _copyNote =
+        'Medicus accepted ' +
+        n +
+        ' reassignment' +
+        (n === 1 ? '' : 's') +
+        '. Check the queue — this canvas is a working copy.';
+      _writing = false;
+      announce(_copyNote);
+      await loadBoard();
+    } catch (err) {
+      _writing = false;
+      _confirmWrite = null;
+      _error = err && err.message ? err.message : 'Medicus did not accept the reassignment.';
+      announce(_error);
+      render();
+    }
+  }
+
   function requestClose() {
+    if (_writing) return;
+    if (_confirmWrite) {
+      _confirmWrite = null;
+      announce('Kept planning. Nothing was written.');
+      render();
+      return;
+    }
     if (C.draftSummary(_rows, _draft).count > 0) {
       _confirmClose = true;
       announce('Close and discard staged moves? Confirm below.');
@@ -826,6 +991,10 @@
     _copyNote = '';
     _expandedChip = '';
     _confirmClose = false;
+    _confirmWrite = null;
+    _writing = false;
+    _taskList = undefined;
+    _staffDir = C.harvestStaffDirectory([], null);
     _collapsed = {};
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
@@ -841,6 +1010,12 @@
     _selected = {};
     _expandedChip = '';
     _confirmClose = false;
+    _confirmWrite = null;
+    _writing = false;
+    _taskList = undefined;
+    _staffDir = C.harvestStaffDirectory([], null);
+    _copyNote = '';
+    _error = null;
     _collapsed = {};
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
@@ -885,6 +1060,13 @@
     function (e) {
       if (e.key === 'Escape' && _open) {
         e.stopPropagation();
+        if (_writing) return;
+        if (_confirmWrite) {
+          _confirmWrite = null;
+          announce('Kept planning. Nothing was written.');
+          render();
+          return;
+        }
         if (selectedIds().length) {
           _selected = {};
           announce('Selection cleared');

@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.0] — 2026-08-25
+
+### Lab allocation canvas — write via captured bulk-reassign
+
+The 2026-08-25 live capture on Investigation Results unlocked
+Medicus's own write:
+
+`POST /tasks/task-list/bulk-reassign`
+keys: `assigneeId`, `assigneeType`, `taskList`, `taskIds`
+
+Finalise is no longer hard-disabled. Staging stays local; **Review then
+write** lists every patient → clinician pair and only that confirm
+POSTs. The body is exactly those four captured keys — nothing invented.
+`assigneeType` is `"staff"` (sibling-confirmed on create-task writes;
+the canvas only allocates to people). `taskList` is passed through from
+the GET task-list envelope; without that token the write stays closed.
+
+Staff UUIDs come from row `assignedTo`/`assignedId` (people only) and
+overview `assigneeOptions.staff`, matched by the same surname+initial
+key that already unifies `AZADIAN N` and `Dr Natalie Azadian`. No unique
+match, or two UUIDs for one chip, refuses that destination — it is not
+guessed. Immediately before the first POST the queue is re-read; a
+vanished taskId aborts the whole write. Failures stop the batch and say
+how many earlier groups Medicus accepted.
+
+This does **not** file the result. Named GP is still a caption. The
+lab/org `requester` object on the overview is not who ordered — the
+task-list `requestedBy` column is. Copy never claims Done / Sent /
+Allocated / Submitted / Booked.
+
+Also: drag-ghost `z-index` moved off a Modulus-11-valid 10-digit lookalike
+so `check-no-patient-data` stays green.
+
+CSN **W23**, hazard **H-064** (Proposed — pending CSO). Clinical Safety
+Notice product pin moved to 3.243.0 (doc v3.30).
+
 ## [v3.242.8] — 2026-08-25
 
 ### Lab allocation canvas — workbench rebuild after a three-critic design review

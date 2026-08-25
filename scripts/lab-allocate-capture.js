@@ -9,8 +9,10 @@
 // Medicus's own "Reassign task" control. The script dumps:
 //   1. task-list keys + assignment/status/namedGp samples (patient names redacted)
 //   2. one overview's requester-shaped keys (no result VALUES)
-//   3. any POST/PUT/PATCH the page fires while you reassign — that is the
-//      write contract the allocation canvas is waiting for
+//   3. any POST/PUT/PATCH the page fires while you reassign — path, keys,
+//      and value TYPES (not PHI). The captured write is
+//      POST /tasks/task-list/bulk-reassign
+//      (assigneeId, assigneeType, taskList, taskIds). Re-run if that drifts.
 //
 // Same doctrine as scripts/labfiling-capture.js and scripts/booking-flow-capture.js:
 // do not invent Medicus slugs. Paths below are what the page actually called.
@@ -29,12 +31,40 @@
   const redact = (s) => (s == null ? '' : String(s).replace(/\s+/g, ' ').trim().slice(0, 80));
   const looksPhiKey = (k) => /patient|nhs|dob|dateofbirth|resultvalue|resulttext/i.test(k);
 
+  function describeWriteValue(k, v) {
+    const t = v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v;
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (k === 'assigneeType' && typeof v === 'string') return { type: t, value: v.slice(0, 20) };
+    if (k === 'taskList') {
+      if (typeof v === 'string')
+        return { type: t, looksUuid: uuidRe.test(v), length: v.length, looksSlug: /[a-z0-9_-]+/i.test(v) };
+      if (v && typeof v === 'object' && !Array.isArray(v)) return { type: t, keys: Object.keys(v).slice(0, 20) };
+      if (Array.isArray(v)) return { type: t, length: v.length };
+      return { type: t };
+    }
+    if (k === 'taskIds' && Array.isArray(v))
+      return { type: t, length: v.length, itemType: typeof v[0], uuidShaped: !!(v[0] && uuidRe.test(String(v[0]))) };
+    if (k === 'assigneeId') return { type: t, uuidShaped: uuidRe.test(String(v || '')) };
+    return { type: t };
+  }
+
   function recordWrite(method, url, body) {
-    const entry = { method, url: String(url || '').slice(0, 240), at: new Date().toISOString(), keys: [] };
+    const entry = {
+      method,
+      url: String(url || '').slice(0, 240),
+      at: new Date().toISOString(),
+      keys: [],
+      keyTypes: {},
+    };
     try {
       if (typeof body === 'string' && body) {
         const j = JSON.parse(body);
-        if (j && typeof j === 'object') entry.keys = Object.keys(j).slice(0, 40);
+        if (j && typeof j === 'object') {
+          entry.keys = Object.keys(j).slice(0, 40);
+          entry.keys.forEach((k) => {
+            entry.keyTypes[k] = describeWriteValue(k, j[k]);
+          });
+        }
       }
     } catch (_) {}
     out.writes.push(entry);

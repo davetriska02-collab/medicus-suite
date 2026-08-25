@@ -615,7 +615,7 @@
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.3);
   pointer-events: none;
-  z-index: 2147483001;
+  z-index: 2147483646;
   max-width: 320px;
 }
 
@@ -698,6 +698,19 @@
   gap: 8px;
   margin-left: auto;
   align-items: center;
+}
+
+.ms-lac-writelist {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.ms-lac-panel-writing .ms-lac-body,
+.ms-lac-panel-writing .ms-lac-close {
+  pointer-events: none;
 }
 
 .ms-lac-confirm-btn {
