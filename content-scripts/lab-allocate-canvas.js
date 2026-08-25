@@ -1,12 +1,11 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
 // Medicus Suite — lab allocation canvas (v1, stage-only)
 //
-// Overlay on the investigation-results task-list. Columns are Unallocated /
-// inbox / clinicians; tiles are incoming lab tasks. Drag stages a move.
-// Who-ordered placement uses only requester evidence from the overview
-// (or an OIR-style "Panel (Dr Name • date)" label). Named GP is a hint,
-// never auto-placement. Finalise does not write — the Reassign endpoint
-// has not been captured (shared/lab-allocate-core.js WRITE_BLOCKED).
+// Overlay on the investigation-results task-list. The big pile is
+// Investigation reports, grouped by who requested them. Clinicians are
+// small chips on the right — drop targets, click to expand. Named GP is a
+// hint, never auto-placement. Finalise does not write — the Reassign
+// endpoint has not been captured (shared/lab-allocate-core.js WRITE_BLOCKED).
 'use strict';
 
 (function () {
@@ -43,6 +42,7 @@
   var _rota = { staff: [], leave: [], loaded: false };
   var _pendingAbsence = null;
   var _dragGhost = null;
+  var _expandedChip = '';
 
   function announce(text) {
     setTimeout(function () {
@@ -131,7 +131,7 @@
     }
   }
 
-  function absenceForColumn(col) {
+  function absenceForClinician(col) {
     if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
     return C.absenceForName(_rota.staff, _rota.leave, col.title, C.todayISO());
   }
@@ -161,7 +161,11 @@
       esc(who) +
       '</div>' +
       (inbox ? '<div class="ms-lac-tile-meta">' + esc(inbox) + '</div>' : '') +
-      (tile.staged ? '<div class="ms-lac-tile-draft">Staged on this canvas only — not in Medicus yet</div>' : '') +
+      (tile.staged
+        ? '<div class="ms-lac-tile-draft">Staged on this canvas only — not in Medicus yet</div>'
+        : tile.homeKey && tile.homeKey.indexOf('clinician:') === 0
+          ? '<div class="ms-lac-tile-meta">Already assigned in Medicus</div>'
+          : '') +
       '</div>'
     );
   }
@@ -190,42 +194,80 @@
     );
   }
 
-  function boardHtml() {
-    var board = C.buildBoard(_rows, _draft);
-    return board.columns
-      .map(function (col) {
-        var abs = absenceForColumn(col);
-        var away = abs.state === 'away' || abs.state === 'away-pending';
-        var unknown = abs.state === 'unknown';
-        var body =
-          col.groups && col.groups.length ? col.groups.map(groupHtml).join('') : col.tiles.map(tileHtml).join('');
-        return (
-          '<div class="ms-lac-col' +
-          (away ? ' ms-lac-col-away' : '') +
-          '" data-col-key="' +
-          esc(col.key) +
-          '" data-col-kind="' +
-          esc(col.kind) +
-          '">' +
-          '<h3 class="ms-lac-col-heading">' +
-          esc(col.title) +
-          '</h3>' +
-          '<div class="ms-lac-col-meta">' +
-          esc(String(col.count)) +
-          (col.kind === 'unallocated'
-            ? ' — drop here to leave unmarked'
-            : col.kind === 'inbox'
-              ? ' — shared inbox, not a person'
-              : ' — drop here to mark as ordered by / for them') +
-          '</div>' +
+  function chipCountLabel(col) {
+    if (!col.count) return 'None on this canvas';
+    var bits = [];
+    if (col.stagedCount) bits.push(col.stagedCount + ' staged here');
+    if (col.assignedCount) bits.push(col.assignedCount + ' already assigned in Medicus');
+    return bits.join(' · ') || String(col.count);
+  }
+
+  function chipHtml(col) {
+    var abs = absenceForClinician(col);
+    var away = abs.state === 'away' || abs.state === 'away-pending';
+    var unknown = abs.state === 'unknown';
+    var open = _expandedChip === col.key;
+    var body =
+      col.groups && col.groups.length ? col.groups.map(groupHtml).join('') : col.tiles.map(tileHtml).join('');
+    return (
+      '<div class="ms-lac-chip-wrap' +
+      (away ? ' ms-lac-chip-away' : '') +
+      (open ? ' ms-lac-chip-open' : '') +
+      '" data-col-key="' +
+      esc(col.key) +
+      '" data-col-kind="clinician">' +
+      '<button type="button" class="ms-lac-chip" data-chip-key="' +
+      esc(col.key) +
+      '" aria-expanded="' +
+      (open ? 'true' : 'false') +
+      '">' +
+      '<span class="ms-lac-chip-name">' +
+      esc(col.title) +
+      '</span>' +
+      '<span class="ms-lac-chip-count">' +
+      esc(chipCountLabel(col)) +
+      '</span>' +
+      (away ? '<span class="ms-lac-chip-flag">Away</span>' : unknown ? '<span class="ms-lac-chip-flag">Absence unknown</span>' : '') +
+      '</button>' +
+      (open
+        ? '<div class="ms-lac-chip-drawer">' +
           (away || unknown
             ? '<div class="ms-lac-col-absence">' + esc(abs.label || 'Absence unknown.') + '</div>'
             : '') +
-          (body || '<div class="ms-lac-empty">No results in this column.</div>') +
+          (body ||
+            '<div class="ms-lac-empty">Nothing on this clinician on this canvas. Drop a group from Investigation reports to stage a move.</div>') +
           '</div>'
-        );
-      })
-      .join('');
+        : '') +
+      '</div>'
+    );
+  }
+
+  function boardHtml() {
+    var board = C.buildWorkspace(_rows, _draft);
+    var pool = board.pool;
+    var body =
+      pool.groups && pool.groups.length ? pool.groups.map(groupHtml).join('') : pool.tiles.map(tileHtml).join('');
+    return (
+      '<div class="ms-lac-workspace">' +
+      '<div class="ms-lac-col ms-lac-pool" data-col-key="' +
+      esc(pool.key) +
+      '" data-col-kind="pool">' +
+      '<h3 class="ms-lac-col-heading">' +
+      esc(pool.title) +
+      '</h3>' +
+      '<div class="ms-lac-col-meta">' +
+      esc(String(pool.count)) +
+      ' — grouped by who requested them. Drop here to leave in the reports pile.</div>' +
+      (body || '<div class="ms-lac-empty">No investigation reports on this queue.</div>') +
+      '</div>' +
+      '<aside class="ms-lac-rail" aria-label="Clinicians">' +
+      '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
+      '<div class="ms-lac-col-meta">Small chips. Drop a group on a name, or click to see what is already on them.</div>' +
+      (board.clinicians.length
+        ? board.clinicians.map(chipHtml).join('')
+        : '<div class="ms-lac-empty">No requester names on the payload yet — add a clinician if you need a drop target.</div>') +
+      '</aside></div>'
+    );
   }
 
   function confirmBarHtml() {
@@ -275,15 +317,16 @@
       '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
       '</div>' +
       '<div class="ms-lac-explainer">' +
-      'Results that share a requester sit in one pile — drag the group header to move them together. ' +
-      'The drag label names who ordered them. A registered GP is a hint only. ' +
+      'The big pile is investigation reports, grouped by who requested them. ' +
+      'Clinician chips on the right are drop targets — click one to see anything already on them. ' +
+      'A registered GP is a hint only. ' +
       'Dropping onto a clinician always runs an absence check against this machine’s rota leave list before anything is staged. ' +
       'Nothing is written to Medicus from this canvas yet.' +
       (_overviewProgress ? ' ' + esc(_overviewProgress) : '') +
       '</div>' +
       '<div class="ms-lac-filterbar">' +
-      '<label class="ms-lac-add">Add clinician column <input type="text" id="ms-lac-add-name" maxlength="80" placeholder="e.g. Dr Jane Cole"></label>' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add column</button>' +
+      '<label class="ms-lac-add">Add clinician chip <input type="text" id="ms-lac-add-name" maxlength="80" placeholder="e.g. Dr Jane Cole"></label>' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add chip</button>' +
       '<span class="ms-lac-hint">' +
       esc(_rows.length ? _rows.length + ' results on the queue' : '') +
       '</span>' +
@@ -319,7 +362,7 @@
     var name = input && input.value;
     if (!name || !String(name).trim()) return;
     _draft = C.addColumn(_draft, name);
-    announce('Added column ' + String(name).trim());
+    announce('Added clinician chip ' + String(name).trim());
     render();
   }
 
@@ -428,18 +471,18 @@
       });
       tile.addEventListener('dragend', endDrag);
     });
-    root.querySelectorAll('.ms-lac-col').forEach(function (col) {
-      col.addEventListener('dragover', function (e) {
+    function bindDropTarget(el) {
+      el.addEventListener('dragover', function (e) {
         e.preventDefault();
-        col.classList.add('ms-lac-drop-hover');
+        el.classList.add('ms-lac-drop-hover');
       });
-      col.addEventListener('dragleave', function () {
-        col.classList.remove('ms-lac-drop-hover');
+      el.addEventListener('dragleave', function () {
+        el.classList.remove('ms-lac-drop-hover');
       });
-      col.addEventListener('drop', function (e) {
+      el.addEventListener('drop', function (e) {
         e.preventDefault();
-        col.classList.remove('ms-lac-drop-hover');
-        var key = col.getAttribute('data-col-key');
+        el.classList.remove('ms-lac-drop-hover');
+        var key = el.getAttribute('data-col-key');
         var ids = _dragIds && _dragIds.length ? _dragIds : [];
         if (!ids.length && e.dataTransfer) {
           ids = String(e.dataTransfer.getData('text/plain') || '')
@@ -448,14 +491,26 @@
         }
         endDrag();
         if (!key || !ids.length) return;
-        requestStage(ids, key, col);
+        requestStage(ids, key, el);
+      });
+    }
+    root.querySelectorAll('.ms-lac-col, .ms-lac-chip-wrap').forEach(bindDropTarget);
+    root.querySelectorAll('.ms-lac-chip').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var key = btn.getAttribute('data-chip-key') || '';
+        _expandedChip = _expandedChip === key ? '' : key;
+        render();
       });
     });
   }
 
   function requestStage(ids, key, colEl) {
     var kind = (colEl && colEl.getAttribute('data-col-kind')) || '';
-    var title = ((colEl && colEl.querySelector('.ms-lac-col-heading')) || {}).textContent || '';
+    var titleEl =
+      (colEl && colEl.querySelector('.ms-lac-chip-name')) || (colEl && colEl.querySelector('.ms-lac-col-heading'));
+    var title = (titleEl && titleEl.textContent) || '';
     if (kind === 'clinician') {
       var abs = C.absenceForName(_rota.staff, _rota.leave, title, C.todayISO());
       if (C.shouldWarnAbsence(abs)) {
@@ -477,6 +532,7 @@
     _selected = {};
     _pendingAbsence = null;
     _dragIds = null;
+    if (key && key.indexOf('clinician:') === 0) _expandedChip = key;
     announce('Staged ' + ids.length + ' result' + (ids.length === 1 ? '' : 's') + ' on this canvas only');
     render();
   }
@@ -531,6 +587,7 @@
     _selected = {};
     _error = null;
     _copyNote = '';
+    _expandedChip = '';
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
   }
@@ -541,6 +598,7 @@
     _open = true;
     _draft = C.emptyDraft();
     _selected = {};
+    _expandedChip = '';
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');
