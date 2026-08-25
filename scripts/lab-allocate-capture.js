@@ -123,12 +123,17 @@
   };
 
   function dump() {
-    const old = document.getElementById('__lacCapBox');
-    if (old) old.remove();
+    const existing = document.getElementById('__lacCapBox');
+    if (existing) {
+      const ta0 = existing.querySelector('textarea');
+      if (ta0) ta0.value = JSON.stringify(out, null, 2);
+      window.__lacCapture = out;
+      return;
+    }
     const wrap = document.createElement('div');
     wrap.id = '__lacCapBox';
     wrap.style.cssText =
-      'position:fixed;inset:24px;z-index:2147483647;background:#fff;border:2px solid #1e3a5f;border-radius:8px;padding:8px;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)';
+      'position:fixed;right:16px;bottom:16px;width:360px;height:200px;z-index:2147483647;background:#fff;border:2px solid #1e3a5f;border-radius:8px;padding:8px;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)';
     const bar = document.createElement('div');
     bar.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;align-items:center';
     const ta = document.createElement('textarea');

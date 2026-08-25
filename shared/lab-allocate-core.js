@@ -27,7 +27,7 @@
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var RESULT_SLUG_RE = /investigation|result/i;
   var TEAM_ASSIGNEE_RE =
-    /\b(team|inbox|results?|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing)\b/i;
+    /\b(team|inbox|results?|reports?|investigation|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing)\b/i;
   var TITLE_RE = /\b(dr|doctor|prof|professor|mr|mrs|ms|miss)\b\.?/g;
   var WRITE_BLOCKED =
     'Writing allocations to Medicus is not enabled. The Reassign-task endpoint has not been captured live — do not invent a slug. Use scripts/lab-allocate-capture.js while you reassign one result by hand, then we can wire Finalise.';
@@ -245,6 +245,20 @@
     return { name: first.name, source: first.source, confidence: 'requester' };
   }
 
+  function pickRequesterFromTaskRow(item) {
+    if (!item || typeof item !== 'object') return null;
+    var keys = Object.keys(item);
+    for (var i = 0; i < keys.length; i++) {
+      var key = keys[i];
+      var lk = key.toLowerCase();
+      if (lk === 'namedgp' || lk === 'namedgpid' || lk === 'assignedto' || lk === 'assignedid') continue;
+      if (!REQUESTER_KEYS[lk]) continue;
+      var name = nameFromUnknown(item[key]);
+      if (name && !isTeamAssignee(name)) return { name: name, source: key, confidence: 'requester' };
+    }
+    return null;
+  }
+
   function normaliseTaskRow(item, slug) {
     if (!item || typeof item !== 'object') return null;
     var id = pickTaskId(item);
@@ -256,7 +270,7 @@
       : isStr(item.summaryLabel)
         ? clip(item.summaryLabel, 120)
         : '';
-    return {
+    var row = {
       id: id,
       patientName: isStr(item.patientName) ? clip(item.patientName, 80) : 'Unknown',
       summary: summary,
@@ -272,6 +286,7 @@
       requesterSource: '',
       requesterConfidence: '',
     };
+    return applyRequester(row, pickRequesterFromTaskRow(item));
   }
 
   function applyRequester(row, hint) {
@@ -284,15 +299,10 @@
   }
 
   function homeColumnKey(row) {
-    // Already sitting with a named person in Medicus — show on their chip.
-    // Requester evidence does NOT auto-place: those stay in the reports pool,
-    // grouped by who ordered, until someone stages them onto a chip.
-    if (row && row.assignedTo && !isTeamAssignee(row.assignedTo)) {
-      var key = clinicianColumnKey(row.assignedTo);
-      // A name that normalises to nothing has no chip to sit on — pool it
-      // rather than parking it on a key no column renders.
-      if (key !== UNALLOCATED) return key;
-    }
+    // Everything on this queue starts in the reports pool. assignedTo is a
+    // caption (often the inbox name "Investigation Reports"). Staging onto a
+    // chip is the only way a tile leaves the pool.
+    void row;
     return POOL;
   }
 
@@ -412,9 +422,6 @@
     });
     rows.forEach(function (row) {
       if (row.requester) remember(clinicianColumnKey(row.requester), row.requester);
-      if (row.assignedTo && !isTeamAssignee(row.assignedTo)) {
-        remember(clinicianColumnKey(row.assignedTo), row.assignedTo);
-      }
       remember(visualColumnKey(row, draft), null);
     });
     return { keys: Object.keys(seen).sort(), titles: titles };
@@ -709,7 +716,201 @@
 
   function shouldWarnAbsence(absence) {
     if (!absence) return false;
-    return absence.state === 'away' || absence.state === 'away-pending' || absence.state === 'unknown';
+    return absence.state === 'away' || absence.state === 'away-pending';
+  }
+
+  function looksLikeDate(s) {
+    return /^\d{4}-\d{2}-\d{2}/.test(String(s || ''));
+  }
+
+  function isoDay(s) {
+    return looksLikeDate(s) ? String(s).slice(0, 10) : '';
+  }
+
+  function pickRecordName(obj) {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return '';
+    var keys = ['name', 'staffName', 'clinicianName', 'displayName', 'fullName'];
+    for (var i = 0; i < keys.length; i++) {
+      if (isStr(obj[keys[i]]) && obj[keys[i]].trim()) return obj[keys[i]].trim();
+    }
+    if (obj.staff) return pickRecordName(obj.staff);
+    if (obj.assignee) return pickRecordName(obj.assignee);
+    if (obj.employee) return pickRecordName(obj.employee);
+    return '';
+  }
+
+  function pickDateRange(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    var start = obj.startDate || obj.minDate || obj.fromDate || obj.beginDate || obj.start;
+    var end = obj.endDate || obj.maxDate || obj.toDate || obj.finishDate || obj.end;
+    if (!looksLikeDate(start) && obj.startDateTime) start = obj.startDateTime;
+    if (!looksLikeDate(end) && obj.endDateTime) end = obj.endDateTime;
+    var startDay = isoDay(start);
+    if (!startDay) return null;
+    return { startDate: startDay, endDate: isoDay(end) || startDay };
+  }
+
+  function looksLikeAbsenceRecord(node) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) return false;
+    if (node.absenceId || node.absenceDetails || node.coveringAssigneeId) return true;
+    if (node.absenceType || node.unavailabilityType) return true;
+    if (isStr(node.scheduleType) && /unavailability|absence/i.test(node.scheduleType)) return true;
+    var kind = node.diaryEntryType;
+    if (kind && typeof kind === 'object') {
+      var token = String(kind.value || kind.label || '');
+      if (/absence|unavailability/i.test(token)) return true;
+    }
+    return false;
+  }
+
+  function parseTodayBook(payload) {
+    var date = payload && payload.date ? isoDay(payload.date) : '';
+    var present = [];
+    var presentByKey = {};
+    var list = payload && Array.isArray(payload.staffSchedules) ? payload.staffSchedules : [];
+    for (var i = 0; i < list.length; i++) {
+      var sched = list[i];
+      if (!sched) continue;
+      var name = clip(sched.name, 80);
+      if (!name) continue;
+      var sessions = 0;
+      var site = '';
+      var service = '';
+      var blocks = Array.isArray(sched.schedule) ? sched.schedule : [];
+      for (var j = 0; j < blocks.length; j++) {
+        var block = blocks[j];
+        if (block && block.summary && block.summary.status && block.summary.status.isCancelled) continue;
+        sessions += 1;
+        if (!site && block && block.summary && block.summary.site && block.summary.site.name) {
+          site = clip(block.summary.site.name, 80);
+        }
+        if (!service && block && block.summary && block.summary.service && block.summary.service.name) {
+          service = clip(block.summary.service.name, 80);
+        }
+      }
+      if (!sessions) continue;
+      var key = clinicianColumnKey(name);
+      if (key === UNALLOCATED) continue;
+      var rec = { name: name, key: key, sessions: sessions, site: site, service: service };
+      present.push(rec);
+      if (!presentByKey[key]) presentByKey[key] = rec;
+    }
+    return { date: date, present: present, presentByKey: presentByKey };
+  }
+
+  function bookPresenceForName(book, name) {
+    if (!book || !name) return null;
+    var key = clinicianColumnKey(name);
+    if (key !== UNALLOCATED && book.presentByKey && book.presentByKey[key]) {
+      return book.presentByKey[key];
+    }
+    var list = book.present || [];
+    for (var i = 0; i < list.length; i++) {
+      if (sameClinician(list[i].name, name)) return list[i];
+    }
+    return null;
+  }
+
+  function parseAbsenceRecords(payload) {
+    var hits = [];
+    function consider(node) {
+      if (!looksLikeAbsenceRecord(node)) return;
+      var range = pickDateRange(node);
+      var name = pickRecordName(node);
+      if (!range || !name) return;
+      var typeHint = node.absenceType || node.type || node.leaveType || node.unavailabilityType;
+      var typeLabel = '';
+      if (typeHint && typeof typeHint === 'object') {
+        typeLabel = typeHint.label || typeHint.name || typeHint.value || '';
+      } else if (isStr(typeHint)) {
+        typeLabel = typeHint;
+      }
+      hits.push({
+        name: clip(name, 80),
+        startDate: range.startDate,
+        endDate: range.endDate,
+        type: clip(typeLabel || 'absence', 40),
+        source: 'medicus',
+      });
+    }
+    function walk(node, depth) {
+      if (!node || typeof node !== 'object' || depth > 6) return;
+      if (Array.isArray(node)) {
+        var cap = Math.min(node.length, 200);
+        for (var i = 0; i < cap; i++) walk(node[i], depth + 1);
+        return;
+      }
+      consider(node);
+      var keys = Object.keys(node);
+      for (var k = 0; k < keys.length; k++) {
+        var lk = String(keys[k] || '').toLowerCase();
+        if (SKIP_WALK_KEYS[lk]) continue;
+        if (/patient|nhsnumber|dateofbirth|address|postcode/i.test(keys[k])) continue;
+        walk(node[keys[k]], depth + 1);
+      }
+    }
+    walk(payload, 0);
+    return hits;
+  }
+
+  function absenceOnDate(absences, name, dateISO) {
+    var list = Array.isArray(absences) ? absences : [];
+    var when = dateISO || todayISO();
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (!a || !sameClinician(a.name, name)) continue;
+      if (a.startDate <= when && a.endDate >= when) return a;
+    }
+    return null;
+  }
+
+  function presenceForName(opts) {
+    opts = opts || {};
+    var who = clip(opts.name, 80);
+    var when = opts.dateISO || todayISO();
+    if (!who || clinicianColumnKey(who) === UNALLOCATED) {
+      return { state: 'n/a', reason: 'not-a-person', label: '', source: '', staff: null, leave: null };
+    }
+    var medicusAbs = absenceOnDate(opts.absences, who, when);
+    if (medicusAbs) {
+      var until = formatLeaveDate(medicusAbs.endDate);
+      return {
+        state: 'away',
+        reason: 'medicus-absence',
+        source: 'medicus',
+        type: medicusAbs.type || 'absence',
+        until: medicusAbs.endDate || '',
+        label: who + ' has a Medicus absence' + (until ? ' until ' + until : '') + '.',
+        staff: null,
+        leave: medicusAbs,
+      };
+    }
+    var rota = absenceForName(opts.staffList, opts.leaveList, who, when);
+    if (rota.state === 'away' || rota.state === 'away-pending') {
+      rota.source = 'rota';
+      return rota;
+    }
+    var inToday = bookPresenceForName(opts.book, who);
+    if (inToday) {
+      return {
+        state: 'present',
+        reason: 'in-today',
+        source: 'medicus',
+        sessions: inToday.sessions,
+        site: inToday.site || '',
+        label: who + ' has a session on today’s appointment book.',
+        staff: rota.staff || null,
+        leave: null,
+      };
+    }
+    return {
+      state: 'unknown',
+      reason: 'no-evidence',
+      source: '',
+      label: '',
+      staff: rota.staff || null,
+      leave: null,
+    };
   }
 
   function absenceWarningCopy(absence, count, clinicianName) {
@@ -814,7 +1015,27 @@
       return getJson(overviewURL);
     }
 
-    return { fetchTaskList: fetchTaskList, fetchOverview: fetchOverview };
+    async function fetchTodayBook(dateISO) {
+      var day = /^\d{4}-\d{2}-\d{2}$/.test(String(dateISO || '')) ? String(dateISO) : todayISO();
+      var body = await getJson(
+        '/scheduling/data/appointment-book/embedded-overview?date=' +
+          encodeURIComponent(day) +
+          '&filterByUsualLocation=false'
+      );
+      return parseTodayBook(body);
+    }
+
+    async function fetchStaffScheduleAbsences() {
+      var body = await getJson('/scheduling/data/staff-schedule');
+      return parseAbsenceRecords(body);
+    }
+
+    return {
+      fetchTaskList: fetchTaskList,
+      fetchOverview: fetchOverview,
+      fetchTodayBook: fetchTodayBook,
+      fetchStaffScheduleAbsences: fetchStaffScheduleAbsences,
+    };
   }
 
   var api = {
@@ -834,6 +1055,7 @@
     inboxColumnKey: inboxColumnKey,
     parseRequestLabel: parseRequestLabel,
     pickRequesterFromOverview: pickRequesterFromOverview,
+    pickRequesterFromTaskRow: pickRequesterFromTaskRow,
     normaliseTaskRow: normaliseTaskRow,
     applyRequester: applyRequester,
     homeColumnKey: homeColumnKey,
@@ -857,6 +1079,11 @@
     absenceForName: absenceForName,
     shouldWarnAbsence: shouldWarnAbsence,
     absenceWarningCopy: absenceWarningCopy,
+    parseTodayBook: parseTodayBook,
+    bookPresenceForName: bookPresenceForName,
+    parseAbsenceRecords: parseAbsenceRecords,
+    absenceOnDate: absenceOnDate,
+    presenceForName: presenceForName,
     createClient: createClient,
   };
 

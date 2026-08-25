@@ -131,36 +131,104 @@ Until that paste-back, the canvas is a **planning board**.
 
 ---
 
-## Grouping and absences (v3.242.1 / v3.242.4)
+## Grouping and absences (v3.242.1 / v3.242.5)
 
 The canvas is one **Investigation reports** pool, grouped by who
-requested the test, plus small **clinician chips** on the right. A
-requester does not auto-move out of the pool — drag the group onto
-their chip. Click a chip to see anything already assigned to them in
-Medicus, or staged onto them on this canvas.
+requested the test, plus small **clinician chips** on the right. Every
+row on this queue starts in the pool — including rows whose
+`assignedTo` is the inbox name "Investigation Reports" (that is not a
+person). Drag or multi-select onto a chip. Who requested is read from
+the task-list `requestedBy` field when present; overview fetch is the
+fallback.
 
 Same-requester tiles group under one header and drag as a set. The drag
 ghost names who ordered them. That only works when requester evidence
 is on the payload — unknown rows stay in their own pile.
 
-Dropping onto a **person** always consults `rota.staff` + `rota.leave`
-on this machine (approved and requested leave for today, matching
-`name` or `medicusName`). If they are away, or we cannot tell, the drop
-does not stage until the warning is acknowledged. An empty rota is
-**absence unknown**, not “everyone is in”.
+Dropping onto a **person** consults, in this order:
 
-Medicus's own Staff scheduling page is still a discovery gap. Paste
-`scripts/staff-scheduling-capture.js` on that screen and click around
-so we can see who's in / leave / sessions from the host app, not only
-this machine's rota store.
+1. A Medicus absence record that names them and overlaps today (only
+   when we have actually parsed one — see the Staff scheduling capture).
+2. This machine’s `rota.staff` + `rota.leave` (approved, then requested).
+3. Today’s appointment book (`staffSchedules[].name`) — **In today**.
+
+Not being on today’s book is **not** absence. Many clinicians simply
+have no diary. Chips stay quiet unless (1) or (2) fires. The drop
+warns only for `away` / `away-pending`, never for “we don’t know”.
+
+---
+
+## Staff scheduling capture (2026-08-25, Witley & Milford)
+
+Pasted from `https://england.medicus.health/560b6c/scheduling/staff-schedule`
+(`capturedAt` 2026-08-25T09:12:40Z). This is the live contract. Do not
+invent a different slug.
+
+### Confirmed GETs (canvas may call these)
+
+| Path | What we saw |
+|---|---|
+| `GET /scheduling/data/appointment-book/embedded-overview?date=YYYY-MM-DD&filterByUsualLocation=false` | Today’s book. Root keys include `staffSchedules` (11 that day), `staffOptions` (91), `teamOptions`, `jobRoleOptions`, `loggedInStaffId`, `scheduleDiaryType` = `"diary"`, `scheduleUnavailabilityPeriodType` = `"unavailability-period"`. |
+| `GET /scheduling/data/staff-schedule` | Page data for Staff Schedule. **No response body sampled** (XHR, not fetch). Path is real; fields are not. |
+| `GET /scheduling/data/staff-absence/absence-overview/{absenceId}` | Opens when an absence block is clicked. IDs seen: `019e8211-…`, `019c65be-…`, `019cd2ef-…`. **No body sampled.** Do not guess field names; do not enumerate IDs we have not seen on a list. |
+| `GET /scheduling/data/staff-absence/edit-absence/{absenceId}` | Edit form seed. Same IDs. Not needed for a chip caption. |
+| `GET /scheduling/data/staff-unavailability-entry/find-conflicting-assignments-for-staff-between-range?staffIds[]=…&minDateTime=…&maxDateTime=…&ignoredAbsenceIds[]=…` | Conflict check while editing an absence. Not a who’s-away list. |
+| `GET /scheduling/data/appointment-service/unfulfilled-staff-requirements-between-range?minDateTime=…&maxDateTime=…` | Unfulfilled requirements strip. Not presence. |
+
+`staffSchedules[n]` shape (from `staffShaped` + `todayBook`):
+
+```
+name                              e.g. "Dr Natalie Azadian"
+schedule[]                        diaries for that day
+  scheduleType                    "diary"
+  summary.site.name               "Witley Surgery" / "Milford Surgery"
+  summary.service.name            "General Appointments"
+  summary.defaultAppointmentType.name
+  summary.diaryTimeline[]
+  entries[].diaryId
+  entries[].diaryEntryType        { value, label, isSlot | isAppointment | isStaffBreakAssignment }
+```
+
+That day’s `todayBook.staff` (session = `schedule.length`): Nhs 111,
+Dr Natalie Azadian, Subancely Heelas-Ebance, Helen Hughes, Linda Inskip,
+Rachel Nilsen, Dr Amy Offer, Dr Dhivyaa Shanker,
+Helene Steenfeldt-Kristensen, Samantha Thomason, Dr David Triska.
+
+The week-view landmark blob also contained `1Absence 00:00 - 23:59`, so
+all-day absences render on that grid. The grid itself is **not** this GET.
+
+### Writes seen — never call from the canvas
+
+| Method | Path | Why it fired |
+|---|---|---|
+| `POST /scheduling/staff-absence/change-absence` | Dave edited an absence. Keys: `absenceId`, `startDate`, `startTime`, `endDate`, `endTime`, `absenceDetails`, `coveringAssigneeId`. **A write.** |
+| `POST /scheduling/data/staff-schedule/calendar-resources` | Week calendar query. Keys: `minDateTime`, `maxDateTime`, `staffIds`, `teamIds`. Read-shaped POST; still not a GET we will invent usage for. |
+| `POST /scheduling/data/staff-unavailability-entry/find-assignments-for-staff-between-range` | Same refresh. Keys: `minDateTime`, `maxDateTime`, `staffIds`. |
+
+The canvas stays GET-only. It must not POST `change-absence`,
+`calendar-resources`, or the assignment finder.
+
+### What this does *not* tell us
+
+Absence-overview / edit-absence / `GET staff-schedule` bodies were not
+in the dump (the capture script only sampled `fetch` JSON; Vue used
+XHR). We therefore **cannot** list every absence by name from this
+paste. Next paste, after the XHR sampler is in, should include those
+keys. Until then: **In today** from `embedded-overview`; **Away** from
+a parsed absence record or this machine’s rota leave list — never from
+“not in the 11”.
 
 ---
 
 ## Shipped in this pass
 
-- `shared/lab-allocate-core.js` — route, row, requester walker, pool + chips, draft.
+- `shared/lab-allocate-core.js` — route, row, requester walker, pool + chips,
+  today’s-book parser, presence merge, draft.
 - `content-scripts/lab-allocate-canvas.js` — launch button on a results
-  task-list, reports pool, clinician chips, copy working list.
+  task-list, reports pool, clinician chips, In today / Away, copy working list.
 - `scripts/lab-allocate-capture.js` — live Reassign-path scoping.
-- `scripts/staff-scheduling-capture.js` — live Staff scheduling scoping.
-- `test-lab-allocate-core.js` — placement rules, no-write lock, GET-only client.
+- `scripts/staff-scheduling-capture.js` — live Staff scheduling scoping
+  (fetch + XHR samples; re-reads embedded-overview and staff-schedule).
+- `scripts/lab-requester-capture.js` — live Requested By / report-page scoping.
+- `test-lab-allocate-core.js` — placement rules, no-write lock, GET-only client,
+  captured today-book shape.
