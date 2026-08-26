@@ -114,6 +114,7 @@
         "content-scripts/allergy-cleanup.js",
         "shared/write-core.js",
         "content-scripts/allergy-cleanup-canvas.js",
+        "shared/risk-flag-cleanup-core.js",
         "content-scripts/risk-flag-cleanup.js",
         "content-scripts/task-presence.js",
         "content-scripts/task-bulk-action.js",
@@ -133,6 +134,7 @@
         "content-scripts/lab-allocate-canvas.css",
         "content-scripts/allergy-cleanup.css",
         "content-scripts/allergy-cleanup-canvas.css",
+        "content-scripts/risk-flag-cleanup.css",
         "content-scripts/task-presence.css",
         "content-scripts/task-bulk-action.css"
       ],

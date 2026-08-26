@@ -8,12 +8,7 @@
 // user ticks any number and removes just the banner flag (never the note
 // itself, never its SNOMED code) in one reviewed, confirmed batch.
 //
-// This is a straight port of the write path already discovered, live-tested
-// and hardened in the standalone tools/risk-flag-review/ console tool over
-// several rounds of real 400/500 failures against production — see that
-// tool's README for the full HAR-capture research trail behind the
-// change-note contract (in particular: `flags` and `recordedByOrganisation`
-// both need reshaping from what GET returns before they can be POSTed back).
+// Payload + write-set live in shared/risk-flag-cleanup-core.js (W24).
 //
 // WRONG-PATIENT SAFETY: identity is captured only when the panel opens and
 // RE-VERIFIED immediately before EVERY write in the batch — never trust an
@@ -40,16 +35,19 @@
   'use strict';
 
   if (window.__rfcMounted) return;
+  var Core = window.RiskFlagCleanupCore;
+  if (!Core) return;
   window.__rfcMounted = true;
 
-  var PILL_ID = 'rfc-pill';
-  var PANEL_ID = 'rfc-panel';
+  var PILL_ID = 'ms-rfc-pill';
+  var OVERLAY_ID = 'ms-rfc-overlay';
   // Same host selector set sentinel's pageReady() and patient-alerts-banner.js
   // already wait on for the patient header/banner container.
   var HOST_SELECTOR = '[class*="patient-banner"], [class*="patient-header"], [data-cy*="patient-banner"]';
 
   var _renderQueued = false;
   var _panelState = null; // null when closed; object when open (see openPanel)
+  var _writing = false;
 
   function SAC() {
     return window.SentinelApiClient;
@@ -78,26 +76,19 @@
     if (el) el.remove();
   }
 
+  function setPillExpanded(open) {
+    var pill = document.getElementById(PILL_ID);
+    if (pill) pill.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
   function buildPill() {
     var pill = document.createElement('button');
     pill.id = PILL_ID;
     pill.type = 'button';
     pill.textContent = 'Clean up alerts';
     pill.title = 'Review and remove banner risk flags for this patient';
-    pill.style.cssText = [
-      'display:inline-flex',
-      'align-items:center',
-      'margin-left:auto',
-      'order:9999', // render last regardless of DOM position (see prepend note below)
-      'background:#2a4d8f',
-      'color:#fff',
-      'border:1px solid rgba(255,255,255,.45)',
-      'border-radius:14px',
-      'padding:2px 10px',
-      'font:600 12px/1.6 -apple-system,Segoe UI,sans-serif',
-      'cursor:pointer',
-      'white-space:nowrap',
-    ].join(';');
+    pill.setAttribute('aria-expanded', _panelState ? 'true' : 'false');
+    pill.setAttribute('aria-controls', OVERLAY_ID);
     pill.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -181,9 +172,9 @@
     var row = findBadgeRow(host);
     var target = row || host;
     // PREPEND (rule #1) so the reconciler doesn't strip it as a trailing
-    // foreign node; `order:9999` in the pill's own style renders it LAST
-    // regardless of DOM position, so it visually lands after Medicus's own
-    // badges when the row is a flex container (it is, for a horizontal strip).
+    // foreign node; `order:9999` on #ms-rfc-pill renders it LAST regardless
+    // of DOM position, so it visually lands after Medicus's own badges when
+    // the row is a flex container (it is, for a horizontal strip).
     target.insertBefore(buildPill(), target.firstChild);
   }
 
@@ -246,27 +237,18 @@
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
-    }).then(async function (r) {
-      var text = '';
-      try {
-        text = await r.text();
-      } catch (_) {
-        /* body already consumed / unreadable */
-      }
-      if (!r.ok) {
-        console.error('[Risk Flag Cleanup] write failed', {
-          path: path,
-          requestBody: body,
-          status: r.status,
-          responseText: text,
-        });
-        throw new Error(path + ' -> HTTP ' + r.status + (text ? ': ' + text.slice(0, 400) : ''));
-      }
-      try {
-        return text ? JSON.parse(text) : {};
-      } catch (_) {
-        return {};
-      }
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        if (!r.ok) {
+          console.error('[Risk Flag Cleanup] write failed', path, r.status);
+          throw new Error(path + ' -> HTTP ' + r.status);
+        }
+        try {
+          return text ? JSON.parse(text) : {};
+        } catch (_) {
+          return {};
+        }
+      });
     });
   }
 
@@ -285,6 +267,21 @@
     return { text: preview, isFreeText: true };
   }
 
+  function rowMatchesFilter(r, filter) {
+    var q = String(filter || '')
+      .trim()
+      .toLowerCase();
+    if (!q) return true;
+    return (
+      String(r.description || '')
+        .toLowerCase()
+        .indexOf(q) !== -1 ||
+      String(r.category || '')
+        .toLowerCase()
+        .indexOf(q) !== -1
+    );
+  }
+
   // Two badge shapes: exactly one note in a category links straight at it
   // (/clinical/note/overview/{noteId}); more than one collapses into a
   // summary badge whose link points at the category LIST instead
@@ -294,29 +291,13 @@
   var CATEGORY_LIST_RE = /\/clinical\/note\/risks-overview\/[^/]+\/([^/?]+)/;
 
   // Fresh-GET-immediately-before-write, full-replace with ONLY
-  // flagOnPatientBanner changed. `flags` and `recordedByOrganisation` both
-  // need reshaping from edit-note's GET shape before they can be POSTed back
-  // — see the header comment for the research trail; do not "simplify" this
-  // back to a raw pass-through without re-reading it.
+  // flagOnPatientBanner changed. Payload (including flags [] and the
+  // recordedByOrganisation unwrap) is built by the core — do not inline a
+  // `org.value` pass-through here.
   async function removeBannerFlag(apiBase, noteId) {
     var en = await getJson(apiBase, '/clinical/data/note/edit-note/' + noteId);
     if (en.flagOnPatientBanner === false) return { status: 'skipped', reason: 'already off' };
-    var recordedByOrganisation = en.recordedByOrganisation ? en.recordedByOrganisation.value : null;
-    var body = {
-      noteId: en.noteId,
-      note: en.note,
-      noteSNOMEDct: en.noteSNOMEDct,
-      hiddenFromPatientFacingServices: en.hiddenFromPatientFacingServices,
-      confidentialFromThirdParties: en.confidentialFromThirdParties,
-      flagOnPatientBanner: false,
-      recordedByOrganisation: recordedByOrganisation,
-      recordedByPractitioner: en.recordedByPractitioner,
-      recordedByStaff: en.recordedByStaff,
-      recordDate: en.recordDate,
-      flags: en.flags,
-      clinicalCaseId: en.linkedClinicalCase ? en.linkedClinicalCase.defaultClinicalCaseId : null,
-      linkedProblemIds: en.linkedProblemIds,
-    };
+    var body = Core.buildClearBannerFlagPayload(en);
     await postJson(apiBase, '/clinical/note/change-note', body);
     var after = await getJson(apiBase, '/clinical/data/note/overview/' + noteId);
     var cleared = !(after.patientBannerFlags && after.patientBannerFlags.length);
@@ -397,42 +378,339 @@
   // ---- Panel UI -----------------------------------------------------------------
 
   function closePanel() {
-    var el = document.getElementById(PANEL_ID);
+    var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
+    document.removeEventListener('keydown', onDocKeydown);
     _panelState = null;
+    _writing = false;
+    setPillExpanded(false);
+  }
+
+  function requestClose() {
+    if (_writing) return;
+    closePanel();
   }
 
   function togglePanel() {
     if (_panelState) {
-      closePanel();
+      requestClose();
       return;
     }
     openPanel();
   }
 
+  function onDocKeydown(e) {
+    if (e.key !== 'Escape') return;
+    if (_writing) return;
+    requestClose();
+  }
+
+  function catClass(colour) {
+    if (colour === 'red') return 'ms-rfc-cat ms-rfc-cat--red';
+    if (colour === 'amber') return 'ms-rfc-cat ms-rfc-cat--amber';
+    return 'ms-rfc-cat ms-rfc-cat--neutral';
+  }
+
+  function statusClass(status) {
+    if (status === 'removed') return 'ms-rfc-status ms-rfc-status--removed';
+    if (status === 'failed') return 'ms-rfc-status ms-rfc-status--failed';
+    if (status === 'processing') return 'ms-rfc-status ms-rfc-status--processing';
+    return 'ms-rfc-status';
+  }
+
+  function statusText(status) {
+    if (status === 'processing') return 'Working…';
+    if (status === 'removed') return 'Removed';
+    if (status === 'failed') return 'Failed';
+    if (status === 'skipped') return 'already off';
+    return '';
+  }
+
+  function confirmBarHtml(targets) {
+    var items = targets
+      .map(function (r) {
+        return (
+          '<li>[' +
+          escapeHtml(r.category) +
+          '] ' +
+          escapeHtml(r.description) +
+          ' — ' +
+          escapeHtml(r.recordDate || 'date unknown') +
+          '</li>'
+        );
+      })
+      .join('');
+    return (
+      '<p>Remove the Flag on patient banner from ' +
+      targets.length +
+      ' note' +
+      (targets.length === 1 ? '' : 's') +
+      '? This does not delete the note or change its clinical code — only the banner checkbox is cleared.</p>' +
+      '<ul>' +
+      items +
+      '</ul>' +
+      '<button type="button" class="ms-rfc-confirm-btn" data-act="confirm-cancel">Cancel</button>' +
+      '<button type="button" class="ms-rfc-confirm-go" data-act="confirm-go">Remove banner flags</button>'
+    );
+  }
+
+  function rowHtml(r, selected) {
+    var pending = r.status === 'pending';
+    var descClass = r.isFreeText ? 'ms-rfc-desc ms-rfc-desc-free' : 'ms-rfc-desc';
+    var desc = r.isFreeText ? '“' + escapeHtml(r.description) + '”' : escapeHtml(r.description);
+    var label = statusText(r.status);
+    var statusHtml = label
+      ? '<span class="' +
+        statusClass(r.status) +
+        '">' +
+        escapeHtml(label) +
+        (r.reason ? ' (' + escapeHtml(r.reason) + ')' : '') +
+        '</span>'
+      : '';
+    return (
+      '<div class="ms-rfc-row">' +
+      '<label>' +
+      '<input type="checkbox" data-note-id="' +
+      escapeHtml(r.noteId || '') +
+      '"' +
+      (selected.has(r.noteId) ? ' checked' : '') +
+      (pending ? '' : ' disabled') +
+      ' />' +
+      '<span class="' +
+      catClass(r.colour) +
+      '">' +
+      escapeHtml(r.category) +
+      '</span>' +
+      '</label>' +
+      '<a class="ms-rfc-open" href="' +
+      escapeHtml(location.origin + r.slideoverPath) +
+      '" target="_blank" rel="noopener">Open</a>' +
+      '<div class="' +
+      descClass +
+      '">' +
+      desc +
+      '</div>' +
+      '<div class="ms-rfc-date">' +
+      escapeHtml(r.recordDate) +
+      (r.recordedBy ? ' · ' + escapeHtml(r.recordedBy) : '') +
+      '</div>' +
+      statusHtml +
+      '</div>'
+    );
+  }
+
+  function ensureOverlay() {
+    var el = document.getElementById(OVERLAY_ID);
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = OVERLAY_ID;
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-labelledby', 'ms-rfc-title');
+    el.innerHTML =
+      '<div class="ms-rfc-head">' +
+      '<h2 class="ms-rfc-title" id="ms-rfc-title">Clean up alerts</h2>' +
+      '<button type="button" class="ms-rfc-close" data-act="close">Close</button>' +
+      '</div>' +
+      '<p class="ms-rfc-meta"></p>' +
+      '<p class="ms-rfc-counts"></p>' +
+      '<p class="ms-rfc-skipped" hidden></p>' +
+      '<input class="ms-rfc-filter" type="text" placeholder="Filter e.g. suicide" />' +
+      '<div class="ms-rfc-actions">' +
+      '<button type="button" class="ms-rfc-ghost" data-act="select-all" disabled>Select all shown (0)</button>' +
+      '<button type="button" class="ms-rfc-remove" data-act="remove-selected" disabled>Remove 0 flags from banner</button>' +
+      '</div>' +
+      '<div data-rfc-list></div>' +
+      '<div class="ms-rfc-confirmbar" hidden></div>';
+    el.addEventListener('click', onOverlayClick);
+    el.addEventListener('change', onOverlayChange);
+    var filter = el.querySelector('.ms-rfc-filter');
+    filter.addEventListener('input', function (e) {
+      if (!_panelState) return;
+      _panelState.filter = e.target.value;
+      renderList();
+    });
+    document.body.appendChild(el);
+    document.addEventListener('keydown', onDocKeydown);
+    return el;
+  }
+
+  function renderList() {
+    if (!_panelState) return;
+    var overlay = ensureOverlay();
+    var loaded = !!_panelState.loaded;
+    var visible = loaded
+      ? _panelState.rows.filter(function (r) {
+          return rowMatchesFilter(r, _panelState.filter);
+        })
+      : [];
+    var selectableCount = visible.filter(function (r) {
+      return r.status === 'pending';
+    }).length;
+    var targets = loaded ? Core.visiblePendingSelected(_panelState.rows, _panelState.selected, _panelState.filter) : [];
+    var selectedCount = targets.length;
+
+    overlay.querySelector('.ms-rfc-meta').textContent = _panelState.loadError
+      ? ''
+      : loaded
+        ? _panelState.displayName || ''
+        : 'Loading flags…';
+
+    var counts = overlay.querySelector('.ms-rfc-counts');
+    counts.textContent = loaded ? _panelState.rows.length + ' flag(s) total, ' + visible.length + ' shown' : '';
+
+    var skipped = overlay.querySelector('.ms-rfc-skipped');
+    if (loaded && _panelState.skippedCount) {
+      skipped.hidden = false;
+      skipped.textContent =
+        _panelState.skippedCount + ' banner badges could not be listed (not a note link) — they were not included.';
+    } else {
+      skipped.hidden = true;
+      skipped.textContent = '';
+    }
+
+    var filter = overlay.querySelector('.ms-rfc-filter');
+    filter.hidden = !loaded;
+    var actions = overlay.querySelector('.ms-rfc-actions');
+    actions.hidden = !loaded;
+
+    var selectAll = overlay.querySelector('[data-act="select-all"]');
+    selectAll.textContent = 'Select all shown (' + selectableCount + ')';
+    selectAll.disabled = !selectableCount || _writing;
+
+    var removeBtn = overlay.querySelector('[data-act="remove-selected"]');
+    removeBtn.textContent = 'Remove ' + selectedCount + ' flag' + (selectedCount === 1 ? '' : 's') + ' from banner';
+    removeBtn.disabled = !selectedCount || _writing;
+
+    var list = overlay.querySelector('[data-rfc-list]');
+    if (_panelState.loadError) {
+      list.innerHTML = '<p class="ms-rfc-empty">Failed to load: ' + escapeHtml(_panelState.loadError) + '</p>';
+    } else if (!loaded) {
+      list.innerHTML = '<p class="ms-rfc-empty">Loading flags…</p>';
+    } else if (!visible.length) {
+      list.innerHTML = '<p class="ms-rfc-empty">No flags match that filter.</p>';
+    } else {
+      list.innerHTML = visible
+        .map(function (r) {
+          return rowHtml(r, _panelState.selected);
+        })
+        .join('');
+    }
+
+    var bar = overlay.querySelector('.ms-rfc-confirmbar');
+    if (loaded && _panelState.confirming && !_writing && targets.length) {
+      var firstShow = bar.hidden;
+      bar.hidden = false;
+      bar.innerHTML = confirmBarHtml(targets);
+      if (firstShow) {
+        var cancel = bar.querySelector('.ms-rfc-confirm-btn');
+        if (cancel) cancel.focus();
+      }
+    } else {
+      bar.hidden = true;
+      bar.innerHTML = '';
+      if (loaded && _panelState.confirming && !targets.length) _panelState.confirming = false;
+    }
+
+    if (loaded && !_panelState.filterFocused) {
+      _panelState.filterFocused = true;
+      filter.focus();
+    }
+  }
+
+  function onOverlayChange(e) {
+    var cb = e.target && e.target.matches && e.target.matches('input[type="checkbox"][data-note-id]');
+    if (!cb || !_panelState) return;
+    var id = e.target.getAttribute('data-note-id');
+    if (e.target.checked) _panelState.selected.add(id);
+    else _panelState.selected.delete(id);
+    renderList();
+  }
+
+  function onOverlayClick(e) {
+    var btn = e.target.closest && e.target.closest('[data-act]');
+    if (!btn || !_panelState) return;
+    var act = btn.dataset.act;
+
+    if (act === 'close') {
+      requestClose();
+      return;
+    }
+
+    if (act === 'select-all') {
+      if (_writing) return;
+      _panelState.rows.forEach(function (r) {
+        if (r.status === 'pending' && rowMatchesFilter(r, _panelState.filter)) {
+          _panelState.selected.add(r.noteId);
+        }
+      });
+      renderList();
+      return;
+    }
+
+    if (act === 'confirm-cancel') {
+      if (_writing) return;
+      _panelState.confirming = false;
+      renderList();
+      return;
+    }
+
+    if (act === 'remove-selected') {
+      if (_writing) return;
+      var preview = Core.visiblePendingSelected(_panelState.rows, _panelState.selected, _panelState.filter);
+      if (!preview.length) return;
+      _panelState.confirming = true;
+      renderList();
+      return;
+    }
+
+    if (act === 'confirm-go') {
+      if (_writing) return;
+      runBatch();
+    }
+  }
+
+  async function runBatch() {
+    if (!_panelState || _writing) return;
+    var targets = Core.visiblePendingSelected(_panelState.rows, _panelState.selected, _panelState.filter);
+    if (!targets.length) return;
+
+    _writing = true;
+    _panelState.confirming = false;
+    var expectedUuid = _panelState.patientUuid;
+    var apiBase = _panelState.apiBase;
+
+    for (var i = 0; i < targets.length; i++) {
+      var r = targets[i];
+      // Wrong-patient re-check immediately before EACH write in the batch —
+      // a long-running batch must never fire against a patient the SPA has
+      // since navigated away from underneath it (H-043 family).
+      var live = resolveIdentity();
+      if (!_panelState || !live || live.patientUuid !== expectedUuid) {
+        closePanel();
+        return;
+      }
+      r.status = 'processing';
+      _panelState.selected.delete(r.noteId);
+      renderList();
+      try {
+        var res = await removeBannerFlag(apiBase, r.noteId);
+        r.status = res.status;
+        r.reason = res.reason || '';
+      } catch (err) {
+        r.status = 'failed';
+        r.reason = String((err && err.message) || err);
+      }
+      renderList();
+      if (r.status === 'failed') break; // stop the batch, don't plough on into unknown state
+    }
+
+    _writing = false;
+    if (_panelState) renderList();
+  }
+
   async function openPanel() {
     var ids = resolveIdentity();
     if (!ids) return;
-
-    var panel = document.createElement('div');
-    panel.id = PANEL_ID;
-    panel.style.cssText = [
-      'position:fixed',
-      'top:16px',
-      'right:16px',
-      'width:420px',
-      'max-height:80vh',
-      'overflow:auto',
-      'background:#1e1e1e',
-      'color:#e8e8e8',
-      'font:13px/1.4 -apple-system,Segoe UI,sans-serif',
-      'border:1px solid #444',
-      'border-radius:8px',
-      'box-shadow:0 8px 24px rgba(0,0,0,.4)',
-      'z-index:2147483647',
-      'padding:12px',
-    ].join(';');
-    document.body.appendChild(panel);
 
     _panelState = {
       patientUuid: ids.patientUuid,
@@ -441,30 +719,24 @@
       selected: new Set(),
       filter: '',
       displayName: '',
+      skippedCount: 0,
+      confirming: false,
+      loaded: false,
+      filterFocused: false,
+      loadError: '',
     };
-
-    function setBody(html) {
-      panel.innerHTML =
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-        '<strong>Clean up alerts</strong>' +
-        '<button id="rfc-close" style="background:none;border:none;color:#aaa;font-size:16px;cursor:pointer;">&times;</button>' +
-        '</div>' +
-        html;
-      var closeBtn = document.getElementById('rfc-close');
-      if (closeBtn)
-        closeBtn.onclick = function () {
-          closePanel();
-        };
-    }
-
-    setBody('<p>Loading flags&hellip;</p>');
+    _writing = false;
+    setPillExpanded(true);
+    ensureOverlay();
+    renderList();
 
     var data;
     try {
       data = await loadRows(ids.apiBase, ids.patientUuid);
     } catch (e) {
-      if (_panelState)
-        setBody('<p style="color:#f66">Failed to load: ' + escapeHtml(String((e && e.message) || e)) + '</p>');
+      if (!_panelState || _panelState.patientUuid !== ids.patientUuid) return;
+      _panelState.loadError = String((e && e.message) || e);
+      renderList();
       return;
     }
     // Panel may have been closed, or the patient may have changed, while
@@ -472,216 +744,8 @@
     if (!_panelState || _panelState.patientUuid !== ids.patientUuid) return;
     _panelState.rows = data.rows;
     _panelState.displayName = data.displayName;
-
-    var STATUS_LABEL = {
-      pending: '',
-      processing: '&#8987; working&hellip;',
-      removed: '&#10003; removed',
-      skipped: 'already off',
-      failed: '&#10007; failed',
-    };
-    var STATUS_COLOUR = { processing: '#999', removed: '#4a4', skipped: '#999', failed: '#f66' };
-
-    function renderList() {
-      if (!_panelState) return;
-      var q = (_panelState.filter || '').trim().toLowerCase();
-      var visible = _panelState.rows.filter(function (r) {
-        return !q || r.description.toLowerCase().indexOf(q) !== -1 || r.category.toLowerCase().indexOf(q) !== -1;
-      });
-      var selectableCount = visible.filter(function (r) {
-        return r.status === 'pending';
-      }).length;
-      var selectedCount = visible.filter(function (r) {
-        return _panelState.selected.has(r.noteId) && r.status === 'pending';
-      }).length;
-
-      var list = visible
-        .map(function (r) {
-          var done = r.status !== 'pending' && r.status !== 'processing';
-          var statusHtml =
-            r.status === 'pending'
-              ? ''
-              : '<span style="color:' +
-                (STATUS_COLOUR[r.status] || '#999') +
-                ';font-size:11px;">' +
-                STATUS_LABEL[r.status] +
-                (r.reason ? ' (' + escapeHtml(r.reason) + ')' : '') +
-                '</span>';
-          return (
-            '<div style="border:1px solid #333;border-radius:6px;padding:8px;margin-bottom:6px;' +
-            (done ? 'opacity:.6;' : '') +
-            '">' +
-            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-            '<label style="display:flex;align-items:center;gap:6px;">' +
-            '<input type="checkbox" class="rfc-cb" data-note-id="' +
-            escapeHtml(r.noteId || '') +
-            '" ' +
-            (_panelState.selected.has(r.noteId) ? 'checked' : '') +
-            ' ' +
-            (r.status === 'pending' ? '' : 'disabled') +
-            ' />' +
-            '<span style="background:' +
-            (r.colour === 'amber' ? '#7a5b00' : r.colour === 'red' ? '#7a1e1e' : '#444') +
-            ';color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;">' +
-            escapeHtml(r.category) +
-            '</span>' +
-            '</label>' +
-            '<a href="' +
-            escapeHtml(location.origin + r.slideoverPath) +
-            '" target="_blank" rel="noopener" style="color:#6cf;text-decoration:none;">Open &rarr;</a>' +
-            '</div>' +
-            '<div style="margin-top:4px;font-weight:' +
-            (r.isFreeText ? '400' : '600') +
-            ';' +
-            (r.isFreeText ? 'font-style:italic;color:#ccc;' : '') +
-            '">' +
-            (r.isFreeText ? '&ldquo;' : '') +
-            escapeHtml(r.description) +
-            (r.isFreeText ? '&rdquo;' : '') +
-            '</div>' +
-            '<div style="color:#999;font-size:11px;">' +
-            escapeHtml(r.recordDate) +
-            (r.recordedBy ? ' &middot; ' + escapeHtml(r.recordedBy) : '') +
-            '</div>' +
-            '<div style="color:#666;font-size:10px;">' +
-            escapeHtml(r.noteId || '') +
-            '</div>' +
-            (statusHtml ? '<div style="margin-top:2px;">' + statusHtml + '</div>' : '') +
-            '</div>'
-          );
-        })
-        .join('');
-
-      setBody(
-        '<div style="margin-bottom:8px;color:#aaa;">' +
-          escapeHtml(_panelState.displayName) +
-          ' &mdash; ' +
-          _panelState.rows.length +
-          ' flag(s) total, ' +
-          visible.length +
-          ' shown</div>' +
-          '<input id="rfc-filter" type="text" placeholder="Filter e.g. suicide" value="' +
-          escapeHtml(_panelState.filter) +
-          '" style="width:100%;box-sizing:border-box;padding:6px;margin-bottom:8px;background:#111;color:#eee;border:1px solid #444;border-radius:4px;" />' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-          '<button data-act="select-all" style="padding:4px 8px;background:#333;color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;" ' +
-          (selectableCount ? '' : 'disabled') +
-          '>Select all shown (' +
-          selectableCount +
-          ')</button>' +
-          '<button data-act="remove-selected" style="padding:4px 8px;background:' +
-          (selectedCount ? '#7a1e1e' : '#333') +
-          ';color:#eee;border:1px solid #555;border-radius:4px;cursor:pointer;" ' +
-          (selectedCount ? '' : 'disabled') +
-          '>Remove ' +
-          selectedCount +
-          ' flag(s) from banner</button>' +
-          '</div>' +
-          (list || '<p style="color:#888;">No flags match that filter.</p>') +
-          '<p style="color:#666;font-size:11px;margin-top:8px;">Tick rows and click "Remove" to clear just the banner flag (confirmed before anything writes) &mdash; or click Open to edit a note yourself in Medicus.</p>'
-      );
-
-      var input = document.getElementById('rfc-filter');
-      if (input) {
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
-        input.oninput = function (e) {
-          _panelState.filter = e.target.value;
-          renderList();
-        };
-      }
-    }
-
-    panel.addEventListener('change', function (e) {
-      var cb = e.target.closest && e.target.closest('.rfc-cb');
-      if (!cb || !_panelState) return;
-      if (cb.checked) _panelState.selected.add(cb.dataset.noteId);
-      else _panelState.selected.delete(cb.dataset.noteId);
-      renderList();
-    });
-
-    panel.addEventListener('click', async function (e) {
-      var btn = e.target.closest && e.target.closest('[data-act]');
-      if (!btn || !_panelState) return;
-
-      if (btn.dataset.act === 'select-all') {
-        var q = (_panelState.filter || '').trim().toLowerCase();
-        _panelState.rows
-          .filter(function (r) {
-            return (
-              r.status === 'pending' &&
-              (!q || r.description.toLowerCase().indexOf(q) !== -1 || r.category.toLowerCase().indexOf(q) !== -1)
-            );
-          })
-          .forEach(function (r) {
-            _panelState.selected.add(r.noteId);
-          });
-        renderList();
-        return;
-      }
-
-      if (btn.dataset.act !== 'remove-selected') return;
-      var targets = _panelState.rows.filter(function (r) {
-        return _panelState.selected.has(r.noteId) && r.status === 'pending';
-      });
-      if (!targets.length) return;
-
-      var lines = targets
-        .map(function (r) {
-          return '  • [' + r.category + '] ' + r.description + ' — ' + (r.recordDate || 'date unknown');
-        })
-        .join('\n');
-      var ok = confirm(
-        'Remove the "Flag on patient banner" from ' +
-          targets.length +
-          ' note(s)?\n\n' +
-          lines +
-          '\n\n' +
-          'This does NOT delete the note or change its clinical code — only the banner checkbox is ' +
-          'cleared. Each note is re-fetched fresh immediately before writing and every other field is ' +
-          'preserved exactly as read.\n\n' +
-          'OK = remove ' +
-          (targets.length > 1 ? 'them all' : 'it') +
-          '    Cancel = do nothing'
-      );
-      if (!ok) return;
-
-      var results = [];
-      for (var i = 0; i < targets.length; i++) {
-        var r = targets[i];
-        // Wrong-patient re-check immediately before EACH write in the batch —
-        // a long-running batch must never fire against a patient the SPA has
-        // since navigated away from underneath it (H-043 family).
-        var live = resolveIdentity();
-        if (!_panelState || !live || live.patientUuid !== _panelState.patientUuid) {
-          closePanel();
-          return;
-        }
-        r.status = 'processing';
-        _panelState.selected.delete(r.noteId);
-        renderList();
-        try {
-          var res = await removeBannerFlag(_panelState.apiBase, r.noteId);
-          r.status = res.status;
-          r.reason = res.reason || '';
-        } catch (err) {
-          r.status = 'failed';
-          r.reason = String((err && err.message) || err);
-        }
-        results.push({
-          noteId: r.noteId,
-          category: r.category,
-          description: r.description,
-          status: r.status,
-          reason: r.reason,
-        });
-        renderList();
-        if (r.status === 'failed') break; // stop the batch, don't plough on into unknown state
-      }
-      console.log('[Risk Flag Cleanup] batch results:');
-      console.table(results);
-    });
-
+    _panelState.skippedCount = (data.skippedBadges && data.skippedBadges.length) || 0;
+    _panelState.loaded = true;
     renderList();
   }
 })();

@@ -16,10 +16,10 @@ filter, so a patient with dozens of near-duplicate flags (e.g. repeated
 through Medicus's own risk-category screens one at a time.
 
 Tick any number of rows and remove just the banner flag in one confirmed
-batch (W24): the confirm dialog names every targeted note before anything
-writes, each write re-verifies patient identity immediately beforehand and
-is checked afterwards to confirm it actually landed, and a batch stops at
-the first failure. This clears only the "Flag on patient banner" checkbox —
+batch (W24): the in-panel confirm bar names every targeted note before
+anything writes, each write re-verifies patient identity immediately
+beforehand and is checked afterwards to confirm it actually landed, and a
+batch stops at the first failure. This clears only the "Flag on patient banner" checkbox —
 the note, its SNOMED code, its free text and its risk-category
 classification are never touched, and nothing is deleted.
 
@@ -28,6 +28,12 @@ Ported from a standalone HAR-capture research tool (kept in the repo at
 400/500 failures uncovered two places where Medicus's read and write shapes
 for the same note diverge. See `docs/CLINICAL-SAFETY-NOTICE.md` **W24** and
 `docs/HAZARD-LOG.md` **H-065** (pending CSO sign-off).
+
+Review fixes: the change-note payload unwraps `recordedByOrganisation`
+(never `org.value` on an already-flat GET), batches write only the visible
+pending selection, confirm is an in-panel bar (Cancel focused; "Remove
+banner flags" proceeds), and the pill/panel use suite chrome. Failures log
+path + status only — not the request body.
 
 ## [v3.243.9] — 2026-08-26
 
