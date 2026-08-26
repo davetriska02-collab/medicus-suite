@@ -41,6 +41,13 @@ console.log('--- parseResultsQueueRoute ---');
   );
   check(C.isResultsQueueSlug('review-investigation-report') === true, 'investigation slug matches');
   check(C.isResultsQueueSlug('medical_patient_request_task') === false, 'request slug does not match');
+  const withQs = C.parseResultsQueueRoute(
+    '/560b6c/tasks/review_investigation_results_task/task-list',
+    '?viewContext=workflow&masterAssignee=abc'
+  );
+  check(withQs && withQs.search === '?viewContext=workflow', 'keeps viewContext and drops masterAssignee');
+  check(C.queryStringForList('https://evil.example/?x=1') === '', 'rejects a query that looks like a URL');
+  check(C.sanitizeSlug('../x') === '', 'rejects a path-like slug');
 }
 
 console.log('\n--- extractTaskArray / pickTaskId ---');
@@ -164,6 +171,21 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
   check(C.homeColumnKey(inbox) === C.POOL, 'team assignee stays in the unallocated reports pool');
   check(C.placementReason(inbox) === 'inbox', 'inbox reason is still recorded');
   check(inbox.namedGp === 'Dr Registered GP', 'named GP kept as a hint only');
+  const objAssigned = C.normaliseTaskRow(
+    {
+      id: uuid(15),
+      patientName: 'A',
+      assignedTo: { type: 'staff', id: uuid(9), name: 'Dr David Triska' },
+      summary: 'FBC',
+    },
+    'x'
+  );
+  check(objAssigned.assignedTo === 'Dr David Triska', 'object assignedTo yields the person name');
+  check(
+    C.homeColumnKey(objAssigned) === C.clinicianColumnKey('Dr David Triska'),
+    'object staff assignee sits on that clinician field'
+  );
+  check(objAssigned.assignedId === uuid(9), 'object assignedTo still keeps the staff UUID');
 }
 
 console.log('\n--- requester placement never uses named GP ---');
@@ -238,12 +260,33 @@ console.log('\n--- write contract is the captured bulk-reassign ---');
   check(C.canWriteAllocations({ taskList: '' }).ok === false, 'empty string is not a token');
   check(C.canWriteAllocations({ taskList: {} }).ok === false, 'empty object is not a token');
   check(
+    C.canWriteAllocations({ taskList: {}, slug: 'review_investigation_results_task' }).ok === true,
+    'queue slug unlocks the write when the envelope token is not a string'
+  );
+  check(
     C.extractTaskListToken({ data: { taskList: 'nested-token' } }) === 'nested-token',
     'taskList token may sit on data.taskList'
   );
+  check(
+    C.coerceTaskListToken({ slug: 'review_investigation_results_task' }) === 'review_investigation_results_task',
+    'object token yields its slug string, not the object'
+  );
+  check(
+    C.coerceTaskListToken({}, 'review_investigation_results_task') === 'review_investigation_results_task',
+    'missing token falls back to the URL slug'
+  );
   const src = require('fs').readFileSync(require('path').join(__dirname, 'shared/lab-allocate-core.js'), 'utf8');
   check(/method:\s*['"]POST['"]/.test(src), 'core POSTs the captured bulk-reassign');
-  check(src.indexOf('/tasks/task-list/bulk-reassign') !== -1, 'core uses the captured path');
+  check(src.indexOf('/tasks/task-list/bulk-reassign') !== -1, 'captured literal path is still the 404 fallback');
+  check(
+    C.bulkReassignPaths('review_investigation_results_task')[0] ===
+      '/tasks/review_investigation_results_task/task-list/bulk-reassign',
+    'first POST path nests the queue slug'
+  );
+  check(
+    C.bulkReassignPaths('review_investigation_results_task')[1] === '/tasks/task-list/bulk-reassign',
+    'second POST path is the captured literal'
+  );
   check(!/method:\s*['"]PUT['"]/.test(src), 'core has no PUT');
   check(!/method:\s*['"]PATCH['"]/.test(src), 'core has no PATCH');
   check(!/change-absence/.test(src), 'core never mentions change-absence');
@@ -258,6 +301,11 @@ console.log('\n--- write contract is the captured bulk-reassign ---');
   );
   check(C.buildBulkReassignBody('not-a-uuid', 'token', [uuid(1)]) === null, 'refuses a non-uuid assignee');
   check(C.buildBulkReassignBody(uuid(9), '', [uuid(1)]) === null, 'refuses a missing taskList token');
+  check(
+    C.buildBulkReassignBody(uuid(9), {}, [uuid(1)], 'review_investigation_results_task').taskList ===
+      'review_investigation_results_task',
+    'object token is not posted — the URL slug is'
+  );
 }
 
 console.log('\n--- canvas + manifest source locks ---');
@@ -300,9 +348,14 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
+  check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
+  check(!/list\.length >= 8/.test(canvas), 'overview harvest does not stop at eight staff ids');
+  check(/fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas), 'task-list GET uses the page query (minus masterAssignee)');
+  check(/search: _route && _route\.search/.test(canvas), 'write re-GET keeps the page filters');
   check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
   check(/Why this will not write/.test(canvas), 'a blocked write is a visible action, not a dead button');
+  check(/writeBlockReason/.test(canvas), 'blocked write uses the shared refuse copy, not plan.reason');
   check(
     /requestStage\(ids, key, btn\.closest/.test(canvas),
     'clicking a field stages the active selection — no drag needed'
@@ -311,6 +364,15 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/aria-selected/.test(canvas), 'selection state is exposed to assistive tech');
   check(/ms-lac-selectbar/.test(canvas), 'an active selection shows a visible count bar');
   check(/Select all/.test(canvas), 'group headers name their select-all affordance');
+  check(/ms-lac-group-pick/.test(canvas), 'each requester group has an explicit add-to-selection control');
+  check(/Select all sitting/.test(canvas), 'a clinician field can select every report sitting with them');
+  check(/toggleGroupInSelection/.test(canvas), 'clinician groups can be added to the selection');
+  check(/dropTargetShowsHover/.test(canvas), 'pool is not shaded when dragging a group out of it');
+  check(/ms-lac-lifting/.test(canvas), 'lifting a group marks the overlay, not the whole well as a drop');
+  check(/_dragOriginKind/.test(canvas), 'drag origin is tracked so the pile is not a drop target for itself');
+  check(/harvestTeamDirectory/.test(canvas), 'teams are harvested as drop targets');
+  check(/ms-lac-rail-teams/.test(canvas), 'the rail has a Teams section');
+  check(/data-col-kind/.test(canvas), 'drop targets declare pool, clinician or team');
   check(/_confirmClose/.test(canvas), 'closing with staged moves asks before discarding');
   check(!/do not invent a slug/.test(canvas), 'footer no longer shows developer jargon');
   check(
@@ -326,6 +388,8 @@ console.log('\n--- canvas + manifest source locks ---');
     'warn/red surfaces use the token triads, not raw hexes'
   );
   check(/prefers-reduced-motion/.test(canvasCss), 'motion respects prefers-reduced-motion');
+  check(/ms-lac-lifting/.test(canvasCss), 'lifting a group dims the rest of the pile, not the well');
+  check(/ms-lac-drag-source/.test(canvasCss), 'the dragged reports are marked, not the whole list');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
   check(!/Add clinician column/.test(canvas), 'clinicians are fields, not full-page columns');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
@@ -347,6 +411,7 @@ console.log('\n--- canvas + manifest source locks ---');
   const labCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-allocate-capture.js'), 'utf8');
   check(/describeWriteValue/.test(labCap), 'lab-allocate capture samples write-key types, not PHI values');
   check(!/method:\s*['"]POST['"]/.test(labCap), 'lab-allocate capture does not POST');
+  check(/teamOptions/.test(labCap), 'lab-allocate capture samples teamOptions alongside staff');
 }
 
 console.log('\n--- grouping by who ordered ---');
@@ -393,10 +458,71 @@ console.log('\n--- grouping by who ordered ---');
   check(mixed.mixed === true && mixed.canGroup === false, 'mixed requesters cannot auto-group');
 }
 
+console.log('\n--- multi-select and drag origin ---');
+{
+  const a = uuid(1);
+  const b = uuid(2);
+  const c = uuid(3);
+  const d = uuid(4);
+  check(C.selectedIdList({ [a]: true, [b]: false }).join(',') === a, 'selectedIdList drops falsey flags');
+  const one = C.toggleIdInSelection({}, a, false);
+  check(one[a] === true && C.selectedIdList(one).length === 1, 'plain click selects that report');
+  const toggledOff = C.toggleIdInSelection(one, a, false);
+  check(C.selectedIdList(toggledOff).length === 0, 'plain click on the only pick clears it');
+  const replaced = C.toggleIdInSelection({ [a]: true }, b, false);
+  check(replaced[b] === true && !replaced[a], 'plain click replaces a previous pick');
+  const added = C.toggleIdInSelection({ [a]: true }, b, true);
+  check(added[a] && added[b], 'ctrl-click adds another report');
+  const removed = C.toggleIdInSelection(added, a, true);
+  check(!removed[a] && removed[b], 'ctrl-click on a picked report removes it');
+  const g1 = C.toggleGroupInSelection({}, [a, b], false);
+  check(g1[a] && g1[b] && C.selectedIdList(g1).length === 2, 'plain group click takes that clinician’s lot');
+  const g2 = C.toggleGroupInSelection(g1, [c], true);
+  check(g2[a] && g2[b] && g2[c], 'ctrl-click another heading adds that clinician too');
+  const g2off = C.toggleGroupInSelection(g2, [a, b], true);
+  check(!g2off[a] && !g2off[b] && g2off[c], 'ctrl-click a fully-picked heading removes just that clinician');
+  const gReplace = C.toggleGroupInSelection(g2, [d], false);
+  check(gReplace[d] && !gReplace[a] && !gReplace[c], 'plain click on a heading replaces the set');
+  check(
+    C.rangeSelectIds([a, b, c, d], b, d).join(',') === [b, c, d].join(','),
+    'shift-click range is inclusive in visual order'
+  );
+  check(C.rangeSelectIds([a, b, c, d], d, b).join(',') === [b, c, d].join(','), 'shift-click range works backwards');
+  check(C.rangeSelectIds([a, b, c], 'missing', b).join(',') === b, 'shift-click without an anchor is that report');
+  const groups = [
+    { key: 'clinician:cole', tileIds: [a, b] },
+    { key: 'clinician:triska', tileIds: [c] },
+    { key: 'unknown', tileIds: [d] },
+  ];
+  check(
+    C.idsInGroupRange(groups, 'clinician:cole', 'clinician:triska').join(',') === [a, b, c].join(','),
+    'shift-click across headings takes every report in between'
+  );
+  check(
+    C.dragIdsFor({ [a]: true, [c]: true }, [a, b]).join(',') === [a, c].join(','),
+    'dragging a picked clinician block takes the whole selection'
+  );
+  check(
+    C.dragIdsFor({ [a]: true }, [c]).join(',') === c,
+    'dragging an unpicked block does not swallow a previous pick'
+  );
+  check(C.dropTargetShowsHover('pool', 'pool') === false, 'lifting from unallocated does not shade the pile');
+  check(C.dropTargetShowsHover('pool', 'clinician') === true, 'a clinician field still highlights as the drop');
+  check(C.dropTargetShowsHover('clinician', 'pool') === true, 'bringing work back to unallocated does highlight the well');
+  check(C.dropTargetShowsHover('clinician', 'clinician') === true, 'field-to-field still highlights the destination');
+  check(C.dropTargetShowsHover('pool', 'team') === true, 'a team field highlights as a drop from the pile');
+  check(C.dropTargetShowsHover('team', 'pool') === true, 'bringing work back from a team highlights the well');
+}
+
 console.log('\n--- one person, two wire formats ---');
 {
   check(C.personNameKey('AZADIAN N') === 'azadian|n', 'caps SURNAME INITIAL keys as surname|initial');
   check(C.personNameKey('Dr Natalie Azadian') === 'azadian|n', 'full name keys the same');
+  check(C.personNameKey('Triska, David') === 'triska|d', 'surname, forename comma form keys as surname|initial');
+  check(C.samePerson('TRISKA D', 'Triska, David') === true, 'requestedBy matches surname, forename staff option');
+  check(C.samePerson('TRISKA D', 'Triska David') === true, 'requestedBy matches surname-then-forename');
+  check(C.samePerson('TRISKA D', 'Dr David Triska GP') === true, 'trailing GP role suffix is stripped');
+  check(C.samePerson('Triska', 'Dr David Triska') === true, 'bare surname matches the full name');
   check(C.personNameKey('Anstead') === 'anstead', 'bare surname keys alone');
   check(C.personNameKey('Subancely Heelas-Ebance') === 'heelas ebance|s', 'hyphenated surname keeps both parts');
   check(C.personNameKey('HEELAS-EBANCE S') === 'heelas ebance|s', 'caps hyphenated format matches it');
@@ -444,6 +570,103 @@ console.log('\n--- one person, two wire formats ---');
     leaveList: [{ staffId: 's9', status: 'approved', type: 'annual', startDate: '2026-08-01', endDate: '2026-09-01' }],
   });
   check(rotaAway.state === 'away', 'caps chip reads Away off the rota leave list');
+
+  // Surname-then-forename without a comma keys as forename|s — a second
+  // chip, and the empty one has no sitting assignedId so it will not write.
+  check(C.personNameKey('Triska David') === 'david|t', 'surname-forename without comma is the swapped key');
+  check(
+    C.clinicianColumnKey('Triska David') !== C.clinicianColumnKey('Dr David Triska'),
+    'raw keys still differ — merge happens at board build'
+  );
+  check(C.sameClusterPerson('Triska David', 'Dr David Triska') === true, 'those two names are one person for chip merge');
+  check(C.sameClusterPerson('AZADIAN N', 'Dr Amy Azadian') === false, 'different initials stay two people on the rail');
+
+  const daveId = uuid(61);
+  const sittingDave = C.normaliseTaskRow(
+    {
+      id: uuid(62),
+      patientName: 'Sit',
+      assignedTo: 'Dr David Triska',
+      assignedId: daveId,
+      summary: 'FBC',
+    },
+    'x'
+  );
+  const pileDave = C.applyRequester(
+    C.normaliseTaskRow({ id: uuid(63), patientName: 'Pile', assignedTo: 'Investigation Reports', summary: 'TSH' }, 'x'),
+    { name: 'Triska David', source: 'requestedBy', confidence: 'requester' }
+  );
+  const dupDraft = C.addColumn(C.emptyDraft(), 'Triska David');
+  const dupBoard = C.buildWorkspace([sittingDave, pileDave], dupDraft);
+  const daveChips = dupBoard.clinicians.filter((c) => /triska|david/i.test(c.title));
+  check(daveChips.length === 1, 'Dr David Triska and Triska David share one drop field');
+  check(/triska/i.test(daveChips[0].title), 'the merged field keeps the fullest name');
+  const daveGroups = dupBoard.pool.groups.filter((g) => /triska|david/i.test(g.requester));
+  check(daveGroups.length === 1, 'the unallocated pile also merges those requester spellings');
+  const writeDup = C.planBulkReassign(
+    [sittingDave, pileDave],
+    C.stageMove(dupDraft, pileDave.id, daveChips[0].key),
+    'token',
+    C.harvestStaffDirectory([], { staffOptions: [{ id: uuid(99), name: 'Dr Someone Else' }] })
+  );
+  check(writeDup.ok === true, 'the merged field writes using the sitting assignedId');
+  check(writeDup.batches[0].assigneeId === daveId, 'write id is the sitting lab’s staff UUID, not a name guess');
+}
+
+console.log('\n--- team drop targets ---');
+{
+  const teamId = uuid(81);
+  const resultsId = uuid(82);
+  const inbox = C.normaliseTaskRow(
+    {
+      id: uuid(83),
+      patientName: 'A',
+      assignedTo: 'Investigation Reports',
+      assignedId: teamId,
+      summary: 'FBC',
+    },
+    'x'
+  );
+  const teamDir = C.harvestTeamDirectory([inbox], {
+    assigneeOptions: {
+      teams: [
+        { value: teamId, label: 'Investigation Reports', type: 'team' },
+        { value: resultsId, label: 'Results', type: 'team' },
+      ],
+    },
+  });
+  check(teamDir.list.length === 2, 'assigneeOptions.teams harvests both inboxes');
+  check(
+    teamDir.list.some((t) => t.id === resultsId && t.name === 'Results'),
+    'Results team keeps its UUID'
+  );
+  const teamBoard = C.buildWorkspace([inbox], C.emptyDraft(), { teams: teamDir.list });
+  check(teamBoard.teams.length === 2, 'harvested teams appear as drop targets');
+  check(teamBoard.pool.count === 1, 'inbox-assigned work stays in the unallocated pile');
+  check(
+    teamBoard.clinicians.every((c) => !/investigation reports/i.test(c.title)),
+    'the inbox name is not a clinician field'
+  );
+  const resultsKey = C.teamColumnKey('Results');
+  const teamPlan = C.planBulkReassign(
+    [inbox],
+    C.stageMove(C.emptyDraft(), inbox.id, resultsKey),
+    'token',
+    C.harvestStaffDirectory([], null),
+    'review_investigation_results_task',
+    teamDir
+  );
+  check(teamPlan.ok === true, 'staging onto a team is writable when the team UUID is unique');
+  check(teamPlan.batches[0].assigneeType === 'team', 'team write uses assigneeType team');
+  check(teamPlan.batches[0].assigneeId === resultsId, 'team write uses the harvested team UUID');
+  const teamBody = C.buildBulkReassignBody(resultsId, 'token', [inbox.id], 'slug', 'team');
+  check(teamBody.assigneeType === 'team', 'body assigneeType is team when the destination is a team');
+  check(
+    Object.keys(teamBody).join(',') === 'assigneeId,assigneeType,taskList,taskIds',
+    'team write still posts exactly the four captured keys'
+  );
+  const staffBody = C.buildBulkReassignBody(uuid(1), 'token', [inbox.id], 'slug');
+  check(staffBody.assigneeType === 'staff', 'omitted type stays staff');
 }
 
 console.log('\n--- person-assigned sits on the clinician field ---');
@@ -631,6 +854,18 @@ console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
     leaveList: [{ staffId: 's1', status: 'approved', type: 'annual', startDate: '2026-08-24', endDate: '2026-08-29' }],
   });
   check(rotaWins.state === 'away' && rotaWins.source === 'rota', 'rota leave still marks Away when Medicus has no row');
+  const wrappedBook = C.parseTodayBook({
+    data: {
+      date: '2026-08-25',
+      staffSchedules: [{ name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] }],
+    },
+  });
+  check(
+    wrappedBook.present.some(function (p) {
+      return p.name === 'Dr Natalie Azadian';
+    }),
+    'today-book unwraps data.staffSchedules'
+  );
 }
 
 function staffForPresence() {
@@ -674,6 +909,51 @@ console.log('\n--- staff directory + unique UUID resolve ---');
     ],
   });
   check(fromBook.byId[azadianId] && fromBook.byId[coleId], 'today-book staffOptions populate the staff directory');
+  const wrappedVal = C.harvestStaffDirectory([], {
+    staffOptions: [{ value: { id: azadianId, name: 'Natalie' }, label: 'Dr Natalie Azadian' }],
+  });
+  check(wrappedVal.byId[azadianId], 'Vue-wrapped staffOptions value object is harvested');
+  check(
+    wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1,
+    'outer full label wins over inner first name'
+  );
+  check(
+    C.pickStaffFields({ id: azadianId, name: 'Natalie', label: 'Dr Natalie Azadian' }).name.indexOf('Azadian') !== -1,
+    'prefers full label over short name field'
+  );
+  const commaDir = C.harvestStaffDirectory([], {
+    staffOptions: [{ id: azadianId, label: 'Azadian, Natalie' }],
+  });
+  check(
+    C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', commaDir).ok === true,
+    'AZADIAN N resolves against Surname, Forename staff option'
+  );
+  const bareDir = C.harvestStaffDirectory([], {
+    staffOptions: [{ id: uuid(21), name: 'Dr David Triska' }],
+  });
+  check(
+    C.resolveStaffForColumn(C.clinicianColumnKey('Triska'), 'Triska', bareDir).ok === true,
+    'bare surname Triska resolves to Dr David Triska'
+  );
+  const mapped = C.harvestStaffDirectory([], {
+    staffOptions: { [azadianId]: 'Dr Natalie Azadian' },
+  });
+  check(mapped.byId[azadianId], 'id→name staffOptions map is harvested');
+  const nestedOpts = C.harvestStaffDirectory([], {
+    staffOptions: { options: [{ value: coleId, label: 'Dr Jane Cole' }] },
+  });
+  check(nestedOpts.byId[coleId], 'staffOptions.options array is harvested');
+  const dutyId = uuid(40);
+  const duty = C.harvestStaffDirectory([], {
+    staffOptions: [{ id: dutyId, name: 'Duty Doctor' }],
+  });
+  check(duty.byId[dutyId], 'a staff option named Duty Doctor keeps its UUID');
+  const wrappedData = C.harvestStaffDirectory([], {
+    data: { staffOptions: [{ id: azadianId, name: 'Dr Natalie Azadian' }] },
+  });
+  check(wrappedData.byId[azadianId], 'staffOptions nested under data is harvested');
+  check(C.pickPatientId({ patientId: uuid(5) }) === uuid(5), 'row patientId is a UUID');
+  check(C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6), 'overview patient.id is picked');
   const hit = C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', dir);
   check(hit.ok && hit.staff.id === azadianId, 'AZADIAN N resolves to the Azadian UUID');
   const miss = C.resolveStaffForColumn(C.clinicianColumnKey('Dr Mystery'), 'Dr Mystery', dir);
@@ -718,6 +998,63 @@ console.log('\n--- planBulkReassign groups by destination UUID ---');
   check(plan.refused.length === 1 && /Mystery/.test(plan.refused[0].toTitle), 'unmatched chip is refused, not guessed');
   const noToken = C.planBulkReassign([a, b], draft, '', dir);
   check(noToken.ok === false, 'plan refuses without the queue token');
+}
+
+console.log('\n--- sitting assignedId is the write destination ---');
+{
+  const daveId = uuid(50);
+  const sitting = C.normaliseTaskRow(
+    {
+      id: uuid(51),
+      patientName: 'A',
+      assignedTo: 'Dr David Triska',
+      assignedId: daveId,
+      summary: 'FBC',
+    },
+    'x'
+  );
+  const pile = C.normaliseTaskRow(
+    { id: uuid(52), patientName: 'B', assignedTo: 'Investigation Reports', summary: 'TSH' },
+    'x'
+  );
+  const key = C.clinicianColumnKey('Dr David Triska');
+  const draft = C.stageMove(C.emptyDraft(), pile.id, key);
+  const emptyDir = C.harvestStaffDirectory([], { staffOptions: [{ id: uuid(99), name: 'Dr Someone Else' }] });
+  const plan = C.planBulkReassign([sitting, pile], draft, 'token', emptyDir);
+  check(plan.ok === true, 'plan writes using the sitting row assignedId');
+  check(plan.batches[0].assigneeId === daveId, 'assigneeId is the sitting lab’s staff UUID');
+  check(plan.batches[0].taskIds.join(',') === String(pile.id), 'only the staged pile row is written');
+  const onField = C.assignedIdsOnColumn([sitting, pile], key);
+  check(onField.ids.join(',') === daveId, 'assignedIdsOnColumn sees only the sitting UUID');
+
+  const otherId = uuid(53);
+  const clashSit = C.normaliseTaskRow(
+    {
+      id: uuid(54),
+      patientName: 'C',
+      assignedTo: 'Dr David Triska',
+      assignedId: otherId,
+      summary: 'U&E',
+    },
+    'x'
+  );
+  const clash = C.planBulkReassign([sitting, clashSit, pile], draft, 'token', emptyDir);
+  check(clash.ok === false, 'two assignedIds on one field refuse');
+  check(
+    clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id',
+    'reason is ambiguous-assigned-id'
+  );
+  check(/more than one staff id/.test(C.writeBlockReason(clash)), 'refuse copy names two ids on the field');
+
+  const emptyDraft = C.addColumn(C.emptyDraft(), 'Dr Mystery');
+  const emptyField = C.planBulkReassign(
+    [pile],
+    C.stageMove(emptyDraft, pile.id, C.clinicianColumnKey('Dr Mystery')),
+    'token',
+    emptyDir
+  );
+  check(emptyField.ok === false, 'empty field with no name match still refuses');
+  check(/Mystery/.test(C.writeBlockReason(emptyField)), 'refuse copy names the field');
 }
 
 async function testClient() {
@@ -773,11 +1110,17 @@ async function testClient() {
       };
     },
   });
-  const out = await client.fetchTaskList('review-investigation-report');
+  const out = await client.fetchTaskList(
+    'review-investigation-report',
+    '?viewContext=workflow&masterAssignee=team-1'
+  );
   check(out.rows.length === 1, 'client maps the task-list');
   check(out.taskList === 'envelope-token', 'client keeps the envelope taskList token');
   check(calls[0].method === 'GET', 'task-list fetch is GET');
-  check(/\/tasks\/data\/review-investigation-report\/task-list$/.test(calls[0].url), 'confirmed task-list path family');
+  check(
+    /\/tasks\/data\/review-investigation-report\/task-list\?viewContext=workflow$/.test(calls[0].url),
+    'task-list GET keeps viewContext and drops masterAssignee'
+  );
   await client.fetchOverview(out.rows[0].overviewURL);
   check(calls[1].method === 'GET', 'overview fetch is GET');
   try {
@@ -835,13 +1178,69 @@ async function testClient() {
     return c.method === 'POST';
   });
   check(posts.length === 1, 'exactly one POST for one destination');
-  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts[0].url), 'POST hits the captured bulk-reassign path');
+  check(
+    /\/tasks\/review-investigation-report\/task-list\/bulk-reassign$/.test(posts[0].url),
+    'POST nests the queue slug, not the captured literal'
+  );
   check(bodies[0].assigneeType === 'staff', 'POST assigneeType is staff');
   check(bodies[0].taskList === 'envelope-token', 'POST passes the envelope taskList through');
   check(
     Object.keys(bodies[0]).join(',') === 'assigneeId,assigneeType,taskList,taskIds',
     'POST body is exactly the four captured keys'
   );
+
+  const calls404 = [];
+  const client404 = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      calls404.push({ url: url, method: opts.method });
+      if (/\/tasks\/review-investigation-report\/task-list\/bulk-reassign$/.test(url)) {
+        return {
+          ok: false,
+          status: 404,
+          text: async function () {
+            return '';
+          },
+        };
+      }
+      var body404 = { ok: true };
+      if (/\/tasks\/data\/.+\/task-list/.test(url)) {
+        body404 = {
+          taskList: 'envelope-token',
+          tasks: [
+            {
+              id: uuid(1),
+              patientName: 'A',
+              assignedTo: 'Investigation Reports',
+              requestedBy: 'AZADIAN N',
+            },
+          ],
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify(body404);
+        },
+      };
+    },
+  });
+  const written404 = await client404.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(
+    written404.ok === true && written404.written === 1,
+    '404 on the slug path still writes via the captured fallback'
+  );
+  const posts404 = calls404.filter(function (c) {
+    return c.method === 'POST';
+  });
+  check(posts404.length === 2, 'slug path 404 then one fallback POST');
+  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts404[1].url), 'fallback POST is the captured literal');
 
   taskListGone = true;
   const vanished = await client.commitAllocations({
@@ -861,6 +1260,28 @@ async function testClient() {
     }).length === 1,
     'vanished abort does not POST'
   );
+
+  const staffFormCalls = [];
+  const staffClient = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url) {
+      staffFormCalls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify({
+            assigneeOptions: { staff: [{ type: 'staff', value: uuid(21), label: 'Dr Natalie Azadian' }] },
+          });
+        },
+      };
+    },
+  });
+  const form = await staffClient.fetchAssigneeStaff(uuid(8));
+  check(
+    /\/patient\/data\/workflow\/general-task\/create\?patientId=/.test(staffFormCalls[0]),
+    'create-task GET for staff directory'
+  );
+  check(C.harvestStaffDirectory(null, form).byId[uuid(21)], 'create-task assigneeOptions.staff harvests');
 }
 
 console.log('--- board keeps every row visible ---');

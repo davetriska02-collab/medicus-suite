@@ -2,6 +2,115 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.9] — 2026-08-26
+
+### Lab allocation canvas — one person, one field; teams as drops
+
+Some clinicians appeared twice on the right-hand list: Requested By /
+staff-list “Triska David” (surname then forename, no comma) keyed
+differently from “Dr David Triska”, so one field had the sitting lab
+(and would write) and the other was a name-only chip (and would not).
+Same-person spellings now share one field; the sitting `assignedId`
+still wins the write.
+
+Teams from `assigneeOptions.teams` / `teamOptions` show under **Teams**.
+Dropping onto one POSTs the same four captured keys with
+`assigneeType: "team"` (sibling-confirmed on create-task). Unique team
+UUID or refuse. Inbox work stays in Unallocated until you stage it.
+
+## [v3.243.8] — 2026-08-26
+
+### Lab allocation canvas — grab one clinician, pick several
+
+Dragging a requester block out of Unallocated painted the whole inbox
+well as a drop target, so it looked like the entire pile was in hand.
+The well now only highlights when work is coming *back* onto it; the
+lifted group stays marked and the rest of the pile dims.
+
+Ctrl-click (or the heading’s **Select all**) adds another clinician’s
+reports to the selection; Shift-click ranges across headings or
+individual rows; the tick on a row toggles that report without a
+modifier. Expanded clinician fields have **Select all sitting**. Write
+keys unchanged (W23).
+
+## [v3.243.7] — 2026-08-26
+
+### Lab allocation canvas — write uses the id already on the field
+
+Dragging onto a clinician who already has a lab sitting with them
+still refused: the write fuzzy-matched the chip title against 91
+staff-list names and ignored `assignedId` on that sitting row.
+Destination UUID now comes from person-assigned rows already on that
+field (one id → write; two ids → refuse). Name match is only the
+fallback for an empty In-today field. **Why this will not write**
+names the field. Four captured keys unchanged (W23).
+
+## [v3.243.6] — 2026-08-26
+
+### Lab allocation canvas — sitting-with-them was the team inbox filter
+
+Passing the page query string on the task-list GET (v3.243.3) included
+`masterAssignee`, so the board only saw the current inbox. Everyone In
+today showed 0 sitting with them — including work already assigned to
+you on your own labs list. The GET now drops `masterAssignee` and keeps
+`viewContext` / statuses. `assignedTo` as an object `{id,name,type}` is
+read as a person, not skipped. Write-block copy lists a few staff-list
+names so a remaining match miss is visible. Capture script samples
+`assignedTo` types and `staffOptions` keys/names.
+
+## [v3.243.5] — 2026-08-26
+
+### Lab allocation canvas — match Triska to Dr David Triska
+
+91 staff ids loaded, still **Why this will not write** for every
+clinician: Requested By is `TRISKA D` / bare `Triska`, while
+`staffOptions` is often `Triska, David` (surname, forename),
+`Triska David`, or `{ name: "David", label: "Dr David Triska" }`.
+Those did not share a `personNameKey` with `triska|d`.
+
+Comma surname-forename, swapped two-token form, trailing role
+suffixes (GP, partner, …), and preferring the fullest label over a
+short `name` now unify those. A bare surname still matches one
+person and stays a refuse if two Triskas share the directory.
+Ambiguous refuses now name the matching staff. Write keys unchanged.
+
+## [v3.243.4] — 2026-08-26
+
+### Lab allocation canvas — staff ids for Write to Medicus
+
+**Why this will not write** named every clinician because the canvas
+had no Medicus staff UUID to put in `assigneeId`. Today-book
+`staffOptions` is 91 people, but items are often Vue-shaped
+`{ value: { id, name }, label }` or an id→name map — neither matched
+`{id,name}` / `{value,label}`, so the directory stayed empty. Overview
+harvest also stopped after eight ids.
+
+Harvest now unwraps those option shapes, does not treat a staff-option
+labelled "Duty Doctor" as a team inbox, and loads Medicus's own
+create-task `assigneeOptions.staff` (confirmed GET, W4) once a patient
+UUID is on a row or overview. The refuse copy says whether the canvas
+has zero staff ids or ids that do not uniquely match the name. Write
+keys unchanged (W23).
+
+## [v3.243.3] — 2026-08-26
+
+### Lab allocation canvas — 404 on Write to Medicus
+
+Confirming a staged allocation POSTed
+`/tasks/task-list/bulk-reassign`. Medicus answered 404: that path is the
+capture's last path segment, not the queue. Sibling task writes nest the
+slug (`GET /tasks/data/{slug}/task-list` → POST drops `/data/` and keeps
+the slug), so the write is now
+
+`POST /tasks/{slug}/task-list/bulk-reassign`
+
+and only the captured literal is tried if that 404s. `taskList` in the
+body is a string — the GET envelope token when it is a string, otherwise
+the URL slug — never the envelope object (that also 404s). The re-GET
+before write keeps the page query string (`masterAssignee`, …) so the
+token matches the list on screen. Four captured keys unchanged (W23 /
+H-064).
+
 ## [v3.243.2] — 2026-08-25
 
 ### Lab allocation canvas — write blocker, drag-scroll, In today first
