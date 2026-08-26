@@ -398,6 +398,18 @@
   border-color: var(--green-line);
 }
 
+.ms-lac-chip-flag-team {
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border-color: var(--border);
+}
+
+.ms-lac-rail-teams {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-hi);
+}
+
 .ms-lac-chip-stagehint {
   margin-left: auto;
   font-size: 11px;
@@ -529,19 +541,71 @@
   color: var(--text-3);
 }
 
-.ms-lac-group-hint {
+.ms-lac-group-pick {
   margin-left: auto;
+  padding: 1px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-family: inherit;
   font-size: 10.5px;
   color: var(--text-4);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ms-lac-group-pick:hover,
+.ms-lac-group-pick:focus-visible {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.ms-lac-group-pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .ms-lac-group-picked {
-  margin-left: auto;
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 10.5px;
   font-weight: 700;
   color: var(--accent);
+}
+
+.ms-lac-group-on > .ms-lac-group-head {
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ms-lac-group-some > .ms-lac-group-head {
+  box-shadow: inset 3px 0 0 var(--accent-line);
+}
+
+.ms-lac-field-select {
+  display: block;
+  margin: 8px 0 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: transparent;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.ms-lac-field-select:hover,
+.ms-lac-field-select:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.ms-lac-field-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .ms-lac-group-toggle {
@@ -584,11 +648,12 @@
 }
 
 .ms-lac-tile-check {
-  flex: 0 0 14px;
+  flex: 0 0 18px;
   font-size: 10px;
   line-height: 1;
   color: var(--accent);
   text-align: center;
+  cursor: pointer;
 }
 
 .ms-lac-tile-name {
@@ -639,6 +704,25 @@
 .ms-lac-drop-hover {
   border-color: var(--accent) !important;
   background: var(--accent-dim);
+}
+
+/* Lifting a clinician block from Unallocated: dim the rest of the pile
+   and mark the payload. The well itself is not a drop target for that
+   gesture, so it must not wash the whole list. */
+.ms-lac-lifting .ms-lac-group:not(.ms-lac-group-lift):not(.ms-lac-group-lift-partial),
+.ms-lac-lifting .ms-lac-pool-head {
+  opacity: 0.4;
+}
+
+.ms-lac-group-lift > .ms-lac-group-head {
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.ms-lac-tile.ms-lac-drag-source {
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+  opacity: 1;
 }
 
 /* Drag ghost is appended to document.body — outside the token scope, so

@@ -5,8 +5,11 @@ ordered them. Can we automate batch-marking that — a canvas, drag and drop,
 move them — instead of allocating one result at a time?
 
 **Answer:** both halves are possible. The write is Medicus's own
-`POST /tasks/task-list/bulk-reassign`, captured live on 2026-08-25.
-Do not invent extra keys or a different slug.
+bulk-reassign, captured live on 2026-08-25. Live write on the capture's
+literal `POST /tasks/task-list/bulk-reassign` 404s (v3.243.3): Medicus
+nests the queue slug, so the POST is
+`/tasks/{slug}/task-list/bulk-reassign` with that literal as a 404
+fallback. Do not invent extra keys.
 
 Captured from the suite's own confirmed contracts (not a fresh live session):
 task-list row keys in `docs/learnings-task-presence.md` (2026-08-04), OIR
@@ -112,7 +115,7 @@ else stays in Unallocated or the current inbox column.
 | See who ordered | **Sometimes** | Overview walker for `requestedBy` / aliases; OIR-style `Panel (Dr X • date)` strings if they appear in the payload. Not confirmed. |
 | Suggest a column | Stage only | Requester groups the reports pool. Drag onto a clinician chip to stage. Named GP is a caption only. |
 | Drag / batch-mark on a canvas | Yes | Stage-only, same doctrine as appointment-organise |
-| Write the allocation back to Medicus | **Yes** | `POST /tasks/task-list/bulk-reassign` (`assigneeId`, `assigneeType`, `taskList`, `taskIds`). `canWriteAllocations()` is true only when the GET `taskList` token is present. Unique staff UUID or refuse. |
+| Write the allocation back to Medicus | **Yes** | `POST /tasks/{slug}/task-list/bulk-reassign` (`assigneeId`, `assigneeType`, `taskList`, `taskIds`); 404 fallback to the captured literal `/tasks/task-list/bulk-reassign`. `taskList` is a string (envelope token or the URL slug). Unique staff UUID or refuse. |
 
 A working list can be copied off the canvas so the current one-by-one
 Medicus reassign is at least ordered by clinician.
@@ -125,9 +128,15 @@ On Investigation Results
 (`/560b6c/tasks/review_investigation_results_task/task-list?…&masterAssignee=<team>`):
 
 ```
-POST https://560b6c.api.england.medicus.health/tasks/task-list/bulk-reassign
+POST https://560b6c.api.england.medicus.health/tasks/{slug}/task-list/bulk-reassign
 keys: assigneeId, assigneeType, taskList, taskIds
 ```
+
+The 2026-08-25 capture recorded the keys and a path ending
+`/tasks/task-list/bulk-reassign`. Live write of that literal 404s
+(v3.243.3). The queue slug belongs in the path — same family as
+`GET /tasks/data/{slug}/task-list` with `/data/` dropped on POST.
+The captured literal stays as a 404 fallback only.
 
 This is Medicus's **task-list bulk reassign**, not a per-report
 "Reassign task" next-step. Values were not sampled — only keys.
@@ -136,9 +145,19 @@ Inferred, fail-closed:
 
 - `assigneeId` — staff UUID. Sample row assigned to Azadian had
   `assignedId: 019708e4-f1e5-73b0-b546-cdb5b6682631`.
-- `assigneeType` — `"staff"`. Sibling writes in this repo
-  (`shared/task-api.js`, `task-actions-panel.js`) use `"staff"` /
-  `"team"`. The canvas only allocates to people.
+  v3.243.7: when the destination field already has a person-assigned
+  row, that row’s `assignedId` is the write id. Do not name-match the
+  chip against `staffOptions` first — Requested By / staff-list labels
+  are different wire formats and that match is what 404-adjacent
+  “no unique staff id” refuses were.
+- `assigneeType` — `"staff"` or `"team"`. Sibling writes in this repo
+  (`shared/task-api.js`, `task-actions-panel.js`) use both. People are
+  the usual drop; teams are harvested from `assigneeOptions.teams` /
+  `teamOptions` (v3.243.9). Unique team UUID or refuse.
+- Same person, two chips (v3.243.9): `Triska David` (surname then
+  forename, no comma) keyed as `david|t` while `Dr David Triska` /
+  `TRISKA D` keyed as `triska|d`. The sitting field wrote; the empty
+  name-only field refused. Board build now aliases those onto one field.
 - `taskList` — the GET `/tasks/data/{slug}/task-list` envelope already
   has a `taskList` key. Pass that value through as-is.
 - `taskIds` — array of task UUIDs (`id` on the row).
@@ -149,7 +168,11 @@ Overview notes from the same capture:
   `{ organisationName, organisationOdsCode, departmentName, practitionerName }`
   — the **lab/org**, not the GP. Task-list `requestedBy` wins.
 - `assigneeOptions: { teams, staff }` — harvest staff `{id,name}` /
-  `{value,label}` for the directory.
+  `{value,label}` for the directory. Live write (v3.243.4) also saw
+  Vue-wrapped `{ value: { id, name }, label }` and id→name maps on
+  `staffOptions`; those must harvest too. Create-task
+  `GET /patient/data/workflow/general-task/create?patientId=` is the
+  same `assigneeOptions.staff` directory (W4, read-only here).
 
 The capture script should now also sample **types** of those four keys
 (not PHI values) so a future drift is visible.
@@ -267,6 +290,11 @@ a parsed absence record or this machine’s rota leave list — never from
   today’s-book parser, presence merge, draft.
 - `content-scripts/lab-allocate-canvas.js` — launch button on a results
   task-list, reports pool, clinician chips, In today / Away, copy working list.
+  v3.243.8: the unallocated well is not a drop-hover while lifting a
+  group out of it (that painted the whole pile as the payload). Group
+  headings and tiles multi-select: Ctrl-click / Select all adds another
+  clinician’s reports; Shift-click ranges; Select all sitting on an
+  expanded field.
 - `scripts/lab-allocate-capture.js` — live Reassign-path scoping.
 - `scripts/staff-scheduling-capture.js` — live Staff scheduling scoping
   (fetch + XHR samples; re-reads embedded-overview and staff-schedule).

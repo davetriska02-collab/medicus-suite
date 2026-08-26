@@ -119,6 +119,48 @@
     return { keys, sample: keep };
   }
 
+  function describeAssignee(v) {
+    if (v == null) return { type: 'null' };
+    if (typeof v === 'string')
+      return { type: 'string', length: v.length, looksSurnameInitial: /^[A-Z][A-Z '-]+ [A-Z]$/.test(v.trim()) };
+    if (typeof v === 'object' && !Array.isArray(v))
+      return { type: 'object', keys: Object.keys(v).slice(0, 12) };
+    return { type: Array.isArray(v) ? 'array' : typeof v };
+  }
+
+  function sampleStaffOptions(list) {
+    if (!list) return { present: false };
+    if (Array.isArray(list)) {
+      const first = list[0];
+      const names = list.slice(0, 8).map((item) => {
+        if (!item) return '';
+        if (typeof item === 'string') return redact(item);
+        if (typeof item === 'object')
+          return redact(item.label || item.name || item.displayName || item.fullName || '');
+        return '';
+      });
+      return {
+        present: true,
+        kind: 'array',
+        length: list.length,
+        firstKeys: first && typeof first === 'object' ? Object.keys(first).slice(0, 16) : typeof first,
+        nameSamples: names.filter(Boolean),
+      };
+    }
+    if (typeof list === 'object') {
+      const keys = Object.keys(list);
+      return {
+        present: true,
+        kind: 'object',
+        keyCount: keys.length,
+        firstKeys: keys.slice(0, 8),
+        nestedStaff: Array.isArray(list.staff),
+        nestedOptions: Array.isArray(list.options),
+      };
+    }
+    return { present: true, kind: typeof list };
+  }
+
   function requesterShaped(payload) {
     const hits = [];
     const walk = (node, path, depth) => {
@@ -206,29 +248,75 @@
           envelopeKeys: j && typeof j === 'object' ? Object.keys(j) : [],
           count: Array.isArray(arr) ? arr.length : 0,
           first: Array.isArray(arr) && arr[0] ? sampleTask(arr[0]) : null,
+          assignedTo: Array.isArray(arr) && arr[0] ? describeAssignee(arr[0].assignedTo) : null,
+          requestedBy: Array.isArray(arr) && arr[0] ? describeAssignee(arr[0].requestedBy) : null,
+          assigneeMix: Array.isArray(arr)
+            ? arr.slice(0, 12).map((row) => describeAssignee(row && row.assignedTo))
+            : [],
           filters: j && j.filters ? Object.keys(j.filters) : [],
         };
         const first = Array.isArray(arr) ? arr[0] : null;
+        const api = 'https://' + ctx.siteId + '.api.' + location.host;
+        const now = new Date();
+        const today =
+          now.getFullYear() +
+          '-' +
+          String(now.getMonth() + 1).padStart(2, '0') +
+          '-' +
+          String(now.getDate()).padStart(2, '0');
+        const bookP = fetch(
+          api +
+            '/scheduling/data/appointment-book/embedded-overview?date=' +
+            today +
+            '&filterByUsualLocation=false',
+          { credentials: 'include', headers: { Accept: 'application/json' } }
+        )
+          .then((r) => r.json())
+          .then((b) => {
+            const root = b && b.data && (b.data.staffOptions || b.data.staffSchedules) ? b.data : b;
+            out.todayBook = {
+              rootKeys: root && typeof root === 'object' ? Object.keys(root).slice(0, 30) : [],
+              staffOptions: sampleStaffOptions(root && root.staffOptions),
+              teamOptions: sampleStaffOptions(root && root.teamOptions),
+              staffScheduleCount: Array.isArray(root && root.staffSchedules) ? root.staffSchedules.length : 0,
+              inTodayNames: Array.isArray(root && root.staffSchedules)
+                ? root.staffSchedules.slice(0, 12).map((s) => redact(s && s.name))
+                : [],
+            };
+            dump();
+          })
+          .catch((e) => {
+            out.todayBook = { fetchError: String(e) };
+            dump();
+          });
         const ov =
           first && typeof first.overviewURL === 'string' && first.overviewURL.indexOf('/tasks/data/') === 0
             ? first.overviewURL
             : null;
         if (!ov) {
           dump();
-          return;
+          return bookP;
         }
-        return fetch('https://' + ctx.siteId + '.api.' + location.host + ov, {
-          credentials: 'include',
-          headers: { Accept: 'application/json' },
-        })
-          .then((r) => r.json())
-          .then((ovj) => {
-            out.overview = {
-              keys: ovj && ovj.data ? Object.keys(ovj.data) : ovj ? Object.keys(ovj) : [],
-              requesterShaped: requesterShaped(ovj),
-            };
-            dump();
-          });
+        return Promise.all([
+          bookP,
+          fetch(api + ov, {
+            credentials: 'include',
+            headers: { Accept: 'application/json' },
+          })
+            .then((r) => r.json())
+            .then((ovj) => {
+              out.overview = {
+                keys: ovj && ovj.data ? Object.keys(ovj.data) : ovj ? Object.keys(ovj) : [],
+                requesterShaped: requesterShaped(ovj),
+                assigneeOptionsStaff: sampleStaffOptions(
+                  ovj && ovj.assigneeOptions && ovj.assigneeOptions.staff
+                    ? ovj.assigneeOptions.staff
+                    : ovj && ovj.data && ovj.data.assigneeOptions && ovj.data.assigneeOptions.staff
+                ),
+              };
+              dump();
+            }),
+        ]);
       })
       .catch((e) => {
         out.taskList = { fetchError: String(e) };
