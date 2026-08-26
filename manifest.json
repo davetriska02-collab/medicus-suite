@@ -114,6 +114,7 @@
         "content-scripts/allergy-cleanup.js",
         "shared/write-core.js",
         "content-scripts/allergy-cleanup-canvas.js",
+        "content-scripts/risk-flag-cleanup.js",
         "content-scripts/task-presence.js",
         "content-scripts/task-bulk-action.js",
         "content-scripts/privacy-officer-bulk-acknowledge.js",

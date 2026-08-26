@@ -180,9 +180,10 @@ const FILE_TO_WIDS = {
   'content-scripts/eps-cancellation-bulk-discard.js': ['W21'],
   'content-scripts/triage-lens/content.js': ['W22'],
   'shared/lab-allocate-core.js': ['W23'],
+  'content-scripts/risk-flag-cleanup.js': ['W24'],
 };
 
-const LAST_WID = 23;
+const LAST_WID = 24;
 
 // W7/W8/W22 are DOM macros (may have no method:POST). W12 panel files and the
 // W1 slots shim may only re-export booking-core. W21 companions instantiate
