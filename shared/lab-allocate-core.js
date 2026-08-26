@@ -1475,6 +1475,8 @@
 
   var FAVOURITE_CAP = 24;
   var FAVOURITE_STORE_KEY = 'labAllocate.favourites';
+  var HOWTO_STORE_KEY = 'labAllocate.howtoSeen';
+  var HOWTO_VERSION = 1;
 
   function presenceBucket(presence) {
     if (!presence) return 'not-in-today';
@@ -1691,6 +1693,8 @@
     hiddenSelectedCount: hiddenSelectedCount,
     FAVOURITE_CAP: FAVOURITE_CAP,
     FAVOURITE_STORE_KEY: FAVOURITE_STORE_KEY,
+    HOWTO_STORE_KEY: HOWTO_STORE_KEY,
+    HOWTO_VERSION: HOWTO_VERSION,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

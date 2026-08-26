@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.5] — 2026-08-26
+
+### Lab allocation — the selfish defaults
+
+The board now opens on the decision you actually make, and gets out of
+the way once you know it.
+
+- **How-to strip is first-run only.** Hide it, open `?`, or close the
+  board and it stays gone. `?` still opens the full guide.
+- **Pile opens on Not in today.** Escape no longer treats that default
+  as a filter to clear. If everyone waiting was in today, **Show
+  everyone** is right there.
+- **Press 1** plans the current selection onto the first favourite
+  (same absence gate as a click). The card wears a `1` hint.
+- **Copy this list** lives in the guide, not the footer.
+
+W23 / H-064 unchanged. CSN remains current at 3.244.0 (doc v3.31).
+
 ## [v3.244.4] — 2026-08-25
 
 ### Lab allocation — restore In today green

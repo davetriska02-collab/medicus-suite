@@ -8,7 +8,7 @@
 
 'use strict';
 
-const LAB_ALLOCATE_KEYS = ['labAllocate.favourites'];
+const LAB_ALLOCATE_KEYS = ['labAllocate.favourites', 'labAllocate.howtoSeen'];
 const FAV_CAP = 24;
 const FAV_KEY_RE = /^clinician:[a-z0-9| .'-]{1,80}$/i;
 
@@ -32,17 +32,29 @@ function asStore(raw) {
   return { version: 1, keys: sanitiseFavouriteKeys(keys) };
 }
 
+function asHowtoSeen(raw) {
+  const n = typeof raw === 'number' ? raw : parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(Math.floor(n), 99);
+}
+
 async function labAllocateExport() {
   const r = await chrome.storage.local.get(LAB_ALLOCATE_KEYS);
-  return { favourites: asStore(r['labAllocate.favourites']) };
+  return {
+    favourites: asStore(r['labAllocate.favourites']),
+    howtoSeen: asHowtoSeen(r['labAllocate.howtoSeen']),
+  };
 }
 
 async function labAllocateImport(data) {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error('labAllocate must be an object.');
   }
-  if (data.favourites === undefined) return;
-  await chrome.storage.local.set({ 'labAllocate.favourites': asStore(data.favourites) });
+  const patch = {};
+  if (data.favourites !== undefined) patch['labAllocate.favourites'] = asStore(data.favourites);
+  if (data.howtoSeen !== undefined) patch['labAllocate.howtoSeen'] = asHowtoSeen(data.howtoSeen);
+  if (!Object.keys(patch).length) return;
+  await chrome.storage.local.set(patch);
 }
 
 if (typeof window !== 'undefined') {
@@ -57,5 +69,6 @@ if (typeof module !== 'undefined' && module.exports) {
     LAB_ALLOCATE_KEYS,
     sanitiseFavouriteKeys,
     asStore,
+    asHowtoSeen,
   };
 }

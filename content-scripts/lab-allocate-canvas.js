@@ -61,7 +61,7 @@
   var _focusConfirm = false;
   var _focusAdd = false;
   var _favourites = { version: 1, keys: [] };
-  var _poolPresence = 'all';
+  var _poolPresence = 'not-in-today';
   var _poolTest = '';
   var _poolQuery = '';
   var _poolCaret = null;
@@ -69,6 +69,9 @@
   var _guideOpen = false;
   var _launchPoolCount = null;
   var _launchPrefetchStarted = false;
+  // Assume the how-to has been seen until storage says this is a first run —
+  // returning users must not get a flash of teaching chrome.
+  var _howtoSeen = C.HOWTO_VERSION;
 
   function announce(text) {
     setTimeout(function () {
@@ -335,19 +338,76 @@
   }
 
   function filterActive() {
-    return _poolPresence !== 'all' || !!_poolTest || !!String(_poolQuery || '').trim();
+    return _poolPresence !== 'not-in-today' || !!_poolTest || !!String(_poolQuery || '').trim();
   }
 
   function loadFavourites() {
     try {
       if (!chrome || !chrome.storage || !chrome.storage.local) return;
-      chrome.storage.local.get(C.FAVOURITE_STORE_KEY, function (r) {
+      chrome.storage.local.get([C.FAVOURITE_STORE_KEY, C.HOWTO_STORE_KEY], function (r) {
         _favourites = C.sanitiseFavouriteStore(r && r[C.FAVOURITE_STORE_KEY]);
+        if (!r || r[C.HOWTO_STORE_KEY] == null) _howtoSeen = 0;
+        else {
+          var n = Number(r[C.HOWTO_STORE_KEY]);
+          _howtoSeen = isFinite(n) && n > 0 ? n : 0;
+        }
         if (_open) render();
       });
     } catch (_) {
       /* chrome.storage unavailable — favourites stay empty this session */
     }
+  }
+
+  function howtoVisible() {
+    return _howtoSeen < C.HOWTO_VERSION;
+  }
+
+  function markHowtoSeen() {
+    if (_howtoSeen >= C.HOWTO_VERSION) return;
+    _howtoSeen = C.HOWTO_VERSION;
+    try {
+      if (chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ 'labAllocate.howtoSeen': C.HOWTO_VERSION });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function firstFavouriteKey() {
+    var secs = railSections(C.buildWorkspace(_rows, _draft).clinicians);
+    for (var i = 0; i < secs.length; i++) {
+      if (secs[i].id === 'fav' && secs[i].cols[0]) return secs[i].cols[0].key;
+    }
+    return '';
+  }
+
+  function fieldElForKey(key) {
+    var nodes = document.querySelectorAll('#' + OVERLAY_ID + ' .ms-lac-chip-wrap');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].getAttribute('data-col-key') === key) return nodes[i];
+    }
+    return null;
+  }
+
+  function planOntoFavourite1() {
+    if (_writing || _guideOpen || _confirmWrite || _pendingAbsence) return;
+    var ids = selectedIds();
+    if (!ids.length) {
+      announce('Select reports first, then press 1 to plan them onto your first favourite.');
+      return;
+    }
+    var key = firstFavouriteKey();
+    if (!key) {
+      announce('Star a clinician first. 1 plans onto your first favourite.');
+      return;
+    }
+    var wrap = fieldElForKey(key);
+    if (!wrap) {
+      announce('That favourite is not on the rail yet.');
+      return;
+    }
+    requestStage(ids, key, wrap);
   }
 
   function persistFavourites() {
@@ -620,7 +680,11 @@
       fieldCountsHtml(col) +
       '</span>' +
       (selCount
-        ? '<span class="ms-lac-chip-stagehint">Plan ' + selCount + ' here</span>'
+        ? '<span class="ms-lac-chip-stagehint">Plan ' +
+          selCount +
+          ' here' +
+          (col.key === firstFavouriteKey() ? ' <kbd class="ms-lac-kbd">1</kbd>' : '') +
+          '</span>'
         : '<span class="ms-lac-field-expand">' + esc(open ? 'Hide' : 'Expand') + '</span>') +
       '<span class="ms-lac-vh">' +
       esc(selCount ? 'Plan ' + selCount + ' result' + (selCount === 1 ? '' : 's') + ' onto ' + name : expandHint) +
@@ -646,20 +710,27 @@
   // icon empty state shows, and the (single) Clear filter control lives
   // inside it so the toolbar's own Clear filter never duplicates it.
   function emptyPoolHtml(poolCount) {
-    var filtered = filterActive() && poolCount > 0;
+    var narrowed = poolCount > 0;
+    var onlyDefault = _poolPresence === 'not-in-today' && !_poolTest && !String(_poolQuery || '').trim();
     return (
       '<div class="ms-lac-empty">' +
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
-      (filtered
-        ? '<div class="ms-lac-empty-title">No unallocated reports match this filter</div>' +
+      (narrowed && onlyDefault
+        ? '<div class="ms-lac-empty-title">Everyone waiting was in today</div>' +
           '<div class="ms-lac-empty-sub">' +
           poolCount +
-          ' still waiting — clear the filter to see them.</div>' +
-          '<button type="button" class="ms-lac-ghost" id="ms-lac-filter-clear">Clear filter</button>'
-        : '<div class="ms-lac-empty-title">No unallocated reports — nothing is waiting</div>' +
-          '<div class="ms-lac-empty-sub">Tasks already assigned are listed with each clinician on the right.</div>') +
+          ' still unallocated — switch to All to see them.</div>' +
+          '<button type="button" class="ms-lac-ghost" id="ms-lac-show-all">Show everyone</button>'
+        : narrowed
+          ? '<div class="ms-lac-empty-title">No unallocated reports match this filter</div>' +
+            '<div class="ms-lac-empty-sub">' +
+            poolCount +
+            ' still waiting — clear the filter to see them.</div>' +
+            '<button type="button" class="ms-lac-ghost" id="ms-lac-filter-clear">Clear filter</button>'
+          : '<div class="ms-lac-empty-title">No unallocated reports — nothing is waiting</div>' +
+            '<div class="ms-lac-empty-sub">Tasks already assigned are listed with each clinician on the right.</div>') +
       '</div>'
     );
   }
@@ -807,7 +878,11 @@
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
       '<span class="ms-lac-col-meta">' +
       (selCount
-        ? 'Choose a clinician to plan these ' + selCount + ' result' + (selCount === 1 ? '' : 's')
+        ? 'Choose a clinician to plan these ' +
+          selCount +
+          ' result' +
+          (selCount === 1 ? '' : 's') +
+          (firstFavouriteKey() ? ' — or press 1 for your first favourite' : '')
         : 'Favourites first. Select reports, then Plan N here — or drag. Click a clinician to inspect') +
       '</span>' +
       '</div>' +
@@ -831,7 +906,9 @@
       '<span class="ms-lac-selectbar-count">' +
       n +
       ' selected</span>' +
-      '<span class="ms-lac-selectbar-label">Choose a clinician on the right — nothing changes in Medicus until review.</span>' +
+      '<span class="ms-lac-selectbar-label">Choose a clinician on the right — nothing changes in Medicus until review.' +
+      (firstFavouriteKey() ? ' Press 1 to plan onto your first favourite.' : '') +
+      '</span>' +
       (hidden
         ? '<span class="ms-lac-selectbar-hidden" role="status">' +
           hidden +
@@ -933,7 +1010,6 @@
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '<div class="ms-lac-confirmbar-actions">' +
       (earlyBlock ? '<button type="button" class="ms-lac-ghost" id="ms-lac-reload">Reload this board</button>' : '') +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-copy" title="Copies a plain-text snapshot of this board to the clipboard. Does not change Medicus.">Copy working list</button>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-clear"' +
       (sum.count ? '' : ' disabled') +
       '>Clear planned moves</button>' +
@@ -1035,15 +1111,16 @@
       '</div>' +
       '<div class="ms-lac-guide-body">' +
       '<ol class="ms-lac-guide-steps">' +
-      '<li>Filter the unallocated pool by availability, test type or search to narrow down what you are looking at.</li>' +
-      '<li>Select what to plan — click one row, use a group’s Select N to take everyone a requester ordered, or select every currently shown result at once from the toolbar above the pool.</li>' +
-      '<li>Choose “Plan N here” on a clinician (or drag the selection onto their field, if you prefer) — nothing in Medicus changes yet.</li>' +
+      '<li>The pile opens on people who are not in today. Switch to All if you want everyone.</li>' +
+      '<li>Select what to plan — click one row, use a group’s Select N, or take every currently shown result from the toolbar.</li>' +
+      '<li>Press 1 to plan onto your first favourite, or choose “Plan N here” on a clinician (drag if you prefer) — nothing in Medicus changes yet.</li>' +
       '<li>Review the patient, test and destination for every planned move, then explicitly confirm before Medicus is changed.</li>' +
       '</ol>' +
       '<h4 class="ms-lac-guide-subhead">Favourites and absence warnings</h4>' +
-      '<p class="ms-lac-guide-p">Star a clinician to keep them pinned at the top of the list. Planning work onto someone the rota or Medicus shows as away or on leave shows a warning first — choose someone else, or plan it there anyway.</p>' +
-      '<h4 class="ms-lac-guide-subhead">What “Copy working list” does</h4>' +
-      '<p class="ms-lac-guide-p">It copies a plain-text snapshot of the whole board to your clipboard — the unallocated pool, work already sitting with clinicians, and anything planned on this board. It does not write anything to Medicus. The text contains patient names, so only paste it into an approved practice system.</p>' +
+      '<p class="ms-lac-guide-p">Star a clinician to keep them pinned at the top of the list. Press 1 to plan the current selection onto the first favourite. Planning work onto someone the rota or Medicus shows as away or on leave shows a warning first — choose someone else, or plan it there anyway.</p>' +
+      '<h4 class="ms-lac-guide-subhead">Copy this list</h4>' +
+      '<p class="ms-lac-guide-p">Copies a plain-text snapshot of the whole board to your clipboard — the unallocated pool, work already sitting with clinicians, and anything planned on this board. It does not write anything to Medicus. The text contains patient names, so only paste it into an approved practice system.</p>' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-guide-copy">Copy this list</button>' +
       '<h4 class="ms-lac-guide-subhead">Where the test names come from</h4>' +
       '<p class="ms-lac-guide-p">Test names and counts come from the results queue Medicus returns when this board loads. The filter chips show the most common test types in that queue; search matches any test name Medicus reports, chip or not.</p>' +
       '</div>' +
@@ -1053,11 +1130,13 @@
   }
 
   function howToHtml() {
+    if (!howtoVisible()) return '';
     return (
       '<nav class="ms-lac-howto" aria-label="How to allocate labs">' +
       '<span class="ms-lac-howto-step"><span class="ms-lac-howto-n">1</span> Select reports</span>' +
       '<span class="ms-lac-howto-step"><span class="ms-lac-howto-n">2</span> Choose a clinician</span>' +
       '<span class="ms-lac-howto-step"><span class="ms-lac-howto-n">3</span> Review before Medicus changes</span>' +
+      '<button type="button" class="ms-lac-howto-hide" id="ms-lac-howto-hide">Hide</button>' +
       '</nav>'
     );
   }
@@ -1203,11 +1282,20 @@
   }
 
   function clearPoolFilter() {
+    _poolPresence = 'not-in-today';
+    _poolTest = '';
+    _poolQuery = '';
+    _poolCaret = null;
+    announce('Back to people who are not in today. The queue itself is unchanged.');
+    render();
+  }
+
+  function showEveryone() {
     _poolPresence = 'all';
     _poolTest = '';
     _poolQuery = '';
     _poolCaret = null;
-    announce('Filter cleared. The queue itself is unchanged.');
+    announce('Showing everyone unallocated. The queue itself is unchanged.');
     render();
   }
 
@@ -1247,6 +1335,13 @@
     if (close) close.addEventListener('click', requestClose);
     var help = root.querySelector('#ms-lac-help');
     if (help) help.addEventListener('click', openGuide);
+    var howtoHide = root.querySelector('#ms-lac-howto-hide');
+    if (howtoHide)
+      howtoHide.addEventListener('click', function () {
+        markHowtoSeen();
+        announce('How-to hidden. Press ? if you want it back as a guide.');
+        render();
+      });
     var reloadBtn = root.querySelector('#ms-lac-reload');
     if (reloadBtn) reloadBtn.addEventListener('click', loadBoard);
     var guideClose = root.querySelector('#ms-lac-guide-close');
@@ -1278,6 +1373,12 @@
         clearPoolFilter();
       });
     });
+    var showAll = root.querySelector('#ms-lac-show-all');
+    if (showAll)
+      showAll.addEventListener('click', function (e) {
+        e.preventDefault();
+        showEveryone();
+      });
     var selectVisibleBtn = root.querySelector('#ms-lac-select-visible');
     if (selectVisibleBtn) selectVisibleBtn.addEventListener('click', selectVisible);
     root.querySelectorAll('[data-filter-presence]').forEach(function (btn) {
@@ -1333,8 +1434,8 @@
         announce('Selection cleared');
         render();
       });
-    var copyBtn = root.querySelector('#ms-lac-copy');
-    if (copyBtn) copyBtn.addEventListener('click', copyWorkingList);
+    var guideCopy = root.querySelector('#ms-lac-guide-copy');
+    if (guideCopy) guideCopy.addEventListener('click', copyWorkingList);
     var clearBtn = root.querySelector('#ms-lac-clear');
     if (clearBtn)
       clearBtn.addEventListener('click', function () {
@@ -1726,6 +1827,7 @@
 
   function openGuide() {
     if (_writing || _confirmWrite || _guideOpen) return;
+    markHowtoSeen();
     _guideOpen = true;
     announce('Guide open. Press Escape or Close guide to go back to the planning board.');
     render();
@@ -1776,7 +1878,8 @@
     _addOpen = false;
     _focusConfirm = false;
     _focusAdd = false;
-    _poolPresence = 'all';
+    markHowtoSeen();
+    _poolPresence = 'not-in-today';
     _poolTest = '';
     _poolQuery = '';
     _poolCaret = null;
@@ -1806,7 +1909,7 @@
     _addOpen = false;
     _focusConfirm = false;
     _focusAdd = false;
-    _poolPresence = 'all';
+    _poolPresence = 'not-in-today';
     _poolTest = '';
     _poolQuery = '';
     _poolCaret = null;
@@ -1911,6 +2014,14 @@
       if (!_open) return;
       // A guide open behind the search shortcut must never steal focus back
       // to a hidden/inert board — the shortcut is simply off while it is up.
+      if (e.key === '1' && !_guideOpen && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        var oneTag = (e.target && e.target.tagName) || '';
+        if (oneTag !== 'INPUT' && oneTag !== 'TEXTAREA') {
+          e.preventDefault();
+          planOntoFavourite1();
+          return;
+        }
+      }
       if (e.key === '/' && !_guideOpen && !e.ctrlKey && !e.metaKey && !e.altKey) {
         var tag = (e.target && e.target.tagName) || '';
         if (tag !== 'INPUT' && tag !== 'TEXTAREA') {

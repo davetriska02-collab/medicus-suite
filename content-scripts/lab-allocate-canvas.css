@@ -215,6 +215,39 @@
   color: var(--text-3);
 }
 
+.ms-lac-howto-hide {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ms-lac-howto-hide:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--text-2);
+}
+
+.ms-lac-kbd {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.4;
+}
+
 .ms-lac-howto-n {
   display: inline-flex;
   align-items: center;
@@ -322,6 +355,7 @@
 
 .ms-lac-close:focus-visible,
 .ms-lac-ghost:focus-visible,
+.ms-lac-howto-hide:focus-visible,
 .ms-lac-confirm-btn:focus-visible,
 .ms-lac-confirm-btn-primary:focus-visible,
 #ms-lac-add-name:focus-visible,

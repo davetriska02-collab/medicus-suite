@@ -274,7 +274,10 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → clinician confirm');
   check(/Go back/.test(canvas), 'confirm defaults the clinician back to planning');
   check(/chip-stagehint/.test(canvas), 'a selection shows a Plan N here token, not a repeated sentence');
-  check(/Plan ' \+ selCount \+ ' here/.test(canvas), 'the stage token names the destination action, not a bare +N');
+  check(
+    /Plan ' \+[\s\S]{0,20}selCount[\s\S]{0,20}' here/.test(canvas),
+    'the stage token names the destination action, not a bare +N'
+  );
   check(!/">\+' \+ selCount/.test(canvas), 'no bare +N destination target remains');
   check(/ms-lac-confirm-btn-primary/.test(canvas), 'confirm write is a primary action');
   check(/unstageIds/.test(canvas), 'a staged drawer row can return to unallocated');
@@ -315,14 +318,24 @@ console.log('\n--- canvas + manifest source locks ---');
     'the selection bar removes destination ambiguity'
   );
   check(
-    /Choose a clinician to plan these ' \+ selCount/.test(canvas),
+    /Choose a clinician to plan these ' \+[\s\S]{0,20}selCount/.test(canvas),
     'the rail helper names the plan action, not a generic instruction'
   );
   check(
     /Select reports, then Plan N here/.test(canvas),
     'the resting rail helper names select-then-plan, not only drag'
   );
-  check(/ms-lac-howto/.test(canvas), 'a numbered how-to strip is always visible');
+  check(/function howtoVisible/.test(canvas), 'the how-to strip can hide after first use');
+  check(/howtoVisible\(\)/.test(canvas), 'the how-to strip is gated on whether it has been seen');
+  check(/_poolPresence = 'not-in-today'/.test(canvas), 'the pile opens on people who are not in today');
+  check(/function planOntoFavourite1/.test(canvas), '1 plans the selection onto the first favourite');
+  check(/e\.key === '1' && !_guideOpen/.test(canvas), 'the 1 shortcut is off while the guide is open');
+  check(/id="ms-lac-guide-copy">Copy this list/.test(canvas), 'Copy this list lives in the guide, not the footer');
+  check(!/id="ms-lac-copy"/.test(canvas), 'the footer no longer carries Copy working list');
+  check(/id="ms-lac-show-all">Show everyone/.test(canvas), 'an empty Not-in-today pile offers Show everyone');
+  check(/id="ms-lac-howto-hide">Hide/.test(canvas), 'the how-to strip has a Hide control');
+  check(/labAllocate\.howtoSeen/.test(canvas), 'how-to dismissal persists under labAllocate.howtoSeen');
+  check(/markHowtoSeen\(\)/.test(canvas), 'opening the guide or closing the board dismisses the how-to');
   check(/Select reports/.test(canvas) && /Choose a clinician/.test(canvas), 'the how-to names the first two steps');
   check(/Review before Medicus changes/.test(canvas), 'the how-to names the confirm boundary');
   check(/unallocated in Medicus/.test(canvas), 'the header count is labelled as Medicus state, not the plan');
@@ -543,10 +556,7 @@ console.log('\n--- guide: help button, modal semantics, Escape, copy + dynamic-t
 
   // D. the footer's Copy working list action is explained, and accurately —
   // it must match LabAllocateCore.copyList's actual behaviour, not guesswork.
-  check(
-    /What “Copy working list” does<\/h4>/.test(canvas),
-    'the guide has an explicit section headed What "Copy working list" does'
-  );
+  check(/Copy this list<\/h4>/.test(canvas), 'the guide has an explicit section headed Copy this list');
   check(
     /plain-text snapshot of the whole board[\s\S]{0,40}clipboard[\s\S]{0,40}unallocated pool[\s\S]{0,40}sitting with clinicians[\s\S]{0,40}planned on this board/.test(
       canvas
@@ -555,7 +565,7 @@ console.log('\n--- guide: help button, modal semantics, Escape, copy + dynamic-t
   );
   check(
     /It does not write anything to Medicus\./.test(canvas),
-    'the copy explanation is explicit that Copy working list never writes to Medicus'
+    'the copy explanation is explicit that Copy this list never writes to Medicus'
   );
   check(
     /contains patient names, so only paste it into an approved practice system/.test(canvas),
@@ -1225,12 +1235,17 @@ console.log('\n--- pool filter + favourites ---');
   check(C.presenceBucket({ state: 'present', reason: 'in-today' }) === 'in-today', 'in-today buckets as in-today');
   check(C.presenceBucket({ state: 'unknown', reason: 'no-evidence' }) === 'not-in-today', 'unknown is not in today');
   check(C.FAVOURITE_STORE_KEY === 'labAllocate.favourites', 'favourites use the backup key');
+  check(C.HOWTO_STORE_KEY === 'labAllocate.howtoSeen', 'how-to seen uses the backup key');
+  check(C.HOWTO_VERSION === 1, 'how-to version starts at 1');
 
   const io = require('./shared/io/lab-allocate-io.js');
   check(
     io.sanitiseFavouriteKeys(['clinician:azadian|n', 'pool', 'clinician:x']).length === 2,
     'IO drops non-clinician keys'
   );
+  check(io.asHowtoSeen(1) === 1, 'IO keeps a how-to seen version');
+  check(io.asHowtoSeen('nope') === 0, 'IO treats junk how-to seen as unseen');
+  check(io.LAB_ALLOCATE_KEYS.indexOf('labAllocate.howtoSeen') !== -1, 'backup keys include howtoSeen');
 }
 
 testClient()
