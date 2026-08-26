@@ -318,11 +318,11 @@ console.log('\n--- canvas + manifest source locks ---');
     'the selection bar removes destination ambiguity'
   );
   check(
-    /Choose a clinician to plan these ' \+[\s\S]{0,20}selCount/.test(canvas),
-    'the rail helper names the plan action, not a generic instruction'
+    /Choose a clinician to plan this result/.test(canvas) && /Choose a clinician to plan these /.test(canvas),
+    'the rail helper names the plan action with correct singular/plural grammar, not a generic instruction'
   );
   check(
-    /Select reports, then Plan N here/.test(canvas),
+    /Select reports, then press Plan on a clinician/.test(canvas),
     'the resting rail helper names select-then-plan, not only drag'
   );
   check(/function howtoVisible/.test(canvas), 'the how-to strip can hide after first use');

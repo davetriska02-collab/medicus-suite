@@ -433,7 +433,12 @@
   // in the unknown pile, where it varies per row and is load-bearing.
   function tileHtml(tile, opts) {
     opts = opts || {};
-    var quiet = !!opts.quiet && !tile.staged;
+    // A drawer row (opts.quiet) is view-only chrome whether it is an
+    // already-with-them row or a Planned-on-this-board row — both share the
+    // same left padding and listitem semantics. Only pool-context rows
+    // (opts.quiet false) keep drag/select option semantics.
+    var quiet = !!opts.quiet;
+    var quietStaged = quiet && !!tile.staged;
     var selected = !quiet && !!_selected[tile.id];
     var cls =
       'ms-lac-tile' +
@@ -446,12 +451,15 @@
         : '';
     var whoLine = '';
     if (opts.showWho) {
+      // No requester and no named GP: the group head above already states
+      // once that who ordered is not recorded — a per-row repeat of that
+      // constant sentence added nothing.
       var who = tile.requester
         ? 'Ordered by ' + C.displayClinicianName(tile.requester)
         : tile.namedGp
           ? 'Registered GP ' + tile.namedGp + ' — not confirmed as the requester'
-          : 'Who ordered this is not recorded on the task';
-      whoLine = '<span class="ms-lac-tile-who">' + esc(who) + '</span>';
+          : '';
+      if (who) whoLine = '<span class="ms-lac-tile-who">' + esc(who) + '</span>';
     }
     var attrs;
     if (quiet) {
@@ -473,6 +481,13 @@
         esc(tile.id) +
         '"';
     }
+    var unstageBtn = quietStaged
+      ? '<button type="button" class="ms-lac-ghost ms-lac-unstage" data-task-id="' +
+        esc(tile.id) +
+        '" aria-label="Return ' +
+        esc(tile.patientName) +
+        ' to unallocated">Return</button>'
+      : '';
     return (
       '<div class="' +
       cls +
@@ -489,11 +504,15 @@
       assignedPerson +
       whoLine +
       (tile.staged ? '<span class="ms-lac-tile-staged-mark">Planned</span>' : '') +
+      unstageBtn +
       '</div>'
     );
   }
 
+  // Unknown-requester groups get no presence mark at all — the system has
+  // no name to look up, so "Not in today" would be a made-up claim.
   function groupPresenceMark(group) {
+    if (!group.known) return '';
     var bucket = groupPresenceBucket(group);
     if (bucket === 'in-today') {
       return (
@@ -505,6 +524,10 @@
     return '<span class="ms-lac-group-out">Not in today</span>';
   }
 
+  function numHtml(n) {
+    return '<span class="ms-lac-num">' + n + '</span>';
+  }
+
   var GRIP_SVG =
     '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><circle cx="5" cy="3" r="1.1"/><circle cx="9" cy="3" r="1.1"/><circle cx="5" cy="7" r="1.1"/><circle cx="9" cy="7" r="1.1"/><circle cx="5" cy="11" r="1.1"/><circle cx="9" cy="11" r="1.1"/></svg>';
   var CHEVRON_SVG =
@@ -514,7 +537,7 @@
 
   function groupHtml(group) {
     var collapsed = !!_collapsed[group.key];
-    var title = group.known ? C.displayClinicianName(group.requester) : 'Who ordered is unknown';
+    var title = group.known ? C.displayClinicianName(group.requester) : 'Requester not recorded';
     var idsAttr = esc(group.tileIds.join(','));
     var selectedInGroup = group.tiles.filter(function (t) {
       return _selected[t.id];
@@ -534,7 +557,7 @@
       '<span class="ms-lac-group-grip" aria-hidden="true">' +
       GRIP_SVG +
       '</span>' +
-      '<span class="ms-lac-group-role">Ordered by</span>' +
+      (group.known ? '<span class="ms-lac-group-role">Ordered by</span>' : '') +
       '<span class="ms-lac-group-title">' +
       esc(title) +
       '</span>' +
@@ -553,7 +576,7 @@
           (group.count === 1 ? '' : 's') +
           (group.known ? ' ordered by ' + esc(title) : ' with who ordered unknown') +
           '">Select ' +
-          group.count +
+          numHtml(group.count) +
           '</button>') +
       '<button type="button" class="ms-lac-group-toggle" data-toggle-key="' +
       esc(group.key) +
@@ -580,22 +603,46 @@
     );
   }
 
-  function countPhrase(n, after) {
-    return '<span class="ms-lac-num">' + n + '</span> ' + esc(after);
-  }
-
   // col.count already includes staged rows (buildBoard counts everything
   // visually on this key) — the pre-existing amount is what is left once
   // the staged share is taken back out.
-  function fieldCountsHtml(col) {
-    var existing = Math.max(0, col.count - (col.stagedCount || 0));
+  function existingCount(col) {
+    return Math.max(0, col.count - (col.stagedCount || 0));
+  }
+
+  // The full sentence — kept as the accessible description of the count
+  // region so screen readers still hear "already with them" / "they
+  // ordered still unallocated" even though the visible chip now shows
+  // compact aligned stats instead of that prose.
+  function fieldCountsSentence(col) {
     var bits = [];
-    bits.push(countPhrase(existing, 'already with them'));
-    if (col.stagedCount) {
-      bits.push('<span class="ms-lac-chip-count-staged">' + countPhrase(col.stagedCount, 'planned here') + '</span>');
-    }
-    if (col.inPoolCount) bits.push(countPhrase(col.inPoolCount, 'they ordered still unallocated'));
+    bits.push(existingCount(col) + ' already with them');
+    if (col.stagedCount) bits.push(col.stagedCount + ' planned here');
+    if (col.inPoolCount) bits.push(col.inPoolCount + ' they ordered still unallocated');
     return bits.join(' · ');
+  }
+
+  function statHtml(cls, n, label) {
+    return (
+      '<span class="ms-lac-stat' +
+      (cls ? ' ' + cls : '') +
+      '"><span class="ms-lac-num">' +
+      n +
+      '</span><span class="ms-lac-stat-label">' +
+      esc(label) +
+      '</span></span>'
+    );
+  }
+
+  // Aligned stat pairs, right-aligned as a group so every chip's numbers
+  // land in the same columns — order is fixed (with them, planned here,
+  // unallocated); "with them" is the anchor column and always shows, the
+  // other two only appear when non-zero.
+  function fieldCountsHtml(col) {
+    var bits = [statHtml('', existingCount(col), 'with them')];
+    if (col.stagedCount) bits.push(statHtml('ms-lac-stat-planned', col.stagedCount, 'planned here'));
+    if (col.inPoolCount) bits.push(statHtml('', col.inPoolCount, 'unallocated'));
+    return bits.join('');
   }
 
   function fieldHtml(col, selCount) {
@@ -676,18 +723,30 @@
       esc(name) +
       '</span>' +
       flag +
-      '<span class="ms-lac-chip-count">' +
+      '<span class="ms-lac-chip-count" aria-label="' +
+      esc(fieldCountsSentence(col)) +
+      '">' +
       fieldCountsHtml(col) +
       '</span>' +
       (selCount
         ? '<span class="ms-lac-chip-stagehint">Plan ' +
           selCount +
           ' here' +
-          (col.key === firstFavouriteKey() ? ' <kbd class="ms-lac-kbd">1</kbd>' : '') +
+          (col.key === firstFavouriteKey() ? ' <kbd class="ms-lac-kbd" aria-hidden="true">1</kbd>' : '') +
           '</span>'
-        : '<span class="ms-lac-field-expand">' + esc(open ? 'Hide' : 'Expand') + '</span>') +
+        : '<span class="ms-lac-chip-chevron" aria-hidden="true">' + CHEVRON_SVG + '</span>') +
       '<span class="ms-lac-vh">' +
-      esc(selCount ? 'Plan ' + selCount + ' result' + (selCount === 1 ? '' : 's') + ' onto ' + name : expandHint) +
+      esc(
+        selCount
+          ? 'Plan ' +
+              selCount +
+              ' result' +
+              (selCount === 1 ? '' : 's') +
+              ' onto ' +
+              name +
+              (col.key === firstFavouriteKey() ? ' — or press 1' : '')
+          : expandHint
+      ) +
       '</span>' +
       '</button>' +
       (open
@@ -808,6 +867,20 @@
     );
   }
 
+  // An error must never read as an empty, nothing-to-do queue — it takes
+  // over the whole pool body with its own designed state, not a bare
+  // empty-pile icon plus a footer sentence.
+  function errorStateHtml() {
+    return (
+      '<div class="ms-lac-empty ms-lac-error-state">' +
+      ALERT_TRIANGLE_SVG +
+      '<div class="ms-lac-empty-title">Couldn’t read the results queue</div>' +
+      '<div class="ms-lac-empty-sub">Medicus returned an error, so this board can’t show what’s waiting. Nothing has been changed.</div>' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-retry">Try again</button>' +
+      '</div>'
+    );
+  }
+
   function normEq(a, b) {
     return (
       String(a || '')
@@ -867,23 +940,24 @@
       '<h3 class="ms-lac-pool-title">Unallocated reports</h3>' +
       '</div>' +
       '<span class="ms-lac-pool-count">' +
-      (filterActive() ? shownCount + ' of ' + pool.count + ' shown' : pool.count + ' waiting') +
+      (filterActive()
+        ? numHtml(shownCount) + ' of ' + numHtml(pool.count) + ' shown'
+        : numHtml(pool.count) + ' waiting') +
       '</span>' +
       '</div>' +
-      (pool.count ? poolToolsHtml(board, shownCount, countingGroups) : '') +
-      (body || emptyPoolHtml(pool.count)) +
+      (pool.count && !_error ? poolToolsHtml(board, shownCount, countingGroups) : '') +
+      (_error ? errorStateHtml() : body || emptyPoolHtml(pool.count)) +
       '</div>' +
       '<aside class="ms-lac-rail" aria-label="Clinicians">' +
       '<div class="ms-lac-rail-head">' +
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
       '<span class="ms-lac-col-meta">' +
       (selCount
-        ? 'Choose a clinician to plan these ' +
-          selCount +
-          ' result' +
-          (selCount === 1 ? '' : 's') +
+        ? (selCount === 1
+            ? 'Choose a clinician to plan this result'
+            : 'Choose a clinician to plan these ' + selCount + ' results') +
           (firstFavouriteKey() ? ' — or press 1 for your first favourite' : '')
-        : 'Favourites first. Select reports, then Plan N here — or drag. Click a clinician to inspect') +
+        : 'Favourites first. Select reports, then press Plan on a clinician — or drag. Click a clinician to inspect what they hold.') +
       '</span>' +
       '</div>' +
       railBody +
@@ -924,13 +998,18 @@
     if (_error) {
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-error" role="alert">' +
+        '<span class="ms-lac-confirmbar-note"><strong>Couldn’t read the results queue.</strong> <span class="ms-lac-error-code">' +
         esc(_error) +
-        ' <button type="button" class="ms-lac-ghost" id="ms-lac-error-dismiss">Dismiss</button></div>'
+        '</span></span>' +
+        '<div class="ms-lac-confirmbar-actions">' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-error-retry">Try again</button>' +
+        '<button type="button" class="ms-lac-ghost" id="ms-lac-error-dismiss">Dismiss</button>' +
+        '</div></div>'
       );
     }
     if (_writing) {
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn" tabindex="-1" id="ms-lac-confirm-sheet">' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn" tabindex="-1" id="ms-lac-writing-note">' +
         '<strong>Reassigning in Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this board is a working copy.' +
         '</div>'
       );
@@ -938,15 +1017,15 @@
     if (_confirmClose) {
       var nClose = C.draftSummary(_rows, _draft).count;
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-close">' +
         '<strong>Close and discard?</strong> ' +
         nClose +
         ' planned move' +
         (nClose === 1 ? '' : 's') +
         ' exist only on this board — closing forgets them. The Medicus queue itself is untouched either way.' +
         '<div class="ms-lac-confirmbar-actions">' +
-        '<button type="button" class="ms-lac-ghost" id="ms-lac-close-keep">Keep working</button>' +
-        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-close-discard">Discard and close</button>' +
+        '<button type="button" class="ms-lac-ghost-danger" id="ms-lac-close-discard">Discard and close</button>' +
+        '<button type="button" class="ms-lac-btn-safe" id="ms-lac-close-keep">Keep working</button>' +
         '</div></div>'
       );
     }
@@ -963,7 +1042,7 @@
         esc(_pendingAbsence.copy) +
         '</span>' +
         '<div class="ms-lac-confirmbar-actions">' +
-        '<button type="button" class="ms-lac-confirm-btn-primary" id="ms-lac-abs-cancel">Choose someone else</button>' +
+        '<button type="button" class="ms-lac-btn-amber-safe" id="ms-lac-abs-cancel">Choose someone else</button>' +
         '<button type="button" class="ms-lac-ghost-amber" id="ms-lac-abs-stage">Plan here anyway</button>' +
         '</div></div>'
       );
@@ -1046,6 +1125,31 @@
           ' to ' +
           esc(destTitles[0])
         : 'Review <span class="ms-lac-modal-count">' + n + '</span> task reassignment' + (n === 1 ? '' : 's');
+    // Availability at the gate — the same presence lookup used when staging
+    // a move, surfaced again here so a reviewer sees who is away before
+    // confirming, not only at the moment the drag/click happened.
+    var presenceChips = destTitles
+      .map(function (t) {
+        var presence = C.presenceForName({
+          name: t,
+          dateISO: C.todayISO(),
+          book: _book,
+          absences: _absences,
+          staffList: _rota.staff,
+          leaveList: _rota.leave,
+        });
+        var bucket = C.presenceBucket(presence);
+        if (bucket === 'in-today') {
+          return '<span class="ms-lac-modal-presence-chip ms-lac-modal-presence-in">● In today</span>';
+        }
+        if (bucket === 'away') {
+          return '<span class="ms-lac-modal-presence-chip ms-lac-modal-presence-away">' + esc(t) + ' is away</span>';
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('');
+    var presenceRow = presenceChips ? '<div class="ms-lac-modal-presence">' + presenceChips + '</div>' : '';
     var rows = items
       .map(function (item) {
         return (
@@ -1084,6 +1188,7 @@
       headline +
       '</h3>' +
       '<p class="ms-lac-modal-sub">This changes who the task sits with — it does not file the result.</p>' +
+      presenceRow +
       '<div class="ms-lac-modal-rows">' +
       rows +
       '</div>' +
@@ -1111,7 +1216,7 @@
       '</div>' +
       '<div class="ms-lac-guide-body">' +
       '<ol class="ms-lac-guide-steps">' +
-      '<li>The pile opens on people who are not in today. Switch to All if you want everyone.</li>' +
+      '<li>The unallocated list opens on people who are not in today. Switch to All if you want everyone.</li>' +
       '<li>Select what to plan — click one row, use a group’s Select N, or take every currently shown result from the toolbar.</li>' +
       '<li>Press 1 to plan onto your first favourite, or choose “Plan N here” on a clinician (drag if you prefer) — nothing in Medicus changes yet.</li>' +
       '<li>Review the patient, test and destination for every planned move, then explicitly confirm before Medicus is changed.</li>' +
@@ -1144,16 +1249,22 @@
   function shellHtml() {
     var board = C.buildWorkspace(_rows, _draft);
     var planned = C.draftSummary(_rows, _draft).count;
+    // Rows not sitting in the unallocated pool are, from Medicus's point of
+    // view, already with a clinician (whether that was true before this
+    // board opened or only since something was planned here) — naming that
+    // count lets all three numbers reconcile on sight.
+    var withClinicians = _rows.length - board.pool.count;
     var countBadge = _rows.length
       ? '<span class="ms-lac-header-num" aria-hidden="true">' + board.pool.count + '</span>'
       : '';
     var lead = _rows.length
       ? '<span class="ms-lac-header-lead-label">' +
-        board.pool.count +
+        numHtml(board.pool.count) +
         ' unallocated in Medicus' +
-        (planned ? ' · ' + planned + ' planned here' : '') +
+        (planned ? ' · ' + numHtml(planned) + ' planned here' : '') +
+        (withClinicians > 0 ? ' · ' + numHtml(withClinicians) + ' with clinicians' : '') +
         ' · ' +
-        _rows.length +
+        numHtml(_rows.length) +
         ' in the queue</span>'
       : '';
     return (
@@ -1175,7 +1286,7 @@
       '</div>' +
       lead +
       '</div>' +
-      '<span class="ms-lac-hint" id="ms-lac-progress">' +
+      '<span class="ms-lac-hint" id="ms-lac-progress" aria-live="polite">' +
       esc(_overviewProgress) +
       '</span>' +
       '<button type="button" class="ms-lac-help" id="ms-lac-help" aria-label="How to use lab allocation"' +
@@ -1344,6 +1455,10 @@
       });
     var reloadBtn = root.querySelector('#ms-lac-reload');
     if (reloadBtn) reloadBtn.addEventListener('click', loadBoard);
+    var retryBtn = root.querySelector('#ms-lac-retry');
+    if (retryBtn) retryBtn.addEventListener('click', loadBoard);
+    var errorRetryBtn = root.querySelector('#ms-lac-error-retry');
+    if (errorRetryBtn) errorRetryBtn.addEventListener('click', loadBoard);
     var guideClose = root.querySelector('#ms-lac-guide-close');
     if (guideClose) guideClose.addEventListener('click', closeGuide);
     var dismiss = root.querySelector('#ms-lac-error-dismiss');
@@ -1381,6 +1496,14 @@
       });
     var selectVisibleBtn = root.querySelector('#ms-lac-select-visible');
     if (selectVisibleBtn) selectVisibleBtn.addEventListener('click', selectVisible);
+    root.querySelectorAll('.ms-lac-unstage').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var id = btn.getAttribute('data-task-id');
+        if (id) unstageIds([id]);
+      });
+    });
     root.querySelectorAll('[data-filter-presence]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         _poolPresence = btn.getAttribute('data-filter-presence') || 'all';

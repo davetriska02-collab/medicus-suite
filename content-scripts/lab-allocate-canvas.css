@@ -206,10 +206,9 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-3);
@@ -234,17 +233,24 @@
   color: var(--text-2);
 }
 
+.ms-lac-howto-hide:active {
+  background: var(--bg-hover);
+}
+
 .ms-lac-kbd {
   display: inline-block;
   margin-left: 4px;
   padding: 0 5px;
-  border: 1px solid var(--accent-line);
+  min-width: 14px;
+  text-align: center;
+  border: 1px solid var(--border-hi);
+  border-bottom-width: 2px;
   border-radius: var(--r-sm);
-  background: var(--bg-elev);
+  background: var(--bg-mid);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--text-2);
   line-height: 1.4;
 }
 
@@ -380,7 +386,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 16px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--accent-line);
   background: var(--accent-dim);
   flex: 0 0 auto;
@@ -426,7 +432,7 @@
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
-  padding: 10px 16px;
+  padding: 8px 16px;
 }
 
 .ms-lac-workspace {
@@ -447,11 +453,26 @@
 
 /* Inbox well — a pile, not a stack of person cards. */
 .ms-lac-pool {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
   padding: 0 8px 8px;
   background: var(--bg-mid);
   border: 1px solid var(--border);
+  scroll-padding-block-end: 44px;
+}
+
+/* A fade at the scroll boundary reads as "more below", so a row clipped by
+   the box edge is never mistaken for the last one. */
+.ms-lac-pool::after {
+  content: '';
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 16px;
+  margin-top: -16px;
+  background: linear-gradient(to bottom, transparent, var(--bg-mid));
+  pointer-events: none;
 }
 
 .ms-lac-pool-head {
@@ -580,6 +601,10 @@
   outline-offset: 2px;
 }
 
+.ms-lac-filter-chip-label {
+  font-family: inherit;
+}
+
 .ms-lac-filter-chip-count {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -603,6 +628,10 @@
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
+}
+
+#ms-lac-pool-q:hover {
+  border-color: var(--border-hi);
 }
 
 #ms-lac-pool-q:focus {
@@ -662,7 +691,10 @@
 }
 
 .ms-lac-col-meta {
+  display: block;
+  min-height: 2.8em;
   font-size: 11px;
+  line-height: 1.4;
   color: var(--text-4);
 }
 
@@ -726,14 +758,18 @@
 
 .ms-lac-field-has {
   border-style: solid;
+  border-color: var(--border-hi);
 }
 
-.ms-lac-field-expand {
+.ms-lac-chip-chevron {
+  display: flex;
   margin-left: auto;
-  font-size: 11px;
-  font-weight: 600;
   color: var(--text-4);
-  white-space: nowrap;
+  transition: transform var(--fast) var(--ease);
+}
+
+.ms-lac-chip-open .ms-lac-chip-chevron {
+  transform: rotate(180deg);
 }
 
 .ms-lac-chip {
@@ -775,10 +811,33 @@
 
 .ms-lac-chip-count {
   flex-basis: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-3);
   padding-right: 20px;
+}
+
+.ms-lac-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.ms-lac-stat-label {
+  font-size: 9px;
+  color: var(--text-4);
+}
+
+.ms-lac-stat .ms-lac-num {
+  font-size: 12px;
+}
+
+.ms-lac-stat-planned .ms-lac-num,
+.ms-lac-stat-planned .ms-lac-stat-label {
+  color: var(--accent);
 }
 
 .ms-lac-num {
@@ -817,6 +876,10 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--green);
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
 }
 
 .ms-lac-chip-stagehint {
@@ -843,7 +906,7 @@
 }
 
 .ms-lac-chip-away .ms-lac-chip-name {
-  color: var(--text-4);
+  color: var(--text-1);
 }
 
 .ms-lac-chip-in {
@@ -887,7 +950,7 @@
   margin: 6px 0 2px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--text-4);
+  color: var(--text-3);
 }
 
 .ms-lac-drawer-sub:first-child {
@@ -928,7 +991,8 @@
 }
 
 .ms-lac-add-reveal {
-  width: 100%;
+  width: auto;
+  align-self: flex-start;
   margin-top: 10px;
 }
 
@@ -944,6 +1008,10 @@
   border-radius: var(--r-md);
 }
 
+#ms-lac-add-name:hover {
+  border-color: var(--border-hi);
+}
+
 #ms-lac-add-name:focus {
   border-color: var(--accent);
 }
@@ -955,7 +1023,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   box-shadow: var(--shadow-1);
-  overflow: hidden;
+  overflow: clip;
 }
 
 .ms-lac-group-head {
@@ -969,13 +1037,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 6px 6px;
-  background: var(--bg-elev);
+  padding: 6px 8px;
+  background: var(--bg-mid);
   border: 0;
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   cursor: grab;
-  box-shadow: inset 3px 0 0 var(--border-hi);
+  box-shadow: none;
   transition: background var(--fast) var(--ease);
 }
 
@@ -985,11 +1053,12 @@
 
 .ms-lac-group-head:active {
   cursor: grabbing;
+  background: var(--accent-dim);
 }
 
 .ms-lac-group-grip {
   display: flex;
-  color: var(--border-hi);
+  color: var(--text-4);
 }
 
 .ms-lac-group-role {
@@ -1080,6 +1149,7 @@
 
 .ms-lac-tile:active {
   cursor: grabbing;
+  background: var(--bg-hover);
 }
 
 .ms-lac-tile:focus-visible {
@@ -1108,7 +1178,8 @@
 }
 
 .ms-lac-tile-test {
-  font-size: 12px;
+  font-family: var(--mono);
+  font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
 }
@@ -1164,18 +1235,25 @@
 }
 
 .ms-lac-tile-staged {
-  background: var(--accent-dim);
-  box-shadow: inset 2px 0 0 var(--accent-line);
+  background: var(--bg-elev);
+  box-shadow: inset 3px 0 0 var(--accent);
   cursor: pointer;
 }
 
 .ms-lac-tile-staged:hover {
-  background: var(--accent-line);
+  background: var(--bg-hover);
 }
 
 .ms-lac-tile-staged .ms-lac-tile-name {
   color: var(--text-1);
   font-weight: 600;
+}
+
+/* Sits in an already-compact drawer row, so it stays small rather than
+   inheriting the full-size ghost button. */
+.ms-lac-unstage {
+  padding: 2px 8px;
+  font-size: 10.5px;
 }
 
 .ms-lac-tile-staged-mark {
@@ -1286,23 +1364,58 @@
   color: var(--red);
 }
 
+.ms-lac-confirmbar-error strong {
+  color: var(--red);
+}
+
+.ms-lac-error-code {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+/* Failure fills the pool body itself — an error must never look like an
+   empty, nothing-to-do queue. */
+.ms-lac-error-state svg {
+  color: var(--red);
+}
+
+.ms-lac-error-state .ms-lac-empty-title {
+  color: var(--red);
+}
+
 .ms-lac-confirmbar-warn {
   background: var(--amber-dim);
   border-top-color: var(--amber-line);
   color: var(--text-1);
 }
 
+/* Closing with planned moves still on the board is a decision, not a
+   hazard — it stays on the neutral chrome, amber is reserved for genuine
+   clinical/absence risk elsewhere on this canvas. */
+.ms-lac-confirmbar-close {
+  background: var(--bg-mid);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+  color: var(--text-1);
+}
+
 /* Absence gate — a genuine hazard, so it gets the full amber triad (ink +
-   wash + line) plus an icon, not just a tinted footer band. */
+   wash + line) plus an icon, not just a tinted footer band. The 3px
+   structural border + shadow lift it further above the neutral chrome —
+   this is the one footer state that must never read as quieter than the
+   bars around it. */
 .ms-lac-confirmbar-absence {
   align-items: flex-start;
   background: var(--amber-dim);
-  border-top-color: var(--amber-line);
+  border-top: 3px solid var(--amber);
+  box-shadow: var(--shadow-2);
   color: var(--amber);
 }
 
 .ms-lac-confirmbar-absence .ms-lac-confirmbar-note {
   color: var(--text-1);
+  max-width: 72ch;
 }
 
 .ms-lac-confirmbar-absence strong {
@@ -1358,8 +1471,41 @@
   outline-offset: 2px;
 }
 
+/* The safe absence choice — recast into the amber field itself (rather
+   than the unrelated blue primary) so "Choose someone else" reads as the
+   obvious, endorsed way out of the warning it sits beside. */
+.ms-lac-btn-amber-safe {
+  padding: 4px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--amber);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-1);
+  box-shadow: var(--shadow-1);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.ms-lac-btn-amber-safe:hover {
+  background: var(--amber-dim);
+}
+
+.ms-lac-btn-amber-safe:active {
+  background: var(--amber-dim);
+  border-color: var(--amber);
+}
+
+.ms-lac-btn-amber-safe:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
 .ms-lac-confirm-btn {
-  padding: 4px 14px;
+  padding: 4px 12px;
   border: 1px solid var(--border-hi);
   border-radius: var(--r-md);
   background: var(--bg-mid);
@@ -1382,8 +1528,71 @@
   background: var(--bg-hover);
 }
 
+/* Close-and-discard — the destructive path out of the close-confirm bar.
+   Marked red so it never reads as the equal-weight twin of Keep working. */
+.ms-lac-ghost-danger {
+  padding: 4px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--red);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.ms-lac-ghost-danger:hover {
+  background: var(--red-dim);
+}
+
+.ms-lac-ghost-danger:active {
+  background: var(--red-dim);
+  border-color: var(--red);
+}
+
+.ms-lac-ghost-danger:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+
+/* Keep working — the emphasised default of the close-confirm bar; sits on
+   the accent field rather than neutral chrome so it reads as the obvious
+   safe choice, without borrowing the write-confirmation's full primary. */
+.ms-lac-btn-safe {
+  padding: 4px 12px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.ms-lac-btn-safe:hover {
+  background: var(--accent-line);
+}
+
+.ms-lac-btn-safe:active {
+  background: var(--accent-line);
+  border-color: var(--accent);
+}
+
+.ms-lac-btn-safe:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .ms-lac-confirm-btn-primary {
-  padding: 4px 14px;
+  padding: 4px 12px;
   border: 1px solid var(--accent);
   border-radius: var(--r-md);
   background: var(--accent);
@@ -1457,6 +1666,33 @@
   color: var(--text-3);
 }
 
+.ms-lac-modal-presence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
+.ms-lac-modal-presence-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+}
+
+.ms-lac-modal-presence-in {
+  color: var(--green);
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
+}
+
+.ms-lac-modal-presence-away {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+
 .ms-lac-modal-rows {
   display: flex;
   flex-direction: column;
@@ -1492,6 +1728,8 @@
 }
 
 .ms-lac-modal-row-test {
+  font-family: var(--mono);
+  font-size: 11px;
   color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1516,19 +1754,13 @@
   color: var(--text-3);
 }
 
-/* Actions stack in reading order — Go back, then the primary action below
-   it — rather than sitting side by side. */
+/* Actions sit right-aligned in reading order — Go back, then the primary
+   action last — at their natural width, not stacked full-width blocks. */
 .ms-lac-modal-actions {
   display: flex;
-  flex-direction: column;
+  justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
-}
-
-.ms-lac-modal-actions .ms-lac-ghost,
-.ms-lac-modal-actions .ms-lac-confirm-btn-primary {
-  width: 100%;
-  text-align: center;
 }
 
 /* Guide — reuses the write-confirm modal's scrim/shell (ms-lac-modal-scrim,
@@ -1570,10 +1802,14 @@
   line-height: 1.5;
 }
 
+.ms-lac-guide-body {
+  max-width: 68ch;
+}
+
 .ms-lac-guide-subhead {
   margin: 14px 0 4px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-1);
 }
 
