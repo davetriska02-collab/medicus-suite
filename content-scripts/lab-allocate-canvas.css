@@ -1105,6 +1105,9 @@
 
 .ms-lac-group-select {
   margin-left: 0;
+  /* inline-flex collapses the literal space between the "Select" text node
+     and the mono numeral span — the gap restores it. */
+  gap: 3px;
 }
 
 .ms-lac-group-select:hover,
