@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.243.10] — 2026-08-26
+
+### Lab allocation canvas — name the team on the confirm list
+
+Review fixes on top of 3.243.9. Staging onto a team and pressing
+**Review then write…** listed the destination as `results team` — the
+normalised column key, not the inbox's name — because `draftSummary`
+was not given the harvested team directory. The confirm list is the
+last thing read before Medicus reassigns the task, so it now names the
+team (`Results Team`); a team with no directory entry reads as words
+rather than a lower-case slug, and the refusal note reads the same way.
+
+Team fields now carry the `ms-lac-chip-team` style the markup already
+asked for — a dashed edge, so an inbox does not read as a person.
+
+Formatting on the five lab-allocation files restored to Prettier's
+output; the 3.243.3–3.243.9 pass had drifted them off it.
+
 ## [v3.243.9] — 2026-08-26
 
 ### Lab allocation canvas — one person, one field; teams as drops

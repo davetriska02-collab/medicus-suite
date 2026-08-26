@@ -123,8 +123,7 @@
     if (v == null) return { type: 'null' };
     if (typeof v === 'string')
       return { type: 'string', length: v.length, looksSurnameInitial: /^[A-Z][A-Z '-]+ [A-Z]$/.test(v.trim()) };
-    if (typeof v === 'object' && !Array.isArray(v))
-      return { type: 'object', keys: Object.keys(v).slice(0, 12) };
+    if (typeof v === 'object' && !Array.isArray(v)) return { type: 'object', keys: Object.keys(v).slice(0, 12) };
     return { type: Array.isArray(v) ? 'array' : typeof v };
   }
 
@@ -135,8 +134,7 @@
       const names = list.slice(0, 8).map((item) => {
         if (!item) return '';
         if (typeof item === 'string') return redact(item);
-        if (typeof item === 'object')
-          return redact(item.label || item.name || item.displayName || item.fullName || '');
+        if (typeof item === 'object') return redact(item.label || item.name || item.displayName || item.fullName || '');
         return '';
       });
       return {
@@ -250,9 +248,7 @@
           first: Array.isArray(arr) && arr[0] ? sampleTask(arr[0]) : null,
           assignedTo: Array.isArray(arr) && arr[0] ? describeAssignee(arr[0].assignedTo) : null,
           requestedBy: Array.isArray(arr) && arr[0] ? describeAssignee(arr[0].requestedBy) : null,
-          assigneeMix: Array.isArray(arr)
-            ? arr.slice(0, 12).map((row) => describeAssignee(row && row.assignedTo))
-            : [],
+          assigneeMix: Array.isArray(arr) ? arr.slice(0, 12).map((row) => describeAssignee(row && row.assignedTo)) : [],
           filters: j && j.filters ? Object.keys(j.filters) : [],
         };
         const first = Array.isArray(arr) ? arr[0] : null;
@@ -265,10 +261,7 @@
           '-' +
           String(now.getDate()).padStart(2, '0');
         const bookP = fetch(
-          api +
-            '/scheduling/data/appointment-book/embedded-overview?date=' +
-            today +
-            '&filterByUsualLocation=false',
+          api + '/scheduling/data/appointment-book/embedded-overview?date=' + today + '&filterByUsualLocation=false',
           { credentials: 'include', headers: { Accept: 'application/json' } }
         )
           .then((r) => r.json())

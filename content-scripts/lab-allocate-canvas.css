@@ -404,6 +404,17 @@
   border-color: var(--border);
 }
 
+/* Team fields are drop targets like clinician fields, but they are an
+   inbox, not a person — a dashed edge keeps that legible at a glance. */
+.ms-lac-chip-team {
+  border-style: dashed;
+  background: var(--bg-mid);
+}
+
+.ms-lac-chip-team.ms-lac-field-has {
+  border-style: dashed;
+}
+
 .ms-lac-rail-teams {
   margin-top: 14px;
   padding-top: 10px;

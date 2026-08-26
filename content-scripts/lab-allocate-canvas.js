@@ -491,7 +491,13 @@
           '" aria-pressed="' +
           (sittingAllOn ? 'true' : 'false') +
           '">' +
-          (sittingAllOn ? (isTeam ? 'All selected' : 'All sitting selected') : isTeam ? 'Select these' : 'Select all sitting') +
+          (sittingAllOn
+            ? isTeam
+              ? 'All selected'
+              : 'All sitting selected'
+            : isTeam
+              ? 'Select these'
+              : 'Select all sitting') +
           '</button>'
         : '';
     return (
@@ -514,11 +520,7 @@
       '" aria-controls="ms-lac-drawer-' +
       esc(col.key).replace(/[^a-z0-9]/gi, '_') +
       '" aria-label="' +
-      esc(
-        selCount
-          ? 'Stage ' + selCount + ' selected results onto ' + name
-          : name + '. ' + expandHint
-      ) +
+      esc(selCount ? 'Stage ' + selCount + ' selected results onto ' + name : name + '. ' + expandHint) +
       '">' +
       '<span class="ms-lac-chip-name">' +
       esc(name) +
@@ -541,10 +543,10 @@
           selectSitting +
           (body ||
             '<div class="ms-lac-empty-sm">' +
-            (isTeam
-              ? 'Nothing staged onto this team yet. Drag from the unallocated box, or select there and click this field.'
-              : 'Nothing sitting with them yet. Drag from the unallocated box, or select there and click this field.') +
-            '</div>') +
+              (isTeam
+                ? 'Nothing staged onto this team yet. Drag from the unallocated box, or select there and click this field.'
+                : 'Nothing sitting with them yet. Drag from the unallocated box, or select there and click this field.') +
+              '</div>') +
           '</div>'
         : '') +
       '</div>'
@@ -959,9 +961,11 @@
       var overlay = document.getElementById(OVERLAY_ID);
       if (!overlay) return;
       overlay.classList.remove('ms-lac-lifting');
-      overlay.querySelectorAll('.ms-lac-drag-source, .ms-lac-group-lift, .ms-lac-group-lift-partial').forEach(function (node) {
-        node.classList.remove('ms-lac-drag-source', 'ms-lac-group-lift', 'ms-lac-group-lift-partial');
-      });
+      overlay
+        .querySelectorAll('.ms-lac-drag-source, .ms-lac-group-lift, .ms-lac-group-lift-partial')
+        .forEach(function (node) {
+          node.classList.remove('ms-lac-drag-source', 'ms-lac-group-lift', 'ms-lac-group-lift-partial');
+        });
     }
     function beginDrag(e, startIds) {
       var ids = C.dragIdsFor(_selected, startIds);
@@ -1028,7 +1032,11 @@
     root.querySelectorAll('.ms-lac-group-head').forEach(function (head) {
       head.addEventListener('click', function (e) {
         if (_ignoreClickAfterDrag) return;
-        if (e.target && e.target.closest && (e.target.closest('.ms-lac-group-toggle') || e.target.closest('.ms-lac-group-pick'))) {
+        if (
+          e.target &&
+          e.target.closest &&
+          (e.target.closest('.ms-lac-group-toggle') || e.target.closest('.ms-lac-group-pick'))
+        ) {
           return;
         }
         e.stopPropagation();

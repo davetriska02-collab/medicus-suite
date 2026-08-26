@@ -668,7 +668,11 @@
           return rows[u].assignedTo;
         }
       }
-      return teamSlug;
+      // Nothing named this team (empty directory) — show the key as words
+      // rather than the raw lower-case slug, so the refusal still reads.
+      return teamSlug.replace(/\b[a-z]/g, function (c) {
+        return c.toUpperCase();
+      });
     }
     if (key.indexOf('clinician:') === 0) {
       var best = '';
@@ -903,9 +907,14 @@
     return buildBoard(rows, draft, opts);
   }
 
-  function draftSummary(rows, draft) {
+  // `teams` is the harvested team directory list. Without it a team
+  // destination has no name to show and the confirm list falls back to the
+  // normalised key ("results team") — the one screen the clinician reads
+  // before the write must name the real inbox.
+  function draftSummary(rows, draft, teams) {
     draft = draft || emptyDraft();
     rows = Array.isArray(rows) ? rows : [];
+    teams = Array.isArray(teams) ? teams : [];
     var aliases = buildClinicianAliases(rows, draft);
     var items = [];
     Object.keys(draft.moves || {}).forEach(function (id) {
@@ -921,15 +930,16 @@
       var to = remapClinicianKey(draft.moves[id], aliases);
       if (!to || to === from) return;
       if (!isDestinationKey(to)) return;
+      var toTitle = columnTitle(to, rows, draft.columnTitles, aliases, teams);
       items.push({
         id: id,
         patientName: row.patientName,
         summary: row.summary,
         fromKey: from,
         toKey: to,
-        fromTitle: columnTitle(from, rows, draft.columnTitles, aliases),
-        toTitle: columnTitle(to, rows, draft.columnTitles, aliases),
-        text: (row.patientName || 'Unknown') + ' → ' + columnTitle(to, rows, draft.columnTitles, aliases),
+        fromTitle: columnTitle(from, rows, draft.columnTitles, aliases, teams),
+        toTitle: toTitle,
+        text: (row.patientName || 'Unknown') + ' → ' + toTitle,
       });
     });
     return { items: items, count: items.length };
@@ -1063,11 +1073,7 @@
 
   function scoreStaffName(n) {
     if (!n) return 0;
-    var toks = String(n)
-      .replace(/\s+/g, ' ')
-      .trim()
-      .split(' ')
-      .filter(Boolean);
+    var toks = String(n).replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
     return toks.length * 100 + n.length;
   }
 
@@ -1160,7 +1166,11 @@
       if (!Array.isArray(teams)) return;
       teams.forEach(function (item) {
         if (!item) return;
-        var tid = pickUuid(item.id) || pickUuid(item.value) || (isStr(item.id) ? item.id : '') || (isStr(item.value) ? item.value : '');
+        var tid =
+          pickUuid(item.id) ||
+          pickUuid(item.value) ||
+          (isStr(item.id) ? item.id : '') ||
+          (isStr(item.value) ? item.value : '');
         if (tid && dir.byId[tid]) delete dir.byId[tid];
       });
     }
@@ -1498,12 +1508,15 @@
         refused: [],
         items: [],
         directorySize: ((directory && directory.list) || []).length,
-        staffNameSamples: ((directory && directory.list) || []).slice(0, 4).map(function (s) {
-          return s && s.name ? s.name : '';
-        }).filter(Boolean),
+        staffNameSamples: ((directory && directory.list) || [])
+          .slice(0, 4)
+          .map(function (s) {
+            return s && s.name ? s.name : '';
+          })
+          .filter(Boolean),
       };
     }
-    var sum = draftSummary(rows, draft);
+    var sum = draftSummary(rows, draft, (teamDir && teamDir.list) || []);
     var aliases = buildClinicianAliases(rows, draft);
     var byDest = {};
     var destOrder = [];
@@ -1556,9 +1569,12 @@
       return byDest[id];
     });
     var directorySize = ((directory && directory.list) || []).length;
-    var staffNameSamples = ((directory && directory.list) || []).slice(0, 4).map(function (s) {
-      return s && s.name ? s.name : '';
-    }).filter(Boolean);
+    var staffNameSamples = ((directory && directory.list) || [])
+      .slice(0, 4)
+      .map(function (s) {
+        return s && s.name ? s.name : '';
+      })
+      .filter(Boolean);
     if (!batches.length) {
       return {
         ok: false,

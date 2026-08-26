@@ -350,7 +350,10 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
   check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
   check(!/list\.length >= 8/.test(canvas), 'overview harvest does not stop at eight staff ids');
-  check(/fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas), 'task-list GET uses the page query (minus masterAssignee)');
+  check(
+    /fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas),
+    'task-list GET uses the page query (minus masterAssignee)'
+  );
   check(/search: _route && _route\.search/.test(canvas), 'write re-GET keeps the page filters');
   check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
@@ -508,7 +511,10 @@ console.log('\n--- multi-select and drag origin ---');
   );
   check(C.dropTargetShowsHover('pool', 'pool') === false, 'lifting from unallocated does not shade the pile');
   check(C.dropTargetShowsHover('pool', 'clinician') === true, 'a clinician field still highlights as the drop');
-  check(C.dropTargetShowsHover('clinician', 'pool') === true, 'bringing work back to unallocated does highlight the well');
+  check(
+    C.dropTargetShowsHover('clinician', 'pool') === true,
+    'bringing work back to unallocated does highlight the well'
+  );
   check(C.dropTargetShowsHover('clinician', 'clinician') === true, 'field-to-field still highlights the destination');
   check(C.dropTargetShowsHover('pool', 'team') === true, 'a team field highlights as a drop from the pile');
   check(C.dropTargetShowsHover('team', 'pool') === true, 'bringing work back from a team highlights the well');
@@ -578,7 +584,10 @@ console.log('\n--- one person, two wire formats ---');
     C.clinicianColumnKey('Triska David') !== C.clinicianColumnKey('Dr David Triska'),
     'raw keys still differ — merge happens at board build'
   );
-  check(C.sameClusterPerson('Triska David', 'Dr David Triska') === true, 'those two names are one person for chip merge');
+  check(
+    C.sameClusterPerson('Triska David', 'Dr David Triska') === true,
+    'those two names are one person for chip merge'
+  );
   check(C.sameClusterPerson('AZADIAN N', 'Dr Amy Azadian') === false, 'different initials stay two people on the rail');
 
   const daveId = uuid(61);
@@ -667,6 +676,21 @@ console.log('\n--- team drop targets ---');
   );
   const staffBody = C.buildBulkReassignBody(uuid(1), 'token', [inbox.id], 'slug');
   check(staffBody.assigneeType === 'staff', 'omitted type stays staff');
+
+  // The confirm list is the last thing read before the write lands. A team
+  // destination must be named, not shown as its normalised key.
+  const teamDraft = C.stageMove(C.emptyDraft(), inbox.id, resultsKey);
+  check(
+    C.draftSummary([inbox], teamDraft, teamDir.list).items[0].toTitle === 'Results',
+    'confirm list names the team, not its key'
+  );
+  check(
+    C.draftSummary([inbox], teamDraft, teamDir.list).items[0].text.endsWith('\u2192 Results'),
+    'confirm line reads patient \u2192 team name'
+  );
+  check(teamPlan.items[0].toTitle === 'Results', 'the write plan carries the team name through');
+  const unnamedTeam = C.draftSummary([inbox], C.stageMove(C.emptyDraft(), inbox.id, 'team:duty inbox'));
+  check(unnamedTeam.items[0].toTitle === 'Duty Inbox', 'an unnamed team still reads as words, never a lower-case slug');
 }
 
 console.log('\n--- person-assigned sits on the clinician field ---');
@@ -913,10 +937,7 @@ console.log('\n--- staff directory + unique UUID resolve ---');
     staffOptions: [{ value: { id: azadianId, name: 'Natalie' }, label: 'Dr Natalie Azadian' }],
   });
   check(wrappedVal.byId[azadianId], 'Vue-wrapped staffOptions value object is harvested');
-  check(
-    wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1,
-    'outer full label wins over inner first name'
-  );
+  check(wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1, 'outer full label wins over inner first name');
   check(
     C.pickStaffFields({ id: azadianId, name: 'Natalie', label: 'Dr Natalie Azadian' }).name.indexOf('Azadian') !== -1,
     'prefers full label over short name field'
@@ -953,7 +974,10 @@ console.log('\n--- staff directory + unique UUID resolve ---');
   });
   check(wrappedData.byId[azadianId], 'staffOptions nested under data is harvested');
   check(C.pickPatientId({ patientId: uuid(5) }) === uuid(5), 'row patientId is a UUID');
-  check(C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6), 'overview patient.id is picked');
+  check(
+    C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6),
+    'overview patient.id is picked'
+  );
   const hit = C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', dir);
   check(hit.ok && hit.staff.id === azadianId, 'AZADIAN N resolves to the Azadian UUID');
   const miss = C.resolveStaffForColumn(C.clinicianColumnKey('Dr Mystery'), 'Dr Mystery', dir);
@@ -1040,10 +1064,7 @@ console.log('\n--- sitting assignedId is the write destination ---');
   );
   const clash = C.planBulkReassign([sitting, clashSit, pile], draft, 'token', emptyDir);
   check(clash.ok === false, 'two assignedIds on one field refuse');
-  check(
-    clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id',
-    'reason is ambiguous-assigned-id'
-  );
+  check(clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id', 'reason is ambiguous-assigned-id');
   check(/more than one staff id/.test(C.writeBlockReason(clash)), 'refuse copy names two ids on the field');
 
   const emptyDraft = C.addColumn(C.emptyDraft(), 'Dr Mystery');
@@ -1110,10 +1131,7 @@ async function testClient() {
       };
     },
   });
-  const out = await client.fetchTaskList(
-    'review-investigation-report',
-    '?viewContext=workflow&masterAssignee=team-1'
-  );
+  const out = await client.fetchTaskList('review-investigation-report', '?viewContext=workflow&masterAssignee=team-1');
   check(out.rows.length === 1, 'client maps the task-list');
   check(out.taskList === 'envelope-token', 'client keeps the envelope taskList token');
   check(calls[0].method === 'GET', 'task-list fetch is GET');
