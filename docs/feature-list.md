@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.243.9
+**Version:** v3.244.0
 **Generated:** 2026-08-26 (automated)
 
 ## What it is
@@ -143,6 +143,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Clean up code** — flags outdated or retired SNOMED problem-list codes, suggests a cleaner code or description, and can sync a cleaned-up code or text into a matching consultation-note entry, with one-click undo.
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with SNOMED- and text-based suggested links; tick several tiles (or Ctrl/⌘-click) and drag the set together; every change staged, then confirmed together.
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance; tick several tiles and drag the set onto End or Dual-coded.
+- **Clean up alerts** — pill on the patient banner; batch-clears Flag on patient banner only (W24).
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view.
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch.
 - **Task presence** — shows a colleague's name on a queue row they already have open, backed by the practice's own shared folder; advisory only, never a lock.

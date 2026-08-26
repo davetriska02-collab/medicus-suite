@@ -1,0 +1,404 @@
+/* Risk flag cleanup. Injected surface: #ms-rfc-overlay carries its own
+   token block (panel.css :root is not an ancestor on Medicus pages) — values
+   mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
+
+/* Quiet ghost pill in the host banner — NOT a filled navy clinical badge.
+   The launcher is not inside #ms-rfc-overlay, so the token block below is
+   not an ancestor; var(--accent) would resolve to nothing and drop the
+   focus ring. Literal hex, same colours as #ms-lac-launch. */
+#ms-rfc-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  order: 9999;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font:
+    600 12px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #1e3a5f;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+#ms-rfc-pill:hover {
+  border-color: #2563eb;
+  background: #eff4fd;
+}
+
+#ms-rfc-pill:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+#ms-rfc-overlay {
+  --bg-deep: #f8fafc;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --bg-hover: #e2eaf5;
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --text-4: #556377;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.09);
+  --green-line: rgba(22, 163, 74, 0.3);
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-sizing: border-box;
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2147483000;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: 80vh;
+  overflow: auto;
+  padding: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+}
+
+#ms-rfc-overlay *,
+#ms-rfc-overlay *::before,
+#ms-rfc-overlay *::after {
+  box-sizing: border-box;
+}
+
+.ms-rfc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ms-rfc-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+  text-transform: none;
+}
+
+.ms-rfc-close,
+.ms-rfc-ghost,
+.ms-rfc-confirm-btn {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease),
+    border-color 150ms var(--ease),
+    color 150ms var(--ease);
+}
+
+.ms-rfc-close:hover,
+.ms-rfc-ghost:hover:not(:disabled),
+.ms-rfc-confirm-btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.ms-rfc-close:active,
+.ms-rfc-ghost:active:not(:disabled),
+.ms-rfc-confirm-btn:active:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.ms-rfc-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+
+.ms-rfc-counts {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.ms-rfc-skipped {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+
+.ms-rfc-filter {
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-2);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.ms-rfc-filter:focus {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+.ms-rfc-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Destructive ghost — colour + line only; never a filled red button. */
+.ms-rfc-remove {
+  padding: 4px 12px;
+  color: var(--red);
+  background: transparent;
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease),
+    border-color 150ms var(--ease);
+}
+
+.ms-rfc-remove:hover:not(:disabled) {
+  background: var(--red-dim);
+  border-color: var(--red);
+}
+
+.ms-rfc-ghost:disabled,
+.ms-rfc-remove:disabled,
+.ms-rfc-confirm-btn:disabled,
+.ms-rfc-confirm-go:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ms-rfc-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.ms-rfc-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 8px;
+  margin-bottom: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+}
+
+.ms-rfc-cat {
+  display: inline-block;
+  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.ms-rfc-cat--red {
+  color: var(--red);
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+
+.ms-rfc-cat--amber {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+
+.ms-rfc-cat--neutral {
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border-color: var(--border);
+}
+
+.ms-rfc-open {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ms-rfc-open:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.ms-rfc-desc {
+  flex: 1 0 100%;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.ms-rfc-desc-free {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-3);
+}
+
+.ms-rfc-date {
+  flex: 1 0 auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.ms-rfc-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-4);
+}
+
+.ms-rfc-status--removed {
+  color: var(--green);
+}
+
+.ms-rfc-status--failed {
+  color: var(--red);
+}
+
+.ms-rfc-status--processing {
+  color: var(--text-4);
+}
+
+.ms-rfc-empty {
+  padding: 24px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.ms-rfc-confirmbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px -12px -12px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.ms-rfc-confirmbar > p,
+.ms-rfc-confirmbar > ul {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
+.ms-rfc-confirmbar > ul {
+  padding-left: 18px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.ms-rfc-confirmbar-warn {
+  background: var(--amber-dim);
+  border-top-color: var(--amber-line);
+  color: var(--text-1);
+}
+
+/* Proceed is an accent-bordered ghost — not a red fill. */
+.ms-rfc-confirm-go {
+  padding: 4px 12px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease),
+    border-color 150ms var(--ease),
+    color 150ms var(--ease);
+}
+
+.ms-rfc-confirm-go:hover:not(:disabled) {
+  background: var(--accent-dim);
+  border-color: var(--accent-hover);
+  color: var(--accent-hover);
+}
+
+#ms-rfc-overlay button:focus-visible,
+#ms-rfc-overlay input:focus-visible,
+#ms-rfc-overlay a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ms-rfc-overlay * {
+    transition: none !important;
+  }
+}
