@@ -2,7 +2,7 @@
 
 **Document reference:** MS-CSO-CSN-001  
 **Software product:** Medicus Suite (Chrome extension)  
-**Product version:** 3.243.0 (full review re-baseline to v3.115.0 on 2026-06-17; last incremental CSO sign-off 2026-08-23 on the organise-canvas correction set — see document version 3.21. **Section 6.2/6.3 write-path posture from 3.14, and the section 6 items 1/8/9 transactional-API correction note, remain PENDING a whole-document CSN review.**)  
+**Product version:** 3.244.0 (full review re-baseline to v3.115.0 on 2026-06-17; last incremental CSO sign-off 2026-08-23 on the organise-canvas correction set — see document version 3.21. **Section 6.2/6.3 write-path posture from 3.14, and the section 6 items 1/8/9 transactional-API correction note, remain PENDING a whole-document CSN review.**)  
 **Document version:** 3.30  
 **Date issued:** 2026-08-25 _(v3.30 addendum 2026-08-25 — lab allocation canvas write W23, PENDING CSO review; v3.29 addendum 2026-08-25 — lab allocation canvas is stage-only, PENDING CSO review; v3.28 addendum 2026-08-24 — W13 allergy-end restriction relaxed, PENDING CSO review; v3.27 addendum 2026-08-24 — Companion all-screens / organiser multi-select; v3.26 addendum 2026-08-24 — Companion Practice pass; v3.25 addendum 2026-08-24 — Companion HUD, PENDING CSO review)_  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
