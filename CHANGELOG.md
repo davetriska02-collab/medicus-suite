@@ -2,6 +2,46 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.244.6] — 2026-08-26
+
+### Lab allocation — design crit (three critics, one board)
+
+A full multi-critic pass over the board at realistic queue volume. Two of
+the findings were clinical, not cosmetic:
+
+- **Sticky-header occlusion fixed.** `overflow: hidden` on each requester
+  card made it its own scroll container, so the sticky group head pinned
+  to the **bottom** of the card and covered the last patient row — names
+  invisible while "Select N" still selected them. Now `overflow: clip`
+  (no scroll context, corners still clipped) and the head is a proper
+  top band. Field evidence recorded under H-064 (hazard log v3.38).
+- **A queue-read error no longer looks like an empty queue.** API failure
+  now paints an explicit red "Couldn't read the results queue" state with
+  a Try again button, instead of the calm "no unallocated reports" icon.
+  The footer error bar speaks human first, `HTTP 500` demoted to a code.
+
+And the rest of the crit:
+
+- **The rail is an instrument now.** Aligned mono stat pairs ("2 with
+  them · 3 unallocated") replace the prose sentence — the sentence
+  survives as the screen-reader label. Expand/Hide is a rotating chevron;
+  Add clinician… no longer masquerades as a primary action.
+- **Header arithmetic reconciles:** "N unallocated in Medicus · N with
+  clinicians · N in the queue", all numerals mono.
+- **Planned ≠ selected.** Staged tiles are neutral with an accent left
+  rail; selected keeps the accent wash. No more two-blues guessing.
+- **Close-confirm de-ambered** — amber is for clinical warnings, not
+  housekeeping. Discard and close is red; Keep working is the default.
+- **Absence bar louder, never quieter:** 3px amber border, elevated.
+- **Unknown requesters honestly labelled** "Requester not recorded"
+  (no fake "Ordered by" prefix, no presence mark).
+- **A11y sweep:** duplicate confirm-sheet id renamed (focus no longer
+  lost after write), drawer rows are list items with an explicit Return
+  button, progress is `aria-live`, keycap `1` hint is decorative to AT.
+
+W23 / H-064 controls unchanged in behaviour; hazard log v3.38 records
+the occlusion field evidence. CSN remains current at 3.244.0 (doc v3.31).
+
 ## [v3.244.5] — 2026-08-26
 
 ### Lab allocation — the selfish defaults
