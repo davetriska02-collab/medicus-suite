@@ -1,0 +1,268 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Routine-prescription re-assign launcher. Injected surface: .chrx-host
+   carries its own token block (panel.css :root is not an ancestor on Medicus
+   pages) — values mirror the canon light column in
+   .claude/skills/ui-design/TOKENS.md. Host page is light.
+
+   Button copy is set in JS.
+
+   Quiet ghost pill matching #ms-rfc-pill / #ms-lac-launch — not a filled teal
+   badge. .chrx-btn / .chrx-caret must not rely on overlay ancestry for the
+   focus ring: colour, border and :focus-visible use literal hex (same as
+   #ms-rfc-pill). Tokens below serve the menu (a child of .chrx-host) and the
+   body-appended toast. */
+
+.chrx-host,
+.chrx-toast,
+.chrx-menu {
+  /* Surfaces */
+  --bg-deep: #f8fafc;
+  --bg-mid: #f1f5f9;
+  --bg-elev: #ffffff;
+  --bg-hover: #e2eaf5;
+  /* Borders */
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  /* Text tiers */
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --text-4: #556377;
+  --text-5: #5f6f85;
+  /* Accent triad */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-dim: rgba(37, 99, 235, 0.09);
+  --accent-line: rgba(37, 99, 235, 0.3);
+  /* Status triads: ink / wash / line */
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.09);
+  --green-line: rgba(22, 163, 74, 0.3);
+  --amber: #b45309;
+  --amber-dim: rgba(180, 83, 9, 0.09);
+  --amber-line: rgba(180, 83, 9, 0.32);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
+  /* Shape */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-pill: 999px;
+  /* Depth */
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  --med: 200ms;
+  /* Typography — no @import (host-page CSP); system stacks only */
+  --mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.chrx-host,
+.chrx-host *,
+.chrx-host *::before,
+.chrx-host *::after,
+.chrx-menu,
+.chrx-menu *,
+.chrx-menu *::before,
+.chrx-menu *::after {
+  box-sizing: border-box;
+}
+
+/* Split ghost pill: host is the pill; btn + caret share one 1px border. */
+.chrx-host {
+  display: inline-flex;
+  gap: 0;
+  align-items: stretch;
+  position: relative;
+  margin: 0 8px 0 0;
+  vertical-align: middle;
+  border-radius: 999px;
+  font:
+    600 12px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+.chrx-btn,
+.chrx-caret {
+  margin: 0;
+  font: inherit;
+  color: #1e3a5f;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.chrx-btn {
+  padding: 4px 10px;
+  border-right: 0;
+  border-radius: 999px 0 0 999px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chrx-caret {
+  padding: 4px 8px;
+  border-radius: 0 999px 999px 0;
+}
+
+.chrx-host:hover .chrx-btn,
+.chrx-host:hover .chrx-caret,
+.chrx-btn:hover,
+.chrx-caret:hover {
+  border-color: #2563eb;
+  background: #eff4fd;
+}
+
+.chrx-btn:focus-visible,
+.chrx-caret:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.chrx-btn:disabled,
+.chrx-caret:disabled,
+.chrx-host.chrx-busy {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.chrx-confirm-msg {
+  padding: 8px 9px 6px;
+  font: 500 12px/1.35 var(--sans);
+  color: var(--text-2);
+}
+
+.chrx-confirm-actions {
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px 6px;
+}
+
+.chrx-confirm-go {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+/* Menu is a child of .chrx-host, so tokens resolve. */
+.chrx-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 2147482990;
+  min-width: 240px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+  font-family: var(--sans);
+}
+
+.chrx-menu-h {
+  padding: 8px 8px 4px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-2);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.chrx-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 7px 9px;
+  text-align: left;
+  font: 500 13px/1.2 var(--sans);
+  color: var(--text-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.chrx-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.chrx-menu-item.chrx-sel {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.chrx-menu-item.chrx-add {
+  color: var(--accent);
+}
+
+.chrx-menu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Toast is appended to document.body — listed on the token block above. */
+.chrx-toast {
+  box-sizing: border-box;
+  position: fixed;
+  right: 18px;
+  bottom: 72px;
+  z-index: 2147482990;
+  max-width: 340px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  font: 500 13px/1.35 var(--sans);
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  transform: translateY(8px);
+  transition:
+    opacity var(--med) var(--ease),
+    transform var(--med) var(--ease);
+}
+
+.chrx-toast.chrx-show {
+  opacity: 1;
+  transform: none;
+}
+
+.chrx-toast.chrx-ok {
+  background: var(--green-dim);
+  color: var(--green);
+  border-color: var(--green-line);
+}
+
+.chrx-toast.chrx-warn {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-color: var(--amber-line);
+}
+
+.chrx-toast.chrx-err {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: var(--red-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrx-toast {
+    transform: none;
+    transition: opacity var(--med) var(--ease);
+  }
+}

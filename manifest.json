@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.246.1",
+  "version": "3.247.1",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -84,7 +84,10 @@
         "shared/lab-filing-utils.js",
         "content-scripts/triage-lens/lab-file-button.js"
       ],
-      "css": ["content-scripts/triage-lens/hud.css"],
+      "css": [
+        "content-scripts/triage-lens/hud.css",
+        "content-scripts/triage-lens/routine-rx-button.css"
+      ],
       "run_at": "document_idle"
     },
     {

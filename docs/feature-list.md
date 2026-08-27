@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.246.0
+**Version:** v3.247.0
 **Generated:** 2026-08-27 (automated)
 
 ## What it is
@@ -184,6 +184,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **Send to routine list** — the on-page prescription-request button is ghost-pill chrome. After authorising it selects Medicus's own Next Steps radio, the Assign-to team (slash-spacing in the name is the same team), then asks before clicking Send to routine list. Confirm sits next to the pill. It does not prescribe.
 - **Companion HUD** — the floating booking/task panel is now one role-toggled box (Clinic / Reception / Triage / Nursing) on task pages, the care-record and the queue, and on every other Medicus screen if you opt in. Resize, minimise, or pop it in to an edge tab so it does not cover the page. What’s due stays a four-line pocket of Sentinel’s action-needed chips (reception uses booking voice; nursing uses treatment-room voice). Desk / slots / pulse are operational glances and stay unknown on failure. Identity-gated; no second clinical fetch. v3.240.2: red-severity wins the visible four; overflow expands in-widget; Monitoring / Slot Counter open from the box; reception gets a book-type hint and this-patient future appointments.
 - **Clinical-safety audit remediation** — an adversarial audit of the write paths, the fail-closed rules and the safety documentation was acted on in full: the automated lab-filing gate now refuses anything it cannot judge (unreadable rows, unconfirmable units, ambiguous or cross-matched analyte ranges), the outstanding-investigation tick-off became opt-in and is now listed in the public write inventory, the transactional feed refuses writes in code rather than only in prose, and two hazard entries that had never reached the register were recovered.
 - **Organise-canvas fail-safe write paths** — the appointment-organise canvas's failure modes were closed after an adversarial review: moves now prove the destination window is still free on the fresh board before writing, a failed stretch re-creates the original booking (with an urgent named-patient error if even that fails), the confirmation overlay freezes while a batch is being written, and the "Tell the patient" opt-in is described honestly everywhere it appears (and never offered on a stretch).

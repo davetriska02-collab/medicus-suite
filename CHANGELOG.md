@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.246.1] — 2026-08-27
+## [v3.247.1] — 2026-08-27
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,30 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.247.0] — 2026-08-27
+
+### Routine-prescription "Send to routine list" — ghost pill and live-flow fixes
+
+The on-page button is ghost-pill chrome in suite tokens, not a teal FAB.
+If the configured team is already in the open assignee picker, the macro
+selects it without typing.
+
+Live-flow fixes against current Medicus:
+
+- After authorising, Next Steps stays on "Issue 1 approved item". Step 1
+  now clicks the real Vue radio (`[role=radio]` / native input), not the
+  nested text.
+- `Prescribing / Meds Management` and `Prescribing/Meds Management` are
+  the same team. `Med` vs `Meds` is not.
+- Confirm and error toasts sit next to the pill (the action row clips
+  overflow; Vue rebuilding it used to cancel the confirm). The button
+  shows the step it is on.
+- Assignee matching is the Assign-to picker only. Clinical History /
+  Reason for exam `[role=option]` nodes on the overview are ignored.
+
+Still CSN **W8**: drives Medicus's own four controls; no API POST; confirm
+names the destination team; Cancel is the default. See **H-035**.
 
 ## [v3.246.0] — 2026-08-27
 
