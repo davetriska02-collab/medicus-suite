@@ -9,9 +9,11 @@ registered patients from one usual-GP list to another, the way a practice
 does when a partner leaves or lists are rebalanced?
 
 **Product direction (2026-08-27):** if we build, it is a **canvas** (same
-family as lab / workflow allocate and appointment organise). The pool is
-not given — you have to **define which patients**, and that definition is
-a **search** (plus the listing's Usual GP filter). See [Canvas +
+family as lab / workflow allocate and appointment organise). The **lists
+on the board are registered doctors / usual doctors** — that is the only
+column you add. Search defines _which patients_ enter the pool. Dropping
+a patient onto another doctor's list is a usual/registered-doctor change.
+See [What "list" means](#what-list-means-here) and [Canvas +
 search-defined cohort](#canvas--search-defined-cohort).
 
 ---
@@ -46,12 +48,18 @@ answer.
 
 ## What "list" means here
 
-In UK GP language a GP's **list** is the set of patients who have that
-clinician as usual / named GP. Medicus help uses **Usual GP** on the
-patient list and Registration tab, and **named GP** on task rows, automated
-registration, and FP34D grouping. The suite already treats those as the
-same idea (`namedGP` on the banner, `namedGp` / `namedGpId` on task-list
-rows).
+**Settled:** the list you add on the canvas is a **registered doctor /
+usual doctor**. One column per doctor. A patient's current list is who
+they are registered with (usual / named GP). Moving them is changing
+that field — not a diary, not a task inbox, not a report.
+
+Medicus help says **Usual GP** on the registration listing and
+Registration tab, and **named GP** on task rows, automated registration,
+and FP34D grouping. Same field. Suite names already on the wire:
+`namedGP` (banner), `namedGp` / `namedGpId` (task-list). **Add list**
+picks a staff UUID that is allowed to be a usual/registered doctor
+(Doctor role / GMC — capture must confirm the option list), never a
+team, locum-excluded role, or free-text name.
 
 This spike is **not** about:
 
@@ -220,17 +228,22 @@ tiles. So the first act is **define who**, and the tool for that is
 search.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Define who                                                  │
-│   Search  [ name / NHS / DOB              ]  Find           │
-│   or source list: Usual GP [ Dr X ▾ ]                       │
-│   12 in the pool · 0 staged                                 │
-├────────────────────────────┬────────────────────────────────┤
-│ POOL                       │ Move onto                      │
-│ SMITH, Ann  · now Dr X     │  [ Dr Y ]  [ Dr Z ]            │
-│ SMITH, Ben  · now Dr X     │  click a chip or drag          │
-└────────────────────────────┴────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ Define who — Search [ name / NHS / DOB ]                         │
+│ or open a list: Usual / registered doctor [ Dr X ▾ ]             │
+│ + Add list  → pick another registered / usual doctor             │
+├──────────────┬──────────────────┬────────────────────────────────┤
+│ POOL         │ Dr X (usual)     │ Dr Y (usual)                   │
+│ (search hits │ SMITH, Ann       │                                │
+│  not yet     │ SMITH, Ben       │                                │
+│  placed)     │                  │                                │
+└──────────────┴──────────────────┴────────────────────────────────┘
 ```
+
+**Add list** = pick a registered / usual doctor. Those columns _are_
+the lists. Search fills or narrows the pool; it does not create a
+column. A tile's home column is their current usual doctor when we
+know it; unknown stays in the pool until placed.
 
 Nothing is pre-staged. Closing with staged moves asks first. Confirm
 names every patient, current GP → new GP. Copy does not say Moved /
@@ -286,6 +299,10 @@ On top of the write-path questions above:
    or only last-seen clinician? Params, then Cancel.
 10. On the listing page, is there a **name/NHS box** as well as the Usual
     GP filter?
+11. **Add-list picker.** Who appears as a usual/registered doctor —
+    Doctor role only? GMC number? Job-role "exclude from auto
+    registration GP allocation"? Teams must not appear. Capture the
+    options endpoint, not a guessed staff list.
 
 Until those three and the Registration save are captured: **do not
 build the canvas**.
@@ -293,7 +310,8 @@ build the canvas**.
 ### If the write lands
 
 1. Pool from finder and/or listing filter — replay captured URLs only.
-2. Stage onto destination chips keyed by staff UUID.
+2. **Add list** = a usual/registered-doctor staff UUID from the captured
+   options list. Stage tiles onto that column.
 3. Confirm: every patient named, current → new GP, count, escape.
 4. Write exactly the captured endpoint(s). One-patient save → loop,
    stop on first failure. Archive-reassign → whole-list tool, labelled

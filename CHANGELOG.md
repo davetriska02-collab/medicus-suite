@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.246.3] — 2026-08-27
+
+### Patient-list move spike — lists are registered / usual doctors
+
+The canvas column you add is a **registered doctor / usual doctor**.
+Search still defines which patients are in play. Same investigation
+only — no write path. See `docs/plans/PATIENT-LIST-MOVE-SPIKE.md`.
+
 ## [v3.246.2] — 2026-08-27
 
 ### Patient-list move spike — search defines the canvas pool
