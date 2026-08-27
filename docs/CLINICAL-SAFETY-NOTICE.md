@@ -4,7 +4,7 @@
 **Software product:** Medicus Suite (Chrome extension)  
 **Product version:** 3.246.0 (full review re-baseline to v3.115.0 on 2026-06-17; last incremental CSO sign-off 2026-08-23 on the organise-canvas correction set — see document version 3.21. **Section 6.2/6.3 write-path posture from 3.14, and the section 6 items 1/8/9 transactional-API correction note, remain PENDING a whole-document CSN review.**)  
 **Document version:** 3.35  
-**Date issued:** 2026-08-27 _(v3.35 addendum 2026-08-27 — workflow / inbound-document allocation canvas, same W23 write, PENDING CSO review; v3.34 addendum 2026-08-27 — Trends DOAC CrCl display, PENDING CSO review; v3.33 addendum 2026-08-26 — risk-flag banner cleanup W24; v3.30 addendum 2026-08-25 — lab allocation canvas write W23, PENDING CSO review)_
+**Date issued:** 2026-08-27 _(v3.35 addendum 2026-08-27 — workflow / inbound-document allocation canvas, same W23 write, PENDING CSO review; v3.34 addendum 2026-08-27 — Trends DOAC CrCl display, PENDING CSO review; v3.33 addendum 2026-08-26 — risk-flag banner cleanup W24; v3.30 addendum 2026-08-25 — lab allocation canvas write W23, PENDING CSO review; v3.29 addendum 2026-08-25 — lab allocation canvas is stage-only, PENDING CSO review; v3.28 addendum 2026-08-24 — W13 allergy-end restriction relaxed, PENDING CSO review; v3.27 addendum 2026-08-24 — Companion all-screens / organiser multi-select; v3.26 addendum 2026-08-24 — Companion Practice pass; v3.25 addendum 2026-08-24 — Companion HUD, PENDING CSO review)_  
 **Author:** Dr Dave Triska, Graysbrook Ltd  
 **Clinical Safety Officer:** Dr Dave Triska (GMC 6159481)  
 **Status:** Live — must be read before installation or use  
