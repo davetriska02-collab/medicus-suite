@@ -255,7 +255,7 @@
 
   function waitFor(fn, timeout, interval) {
     timeout = timeout || 5000;
-    interval = interval || 120;
+    interval = interval || 50;
     return new Promise(function (resolve) {
       var t0 = Date.now();
       (function poll() {
@@ -289,6 +289,114 @@
     }
   }
 
+  // Vue Next Steps radios listen on [role=radio] / the native input / the inner
+  // visual — not on the nested span findByText often returns. Clicking that
+  // span leaves "Issue 1 approved item" selected and never reveals Assign-to.
+  function isRadioEl(el) {
+    if (!el) return false;
+    if (el.getAttribute && el.getAttribute('role') === 'radio') return true;
+    var type = el.type || (el.getAttribute && el.getAttribute('type'));
+    if (type === 'radio') return true;
+    if (
+      el.classList &&
+      (el.classList.contains('radio') || el.classList.contains('q-radio') || el.classList.contains('m-radio'))
+    ) {
+      return true;
+    }
+    return false;
+  }
+  function radioControl(el) {
+    if (!el) return null;
+    var n = el;
+    for (var i = 0; i < 8 && n; i++) {
+      if (isRadioEl(n)) return n;
+      var tag = (n.tagName && String(n.tagName).toLowerCase()) || n.tag || '';
+      if (tag === 'label') {
+        var inp = n.querySelector && n.querySelector('input[type="radio"]');
+        if (inp) return inp;
+        var htmlFor = n.htmlFor || (n.getAttribute && n.getAttribute('for'));
+        if (htmlFor && typeof document.getElementById === 'function') {
+          var byId = document.getElementById(htmlFor);
+          if (byId && isRadioEl(byId)) return byId;
+        }
+        return n;
+      }
+      n = n.parentElement;
+    }
+    var inner =
+      (el.querySelector &&
+        (el.querySelector('input[type="radio"]') ||
+          el.querySelector('[role="radio"]') ||
+          el.querySelector('.q-radio, .m-radio, .radio'))) ||
+      null;
+    return inner || el;
+  }
+  function isRadioOn(el) {
+    if (!el) return false;
+    var n = radioControl(el) || el;
+    if (n.checked === true) return true;
+    if (n.getAttribute && n.getAttribute('aria-checked') === 'true') return true;
+    var wrap = n.closest && n.closest('[role="radio"]');
+    if (wrap && wrap.getAttribute && wrap.getAttribute('aria-checked') === 'true') return true;
+    var inner = n.querySelector && (n.querySelector('[role="radio"]') || n.querySelector('input[type="radio"]'));
+    if (inner) {
+      if (inner.checked === true) return true;
+      if (inner.getAttribute && inner.getAttribute('aria-checked') === 'true') return true;
+    }
+    return false;
+  }
+  function issue1StillOn() {
+    var issue = findByText(['label', '[role="radio"]', '.radio', 'div', 'span'], 'Issue 1 approved item');
+    return !!(issue && isRadioOn(issue));
+  }
+  function activateRadio(el) {
+    var control = radioControl(el) || el;
+    var input = null;
+    var type = control.type || (control.getAttribute && control.getAttribute('type'));
+    if (type === 'radio') input = control;
+    else if (control.querySelector) input = control.querySelector('input[type="radio"]');
+    if (!input) {
+      var htmlFor = control.htmlFor || (control.getAttribute && control.getAttribute('for'));
+      if (htmlFor && typeof document.getElementById === 'function') {
+        var byId = document.getElementById(htmlFor);
+        var byType = byId && (byId.type || (byId.getAttribute && byId.getAttribute('type')));
+        if (byType === 'radio') input = byId;
+      }
+    }
+    if (input) {
+      try {
+        input.checked = true;
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      } catch (e) {
+        /* ignore */
+      }
+      try {
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      } catch (e) {
+        /* ignore */
+      }
+      realClick(input);
+    }
+    var aria =
+      control.getAttribute && control.getAttribute('role') === 'radio'
+        ? control
+        : (control.closest && control.closest('[role="radio"]')) ||
+          (control.querySelector && control.querySelector('[role="radio"]'));
+    if (aria && aria !== input) realClick(aria);
+    var visual =
+      (control.querySelector &&
+        (control.querySelector('.q-radio__inner') ||
+          control.querySelector('.m-radio__inner') ||
+          control.querySelector('[class*="radio__inner"]'))) ||
+      null;
+    if (visual && visual !== control && visual !== input && visual !== aria) realClick(visual);
+    if (!input && !aria) realClick(control);
+  }
+
   function setNativeValue(el, val) {
     try {
       var proto = Object.getPrototypeOf(el);
@@ -315,6 +423,13 @@
   // leading token first (the name up to the first character that isn't a
   // letter / digit / space), then fall back to the full name for any picker where
   // that string genuinely did work.
+  // "Prescribing / Meds Management" and "Prescribing/Meds Management" are the
+  // same team — Medicus's picker often drops the spaces around "/". Folding
+  // those spaces is exact-equivalent (audit R8); "Med" vs "Meds" is not.
+  function foldTeam(s) {
+    return norm(s).replace(/\s*\/\s*/g, '/');
+  }
+
   function searchQueriesFor(team) {
     var full = String(team == null ? '' : team).trim();
     var queries = [];
@@ -325,6 +440,8 @@
     // full name (never type nothing, and never a query so short it floods the
     // picker with unrelated teams).
     if (lead.length >= 2 && lead.toLowerCase() !== full.toLowerCase()) queries.push(lead);
+    var compact = full.replace(/\s*\/\s*/g, '/');
+    if (compact !== full && compact.toLowerCase() !== lead.toLowerCase()) queries.push(compact);
     queries.push(full);
     return queries;
   }
@@ -355,7 +472,7 @@
   // Simulate an actual keystroke-by-keystroke type with a small pause between
   // characters so the debounce fires the same way it does for a human typing.
   function typeText(el, text, delay) {
-    delay = delay || 45;
+    delay = delay || 20;
     return new Promise(function (resolve) {
       var i = 0;
       var built = '';
@@ -363,38 +480,203 @@
         if (i >= text.length) return resolve();
         var ch = text[i++];
         built += ch;
-        el.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: ch }));
+        var keyOpts = { bubbles: true, cancelable: true, key: ch };
+        try {
+          el.dispatchEvent(new KeyboardEvent('keydown', keyOpts));
+        } catch (e1) {
+          /* ignore */
+        }
         setNativeValue(el, built);
-        el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ch }));
+        try {
+          el.dispatchEvent(new InputEvent('input', { bubbles: true, data: ch, inputType: 'insertText' }));
+        } catch (e2) {
+          /* setNativeValue already fired input */
+        }
+        try {
+          el.dispatchEvent(new KeyboardEvent('keyup', keyOpts));
+        } catch (e3) {
+          /* ignore */
+        }
         setTimeout(step, delay);
       })();
     });
   }
 
   // The "Assign to" control: an input reachable after the re-assign radio is on.
-  function findAssignInput() {
+  // `near` (the routing radio) prefers the picker in the same panel so we don't
+  // type into a different "assign" field elsewhere on the overview.
+  function findAssignInput(near) {
+    var candidates = [];
     var inputs = document.querySelectorAll('input');
     for (var i = 0; i < inputs.length; i++) {
       var el = inputs[i];
       if (!visible(el)) continue;
       var hint = norm((el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('placeholder') || ''));
-      if (hint.indexOf('assign') >= 0) return el;
+      if (hint.indexOf('assign') >= 0) candidates.push(el);
     }
-    // fallback: a label "Assign to" → its sibling/descendant input
-    var labels = document.querySelectorAll('label, .label, [class*="label"]');
-    for (var j = 0; j < labels.length; j++) {
-      if (textOf(labels[j]).indexOf('assign to') >= 0) {
-        var scope = labels[j].closest('div') || labels[j].parentElement;
-        var inp = scope && scope.querySelector('input');
-        if (inp && visible(inp)) return inp;
+    if (!candidates.length) {
+      var labels = document.querySelectorAll('label, .label, [class*="label"]');
+      for (var j = 0; j < labels.length; j++) {
+        if (textOf(labels[j]).indexOf('assign to') >= 0) {
+          var scope = labels[j].closest('div') || labels[j].parentElement;
+          var inp = scope && scope.querySelector('input');
+          if (inp && visible(inp)) candidates.push(inp);
+        }
       }
     }
+    if (near) {
+      var best = null;
+      var bestDist = 99;
+      for (var k = 0; k < candidates.length; k++) {
+        var node = near;
+        for (var d = 0; d < 12 && node; d++, node = node.parentElement) {
+          if (node.contains(candidates[k]) && d < bestDist) {
+            bestDist = d;
+            best = candidates[k];
+            break;
+          }
+        }
+      }
+      if (best) return best;
+    }
+    return candidates[0] || null;
+  }
+
+  function optionControl(el) {
+    if (!el) return null;
+    var n = el;
+    for (var i = 0; i < 6 && n; i++) {
+      var role = n.getAttribute && n.getAttribute('role');
+      if (role === 'option') return n;
+      var id = n.id || (n.getAttribute && n.getAttribute('id')) || '';
+      if (String(id).indexOf('select-item-') === 0) return n;
+      n = n.parentElement;
+    }
+    return el;
+  }
+
+  // Team names are short labels. The overview also has [role=option] nodes for
+  // Clinical History / Reason for exam — those must never be treated as assignees.
+  function looksLikeAssigneeName(el) {
+    var t = textOf(el);
+    if (!t || t.length > 80) return false;
+    if (t.indexOf('reason for exam') >= 0) return false;
+    if (t.indexOf('clinical history') >= 0) return false;
+    if (t.indexOf('clinical indication') >= 0) return false;
+    return true;
+  }
+
+  function snapshotVisible(sel) {
+    var out = [];
+    try {
+      var nodes = document.querySelectorAll(sel);
+      for (var i = 0; i < nodes.length; i++) {
+        if (visible(nodes[i])) out.push(nodes[i]);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return out;
+  }
+
+  function listboxForAssign(assignEl) {
+    if (!assignEl) return null;
+    var attrs = ['aria-controls', 'aria-owns'];
+    for (var a = 0; a < attrs.length; a++) {
+      var v = assignEl.getAttribute && assignEl.getAttribute(attrs[a]);
+      if (!v) continue;
+      var ids = String(v).split(/\s+/);
+      for (var j = 0; j < ids.length; j++) {
+        if (!ids[j]) continue;
+        var el = typeof document.getElementById === 'function' ? document.getElementById(ids[j]) : null;
+        if (!el) continue;
+        if (el.getAttribute && el.getAttribute('role') === 'listbox') return el;
+        var inner = el.querySelector && el.querySelector('[role="listbox"]');
+        if (inner) return inner;
+        return el;
+      }
+    }
+    var combo = assignEl.closest && assignEl.closest('[role="combobox"]');
+    if (combo) {
+      var owned = combo.getAttribute('aria-controls') || combo.getAttribute('aria-owns');
+      if (owned && typeof document.getElementById === 'function') {
+        var box = document.getElementById(owned);
+        if (box) return box;
+      }
+      var inside = combo.querySelector && combo.querySelector('[role="listbox"]');
+      if (inside) return inside;
+    }
     return null;
+  }
+
+  function inList(el, list) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] === el) return true;
+    }
+    return false;
+  }
+
+  // Options for the Assign-to picker we just opened — not Clinical History
+  // [role=option] nodes that are always on the overview.
+  function collectAssigneeOptions(assignEl, ignoreList, optionSel) {
+    ignoreList = ignoreList || [];
+    optionSel = optionSel || '[id^="select-item-"], [role="option"], li[role="option"]';
+    var nodes = [];
+    function add(sel, root) {
+      try {
+        var found = (root || document).querySelectorAll(sel);
+        for (var i = 0; i < found.length; i++) nodes.push(found[i]);
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    var box = listboxForAssign(assignEl);
+    if (box) {
+      add('[id^="select-item-"], [role="option"], li, button', box);
+    } else {
+      add(optionSel);
+    }
+    var fresh = [];
+    var near = [];
+    for (var n = 0; n < nodes.length; n++) {
+      var el = nodes[n];
+      if (!visible(el) || !looksLikeAssigneeName(el)) continue;
+      if (box && box.contains && !box.contains(el) && el !== box) continue;
+      if (!inList(el, ignoreList)) fresh.push(el);
+      else if (assignEl && sharesPanel(el, assignEl, 8)) near.push(el);
+    }
+    if (fresh.length) return fresh;
+    if (near.length) return near;
+    return [];
+  }
+
+  function openAssignPicker(assignEl) {
+    if (!assignEl) return;
+    try {
+      assignEl.focus();
+    } catch (e) {
+      /* ignore */
+    }
+    realClick(assignEl);
+    var n = assignEl.parentElement;
+    for (var i = 0; i < 4 && n; i++, n = n.parentElement) {
+      var role = n.getAttribute && n.getAttribute('role');
+      if (role === 'combobox') {
+        realClick(n);
+        return;
+      }
+    }
   }
 
   // ---- the macro ---------------------------------------------------------
 
   var running = false;
+
+  // Default confirm is window.confirm so extracted tests (and the Node hook)
+  // keep working. After UI boot this is replaced with an in-host confirm bar.
+  function requestConfirm(msg) {
+    return Promise.resolve(window.confirm(msg));
+  }
 
   // team/mode default to null so an abort BEFORE runMacro's parameters are
   // known (there is none today, but keeps the signature safe) never throws.
@@ -416,46 +698,78 @@
     // the instant the path changes. Cleared in the finally below.
     _macroPath = location.pathname;
     try {
+      var say = function (s) {
+        try {
+          console.info('[ClinHUD:rx]', s);
+        } catch (e) {
+          /* ignore */
+        }
+        if (typeof setStep === 'function') setStep(s);
+      };
+
       // 1. radio: Save & send to routine requests task list
-      var radio = findByText(
-        ['label', '[role="radio"]', '.radio', 'div', 'span'],
-        'Save & send to routine requests task list'
-      );
-      if (!radio)
+      // findRoutingControl prefers label/[role=radio]/.radio so we don't lock
+      // onto an inner span; radioControl then walks to the Vue listener.
+      say('Selecting destination…');
+      var radioHit = findRoutingControl();
+      if (!radioHit)
         return abort(
           'Couldn’t find the “Save & send to routine requests task list” option on this screen.',
           team,
           mode
         );
-      realClick(radio);
+      var radio = radioControl(radioHit) || radioHit;
+      if (!isRadioOn(radio)) activateRadio(radio);
 
-      // 2. Assign-to picker
-      var assign = await waitFor(findAssignInput, 4000);
-      if (!assign) return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
-      assign.focus();
-      realClick(assign);
-
-      // 3. Filter the list by typing, then pick the team option. The picker's
-      // search is debounced/server-driven and only fires off real per-keystroke
-      // input (see typeText). We match ANY rendered option by the FULL team text
-      // (exact first, else contains) — never by the query we typed — so a search
-      // that surfaces the team under a broad token still selects the right team.
+      // 2. Assign-to picker (only on screen once the routine radio is on)
+      say('Opening Assign to…');
+      var assign = await waitFor(function () {
+        return findAssignInput(radio);
+      }, 2000);
+      if (!assign) {
+        if (issue1StillOn()) {
+          return abort(
+            'Couldn’t switch Next Steps to “Save & send to routine requests task list” — still on “Issue 1 approved item”. Tick that option yourself and press the button again.',
+            team,
+            mode
+          );
+        }
+        return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
+      }
+      // Snapshot [role=option] already on the overview (Clinical History /
+      // Reason for exam) BEFORE opening Assign-to, so we don't treat those
+      // as the team list.
       var optionSel =
         DC && DC.get('routine-rx.assignee-option')
           ? DC.get('routine-rx.assignee-option').target.join(', ')
           : '[id^="select-item-"], [role="option"], li[role="option"]';
+      var priorVisible = snapshotVisible(optionSel);
+      openAssignPicker(assign);
+
+      // 3. Pick the team option. Prefer an already-rendered option (skip-type);
+      //    only then filter the list by typing. The picker's search is
+      //    debounced/server-driven and only fires off real per-keystroke input
+      //    (see typeText). We match ANY rendered option by the FULL team text
+      //    (exact first, else contains) — never by the query we typed — so a
+      //    search that surfaces the team under a broad token still selects the
+      //    right team. Options are scoped to the Assign-to picker, not other
+      //    [role=option] lists on the overview.
+      var optionNodes = function () {
+        return collectAssigneeOptions(assign, priorVisible, optionSel);
+      };
       var matchOption = function () {
-        var opts = document.querySelectorAll(optionSel);
+        var opts = optionNodes();
+        var want = foldTeam(team);
         var exact = null,
           partial = null;
         for (var i = 0; i < opts.length; i++) {
           if (!visible(opts[i])) continue;
-          var t = textOf(opts[i]);
-          if (t === norm(team)) {
+          var t = foldTeam(textOf(opts[i]));
+          if (t === want) {
             exact = opts[i];
             break;
           }
-          if (!partial && t.indexOf(norm(team)) >= 0) partial = opts[i];
+          if (!partial && want && t.indexOf(want) >= 0) partial = opts[i];
         }
         return exact || partial;
       };
@@ -463,29 +777,32 @@
       // A contains-match (configured "Prescribing" hitting "Prescribing / Meds
       // Management") is allowed to pre-fill, but must never be committed
       // without a human reading the real name — auto mode downgrades to a
-      // confirm below when this is false.
+      // confirm below when this is false. Slash-spacing (" / " vs "/") is the
+      // same name and counts as exact.
       var optionIsExact = function (el) {
-        return !!el && textOf(el) === norm(team);
+        return !!el && foldTeam(textOf(el)) === foldTeam(team);
       };
       // Case-preserving text for user-facing copy (textOf lowercases for match).
       var rawTextOf = function (el) {
         var s = (el && el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent) || '';
         return String(s).replace(/\s+/g, ' ').trim();
       };
-      // Try each query in turn (safe leading token first, then the full name —
-      // see searchQueriesFor), re-typing from empty each time. The FINAL query
-      // gets the full 6s margin (a real debounce + server round trip, not a
-      // local list filter); non-final queries get a short 1.5s budget so a
-      // leading-token miss falls through to the full name quickly instead of
-      // burning 6s on every miss (v3.173.2 — the reported "very slow but
-      // works" case was exactly this: token query misses, full-name query
-      // succeeds, total wait dominated by the dead 6s).
+      // Skip-type: after opening Assign-to, wait briefly for an already-rendered
+      // option. If the configured team is already on screen, select it without
+      // typing. W8 is still UI-drive — abort if the option is never found.
+      say('Finding team…');
       var queries = searchQueriesFor(team);
-      var option = null;
-      for (var qi = 0; qi < queries.length && !option; qi++) {
-        setNativeValue(assign, '');
-        await typeText(assign, queries[qi]);
-        option = await waitFor(matchOption, qi < queries.length - 1 ? 1500 : 6000);
+      var option = await waitFor(matchOption, 400, 50);
+      if (!option) {
+        // Try each query in turn (safe leading token first, then the full name —
+        // see searchQueriesFor), re-typing from empty each time. The FINAL query
+        // gets 3.5s (debounce + server round trip); non-final queries get 800ms
+        // so a leading-token miss falls through to the full name quickly.
+        for (var qi = 0; qi < queries.length && !option; qi++) {
+          setNativeValue(assign, '');
+          await typeText(assign, queries[qi], 20);
+          option = await waitFor(matchOption, qi < queries.length - 1 ? 800 : 3500);
+        }
       }
       if (!option) {
         // Breadcrumb for a page-console capture (see renderedOptionTexts).
@@ -502,26 +819,41 @@
         } catch (e) {
           /* ignore */
         }
+        var seen = [];
+        try {
+          var listed = optionNodes();
+          for (var si = 0; si < listed.length; si++) {
+            if (visible(listed[si])) seen.push(textOf(listed[si]));
+          }
+        } catch (eSeen) {
+          seen = renderedOptionTexts(optionSel);
+        }
+        var seenBit = seen.length
+          ? ' Assign-to listed: “' + seen.slice(0, 5).join('”, “') + '”.'
+          : ' The Assign-to picker didn’t list any teams.';
         return abort(
           'Team “' +
             team +
-            '” isn’t in the assignee list. Open the picker to check the exact name, or add it via the ▾ menu.',
+            '” isn’t in the assignee list.' +
+            seenBit +
+            ' Open the picker to check the exact name (spaces around “/” count), or add it via the ▾ menu.',
           team,
           mode
         );
       }
       var optionExact = optionIsExact(option);
       var optionText = rawTextOf(option);
-      realClick(option);
+      realClick(optionControl(option) || option);
 
       // 4. commit — find the button (EXACT label only — a commit click must
       //    never go through the substring fallback, audit R8), then wait until
       //    Medicus ENABLES it (it stays disabled until a valid assignee is
       //    registered).
+      say('Waiting to send…');
       var commit = await waitFor(function () {
         var b = findByText(['button', '[role="button"]'], 'Send to routine list', true);
         return b && isEnabled(b) ? b : null;
-      }, 5000);
+      }, 2500);
       if (!commit) {
         if (findByText(['button', '[role="button"]'], 'Send to routine list')) {
           return abort(
@@ -547,6 +879,7 @@
       // EXACTLY matches the configured team — a contains-match must be read by
       // a human (named with the option's REAL text) before the write.
       if (mode === 'confirm' || (mode === 'auto' && !optionExact)) {
+        say('Confirm to send…');
         var confirmMsg = optionExact
           ? 'Send this prescription to routine requests for “' + team + '”?'
           : 'The assignee list matched “' +
@@ -556,7 +889,7 @@
             '” (not an exact match). Send this prescription to routine requests for “' +
             optionText +
             '”?';
-        var ok = window.confirm(confirmMsg);
+        var ok = await requestConfirm(confirmMsg);
         if (!ok) {
           toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
           recordAudit(team, mode, 'aborted', 'clinician declined the confirm-mode dialog');
@@ -574,11 +907,24 @@
         abort('Task changed mid-run — nothing was clicked on the new task.', team, mode);
         return;
       }
+      // Confirm can take wall-clock time; Vue may have disabled the button
+      // meanwhile. Never click a disabled commit (partial matches never
+      // auto-commit either — that gate is above).
+      if (!isEnabled(commit)) {
+        return abort(
+          'Selected “' +
+            team +
+            '”, but “Send to routine list” stayed disabled — the assignee may not have registered. Check the picker.',
+          team,
+          mode
+        );
+      }
       commitAndAudit(commit, team, mode);
     } finally {
       _macroPath = null;
       running = false;
       setBusy(false);
+      if (typeof renderButton === 'function') renderButton();
     }
   }
 
@@ -588,14 +934,136 @@
     btn = null,
     caret = null,
     menu = null,
-    busy = false;
+    busy = false,
+    confirmBar = null,
+    confirmResolve = null,
+    confirmOnKey = null;
 
   function setBusy(b) {
     busy = b;
-    if (btn) {
-      btn.disabled = b;
-      btn.style.opacity = b ? '0.6' : '1';
+    if (host) {
+      if (b) host.classList.add('chrx-busy');
+      else host.classList.remove('chrx-busy');
     }
+    if (btn) btn.disabled = b;
+    if (caret) caret.disabled = b;
+  }
+
+  function setStep(label) {
+    if (!btn || !label) return;
+    btn.textContent = label;
+    btn.title = label;
+  }
+
+  // Confirm/menu must sit on document.body — the Medicus action row clips
+  // overflow, so an absolutely-positioned child of .chrx-host is invisible.
+  function placeOverHost(el) {
+    if (!el) return;
+    try {
+      if (typeof document !== 'undefined' && document.body && el.parentElement !== document.body) {
+        document.body.appendChild(el);
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    if (!el.style) return;
+    el.style.position = 'fixed';
+    el.style.zIndex = '2147483000';
+    el.style.right = 'auto';
+    el.style.top = 'auto';
+    try {
+      var r = host && host.getBoundingClientRect && host.getBoundingClientRect();
+      if (r && r.width) {
+        var w = el.offsetWidth || 280;
+        el.style.left = Math.max(8, Math.min(r.right - w, (window.innerWidth || 800) - w - 8)) + 'px';
+        el.style.bottom = Math.max(8, (window.innerHeight || 600) - r.top + 8) + 'px';
+        return;
+      }
+    } catch (e2) {
+      /* ignore */
+    }
+    el.style.left = 'auto';
+    el.style.right = '18px';
+    el.style.bottom = '96px';
+  }
+
+  function dismissConfirmBar(ok) {
+    if (confirmOnKey) {
+      try {
+        document.removeEventListener('keydown', confirmOnKey, true);
+      } catch (e) {
+        /* ignore */
+      }
+      confirmOnKey = null;
+    }
+    var resolve = confirmResolve;
+    confirmResolve = null;
+    if (confirmBar && confirmBar.parentElement) confirmBar.parentElement.removeChild(confirmBar);
+    confirmBar = null;
+    if (resolve) resolve(!!ok);
+  }
+
+  // In-host confirm: Cancel is focused (safer default). Proceed never clicks
+  // Medicus itself — it only resolves true so runMacro can commitAndAudit.
+  function hostConfirm(msg) {
+    if (confirmBar) return Promise.resolve(false);
+    if (!host || (host.isConnected === false)) return Promise.resolve(window.confirm(msg));
+    closeMenu();
+    return new Promise(function (resolve) {
+      confirmResolve = resolve;
+      var bar = document.createElement('div');
+      // Body-fixed, not a child of .chrx-host — the action row clips overflow.
+      bar.className = 'chrx-menu chrx-confirm';
+      bar.setAttribute('role', 'dialog');
+
+      var p = document.createElement('div');
+      p.className = 'chrx-confirm-msg';
+      p.textContent = msg;
+      bar.appendChild(p);
+
+      var row = document.createElement('div');
+      row.className = 'chrx-confirm-actions';
+
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'chrx-menu-item chrx-confirm-cancel';
+      cancel.textContent = 'Cancel';
+      cancel.setAttribute('autofocus', '');
+      cancel.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dismissConfirmBar(false);
+      };
+
+      var go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'chrx-menu-item chrx-confirm-go';
+      go.textContent = 'Send to routine list';
+      go.onclick = function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dismissConfirmBar(true);
+      };
+
+      row.appendChild(cancel);
+      row.appendChild(go);
+      bar.appendChild(row);
+      confirmBar = bar;
+      placeOverHost(bar);
+      confirmOnKey = function (e) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          dismissConfirmBar(false);
+        }
+      };
+      document.addEventListener('keydown', confirmOnKey, true);
+      try {
+        cancel.focus();
+      } catch (e) {
+        /* ignore */
+      }
+    });
   }
 
   function highlight(el) {
@@ -616,6 +1084,7 @@
     t.className = 'chrx-toast chrx-' + (kind || 'ok');
     t.textContent = msg;
     document.body.appendChild(t);
+    placeOverHost(t);
     setTimeout(function () {
       t.classList.add('chrx-show');
     }, 10);
@@ -635,18 +1104,20 @@
   }
 
   function openMenu() {
+    if (busy || running) return;
     closeMenu();
     menu = document.createElement('div');
     menu.className = 'chrx-menu';
 
     var h1 = document.createElement('div');
     h1.className = 'chrx-menu-h';
-    h1.textContent = 'Send to team';
+    h1.textContent = 'Team';
     menu.appendChild(h1);
     cfg.teams.forEach(function (team) {
       var item = document.createElement('button');
+      item.type = 'button';
       item.className = 'chrx-menu-item' + (team === cfg.lastTeam ? ' chrx-sel' : '');
-      item.textContent = (team === cfg.lastTeam ? '● ' : '○ ') + team;
+      item.textContent = team;
       item.onclick = function () {
         cfg.lastTeam = team;
         saveCfg();
@@ -656,6 +1127,7 @@
       menu.appendChild(item);
     });
     var add = document.createElement('button');
+    add.type = 'button';
     add.className = 'chrx-menu-item chrx-add';
     add.textContent = '+ Add team…';
     add.onclick = function () {
@@ -673,16 +1145,17 @@
 
     var h2 = document.createElement('div');
     h2.className = 'chrx-menu-h';
-    h2.textContent = 'On commit';
+    h2.textContent = 'When sending';
     menu.appendChild(h2);
     [
-      ['confirm', 'Ask, then send'],
-      ['manual', 'Pre-fill, I’ll click'],
-      ['auto', 'Send automatically'],
+      ['confirm', 'Ask before sending'],
+      ['manual', 'Pre-fill only'],
+      ['auto', 'Send without asking'],
     ].forEach(function (m) {
       var item = document.createElement('button');
+      item.type = 'button';
       item.className = 'chrx-menu-item' + (m[0] === cfg.commitMode ? ' chrx-sel' : '');
-      item.textContent = (m[0] === cfg.commitMode ? '● ' : '○ ') + m[1];
+      item.textContent = m[1];
       item.onclick = function () {
         cfg.commitMode = m[0];
         saveCfg();
@@ -704,11 +1177,27 @@
     }
   }
 
+  function shortTeamLabel(team) {
+    var full = String(team == null ? '' : team).trim();
+    if (!full) return '';
+    var m = /^[a-z0-9 ]+/i.exec(full);
+    var lead = m ? m[0].trim() : '';
+    return lead || full;
+  }
+
+  function modeTitle(mode) {
+    if (mode === 'auto') return 'Send without asking';
+    if (mode === 'manual') return 'Pre-fill only';
+    return 'Ask before sending';
+  }
+
   function renderButton() {
     if (!btn) return;
-    var modeTag = cfg.commitMode === 'auto' ? ' ⚡' : cfg.commitMode === 'manual' ? ' ✎' : '';
-    btn.textContent = '→ ' + cfg.lastTeam + modeTag;
-    btn.title = 'Re-assign this prescription to “' + cfg.lastTeam + '” (' + cfg.commitMode + '). Use ▾ to change.';
+    var label = 'Send to routine list';
+    var short = shortTeamLabel(cfg.lastTeam);
+    if (short && short.length <= 22) label += ' · ' + short;
+    btn.textContent = label;
+    btn.title = modeTitle(cfg.commitMode) + ' — “' + cfg.lastTeam + '”. Use ▾ to change.';
   }
 
   function buildUI() {
@@ -739,6 +1228,7 @@
     caret.title = 'Change team / commit behaviour';
     caret.onclick = function (e) {
       e.stopPropagation();
+      if (busy || running) return;
       if (menu) closeMenu();
       else openMenu();
     };
@@ -746,10 +1236,6 @@
     host.appendChild(btn);
     host.appendChild(caret);
     renderButton();
-
-    var style = document.createElement('style');
-    style.textContent = CSS;
-    document.head.appendChild(style);
   }
 
   // Where to inject the button. The H-035 visibility control is that the button
@@ -838,6 +1324,15 @@
   function ensureInjected() {
     if (!host) return;
 
+    // Freeze placement while the macro is running. Confirm lives on
+    // document.body so Vue replacing the action row must not auto-Cancel it.
+    if (running || busy) {
+      if (placedAnchor && document.contains(placedAnchor) && host.parentElement !== placedAnchor) {
+        insertHost(placedAnchor);
+      }
+      return;
+    }
+
     // 1. Cheap path gate — no DOM scan, no reflow.
     if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) {
       removeHost();
@@ -875,6 +1370,7 @@
   }
 
   function removeHost() {
+    if (confirmResolve) dismissConfirmBar(false);
     if (host && host.parentElement) host.parentElement.removeChild(host);
     placedAnchor = null;
     placedRoutingControl = null;
@@ -895,27 +1391,6 @@
       if (mo) mo.observe(document.body, { childList: true, subtree: true });
     }
   }
-
-  var CSS = [
-    '.chrx-host{display:inline-flex;align-items:stretch;vertical-align:middle;position:relative;margin:0 8px 0 0;',
-    'font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,.18);border-radius:8px}',
-    '.chrx-btn{background:#0d6e5e;color:#fff;border:0;padding:9px 13px;border-radius:8px 0 0 8px;cursor:pointer;max-width:300px;',
-    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.chrx-btn:hover{background:#0a5a4d}',
-    '.chrx-caret{background:#0a5a4d;color:#fff;border:0;border-left:1px solid rgba(255,255,255,.25);padding:0 11px;border-radius:0 8px 8px 0;cursor:pointer}',
-    '.chrx-caret:hover{background:#084a40}',
-    '.chrx-menu{position:absolute;right:0;bottom:calc(100% + 6px);z-index:2147483000;min-width:240px;background:#fff;color:#10302a;border:1px solid #cdd8d4;',
-    'border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:6px;display:flex;flex-direction:column;gap:2px}',
-    '.chrx-menu-h{font:700 11px/1 system-ui;text-transform:uppercase;letter-spacing:.04em;color:#5b6b66;padding:8px 8px 4px}',
-    '.chrx-menu-item{text-align:left;background:none;border:0;padding:7px 9px;border-radius:6px;cursor:pointer;font:500 13px/1.2 system-ui;color:#10302a}',
-    '.chrx-menu-item:hover{background:#eef4f2}',
-    '.chrx-menu-item.chrx-sel{color:#0d6e5e;font-weight:700}',
-    '.chrx-menu-item.chrx-add{color:#0d6e5e}',
-    '.chrx-toast{position:fixed;right:18px;bottom:72px;z-index:2147483000;max-width:340px;padding:11px 14px;border-radius:8px;',
-    'color:#fff;font:500 13px/1.35 system-ui;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;transform:translateY(8px);transition:.28s}',
-    '.chrx-toast.chrx-show{opacity:1;transform:none}',
-    '.chrx-toast.chrx-ok{background:#0d6e5e}.chrx-toast.chrx-warn{background:#b45309}.chrx-toast.chrx-err{background:#b42318}',
-  ].join('');
 
   // ── Node test hook ────────────────────────────────────────────────────
   // Exposes the already-isolated audit helpers (see their comments above) so
@@ -982,6 +1457,7 @@
 
   loadCfg().then(function () {
     buildUI();
+    requestConfirm = hostConfirm;
     ensureInjected();
     // Skip batches that are entirely our own host inject/remove — they'd
     // otherwise self-trigger a needless rescan.
