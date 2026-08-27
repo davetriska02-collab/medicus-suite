@@ -22,9 +22,10 @@ was coded within 24 months. Deliberately conservative:
   tidy-ups never fire.** Undated grades are excluded from the comparison (they cannot be
   ordered) but still listed in evidence so nothing is silently dropped.
 - **Honest insufficient/stale states.** No frailty codes → NO DATA; an ungraded code, a
-  single grade, undated grades, or a newest grade older than the window → neutral NOTED
-  with the recorded grade and date visible. The green state asserts only "no recorded
-  worsening" — never "stable".
+  single grade, undated grades, a **future-dated** newest grade (verify the coding
+  date — it can never fire red or claim green), or a newest grade older than the
+  window → neutral NOTED with the recorded grade and date visible. The green state
+  asserts only "no recorded worsening" — never "stable".
 - Superseded grades moved to **past problems** still count (the normal re-grading
   pattern); Sweep now passes `pastProblems` into evaluation to match the live panel
   (this also fixes the pre-existing HRT hysterectomy-context gap in Sweep).

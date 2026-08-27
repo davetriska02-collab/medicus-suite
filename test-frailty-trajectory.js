@@ -257,6 +257,55 @@ console.log('\n--- insufficient/stale evidence: neutral noted, never a green cla
   check(c && /without a grade/.test(c.valueText), 'ungraded valueText says no grade recorded');
 }
 {
+  // FUTURE-dated newest grade: nowMs - latestMs is negative, which trivially
+  // passes a naive <= withinMs recency test — the guard must stop a
+  // future-dated "worsening" from firing red, and must not reuse the stale
+  // "older than window" copy (factually wrong for a date AHEAD of the window).
+  const c = frailtyChip({
+    problems: [
+      { label: 'Mild frailty', codedDate: '2025-01-10' },
+      { label: 'Moderate frailty', codedDate: '2027-02-01' },
+    ],
+  });
+  check(c && c.status !== 'not_met', 'future-dated worsening NEVER fires red');
+  check(c && c.status === 'noted', 'future-dated worsening → neutral noted');
+  check(c && /future-dated \(2027-02-01\)/.test(c.valueText), 'future valueText names the future date');
+  check(
+    c && /verify the coding date/.test(c.valueText),
+    'future valueText tells the clinician to verify the coding date'
+  );
+  check(c && !/older than/.test(c.valueText), 'future valueText does NOT claim the grade is older than the window');
+  check(c && c.days == null, 'no nonsense negative "days ago" for a future date');
+  const traj = ((c.evidence && c.evidence.facts) || []).find((f) => f.label === 'Trajectory');
+  check(traj && /future-dated/.test(traj.value), 'evidence Trajectory fact says future-dated');
+  check(
+    traj && /verify the coding date/.test(traj.detail || ''),
+    'evidence Trajectory fact prompts coding-date verification'
+  );
+}
+{
+  // A single future-dated grade must hit the future copy, not "first recorded grade".
+  const c = frailtyChip({ problems: [{ label: 'Severe frailty', codedDate: '2027-06-01' }] });
+  check(
+    c && c.status === 'noted' && /future-dated/.test(c.valueText),
+    'single future-dated grade → noted with future copy'
+  );
+}
+{
+  // A future-dated IMPROVEMENT must not claim green "no worsening" either —
+  // no trajectory of any colour may be asserted from an untrustworthy date.
+  const c = frailtyChip({
+    problems: [
+      { label: 'Severe frailty', codedDate: '2024-10-01' },
+      { label: 'Moderate frailty', codedDate: '2027-02-01' },
+    ],
+  });
+  check(
+    c && c.status === 'noted' && /future-dated/.test(c.valueText),
+    'future-dated improvement → noted, never a green claim'
+  );
+}
+{
   // Process codes are not diagnoses: genericExclude keeps them out entirely.
   const c = frailtyChip({
     problems: [

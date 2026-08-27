@@ -768,6 +768,12 @@
             value: `worsened — ${pg.priorMax.level} → ${pg.latest.level}`,
             detail: `latest grade within ${pg.withinMonths}-month window`,
           });
+        } else if (pg.latest && pg.latestFuture) {
+          facts.push({
+            label: 'Trajectory',
+            value: `not assessable — newest grade is future-dated (${pg.latest.date})`,
+            detail: 'verify the coding date in the record',
+          });
         } else if (pg.latest && !pg.latestRecent) {
           facts.push({
             label: 'Trajectory',
@@ -2206,7 +2212,15 @@
 
       const withinMs = withinMonths * 30.4375 * 24 * 60 * 60 * 1000;
       const nowMs = new Date(now).getTime();
-      const latestRecent = !!latest && nowMs - new Date(latest.date).getTime() <= withinMs;
+      const latestMs = latest ? new Date(latest.date).getTime() : null;
+      // A FUTURE-dated newest grade is a coding error, not evidence. Without
+      // this guard, nowMs - latestMs is negative, which trivially satisfies the
+      // <= withinMs recency test — so a future-dated "worsening" would fire
+      // red. Future-dated → never fires, never claims "no worsening", and gets
+      // its own honest NOTED copy (the stale "older than window" copy would be
+      // factually wrong for a date that is AHEAD of the window).
+      const latestFuture = !!latest && latestMs > nowMs;
+      const latestRecent = !!latest && !latestFuture && nowMs - latestMs <= withinMs;
       const worsened = !!(latest && priorMax && latest.levelIndex > priorMax.levelIndex);
       const fires = worsened && latestRecent;
 
@@ -2218,6 +2232,14 @@
         valueText = `Worsened: ${priorMax.level} → ${latest.level} ${subject} (${priorMax.date} → ${latest.date})`;
         dateText = latest.date;
         days = daysBetween(latest.date, now);
+      } else if (latest && latestFuture) {
+        // Newest grade dated in the future: the ordering cannot be trusted, so
+        // no trajectory (red OR green) may be asserted from it. Point the
+        // clinician at the likely coding error instead. days stays null (a
+        // negative "days ago" would be nonsense).
+        status = 'noted';
+        valueText = `${cap(latest.level)} ${subject} — newest grade is future-dated (${latest.date}); verify the coding date; trajectory not assessable`;
+        dateText = latest.date;
       } else if (latest && priors.length > 0 && latestRecent) {
         // ≥2 distinct-dated grades with the newest inside the window: genuinely
         // assessable, and not a new worst → stable or improved.
@@ -2266,6 +2288,7 @@
         priorMax: priorMax || null,
         worsened,
         latestRecent,
+        latestFuture,
         fires,
       };
     }
