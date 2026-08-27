@@ -3,7 +3,7 @@
   "lastUpdated": "2026-08-22",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159.",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159. 2026-08-27: added medicusRegisterTypes to DM/DEM/HYP/AF/CHD/COPD/OB — Medicus's own clinical-summary endpoint returns a `patientRegisters` array with its own computed register membership (verified via a real HAR capture, test patient 01923625-8042-7071-a04d-1c610de03944), which the engine now prefers over problem-text-matching for these 7 registers when available (see patientOnRegister in rules-engine.js) — it is not subject to the stray 'family history of X' false-positive that text-matching can hit. Only these 7 registerType strings have been confirmed against real data; ASTHMA (and the remaining STIA/CKD/PAD/SMI/LD/HF registers) still use text-matching only until a HAR from a patient genuinely on each of those registers confirms the real registerType string — do not guess unconfirmed strings (same silent-failure caution as drug-rules.json match lists). 2026-08-27 follow-up: HAR from a genuine asthma-register patient (test patient 019235dd-c0e3-7234-85c9-931844b47691) confirmed registerType 'medicus-health/register-asthma' (note the register-X prefix, matching AF's pattern, not the -register suffix most others use) — added to ASTHMA. STIA/CKD/PAD/SMI/LD/HF remain unconfirmed.",
   "rules": [
     {
       "id": "qof-reg-dm",
@@ -11,6 +11,7 @@
       "enabled": true,
       "registerCode": "DM",
       "registerName": "Diabetes",
+      "medicusRegisterTypes": ["medicus-health/diabetes-register"],
       "problemMatch": [
         "type 1 diabetes",
         "type 2 diabetes",
@@ -36,6 +37,7 @@
       "enabled": true,
       "registerCode": "DEM",
       "registerName": "Dementia",
+      "medicusRegisterTypes": ["medicus-health/dementia-register"],
       "problemMatch": [
         "dementia",
         "alzheimer",
@@ -57,6 +59,7 @@
       "enabled": true,
       "registerCode": "HYP",
       "registerName": "Hypertension",
+      "medicusRegisterTypes": ["medicus-health/hypertension-register"],
       "problemMatch": [
         "hypertension",
         "essential hypertension",
@@ -77,6 +80,7 @@
       "enabled": true,
       "registerCode": "AF",
       "registerName": "Atrial Fibrillation",
+      "medicusRegisterTypes": ["medicus-health/register-atrial-fibrillation"],
       "problemMatch": [
         "atrial fibrillation",
         "atrial flutter"
@@ -90,6 +94,7 @@
       "enabled": true,
       "registerCode": "CHD",
       "registerName": "Coronary Heart Disease",
+      "medicusRegisterTypes": ["medicus-health/chd-register"],
       "problemMatch": [
         "coronary artery",
         "coronary heart disease",
@@ -175,14 +180,18 @@
       "enabled": true,
       "registerCode": "ASTHMA",
       "registerName": "Asthma",
+      "medicusRegisterTypes": ["medicus-health/register-asthma"],
       "problemMatch": [
         "asthma"
       ],
       "problemExclude": [
         "resolved asthma",
-        "no asthma"
+        "no asthma",
+        "family history",
+        "suspected asthma",
+        "query asthma"
       ],
-      "source": "QOF 26/27 AST register. Underlying business rules amended for 26/27 to include patients from age 5 (was 6); Sentinel's substring match is age-agnostic so this change has no functional effect here."
+      "source": "QOF 26/27 AST register. Underlying business rules amended for 26/27 to include patients from age 5 (was 6); Sentinel's substring match is age-agnostic so this change has no functional effect here. 2026-08-27: added family history / suspected / query exclusions (matching the LD register's precedent) — a stray \"Family history of asthma\" or \"?asthma\" problem was otherwise counting as register membership and, worse, could supply a spuriously old codedDate that blocked AST012 from firing for a genuinely new diagnosis coded later."
     },
     {
       "id": "qof-reg-copd",
@@ -190,6 +199,7 @@
       "enabled": true,
       "registerCode": "COPD",
       "registerName": "COPD",
+      "medicusRegisterTypes": ["medicus-health/copd-register"],
       "problemMatch": [
         "chronic obstructive pulmonary disease",
         "copd",
@@ -231,6 +241,7 @@
       "registerCode": "OB",
       "registerName": "Obesity",
       "ageMin": 18,
+      "medicusRegisterTypes": ["medicus-health/obesity-register"],
       "problemMatch": [
         "obesity",
         "obese",
@@ -273,6 +284,62 @@
       ],
       "source": "QOF 26/27 LD register (LD_COD refset approximation — corroborated via PRN02356 search; primary PDF 403 this run). Added 2026-07-11 (The Keeper). 2026-07-25 (qof-006, VERIFIER-B GREEN): LD annual health check confirmed as a Directed Enhanced Service (DES), NOT a core QOF clinical indicator — notes updated accordingly.",
       "notes": "The QOF LD register is defined by SNOMED codes for intellectual disability; Sentinel approximates via problem substring matching. This will miss patients with a learning disability not coded using these terms. Down's syndrome and Fragile X are the most commonly encountered specific diagnoses in primary care LD registers. Autism spectrum disorder (ASD) without intellectual disability does NOT qualify for the QOF LD register — autistic patients who do not have a separately coded intellectual disability are correctly not flagged. LD ANNUAL HEALTH CHECK: confirmed as a Directed Enhanced Service (DES/Learning Disability Health Check Scheme 2025-2028, managed via CQRS), NOT a core QOF clinical domain indicator — the QOF LD register identifies eligible patients but the health check itself and its £140 payment sit in enhanced services. Health check indicator (LD004-equivalent) not encoded here; the DES-linked check should be tracked separately via the enhanced-services workflow."
+    },
+    {
+      "id": "qof-reg-ndh",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "NDH",
+      "registerName": "Non-diabetic Hyperglycaemia",
+      "ageMin": 18,
+      "problemMatch": [
+        "non-diabetic hyperglycaemia",
+        "nondiabetic hyperglycaemia",
+        "prediabetes",
+        "pre-diabetes",
+        "pre diabetes",
+        "prediabetic",
+        "pre-diabetic",
+        "impaired glucose tolerance",
+        "impaired fasting glycaemia",
+        "gestational diabetes"
+      ],
+      "problemExclude": [
+        "type 1 diabetes",
+        "type 2 diabetes",
+        "diabetes insipidus",
+        "no non-diabetic hyperglycaemia",
+        "no prediabetes",
+        "family history"
+      ],
+      "source": "QOF 26/27 NDH register (NHS England PRN02356 — NDH003 'Reporting and verification': \"the register... is defined as all patients aged 18 or over with a record of non-diabetic hyperglycaemia or pre-diabetes or GDM, which has not been superseded by a diagnosis of diabetes (excluding GDM) recorded prior to the beginning of the financial year\"). Fetched and confirmed in full 2026-08-28 (The Keeper) — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf pp.57-58. NEW to Sentinel this run — was held pending confirmation (see qof-ndh in .claude/skills/the-keeper/references/state/last-run.json), now resolved and applied.",
+      "notes": "problemExclude deliberately uses \"type 1 diabetes\"/\"type 2 diabetes\" rather than bare \"diabetes mellitus\" — a bare \"diabetes mellitus\" exclude would also match \"Gestational diabetes mellitus\" as a substring and wrongly drop the very GDM patients this register must include (the QOF definition explicitly excludes progression to diabetes but excludes GDM from that exclusion). Known approximation: a patient coded with bare \"Diabetes mellitus\" (no type specified) who has progressed from NDH will not be excluded — same class of imprecision the DM register itself accepts elsewhere in this file. ageMin:18 per the QOF register definition (\"aged 18 or over\")."
+    },
+    {
+      "id": "qof-ndh003",
+      "type": "qof-indicator",
+      "enabled": true,
+      "indicatorCode": "NDH003",
+      "indicatorName": "HbA1c or fasting glucose recorded in NDH/prior GDM (preceding 12 months)",
+      "requiresRegister": "NDH",
+      "check": {
+        "kind": "observation-recent",
+        "observation": [
+          "hba1c",
+          "haemoglobin a1c",
+          "fasting blood glucose",
+          "fasting plasma glucose",
+          "fasting glucose"
+        ],
+        "withinDays": 365
+      },
+      "thresholds": {
+        "lower": 50,
+        "upper": 90
+      },
+      "points": 20,
+      "source": "QOF 26/27 NDH003 (NICE IND172/IND173) — NHS England PRN02356: \"The percentage of patients with non-diabetic hyperglycaemia or a previous diagnosis of gestational diabetes who have had an HbA1c or fasting blood glucose performed in the preceding 12 months.\" 20pts, 50-90%. Fetched and confirmed in full 2026-08-28 (The Keeper) — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf pp.57-58. NEW to Sentinel this run — was held pending confirmation (see qof-ndh in .claude/skills/the-keeper/references/state/last-run.json), now resolved and applied.",
+      "notes": "NEW 26/27 indicator (previously NDH002, renamed and updated for 26/27 to also cover women with a history of gestational diabetes — same underlying rationale as the AST007->AST015/AST012->AST014 renames this session, but this one is a genuinely new cohort addition, not a pure ID relabel, so shipped as a new rule id rather than reusing a retired one). Structurally identical to the already-shipped DM020 (HbA1c, observation-recent, register-gated) — same feasibility, same engine support, no extension needed."
     },
     {
       "id": "qof-hyp008",
@@ -1633,9 +1700,10 @@
       "id": "qof-ast007",
       "type": "qof-indicator",
       "enabled": true,
-      "indicatorCode": "AST007",
+      "indicatorCode": "AST015",
       "indicatorName": "Asthma review with 4 components in preceding 12 months",
       "requiresRegister": "ASTHMA",
+      "treatNeverRecordedAsOverdue": true,
       "check": {
         "kind": "observation-recent",
         "observation": [
@@ -1649,16 +1717,17 @@
         "upper": 70
       },
       "points": 20,
-      "source": "QOF 26/27 AST007",
-      "notes": "Threshold tightened for 26/27 from 50-75 to 45-70. The full QOF rule now requires the review to include FOUR components: (1) assessment of asthma control, (2) recording of number of exacerbations, (3) assessment of inhaler technique, (4) written personalised action plan. Sentinel cannot verify all four components are present; presence of an asthma-review code is the closest approximation. Clinician must verify the written action plan and other elements."
+      "source": "QOF 26/27 AST015 (PRN02356 July 2026 update, changelog table: \"AST015 Changed indicator ID due to asthma register change\", thresholds/points unchanged from prior AST007)",
+      "notes": "2026-08-28 (The Keeper): renumbered AST007 -> AST015 per the July 2026 PRN02356 amendment (fetched and confirmed in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf, pp.42-43 and changelog table p.1). Pure ID rename — wording, 20pts and 45-70% thresholds are byte-for-byte unchanged; the internal rule id (qof-ast007) is kept so overrides/dismissals keyed on it are not disturbed, only indicatorCode changed. Was HELD since 2026-08-17 pending this confirmation (see the-keeper-report-2026-08-18.md / docs/keeper/KEEPER-GAP-ANALYSIS-2026-08-22.md) — now applied. Threshold tightened for 26/27 from 50-75 to 45-70 (unchanged by this rename). The full QOF rule requires the review to include FOUR components: (1) assessment of asthma control, (2) recording of number of exacerbations, (3) assessment of inhaler technique, (4) written personalised action plan. Sentinel cannot verify all four components are present; presence of an asthma-review code is the closest approximation. Clinician must verify the written action plan and other elements. 2026-08-28: added treatNeverRecordedAsOverdue — a long-standing asthma-register patient with NO review EVER recorded now shows overdue (red), not neutral no_data, matching the AST014 fix (a genuine miss should never render as ambiguous absence of data). Only applies once the register-coded date itself is outside the current window; a recently-registered patient with no review yet still correctly shows no_data."
     },
     {
       "id": "qof-ast012",
       "type": "qof-indicator",
       "enabled": true,
-      "indicatorCode": "AST012",
+      "indicatorCode": "AST014",
       "indicatorName": "Objective test within 3 months of new asthma diagnosis (post-Apr 2025)",
       "requiresRegister": "ASTHMA",
+      "requiresRegisterCodedFrom": "2025-04-01",
       "check": {
         "kind": "observation-recent",
         "observation": [
@@ -1676,8 +1745,8 @@
         "upper": 80
       },
       "points": 15,
-      "source": "QOF 26/27 AST012",
-      "notes": "NEW 26/27 indicator. Applies to patients newly diagnosed with asthma on or after 1 April 2025, with an objective test (spirometry with BDR, FeNO, or peak flow variability) within 3 months either side of diagnosis. Sentinel cannot determine diagnosis date or 3-month window without rules-engine extension — this rule fires for all asthma-register patients with any objective test in the last year. Useful as a prompt, not a claim verifier."
+      "source": "QOF 26/27 AST014 (PRN02356 July 2026 update, p.42: \"AST014. The percentage of patients with a new diagnosis of asthma on or after 1 April 2025 with a record of an objective test between 3 months before or 3 months after diagnosis.\" 15pts, 45-80%)",
+      "notes": "2026-08-28 (The Keeper): renumbered AST012 -> AST014 per the July 2026 PRN02356 amendment (fetched and confirmed in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf, pp.42-43 and changelog table p.1: \"AST014 Changed indicator ID due to asthma register change\", thresholds/points unchanged). Pure ID rename — wording, 15pts and 45-80% thresholds are byte-for-byte unchanged from prior AST012; the internal rule id (qof-ast012) is kept so overrides/dismissals keyed on it are not disturbed, only indicatorCode changed. Was HELD since 2026-08-17 pending this confirmation (see the-keeper-report-2026-08-18.md / docs/keeper/KEEPER-GAP-ANALYSIS-2026-08-22.md) — now applied. Applies to patients newly diagnosed with asthma on or after 1 April 2025, with an objective test (spirometry with BDR, FeNO, or peak flow variability) within 3 months either side of diagnosis. 2026-08-27: gated on requiresRegisterCodedFrom (2025-04-01) — the asthma register problem's codedDate is used as a proxy for diagnosis date, so patients coded before that date (or with no coded date) no longer raise this chip at all. Sentinel still cannot verify the exact 3-month window around diagnosis, only that an objective test was recorded in the last year for a patient diagnosed on/after 1 Apr 2025 — useful as a prompt, not a claim verifier."
     },
     {
       "id": "qof-copd010",
@@ -1797,9 +1866,9 @@
     {
       "id": "qof-ob004",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB004",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Offer of referral to a weight-management programme in obesity",
+      "indicatorName": "Offer of referral to a weight-management programme in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "observation-recent",
@@ -1818,24 +1887,28 @@
         "upper": 30
       },
       "points": 5,
-      "source": "QOF 26/27 OB004 (NHS England PRN02356) — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~5), thresholds (corroborated 10–30%) and code cluster against PRN02356. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year. Flip enabled:true once the values are confirmed. Depends on the OB register, which is itself a BMI-driven approximation."
+      "source": "QOF 26/27 OB004 (NHS England PRN02356): \"The percentage of patients aged 18 or over living with obesity... who have been referred to a weight management programme within 90 days of the BMI being recorded.\" 5pts, 10-30%. CONFIRMED 2026-08-28 (The Keeper) by fetching the primary guidance in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf p.70 (indicator wording) and p.12 (Table of indicator changes: \"New indicator – 10-30%\" / \"New – 5 pts\") — both match the previously-corroborated values exactly. Numerator cluster confirmed 2026-08-28 against the official QOF v51 business rules (Obesity_v51.3, https://digital.nhs.uk/data-and-information/data-collections-and-data-sets/data-collections/quality-and-outcomes-framework-qof/business-rules/quality-and-outcomes-framework-qof-business-rules-v51-2026): cluster WTMGREF_COD \"Weight management programme referral codes\" (SNOMED refset 999037041000230107) — a single general referral cluster, not split by tier, so the existing tier-2/tier-3-worded match terms are a reasonable free-text approximation of it, not an under-match.",
+      "notes": "ENABLED 2026-08-28 (The Keeper) — was shipped disabled pending CSO confirmation of points/thresholds; that confirmation is now done (see source) so the stated blocker is resolved. The true definition requires the referral to be offered within 90 days of the qualifying BMI being recorded — Sentinel cannot verify that 90-day timing, so this observation-recent approximation checks only for a weight-management-referral code within the QOF year (a genuine, documented approximation limit, not a reason to keep it disabled). Depends on the OB register, which is itself a BMI-driven approximation. UNMODELLED PCA exception clusters exist in the official ruleset (WTMGREFDEC_COD — patient declined referral; WTMGSU_COD — service unavailable; WTMGPU_COD — programme unsuitable for the patient): a patient with a coded decline/unavailability/unsuitability entry is a legitimate QOF exception, not a missed referral, but Sentinel has no personalised-care-adjustment concept and cannot suppress the chip for them — same class of limitation already documented elsewhere in this file for other PCA-bearing indicators. Sentinel's substring matching cannot consume SNOMED refset IDs directly (see the file's own top-level notes); this citation exists for source-accuracy and for anyone with NHS TRUD access wanting to pull the actual member-code text to refine the match list further."
     },
     {
       "id": "qof-ob005",
       "type": "qof-indicator",
-      "enabled": false,
+      "enabled": true,
       "indicatorCode": "OB005",
-      "indicatorName": "[DRAFT 26/27 — PENDING CONFIRMATION] Weight-management pharmacotherapy / shared decision-making in obesity",
+      "indicatorName": "Weight-management pharmacotherapy / shared decision-making in obesity",
       "requiresRegister": "OB",
       "check": {
         "kind": "medication-present",
         "medicationMatch": [
           "orlistat",
+          "xenical",
           "liraglutide",
+          "victoza",
           "saxenda",
           "semaglutide",
+          "ozempic",
           "wegovy",
+          "rybelsus",
           "tirzepatide",
           "mounjaro"
         ]
@@ -1845,8 +1918,8 @@
         "upper": 80
       },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356); tirzepatide eligibility per NICE TA1026 — DRAFT, corroborated via search, NOT yet confirmed against the primary guidance.",
-      "notes": "NEW 26/27 indicator, shipped DISABLED pending CSO confirmation of the exact points (corroborated ~13), thresholds (corroborated 50–80%) and definition against PRN02356. The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing. Flip enabled:true once values are confirmed."
+      "source": "QOF 26/27 OB005 (NHS England PRN02356): \"Percentage of eligible patients... who have a recorded shared decision-making discussion... and are offered NICE approved medicines management (pharmacotherapy)...\" 13pts, 50-80%; tirzepatide eligibility per NICE TA1026. CONFIRMED 2026-08-28 (The Keeper) by fetching the primary guidance in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf p.70-73 (indicator wording + rationale) and p.12 (Table of indicator changes: \"New indicator – 50-80%\" / \"New – 13 pts\") — both match the previously-corroborated values exactly.",
+      "notes": "ENABLED 2026-08-28 (The Keeper) — was shipped disabled pending CSO confirmation of points/thresholds; that confirmation is now done (see source) so the stated blocker is resolved. Brand list completed at the same time (per CLAUDE.md's brand-completeness expectation for substring-matched medications): added xenical (orlistat), victoza (liraglutide, diabetes-branded but still a genuine weight-management prescription when used off-label), ozempic and rybelsus (semaglutide — Ozempic especially is commonly prescribed off-label for weight loss and was a real gap, since the bare generic \"semaglutide\" substring never matches a purely brand-named script). The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing."
     },
     {
       "id": "qof-dem004",
@@ -1878,8 +1951,9 @@
     {
       "id": "qof-ckd002",
       "type": "qof-indicator",
+      "category": "safety-monitoring",
       "enabled": true,
-      "indicatorCode": "CKD002",
+      "indicatorCode": "CKD-BP",
       "indicatorName": "BP <=140/90 in CKD (no frailty)",
       "requiresRegister": "CKD",
       "excludeIfProblem": [
@@ -1896,19 +1970,15 @@
         "thresholdDiastolic": 90,
         "withinDays": 365
       },
-      "thresholds": {
-        "lower": 40,
-        "upper": 90
-      },
-      "points": 20,
-      "source": "QOF 26/27 CKD002 — corroborated via PRN02356 search; primary PDF 403 this run. Added 2026-07-11 (The Keeper).",
-      "notes": "CKD blood-pressure control indicator. Target ≤140/90 per QOF and NICE NG203; in CKD patients with ACR >70 mg/mmol (proteinuria) the NICE NG203 target is ≤130/80 — QOF indicator uses the 140/90 threshold, which Sentinel enforces here. Frailty exclusion applied per PRN02356 pattern. Note the NICE NG136 (hypertension) BP monitoring is a separate activity; this indicator applies to CKD patients regardless of whether they are also on the HYP register."
+      "source": "NICE NG203 (CKD BP target). NOT a QOF 26/27 indicator — 2026-08-28 (The Keeper) fetched and read the full current NHS England QOF 2026/27 guidance (PRN02356, https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf) end to end: CKD does not appear as a QOF clinical domain, there is no CKD register/indicator chapter, and no CKD002 exists anywhere in the document. The prior 2026-07-11 entry (\"QOF 26/27 CKD002\") was added on a 403'd primary source and never independently confirmed — that framing was wrong and is corrected here. Relabelled from indicatorCode CKD002 (a real-looking but non-existent QOF code — risked a clinician mistaking this for something that counts toward practice QOF income/reporting) to CKD-BP and recategorised as a non-QOF safety-monitoring prompt, matching the existing trend-egfr-falling/K-HIGH/trend-hba1c-rising pattern in this file. The underlying clinical check (BP control in CKD) remains genuinely useful per NICE NG203 and is kept firing unchanged — only the false QOF-indicator framing is removed. rule id (qof-ckd002) and check logic are unchanged so no override/dismissal breaks.",
+      "notes": "CKD blood-pressure control prompt, NOT a QOF-scored indicator (see source). Target ≤140/90 per NICE NG203; in CKD patients with ACR >70 mg/mmol (proteinuria) the NICE NG203 target is tighter (≤130/80) — this rule enforces the more general 140/90 threshold only. Frailty exclusion retained. Note the NICE NG136 (hypertension) BP monitoring is a separate activity; this rule applies to CKD register patients regardless of whether they are also on the HYP register."
     },
     {
       "id": "qof-ckd003",
       "type": "qof-indicator",
+      "category": "safety-monitoring",
       "enabled": true,
-      "indicatorCode": "CKD003",
+      "indicatorCode": "CKD-RASI",
       "indicatorName": "ACE-I or ARB in CKD with hypertension and proteinuria",
       "requiresRegister": "CKD",
       "requiresAnyProblem": [
@@ -1938,13 +2008,8 @@
           "sacubitril"
         ]
       },
-      "thresholds": {
-        "lower": 60,
-        "upper": 90
-      },
-      "points": 15,
-      "source": "QOF 26/27 CKD003 — corroborated via PRN02356 search; primary PDF 403 this run. Added 2026-07-11 (The Keeper).",
-      "notes": "ACE inhibitor or ARB in CKD patients with hypertension and proteinuria (ACR>70 mg/mmol or equivalent). The full QOF definition requires ACR>70 to qualify — Sentinel approximates by checking ACE-I/ARB presence in CKD patients with any coded hypertension (requiresAnyProblem is negation-aware; 'family history of hypertension' does not qualify). This will over-flag CKD+HYP patients without significant proteinuria — clinician must verify ACR status. The requiresAnyProblem approach is the closest expressible approximation; a full ACR-observation-threshold gate requires an engine extension."
+      "source": "NICE NG203 (RAS-inhibition in proteinuric CKD). NOT a QOF 26/27 indicator — same 2026-08-28 (The Keeper) full-document confirmation as CKD-BP (qof-ckd002): CKD has no QOF clinical domain, register or indicator chapter in the current guidance and no CKD003 exists anywhere in it. The prior 2026-07-11 entry (\"QOF 26/27 CKD003\") was added on a 403'd primary source and never independently confirmed — corrected here. Relabelled from indicatorCode CKD003 to CKD-RASI and recategorised as a non-QOF safety-monitoring prompt (same pattern as CKD-BP). The underlying clinical check (ACEi/ARB in proteinuric hypertensive CKD) remains genuinely useful per NICE NG203 and is kept firing unchanged — only the false QOF-indicator framing is removed. rule id (qof-ckd003) and check logic are unchanged so no override/dismissal breaks.",
+      "notes": "ACE inhibitor or ARB prompt for CKD patients with hypertension and proteinuria (ACR>70 mg/mmol or equivalent) — NOT a QOF-scored indicator (see source). Sentinel approximates by checking ACE-I/ARB presence in CKD patients with any coded hypertension (requiresAnyProblem is negation-aware; 'family history of hypertension' does not qualify). This will over-flag CKD+HYP patients without significant proteinuria — clinician must verify ACR status. A full ACR-observation-threshold gate would need an engine extension."
     },
     {
       "id": "qof-smok002-chd",

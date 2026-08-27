@@ -189,6 +189,15 @@
   function fetchInvestigationDashboard(apiBase, uuid) {
     return safeFetch(`${apiBase}/care-record/data/investigation/dashboard/${uuid}`);
   }
+  // Carries patientRegisters — Medicus's OWN computed register membership
+  // ({ id, registerType, registerLabel, dashboardIdentifier }[]), used as the
+  // authoritative source for register matching in place of text-matching the
+  // problem list (see engine/rules-engine.js patientOnRegister). Optional/
+  // best-effort: a failure here just leaves patientRegisters empty and every
+  // register falls back to text-matching, same as before this endpoint existed.
+  function fetchClinicalSummary(apiBase, uuid) {
+    return safeFetch(`${apiBase}/clinical/data/clinical-summary/summary/${uuid}`);
+  }
 
   // Fetch the overview payload for a single investigation-report task.
   // overviewURL is provided by the caller (from the task's overviewURL field) and
@@ -302,9 +311,12 @@
   function clearCache() { CACHE.clear(); }
 
   // ---- Combined fetch ----
-  // Fetches all four endpoints in parallel. Returns:
-  //   { banner, medicationRegimen, problemListing, investigationDashboard, errors }
+  // Fetches all five endpoints in parallel. Returns:
+  //   { banner, medicationRegimen, problemListing, investigationDashboard, clinicalSummary, errors }
   // Each may be null if that endpoint failed; errors carries the messages.
+  // clinicalSummary is best-effort only — nothing downstream treats its
+  // absence as a fetch failure the way banner/medicationRegimen/problemListing/
+  // investigationDashboard are (see data-fetcher.js's failedFields handling).
   async function fetchAll(apiBase, uuid, opts) {
     opts = opts || {};
     const useCache = opts.useCache !== false;
@@ -312,9 +324,17 @@
       ['banner', fetchBanner],
       ['medicationRegimen', fetchMedicationRegimen],
       ['problemListing', fetchProblemListing],
-      ['investigationDashboard', fetchInvestigationDashboard]
+      ['investigationDashboard', fetchInvestigationDashboard],
+      ['clinicalSummary', fetchClinicalSummary]
     ];
-    const results = { banner: null, medicationRegimen: null, problemListing: null, investigationDashboard: null, errors: {} };
+    const results = {
+      banner: null,
+      medicationRegimen: null,
+      problemListing: null,
+      investigationDashboard: null,
+      clinicalSummary: null,
+      errors: {},
+    };
     const promises = endpoints.map(async ([key, fn]) => {
       if (useCache) {
         const cached = getCached(apiBase, uuid, key);
@@ -351,6 +371,7 @@
     fetchProblemListing,
     fetchInvestigationDashboard,
     fetchInvestigationReport,
+    fetchClinicalSummary,
     fetchAll,
     clearCache,
     CACHE_TTL_MS

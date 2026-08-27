@@ -291,7 +291,9 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
   const engine = window.SentinelRules;
 
   const raw = await api.fetchAll(apiBase, patientUuid, { useCache: false });
-  const failed = Object.keys(raw.errors || {});
+  // clinicalSummary (patientRegisters) is best-effort — see the matching note
+  // in side-panel/modules/sweep/sweep.js's evaluatePatient.
+  const failed = Object.keys(raw.errors || {}).filter((k) => k !== 'clinicalSummary');
   if (!raw.banner) {
     throw new Error('record not read' + (failed.length ? ` (${failed.join(', ')} failed)` : ''));
   }
@@ -312,6 +314,7 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     problems: data.problems || [],
     patientContext: data.patientContext,
     observationHistory: data.observationHistory || [],
+    patientRegisters: data.patientRegisters != null ? data.patientRegisters : null,
   });
   // Renal context rides along with the verdict — same fetch, zero extra cost.
   return { chips, renal: renalContext(data.observations || [], Date.now()) };

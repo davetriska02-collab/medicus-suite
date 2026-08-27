@@ -96,13 +96,41 @@
     return out;
   }
 
+  // ---- Onset-date confidence (from clinical-summary) ----
+  // clinical-summary's own problems[] carries a boolean hasOnsetDate alongside
+  // its displayDate/orderingDateString — Medicus's own signal for whether that
+  // date is a genuine clinical onset date or a fallback "ordering" date (shown
+  // asterisked in its UI). problem-listing (the primary source for
+  // data.problems, via normaliseProblemsAll below) has no equivalent flag, so
+  // this builds an id -> hasOnsetDate lookup to join onto it. Joined by the
+  // problem's own id, which both endpoints expose for the same underlying
+  // record. Returns null when clinical-summary is unavailable — callers must
+  // treat "no lookup" the same as "id not found in it" (hasOnsetDate: null,
+  // i.e. unknown, never a false claim either way).
+  function buildOnsetDateIndex(clinicalSummary) {
+    if (!clinicalSummary || !Array.isArray(clinicalSummary.problems)) return null;
+    const index = new Map();
+    clinicalSummary.problems.forEach((p) => {
+      if (p && p.id) index.set(p.id, !!p.hasOnsetDate);
+    });
+    return index;
+  }
+
   // ---- Problems from problem-listing ----
   // Returns { active, past } — active for QOF/rule matching, past for
   // procedure-history checks (e.g. hysterectomy coded as a past/ended problem).
-  function normaliseProblemsAll(listing) {
+  // onsetIndex (optional): see buildOnsetDateIndex above. Each returned record
+  // carries hasOnsetDate: true | false | null (null = unknown — index absent or
+  // this id wasn't in it). codedDate itself is UNCHANGED by this — still
+  // dateToDisplay || createdInOriginalSystemDateTime — hasOnsetDate is a
+  // confidence signal on that value, not a replacement for it (callers that
+  // care, e.g. earliestRegisterCodedDate in rules-engine.js, use it to prefer
+  // confirmed-onset dates over fallback ones).
+  function normaliseProblemsAll(listing, onsetIndex) {
     if (!listing || !Array.isArray(listing.activeProblems)) return { active: [], past: [] };
     const active = [],
       past = [];
+    const hasOnsetDateFor = (id) => (onsetIndex && id && onsetIndex.has(id) ? onsetIndex.get(id) : null);
     listing.activeProblems
       .filter((p) => !p.isMarkedAsIncorrect)
       .forEach((p) => {
@@ -111,6 +139,7 @@
         const rec = {
           label,
           codedDate: p.dateToDisplay || p.createdInOriginalSystemDateTime || null,
+          hasOnsetDate: hasOnsetDateFor(p.id),
           significance: p.significance || null,
           source: 'API:problem-listing',
           id: p.id || null,
@@ -131,6 +160,7 @@
           past.push({
             label,
             codedDate: p.dateToDisplay || p.createdInOriginalSystemDateTime || null,
+            hasOnsetDate: hasOnsetDateFor(p.id),
             significance: p.significance || null,
             source: 'API:problem-listing',
             id: p.id || null,
@@ -650,9 +680,23 @@
     return safe;
   }
 
-  // ---- Combined normalisation ----
+  // ---- Patient registers (from clinical-summary) ----
+  // Medicus's OWN computed register membership — authoritative, unlike the
+  // text-matched `problems` list ASTHMA/DM/etc. registers fall back to (see
+  // patientOnRegister in rules-engine.js). Returns null (not []) when the
+  // clinical-summary endpoint didn't return usable data, so callers can tell
+  // "fetch failed/unavailable" (null — fall back to text-matching) apart from
+  // "fetched, patient genuinely has zero registers" ([] — trust it).
+  function normalisePatientRegisters(clinicalSummary) {
+    if (!clinicalSummary || !Array.isArray(clinicalSummary.patientRegisters)) return null;
+    return clinicalSummary.patientRegisters
+      .filter((r) => r && typeof r.registerType === 'string' && r.registerType)
+      .map((r) => ({ registerType: r.registerType, registerLabel: r.registerLabel || null }));
+  }
+
   function normaliseAll(apiResults, urlContext) {
-    const allProbs = normaliseProblemsAll(apiResults?.problemListing);
+    const onsetIndex = buildOnsetDateIndex(apiResults?.clinicalSummary);
+    const allProbs = normaliseProblemsAll(apiResults?.problemListing, onsetIndex);
     return {
       patientContext: normaliseBanner(apiResults?.banner, urlContext),
       medications: normaliseMedications(apiResults?.medicationRegimen),
@@ -660,6 +704,7 @@
       observationHistory: normaliseObservationHistory(apiResults?.investigationDashboard),
       problems: allProbs.active,
       pastProblems: allProbs.past,
+      patientRegisters: normalisePatientRegisters(apiResults?.clinicalSummary),
       apiErrors: apiResults?.errors || {},
     };
   }
@@ -668,9 +713,12 @@
     normaliseBanner,
     normaliseMedications,
     normaliseProblems,
+    normaliseProblemsAll,
     normaliseObservations,
     normaliseObservationHistory,
+    buildOnsetDateIndex,
     parseObservationValue,
+    normalisePatientRegisters,
     normaliseAll,
     normaliseInvestigationReport,
   };

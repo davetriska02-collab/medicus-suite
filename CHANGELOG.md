@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.248.0] — 2026-08-28
+
+### QOF monitoring rework — disease-register-driven matching, July 2026 rule refresh, fewer false positives
+
+Full update of monitoring rules against the July 2026 QOF 2026/27 guidance, rework of
+monitoring rules to work from Medicus's own disease registers where these exist, and
+cross-checking of diagnosis dates against the problem list's onset-date confidence.
+
+AST014 ("objective test for new asthma diagnosis") previously fired red for every
+asthma patient regardless of diagnosis date — it's now gated to patients actually
+coded on or after 1 April 2025, using the earliest confirmed date across their
+problem list rather than a single lookup that a stray "family history of asthma"
+entry could poison. A long-standing asthma patient (AST014) or asthma-register
+patient with no annual review ever recorded (AST015) now correctly shows overdue
+instead of neutral "no data". Chips built on an unconfirmed onset date, or on
+register membership with no corresponding problem code, now show a dashed border
+and an explicit note — status colour is never diluted, only flagged for a second
+look — and the evidence panel now shows the actual date driving the check.
+
+Register membership can now be read directly from Medicus's own computed register
+list (via a new `clinical-summary` fetch) for 8 registers with confirmed register
+IDs, falling back to problem-list text-matching elsewhere — reducing both
+false-positive and false-negative register membership.
+
+Cross-checked all 79 rules in `qof-rules.json` against the current NHS England QOF
+guidance: renumbered AST012→AST014 and AST007→AST015 (thresholds/points unchanged),
+added the previously-missing NDH register/indicator, enabled OB004/OB005 (values now
+confirmed) and completed OB005's weight-loss drug brand list, and relabelled
+CKD002/CKD003 to non-QOF safety-monitoring codes (CKD-BP/CKD-RASI) after confirming
+CKD has no QOF domain at all this year — the checks still fire, only the misleading
+QOF-code framing is gone.
+
+Tweaked the Companion app's QOF glance text so AST014/AST015 and DM006/DM020/DM036 no
+longer show identical generic text ("Asthma review" / "Diabetes review") for
+different required actions, without leaking into reception's booking wording.
+
 ## [v3.247.0] — 2026-08-27
 
 ### Routine-prescription "Send to routine list" — ghost pill and live-flow fixes

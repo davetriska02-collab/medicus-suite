@@ -257,7 +257,7 @@
   }
 
   // ============================================================
-  // JOURNAL OBSERVATIONS (for AST007 and future encounter-coded rules)
+  // JOURNAL OBSERVATIONS (for AST015 and future encounter-coded rules)
   // ============================================================
 
   // Derive the Medicus API origin from the current page URL.
@@ -271,7 +271,7 @@
   // Fetch encounter-coded observations from the patient journal overview endpoint.
   // The investigation dashboard misses entries coded inside consultations (e.g. asthma annual
   // review, smoking status, depression questionnaire scores). This function fills that gap
-  // for indicators like AST007 whose evidence lives exclusively in the journal.
+  // for indicators like AST015 whose evidence lives exclusively in the journal.
   //
   // Returns an array of { name, value, date (ISO YYYY-MM-DD), source: 'journal' } objects,
   // filtered to the last 400 days and de-duplicated against existingObs by name+date.
@@ -520,7 +520,7 @@
           // Augment observations with encounter/journal-coded entries (annual-review
           // codes, questionnaire scores, CHA2DS2-VASc, etc.) that never appear in the
           // investigation dashboard, so indicators whose evidence lives only in the
-          // journal (AST007, COPD010, HF007, DM014, AF006…) can fire in the SIDE
+          // journal (AST015, COPD010, HF007, DM014, AF006…) can fire in the SIDE
           // PANEL too — previously this augmentation ran only in the now-dead HUD
           // refresh() path, so these read no_data in suite mode.
           const _patientId =
@@ -539,7 +539,7 @@
             } catch (journalErr) {
               // Journal augmentation is best-effort; never block the chip. Record
               // the failure so the side panel can surface a non-blocking warning —
-              // QOF chips that rely on journal codes (AST007, COPD010, HF007, etc.)
+              // QOF chips that rely on journal codes (AST015, COPD010, HF007, etc.)
               // may show no_data when they should not, which is a silent clinical gap.
               // No patient data in the error message — only the error type/message.
               _journalAugmentFailed = true;
@@ -567,6 +567,9 @@
               patientContext: data.patientContext,
               observationHistory: data.observationHistory || [],
               allergies: data.allergies || [],
+              // null (not fetched/failed) vs [] (fetched, genuinely zero registers)
+              // matters — see patientOnRegister in rules-engine.js.
+              patientRegisters: data.patientRegisters != null ? data.patientRegisters : null,
               trace: true,
             }
           );
