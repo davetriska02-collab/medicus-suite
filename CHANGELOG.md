@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.245.0] — 2026-08-27
+
+### Trends — DOAC view and CrCl on the renal page
+
+Patients on a current DOAC (apixaban / Eliquis, rivaroxaban / Xarelto,
+edoxaban / Lixiana, dabigatran / Pradaxa) now get creatinine clearance on
+the renal page, plus a dedicated **DOAC** tab on Trends.
+
+The tab only appears when a DOAC is on the regimen. It shows the drug and
+dose, Cockcroft-Gault CrCl (not eGFR) with the age / sex / weight /
+creatinine actually used, SPS/EHRA monitoring-band prompts, drug-specific
+renal notes (including dabigatran &lt;30 and the apixaban 2-of-3
+dose-review criteria), last U&amp;E / FBC / LFT dates, NSAID or
+antiplatelet co-prescribing, and CrCl + creatinine charts. The renal page
+carries a compact card of the same CrCl so the number is visible without
+leaving that view.
+
+**Safety posture (D-001 unchanged):** this is display-only. A missing
+input (age, sex, weight, creatinine, paediatric, ambiguous units) fails
+closed — no CrCl is invented, and the band stays "unknown", never annual.
+The view never hides or re-bands Sentinel's annual U&amp;E chip. Weight is
+actual recorded body weight; the UI says so.
+
+`getTrendData` now includes a slim active-medication list (name, dosage,
+source, start date) so Trends can detect a DOAC without a second fetch.
+
 ## [v3.244.0] — 2026-08-26
 
 ### Risk-flag banner cleanup — "Clean up alerts" pill on the patient banner

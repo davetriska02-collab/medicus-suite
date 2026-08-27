@@ -819,6 +819,14 @@
       ? {
           observationHistory: rawData.observationHistory || [],
           problems: rawData.problems || [],
+          // Slim active-med list so Trends can detect a DOAC and show CrCl
+          // without a second fetch. Name + dosage only — no issue history.
+          medications: (rawData.medications || []).map((m) => ({
+            name: m.name || null,
+            dosage: m.dosage || null,
+            source: m.source || null,
+            startDate: m.startDate || null,
+          })),
           patientContext: pc || null,
         }
       : null;
