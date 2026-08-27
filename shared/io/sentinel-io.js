@@ -195,7 +195,8 @@ function validateCustomRule(rule, index) {
   const loc = index !== undefined ? ` (index ${index})` : '';
   if (!rule || typeof rule !== 'object') throw new Error(`Custom rule${loc} is not an object.`);
   if (!rule.id || typeof rule.id !== 'string') throw new Error(`Custom rule${loc}: id is required.`);
-  if (!/^custom-[a-z0-9-]{1,60}$/.test(rule.id)) throw new Error(`Custom rule${loc}: id must match /^custom-[a-z0-9-]{1,60}$/.`);
+  if (!/^custom-[a-z0-9-]{1,60}$/.test(rule.id))
+    throw new Error(`Custom rule${loc}: id must match /^custom-[a-z0-9-]{1,60}$/.`);
 
   if (rule.type === 'drug-monitoring') return validateDrugMonitoringRule(rule, loc);
   if (rule.type === 'qof-indicator') return validateQofIndicatorRule(rule, loc);
@@ -257,6 +258,7 @@ const ALLOWED_CHECK_KINDS = [
   'medication-present',
   'observation-recent',
   'observation-trend',
+  'efi-progression',
   'observation-alert',
   'observation-bundle',
 ];
@@ -324,6 +326,20 @@ function validateQofIndicatorRule(rule, loc) {
     }
     if (rule.check.minDelta != null && (typeof rule.check.minDelta !== 'number' || rule.check.minDelta < 0)) {
       throw new Error(`Custom rule${loc}: check.minDelta must be a non-negative number.`);
+    }
+  }
+  if (rule.check.kind === 'efi-progression') {
+    if (
+      rule.check.withinMonths != null &&
+      (typeof rule.check.withinMonths !== 'number' || rule.check.withinMonths <= 0)
+    ) {
+      throw new Error(`Custom rule${loc}: check.withinMonths must be a positive number.`);
+    }
+    if (
+      rule.check.minNewDeficits != null &&
+      (typeof rule.check.minNewDeficits !== 'number' || rule.check.minNewDeficits < 1)
+    ) {
+      throw new Error(`Custom rule${loc}: check.minNewDeficits must be a number >= 1.`);
     }
   }
   if (rule.check.kind === 'observation-bundle') {
@@ -579,7 +595,7 @@ function customRuleSchemaPrompt() {
   check           (object, required)
     .kind         (string, required)  — One of:
                   "observation-threshold" | "medication-present" | "observation-recent" |
-                  "observation-trend" | "observation-alert" | "observation-bundle"
+                  "observation-trend" | "efi-progression" | "observation-alert" | "observation-bundle"
 
   For kind "observation-threshold":
     .observation  (array of strings, required, non-empty)  — observation match terms.
@@ -602,6 +618,10 @@ function customRuleSchemaPrompt() {
     .minPoints    (number, optional, ≥ 2, default 3)
     .withinMonths (number, optional, > 0)
     .minDelta     (number, optional, ≥ 0)
+
+  For kind "efi-progression":
+    .withinMonths    (number, optional, > 0, default 24)
+    .minNewDeficits  (number, optional, ≥ 1, default 2)
 
   For kind "observation-alert":
     .observation  (array of strings, required, non-empty)

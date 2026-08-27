@@ -207,6 +207,8 @@ const QOF_REGISTERS = [
 // Electronic Frailty Index (eFI). Clegg 2016 — 36 deficits accumulated from
 // the problem list. Score = count / 36. Cut-points: <0.12 fit; 0.13–0.24 mild;
 // 0.25–0.36 moderate; >0.36 severe.
+// Canonical table + scorer: engine/efi.js (Sentinel frailty-slip uses the same
+// instrument). This local copy is a fallback if that script failed to load.
 const EFI_DEFICITS = [
   { id: 'anaemia', label: 'Anaemia', terms: ['anaemia', 'anemia'] },
   { id: 'arthritis', label: 'Arthritis', terms: ['osteoarthritis', 'rheumatoid arthritis', 'arthritis'] },
@@ -1567,6 +1569,11 @@ function enrichRegistersWithReview(registers, entries) {
 // are present in the problem list. Polypharmacy is computed separately from
 // the drug list (≥5 active high-risk-or-otherwise drugs).
 function computeEFI(activeProblems, pastProblems, drugs) {
+  // Canonical implementation lives in engine/efi.js (shared with Sentinel).
+  // Keep this local copy as a fallback if the script failed to load.
+  if (typeof Efi !== 'undefined' && typeof Efi.computeFromVisualiserInputs === 'function') {
+    return Efi.computeFromVisualiserInputs(activeProblems, pastProblems, drugs);
+  }
   const all = [...activeProblems, ...pastProblems];
   const ticked = [];
   for (const d of EFI_DEFICITS) {

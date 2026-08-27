@@ -68,6 +68,7 @@ const QOF_ACTION_BY_PREFIX = [
   ['OB', 'Book an obesity review'],
   ['SMOK', 'Book a smoking cessation review'],
   ['LD', 'Book an annual health check'],
+  ['TREND-FRAIL', 'Book a frailty review'],
 ];
 
 // Convert a single chip into a plain-English booking instruction for admin.

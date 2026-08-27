@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-08-22",
+  "lastUpdated": "2026-08-27",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159.",
@@ -1793,6 +1793,26 @@
       },
       "source": "NICE NG28 (type 2 diabetes in adults) / NICE NG17 (type 1 diabetes)",
       "notes": "Clinical-review trend monitor for worsening glycaemic control in people on the diabetes register (fires only when the patient is on the DM register). Not a QOF claim indicator. Values are in mmol/mol (IFCC units). Multi-point HbA1c history is required: where only the latest result is available the chip shows no_data until history exists. Window is 24 months to capture enough readings (HbA1c is typically checked 3-6 monthly in diabetes). The >=10 mmol/mol rise is a pragmatic review threshold, not a fixed guideline cut-off - adjust to local policy. A sustained rise suggests deteriorating control: review adherence, diet/lifestyle, intercurrent illness or steroids, and consider treatment intensification per NICE NG28/NG17. Confirm on repeat testing and interpret alongside the individualised HbA1c target (commonly 48 mmol/mol, or 53 mmol/mol where treatment carries hypoglycaemia risk)."
+    },
+    {
+      "id": "trend-frailty-slipping",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "TREND-FRAILTY",
+      "indicatorName": "Slipping into frailty",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "check": {
+        "kind": "efi-progression",
+        "withinMonths": 24,
+        "minNewDeficits": 2
+      },
+      "source": "Clegg 2016 eFI / NHS England frailty identification (65+) / NICE NG56 multimorbidity / BGS Comprehensive Geriatric Assessment",
+      "notes": "Clinical-review trend monitor, not a QOF claim indicator and not the official NHS Digital eFI. Reconstructs a keyword approximation of the 36-deficit Clegg eFI from the live problem list (active + past) plus current polypharmacy, then compares the score 24 months ago (problems dated on or before the cutoff; undated problems count in both snapshots so they cannot invent a slip) with the score now. Fires when the eFI category worsens (Fit → Mild is the preventative window), when a coded CFS/eFI category worsens (mild → moderate → severe), or when ≥2 new deficits appear in the window. An uncoded weight fall of ≥5% or ≥5 kg in the same window can tick the weight-loss deficit now (confirm unintentional — intentional diet is a known false positive). Polypharmacy is current-only and is counted in both snapshots when the live regimen is ≥5, so it cannot fire the chip by itself. Age gate is 65+ (eFI validated population); unknown age fail-opens per the suite convention. Same-day catch-up coding of several deficits is still a fire, with an evidence note so the clinician can dismiss. This is a preventative memory aid: the actionable moment is the Fit → Mild and Mild → Moderate crossings, when a frailty review, medication review, falls/strength-and-balance work or social-care conversation can still change the trajectory. Absence of the chip is not 'fit'. Verify against the record before acting."
     },
     {
       "id": "qof-ob004",

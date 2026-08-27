@@ -337,18 +337,33 @@ check(
 console.log('\n--- category: safety-monitoring passes through to the chip ---');
 const safetyChips = engine.evaluateQofIndicatorRule(
   { type: 'qof-indicator', category: 'safety-monitoring', enabled: true, indicatorCode: 'TEST', check: baseCheck },
-  { medications: [{ name: 'atorvastatin 20mg' }], observations: [], problems: [], patientContext: {}, _registerLookup: {} },
+  {
+    medications: [{ name: 'atorvastatin 20mg' }],
+    observations: [],
+    problems: [],
+    patientContext: {},
+    _registerLookup: {},
+  },
   NOW
 );
 check(safetyChips.length > 0 && safetyChips[0].category === 'safety-monitoring', 'chip carries category from the rule');
 const plainChips = engine.evaluateQofIndicatorRule(
   { type: 'qof-indicator', enabled: true, indicatorCode: 'TEST', check: baseCheck },
-  { medications: [{ name: 'atorvastatin 20mg' }], observations: [], problems: [], patientContext: {}, _registerLookup: {} },
+  {
+    medications: [{ name: 'atorvastatin 20mg' }],
+    observations: [],
+    problems: [],
+    patientContext: {},
+    _registerLookup: {},
+  },
   NOW
 );
-check(plainChips.length > 0 && plainChips[0].category === null, 'chip category defaults to null when the rule has none');
-// The three shipped non-QOF surveillance rules are tagged so the UI groups them apart from QOF.
-const safetyRuleIds = ['trend-egfr-falling', 'trend-hba1c-rising', 'alert-hyperkalaemia'];
+check(
+  plainChips.length > 0 && plainChips[0].category === null,
+  'chip category defaults to null when the rule has none'
+);
+// The shipped non-QOF surveillance rules are tagged so the UI groups them apart from QOF.
+const safetyRuleIds = ['trend-egfr-falling', 'trend-hba1c-rising', 'alert-hyperkalaemia', 'trend-frailty-slipping'];
 safetyRuleIds.forEach((id) => {
   const r = qof.rules.find((x) => x.id === id);
   check(r && r.category === 'safety-monitoring', `${id} is tagged category: safety-monitoring`);
@@ -372,13 +387,22 @@ console.log('\n--- DEM004 indicator (annual dementia review, new 2026-07-11) ---
 const dem004 = qof.rules.find((r) => r.indicatorCode === 'DEM004');
 check(!!dem004, 'DEM004 indicator exists in qof-rules.json');
 check(dem004.enabled === true, 'DEM004 is enabled');
-check(dem004.registerCode === 'DEM' || (dem004.requiresRegister && dem004.requiresRegister.includes('DEM')), 'DEM004 scoped to DEM register');
+check(
+  dem004.registerCode === 'DEM' || (dem004.requiresRegister && dem004.requiresRegister.includes('DEM')),
+  'DEM004 scoped to DEM register'
+);
 // ── 2026-07-25 Keeper: DEM004 threshold correction ─────────────────────────
 // Previous Keeper run (2026-07-11) encoded wrong values (30pts/60-90%) due to primary PDF 403.
 // Correct 2026/27 QOF values (PRN02356): 14 points, 35-70% payment range.
 check(dem004 && dem004.points === 14, 'DEM004 points corrected to 14 (was wrongly 30 in 2026-07-11 run)');
-check(dem004 && dem004.thresholds && dem004.thresholds.lower === 35, 'DEM004 lower threshold corrected to 35% (was wrongly 60)');
-check(dem004 && dem004.thresholds && dem004.thresholds.upper === 70, 'DEM004 upper threshold corrected to 70% (was wrongly 90)');
+check(
+  dem004 && dem004.thresholds && dem004.thresholds.lower === 35,
+  'DEM004 lower threshold corrected to 35% (was wrongly 60)'
+);
+check(
+  dem004 && dem004.thresholds && dem004.thresholds.upper === 70,
+  'DEM004 upper threshold corrected to 70% (was wrongly 90)'
+);
 
 // ── 2026-07-11 Keeper: CKD002 indicator ──────────────────────────────────────
 console.log('\n--- CKD002 indicator (BP ≤140/90 in CKD, new 2026-07-11) ---');

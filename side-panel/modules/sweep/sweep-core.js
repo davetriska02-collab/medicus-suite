@@ -293,6 +293,7 @@ const QOF_ACTION_BY_PREFIX = [
   ['MH', 'Book an annual health check'],
   ['SMI', 'Book an annual health check'],
   ['LD', 'Book an annual health check'],
+  ['TREND-FRAIL', 'Book a frailty review'],
 ];
 
 // isBloodTest() is imported from ../shared/chip-instructions.js.

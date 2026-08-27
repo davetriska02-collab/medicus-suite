@@ -50,6 +50,7 @@
     'observation-alert',
     'observation-bundle',
     'observation-trend',
+    'efi-progression',
     'medication-present',
     'medication-all-of',
   ];
@@ -66,6 +67,7 @@
     'thresholdDiastolic',
     'minDelta',
     'minPoints',
+    'minNewDeficits',
     'withinDays',
     'withinMonths',
   ];

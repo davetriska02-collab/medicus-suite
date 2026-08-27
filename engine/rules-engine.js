@@ -44,6 +44,18 @@
   };
 
   // === DRUG MATCHING ===
+  function loadEfi() {
+    if (typeof Efi !== 'undefined') return Efi;
+    if (typeof require === 'function') {
+      try {
+        return require('./efi.js');
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
   function normaliseDrugString(s) {
     return String(s || '')
       .toLowerCase()
@@ -134,9 +146,20 @@
     {
       label: 'DMARD / immunosuppressant',
       stems: [
-        'methotrexate', 'azathioprine', 'mercaptopurine', 'leflunomide', 'sulfasalazine',
-        'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
-        'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
+        'methotrexate',
+        'azathioprine',
+        'mercaptopurine',
+        'leflunomide',
+        'sulfasalazine',
+        'ciclosporin',
+        'cyclosporin',
+        'tacrolimus',
+        'mycophenolate',
+        'penicillamine',
+        'sirolimus',
+        'everolimus',
+        'hydroxycarbamide',
+        'cyclophosphamide',
       ],
     },
     { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
@@ -299,7 +322,7 @@
     'units/l': 'iu/l',
     'ml/min': 'ml/min',
     'ml/min/1.73m2': 'ml/min',
-    'mmhg': 'mmhg',
+    mmhg: 'mmhg',
     '10*9/l': '10*9/l',
     'x10^9/l': '10*9/l',
     '10^9/l': '10*9/l',
@@ -307,12 +330,7 @@
   };
   function canonUnit(u) {
     if (u == null) return null;
-    const k = String(u)
-      .toLowerCase()
-      .replace(/\s+/g, '')
-      .replace(/²/g, '2')
-      .replace(/³/g, '3')
-      .replace(/\.$/, '');
+    const k = String(u).toLowerCase().replace(/\s+/g, '').replace(/²/g, '2').replace(/³/g, '3').replace(/\.$/, '');
     return UNIT_CANON[k] || null; // unknown unit → null → "can't tell" → fail open
   }
   function unitsConflict(expectedUnit, actualUnit) {
@@ -731,6 +749,61 @@
           date: r.obs ? r.obs.date : null,
         });
       });
+    } else if (check.kind === 'efi-progression') {
+      const e = ctx.efiProgression;
+      if (e) {
+        facts.push({
+          label: 'eFI now',
+          value: `${e.now.category} · ${e.now.ticked.length}/${e.now.total} (${e.now.score.toFixed(2)})`,
+        });
+        facts.push({
+          label: `eFI ${e.withinMonths}mo ago`,
+          value: `${e.then.category} · ${e.then.ticked.length}/${e.then.total} (${e.then.score.toFixed(2)})`,
+        });
+        if (e.categoryWorsened) {
+          facts.push({ label: 'Category', value: `${e.then.category} → ${e.now.category}` });
+        }
+        if (e.codedWorsened) {
+          facts.push({
+            label: 'Coded frailty',
+            value: `${e.codedThen.label} → ${e.codedNow.label}`,
+            detail: e.codedNow.evidence || null,
+          });
+        }
+        if (e.newDeficits && e.newDeficits.length) {
+          e.newDeficits.forEach((d) => {
+            facts.push({
+              label: 'New deficit',
+              value: d.label,
+              date: d.date || null,
+              detail: d.evidence || null,
+            });
+          });
+        } else {
+          facts.push({ label: 'New deficits', value: 'none in window' });
+        }
+        if (e.now.weightDecline) {
+          const w = e.now.weightDecline;
+          facts.push({
+            label: 'Weight',
+            value: `${Math.round(w.oldest)} → ${Math.round(w.newest)} kg (${w.pct.toFixed(0)}%)`,
+            date: w.newestDate || null,
+            detail: 'Confirm unintentional before acting',
+          });
+        }
+        if (e.sameDayCatchUp) {
+          facts.push({
+            label: 'Coding date',
+            value: 'New deficits share one coding date — may be catch-up coding',
+          });
+        }
+        facts.push({
+          label: 'Instrument',
+          value: 'Keyword eFI approximation (Clegg 2016 / NHSE cut-points) — not the official NHS Digital eFI',
+        });
+      } else {
+        facts.push({ label: 'eFI', value: valueText || 'insufficient data' });
+      }
     } else if (check.kind === 'observation-trend') {
       const s = ctx.trendSeries;
       if (s && s.points && s.points.length) {
@@ -1374,9 +1447,7 @@
       traceEntry.matchSummary = matchSummary;
     }
 
-    const facts = [
-      { label: 'Allergy', value: matchedAllergies.map((a) => a.label).join(', ') },
-    ];
+    const facts = [{ label: 'Allergy', value: matchedAllergies.map((a) => a.label).join(', ') }];
     matchedPerSet.forEach((matched, i) => {
       if (matched.length) {
         const set = drugSets[i] || {};
@@ -1687,7 +1758,10 @@
     // never adds green "MET" noise. comparator 'above' = high values are dangerous
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, {
+        match: check.observation,
+        exclude: check.observationExclude,
+      });
       if (!obs || !obs.date) {
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
@@ -1772,7 +1846,10 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, {
+        match: check.observation,
+        exclude: check.observationExclude,
+      });
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -1834,7 +1911,10 @@
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, {
+        match: check.observation,
+        exclude: check.observationExclude,
+      });
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2040,6 +2120,27 @@
         }
       }
       // status remains 'no_data' when no history entry found or history array is empty
+    } else if (check.kind === 'efi-progression') {
+      const EfiApi = loadEfi();
+      if (!EfiApi || typeof EfiApi.progressFrailty !== 'function') {
+        status = 'no_data';
+        valueText = 'eFI engine unavailable';
+      } else {
+        const prog = EfiApi.progressFrailty({
+          problems: data.problems || [],
+          pastProblems: data.pastProblems || [],
+          medications: data.medications || [],
+          observationHistory: data.observationHistory || [],
+          now,
+          withinMonths: check.withinMonths != null ? check.withinMonths : 24,
+          minNewDeficits: check.minNewDeficits != null ? check.minNewDeficits : 2,
+        });
+        status = prog.fires ? 'not_met' : 'achieved';
+        valueText = prog.valueText;
+        dateText = prog.dateText;
+        evidenceCtx.efiProgression = prog;
+        evidenceCtx.trendSeries = prog.series || null;
+      }
     }
 
     if (traceEntry) {
@@ -2058,6 +2159,15 @@
           }))
         : null;
       traceEntry.trendSeries = evidenceCtx.trendSeries || null;
+      traceEntry.efiProgression = evidenceCtx.efiProgression
+        ? {
+            fires: evidenceCtx.efiProgression.fires,
+            valueText: evidenceCtx.efiProgression.valueText,
+            nowCategory: evidenceCtx.efiProgression.now && evidenceCtx.efiProgression.now.category,
+            thenCategory: evidenceCtx.efiProgression.then && evidenceCtx.efiProgression.then.category,
+            newDeficitIds: (evidenceCtx.efiProgression.newDeficits || []).map((d) => d.id),
+          }
+        : null;
       traceEntry.valueText = valueText;
       traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
     }

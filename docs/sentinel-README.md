@@ -37,7 +37,7 @@ For each patient page the user opens in Medicus, Sentinel:
 3. Matches the patient's medications against a curated set of drug-monitoring rules (e.g. methotrexate FBC/U&E/LFT every 12 weeks).
 4. Matches the patient's active problems against the QOF 2025/26 register definitions to determine register membership.
 5. For each register the patient is on, evaluates the relevant QOF indicators against the patient's most recent recorded values.
-6. Displays the results as colour-coded chips grouped by type (drug monitoring / QOF registers / QOF indicators), with each chip showing the value, date and source.
+6. Displays the results as colour-coded chips grouped by type (drug monitoring / QOF registers / QOF indicators / Safety Monitoring), with each chip showing the value, date and source. Safety Monitoring includes falling eGFR, rising HbA1c, electrolyte alerts, and from v3.247.0 a **frailty-slip** chip: a keyword Clegg eFI reconstructed 24 months ago vs now, so people crossing Fit → Mild (or accumulating new deficits) are visible while a frailty review can still change the trajectory. It is not the official NHS Digital eFI.
 
 ## What Sentinel does not do
 

@@ -297,6 +297,16 @@ async function runTests() {
     'sentinel: CHD indicator → "Book a heart disease review" (different from sweep)'
   );
 
+  let sciFrail =
+    sentinelChipInstruction &&
+    sentinelChipInstruction({
+      type: 'qof-indicator',
+      status: 'not_met',
+      indicatorCode: 'TREND-FRAILTY',
+      indicatorName: 'Slipping into frailty',
+    });
+  check(sciFrail && sciFrail.action === 'Book a frailty review', 'sentinel: TREND-FRAILTY → "Book a frailty review"');
+
   // qof BP002 in sentinel — BP prefix NOT in sentinel's table → fallback 'Book a review appointment'
   let sciBp =
     sentinelChipInstruction &&

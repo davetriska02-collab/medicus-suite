@@ -37,6 +37,7 @@ const IMPLEMENTED_KINDS = new Set([
   'observation-alert',
   'observation-bundle',
   'observation-trend',
+  'efi-progression',
   'medication-present',
   'medication-all-of',
 ]);

@@ -1252,8 +1252,8 @@ function render(payload) {
   const actionCount = chips.filter((c) => STATUS_RANK[c.status] <= 2).length;
   const clearCount = chips.filter((c) => STATUS_RANK[c.status] >= 5).length;
 
-  // Group by type. Non-QOF surveillance items (eGFR/HbA1c trends, electrolyte
-  // alerts) carry category: 'safety-monitoring' on the rule — bucket those into
+  // Group by type. Non-QOF surveillance items (eGFR/HbA1c/frailty trends,
+  // electrolyte alerts) carry category: 'safety-monitoring' on the rule — bucket those into
   // their own "Safety Monitoring" section so they don't read as QOF claim
   // indicators, even though they reuse the qof-indicator evaluation/chip shape.
   const groups = {};

@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.247.0] — 2026-08-27
+
+### Sentinel — live frailty-slip indicator
+
+A Safety Monitoring chip, same family as falling eGFR, that watches people
+**slipping into frailty** while there is still time to intervene.
+
+It reconstructs a keyword approximation of the Clegg / NHS England Electronic
+Frailty Index (36 deficits) from the live problem list and current regimen,
+then compares the score 24 months ago with the score now. The chip fires when:
+
+- the eFI category worsens (**Fit → Mild is the preventative window**)
+- a coded CFS / eFI category worsens (mild → moderate → severe)
+- two or more new deficits appear in the window
+
+An uncoded weight fall of ≥5% or ≥5 kg in the same window can tick the
+weight-loss deficit (confirm unintentional). Polypharmacy is current-only and
+is counted in both snapshots, so a long-standing repeat list cannot invent a
+slip. Age gate is 65+ (eFI validated population); unknown age fail-opens.
+
+Stable patients still show the live category ("Mild frailty (6/36) — stable")
+so the indicator is present, not only the alarm. Action Packs stay
+clinician-review only — no patient SMS saying they are becoming frail.
+
+This is **not** the official NHS Digital eFI. Absence of the chip is not
+"fit". Shared engine: `engine/efi.js` (Visualiser gauge now uses the same
+table when the script is loaded). See `docs/CLINICAL-SAFETY-NOTICE.md`
+limitation 49 and `docs/HAZARD-LOG.md` H-002/H-003 addendum.
+
 ## [v3.246.0] — 2026-08-27
 
 ### Workflow allocation canvas — inbound documents and team inboxes
