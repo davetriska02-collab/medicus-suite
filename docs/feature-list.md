@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.244.0
-**Generated:** 2026-08-26 (automated)
+**Version:** v3.246.0
+**Generated:** 2026-08-27 (automated)
 
 ## What it is
 
@@ -41,8 +41,9 @@ The clinical context sidebar for whichever patient record is open. Checks active
 - One-click "create task" / "add to Follow-ups" from a chip
 
 ### Trends
-Charts a patient's blood pressure, renal function, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses.
+Charts a patient's blood pressure, renal function, DOAC creatinine clearance, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses.
 - Line charts with clinical zone bands
+- DOAC-only view (gated on a current DOAC) with Cockcroft-Gault CrCl, not eGFR
 - CSV export of the underlying series
 
 ### Capacity Forecast
@@ -137,6 +138,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue; compresses into a compact "pulse" display on busy queues.
 - **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who requested them, with clinician fields on the right (In today first; click to expand) and practice teams as extra drop targets. Click a report or a clinician heading; Ctrl-click (or Select all) adds more; drag onto a field. Staging is local; confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result).
+- **Workflow allocation canvas** — the same workbench on inbound-document queues and any task-list with `viewContext=workflow`. Unallocated work groups by registered GP (a pile label, never auto-placement). Confirming writes the same bulk-reassign (who the task sits with — it does not file the document). Results, privacy-officer, EPS and prescription queues are left to their own surfaces.
 - **Inline booking and task creation** — appointment-booking and create-task panels injected directly on patient and task pages, using Medicus's own scheduling and task-creation controls. The same floating **Companion** box (Clinic / Reception / Triage / Nursing) carries a read-only pocket Sentinel **What’s due** strip (drug monitoring, QOF, vaccines) identity-gated to this page’s patient — reception in booking voice, nursing in treatment-room voice — plus honest desk / slots / pulse glances by role. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab.
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document; a checklist that turns a document's coded journal entries into new Problems.
 - **Reception quick-actions composer** — three chip rows (Action / With whom / Timeframe) above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit.

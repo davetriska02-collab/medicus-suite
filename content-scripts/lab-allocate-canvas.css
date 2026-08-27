@@ -1,7 +1,9 @@
-/* Lab allocation canvas. Injected surface: #ms-lac-overlay carries its own
-   token block (panel.css :root is not available on Medicus pages) — values
-   mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
-#ms-lac-launch {
+/* Lab + workflow allocation canvases. Injected surfaces: #ms-lac-overlay
+   and #ms-wac-overlay carry their own token block (panel.css :root is not
+   available on Medicus pages) — values mirror the canon light column in
+   .claude/skills/ui-design/TOKENS.md. */
+#ms-lac-launch,
+#ms-wac-launch {
   position: fixed;
   top: 12px;
   right: 16px;
@@ -21,7 +23,8 @@
   cursor: pointer;
 }
 
-#ms-lac-launch:hover {
+#ms-lac-launch:hover,
+#ms-wac-launch:hover {
   border-color: #2563eb;
   background: #eff4fd;
 }
@@ -30,12 +33,14 @@
    token block below is not an ancestor of it — var(--accent) would resolve
    to nothing and invalidate the whole `outline` shorthand, leaving the
    button with no keyboard focus ring. Literal value, same colour. */
-#ms-lac-launch:focus-visible {
+#ms-lac-launch:focus-visible,
+#ms-wac-launch:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
-#ms-lac-overlay {
+#ms-lac-overlay,
+#ms-wac-overlay {
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
   --bg-elev: #ffffff;
@@ -873,7 +878,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #ms-lac-overlay * {
+  #ms-lac-overlay *,
+  #ms-wac-overlay * {
     transition: none !important;
   }
 }

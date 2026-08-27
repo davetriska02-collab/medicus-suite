@@ -4,14 +4,15 @@ import { lineChart, esc, fmtDate, parseBp, bpTarget } from '../shared/trend-char
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { downloadCsv } from '../shared/export-util.js';
 import { getTxnBundleIfEnabled, feedSourceLabel } from '../../../shared/panel-txn-feed.js';
+import { buildDoacModel, patientOnDoac, creatSeries, weightSeries } from './doac-core.js';
 
 // ── Transactional feed integration (v3.165.0+) ──────────────────────────────
 //
 // Trends' existing data path (content-scripts/sentinel.js getTrendData) is
-// untouched: it stays the baseline "session" fetch and is always tried first,
-// since it is also the only place a patientUuid can be resolved without new
-// content-script plumbing (out of scope — this module may only touch its own
-// files). Once session data (and a patientUuid) is in hand, the official
+// the baseline "session" fetch and is always tried first. v3.245.0 added a
+// slim `medications` list to that payload (name/dosage/source/startDate) so
+// the DOAC view can detect a current anticoagulant without a second fetch.
+// Once session data (and a patientUuid) is in hand, the official
 // Transactional API feed (shared/panel-txn-feed.js) is offered for the SAME
 // patient; getTxnBundleIfEnabled() returns null in every case except a
 // practice explicitly on integrationMode 'transactional' with a healthy feed.
@@ -122,7 +123,7 @@ function aStage(a) {
 let container = null;
 let pollTimer = null;
 let onRuntimeMsg = null;
-let selectedView = 'bp'; // 'bp' | 'renal' | 'hba1c' | 'chol' | 'weight'
+let selectedView = 'bp'; // 'bp' | 'renal' | 'doac' | 'hba1c' | 'chol' | 'weight'
 let lastData = null;
 
 export async function init(el) {
@@ -138,7 +139,7 @@ export async function init(el) {
   render({ state: 'loading' });
   await refresh();
   pollTimer = setInterval(() => {
-    if (document.visibilityState === 'visible') (refresh)();
+    if (document.visibilityState === 'visible') refresh();
   }, 15000);
   onRuntimeMsg = (msg, sender) => {
     if (!sender || sender.id !== chrome.runtime.id) return;
@@ -243,6 +244,21 @@ function feedCoversSessionSeries(feedData, sessionData) {
     const sessionPts = seriesFor(metric, sessionData).pts;
     if (sessionPts.length > 0 && seriesFor(metric, feedData).pts.length === 0) return false;
   }
+
+  // Creatinine + weight are the Cockcroft-Gault inputs for the DOAC view.
+  // Dropping either would silently blank CrCl after a feed swap.
+  if (
+    creatSeries(sessionData.observationHistory).pts.length > 0 &&
+    creatSeries(feedData.observationHistory).pts.length === 0
+  ) {
+    return false;
+  }
+  if (
+    weightSeries(sessionData.observationHistory).pts.length > 0 &&
+    weightSeries(feedData.observationHistory).pts.length === 0
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -250,18 +266,32 @@ function feedCoversSessionSeries(feedData, sessionData) {
 const VIEWS = [
   { key: 'bp', label: 'BP' },
   { key: 'renal', label: 'Renal' },
+  { key: 'doac', label: 'DOAC', requiresDoac: true },
   { key: 'hba1c', label: 'HbA1c' },
   { key: 'chol', label: 'Cholesterol' },
   { key: 'weight', label: 'Weight' },
 ];
 
+function visibleViews() {
+  const onDoac = !!(lastData && patientOnDoac(lastData));
+  return VIEWS.filter((v) => !v.requiresDoac || onDoac);
+}
+
+function activeView() {
+  const keys = visibleViews().map((v) => v.key);
+  return keys.includes(selectedView) ? selectedView : 'bp';
+}
+
 function pickerHtml() {
+  const view = activeView();
   return (
     `<div class="trends-picker" role="tablist">` +
-    VIEWS.map(
-      (v) =>
-        `<button class="trends-tab${v.key === selectedView ? ' active' : ''}" id="trendsTab-${esc(v.key)}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === selectedView}" aria-controls="trendsPanel">${esc(v.label)}</button>`
-    ).join('') +
+    visibleViews()
+      .map(
+        (v) =>
+          `<button class="trends-tab${v.key === view ? ' active' : ''}" id="trendsTab-${esc(v.key)}" data-view="${esc(v.key)}" role="tab" aria-selected="${v.key === view}" aria-controls="trendsPanel">${esc(v.label)}</button>`
+      )
+      .join('') +
     `<button class="trends-export" id="trendsExport" title="Download the current view as CSV" aria-label="Export CSV">↓ CSV</button>` +
     `</div>`
   );
@@ -279,15 +309,21 @@ function wirePicker() {
     });
   });
   container.querySelector('#trendsExport')?.addEventListener('click', exportCsv);
+  container.querySelector('[data-open-doac]')?.addEventListener('click', () => {
+    selectedView = 'doac';
+    saveUiState('trends', { selectedView });
+    render({ state: lastData ? 'ok' : 'no-data' });
+  });
 }
 
 // ── CSV export of the active view ───────────────────────────────────────────────
 function exportCsv() {
   if (!lastData) return;
   const stamp = new Date().toISOString().slice(0, 10);
-  const filename = `trends-${selectedView}-${stamp}.csv`;
+  const view = activeView();
+  const filename = `trends-${view}-${stamp}.csv`;
 
-  if (selectedView === 'bp') {
+  if (view === 'bp') {
     const bm = buildBpModel(lastData);
     if (!bm.pairs.length) return;
     const rows = bm.pairs.map((p) => [fmtDate(p.date), p.bp.systolic, p.bp.diastolic]);
@@ -295,18 +331,35 @@ function exportCsv() {
     return;
   }
 
-  if (selectedView === 'renal') {
+  if (view === 'renal') {
     const rm = buildRenalModel(lastData);
-    if (!rm.acrPts.length && !rm.egfrPts.length) return;
+    const dm = buildDoacModel(lastData);
+    if (!rm.acrPts.length && !rm.egfrPts.length && !dm.onDoac) return;
     const rows = [
       ...rm.acrPts.map((p) => [fmtDate(p.date), 'ACR', p.value, rm.acrUnit]),
       ...rm.egfrPts.map((p) => [fmtDate(p.date), 'eGFR', p.value, rm.egfrUnit]),
+      ...(dm.onDoac ? dm.crclPts.map((p) => [fmtDate(p.date), 'CrCl', p.value, 'mL/min']) : []),
+      ...(dm.onDoac ? dm.creatPts.map((p) => [fmtDate(p.date), 'Creatinine', p.value, dm.creatUnit]) : []),
     ];
+    if (!rows.length) return;
     downloadCsv(filename, ['Date', 'Measure', 'Value', 'Unit'], rows);
     return;
   }
 
-  const metric = OBS_METRICS.find((x) => x.key === selectedView) || OBS_METRICS[0];
+  if (view === 'doac') {
+    const dm = buildDoacModel(lastData);
+    if (!dm.onDoac) return;
+    const rows = [
+      ...dm.crclPts.map((p) => [fmtDate(p.date), 'CrCl', p.value, 'mL/min']),
+      ...dm.creatPts.map((p) => [fmtDate(p.date), 'Creatinine', p.value, dm.creatUnit]),
+      ...dm.weightPts.map((p) => [fmtDate(p.date), 'Weight', p.value, 'kg']),
+    ];
+    if (!rows.length) return;
+    downloadCsv(filename, ['Date', 'Measure', 'Value', 'Unit'], rows);
+    return;
+  }
+
+  const metric = OBS_METRICS.find((x) => x.key === view) || OBS_METRICS[0];
   const { pts, unit } = seriesFor(metric, lastData);
   if (!pts.length) return;
   const rows = pts.map((p) => [fmtDate(p.date), p.value]);
@@ -354,8 +407,8 @@ function buildRestingState() {
       </div>
       <p class="trends-rest-purpose">
         Trends draws a line chart of one patient's results over time — blood pressure, renal
-        function (ACR/eGFR), HbA1c, cholesterol or weight — so a slow drift is easy to see, not
-        just the latest number.
+        function (ACR/eGFR), DOAC CrCl when they are on an anticoagulant, HbA1c, cholesterol or
+        weight — so a slow drift is easy to see, not just the latest number.
       </p>
       <p class="trends-rest-step">
         <strong>First step:</strong> open a patient in Medicus, then pick a metric.
@@ -375,12 +428,14 @@ function render(m) {
     return;
   }
 
+  const view = activeView();
   let body;
-  if (selectedView === 'bp') body = renderBp(m);
-  else if (selectedView === 'renal') body = renderRenal(m);
+  if (view === 'bp') body = renderBp(m);
+  else if (view === 'renal') body = renderRenal(m);
+  else if (view === 'doac') body = renderDoac(m);
   else body = renderObs(m);
 
-  container.innerHTML = `<div class="trends-module">${pickerHtml()}${sourceLineHtml()}<div id="trendsPanel" role="tabpanel" aria-labelledby="trendsTab-${esc(selectedView)}">${body}</div></div>`;
+  container.innerHTML = `<div class="trends-module">${pickerHtml()}${sourceLineHtml()}<div id="trendsPanel" role="tabpanel" aria-labelledby="trendsTab-${esc(view)}">${body}</div></div>`;
   wirePicker();
 }
 
@@ -577,7 +632,8 @@ function renderRenal(m) {
     return `<div class="trends-msg">No ACR or eGFR data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
   }
   const rm = buildRenalModel(lastData);
-  if (!rm.acrPts.length && !rm.egfrPts.length) {
+  const dm = buildDoacModel(lastData);
+  if (!rm.acrPts.length && !rm.egfrPts.length && !dm.onDoac) {
     return `<div class="trends-msg">No ACR or eGFR data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
   }
 
@@ -594,6 +650,11 @@ function renderRenal(m) {
     banners.push(
       `<div class="acrt-banner acrt-banner-amber" role="alert">ACR category has increased (${esc(rm.as)}) — escalate monitoring frequency</div>`
     );
+  for (const f of dm.flags || []) {
+    if (f.severity === 'red') {
+      banners.push(`<div class="acrt-banner acrt-banner-red" role="alert">${esc(f.text)}</div>`);
+    }
+  }
 
   const kdigoHtml =
     rm.gs && rm.as
@@ -605,7 +666,9 @@ function renderRenal(m) {
     </div>`
       : '';
 
-  const latestHtml = `
+  const latestHtml =
+    rm.acrPts.length || rm.egfrPts.length
+      ? `
     <div class="acrt-head">
       ${
         rm.latestAcr != null
@@ -618,7 +681,8 @@ function renderRenal(m) {
           : `<div class="acrt-val acrt-no-val">No eGFR data</div>`
       }
       ${kdigoHtml}
-    </div>`;
+    </div>`
+      : '';
 
   const acrChart = rm.acrPts.length
     ? `<div class="acrt-section-lbl">ACR trend (mg/mmol) — values above 100 plotted at 100</div>` +
@@ -631,7 +695,9 @@ function renderRenal(m) {
         title: 'ACR trend',
       }) +
       `<div class="acrt-band-legend"><span class="acrt-band-a1">A1 &lt;3</span><span class="acrt-band-a2">A2 3–30</span><span class="acrt-band-a3">A3 &gt;30</span></div>`
-    : `<div class="trends-msg" style="padding:10px 12px">No ACR readings available.</div>`;
+    : dm.onDoac
+      ? ''
+      : `<div class="trends-msg" style="padding:10px 12px">No ACR readings available.</div>`;
 
   const egfrBands = [
     { lo: 90, hi: 200, cls: 'tc-g1' },
@@ -653,17 +719,221 @@ function renderRenal(m) {
       })
     : '';
 
+  const crclChart =
+    dm.onDoac && dm.crclPts.length
+      ? `<div class="acrt-section-lbl">CrCl trend (Cockcroft-Gault, mL/min) — not eGFR</div>` +
+        lineChart({
+          series: [
+            {
+              cls: 'tc-crcl',
+              label: 'CrCl',
+              points: dm.crclPts.map((p) => ({
+                date: p.date,
+                value: p.value,
+                flag: p.value < 30,
+              })),
+            },
+          ],
+          bands: crclBands(),
+          yMin: 0,
+          yMax: 120,
+          unit: 'mL/min',
+          title: 'Creatinine clearance trend',
+        })
+      : '';
+
+  const countBits = [
+    rm.acrPts.length ? `${rm.acrPts.length} ACR reading${rm.acrPts.length !== 1 ? 's' : ''}` : '',
+    rm.egfrPts.length ? `${rm.egfrPts.length} eGFR reading${rm.egfrPts.length !== 1 ? 's' : ''}` : '',
+    dm.onDoac && dm.crclPts.length ? `${dm.crclPts.length} CrCl point${dm.crclPts.length !== 1 ? 's' : ''}` : '',
+  ].filter(Boolean);
+
   return `
     <div class="acrt-module">
       ${banners.join('')}
+      ${doacRenalCard(dm)}
       ${latestHtml}
+      ${crclChart}
       ${acrChart}
       ${egfrChart}
-      <div class="acrt-count">
-        ${rm.acrPts.length ? `${rm.acrPts.length} ACR reading${rm.acrPts.length !== 1 ? 's' : ''}` : ''}
-        ${rm.acrPts.length && rm.egfrPts.length ? ' · ' : ''}
-        ${rm.egfrPts.length ? `${rm.egfrPts.length} eGFR reading${rm.egfrPts.length !== 1 ? 's' : ''}` : ''}
+      <div class="acrt-count">${countBits.join(' · ')}</div>
+    </div>`;
+}
+
+function crclBands() {
+  return [
+    { lo: 60, hi: 200, cls: 'tc-g1' },
+    { lo: 30, hi: 60, cls: 'tc-g3a' },
+    { lo: 15, hi: 30, cls: 'tc-g4' },
+    { lo: 0, hi: 15, cls: 'tc-g5' },
+  ];
+}
+
+function doacRenalCard(dm) {
+  if (!dm.onDoac) return '';
+  const drug = dm.doacs.map((d) => (d.dosage ? `${d.label} · ${d.dosage}` : d.label)).join(', ');
+  const indication = dm.indications.length ? ` · ${dm.indications.join(', ')}` : '';
+  const crclBlock =
+    dm.crclRounded != null
+      ? `<span class="doac-crcl-num">${dm.crclRounded}</span><span class="doac-crcl-unit">mL/min CrCl</span>`
+      : `<span class="doac-crcl-miss">${esc(dm.crclMessage || 'Cannot calculate CrCl')}</span>`;
+  const band =
+    dm.crclRounded != null
+      ? `<span class="doac-band doac-band-${esc(dm.band.severity)}">${esc(dm.band.label)}</span>`
+      : '';
+  const inputs = [
+    dm.ageYears != null ? `age ${dm.ageYears}` : null,
+    dm.sex || null,
+    dm.latestWeight ? `${round(dm.latestWeight.value)} kg` : null,
+    dm.creatUmol != null ? `creat ${Math.round(dm.creatUmol)} µmol/L` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return `
+    <div class="doac-renal-card">
+      <div class="doac-renal-top">
+        <div>
+          <div class="doac-kicker">On DOAC</div>
+          <div class="doac-drug">${esc(drug)}${esc(indication)}</div>
+        </div>
+        <div class="doac-renal-crcl">${crclBlock}</div>
       </div>
+      ${band}
+      ${inputs ? `<div class="doac-inputs">Cockcroft-Gault from ${esc(inputs)} — not eGFR</div>` : ''}
+      <button type="button" class="doac-open-view" data-open-doac>Open DOAC view</button>
+    </div>`;
+}
+
+// ── DOAC view ──────────────────────────────────────────────────────────────────
+function renderDoac(m) {
+  if (m.state === 'no-data' || !lastData) {
+    return `<div class="trends-msg">No DOAC data for this patient.<br><span class="trends-hint">The DOAC view appears once a current apixaban, rivaroxaban, edoxaban or dabigatran is in the regimen.</span></div>`;
+  }
+  const dm = buildDoacModel(lastData);
+  if (!dm.onDoac) {
+    return `<div class="trends-msg">This patient is not on a current DOAC.<br><span class="trends-hint">The DOAC view is only shown when apixaban, rivaroxaban, edoxaban or dabigatran is on the regimen.</span></div>`;
+  }
+
+  const banners = [];
+  for (const f of dm.flags) {
+    const cls = f.severity === 'red' ? 'acrt-banner-red' : 'acrt-banner-amber';
+    banners.push(`<div class="acrt-banner ${cls}" role="alert">${esc(f.text)}</div>`);
+  }
+  for (const ix of dm.interactions) {
+    banners.push(
+      `<div class="acrt-banner acrt-banner-amber" role="alert">${esc(ix.kind)}: ${esc(ix.name)} — ${esc(ix.risk)}</div>`
+    );
+  }
+  if (dm.crclRounded == null && dm.crclMessage) {
+    banners.push(`<div class="doac-missing" role="status">${esc(dm.crclMessage)}</div>`);
+  }
+
+  const drugLine = dm.doacs.map((d) => (d.dosage ? `${d.label} · ${d.dosage}` : d.label)).join(', ');
+  const indication = dm.indications.length ? dm.indications.join(', ') : 'indication not coded';
+  const bandCls = `doac-band doac-band-${esc(dm.band.severity)}`;
+
+  const latestHtml = `
+    <div class="doac-head">
+      <div class="doac-head-drug">
+        <div class="doac-kicker">DOAC review</div>
+        <div class="doac-drug">${esc(drugLine)}</div>
+        <div class="doac-indication">${esc(indication)}</div>
+      </div>
+      <div class="doac-head-crcl">
+        ${
+          dm.crclRounded != null
+            ? `<span class="doac-crcl-num">${dm.crclRounded}</span><span class="doac-crcl-unit">mL/min CrCl</span>`
+            : `<span class="doac-crcl-miss">No CrCl</span>`
+        }
+        <span class="${bandCls}">${esc(dm.band.label)}</span>
+      </div>
+    </div>`;
+
+  const inputBits = [
+    ['Age', dm.ageYears != null ? `${dm.ageYears} y` : 'unknown'],
+    ['Sex', dm.sex || 'unknown'],
+    [
+      'Weight',
+      dm.latestWeight ? `${round(dm.latestWeight.value)} kg · ${fmtDate(dm.latestWeight.date)}` : 'not recorded',
+    ],
+    [
+      'Creatinine',
+      dm.creatUmol != null && dm.latestCreat
+        ? `${Math.round(dm.creatUmol)} µmol/L · ${fmtDate(dm.latestCreat.date)}`
+        : 'not recorded',
+    ],
+  ];
+  const inputsHtml = `
+    <div class="doac-input-grid">
+      ${inputBits
+        .map(
+          ([k, v]) =>
+            `<div class="doac-input"><span class="doac-input-k">${esc(k)}</span><span class="doac-input-v">${esc(v)}</span></div>`
+        )
+        .join('')}
+    </div>
+    <p class="doac-formula">Cockcroft-Gault using actual recorded weight — not eGFR, not a dosing decision. Verify against the record before any change.</p>`;
+
+  const notesHtml = dm.spec
+    ? `<div class="doac-notes">
+        <div class="acrt-section-lbl">Renal notes for ${esc(dm.primary.label)}</div>
+        <p class="doac-note">${esc(dm.spec.renalNote)}</p>
+        <p class="doac-note">${esc(dm.spec.doseReview)}</p>
+      </div>`
+    : '';
+
+  const monitorHtml = `
+    <div class="doac-monitor">
+      <div class="doac-input"><span class="doac-input-k">Last U&amp;E</span><span class="doac-input-v">${dm.lastUe ? esc(fmtDate(dm.lastUe)) : 'not found'}</span></div>
+      <div class="doac-input"><span class="doac-input-k">Last FBC</span><span class="doac-input-v">${dm.lastFbc ? esc(fmtDate(dm.lastFbc)) : 'not found'}</span></div>
+      <div class="doac-input"><span class="doac-input-k">Last LFT</span><span class="doac-input-v">${dm.lastLft ? esc(fmtDate(dm.lastLft)) : 'not found'}</span></div>
+    </div>
+    <p class="doac-formula">SPS/EHRA bands are a prompt to consider frequency — Sentinel still flags the annual U&amp;E. This view never hides a due test.</p>`;
+
+  const crclChart = dm.crclPts.length
+    ? `<div class="acrt-section-lbl">CrCl trend (Cockcroft-Gault, mL/min)</div>` +
+      lineChart({
+        series: [
+          {
+            cls: 'tc-crcl',
+            label: 'CrCl',
+            points: dm.crclPts.map((p) => ({ date: p.date, value: p.value, flag: p.value < 30 })),
+          },
+        ],
+        bands: crclBands(),
+        yMin: 0,
+        yMax: 120,
+        unit: 'mL/min',
+        title: 'Creatinine clearance trend',
+      })
+    : `<div class="trends-msg trends-msg-inline">Not enough paired creatinine and weight readings to draw a CrCl trend.</div>`;
+
+  const creatChart = dm.creatPts.length
+    ? `<div class="acrt-section-lbl">Creatinine (${esc(dm.creatUnit)})</div>` +
+      lineChart({
+        series: [{ cls: 'tc-creat', label: 'Creatinine', points: dm.creatPts }],
+        unit: dm.creatUnit,
+        title: 'Creatinine trend',
+      })
+    : '';
+
+  const countBits = [
+    `${dm.doacs.length} DOAC`,
+    dm.crclPts.length ? `${dm.crclPts.length} CrCl point${dm.crclPts.length !== 1 ? 's' : ''}` : '',
+    dm.creatPts.length ? `${dm.creatPts.length} creatinine` : '',
+    dm.weightPts.length ? `${dm.weightPts.length} weight` : '',
+  ].filter(Boolean);
+
+  return `
+    <div class="doac-module">
+      ${banners.join('')}
+      ${latestHtml}
+      ${inputsHtml}
+      ${notesHtml}
+      ${monitorHtml}
+      ${crclChart}
+      ${creatChart}
+      <div class="acrt-count">${countBits.join(' · ')}</div>
     </div>`;
 }
 
@@ -687,7 +957,7 @@ function round(v) {
 }
 
 function renderObs(m) {
-  const metric = OBS_METRICS.find((x) => x.key === selectedView) || OBS_METRICS[0];
+  const metric = OBS_METRICS.find((x) => x.key === activeView()) || OBS_METRICS[0];
   if (m.state === 'no-data' || !lastData) {
     return `<div class="trends-msg">No observation data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
   }
