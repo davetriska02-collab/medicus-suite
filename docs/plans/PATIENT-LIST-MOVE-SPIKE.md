@@ -8,6 +8,12 @@ authorises a new W-id.
 registered patients from one usual-GP list to another, the way a practice
 does when a partner leaves or lists are rebalanced?
 
+**Product direction (2026-08-27):** if we build, it is a **canvas** (same
+family as lab / workflow allocate and appointment organise). The pool is
+not given — you have to **define which patients**, and that definition is
+a **search** (plus the listing's Usual GP filter). See [Canvas +
+search-defined cohort](#canvas--search-defined-cohort).
+
 ---
 
 ## VERDICT (desk research)
@@ -194,7 +200,10 @@ finding). Do not commit the JSON (patient-data CI guard).
    chList.mark('about to save usual GP') … Save … chList.writes()
 6. Optional: staff Archive prompt, then Cancel. chList.mark('archive prompt')
 7. Optional: Report Builder patient report → Bulk actions menu. chList.ui()
-8. chList.summary() / chList.save()  → send the JSON back. chList.stop()
+8. Patient Finder: type a TEST name. chList.mark('finder search') then
+   chList.finder(). Open Advanced options, note whether Usual GP is a
+   field, Cancel.
+9. chList.summary() / chList.save()  → send the JSON back. chList.stop()
 ```
 
 Use a dummy / test patient for step 5. Put the usual GP **back** after
@@ -202,25 +211,95 @@ the capture if you changed a real test record.
 
 ---
 
-## If the write lands — what a later build would look like
+## Canvas + search-defined cohort
 
-Not in scope for this spike. Sketch only, so the capture knows what to
-look for:
+The other canvases start with a pool the page already has: today's book,
+the results queue, this patient's contacts. A list-move canvas does
+**not**. Opening it onto "every registered patient" would dump 8–12k
+tiles. So the first act is **define who**, and the tool for that is
+search.
 
-1. **Read:** replay the discovered listing URL with the captured usual-GP
-   filter; show named patients + current GP.
-2. **Stage:** pick a destination GP from staff UUIDs seen on the page or
-   the archive prompt — never from a typed name.
-3. **Confirm:** every patient named, current GP → new GP, count, escape.
-   Copy must not say Done / Moved / Reassigned until Medicus accepts.
-4. **Write:** exactly the captured endpoint(s). If the only captured write
-   is one-patient, a loop with stop-on-first-failure — not a invented
-   bulk body. If the only captured bulk is archive-reassign, that is a
-   _whole-list_ tool and must be labelled as such.
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Define who                                                  │
+│   Search  [ name / NHS / DOB              ]  Find           │
+│   or source list: Usual GP [ Dr X ▾ ]                       │
+│   12 in the pool · 0 staged                                 │
+├────────────────────────────┬────────────────────────────────┤
+│ POOL                       │ Move onto                      │
+│ SMITH, Ann  · now Dr X     │  [ Dr Y ]  [ Dr Z ]            │
+│ SMITH, Ben  · now Dr X     │  click a chip or drag          │
+└────────────────────────────┴────────────────────────────────┘
+```
+
+Nothing is pre-staged. Closing with staged moves asks first. Confirm
+names every patient, current GP → new GP. Copy does not say Moved /
+Reassigned / Done until Medicus accepts. Destination is a **staff
+UUID**, never a typed name (same refuse-if-ambiguous rule as W23).
+
+### Two ways to fill the pool (both are "search")
+
+| Mode            | What the user does                                                                                                             | What we already know                                                                                                                                                                                                                                                                                                                                     | What capture must settle                                                                                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Finder**      | Type name / NHS / DOB (Medicus Patient Finder text search). Hits _are_ the pool — add one, or take the result set under a cap. | Confirmed: `GET /patient/patient-finder?query=` → `{ patientId, displayName, dateOfBirth, genderIdentity, address, … }[]` (`contacts-api.js`, contacts build plan). Help: [Using the Patient Finder](https://medicus-health.zendesk.com/hc/en-gb/articles/16305852109725-Using-the-Patient-Finder). Deceased come back with a badge — do not stage them. | Does a hit carry usual / named GP (name + staff UUID)? If not, each hit needs a banner (or listing) join before it can sit on the board. Advanced-search field list and params (help says e.g. last-seen clinician — that is **not** usual GP). |
+| **Source list** | Pick Usual GP. That clinician's current named patients _are_ the pool. Optional name box narrows it.                           | Help: listing filters by Usual GP. Suite already paginates the discovered listing URL.                                                                                                                                                                                                                                                                   | Filter query-param names. Row keys (usualGpId?). Whether the listing itself has a text search, or only the finder.                                                                                                                              |
+
+A third, later mode — Report Builder cohort — can wait. It already has
+its own bulk menu (code / recall / jab / letter) and is the wrong
+surface for "move the Smiths".
+
+**Finder and source-list are not interchangeable.** Finder is how you
+name _these people_. Source-list is how you name _this GP's pile_. A
+partner-leaving job is source-list (possibly then search-narrow). "Put
+this household on Dr Y" is finder. The canvas should offer both, and
+say which definition is live.
+
+Changing the definition rebuilds the pool. If anything is already
+staged, ask first — do not silently drop a staged move.
+
+### What we will not do
+
+- Open onto the whole register.
+- Treat last-seen clinician (finder advanced) as usual GP.
+- Auto-place anyone from named GP (same rule as the allocate canvases).
+- Invent a bulk body if Medicus only exposes the one-patient
+  Registration save — then the canvas still stages, and the write is a
+  loop with stop-on-first-failure.
+- Use W23. That moves a _task_.
+
+### Size
+
+Sweep caps a fan-out at 40. A real GP list is 1,500–2,000. Confirm
+cannot paint 2,000 named rows; it can show the count, the destination,
+and a scrollable / exportable patient list the user has to acknowledge.
+A first build should refuse above a stated cap (or page it) rather than
+pretend a 2,000-tile board is the same product as the lab canvas.
+
+### Capture extras this shape needs
+
+On top of the write-path questions above:
+
+8. Type a test name in **Patient Finder**. `chList.mark('finder search')`
+   then `chList.finder()` — path, query params, result keys (is usual GP
+   on the hit?).
+9. Open **Advanced options**. Which fields exist? Does Usual GP appear,
+   or only last-seen clinician? Params, then Cancel.
+10. On the listing page, is there a **name/NHS box** as well as the Usual
+    GP filter?
+
+Until those three and the Registration save are captured: **do not
+build the canvas**.
+
+### If the write lands
+
+1. Pool from finder and/or listing filter — replay captured URLs only.
+2. Stage onto destination chips keyed by staff UUID.
+3. Confirm: every patient named, current → new GP, count, escape.
+4. Write exactly the captured endpoint(s). One-patient save → loop,
+   stop on first failure. Archive-reassign → whole-list tool, labelled
+   as such, not a subset canvas.
 5. New W-id, hazard, CSN row, `test-write-path-inventory.js`. Intended
-   purpose re-freeze if it is a new class of registration write.
-
-Ceiling until capture: **do not build the canvas**.
+   purpose re-freeze if this is a new class of registration write.
 
 ---
 
@@ -232,11 +311,15 @@ Ceiling until capture: **do not build the canvas**.
   report bulk-action menu contents.
 - **VERIFIED in this repo:** listing discovery + pagination; banner
   `namedGP`; task-row `namedGp` / `namedGpId`; no usual-GP write; W23
-  must not be reused.
+  must not be reused; patient-finder text search
+  (`GET /patient/patient-finder?query=`) used by contacts, result shape
+  as captured in the contacts build plan (usual GP **not** among the
+  confirmed keys).
 - **INFERENCE (live capture only):** listing JSON keys; filter param
   names; whether "patients selected" is multi-select; the Registration
   save contract; whether a hidden listing/report bulk-change exists;
-  whether archive-reassign is a single bulk POST or N single saves.
+  whether archive-reassign is a single bulk POST or N single saves;
+  whether finder hits or advanced search carry usual GP.
 
 Treat every write-shaped sentence above as **unproven** until
 `chList.writes()` has a row from a test-patient save.

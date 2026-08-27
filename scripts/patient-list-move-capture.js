@@ -11,6 +11,9 @@
 //   4. the Registration-tab usual-GP save (method, path, body KEYS + value TYPES)
 //   5. the staff-archive replacement prompt (observe, then Cancel — do not archive)
 //   6. whether Report Builder Bulk actions includes Change usual GP
+//   7. Patient Finder text search — result keys (does a hit carry usual GP?)
+//   8. Patient Finder Advanced options — fields + params (Usual GP vs last-seen)
+//   9. listing-page name/NHS box, if any (cohort definition for the canvas)
 //
 // Same doctrine as scripts/booking-flow-capture.js and
 // scripts/lab-allocate-capture.js: do not invent Medicus slugs. Observation
@@ -32,7 +35,9 @@
 //      chList.mark('about to save usual GP') … Save … chList.writes()
 //   7. Optional: Staff Administration → Archive on a Doctor (Cancel, do not archive).
 //   8. Optional: Report Builder patient report → open Bulk actions.
-//   9. chList.summary() / chList.save()  then chList.stop()
+//   9. Patient Finder: type a TEST name. chList.mark('finder search') then
+//      chList.finder(). Open Advanced options, note fields, Cancel.
+//  10. chList.summary() / chList.save()  then chList.stop()
 //
 // TUNING
 //   chList.all()            capture EVERY request (telemetry still dropped).
@@ -53,12 +58,13 @@
   var redact = true;
 
   var INTEREST_RE =
-    /(\/patient\/|patient-list|listing|registrat|usual|named-?gp|namedgp|staff|archive|job-role|report|bulk)/i;
+    /(\/patient\/|patient-finder|patient-list|listing|registrat|usual|named-?gp|namedgp|staff|archive|job-role|report|bulk|finder)/i;
   var IGNORE_RE =
     /(sentry\.io|\/telemetry|\/analytics|google-analytics|googletagmanager|hotjar|fullstory|datadog|newrelic|\.png|\.jpg|\.svg|\.css|\.woff)/i;
   var SIGNAL_RE =
     /(usual|named|gp|list|registrat|assign|staff|clinician|practitioner|doctor|archive|bulk|select|patientid|patientuuid)/i;
-  var UI_RE = /usual|named\s*gp|change\s*(list|gp)|move|reassign|bulk|selected|registration|archive|filter/i;
+  var UI_RE =
+    /usual|named\s*gp|change\s*(list|gp)|move|reassign|bulk|selected|registration|archive|filter|search|finder|advanced/i;
 
   var timeline = [];
   var seq = 0;
@@ -463,6 +469,28 @@
     });
   }
 
+  function isFinderCall(e) {
+    return e && e.kind === 'net' && /patient-finder|\/finder|advanced.?search/i.test(e.url || '');
+  }
+
+  function summariseNet(e) {
+    var hitKeys = null;
+    var shape = e.listingShape;
+    if (shape && shape.firstRowKeys) hitKeys = shape.firstRowKeys;
+    else if (e.resBody && typeof e.resBody === 'object') {
+      var results = e.resBody.results || e.resBody.patients || e.resBody.data;
+      if (Array.isArray(results) && results[0] && typeof results[0] === 'object') hitKeys = Object.keys(results[0]);
+    }
+    return {
+      method: e.method,
+      url: (e.url || '').split('?')[0],
+      params: e.params,
+      status: e.status,
+      listingShape: shape || null,
+      firstHitKeys: hitKeys,
+    };
+  }
+
   window.chList = {
     __armed: true,
     mark: function (text) {
@@ -504,19 +532,13 @@
       var listingNets = timeline.filter(function (e) {
         return e.kind === 'net' && /patient/i.test(e.url || '') && /list/i.test(e.url || '');
       });
+      var finderNets = timeline.filter(isFinderCall);
       var report = {
         capturedAt: new Date().toISOString(),
         page: snap,
         listingUrlsFromPerformance: listingUrls,
-        listingCallsSoFar: listingNets.map(function (e) {
-          return {
-            method: e.method,
-            url: (e.url || '').split('?')[0],
-            params: e.params,
-            status: e.status,
-            listingShape: e.listingShape || null,
-          };
-        }),
+        listingCallsSoFar: listingNets.map(summariseNet),
+        finderCallsSoFar: finderNets.map(summariseNet),
         writeCount: writeRows().length,
       };
       push({ kind: 'probe', report: report });
@@ -528,6 +550,26 @@
         );
       }
       return report;
+    },
+    finder: function () {
+      var rows = timeline.filter(isFinderCall).map(summariseNet);
+      push({ kind: 'finder', calls: rows });
+      console.log('%c[listcap] finder (' + rows.length + ')', 'color:#2a7;font-weight:bold');
+      console.table(
+        rows.map(function (r) {
+          return {
+            call: r.method + ' ' + r.url,
+            status: r.status,
+            keys: (r.firstHitKeys || []).join(', '),
+          };
+        })
+      );
+      if (!rows.length) {
+        console.warn(
+          '[listcap] no patient-finder call yet. Open the magnifying-glass Patient Finder, type a TEST name, then chList.finder() again.'
+        );
+      }
+      return rows;
     },
     writes: function () {
       var rows = writeRows().map(function (e) {
@@ -618,7 +660,7 @@
   console.log(
     '%c[listcap] armed — capturing patient-list / registration / usual-GP / staff-archive traffic.\n' +
       'USE A TEST PATIENT for any usual-GP save. Do NOT confirm a staff Archive.\n' +
-      'chList.probe() · chList.ui() · chList.writes() · chList.summary() / .save() · chList.stop()',
+      'chList.probe() · chList.finder() · chList.ui() · chList.writes() · chList.summary() / .save() · chList.stop()',
     'color:#2a7;font-weight:bold'
   );
 })();

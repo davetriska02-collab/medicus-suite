@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.246.2] — 2026-08-27
+
+### Patient-list move spike — search defines the canvas pool
+
+If this is built, it is a canvas whose pool is empty until you **search**
+(Patient Finder name/NHS/DOB, and/or the listing Usual GP filter). The
+other canvases inherit a queue or a day's book; this one does not. Still
+investigation only — no write path. Capture now records finder + advanced
+search (`chList.finder()`). See `docs/plans/PATIENT-LIST-MOVE-SPIKE.md`.
+
 ## [v3.246.1] — 2026-08-27
 
 ### Patient-list move spike (investigation only)
