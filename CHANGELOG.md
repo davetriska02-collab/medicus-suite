@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.246.1] — 2026-08-27
+
+### Patient-list move spike (investigation only)
+
+Desk research on bulk-moving registered patients between usual-GP lists.
+Medicus documents a one-patient Usual GP edit on the Registration tab, and
+a whole-list reassign when archiving a Doctor — not a listing-page or
+Report Builder subset-bulk. No suite write path added. Capture script
+(`scripts/patient-list-move-capture.js`, not shipped) plus
+`docs/plans/PATIENT-LIST-MOVE-SPIKE.md` for the live session that has to
+settle the contract.
+
 ## [v3.246.0] — 2026-08-27
 
 ### Workflow allocation canvas — inbound documents and team inboxes
