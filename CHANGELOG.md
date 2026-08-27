@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.247.0] — 2026-08-27
+
+### Sentinel — live frailty indicator (Safety Monitoring)
+
+People slipping into frailty now surface in Sentinel's Safety Monitoring section
+the same way a worsening eGFR does. Five new read-only rules for patients 65+
+(the GMS frailty-identification cohort):
+
+- **Rising frailty-index trends** — separate monitors for the original eFI
+  (fires on a ≥0.06 rise within 36 months; categories fit ≤0.12 / mild ≤0.24 /
+  moderate ≤0.36 / severe >0.36) and its 2025 replacement **eFI2** (fires on
+  ≥0.04; bands mild 0.09 / moderate 0.16 / severe ≥0.24). The two indexes use
+  **different category boundaries**, so they deliberately never share a rule —
+  `observation-trend` gains an `observationExclude` field and the original-eFI
+  rules exclude eFI2-named series.
+- **Worsening Rockwood Clinical Frailty Scale** — any ≥1-point rise within
+  36 months, with the ±1 inter-rater caveat in the chip notes.
+- **Frailty-range score, no frailty code** — amber/red preventative prompts when
+  the latest eFI/eFI2 (within 2 years) sits in the moderate/severe screening
+  band but no frailty problem is coded. Negation-aware `excludeIfProblem`
+  retires the chip the moment frailty is coded; "no frailty" does not suppress it.
+
+Data path: frailty scores are journal-coded, not lab results, so journal
+observations are now folded into the multi-point `observationHistory` that
+trend rules read (`mergeJournalIntoHistory` in `engine/normalisers.js`, pure and
+mutation-tested), and the journal fetch window extends from 400 to 1130 days so
+36-month trend windows have data. Recency-gated consumers are unaffected —
+latest-value pickers date-sort and every recent/alert/count check applies its
+own window.
+
+All chips are review prompts, not diagnoses: the eFI/eFI2 are population
+risk-stratification tools and the notes require clinical confirmation (Rockwood
+CFS / comprehensive geriatric assessment) before coding, per NHS England
+guidance. Not QOF claim indicators. See `docs/HAZARD-LOG.md` **H-067** (pending
+CSO sign-off). Pinned by `test-frailty-safety-rules.js` (78 checks).
+
 ## [v3.246.0] — 2026-08-27
 
 ### Workflow allocation canvas — inbound documents and team inboxes

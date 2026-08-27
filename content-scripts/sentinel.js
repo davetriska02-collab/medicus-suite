@@ -274,13 +274,22 @@
   // for indicators like AST007 whose evidence lives exclusively in the journal.
   //
   // Returns an array of { name, value, date (ISO YYYY-MM-DD), source: 'journal' } objects,
-  // filtered to the last 400 days and de-duplicated against existingObs by name+date.
+  // filtered to the last JOURNAL_WINDOW_DAYS and de-duplicated against existingObs by name+date.
+  //
+  // Window: 1130 days (~37 months). Was 400 days until the frailty trend rules
+  // landed — observation-trend windows for journal-coded scores (eFI/eFI2,
+  // Rockwood CFS are typically recalculated at most annually) span 36 months, so
+  // a 400-day window could never yield the minimum 2 points. Recency-gated
+  // consumers are unaffected: latest-value pickers date-sort, and
+  // observation-recent / observation-alert / event-count all apply their own
+  // withinDays / windowMonths cutoffs.
+  const JOURNAL_WINDOW_DAYS = 1130;
   async function fetchJournalObservations(patientId, existingObs) {
     const apiOrigin = getMedicusApiOrigin();
     if (!apiOrigin || !patientId) return [];
 
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 400);
+    cutoff.setDate(cutoff.getDate() - JOURNAL_WINDOW_DAYS);
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -535,7 +544,19 @@
             try {
               const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
               if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
-              if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
+              if (journalObs.length) {
+                data.observations = [...(data.observations || []), ...journalObs];
+                // Also fold journal points into the multi-point history so
+                // observation-trend rules can see journal-coded scores (frailty
+                // indexes, questionnaire scores) — the dashboard-only history
+                // otherwise leaves them permanently at no_data.
+                if (window.SentinelNormalisers && window.SentinelNormalisers.mergeJournalIntoHistory) {
+                  data.observationHistory = window.SentinelNormalisers.mergeJournalIntoHistory(
+                    data.observationHistory || [],
+                    journalObs
+                  );
+                }
+              }
             } catch (journalErr) {
               // Journal augmentation is best-effort; never block the chip. Record
               // the failure so the side panel can surface a non-blocking warning —

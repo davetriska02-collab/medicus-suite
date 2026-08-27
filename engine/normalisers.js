@@ -420,6 +420,80 @@
     return out;
   }
 
+  // ---- Merge journal-coded observations into observationHistory ----
+  // The investigation dashboard only carries lab-style results, so journal-coded
+  // scores (electronic frailty index, Rockwood clinical frailty scale, PHQ-9,
+  // etc.) never appear in normaliseObservationHistory's output — which is the
+  // ONLY series source the observation-trend engine reads. This helper folds the
+  // journal observations fetched by the Sentinel content script (shape:
+  // { name, value (display string), date (ISO YYYY-MM-DD), source: 'journal' })
+  // into an existing observationHistory array so trend rules can see them.
+  //
+  // Pure: returns a NEW array; neither input is mutated (entries that gain
+  // journal points are shallow-copied with a new history array).
+  //
+  // Semantics:
+  //   - Journal obs are grouped by case-insensitive exact name match against
+  //     existing entries (never substring — that is the rules' job).
+  //   - Within an entry, one point per date: an existing dashboard point wins
+  //     over a journal point on the same date (dashboard values carry units and
+  //     reference-range flags; the journal duplicate adds nothing).
+  //   - `value` is numeric via parseObservationValue (NaN for non-numeric,
+  //     matching the documented observationHistory contract); `rawValue` keeps
+  //     the original string.
+  //   - New entries carry unit: null — journal values embed no unit, so the
+  //     engine's unit-conflict guard fails open on them by design.
+  //   - History stays newest-first (ISO string sort, same as the builder above).
+  function mergeJournalIntoHistory(observationHistory, journalObs) {
+    const base = Array.isArray(observationHistory) ? observationHistory : [];
+    const journal = Array.isArray(journalObs) ? journalObs : [];
+    if (journal.length === 0) return base.slice();
+
+    const byIso = (a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0);
+    // name (lowercased) -> output entry index
+    const out = base.slice();
+    const nameIndex = {};
+    const touched = new Set(); // indices whose history gained journal points
+    out.forEach((entry, i) => {
+      if (entry && entry.name) nameIndex[String(entry.name).toLowerCase()] = i;
+    });
+
+    journal.forEach((obs) => {
+      if (!obs || !obs.name) return;
+      // Only accept well-formed ISO dates — trend arithmetic needs real dates.
+      if (typeof obs.date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(obs.date)) return;
+      const key = String(obs.name).toLowerCase();
+      const point = {
+        date: obs.date,
+        value: parseObservationValue(obs.value),
+        rawValue: obs.value == null ? '' : String(obs.value),
+        isAbove: false,
+        isBelow: false,
+        source: 'API:patient-journal',
+      };
+      if (nameIndex[key] === undefined) {
+        nameIndex[key] = out.length;
+        touched.add(out.length);
+        out.push({ name: obs.name, code: null, group: null, unit: null, history: [point] });
+        return;
+      }
+      const idx = nameIndex[key];
+      const entry = out[idx];
+      if ((entry.history || []).some((p) => p.date === point.date)) return; // existing point wins
+      // Copy-on-first-write so the caller's array/entries are never mutated.
+      if (!touched.has(idx)) {
+        out[idx] = { ...entry, history: (entry.history || []).slice() };
+        touched.add(idx);
+      }
+      out[idx].history.push(point);
+    });
+
+    // Re-sort only entries that gained points — untouched base entries are
+    // already newest-first and must not be mutated (purity contract above).
+    touched.forEach((idx) => out[idx].history.sort(byIso));
+    return out;
+  }
+
   // ---- Date string normaliser ----
   // Handles two formats seen in investigationReport payloads:
   //   "2026-01-09 08:26:00"  → "2026-01-09"
@@ -670,6 +744,7 @@
     normaliseProblems,
     normaliseObservations,
     normaliseObservationHistory,
+    mergeJournalIntoHistory,
     parseObservationValue,
     normaliseAll,
     normaliseInvestigationReport,

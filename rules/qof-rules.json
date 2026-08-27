@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-08-22",
+  "lastUpdated": "2026-08-27",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159.",
+  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159. 2026-08-27: added the frailty safety-monitoring set for patients 65+ (not QOF claim indicators) - rising-trend monitors on the original eFI (trend-frailty-efi-rising), the eFI2 (trend-frailty-efi2-rising, separate rule because eFI2 bands differ from original eFI) and the Rockwood CFS (trend-frailty-cfs-rising), plus 'score in frailty range but no frailty problem coded' prompts (alert-frailty-efi-uncoded, alert-frailty-efi2-uncoded, suppressed via excludeIfProblem 'frail' once coded). Frailty scores are journal-coded, so these rules depend on the journal-into-history merge added to the Sentinel data path in the same release.",
   "rules": [
     {
       "id": "qof-reg-dm",
@@ -1793,6 +1793,158 @@
       },
       "source": "NICE NG28 (type 2 diabetes in adults) / NICE NG17 (type 1 diabetes)",
       "notes": "Clinical-review trend monitor for worsening glycaemic control in people on the diabetes register (fires only when the patient is on the DM register). Not a QOF claim indicator. Values are in mmol/mol (IFCC units). Multi-point HbA1c history is required: where only the latest result is available the chip shows no_data until history exists. Window is 24 months to capture enough readings (HbA1c is typically checked 3-6 monthly in diabetes). The >=10 mmol/mol rise is a pragmatic review threshold, not a fixed guideline cut-off - adjust to local policy. A sustained rise suggests deteriorating control: review adherence, diet/lifestyle, intercurrent illness or steroids, and consider treatment intensification per NICE NG28/NG17. Confirm on repeat testing and interpret alongside the individualised HbA1c target (commonly 48 mmol/mol, or 53 mmol/mol where treatment carries hypoglycaemia risk)."
+    },
+    {
+      "id": "trend-frailty-efi-rising",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "TREND-EFI",
+      "indicatorName": "Rising frailty index trend (eFI)",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "check": {
+        "kind": "observation-trend",
+        "observation": [
+          "frailty index"
+        ],
+        "observationExclude": [
+          "efi2",
+          "efi-2",
+          "efi 2",
+          "frailty index 2",
+          "version 2"
+        ],
+        "direction": "rising",
+        "minPoints": 2,
+        "withinMonths": 36,
+        "minDelta": 0.06
+      },
+      "source": "Clegg et al., Age and Ageing 2016 (eFI development/validation) / NHS England electronic Frailty Index guidance",
+      "notes": "Clinical-review trend monitor for progressive frailty in patients aged 65+, not a QOF claim indicator. Original electronic Frailty Index (eFI): 36-deficit cumulative model, score 0-1; categories fit <=0.12, mild >0.12-0.24, moderate >0.24-0.36, severe >0.36. A rise of >=0.06 (half a category width, i.e. accumulating ~2 deficits) within 36 months is a pragmatic review threshold, not a published cut-off - adjust to local policy. Window is 36 months and minPoints 2 because eFI is typically recalculated at most annually. eFI scores are journal-coded: this rule relies on Sentinel's journal history merge and shows no_data until >=2 recorded scores exist. IMPORTANT: this rule deliberately excludes eFI2-named entries - the replacement eFI2 (rolling out from 2025) uses different category boundaries and has its own rule (trend-frailty-efi2-rising). The eFI is a population risk-stratification tool, not a diagnosis: confirm any apparent progression with clinical assessment (e.g. Rockwood CFS, comprehensive geriatric assessment) per the GMS contract frailty requirement, and consider falls risk, medication review (polypharmacy/ACB) and proactive-care interventions."
+    },
+    {
+      "id": "trend-frailty-efi2-rising",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "TREND-EFI2",
+      "indicatorName": "Rising frailty index trend (eFI2)",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "check": {
+        "kind": "observation-trend",
+        "observation": [
+          "efi2",
+          "efi-2",
+          "efi 2",
+          "frailty index 2"
+        ],
+        "direction": "rising",
+        "minPoints": 2,
+        "withinMonths": 36,
+        "minDelta": 0.04
+      },
+      "source": "Clegg et al. 2025 (eFI2 development/validation) / BJGP 2025;75(755):249 / NHS England proactive care guidance",
+      "notes": "Clinical-review trend monitor for progressive frailty in patients aged 65+ using the eFI2 (the replacement for the original eFI, rolling out in GP systems from 2025), not a QOF claim indicator. eFI2 screening bands: mild 0.09 to <0.16, moderate 0.16 to <0.24, severe >=0.24 - NOT the same boundaries as the original eFI, which is why the two indexes have separate rules and must never share thresholds. A rise of >=0.04 (about half an eFI2 band width) within 36 months is a pragmatic review threshold, not a published cut-off - adjust to local policy. Window is 36 months and minPoints 2 because the index is typically recalculated at most annually. Scores are journal-coded: this rule relies on Sentinel's journal history merge and shows no_data until >=2 recorded scores exist. The eFI2 is a population risk-stratification tool, not a diagnosis: confirm any apparent progression with clinical assessment (e.g. Rockwood CFS, comprehensive geriatric assessment), and consider falls risk, medication review (polypharmacy/ACB) and proactive-care interventions."
+    },
+    {
+      "id": "trend-frailty-cfs-rising",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "TREND-CFS",
+      "indicatorName": "Worsening Clinical Frailty Scale (Rockwood)",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "check": {
+        "kind": "observation-trend",
+        "observation": [
+          "rockwood",
+          "clinical frailty scale"
+        ],
+        "direction": "rising",
+        "minPoints": 2,
+        "withinMonths": 36,
+        "minDelta": 1
+      },
+      "source": "Rockwood et al., CMAJ 2005 (Clinical Frailty Scale) / NHS England & British Geriatrics Society frailty guidance",
+      "notes": "Clinical-review trend monitor for worsening clinician-assessed frailty in patients aged 65+, not a QOF claim indicator. Rockwood Clinical Frailty Scale: 1 (very fit) to 9 (terminally ill); 4 = living with very mild frailty (vulnerable), >=5 = living with frailty. Any rise of >=1 point within 36 months fires - CFS is scored sparingly in primary care so even a single-point rise between assessments is worth a look, but note inter-rater variability of about +/-1 point: confirm the change reflects genuine functional decline (ideally against the patient's baseline 2 weeks before any acute illness, per CFS scoring guidance) rather than scorer difference. CFS entries are journal-coded: this rule relies on Sentinel's journal history merge and shows no_data until >=2 recorded scores exist. A genuine rise, especially crossing from <=4 into >=5, should prompt frailty coding, falls risk assessment, medication review and consideration of proactive-care/comprehensive geriatric assessment."
+    },
+    {
+      "id": "alert-frailty-efi-uncoded",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "EFI-RANGE",
+      "indicatorName": "eFI in frailty range - no frailty code on problem list",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "excludeIfProblem": [
+        "frail"
+      ],
+      "check": {
+        "kind": "observation-alert",
+        "observation": [
+          "frailty index"
+        ],
+        "observationExclude": [
+          "efi2",
+          "efi-2",
+          "efi 2",
+          "frailty index 2",
+          "version 2"
+        ],
+        "comparator": "above",
+        "amber": 0.25,
+        "red": 0.36,
+        "withinDays": 730
+      },
+      "source": "Clegg et al., Age and Ageing 2016 (eFI) / NHS England electronic Frailty Index guidance / GMS contract frailty identification requirement (65+)",
+      "notes": "Preventative prompt, not a QOF claim indicator and not a diagnosis: the latest recorded original-eFI score (within 2 years) sits in the moderate (AMBER, >0.24) or severe (RED, >0.36) screening range, but no frailty problem is coded on the active problem list - the patient may be slipping into frailty unrecognised. The GMS contract requires practices to identify and clinically confirm moderate and severe frailty in patients 65+; NHS England guidance asks for clinical confirmation (e.g. Rockwood CFS / comprehensive geriatric assessment) before coding, then falls risk assessment, medication review and (severe, with consent) enriched Summary Care Record. Boundary convention: amber fires at >=0.25 because eFI scores move in steps of 1/36 (~0.028), so the first score strictly above the 0.24 mild/moderate boundary is 9/36 = 0.25; a displayed 0.36 may be a rounded 13/36 = 0.361, so treat boundary-exact values with judgement - the chip shows the raw value and date. The chip disappears once any frailty problem is coded (negation-aware: 'no frailty' does not suppress it). Excludes eFI2-named entries - eFI2 has different bands and its own rule (alert-frailty-efi2-uncoded)."
+    },
+    {
+      "id": "alert-frailty-efi2-uncoded",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "EFI2-RANGE",
+      "indicatorName": "eFI2 in frailty range - no frailty code on problem list",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "excludeIfProblem": [
+        "frail"
+      ],
+      "check": {
+        "kind": "observation-alert",
+        "observation": [
+          "efi2",
+          "efi-2",
+          "efi 2",
+          "frailty index 2"
+        ],
+        "comparator": "above",
+        "amber": 0.16,
+        "red": 0.24,
+        "withinDays": 730
+      },
+      "source": "Clegg et al. 2025 (eFI2) / BJGP 2025;75(755):249 / NHS England proactive care guidance / GMS contract frailty identification requirement (65+)",
+      "notes": "Preventative prompt, not a QOF claim indicator and not a diagnosis: the latest recorded eFI2 score (within 2 years) sits in the moderate (AMBER, >=0.16) or severe (RED, >=0.24) screening band, but no frailty problem is coded on the active problem list - the patient may be slipping into frailty unrecognised. eFI2 bands (mild 0.09 to <0.16, moderate 0.16 to <0.24, severe >=0.24) are inclusive lower bounds, so the amber/red thresholds map directly. Clinical confirmation (e.g. Rockwood CFS / comprehensive geriatric assessment) should precede coding, then falls risk assessment, medication review and (severe, with consent) enriched Summary Care Record per NHS England guidance. The chip disappears once any frailty problem is coded (negation-aware: 'no frailty' does not suppress it). Do NOT apply original-eFI boundaries (0.24/0.36) to eFI2 scores - the scales differ; the original index has its own rule (alert-frailty-efi-uncoded)."
     },
     {
       "id": "qof-ob004",

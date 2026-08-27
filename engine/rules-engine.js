@@ -1937,10 +1937,15 @@
       // Pick the entry with the most data points so the trend uses the richest series.
       // BP-style "120/80" values are not supported in trend mode — they parse to NaN
       // in observationHistory and get filtered below.
+      // observationExclude rejects same-family series recorded on a DIFFERENT scale
+      // — e.g. the original eFI rule must never pick up an eFI2 series (severe is
+      // >0.36 on eFI but >=0.24 on eFI2), so the eFI rule excludes "efi2" names.
       const normStr = (s) => String(s || '').toLowerCase();
       const matchTerms = check.observation || [];
+      const excludeTerms = check.observationExclude || [];
       const candidates = (data.observationHistory || []).filter((entry) => {
         const name = normStr(entry.name);
+        if (excludeTerms.some((e) => name.includes(normStr(e)))) return false;
         return matchTerms.some((m) => name.includes(normStr(m)));
       });
       const historyEntry =
