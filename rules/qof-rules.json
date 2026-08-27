@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-08-22",
+  "lastUpdated": "2026-08-27",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
   "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159.",
@@ -1793,6 +1793,68 @@
       },
       "source": "NICE NG28 (type 2 diabetes in adults) / NICE NG17 (type 1 diabetes)",
       "notes": "Clinical-review trend monitor for worsening glycaemic control in people on the diabetes register (fires only when the patient is on the DM register). Not a QOF claim indicator. Values are in mmol/mol (IFCC units). Multi-point HbA1c history is required: where only the latest result is available the chip shows no_data until history exists. Window is 24 months to capture enough readings (HbA1c is typically checked 3-6 monthly in diabetes). The >=10 mmol/mol rise is a pragmatic review threshold, not a fixed guideline cut-off - adjust to local policy. A sustained rise suggests deteriorating control: review adherence, diet/lifestyle, intercurrent illness or steroids, and consider treatment intensification per NICE NG28/NG17. Confirm on repeat testing and interpret alongside the individualised HbA1c target (commonly 48 mmol/mol, or 53 mmol/mol where treatment carries hypoglycaemia risk)."
+    },
+    {
+      "id": "trend-frailty-worsening",
+      "type": "qof-indicator",
+      "category": "safety-monitoring",
+      "enabled": true,
+      "indicatorCode": "TREND-FRAILTY",
+      "indicatorName": "Worsening frailty trajectory",
+      "sex": "any",
+      "ageRange": {
+        "min": 65
+      },
+      "useQofYearFloor": false,
+      "check": {
+        "kind": "problem-severity-progression",
+        "subject": "frailty",
+        "ladder": [
+          {
+            "level": "mild",
+            "match": [
+              "mild frailty",
+              "mildly frail"
+            ]
+          },
+          {
+            "level": "moderate",
+            "match": [
+              "moderate frailty",
+              "moderately frail"
+            ]
+          },
+          {
+            "level": "severe",
+            "match": [
+              "severe frailty",
+              "severely frail"
+            ]
+          }
+        ],
+        "genericMatch": [
+          "frailty",
+          "frail"
+        ],
+        "genericExclude": [
+          "screening",
+          "assessment",
+          "score",
+          "index",
+          "scale",
+          "declined"
+        ],
+        "contextObservation": [
+          "electronic frailty index",
+          "frailty index",
+          "frailty score",
+          "rockwood",
+          "clinical frailty scale"
+        ],
+        "withinMonths": 24
+      },
+      "source": "NHS England GMS contract — routine frailty identification in patients aged 65+ (eFI categories per Clegg et al., Age and Ageing 2016); NICE CKS frailty",
+      "notes": "Clinical-review trajectory monitor, NOT a QOF claim indicator and NOT a frailty diagnosis tool. Fires (red) ONLY when clinician-CODED frailty grades on the problem list show a new-worst grade (mild -> moderate -> severe) with the latest grade recorded inside the 24-month window; nothing is computed or inferred from proxy signals (falls, weight loss, polypharmacy do not feed this rule), and Sentinel never derives an eFI itself. Improvement or same-grade re-coding never fires. Ungraded frailty codes, a single grade, undated grades, or grades older than the window show a neutral NOTED state (trajectory not assessable/current) - never a green claim. An eFI/Rockwood score observation, when present, is shown in the evidence panel for context only. Restricted to 65+ (fail-open when age unknown) matching GMS routine frailty identification and eFI validation. Action on firing: preventive review - medication review (STOPP/START), falls risk, bone health, care planning per NICE CKS frailty; verify grades in the record first (coding tidy-ups can misdate). Window is 24 months because frailty is typically re-graded at annual review; two review cycles bounds 'live' honestly."
     },
     {
       "id": "qof-ob004",

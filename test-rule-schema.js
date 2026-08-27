@@ -39,6 +39,7 @@ const IMPLEMENTED_KINDS = new Set([
   'observation-trend',
   'medication-present',
   'medication-all-of',
+  'problem-severity-progression',
 ]);
 
 // ── QOF-indicator rules ───────────────────────────────────────────────────────

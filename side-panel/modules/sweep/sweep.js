@@ -370,6 +370,10 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
   const chips = rulesEngine.evaluatePatient(data.medications || [], data.observations || [], rules, {
     now: new Date().toISOString(),
     problems: data.problems || [],
+    // pastProblems parity with content-scripts/sentinel.js: superseded frailty
+    // grades (problem-severity-progression) and hysterectomy context (HRT)
+    // are normally ENDED problems — omitting them silently under-alerts.
+    pastProblems: data.pastProblems || [],
     patientContext: data.patientContext,
     observationHistory: data.observationHistory || [],
     allergies: data.allergies || [],

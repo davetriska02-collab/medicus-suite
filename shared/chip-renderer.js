@@ -205,10 +205,14 @@
     const col = STATUS_COLOUR[chip.status] || 'neutral';
     const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
     const isCustom = chip.isCustom || (chip.ruleId && chip.ruleId.startsWith('custom-'));
+    // safety-monitoring chips (eGFR/HbA1c trend, frailty trajectory, …) are
+    // clinical safety flags, NOT QOF payment items: no year tag, and no
+    // "before QOF year start" warning (their evidence legitimately spans years).
+    const isSafetyMonitoring = chip.category === 'safety-monitoring';
 
     const isOverdue = chip.status === 'overdue' || chip.status === 'not_met';
     const datePart = chip.dateText
-      ? isOverdue && chip.qofYearStart && !isCustom && chip.dateText < chip.qofYearStart
+      ? isOverdue && chip.qofYearStart && !isCustom && !isSafetyMonitoring && chip.dateText < chip.qofYearStart
         ? ` · ${escHtml(chip.dateText)} ⚠ before ${escHtml(chip.qofYearStart)}`
         : ` · ${escHtml(chip.dateText)}${chip.days != null ? ` (${chip.days}d ago)` : ''}`
       : '';
@@ -221,7 +225,7 @@
     // Custom chips: replace QOF year tag with Custom tag; hide points if not set
     const yearOrCustomTag = isCustom
       ? `<span class="sent-custom-tag">Custom</span>`
-      : chip.qofYear
+      : chip.qofYear && !isSafetyMonitoring
         ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>`
         : '';
     const pointsText = chip.points ? ` · ${escHtml(String(chip.points))}pt` : '';

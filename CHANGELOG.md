@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.247.0] — 2026-08-27
+
+### Sentinel — live frailty trajectory indicator (worsening frailty, like worsening eGFR)
+
+A new safety-monitoring chip, **`trend-frailty-worsening`** (patients 65+), watches for
+people slipping into frailty the same way the falling-eGFR trend watches renal decline —
+but from **clinician-coded problem-list frailty grades** (mild → moderate → severe, the
+grades practices code from the eFI), not from a score the extension computes.
+
+Built on a new engine check kind, **`problem-severity-progression`**: it fires red only
+when the most recent dated grade is strictly worse than *every* earlier dated grade and
+was coded within 24 months. Deliberately conservative:
+
+- **Nothing is computed or inferred.** No electronic Frailty Index is derived, and proxy
+  signals (falls, weight loss, polypharmacy) can never fire it. An eFI/Rockwood score
+  observation, when present, appears in the evidence panel marked "context only".
+- **Improvement, same-grade re-codes, re-reaching an old worst, and same-date coding
+  tidy-ups never fire.** Undated grades are excluded from the comparison (they cannot be
+  ordered) but still listed in evidence so nothing is silently dropped.
+- **Honest insufficient/stale states.** No frailty codes → NO DATA; an ungraded code, a
+  single grade, undated grades, or a newest grade older than the window → neutral NOTED
+  with the recorded grade and date visible. The green state asserts only "no recorded
+  worsening" — never "stable".
+- Superseded grades moved to **past problems** still count (the normal re-grading
+  pattern); Sweep now passes `pastProblems` into evaluation to match the live panel
+  (this also fixes the pre-existing HRT hysterectomy-context gap in Sweep).
+- On firing, the action is a preventive review: verify the grades in the record, then
+  medication review / falls risk / bone health / care planning per NICE CKS frailty.
+
+Also in this release: **safety-monitoring chips no longer wear QOF dress** — the
+"QOF 20XX/XX" year tag and the "⚠ before QOF year start" warning are suppressed for
+`category: safety-monitoring` chips in both the shared chip renderer and the panel
+fallback (they are clinical safety flags, not claim items, and their evidence
+legitimately spans years).
+
+Safety documentation: `docs/HAZARD-LOG.md` **H-067** (pending CSO sign-off) and
+`docs/CLINICAL-SAFETY-NOTICE.md` limitation 49. Pinned by `test-frailty-trajectory.js`
+(60 checks); `test-rule-schema.js` and `test-qof-indicator-filters.js` extended.
+
 ## [v3.246.0] — 2026-08-27
 
 ### Workflow allocation canvas — inbound documents and team inboxes

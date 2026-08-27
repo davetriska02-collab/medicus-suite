@@ -758,6 +758,63 @@
       } else {
         facts.push({ label: 'Trend', value: valueText || 'insufficient data' });
       }
+    } else if (check.kind === 'problem-severity-progression') {
+      const pg = ctx.progression;
+      if (pg) {
+        const capF = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+        if (pg.fires && pg.priorMax && pg.latest) {
+          facts.push({
+            label: 'Trajectory',
+            value: `worsened — ${pg.priorMax.level} → ${pg.latest.level}`,
+            detail: `latest grade within ${pg.withinMonths}-month window`,
+          });
+        } else if (pg.latest && !pg.latestRecent) {
+          facts.push({
+            label: 'Trajectory',
+            value: `not current — newest grade older than ${pg.withinMonths}-month window`,
+          });
+        } else if (pg.latest && pg.priorMax) {
+          facts.push({ label: 'Trajectory', value: 'no recorded worsening' });
+        } else if (pg.events.length || pg.genericEvents.length) {
+          facts.push({ label: 'Trajectory', value: 'not assessable — no earlier grade to compare' });
+        }
+        // Every coded grade, newest first, so the clinician sees exactly what
+        // the trajectory was computed from (provenance requirement).
+        const ordered = pg.events
+          .slice()
+          .sort((a, b) => ((a.date || '') > (b.date || '') ? -1 : (a.date || '') < (b.date || '') ? 1 : 0));
+        ordered.forEach((e) => {
+          facts.push({
+            label: 'Coded grade',
+            value: `${capF(e.level)} — “${e.label}”`,
+            date: e.date,
+            detail: e.date ? null : 'date unknown — excluded from trajectory',
+          });
+        });
+        pg.genericEvents.forEach((e) => {
+          facts.push({
+            label: 'Ungraded code',
+            value: `“${e.label}”`,
+            date: e.date,
+            detail: 'no grade — cannot contribute to trajectory',
+          });
+        });
+        if (pg.scoreObs) {
+          facts.push({
+            label: 'Recorded score',
+            value: `${pg.scoreObs.name}: ${pg.scoreObs.value}`,
+            date: pg.scoreObs.date,
+            detail: 'shown for context only — does not drive this alert',
+          });
+        }
+        facts.push({ label: 'Window', value: `latest grade within last ${pg.withinMonths} months` });
+        facts.push({
+          label: 'Source',
+          value: 'clinician-coded problem-list grades only — no score computed or inferred by this tool',
+        });
+      } else {
+        facts.push({ label: 'Trajectory', value: valueText || 'no data' });
+      }
     }
 
     if ((rule.excludeIfProblem || []).length) {
@@ -1604,7 +1661,13 @@
     // evidenceCtx accumulates the matched data the evaluator consults so the
     // evidence panel can show "we looked here, we found X" without re-running
     // the match logic.
-    const evidenceCtx = { matchedRegisterProblem: null, matchedObs: null, matchedMed: null, trendSeries: null };
+    const evidenceCtx = {
+      matchedRegisterProblem: null,
+      matchedObs: null,
+      matchedMed: null,
+      trendSeries: null,
+      progression: null,
+    };
 
     // Step 1: register membership precondition
     if (rule.requiresRegister) {
@@ -2040,6 +2103,171 @@
         }
       }
       // status remains 'no_data' when no history entry found or history array is empty
+    } else if (check.kind === 'problem-severity-progression') {
+      // problem-severity-progression: detects a recorded WORSENING across an
+      // ordered ladder of coded problem-grade severities (shipped use: frailty —
+      // mild → moderate → severe, the grades practices code from the eFI).
+      // Clinically conservative by design:
+      //   • Only clinician-RECORDED grades count. Nothing is computed or
+      //     inferred: no electronic Frailty Index is derived from partial
+      //     inputs, and risk proxies (falls, weight loss, polypharmacy) can
+      //     never fire this check — it re-displays and compares coded grades.
+      //   • Fires ONLY when the most recent dated grade is strictly higher
+      //     than EVERY earlier dated grade (a genuine new-worst) AND that
+      //     latest grade was coded within check.withinMonths of now.
+      //     Improvement (severe → moderate) and same-grade re-codes never fire.
+      //   • Same-date grades at different levels (coding tidy-ups) collapse to
+      //     one grading episode, never a trajectory. Undated grades cannot be
+      //     ordered, so they are excluded from the comparison (still listed in
+      //     the evidence panel so nothing is silently dropped).
+      //   • Honest insufficient/stale states: nothing recorded → no_data;
+      //     recorded but not assessable (ungraded code only, a single grade,
+      //     undated grades, or the newest grade older than the window) →
+      //     neutral 'noted' with the recorded grade + date visible — NEVER a
+      //     green "no worsening" claim off stale or single-point evidence.
+      const subject = check.subject || 'condition';
+      const ladder = Array.isArray(check.ladder) ? check.ladder : [];
+      const withinMonths = check.withinMonths || 24;
+      const allProblems = [...(data.problems || []), ...(data.pastProblems || [])];
+
+      const levelName = (i) => (ladder[i] && ladder[i].level ? String(ladder[i].level) : `level ${i + 1}`);
+      const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+      const validDate = (d) => !!d && !isNaN(new Date(d).getTime());
+
+      // Grade each problem at the HIGHEST ladder level whose terms match
+      // (negation-aware, so "no frailty" / "at risk of severe frailty" never
+      // count). Highest-first scan means "very severely frail" lands on its own
+      // level rather than substring-matching the plain "severely frail" level.
+      // One event per coded problem.
+      const gradedProblems = new Set();
+      const events = [];
+      allProblems.forEach((p) => {
+        if (!p || !p.label) return;
+        for (let i = ladder.length - 1; i >= 0; i--) {
+          if ((ladder[i].match || []).some((t) => problemLabelMatchesTerm(p.label, t))) {
+            gradedProblems.add(p);
+            events.push({
+              levelIndex: i,
+              level: levelName(i),
+              label: p.label,
+              date: validDate(p.codedDate) ? String(p.codedDate).slice(0, 10) : null,
+              problemStatus: p.status || 'active',
+            });
+            return;
+          }
+        }
+      });
+
+      // Ungraded diagnosis codes (e.g. bare "Frailty") establish that the
+      // condition is recorded but carry no grade — provenance only, never a
+      // trajectory input. Problems already graded above are skipped so a bare
+      // "frailty" generic term cannot double-count "Moderate frailty".
+      // genericExclude keeps process codes ("frailty screening", "frailty
+      // assessment declined") from masquerading as a recorded diagnosis.
+      const genericEvents = [];
+      if (Array.isArray(check.genericMatch) && check.genericMatch.length) {
+        const gExcl = (check.genericExclude || []).map((x) => String(x).toLowerCase());
+        allProblems.forEach((p) => {
+          if (!p || !p.label || gradedProblems.has(p)) return;
+          if (!check.genericMatch.some((t) => problemLabelMatchesTerm(p.label, t))) return;
+          const lbl = String(p.label).toLowerCase();
+          if (gExcl.some((x) => lbl.includes(x))) return;
+          genericEvents.push({
+            label: p.label,
+            date: validDate(p.codedDate) ? String(p.codedDate).slice(0, 10) : null,
+            problemStatus: p.status || 'active',
+          });
+        });
+      }
+
+      // Latest recorded score observation (eFI value / Rockwood CFS …) —
+      // CONTEXT ONLY. Re-displayed as provenance; never used to decide status.
+      let scoreObs = null;
+      if (Array.isArray(check.contextObservation) && check.contextObservation.length) {
+        const so = findLatestObservation(data.observations, { match: check.contextObservation });
+        if (so) scoreObs = { name: so.name, value: so.value, date: so.date || null };
+      }
+
+      // Trajectory uses dated grades only. Latest = newest date; a same-date
+      // tie resolves to the higher grade so a tidy-up pair is one episode.
+      const dated = events.filter((e) => e.date);
+      let latest = null;
+      dated.forEach((e) => {
+        if (!latest || e.date > latest.date || (e.date === latest.date && e.levelIndex > latest.levelIndex)) latest = e;
+      });
+      const priors = latest ? dated.filter((e) => e.date < latest.date) : [];
+      // The comparison baseline: the worst earlier grade (most recent of them
+      // when tied) — the latest grade must exceed this to count as worsening.
+      const priorMax = priors.length
+        ? priors.reduce((a, b) =>
+            b.levelIndex > a.levelIndex || (b.levelIndex === a.levelIndex && b.date > a.date) ? b : a
+          )
+        : null;
+
+      const withinMs = withinMonths * 30.4375 * 24 * 60 * 60 * 1000;
+      const nowMs = new Date(now).getTime();
+      const latestRecent = !!latest && nowMs - new Date(latest.date).getTime() <= withinMs;
+      const worsened = !!(latest && priorMax && latest.levelIndex > priorMax.levelIndex);
+      const fires = worsened && latestRecent;
+
+      if (events.length === 0 && genericEvents.length === 0) {
+        status = 'no_data';
+        valueText = `No recorded ${subject} diagnosis or grade`;
+      } else if (fires) {
+        status = 'not_met';
+        valueText = `Worsened: ${priorMax.level} → ${latest.level} ${subject} (${priorMax.date} → ${latest.date})`;
+        dateText = latest.date;
+        days = daysBetween(latest.date, now);
+      } else if (latest && priors.length > 0 && latestRecent) {
+        // ≥2 distinct-dated grades with the newest inside the window: genuinely
+        // assessable, and not a new worst → stable or improved.
+        status = 'achieved';
+        valueText = `${cap(latest.level)} ${subject} — no recorded worsening (previously ${priorMax.level})`;
+        dateText = latest.date;
+        days = daysBetween(latest.date, now);
+      } else if (latest && !latestRecent) {
+        // Stale grading evidence: the newest grade predates the window. An old
+        // worsening is not a LIVE trajectory, and "no worsening" cannot be
+        // asserted from stale grades either → neutral 'noted', date visible.
+        status = 'noted';
+        valueText = `${cap(latest.level)} ${subject} — last graded ${latest.date}, older than ${withinMonths}-month window; trajectory not current`;
+        dateText = latest.date;
+        days = daysBetween(latest.date, now);
+      } else if (latest) {
+        // Single dated grade (possibly plus same-day tidy-ups): nothing to compare.
+        status = 'noted';
+        valueText = `${cap(latest.level)} ${subject} — first recorded grade, no earlier grade to compare`;
+        dateText = latest.date;
+        days = daysBetween(latest.date, now);
+      } else if (events.length > 0) {
+        // Grades exist but none carries a usable date → cannot order them.
+        const topUndated = events.reduce((a, b) => (b.levelIndex > a.levelIndex ? b : a));
+        status = 'noted';
+        valueText = `${cap(topUndated.level)} ${subject} recorded (date unknown) — trajectory not assessable`;
+      } else {
+        // Ungraded diagnosis only.
+        status = 'noted';
+        const gDated = genericEvents.filter((e) => e.date).sort((a, b) => (a.date < b.date ? -1 : 1));
+        const gLatest = gDated.length ? gDated[gDated.length - 1] : null;
+        valueText = `${cap(subject)} recorded without a grade — trajectory not assessable`;
+        if (gLatest) {
+          dateText = gLatest.date;
+          days = daysBetween(gLatest.date, now);
+        }
+      }
+
+      evidenceCtx.progression = {
+        subject,
+        withinMonths,
+        events,
+        genericEvents,
+        scoreObs,
+        latest: latest || null,
+        priorMax: priorMax || null,
+        worsened,
+        latestRecent,
+        fires,
+      };
     }
 
     if (traceEntry) {
@@ -2058,6 +2286,7 @@
           }))
         : null;
       traceEntry.trendSeries = evidenceCtx.trendSeries || null;
+      traceEntry.progression = evidenceCtx.progression || null;
       traceEntry.valueText = valueText;
       traceEntry.qofYearStart = qofYearStart(now).toISOString().slice(0, 10);
     }

@@ -1855,9 +1855,12 @@ function renderChip(chip) {
 
   if (chip.type === 'qof-indicator') {
     // Show the value + date. For overdue chips, flag that the result predates the QOF year start.
+    // safety-monitoring chips are clinical safety flags, not QOF payment items:
+    // no year tag and no before-QOF-year warning (mirrors shared/chip-renderer.js).
+    const isSafetyMonitoring = chip.category === 'safety-monitoring';
     const isOverdue = chip.status === 'overdue' || chip.status === 'not_met';
     const datePart = chip.dateText
-      ? isOverdue && chip.qofYearStart && chip.dateText < chip.qofYearStart
+      ? isOverdue && chip.qofYearStart && !isSafetyMonitoring && chip.dateText < chip.qofYearStart
         ? ` · ${escHtml(chip.dateText)} ⚠ before ${escHtml(chip.qofYearStart)}`
         : ` · ${escHtml(chip.dateText)}${chip.days != null ? ` (${chip.days}d ago)` : ''}`
       : '';
@@ -1866,7 +1869,8 @@ function renderChip(chip) {
       : chip.dateText
         ? datePart.replace(/^ · /, '')
         : '';
-    const yearTag = chip.qofYear ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '';
+    const yearTag =
+      chip.qofYear && !isSafetyMonitoring ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '';
     return `
       <div class="sent-chip sent-chip-${col}">
         ${resurfacedHtml}

@@ -347,8 +347,8 @@ const plainChips = engine.evaluateQofIndicatorRule(
   NOW
 );
 check(plainChips.length > 0 && plainChips[0].category === null, 'chip category defaults to null when the rule has none');
-// The three shipped non-QOF surveillance rules are tagged so the UI groups them apart from QOF.
-const safetyRuleIds = ['trend-egfr-falling', 'trend-hba1c-rising', 'alert-hyperkalaemia'];
+// The shipped non-QOF surveillance rules are tagged so the UI groups them apart from QOF.
+const safetyRuleIds = ['trend-egfr-falling', 'trend-hba1c-rising', 'alert-hyperkalaemia', 'trend-frailty-worsening'];
 safetyRuleIds.forEach((id) => {
   const r = qof.rules.find((x) => x.id === id);
   check(r && r.category === 'safety-monitoring', `${id} is tagged category: safety-monitoring`);
