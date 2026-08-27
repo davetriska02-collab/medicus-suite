@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.246.0] — 2026-08-27
+
+### Workflow allocation canvas — inbound documents and team inboxes
+
+A sibling of the lab allocation canvas for workflow task-lists. On an inbound-document
+queue (slug matching document / inbound / filing / correspondence / letter / scan),
+or any task-list with `viewContext=workflow`, a launcher opens the same
+unallocated-pile + clinician-field workbench the lab canvas uses.
+
+Unallocated work groups by **registered GP** when that is on the row — a pile
+label so the team can take a GP's letters, not a confirmed requester and not
+auto-placement. Investigation-result queues stay on the lab canvas. Privacy-officer,
+EPS and prescription queues are excluded (they already have their own bulk widgets).
+
+Writing is the same W23 bulk-reassign (`LabAllocateCore.createClient`). The new
+core and canvas never POST. Confirm lists patient → destination and states the
+write changes who the task sits with — it does **not** file the document or mark
+it complete. See `docs/CLINICAL-SAFETY-NOTICE.md` **W23** / limitation 48 and
+`docs/HAZARD-LOG.md` **H-066** (pending CSO sign-off).
+
 ## [v3.245.0] — 2026-08-27
 
 ### Trends — DOAC view and CrCl on the renal page
