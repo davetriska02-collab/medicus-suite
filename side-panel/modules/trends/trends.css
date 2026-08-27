@@ -1,5 +1,5 @@
 /* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
-/* Medicus Suite — Trends module (BP / Renal / HbA1c / Cholesterol / Weight) */
+/* Medicus Suite — Trends module (BP / Renal / DOAC / HbA1c / Cholesterol / Weight) */
 
 .trends-module {
   font-family: var(--sans);
@@ -241,6 +241,14 @@
    non-text contrast where --text-4 failed (~2.5:1 dark) */
 .tc-egfr {
   stroke: var(--violet);
+}
+/* CrCl: teal-leaning cat-2 — not a status hue; creat uses accent so the two
+   DOAC series stay separable from eGFR violet */
+.tc-crcl {
+  stroke: var(--cat-2);
+}
+.tc-creat {
+  stroke: var(--accent);
 }
 
 /* ACR band fills — dim washes (reference zones, not alerts) */
@@ -624,4 +632,202 @@
   color: var(--text-3);
   padding: 4px 12px 12px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ── DOAC card (renal page) + DOAC view ─────────────────────────────────────── */
+.doac-module,
+.doac-renal-card {
+  font-family: var(--sans);
+}
+
+.doac-renal-card {
+  margin: 8px 12px 4px;
+  padding: 10px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-1);
+}
+
+.doac-renal-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.doac-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.doac-drug {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-top: 2px;
+}
+
+.doac-indication {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.doac-renal-crcl,
+.doac-head-crcl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+}
+
+.doac-crcl-num {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.doac-crcl-unit {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.doac-crcl-miss {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.doac-inputs,
+.doac-formula {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.doac-open-view {
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.doac-open-view:hover {
+  color: var(--text-2);
+  border-color: var(--border-hi);
+  background: var(--accent-dim);
+}
+
+.doac-open-view:active {
+  opacity: 0.85;
+}
+
+.doac-band {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.doac-band-ok {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green-line);
+}
+
+.doac-band-amber {
+  background: var(--amber);
+  color: var(--bg-deep);
+}
+
+.doac-band-red {
+  background: var(--red);
+  color: var(--bg-deep);
+}
+
+.doac-band-unknown {
+  background: var(--bg-mid);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+.doac-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 12px 6px;
+}
+
+.doac-missing {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 7px 12px;
+  background: var(--amber-dim);
+  color: var(--amber);
+  border-bottom: 1px solid var(--amber-line);
+}
+
+.doac-input-grid,
+.doac-monitor {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  padding: 4px 12px 2px;
+}
+
+.doac-input {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.doac-input-k {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.doac-input-v {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.doac-formula {
+  padding: 0 12px 6px;
+}
+
+.doac-notes {
+  padding: 2px 0 4px;
+}
+
+.doac-note {
+  margin: 0 12px 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
 }

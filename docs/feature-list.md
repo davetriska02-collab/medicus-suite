@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.244.0
+**Version:** v3.245.0
 **Generated:** 2026-08-26 (automated)
 
 ## What it is
@@ -41,8 +41,9 @@ The clinical context sidebar for whichever patient record is open. Checks active
 - One-click "create task" / "add to Follow-ups" from a chip
 
 ### Trends
-Charts a patient's blood pressure, renal function, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses.
+Charts a patient's blood pressure, renal function, DOAC creatinine clearance, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses.
 - Line charts with clinical zone bands
+- DOAC-only view (gated on a current DOAC) with Cockcroft-Gault CrCl, not eGFR
 - CSV export of the underlying series
 
 ### Capacity Forecast
