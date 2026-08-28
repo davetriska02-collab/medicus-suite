@@ -30,8 +30,8 @@ export const TAB_HELP = {
   },
   capacity: {
     title: 'Forecast',
-    what: 'A short-term view of free appointment slots against your practice minimums for each weekday.',
-    firstStep: 'Check the coming days for any shortfall against the active preset’s minimums.',
+    what: 'Free appointment slots against your practice minimums, with a look-ahead for days at risk — including post–bank-holiday uplift estimates.',
+    firstStep: 'Check the look-ahead banner, then print a pack or open Settings to tune the horizon and uplifts.',
   },
   sentinel: {
     title: 'Monitoring',

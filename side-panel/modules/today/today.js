@@ -22,6 +22,13 @@ import { isActionNeeded } from '../sweep/sweep-core.js';
 import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
 import { recordTaskLists } from '../submissions/submissions-ledger.js';
 import { followupCounts } from '../followups/followups-core.js';
+import {
+  normaliseLookahead,
+  scanHorizon,
+  lookAheadSentence,
+  horizonDateList,
+} from '../capacity/capacity-core.js';
+import { fetchManyDates, aggregateSlots, computeStatus, todayISO as medicusTodayISO } from '../../../shared/medicus-api.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -44,6 +51,7 @@ let _wrData = null; // { patients: [], error: null }
 let _rmData = null; // { buckets: {}, configured: bool, error: null }
 let _demandData = null; // { medical: n, admin: n, thresholds: {}, error: null }
 let _slotsData = null; // { count: n, error: null, breaches: [{ typeName, threshold, count, level }] }
+let _capacityData = null; // { summary, atRisk, sentence, presetName, error, noCode, noPreset }
 let _sweepData = null; // { lastRun: obj|null }
 let _alertsData = null; // [{ ts, channel, level, label }, ...]
 
@@ -310,6 +318,76 @@ async function fetchSlots() {
   renderHeadline();
 }
 
+// ── Fetch: Capacity look-ahead (Forecast presets + multi-day scan) ─────────────
+// Read-only consumer of capacity.* keys. Same embedded-overview path as Forecast.
+
+async function fetchCapacity() {
+  if (document.visibilityState !== 'visible') return;
+  try {
+    const stored = await chrome.storage.local.get([
+      'capacity.presets',
+      'capacity.activePresetId',
+      'capacity.lookahead',
+    ]);
+    const presets = Array.isArray(stored['capacity.presets']) ? stored['capacity.presets'] : [];
+    const activeId = stored['capacity.activePresetId'];
+    const preset = presets.find((p) => p.id === activeId) || presets[0] || null;
+    if (!preset) {
+      _capacityData = { noPreset: true, summary: null, atRisk: [], sentence: null };
+      renderCard('capacity');
+      renderHeadline();
+      return;
+    }
+
+    const { code } = await window.PracticeCode.resolve();
+    if (!code) {
+      _capacityData = { noCode: true, summary: null, atRisk: [], sentence: null };
+      renderCard('capacity');
+      renderHeadline();
+      return;
+    }
+
+    const lookahead = normaliseLookahead(stored['capacity.lookahead']);
+    const today = medicusTodayISO();
+    const dates = horizonDateList(today, lookahead.horizonDays);
+    const results = await fetchManyDates(code, dates, { concurrency: 4 });
+    const dataByDate = {};
+    for (const date of dates) {
+      const raw = results[date];
+      if (raw && !raw.error) {
+        dataByDate[date] = aggregateSlots(raw, {
+          allowedTypes: preset.slotTypes || null,
+          filterPastTimes: date === today,
+        });
+      }
+    }
+    const scan = scanHorizon({
+      preset,
+      dataByDate,
+      fromISO: today,
+      today,
+      lookahead,
+      computeStatus,
+    });
+    _capacityData = {
+      summary: scan.summary,
+      atRisk: scan.atRisk.slice(0, 5),
+      sentence: lookAheadSentence(scan.summary, preset.name),
+      presetName: preset.name,
+      error: null,
+    };
+  } catch (e) {
+    _capacityData = {
+      summary: null,
+      atRisk: [],
+      sentence: null,
+      error: e.message || 'Fetch failed',
+    };
+  }
+  renderCard('capacity');
+  renderHeadline();
+}
+
 // ── Fetch: Sweep last run ─────────────────────────────────────────────────────
 
 async function fetchSweep() {
@@ -370,6 +448,7 @@ function renderHeadline() {
     rmData: _rmData,
     demandData: _demandData,
     slotsData: _slotsData,
+    capacityData: _capacityData,
     sweepData: _sweepData,
     oldestUnansweredMs,
     formatProvenance: window.Provenance?.formatProvenance,
@@ -401,6 +480,9 @@ function renderCard(which) {
       break;
     case 'slots':
       body.innerHTML = buildSlotsBody();
+      break;
+    case 'capacity':
+      body.innerHTML = buildCapacityBody();
       break;
     case 'sweep':
       // Decision B: removed wireSwepButtons call — delegated handler is sufficient
@@ -600,7 +682,7 @@ function buildSlotsBody() {
 
   return `
     <div class="today-hero-row">
-      <span class="today-hero-count${countCls}">${count}</span>
+      <span class="today-hero-count${countCls}" aria-label="${count} open slots today">${count}</span>
       <span class="today-hero-label">open today</span>
     </div>
     ${breachLines}
@@ -608,21 +690,45 @@ function buildSlotsBody() {
   `;
 }
 
-// Derive the single provenance summary from sweep.lastRun, or null when no
-// sweep has run this session. Shared by the Sweep card and the Recent Alerts
-// empty state so "ran, all clear" can never be confused with "never ran".
-function sweepProvenance() {
-  const lastRun = _sweepData?.lastRun;
-  if (!lastRun) return null;
-  const runAtDate = new Date(lastRun.runAt);
-  const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const results = Array.isArray(lastRun.results) ? lastRun.results : [];
-  const actionNeeded = results.filter(
-    (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
-  ).length;
-  // Patients actually checked this run (fall back to total when offset absent).
-  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
-  return { timeStr, actionNeeded, checked, lastRun };
+function buildCapacityBody() {
+  if (!_capacityData) return '<span class="today-loading">Loading…</span>';
+  if (_capacityData.noCode) return buildNoCodeMsg();
+  if (_capacityData.noPreset) {
+    return '<span class="today-empty">Set up a Forecast preset to see days at risk</span>';
+  }
+  if (_capacityData.error && !_capacityData.summary) return errMsg(_capacityData.error);
+
+  const summary = _capacityData.summary;
+  const atRisk = summary?.atRiskCount ?? 0;
+  const urgency = summary?.critical > 0 ? 'red' : atRisk > 0 ? 'amber' : 'green';
+  const horizon = summary?.horizonDays ?? 28;
+  const countEl = `<span class="today-hero-count today-hero-count--${urgency}" aria-label="${atRisk} days at risk">${atRisk}</span>`;
+  const label = atRisk === 1 ? 'day at risk' : 'days at risk';
+
+  const chips = (_capacityData.atRisk || [])
+    .slice(0, 3)
+    .map((d) => {
+      const cls =
+        d.status === 'critical' ? 'today-name-chip--red' : d.status === 'low' ? 'today-name-chip--amber' : '';
+      const when = new Date(d.dateISO + 'T12:00:00').toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      });
+      return `<span class="today-name-chip ${cls}">${esc(when)} · ${esc(d.status)}</span>`;
+    })
+    .join('');
+
+  const empty =
+    atRisk === 0
+      ? `<span class="today-empty today-empty--green">Clear for the next ${horizon} days ✓</span>`
+      : '';
+
+  return `
+    <div class="today-hero-row">${countEl}<span class="today-hero-label">${label}</span></div>
+    <div class="today-hero-sub">Next ${horizon} days${_capacityData.presetName ? ` · ${esc(_capacityData.presetName)}` : ''}</div>
+    ${chips ? `<div class="today-name-chips">${chips}</div>` : empty}
+  `;
 }
 
 function buildSweepBody() {
@@ -671,6 +777,23 @@ function buildSweepBody() {
       <button class="today-ghost-btn" data-action="open-sweep">Open Sweep →</button>
     </div>
   `;
+}
+
+// Derive the single provenance summary from sweep.lastRun, or null when no
+// sweep has run this session. Shared by the Sweep card and the Recent Alerts
+// empty state so "ran, all clear" can never be confused with "never ran".
+function sweepProvenance() {
+  const lastRun = _sweepData?.lastRun;
+  if (!lastRun) return null;
+  const runAtDate = new Date(lastRun.runAt);
+  const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const results = Array.isArray(lastRun.results) ? lastRun.results : [];
+  const actionNeeded = results.filter(
+    (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
+  ).length;
+  // Patients actually checked this run (fall back to total when offset absent).
+  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
+  return { timeStr, actionNeeded, checked, lastRun };
 }
 
 function buildNoCodeMsg() {
@@ -829,6 +952,13 @@ function renderScaffold() {
       navModule: 'slots',
     },
     {
+      id: 'capacity',
+      label: 'Days at Risk',
+      navModule: 'capacity',
+      tipKey: 'capacity-lookahead',
+      tipText: 'Forward look at Forecast days below your minimum (including post–bank-holiday uplift). Open Forecast to print a pack.',
+    },
+    {
       id: 'sweep',
       label: 'Morning Sweep',
       navModule: 'sweep',
@@ -886,6 +1016,13 @@ function onStorageChange(changes) {
   // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
   // reflect on the Slots Today card / headline without waiting for the next poll.
   if (changes['slots.alertRules']) fetchSlots();
+  if (
+    changes['capacity.presets'] ||
+    changes['capacity.activePresetId'] ||
+    changes['capacity.lookahead']
+  ) {
+    fetchCapacity();
+  }
 }
 
 // ── Init / Cleanup ────────────────────────────────────────────────────────────
@@ -896,6 +1033,7 @@ export async function init(el) {
   _rmData = null;
   _demandData = null;
   _slotsData = null;
+  _capacityData = null;
   _sweepData = null;
   _alertsData = null;
   _timers = [];
@@ -907,6 +1045,7 @@ export async function init(el) {
   fetchRm();
   fetchDemand();
   fetchSlots();
+  fetchCapacity();
   fetchSweep();
   fetchAlerts();
   renderFollowupsLine();
@@ -916,6 +1055,7 @@ export async function init(el) {
   addTimer(fetchRm, DEMAND_POLL_MS);
   addTimer(fetchDemand, DEMAND_POLL_MS);
   addTimer(fetchSlots, DEMAND_POLL_MS);
+  addTimer(fetchCapacity, DEMAND_POLL_MS * 5); // 5 min — multi-day fetch is heavier
   addTimer(fetchAlerts, 30 * 1000);
   // Sweep is not polled on interval — re-reads on storage change only
 
@@ -929,6 +1069,7 @@ export async function init(el) {
       fetchRm();
       fetchDemand();
       fetchSlots();
+      fetchCapacity();
       fetchSweep();
       fetchAlerts();
       renderFollowupsLine();

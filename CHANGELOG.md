@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.0] — 2026-08-28
+
+### Forecast — days at risk (PM look-ahead)
+
+Capacity Forecast becomes a practice-manager look-ahead, not only a calendar:
+
+- **Look-ahead banner** on Forecast: how many days in the next N (default 28)
+  are critical/low vs your minimums, with chips that jump to the day.
+- **Post–bank-holiday uplift** on effective minimums (editable estimates:
+  single BH ×1.25, Easter ×1.35, Christmas ×1.40) — labelled as estimates.
+- **Print pack** and **CSV** of days at risk for the weekly ops meeting.
+- **Today → Days at Risk** card + headline clause (same scan).
+- Settings on Forecast: horizon 7–84 days, include “tight”, uplift on/off and
+  multipliers. Backed up via `capacity.lookahead`.
+
+Builds on the v3.248.0 UK bank-holiday calendar.
+
 ## [v3.248.0] — 2026-08-28
 
 ### Forecast foundation — UK bank-holiday calendar

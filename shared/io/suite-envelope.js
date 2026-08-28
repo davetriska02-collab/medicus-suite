@@ -275,7 +275,9 @@ function previewEnvelope(envelope) {
 
   if (mods.capacity) {
     const presetCount = (mods.capacity.presets || []).length;
-    lines.push(`Capacity Forecast: ${presetCount} preset(s)`);
+    const horizon = mods.capacity.lookahead?.horizonDays;
+    const horizonBit = horizon ? `, ${horizon}-day look-ahead` : '';
+    lines.push(`Capacity Forecast: ${presetCount} preset(s)${horizonBit}`);
   } else {
     const m = missing('Capacity Forecast');
     if (m) lines.push(m);

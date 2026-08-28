@@ -8,15 +8,17 @@ const CAPACITY_KEYS = [
   'capacity.activePresetId',
   'capacity.viewMode',
   'capacity.showWeekends',
+  'capacity.lookahead',
 ];
 
 async function capacityExport() {
   const r = await chrome.storage.local.get(CAPACITY_KEYS);
   return {
-    presets:         r['capacity.presets']         ?? [],
-    activePresetId:  r['capacity.activePresetId']  ?? null,
-    viewMode:        r['capacity.viewMode']         ?? 'week',
-    showWeekends:    r['capacity.showWeekends']     ?? false,
+    presets: r['capacity.presets'] ?? [],
+    activePresetId: r['capacity.activePresetId'] ?? null,
+    viewMode: r['capacity.viewMode'] ?? 'week',
+    showWeekends: r['capacity.showWeekends'] ?? false,
+    lookahead: r['capacity.lookahead'] ?? null,
   };
 }
 
@@ -42,7 +44,7 @@ async function capacityImport(data, { merge = false } = {}) {
     if (merge) {
       const existing = await chrome.storage.local.get('capacity.presets');
       const existingPresets = existing['capacity.presets'] || [];
-      const existingIds = new Map(existingPresets.map(p => [p.id, p]));
+      const existingIds = new Map(existingPresets.map((p) => [p.id, p]));
       const merged = [...existingPresets];
       for (const incoming of data.presets) {
         if (existingIds.has(incoming.id)) {
@@ -58,10 +60,18 @@ async function capacityImport(data, { merge = false } = {}) {
   }
   if (data.activePresetId !== undefined) toSet['capacity.activePresetId'] = data.activePresetId;
   if (data.viewMode !== undefined) {
-    if (!['week', 'month'].includes(data.viewMode)) throw new Error('viewMode must be "week" or "month".');
+    if (!['day', 'week', 'month'].includes(data.viewMode)) {
+      throw new Error('viewMode must be "day", "week", or "month".');
+    }
     toSet['capacity.viewMode'] = data.viewMode;
   }
   if (data.showWeekends !== undefined) toSet['capacity.showWeekends'] = !!data.showWeekends;
+  if (data.lookahead !== undefined) {
+    if (data.lookahead !== null && typeof data.lookahead !== 'object') {
+      throw new Error('capacity.lookahead must be an object or null.');
+    }
+    toSet['capacity.lookahead'] = data.lookahead;
+  }
 
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

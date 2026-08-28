@@ -863,3 +863,11 @@
   white-space: nowrap;
   min-width: 0;
 }
+
+/* Capacity look-ahead card — secondary line under the hero count */
+.today-hero-sub {
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 2px;
+  line-height: 1.35;
+}
