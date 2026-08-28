@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.1] — 2026-08-28
+
+### Forecast look-ahead — red-team hardening
+
+An unreachable Medicus used to render as a green "no days at risk". It no
+longer can:
+
+- Scan coverage is measured. The banner, Today card, CSV and printed pack
+  withhold the all-clear and show a neutral "not fully checked" state when
+  days could not be read (**H-067**).
+- Today is no longer counted as at risk — its remaining-slot count was being
+  compared with a whole-day target, so every afternoon read as critical.
+- Saturday and Sunday clinics with a minimum can now be flagged; they were
+  silently dropped because they are not "working days" by the BH calendar.
+- Bank holidays carry no target, so a short week is no longer reddened for
+  being short.
+- Holiday classification reads GOV.UK titles: the 3 January New Year
+  substitute counts as Christmas, St Patrick's Day is no longer mistaken for
+  Easter, and long multi-holiday closures no longer get the single-BH figure.
+- An unknown holiday division in a restored backup falls back instead of
+  throwing and killing the tab.
+- The Today card reuses the Forecast tab's scan (20-minute cache) and polls
+  every 30 minutes instead of 5 — a 28-day scan was being repeated per user.
+- Print pack is A4/greyscale-safe with repeating headers; plain-English copy
+  throughout ("days ahead", "adjusted target", not "horizon"/"uplift").
+
 ## [v3.249.0] — 2026-08-28
 
 ### Forecast — days at risk (PM look-ahead)

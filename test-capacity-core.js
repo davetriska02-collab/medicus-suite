@@ -33,9 +33,11 @@ const path = require('path');
     effectiveMinimumForDate,
     upliftKindForBlock,
     scanHorizon,
+    scanTone,
     filterAtRisk,
     lookAheadSentence,
     riskStatusesFor,
+    addDaysISO,
     DEFAULT_LOOKAHEAD,
   } = await import(corePath);
 
@@ -117,28 +119,144 @@ const path = require('path');
   );
 
   console.log('\n--- scanHorizon / at-risk ---');
+  // Scan runs from the Monday BH; the Tuesday carries the post-BH uplift.
   const dataByDate = {
+    '2026-05-25': { total: 0, sessionsCount: 0, byType: {}, byStaff: [] }, // BH — closed
     '2026-05-26': { total: 10, sessionsCount: 4, byType: {}, byStaff: [] }, // 10/25 = 40% → critical
     '2026-05-27': { total: 25, sessionsCount: 4, byType: {}, byStaff: [] }, // sufficient
     '2026-05-28': { total: 14, sessionsCount: 4, byType: {}, byStaff: [] }, // 14/20 = 70% → low
+    '2026-05-29': { total: 25, sessionsCount: 4, byType: {}, byStaff: [] }, // sufficient
   };
   const scan = scanHorizon({
     preset,
     dataByDate,
-    fromISO: '2026-05-26',
-    today: '2026-05-26',
+    fromISO: '2026-05-25',
+    today: '2026-05-25',
     lookahead: { ...la, horizonDays: 5 },
   });
-  check(scan.atRisk.length >= 2, `at-risk includes depleted days (got ${scan.atRisk.length})`);
+  check(scan.atRisk.length === 2, `at-risk includes depleted days (got ${scan.atRisk.length})`);
   check(scan.atRisk[0].status === 'critical', 'worst day sorts first (critical)');
-  check(scan.summary.critical >= 1 && scan.summary.low >= 1, 'summary counts critical + low');
-  check(scan.atRisk.some((d) => d.minInfo.upliftApplied), 'post-BH day appears in at-risk with uplift');
+  check(scan.summary.critical === 1 && scan.summary.low === 1, 'summary counts critical + low');
+  check(
+    scan.atRisk.some((d) => d.minInfo.upliftApplied),
+    'post-BH day appears in at-risk with uplift'
+  );
 
   const sentence = lookAheadSentence(scan.summary, 'GP Routine');
   check(sentence.includes('at risk') && sentence.includes('GP Routine'), 'lookAheadSentence names preset');
+  check(sentence.includes('Critical'), 'worst status is sentence-case in prose');
+
+  // Today is remaining-slots-only against a whole-day target, so it must never
+  // be counted as at risk — otherwise every afternoon reads as critical.
+  const todayScan = scanHorizon({
+    preset,
+    dataByDate: { '2026-05-26': { total: 2, sessionsCount: 5, byType: {}, byStaff: [] } },
+    fromISO: '2026-05-26',
+    today: '2026-05-26',
+    lookahead: { ...la, horizonDays: 1 },
+  });
+  check(todayScan.atRisk.length === 0, 'today is excluded from at-risk (remaining vs whole-day target)');
+
+  // Saturday enhanced-access clinics are not "working days" by the bank-holiday
+  // calendar but still carry a minimum, so they must be scannable.
+  const satPreset = {
+    ...preset,
+    minimumByDay: { ...preset.minimumByDay, sat: 15 },
+  };
+  const satScan = scanHorizon({
+    preset: satPreset,
+    dataByDate: { '2026-09-05': { total: 1, sessionsCount: 3, byType: {}, byStaff: [] } },
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 7 },
+  });
+  check(
+    satScan.atRisk.some((d) => d.dateISO === '2026-09-05'),
+    'Saturday with a minimum can be at risk'
+  );
+
+  console.log('\n--- coverage honesty (never a false all-clear) ---');
+  const blind = scanHorizon({
+    preset,
+    dataByDate: {},
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 28 },
+  });
+  check(blind.summary.atRiskCount === 0, 'no data → nothing flagged');
+  check(blind.summary.complete === false, 'no data → scan is not complete');
+  check(scanTone(blind.summary) === 'unknown', 'no data → tone is unknown, NOT green');
+  check(
+    !/No days at risk/.test(lookAheadSentence(blind.summary, 'GP')),
+    'no data → sentence does not claim "no days at risk"'
+  );
+  check(/Couldn’t check/.test(lookAheadSentence(blind.summary, 'GP')), 'no data → sentence says it could not check');
+
+  const partialData = {};
+  for (let i = 1; i <= 3; i++) {
+    partialData[addDaysISO('2026-09-01', i)] = { total: 99, sessionsCount: 5, byType: {}, byStaff: [] };
+  }
+  const partial = scanHorizon({
+    preset,
+    dataByDate: partialData,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 28 },
+  });
+  check(partial.summary.complete === false, 'partial data → not complete');
+  check(partial.summary.uncheckedDays > 0, 'partial data → uncheckedDays reported');
+  check(scanTone(partial.summary) === 'unknown', 'partial healthy data → still unknown, not green');
+  check(/still unchecked/.test(lookAheadSentence(partial.summary, 'GP')), 'partial data → sentence names the gap');
+
+  const fullData = {};
+  for (let i = 1; i < 8; i++) {
+    fullData[addDaysISO('2026-09-01', i)] = { total: 99, sessionsCount: 5, byType: {}, byStaff: [] };
+  }
+  const full = scanHorizon({
+    preset,
+    dataByDate: fullData,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 8 },
+  });
+  check(full.summary.complete === true, 'every day read → complete');
+  check(scanTone(full.summary) === 'green', 'complete + clear → green');
+  check(/No days at risk/.test(lookAheadSentence(full.summary, 'GP')), 'complete + clear → all-clear sentence');
+
+  console.log('\n--- holiday classification ---');
+  check(
+    effectiveMinimumForDate(preset, '2027-03-26', la).effective === 0,
+    'a bank holiday carries no target (does not inflate the week)'
+  );
+  check(
+    effectiveMinimumForDate(preset, '2028-01-04', la).upliftKind === 'xmas',
+    'New Year substitute block classifies as Christmas, not a single BH'
+  );
+  check(
+    effectiveMinimumForDate(preset, '2025-03-18', { ...la, division: 'northern-ireland' }).upliftKind !== 'easter',
+    'St Patrick’s Day is not mistaken for Easter'
+  );
+  check(
+    effectiveMinimumForDate(preset, '2026-05-26', la).upliftKind === 'single',
+    'an ordinary May bank holiday stays a single'
+  );
+
+  console.log('\n--- hostile config ---');
+  check(
+    normaliseLookahead({ division: 'wales' }).division === 'england-and-wales',
+    'unknown division falls back rather than throwing'
+  );
+  let threw = false;
+  try {
+    effectiveMinimumForDate(preset, '2026-09-02', { ...la, division: 'wales' });
+  } catch (_) {
+    threw = true;
+  }
+  check(!threw, 'a bad stored division cannot take down the tab');
+  check(validateLookahead({ division: 'wales' }).valid === false, 'settings reject an unknown division');
 
   const clear = filterAtRisk(
-    [{ dateISO: '2026-05-27', status: 'sufficient', minInfo: { isWorkingDay: true } }],
+    [{ dateISO: '2026-05-27', status: 'sufficient', minInfo: { countsForRisk: true } }],
     la,
     '2026-05-26'
   );

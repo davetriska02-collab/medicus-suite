@@ -25,15 +25,26 @@ import { followupCounts } from '../followups/followups-core.js';
 import {
   normaliseLookahead,
   scanHorizon,
+  scanTone,
   lookAheadSentence,
   horizonDateList,
+  STATUS_TEXT,
 } from '../capacity/capacity-core.js';
-import { fetchManyDates, aggregateSlots, computeStatus, todayISO as medicusTodayISO } from '../../../shared/medicus-api.js';
+import {
+  fetchManyDates,
+  aggregateSlots,
+  computeStatus,
+  todayISO as medicusTodayISO,
+} from '../../../shared/medicus-api.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WR_POLL_MS = 30 * 1000;
 const DEMAND_POLL_MS = 60 * 1000;
+// The look-ahead scans up to 84 appointment-book days, so it is polled far
+// more slowly than the same-day cards and prefers the Forecast tab's cache.
+const CAPACITY_POLL_MS = 30 * 60 * 1000;
+const CAPACITY_CACHE_TTL_MS = 20 * 60 * 1000;
 const SWEEP_LAST_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 
 const DEFAULT_SUB_THRESHOLDS = {
@@ -328,12 +339,37 @@ async function fetchCapacity() {
       'capacity.presets',
       'capacity.activePresetId',
       'capacity.lookahead',
+      'capacity.scanCache',
     ]);
     const presets = Array.isArray(stored['capacity.presets']) ? stored['capacity.presets'] : [];
     const activeId = stored['capacity.activePresetId'];
     const preset = presets.find((p) => p.id === activeId) || presets[0] || null;
     if (!preset) {
       _capacityData = { noPreset: true, summary: null, atRisk: [], sentence: null };
+      renderCard('capacity');
+      renderHeadline();
+      return;
+    }
+
+    const lookahead = normaliseLookahead(stored['capacity.lookahead']);
+
+    // Prefer a fresh scan published by the Forecast tab — it covers the same
+    // dates, so repeating the fetch here would double the load on Medicus.
+    const cache = stored['capacity.scanCache'];
+    if (
+      cache &&
+      cache.presetId === preset.id &&
+      cache.horizonDays === lookahead.horizonDays &&
+      typeof cache.at === 'number' &&
+      Date.now() - cache.at < CAPACITY_CACHE_TTL_MS
+    ) {
+      _capacityData = {
+        summary: cache.summary,
+        atRisk: cache.atRisk || [],
+        sentence: lookAheadSentence(cache.summary, cache.presetName || preset.name),
+        presetName: cache.presetName || preset.name,
+        error: null,
+      };
       renderCard('capacity');
       renderHeadline();
       return;
@@ -347,7 +383,6 @@ async function fetchCapacity() {
       return;
     }
 
-    const lookahead = normaliseLookahead(stored['capacity.lookahead']);
     const today = medicusTodayISO();
     const dates = horizonDateList(today, lookahead.horizonDays);
     const results = await fetchManyDates(code, dates, { concurrency: 4 });
@@ -699,35 +734,47 @@ function buildCapacityBody() {
   if (_capacityData.error && !_capacityData.summary) return errMsg(_capacityData.error);
 
   const summary = _capacityData.summary;
-  const atRisk = summary?.atRiskCount ?? 0;
-  const urgency = summary?.critical > 0 ? 'red' : atRisk > 0 ? 'amber' : 'green';
   const horizon = summary?.horizonDays ?? 28;
-  const countEl = `<span class="today-hero-count today-hero-count--${urgency}" aria-label="${atRisk} days at risk">${atRisk}</span>`;
-  const label = atRisk === 1 ? 'day at risk' : 'days at risk';
+  // scanTone withholds green when days could not be read — an unreachable
+  // Medicus must never render as "clear for the next 28 days".
+  const tone = scanTone(summary);
+  const atRisk = summary?.atRiskCount ?? 0;
+  const shown = tone === 'unknown' ? '—' : atRisk;
+  const heroCls = tone === 'unknown' ? '' : ` today-hero-count--${tone}`;
+  const aria =
+    tone === 'unknown'
+      ? 'Capacity not fully checked'
+      : `${atRisk} day${atRisk === 1 ? '' : 's'} at risk in the next ${horizon} days`;
+  const countEl = `<span class="today-hero-count${heroCls}" aria-label="${esc(aria)}">${shown}</span>`;
+  const label = tone === 'unknown' ? 'not fully checked' : atRisk === 1 ? 'day at risk' : 'days at risk';
 
   const chips = (_capacityData.atRisk || [])
     .slice(0, 3)
     .map((d) => {
-      const cls =
-        d.status === 'critical' ? 'today-name-chip--red' : d.status === 'low' ? 'today-name-chip--amber' : '';
+      const cls = d.status === 'critical' ? 'today-name-chip--red' : d.status === 'low' ? 'today-name-chip--amber' : '';
       const when = new Date(d.dateISO + 'T12:00:00').toLocaleDateString('en-GB', {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
       });
-      return `<span class="today-name-chip ${cls}">${esc(when)} · ${esc(d.status)}</span>`;
+      return `<span class="today-name-chip ${cls}">${esc(when)} · ${esc(STATUS_TEXT[d.status] || d.status)}</span>`;
     })
     .join('');
 
-  const empty =
-    atRisk === 0
-      ? `<span class="today-empty today-empty--green">Clear for the next ${horizon} days ✓</span>`
-      : '';
+  let tail = '';
+  if (chips) {
+    tail = `<div class="today-name-chips">${chips}</div>`;
+  } else if (tone === 'green') {
+    tail = `<span class="today-empty today-empty--green">Clear for the next ${horizon} days ✓</span>`;
+  } else if (tone === 'unknown') {
+    const unchecked = summary?.uncheckedDays;
+    tail = `<span class="today-empty">${unchecked ? `${unchecked} day${unchecked === 1 ? '' : 's'} couldn’t be checked` : 'Waiting for capacity data'}</span>`;
+  }
 
   return `
     <div class="today-hero-row">${countEl}<span class="today-hero-label">${label}</span></div>
     <div class="today-hero-sub">Next ${horizon} days${_capacityData.presetName ? ` · ${esc(_capacityData.presetName)}` : ''}</div>
-    ${chips ? `<div class="today-name-chips">${chips}</div>` : empty}
+    ${tail}
   `;
 }
 
@@ -956,7 +1003,8 @@ function renderScaffold() {
       label: 'Days at Risk',
       navModule: 'capacity',
       tipKey: 'capacity-lookahead',
-      tipText: 'Forward look at Forecast days below your minimum (including post–bank-holiday uplift). Open Forecast to print a pack.',
+      tipText:
+        'Forward look at Forecast days below your minimum (including post–bank-holiday uplift). Open Forecast to print a pack.',
     },
     {
       id: 'sweep',
@@ -1016,11 +1064,7 @@ function onStorageChange(changes) {
   // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
   // reflect on the Slots Today card / headline without waiting for the next poll.
   if (changes['slots.alertRules']) fetchSlots();
-  if (
-    changes['capacity.presets'] ||
-    changes['capacity.activePresetId'] ||
-    changes['capacity.lookahead']
-  ) {
+  if (changes['capacity.presets'] || changes['capacity.activePresetId'] || changes['capacity.lookahead']) {
     fetchCapacity();
   }
 }
@@ -1055,7 +1099,7 @@ export async function init(el) {
   addTimer(fetchRm, DEMAND_POLL_MS);
   addTimer(fetchDemand, DEMAND_POLL_MS);
   addTimer(fetchSlots, DEMAND_POLL_MS);
-  addTimer(fetchCapacity, DEMAND_POLL_MS * 5); // 5 min — multi-day fetch is heavier
+  addTimer(fetchCapacity, CAPACITY_POLL_MS);
   addTimer(fetchAlerts, 30 * 1000);
   // Sweep is not polled on interval — re-reads on storage change only
 

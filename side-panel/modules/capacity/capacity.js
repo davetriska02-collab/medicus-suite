@@ -189,6 +189,29 @@ function computeScan() {
     console.error('[Capacity] scan failed', err);
     state.scan = { summary: null, atRisk: [], error: true };
   }
+  publishScanCache();
+}
+
+// Share a completed scan with the Today card so it never has to repeat this
+// module's 28-day fetch. Transient (TTL-checked on read), never backed up.
+function publishScanCache() {
+  const summary = state.scan?.summary;
+  if (!summary || !summary.complete) return;
+  const preset = activePreset();
+  try {
+    chrome.storage.local.set({
+      'capacity.scanCache': {
+        at: Date.now(),
+        presetId: preset?.id || null,
+        presetName: preset?.name || null,
+        horizonDays: summary.horizonDays,
+        summary,
+        atRisk: (state.scan.atRisk || []).slice(0, 5),
+      },
+    });
+  } catch (_) {
+    /* cache is an optimisation — never block the render on it */
+  }
 }
 
 async function loadVisibleDates() {
@@ -273,9 +296,7 @@ function bhBadgesHtml(minInfo) {
   if (!minInfo) return '';
   const parts = [];
   if (minInfo.isBankHoliday) {
-    parts.push(
-      '<span class="cap-bh-badge" aria-label="Bank holiday" title="Bank holiday">BH</span>'
-    );
+    parts.push('<span class="cap-bh-badge" aria-label="Bank holiday" title="Bank holiday">BH</span>');
   }
   if (minInfo.upliftApplied) {
     parts.push(
@@ -876,9 +897,7 @@ function renderLookaheadBanner(preset) {
       ? 'Capacity not fully checked'
       : `${atRisk} day${atRisk === 1 ? '' : 's'} at risk in the next ${summary.horizonDays} days`;
 
-  const checkingHtml = isChecking
-    ? '<span class="cap-lookahead-checking">Checking…</span>'
-    : '';
+  const checkingHtml = isChecking ? '<span class="cap-lookahead-checking">Checking…</span>' : '';
 
   const chips = (scan.atRisk || [])
     .slice(0, 5)
@@ -1048,8 +1067,7 @@ async function onPrintRiskPack() {
 
   const stored = await chrome.storage.local.get(['suite.letterhead']);
   const lh = stored['suite.letterhead'] || {};
-  const practiceLabel =
-    (typeof lh.practiceName === 'string' && lh.practiceName.trim()) || SITE_ID || 'Practice';
+  const practiceLabel = (typeof lh.practiceName === 'string' && lh.practiceName.trim()) || SITE_ID || 'Practice';
 
   const model = {
     generatedAt: new Date().toISOString(),
