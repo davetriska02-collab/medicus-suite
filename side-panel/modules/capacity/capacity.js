@@ -8,22 +8,21 @@ import { loadUiState, saveUiState } from '../shared/ui-state.js';
 import { downloadCsv } from '../shared/export-util.js';
 import {
   WEEKDAYS,
-  minimumForDate,
   defaultMinimumByDay,
   presetSummary,
   validatePreset,
-  DEFAULT_LOOKAHEAD,
   normaliseLookahead,
   validateLookahead,
   effectiveMinimumForDate,
   evaluateDay,
   scanHorizon,
+  scanTone,
   lookAheadSentence,
   horizonDateList,
+  STATUS_TEXT,
 } from './capacity-core.js';
 
 import {
-  fetchSchedulingOverview,
   fetchManyDates,
   fetchAppointmentTypes,
   aggregateSlots,
@@ -38,20 +37,8 @@ import {
   formatDateShort,
   formatDateLong,
   isWeekend,
-  isPast,
   pad,
 } from '../../../shared/medicus-api.js';
-
-const STATUS_LABEL = {
-  sufficient: 'Sufficient',
-  tight: 'Tight',
-  low: 'Low',
-  critical: 'Critical',
-  closed: 'Closed',
-  historic: 'Past',
-  loading: 'Loading',
-  empty: 'No data',
-};
 
 let container = null;
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
@@ -189,14 +176,19 @@ function computeScan() {
     state.scan = null;
     return;
   }
-  state.scan = scanHorizon({
-    preset,
-    dataByDate: state.data,
-    loadingDates: state.loading,
-    fromISO: todayISO(),
-    lookahead: state.lookahead,
-    computeStatus,
-  });
+  try {
+    state.scan = scanHorizon({
+      preset,
+      dataByDate: state.data,
+      loadingDates: state.loading,
+      fromISO: todayISO(),
+      lookahead: state.lookahead,
+      computeStatus,
+    });
+  } catch (err) {
+    console.error('[Capacity] scan failed', err);
+    state.scan = { summary: null, atRisk: [], error: true };
+  }
 }
 
 async function loadVisibleDates() {
@@ -211,7 +203,7 @@ async function loadVisibleDates() {
     return;
   }
   const dates = datesToFetch();
-  const toFetch = dates.filter((d) => !state.data[d]);
+  const toFetch = dates.filter((d) => !state.data[d] && !state.loading.has(d));
   if (toFetch.length === 0) {
     computeScan();
     render();
@@ -227,6 +219,7 @@ async function loadVisibleDates() {
     onProgress: (done, total, date, raw) => {
       state.loading.delete(date);
       if (raw && !raw.error) {
+        state.error = null;
         const preset = activePreset();
         state.data[date] = aggregateSlots(raw, {
           allowedTypes: preset?.slotTypes || null,
@@ -268,10 +261,6 @@ function dayEval(date) {
   });
 }
 
-function dayStatus(date) {
-  return dayEval(date).status;
-}
-
 function minimumVsLabel(ev) {
   const minInfo = ev.minInfo || {};
   if (!minInfo.effective) return 'No minimum set';
@@ -283,9 +272,29 @@ function minimumVsLabel(ev) {
 function bhBadgesHtml(minInfo) {
   if (!minInfo) return '';
   const parts = [];
-  if (minInfo.isBankHoliday) parts.push('<span class="cap-bh-badge">BH</span>');
-  if (minInfo.upliftApplied) parts.push('<span class="cap-postbh-badge">post-BH</span>');
+  if (minInfo.isBankHoliday) {
+    parts.push(
+      '<span class="cap-bh-badge" aria-label="Bank holiday" title="Bank holiday">BH</span>'
+    );
+  }
+  if (minInfo.upliftApplied) {
+    parts.push(
+      '<span class="cap-postbh-badge" aria-label="Day after a bank holiday" title="Day after a bank holiday">post-BH</span>'
+    );
+  }
   return parts.join('');
+}
+
+/** Compact month-cell marker (dot + tooltip) — avoids stacking tiny badges. */
+function bhMonthMarkerHtml(minInfo) {
+  if (!minInfo) return '';
+  const labels = [];
+  if (minInfo.isBankHoliday) labels.push('Bank holiday');
+  if (minInfo.upliftApplied) labels.push('Day after a bank holiday');
+  if (labels.length === 0) return '';
+  const title = labels.join(' · ');
+  const kind = minInfo.isBankHoliday ? 'bh' : 'postbh';
+  return `<span class="cap-month-marker cap-month-marker-${kind}" aria-label="${escAttr(title)}" title="${escAttr(title)}"></span>`;
 }
 
 // minimumForDate / defaultMinimumByDay / presetSummary / WEEKDAYS live in capacity-core.js
@@ -414,7 +423,7 @@ function renderDayView(preset) {
         <div class="cap-day-meta">
           <span class="cap-day-vs">${escHtml(vsLabel)}</span>
           ${bhBadgesHtml(minInfo)}
-          <span class="cap-status-pill cap-status-${status}">${STATUS_LABEL[status]}</span>
+          <span class="cap-status-pill cap-status-${status}">${STATUS_TEXT[status] || status}</span>
         </div>
         <div class="cap-day-sub">${remaining} · ${agg.sessionsCount} session${agg.sessionsCount !== 1 ? 's' : ''}</div>
       </div>
@@ -529,7 +538,7 @@ function renderWeekView(preset) {
         <div class="cap-day-pill-label">${escHtml(label)}</div>
         <div class="cap-day-pill-badges">${bhBadgesHtml(ev.minInfo)}</div>
         <div class="cap-day-pill-count">${closed && !agg ? '—' : count}</div>
-        <div class="cap-day-pill-min">${closed ? STATUS_LABEL[status] : `/ ${minimum}`}</div>
+        <div class="cap-day-pill-min">${closed ? STATUS_TEXT[status] || status : `/ ${minimum}`}</div>
       </div>
     `;
     })
@@ -618,7 +627,7 @@ function renderMonthView(preset) {
     cells.push(`
       <div class="cap-month-cell cap-status-${status}${isCurr ? ' cap-today' : ''}${isWeekend(date) ? ' cap-weekend' : ''}" data-date="${date}">
         <div class="cap-month-dow">${dayNum}</div>
-        <div class="cap-month-badges">${bhBadgesHtml(ev.minInfo)}</div>
+        <div class="cap-month-badges">${bhMonthMarkerHtml(ev.minInfo)}</div>
         <div class="cap-month-count">${agg ? agg.total : state.loading.has(date) ? '·' : ''}</div>
       </div>
     `);
@@ -642,6 +651,8 @@ function renderMonthView(preset) {
       <span class="cap-legend-item"><span class="cap-legend-dot cap-status-tight"></span>Tight</span>
       <span class="cap-legend-item"><span class="cap-legend-dot cap-status-low"></span>Low</span>
       <span class="cap-legend-item"><span class="cap-legend-dot cap-status-critical"></span>Critical</span>
+      <span class="cap-legend-item"><span class="cap-month-marker cap-month-marker-bh cap-legend-marker" aria-hidden="true"></span>Bank holiday</span>
+      <span class="cap-legend-item"><span class="cap-month-marker cap-month-marker-postbh cap-legend-marker" aria-hidden="true"></span>After bank holiday</span>
     </div>
     <div class="section-hint">Click a day for detail.</div>
   `;
@@ -827,30 +838,65 @@ function bindControls() {
 // ── Look-ahead banner & settings ─────────────────────────────────────────────
 
 function renderLookaheadBanner(preset) {
+  if (!preset) return '';
   const scan = state.scan;
-  if (!scan || !preset) return '';
+  if (!scan) return '';
 
   const summary = scan.summary;
+  if (!summary || scan.error) {
+    return `
+    <section class="cap-lookahead cap-lookahead-unknown" aria-label="Capacity look-ahead">
+      <div class="cap-lookahead-row">
+        <p class="cap-lookahead-text">Capacity look-ahead unavailable.</p>
+        <span class="cap-lookahead-pill" aria-label="Capacity not fully checked">—</span>
+      </div>
+      <div class="cap-lookahead-actions">
+        <button type="button" class="ghost-btn" id="capLookaheadSettings">Settings</button>
+      </div>
+    </section>
+  `;
+  }
+
   const sentence = lookAheadSentence(summary, preset.name);
   const atRisk = summary.atRiskCount || 0;
-  const critical = summary.critical || 0;
-  const tone = critical > 0 ? 'cap-lookahead-critical' : atRisk > 0 ? 'cap-lookahead-warn' : 'cap-lookahead-ok';
+  const isChecking = state.loading.size > 0 || summary.uncheckedDays > 0;
+  let toneKey = scanTone(summary);
+  if (isChecking) toneKey = 'unknown';
+
+  const toneClass = {
+    red: 'cap-lookahead-critical',
+    amber: 'cap-lookahead-warn',
+    green: 'cap-lookahead-ok',
+    unknown: 'cap-lookahead-unknown',
+  }[toneKey];
+
+  const pillContent = toneKey === 'unknown' ? '—' : atRisk;
+  const pillAria =
+    toneKey === 'unknown'
+      ? 'Capacity not fully checked'
+      : `${atRisk} day${atRisk === 1 ? '' : 's'} at risk in the next ${summary.horizonDays} days`;
+
+  const checkingHtml = isChecking
+    ? '<span class="cap-lookahead-checking">Checking…</span>'
+    : '';
 
   const chips = (scan.atRisk || [])
     .slice(0, 5)
-    .map(
-      (d) => `
-      <button type="button" class="cap-risk-chip cap-status-${d.status}" data-date="${d.dateISO}" title="${escAttr(d.reason)}">
-        ${escHtml(formatDateShort(d.dateISO))} · ${escHtml(STATUS_LABEL[d.status] || d.status)}
-      </button>`
-    )
+    .map((d) => {
+      const statusLabel = STATUS_TEXT[d.status] || d.status;
+      const chipAria = `${formatDateLong(d.dateISO)}: ${statusLabel}. ${d.reason}`;
+      return `
+      <button type="button" class="cap-risk-chip cap-status-${d.status}" data-date="${d.dateISO}" title="${escAttr(d.reason)}" aria-label="${escAttr(chipAria)}">
+        ${escHtml(formatDateShort(d.dateISO))} · ${escHtml(statusLabel)}
+      </button>`;
+    })
     .join('');
 
   return `
-    <section class="cap-lookahead ${tone}" aria-label="Capacity look-ahead">
+    <section class="cap-lookahead ${toneClass}" aria-label="Capacity look-ahead">
       <div class="cap-lookahead-row">
-        <p class="cap-lookahead-text">${escHtml(sentence)}</p>
-        <span class="cap-lookahead-pill">${atRisk}</span>
+        <p class="cap-lookahead-text">${escHtml(sentence)}${checkingHtml}</p>
+        <span class="cap-lookahead-pill" aria-label="${escAttr(pillAria)}">${pillContent}</span>
       </div>
       <div class="cap-lookahead-actions">
         <button type="button" class="ghost-btn" id="capPrintPack">Print pack</button>
@@ -902,7 +948,7 @@ function renderLookaheadSettings() {
 
       <div class="cap-form cap-lookahead-form">
         <div class="cap-field">
-          <label class="cap-field-label" for="capLHHorizon">Horizon (days)</label>
+          <label class="cap-field-label" for="capLHHorizon">How many days ahead to check</label>
           <input type="number" class="cap-input cap-input-num" id="capLHHorizon" value="${la.horizonDays}" min="7" max="84" />
           <div class="cap-field-hint">Scan the next 7–84 calendar days from today.</div>
         </div>
@@ -917,24 +963,24 @@ function renderLookaheadSettings() {
         <div class="cap-field">
           <label class="cap-lookahead-check">
             <input type="checkbox" id="capLHUpliftEnabled" ${la.upliftEnabled ? 'checked' : ''} />
-            Apply post&ndash;bank-holiday uplift to minimums
+            Raise the target after bank holidays
           </label>
         </div>
 
         <div class="cap-field" id="capLHUpliftFields">
-          <label class="cap-field-label">Uplift multipliers (estimates)</label>
+          <label class="cap-field-label">Extra demand after bank holidays (estimates)</label>
           <div class="cap-uplift-grid">
             <label class="cap-uplift-row">
               <span>Single bank holiday</span>
-              <input type="number" class="cap-input cap-input-tiny" id="capLHSingle" value="${la.singleBhUplift}" min="1" max="2.5" step="0.05" />
+              <input type="number" class="cap-input cap-input-tiny" id="capLHSingle" value="${la.singleBhUplift}" min="1" max="2.5" step="0.05" ${la.upliftEnabled ? '' : 'disabled'} />
             </label>
             <label class="cap-uplift-row">
-              <span>Easter block</span>
-              <input type="number" class="cap-input cap-input-tiny" id="capLHEaster" value="${la.easterBlockUplift}" min="1" max="2.5" step="0.05" />
+              <span>Easter / long weekend</span>
+              <input type="number" class="cap-input cap-input-tiny" id="capLHEaster" value="${la.easterBlockUplift}" min="1" max="2.5" step="0.05" ${la.upliftEnabled ? '' : 'disabled'} />
             </label>
             <label class="cap-uplift-row">
-              <span>Christmas block</span>
-              <input type="number" class="cap-input cap-input-tiny" id="capLHXmas" value="${la.xmasBlockUplift}" min="1" max="2.5" step="0.05" />
+              <span>Christmas / New Year</span>
+              <input type="number" class="cap-input cap-input-tiny" id="capLHXmas" value="${la.xmasBlockUplift}" min="1" max="2.5" step="0.05" ${la.upliftEnabled ? '' : 'disabled'} />
             </label>
           </div>
           <div class="cap-field-hint cap-lookahead-note">
@@ -954,8 +1000,14 @@ function renderLookaheadSettings() {
 function bindLookaheadSettings() {
   const upliftEnabled = container.querySelector('#capLHUpliftEnabled');
   const upliftFields = container.querySelector('#capLHUpliftFields');
+  const multiplierInputs = () =>
+    ['#capLHSingle', '#capLHEaster', '#capLHXmas'].map((sel) => container.querySelector(sel));
   const syncUpliftFields = () => {
-    if (upliftFields) upliftFields.style.opacity = upliftEnabled?.checked ? '1' : '0.45';
+    const enabled = !!upliftEnabled?.checked;
+    if (upliftFields) upliftFields.style.opacity = enabled ? '1' : '0.45';
+    multiplierInputs().forEach((el) => {
+      if (el) el.disabled = !enabled;
+    });
   };
   syncUpliftFields();
   upliftEnabled?.addEventListener('change', syncUpliftFields);
@@ -1022,7 +1074,7 @@ function onExportRiskCsv() {
   const scan = state.scan;
   if (!scan) return;
 
-  const header = ['Date', 'Weekday', 'Free', 'Base min', 'Effective min', 'Uplift', 'Status', 'Reason'];
+  const header = ['Date', 'Weekday', 'Free', 'Your target', 'Adjusted target', 'Uplift', 'Status', 'Reason'];
   const atRisk = scan.atRisk || [];
   let rows;
   if (atRisk.length === 0) {
@@ -1035,7 +1087,7 @@ function onExportRiskCsv() {
       d.minInfo.base,
       d.minInfo.effective,
       d.minInfo.upliftApplied ? d.minInfo.uplift : '',
-      STATUS_LABEL[d.status] || d.status,
+      STATUS_TEXT[d.status] || d.status,
       d.reason,
     ]);
   }

@@ -16,6 +16,7 @@ export const DEFAULT_DIVISION = 'england-and-wales';
 export const MIN_HORIZON_MONTHS = 9;
 
 const _sets = new Map(); // division -> Set<iso>
+const _titles = new Map(); // division -> Map<iso, title>
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -45,6 +46,21 @@ function holidaySet(division) {
     _sets.set(div, set);
   }
   return set;
+}
+
+function titleMap(division) {
+  const div = resolveDivision(division);
+  let map = _titles.get(div);
+  if (!map) {
+    map = new Map(UK_BANK_HOLIDAYS[div].events.map((e) => [e.date, e.title || '']));
+    _titles.set(div, map);
+  }
+  return map;
+}
+
+/** Official GOV.UK title for a bank holiday date, or '' when not a holiday. */
+export function bankHolidayTitle(iso, division = DEFAULT_DIVISION) {
+  return titleMap(division).get(iso) || '';
 }
 
 export function calendarMeta() {
@@ -134,11 +150,15 @@ export function holidayBlockContaining(iso, division = DEFAULT_DIVISION) {
     end = next;
   }
   const bankHolidays = [];
+  const titles = [];
   for (let d = start; d <= end; d = addDaysISO(d, 1)) {
-    if (isBankHoliday(d, division)) bankHolidays.push(d);
+    if (isBankHoliday(d, division)) {
+      bankHolidays.push(d);
+      titles.push(bankHolidayTitle(d, division));
+    }
   }
   const closedDays = Math.round((parseISO(end) - parseISO(start)) / 86400000) + 1;
-  return { start, end, bankHolidays, closedDays, division: resolveDivision(division) };
+  return { start, end, bankHolidays, titles, closedDays, division: resolveDivision(division) };
 }
 
 /**

@@ -17,6 +17,7 @@ import {
   closedBlockBefore,
   holidayBlockContaining,
   DEFAULT_DIVISION,
+  DIVISIONS,
 } from '../../../shared/uk-calendar.js';
 
 // Date#getDay() is Sunday-indexed (0=Sun … 6=Sat); map to the preset keys.
@@ -32,6 +33,18 @@ export const WEEKDAYS = [
   { key: 'sat', label: 'Sat' },
   { key: 'sun', label: 'Sun' },
 ];
+
+/** Sentence-case status names for prose (never the raw key). */
+export const STATUS_TEXT = {
+  sufficient: 'Sufficient',
+  tight: 'Tight',
+  low: 'Low',
+  critical: 'Critical',
+  closed: 'Closed',
+  historic: 'Past',
+  loading: 'Loading',
+  empty: 'Not checked',
+};
 
 /** Worse status = higher rank (for sorting at-risk packs). */
 export const STATUS_RANK = {
@@ -67,10 +80,10 @@ export function normaliseLookahead(raw) {
   const horizonDays = clampInt(src.horizonDays, 7, 84, DEFAULT_LOOKAHEAD.horizonDays);
   const includeTight = !!src.includeTight;
   const upliftEnabled = src.upliftEnabled !== false;
-  const division =
-    typeof src.division === 'string' && src.division.trim()
-      ? src.division.trim()
-      : DEFAULT_LOOKAHEAD.division;
+  // An unknown division would throw inside the calendar on every lookup and
+  // take the whole tab down, so fall back rather than trusting stored input.
+  const candidate = typeof src.division === 'string' ? src.division.trim() : '';
+  const division = DIVISIONS.includes(candidate) ? candidate : DEFAULT_LOOKAHEAD.division;
   return {
     horizonDays,
     includeTight,
@@ -87,14 +100,17 @@ export function validateLookahead(form) {
   if (raw.horizonDays != null) {
     const h = Number(raw.horizonDays);
     if (!Number.isFinite(h) || h < 7 || h > 84) {
-      return { valid: false, error: 'Horizon must be between 7 and 84 days.' };
+      return { valid: false, error: 'Check between 7 and 84 days ahead.' };
     }
+  }
+  if (raw.division != null && !DIVISIONS.includes(String(raw.division).trim())) {
+    return { valid: false, error: `Unknown holiday calendar: ${raw.division}` };
   }
   for (const key of ['singleBhUplift', 'easterBlockUplift', 'xmasBlockUplift']) {
     if (raw[key] != null) {
       const n = Number(raw[key]);
       if (!Number.isFinite(n) || n < 1 || n > 2.5) {
-        return { valid: false, error: 'Uplift multipliers must be between 1.0 and 2.5.' };
+        return { valid: false, error: 'Extra-demand figures must be between 1.0 and 2.5.' };
       }
     }
   }
@@ -152,27 +168,38 @@ export function validatePreset({ name, slotTypes, tight, low }) {
  * Classify a closed block for uplift: xmas / easter / single / null.
  * Hypothesis-grade — see DEFAULT_LOOKAHEAD comment.
  */
+/**
+ * Classify a closed block for uplift: xmas / easter / single / null.
+ *
+ * Classified from the GOV.UK holiday TITLES where available, because month
+ * heuristics mistake St Patrick's Day for Easter and miss the New Year
+ * substitute that lands on 3 January. Falls back to date shape for callers
+ * that supply a block without titles.
+ */
 export function upliftKindForBlock(block) {
   if (!block || !Array.isArray(block.bankHolidays) || block.bankHolidays.length === 0) return null;
   const dates = block.bankHolidays;
-  if (
-    dates.some((d) => {
-      const md = d.slice(5); // MM-DD
-      return md >= '12-24' || md <= '01-02';
-    })
-  ) {
-    return 'xmas';
+  const titles = (Array.isArray(block.titles) ? block.titles : []).map((t) => String(t).toLowerCase());
+
+  const hasTitle = (needle) => titles.some((t) => t.includes(needle));
+  if (hasTitle('christmas') || hasTitle('boxing') || hasTitle('new year')) return 'xmas';
+  if (hasTitle('good friday') || hasTitle('easter')) return 'easter';
+
+  if (titles.length === 0) {
+    // Title-free fallback: the winter window spans the New Year substitute days.
+    if (
+      dates.some((d) => {
+        const md = d.slice(5); // MM-DD
+        return md >= '12-24' || md <= '01-04';
+      })
+    ) {
+      return 'xmas';
+    }
   }
-  // Multi-day spring/autumn blocks with a Friday or Monday BH ≈ Easter (or long Jubilee-style).
-  if (
-    block.closedDays >= 3 &&
-    dates.some((d) => {
-      const m = d.slice(5, 7);
-      return m === '03' || m === '04';
-    })
-  ) {
-    return 'easter';
-  }
+
+  // Any other long closure (2+ holidays, or 4+ consecutive closed days — the
+  // Jubilee shape) accumulates more than a single Monday off.
+  if (dates.length >= 2 || block.closedDays >= 4) return 'easter';
   return 'single';
 }
 
@@ -191,15 +218,19 @@ export function upliftMultiplier(kind, lookahead) {
  */
 export function effectiveMinimumForDate(preset, dateISO, lookahead = DEFAULT_LOOKAHEAD) {
   const cfg = normaliseLookahead(lookahead);
-  const base = minimumForDate(preset, dateISO);
+  const rawBase = minimumForDate(preset, dateISO);
   const division = cfg.division;
   const bankHoliday = isBankHoliday(dateISO, division);
   const working = isWorkingDay(dateISO, division);
   const weekend = isWeekend(dateISO);
 
+  // The practice is closed on a bank holiday, so it carries no target — a stale
+  // weekday minimum here would inflate the week total and redden a short week.
+  const base = bankHoliday ? 0 : rawBase;
+
   let kind = null;
   let block = null;
-  if (working && base > 0 && cfg.upliftEnabled) {
+  if (!bankHoliday && base > 0 && cfg.upliftEnabled) {
     block = closedBlockBefore(dateISO, division);
     kind = upliftKindForBlock(block);
   }
@@ -216,6 +247,10 @@ export function effectiveMinimumForDate(preset, dateISO, lookahead = DEFAULT_LOO
     isBankHoliday: bankHoliday,
     isWorkingDay: working,
     isWeekend: weekend,
+    // A day the practice has actually asked for cover on — including Saturday
+    // enhanced-access clinics, which are not "working days" by the BH calendar
+    // but absolutely can be at risk.
+    countsForRisk: !bankHoliday && effective > 0,
     block,
     division,
   };
@@ -291,9 +326,11 @@ export function evaluateDay({
       : (count, minimum, thresholds) => defaultComputeStatus(count, minimum, thresholds);
   const status = statusFn(agg.total, minInfo.effective, preset.thresholds || { tight: 75, low: 50 });
   const pct = minInfo.effective > 0 ? Math.round((agg.total / minInfo.effective) * 100) : 100;
-  let reason = `${agg.total} free vs ${minInfo.effective} minimum (${pct}%)`;
+  let reason = isToday
+    ? `${agg.total} left today vs ${minInfo.effective} for the whole day (${pct}%)`
+    : `${agg.total} free vs ${minInfo.effective} target (${pct}%)`;
   if (minInfo.upliftApplied) {
-    reason += ` · post-holiday uplift ×${minInfo.uplift.toFixed(2)} (est.)`;
+    reason += ` · day after a bank holiday, target raised ×${minInfo.uplift.toFixed(2)} (estimate)`;
   }
   return dayResult({
     dateISO,
@@ -303,6 +340,7 @@ export function evaluateDay({
     sessionsCount: agg.sessionsCount,
     pct,
     reason,
+    isToday,
   });
 }
 
@@ -351,15 +389,22 @@ export function scanHorizon({
     lookahead: cfg,
     days,
     atRisk,
-    summary: summariseScan(days, atRisk, cfg),
+    summary: summariseScan(days, atRisk, cfg, todayISO),
   };
 }
 
+/**
+ * At-risk days the practice can still act on.
+ *
+ * Today is deliberately excluded: its count is remaining-slots-only while the
+ * minimum is a whole-day target, so from mid-afternoon every day would look
+ * critical. That daily false positive would train managers to ignore the card.
+ */
 export function filterAtRisk(days, lookahead = DEFAULT_LOOKAHEAD, today = null) {
   const risk = new Set(riskStatusesFor(lookahead));
   const todayISO = today || localTodayISO();
   return (days || [])
-    .filter((d) => d && risk.has(d.status) && d.dateISO >= todayISO && d.minInfo?.isWorkingDay)
+    .filter((d) => d && risk.has(d.status) && d.dateISO > todayISO && d.minInfo?.countsForRisk)
     .slice()
     .sort((a, b) => {
       const rank = (STATUS_RANK[b.status] || 0) - (STATUS_RANK[a.status] || 0);
@@ -368,18 +413,26 @@ export function filterAtRisk(days, lookahead = DEFAULT_LOOKAHEAD, today = null) 
     });
 }
 
-export function summariseScan(days, atRisk, lookahead = DEFAULT_LOOKAHEAD) {
+export function summariseScan(days, atRisk, lookahead = DEFAULT_LOOKAHEAD, today = null) {
   const cfg = normaliseLookahead(lookahead);
-  const working = (days || []).filter((d) => d.minInfo?.isWorkingDay && d.status !== 'historic');
+  const todayISO = today || localTodayISO();
+  // The scannable population must match filterAtRisk's, or the coverage maths lies.
+  const scannable = (days || []).filter(
+    (d) => d.minInfo?.countsForRisk && d.status !== 'historic' && d.dateISO > todayISO
+  );
   const critical = (atRisk || []).filter((d) => d.status === 'critical').length;
   const low = (atRisk || []).filter((d) => d.status === 'low').length;
   const tight = (atRisk || []).filter((d) => d.status === 'tight').length;
   const postHolidayRisk = (atRisk || []).filter((d) => d.minInfo?.upliftApplied).length;
   const worst = (atRisk && atRisk[0]) || null;
-  const loaded = working.filter((d) => d.status !== 'loading' && d.status !== 'empty').length;
+  const loaded = scannable.filter((d) => d.status !== 'loading' && d.status !== 'empty').length;
+  const unchecked = scannable.length - loaded;
   return {
-    workingDays: working.length,
+    workingDays: scannable.length,
     loadedDays: loaded,
+    uncheckedDays: unchecked,
+    // Never say "all clear" from days we could not read.
+    complete: scannable.length > 0 && unchecked === 0,
     atRiskCount: (atRisk || []).length,
     critical,
     low,
@@ -392,24 +445,44 @@ export function summariseScan(days, atRisk, lookahead = DEFAULT_LOOKAHEAD) {
   };
 }
 
-/** Plain-English one-liner for Today / risk pack header. */
+/** Severity tone for a scan: 'red' | 'amber' | 'green' | 'unknown'. */
+export function scanTone(summary) {
+  if (!summary || summary.workingDays === 0) return 'unknown';
+  if (summary.critical > 0) return 'red';
+  if (summary.atRiskCount > 0) return 'amber';
+  return summary.complete ? 'green' : 'unknown';
+}
+
+/**
+ * Plain-English one-liner for the banner, Today card and print pack.
+ * A zero count is only ever reported as "clear" when every day was actually
+ * read — an unreachable Medicus withdraws reassurance rather than inventing it.
+ */
 export function lookAheadSentence(summary, presetName) {
   if (!summary) return 'Capacity look-ahead unavailable.';
   const name = presetName ? ` (${presetName})` : '';
-  if (summary.atRiskCount === 0) {
-    return `No at-risk days in the next ${summary.horizonDays} days${name}.`;
+  const days = summary.horizonDays;
+
+  if (!summary.workingDays || !summary.loadedDays) {
+    return `Couldn’t check the next ${days} days${name} — no capacity data available.`;
   }
+
+  if (summary.atRiskCount === 0) {
+    if (summary.complete) return `No days at risk in the next ${days} days${name}.`;
+    return `Checked ${summary.loadedDays} of ${summary.workingDays} days${name} — none at risk so far, ${summary.uncheckedDays} still unchecked.`;
+  }
+
   const bits = [];
   if (summary.critical) bits.push(`${summary.critical} critical`);
   if (summary.low) bits.push(`${summary.low} low`);
   if (summary.tight) bits.push(`${summary.tight} tight`);
   const worst =
     summary.worstDate && summary.worstStatus
-      ? ` Worst: ${formatShortEn(summary.worstDate)} (${summary.worstStatus}).`
+      ? ` Worst: ${formatShortEn(summary.worstDate)} (${STATUS_TEXT[summary.worstStatus] || summary.worstStatus}).`
       : '';
-  const post =
-    summary.postHolidayRisk > 0 ? ` ${summary.postHolidayRisk} post–bank-holiday.` : '';
-  return `${summary.atRiskCount} day${summary.atRiskCount === 1 ? '' : 's'} at risk in the next ${summary.horizonDays} days${name}: ${bits.join(', ')}.${worst}${post}`;
+  const post = summary.postHolidayRisk > 0 ? ` ${summary.postHolidayRisk} after a bank holiday.` : '';
+  const gap = summary.uncheckedDays > 0 ? ` ${summary.uncheckedDays} day(s) could not be checked.` : '';
+  return `${summary.atRiskCount} day${summary.atRiskCount === 1 ? '' : 's'} at risk in the next ${days} days${name}: ${bits.join(', ')}.${post}${worst}${gap}`;
 }
 
 export function horizonDateList(fromISO, horizonDays) {
@@ -422,8 +495,9 @@ export function horizonDateList(fromISO, horizonDays) {
 
 // ── internals ─────────────────────────────────────────────────────────────────
 
-function dayResult({ dateISO, status, total, minInfo, sessionsCount, reason, pct = null }) {
+function dayResult({ dateISO, status, total, minInfo, sessionsCount, reason, pct = null, isToday = false }) {
   return {
+    isToday,
     dateISO,
     status,
     total,
