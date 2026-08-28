@@ -30,8 +30,8 @@ export const TAB_HELP = {
   },
   capacity: {
     title: 'Forecast',
-    what: 'A short-term projection of appointment capacity against expected demand.',
-    firstStep: 'Check the coming days for any shortfall between slots and demand.',
+    what: 'A short-term view of free appointment slots against your practice minimums for each weekday.',
+    firstStep: 'Check the coming days for any shortfall against the active preset’s minimums.',
   },
   sentinel: {
     title: 'Monitoring',

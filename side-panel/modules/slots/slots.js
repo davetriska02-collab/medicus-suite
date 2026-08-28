@@ -27,6 +27,7 @@ import {
 } from './slots-alert-core.js';
 import { createFirstAvailablePanel } from '../shared/first-available.js';
 import { filterAppointmentTypes } from '../shared/booking-panel-core.js';
+import { nextWorkingDayISO } from '../../../shared/medicus-api.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -369,13 +370,6 @@ function sumAmPm(o) {
 
 function todayISO() {
   const d = new Date();
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function nextWorkingDayISO() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 

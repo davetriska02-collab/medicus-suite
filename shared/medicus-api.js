@@ -5,6 +5,8 @@
 
 'use strict';
 
+import { nextWorkingDayISO as calendarNextWorkingDayISO } from './uk-calendar.js';
+
 const _cache = new Map(); // dateISO -> { data, fetchedAt }
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -159,11 +161,9 @@ export function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** Tomorrow, or the next weekday that is not an England & Wales bank holiday. */
 export function nextWorkingDayISO() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return calendarNextWorkingDayISO();
 }
 
 export function pad(n) {

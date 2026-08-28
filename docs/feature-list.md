@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.247.0
-**Generated:** 2026-08-27 (automated)
+**Version:** v3.248.0
+**Generated:** 2026-08-28 (automated)
 
 ## What it is
 
@@ -27,6 +27,7 @@ One morning screen: a headline sentence plus waiting-room count, triage queue lo
 ### Slot Counter — v2.2
 Available appointment slots by type for any date, read directly from Medicus's scheduling data, with live updates while a Medicus tab is open.
 - Slot counts by type with configurable alert thresholds
+- “Next working day” skips weekends and England & Wales bank holidays
 - CSV export
 - "First available appointment" lookup with a one-click booking handoff
 - Typable appointment-type filter on the booking picker
@@ -50,6 +51,7 @@ Charts a patient's blood pressure, renal function, DOAC creatinine clearance, Hb
 A calendar comparing available appointment capacity against the practice's own configured daily minimums, so a slot gap is visible days or weeks ahead.
 - Day/week/month views with per-day red/amber/green status
 - Per-weekday minimum presets and a per-session-type breakdown
+- “Next working day” skips weekends and England & Wales bank holidays (bundled GOV.UK calendar)
 
 ### Submissions Tracker — v1.0
 Counts inbound requests (medical, admin, investigation, prescription) arriving each day against a rolling baseline, so an unusual day stands out.
@@ -184,6 +186,7 @@ The shipped alert library carries 37 starter alerts a practice can enable (34 pr
 
 ## Recent additions (last 4 weeks)
 
+- **UK bank-holiday calendar** — Forecast and Slots “Next working day” skip England & Wales bank holidays (and weekends). Rota’s default BH list is seeded from the same GOV.UK JSON through 2028.
 - **Send to routine list** — the on-page prescription-request button is ghost-pill chrome. After authorising it selects Medicus's own Next Steps radio, the Assign-to team (slash-spacing in the name is the same team), then asks before clicking Send to routine list. Confirm sits next to the pill. It does not prescribe.
 - **Companion HUD** — the floating booking/task panel is now one role-toggled box (Clinic / Reception / Triage / Nursing) on task pages, the care-record and the queue, and on every other Medicus screen if you opt in. Resize, minimise, or pop it in to an edge tab so it does not cover the page. What’s due stays a four-line pocket of Sentinel’s action-needed chips (reception uses booking voice; nursing uses treatment-room voice). Desk / slots / pulse are operational glances and stay unknown on failure. Identity-gated; no second clinical fetch. v3.240.2: red-severity wins the visible four; overflow expands in-widget; Monitoring / Slot Counter open from the box; reception gets a book-type hint and this-patient future appointments.
 - **Clinical-safety audit remediation** — an adversarial audit of the write paths, the fail-closed rules and the safety documentation was acted on in full: the automated lab-filing gate now refuses anything it cannot judge (unreadable rows, unconfirmable units, ambiguous or cross-matched analyte ranges), the outstanding-investigation tick-off became opt-in and is now listed in the public write inventory, the transactional feed refuses writes in code rather than only in prose, and two hazard entries that had never reached the register were recovered.

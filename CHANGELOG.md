@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.248.0] — 2026-08-28
+
+### Forecast foundation — UK bank-holiday calendar
+
+Shared England & Wales (plus Scotland / NI) bank-holiday calendar from
+GOV.UK, bundled for offline use. Capacity Forecast and Slots “Next working
+day” now skip bank holidays as well as weekends (so a Friday before a Monday
+BH lands on the Tuesday). Help copy for Forecast no longer claims “expected
+demand” — it compares free slots to your weekday minimums. Rota Manager’s
+default bank-holiday seed is regenerated from the same JSON through 2028.
+
+Refresh with `node scripts/regen-bank-holidays.js` (CI via
+`test-uk-calendar.js` / `--check` fails if the horizon drops under 9 months).
+
 ## [v3.247.0] — 2026-08-27
 
 ### Routine-prescription "Send to routine list" — ghost pill and live-flow fixes
