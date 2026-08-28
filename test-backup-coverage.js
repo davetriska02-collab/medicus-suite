@@ -205,6 +205,11 @@ const ALLOWLIST = new Set([
   // side-panel/modules/sweep/sweep.js):
   'sweep.handout',
 
+  // Transient Forecast print-pack payload — written on "Print pack", read once by
+  // at-risk-pack.html, then removed (60s TTL backstop). Same pattern as
+  // sweep.handout; see side-panel/modules/capacity/capacity.js:
+  'capacity.riskPack',
+
   // Transient batch-output payload — written on "Generate batch", read once by
   // batch-handout.html, overwritten on every generate. Not user config (mirrors
   // sweep.handout; see side-panel/modules/sweep/sweep.js):
