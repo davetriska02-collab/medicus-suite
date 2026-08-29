@@ -291,9 +291,13 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
   const engine = window.SentinelRules;
 
   const raw = await api.fetchAll(apiBase, patientUuid, { useCache: false });
-  // clinicalSummary (patientRegisters) is best-effort — see the matching note
-  // in side-panel/modules/sweep/sweep.js's evaluatePatient.
-  const failed = Object.keys(raw.errors || {}).filter((k) => k !== 'clinicalSummary');
+  // clinicalSummary (patientRegisters) and medicationHistory (true
+  // clinical start dates) are best-effort — see the matching note in
+  // side-panel/modules/sweep/sweep.js's evaluatePatient. A failure of
+  // either must not abort the whole signing read: register matching
+  // falls back to problem text, and start-date derivation falls back
+  // to the batch-scoped regimen date.
+  const failed = Object.keys(raw.errors || {}).filter((k) => k !== 'clinicalSummary' && k !== 'medicationHistory');
   if (!raw.banner) {
     throw new Error('record not read' + (failed.length ? ` (${failed.join(', ')} failed)` : ''));
   }

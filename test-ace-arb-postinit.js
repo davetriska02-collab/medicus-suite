@@ -282,5 +282,20 @@ console.log('\n--- data.observations is latest-only; earliest-since-start must c
   check(!why.includes('not yet repeated'), `no longer misreports a well-monitored patient as "not yet repeated" (got: ${why})`);
 }
 
+console.log('\n--- signing/sweep must not fail-closed on best-effort medicationHistory ---');
+{
+  const fs = require('fs');
+  const signing = fs.readFileSync(path.join(__dirname, 'side-panel/modules/signing/signing.js'), 'utf8');
+  const sweep = fs.readFileSync(path.join(__dirname, 'side-panel/modules/sweep/sweep.js'), 'utf8');
+  check(
+    /k !== 'clinicalSummary' && k !== 'medicationHistory'/.test(signing),
+    'signing evaluatePatient treats medicationHistory as best-effort (same as clinicalSummary)'
+  );
+  check(
+    /k !== 'clinicalSummary' && k !== 'medicationHistory'/.test(sweep),
+    'sweep evaluatePatient treats medicationHistory as best-effort (same as clinicalSummary)'
+  );
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

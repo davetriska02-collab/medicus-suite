@@ -1081,6 +1081,57 @@ check(
     'NDH003 overdue with a stale HbA1c, for a prior-GDM patient'
   );
   check(ndh003Eval([{ label: 'Asthma' }]).length === 0, 'NDH003 raises no chip for a patient not on the NDH register');
+  // ageMin:18 was JSON-only until the registerAgeRange alias — a 16-year-old
+  // with Prediabetes still raised NDH003. Runtime, not just the field.
+  check(
+    engine.evaluateQofRegisterRule(ndhReg, {
+      problems: [{ label: 'Prediabetes' }],
+      patientContext: { ageYears: 16 },
+    }).length === 0,
+    'NDH register chip suppressed for a 16-year-old (ageMin:18 enforced)'
+  );
+  check(
+    engine.evaluateQofIndicatorRule(
+      ndh003,
+      {
+        medications: [],
+        observations: [{ name: 'HbA1c', value: '44', date: '2026-05-01' }],
+        problems: [{ label: 'Prediabetes' }],
+        patientContext: { ageYears: 16 },
+        _registerLookup: { NDH: ndhReg },
+      },
+      NOW
+    ).length === 0,
+    'NDH003 raises no chip for a 16-year-old on the NDH problem list'
+  );
+  check(
+    engine.evaluateQofIndicatorRule(
+      ndh003,
+      {
+        medications: [],
+        observations: [{ name: 'HbA1c', value: '44', date: '2026-05-01' }],
+        problems: [{ label: 'Prediabetes' }],
+        patientContext: { ageYears: 18 },
+        _registerLookup: { NDH: ndhReg },
+      },
+      NOW
+    ).length === 1,
+    'NDH003 still fires at age 18 (inclusive bound)'
+  );
+  check(
+    engine.evaluateQofIndicatorRule(
+      ndh003,
+      {
+        medications: [],
+        observations: [{ name: 'HbA1c', value: '44', date: '2026-05-01' }],
+        problems: [{ label: 'Prediabetes' }],
+        patientContext: {},
+        _registerLookup: { NDH: ndhReg },
+      },
+      NOW
+    ).length === 1,
+    'NDH003 fail-open when age is unknown (same as every other age filter)'
+  );
 }
 
 // ── 2026-08-28 Keeper: OB004/OB005 enabled (points/thresholds now confirmed) ─
@@ -1095,6 +1146,24 @@ check(
   ['ozempic', 'rybelsus', 'xenical', 'victoza'].every((b) => ob005.check.medicationMatch.includes(b)),
   'OB005 brand list completed (ozempic/rybelsus/xenical/victoza added — bare generics never match brand-only scripts)'
 );
+{
+  const obReg = qof.rules.find((r) => r.registerCode === 'OB');
+  check(!!obReg && obReg.ageMin === 18, 'OB register still declares ageMin:18');
+  check(
+    engine.evaluateQofRegisterRule(obReg, {
+      problems: [{ label: 'Obesity' }],
+      patientContext: { ageYears: 16 },
+    }).length === 0,
+    'OB register chip suppressed for a 16-year-old (ageMin:18 now actually enforced)'
+  );
+  check(
+    engine.evaluateQofRegisterRule(obReg, {
+      problems: [{ label: 'Obesity' }],
+      patientContext: { ageYears: 18 },
+    }).length === 1,
+    'OB register chip still fires at age 18'
+  );
+}
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

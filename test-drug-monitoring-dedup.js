@@ -75,6 +75,32 @@ console.log('\n--- two regimen records, no vtmProductName on either side → lef
   check(matching.length === 2, `without vtmProductName on either side, both are kept (got ${matching.length})`);
 }
 
+console.log('\n--- same VTM, mismatched startDates → keep longer name AND earliest start ---');
+{
+  // The longer display name is often the current-batch row whose startDate
+  // is the regimen endpoint's ~12-month window; the shorter fallback row
+  // (or the prescribing-history join) can carry the true clinical start.
+  // Dedup used to keep the longer name wholesale and drop the earlier date.
+  const meds = [
+    { name: 'Ramipril 5mg capsules', vtm: 'Ramipril', startDate: '2025-09-16', source: 'Repeat' },
+    { name: 'Ramipril', vtm: 'Ramipril', startDate: '2013-10-04', source: 'Repeat' },
+  ];
+  const aceArb = (drugRules.rules || []).find((r) => r.id === 'ace-arb');
+  check(!!aceArb, 'ace-arb rule exists (needed for startDate-preserving dedup)');
+  const chips = engine.evaluatePatient(meds, [], [aceArb], { now: NOW });
+  const matching = chips.filter((c) => c.ruleId === 'ace-arb');
+  check(matching.length === 1, `exactly one ace-arb chip after VTM merge (got ${matching.length})`);
+  check(
+    matching[0] && matching[0].drugName === 'Ramipril 5mg capsules',
+    `kept the more detailed name (got ${matching[0] && matching[0].drugName})`
+  );
+  const postInit = matching[0] && (matching[0].tests || []).find((t) => t.postInitiation === true);
+  check(
+    postInit && postInit.startDate === '2013-10-04',
+    `post-init check uses the earliest startDate, not the batch-scoped 2025 date (got ${postInit && postInit.startDate})`
+  );
+}
+
 console.log('\n--- single regimen record (the common case) → unaffected ---');
 {
   const meds = [{ name: 'Leflunomide 20mg tablets', vtm: 'Leflunomide', startDate: '2024-01-10', source: 'Repeat' }];

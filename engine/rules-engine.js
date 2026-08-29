@@ -1033,10 +1033,21 @@
     // correct, not two. Only merges when vtmProductName is present on both
     // sides; entries without it are left alone rather than risk collapsing
     // two genuinely different drugs on a name-substring guess. Keeps the
-    // more detailed (longer) name of the group for display.
+    // more detailed (longer) name of the group for display. When the
+    // rows disagree on startDate, keep the earliest parseable one — the
+    // batch-scoped regimen date is often ~12 months of the current
+    // authorisation, while a sibling row (or the prescribing-history
+    // join) can carry the true clinical start. Picking the longer name
+    // alone was dropping that earlier date and re-breaking post-init
+    // U&E checks.
     if (matchedMeds.length > 1) {
       const byVtm = new Map();
       const noVtm = [];
+      const parseStart = (d) => {
+        if (!d) return null;
+        const t = new Date(d);
+        return isNaN(t.getTime()) ? null : t.getTime();
+      };
       matchedMeds.forEach((m) => {
         const key = m.vtm ? normaliseDrugString(m.vtm) : null;
         if (!key) {
@@ -1044,8 +1055,18 @@
           return;
         }
         const existing = byVtm.get(key);
-        if (!existing || String(m.name || '').length > String(existing.name || '').length) {
+        if (!existing) {
           byVtm.set(key, m);
+          return;
+        }
+        const keep = String(m.name || '').length > String(existing.name || '').length ? m : existing;
+        const other = keep === m ? existing : m;
+        const keepStart = parseStart(keep.startDate);
+        const otherStart = parseStart(other.startDate);
+        if (otherStart != null && (keepStart == null || otherStart < keepStart)) {
+          byVtm.set(key, { ...keep, startDate: other.startDate });
+        } else {
+          byVtm.set(key, keep);
         }
       });
       matchedMeds = [...byVtm.values(), ...noVtm];
@@ -1277,7 +1298,7 @@
   // QOF register rule evaluator -> chip if patient is on register
   function evaluateQofRegisterRule(rule, data) {
     const traceEntry = _traceBase(data, rule);
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+    if (!passesAgeFilter(registerAgeRange(rule), data.patientContext)) {
       if (traceEntry) traceEntry.skipReason = 'age-filter';
       return [];
     }
@@ -1375,6 +1396,19 @@
     if (ageRange.min != null && age < ageRange.min) return false;
     if (ageRange.max != null && age > ageRange.max) return false;
     return true;
+  }
+
+  // Register rules historically used a top-level ageMin/ageMax (OB, NDH)
+  // while indicators use ageRange: { min, max }. Both mean the same thing.
+  // Without this alias, ageMin on a register was JSON-only documentation
+  // and a 16-year-old on the NDH/obesity problem list still raised chips.
+  function registerAgeRange(rule) {
+    if (!rule) return null;
+    if (rule.ageRange) return rule.ageRange;
+    if (rule.ageMin != null || rule.ageMax != null) {
+      return { min: rule.ageMin != null ? rule.ageMin : null, max: rule.ageMax != null ? rule.ageMax : null };
+    }
+    return null;
   }
 
   function passesSexFilter(sex, patientContext) {
@@ -1888,6 +1922,13 @@
       const reg = patientOnRegister(data.problems, registerRule, data.patientRegisters);
       if (!reg || !reg.matched) {
         if (traceEntry) traceEntry.skipReason = 'register-precondition';
+        return [];
+      }
+      // Register-level age (ageMin/ageMax or ageRange) applies to every
+      // indicator gated on that register — NDH/OB are 18+ in the QOF
+      // definition. Fail-open when age is unknown, same as Step 2 below.
+      if (!passesAgeFilter(registerAgeRange(registerRule), data.patientContext)) {
+        if (traceEntry) traceEntry.skipReason = 'register-age-filter';
         return [];
       }
       evidenceCtx.matchedRegisterProblem = reg.problem
