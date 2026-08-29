@@ -18,6 +18,7 @@ import {
   buildSnapshot,
   demoStreams,
   forbiddenSnapshotKeys,
+  feedIsDegraded,
 } from './board-core.js';
 
 const stage = document.getElementById('noteStage');
@@ -93,11 +94,30 @@ function tempoDots(tempo) {
 function tile(opts) {
   const tone = opts.tone ? ` data-tone="${esc(opts.tone)}"` : '';
   const word = opts.word ? ' note-tile-v-word' : '';
+  const strong = opts.strongSub ? ' note-tile-s-strong' : '';
   return `<article class="note-tile"${tone}>
     <div class="note-tile-k">${esc(opts.k)}</div>
     <div class="note-tile-v${word}">${esc(opts.v)}</div>
-    <div class="note-tile-s">${opts.sub || ''}${opts.dots || ''}</div>
+    <div class="note-tile-s${strong}">${opts.sub || ''}${opts.dots || ''}</div>
   </article>`;
+}
+
+function confirmStaffProfile(id) {
+  if (id !== 'ops') return true;
+  if (profile && profile.audience === 'staff' && profile.id === 'ops') return true;
+  return window.confirm(
+    'Ops is a staff display. It shows the triage inbox and pressure figures. Do not put this tab on the waiting-room TV.\n\nOpen Ops anyway?'
+  );
+}
+
+function syncDemoBtn() {
+  if (!hasChrome || !demoBtn) return;
+  demoBtn.hidden = false;
+  demoBtn.textContent = usingDemo ? 'Showing demo' : 'Showing live';
+}
+
+function publicFeedFailed() {
+  return profile.audience === 'public' && !usingDemo && feedIsDegraded(snapshot);
 }
 
 function tickerHtml(lines) {
@@ -130,10 +150,33 @@ function widgetSet() {
   return new Set(widgetsForProfile(profile));
 }
 
+function failLoudHtml() {
+  return `<div class="note-board note-board-fail" data-profile="${esc(profile.id)}" data-audience="public">
+    <div class="note-fail" role="alert">
+      <div class="note-fail-title">This board is not updating</div>
+      <div class="note-fail-ask">Please ask reception</div>
+      <p class="note-fail-body">The numbers are not available right now. Do not use this screen to judge how busy we are.</p>
+    </div>
+    ${clockHtml(lastClock)}
+  </div>`;
+}
+
 function render() {
   const widgets = widgetSet();
   const s = snapshot;
   const parts = [];
+
+  if (publicFeedFailed()) {
+    stage.innerHTML = failLoudHtml();
+    paintChrome();
+    return;
+  }
+
+  if (s && profile.audience === 'staff' && !usingDemo && feedIsDegraded(s)) {
+    parts.push(
+      '<div class="note-fail-banner" role="alert">Live figures failed — do not trust these counts</div>'
+    );
+  }
 
   if (widgets.has('flap')) {
     const rows = 2;
@@ -145,22 +188,28 @@ function render() {
 
   const metrics = [];
   if (s && widgets.has('waiting')) {
+    const waitSub =
+      s.waiting.count > 0
+        ? `${esc(s.waiting.band)}<span class="note-tile-s-caveat">Not a promise for you</span>`
+        : esc(s.waiting.band);
     metrics.push(
       tile({
         k: 'People waiting',
         v: String(s.waiting.count),
-        sub: esc(s.waiting.band),
+        sub: waitSub,
         tone: s.waiting.tone,
+        strongSub: true,
       })
     );
   }
   if (s && widgets.has('tempo')) {
     metrics.push(
       tile({
-        k: 'Tempo',
+        k: profile.audience === 'staff' ? 'How busy we are' : 'This room',
         v: s.tempoLabel,
         word: true,
         tone: s.tempo,
+        sub: profile.audience === 'staff' ? esc("Includes today's requests") : '',
         dots: tempoDots(s.tempo),
       })
     );
@@ -178,7 +227,7 @@ function render() {
   if (s && widgets.has('pressure') && s.pressure) {
     metrics.push(
       tile({
-        k: 'Practice pressure',
+        k: 'Pressure index',
         v: s.pressure.ppi == null ? '—' : String(s.pressure.ppi),
         sub: esc(s.pressure.band || 'Index from Condor'),
         tone: s.pressure.band || '',
@@ -232,11 +281,16 @@ function render() {
     stage.innerHTML = `<div class="note-board" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}</div>`;
   }
 
+  paintChrome();
+}
+
+function paintChrome() {
   chromeProfile.textContent = profile.name;
   profileSelect.value = profile.id;
   document.title = `${profile.name} · Note — Medicus Suite`;
   document.body.dataset.audience = profile.audience;
   document.body.dataset.profile = profile.id;
+  syncDemoBtn();
 
   const bits = ['Note · Medicus Suite'];
   if (usingDemo) bits.push('<span class="note-demo-flag">Demo figures</span>');
@@ -358,7 +412,14 @@ function syncFullscreenClass() {
   fsBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
 }
 
-profileSelect.addEventListener('change', () => applyProfile(profileSelect.value));
+profileSelect.addEventListener('change', () => {
+  const id = profileSelect.value;
+  if (!confirmStaffProfile(id)) {
+    profileSelect.value = profile.id;
+    return;
+  }
+  applyProfile(id);
+});
 fsBtn.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', syncFullscreenClass);
 
@@ -366,7 +427,7 @@ if (hasChrome) {
   demoBtn.hidden = false;
   demoBtn.addEventListener('click', () => {
     usingDemo = !usingDemo;
-    demoBtn.textContent = usingDemo ? 'Live figures' : 'Demo';
+    syncDemoBtn();
     lastFlap = '';
     refresh();
   });
@@ -391,11 +452,13 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     toggleFullscreen();
   } else if (e.key === '1') applyProfile('waiting-room');
-  else if (e.key === '2') applyProfile('ops');
-  else if (e.key === '3') applyProfile('message');
+  else if (e.key === '2') {
+    if (!confirmStaffProfile('ops')) return;
+    applyProfile('ops');
+  } else if (e.key === '3') applyProfile('message');
   else if (e.key === 'd' || e.key === 'D') {
     usingDemo = !usingDemo;
-    if (hasChrome) demoBtn.textContent = usingDemo ? 'Live figures' : 'Demo';
+    syncDemoBtn();
     lastFlap = '';
     refresh();
   }
@@ -413,7 +476,7 @@ bumpIdle();
 (async function boot() {
   await loadConfig();
   profile = resolveProfile(config, requestedProfileId() || config.activeProfileId);
-  if (hasChrome) demoBtn.textContent = usingDemo ? 'Live figures' : 'Demo';
+  syncDemoBtn();
   await refresh();
   startPolling();
 })();

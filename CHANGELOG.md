@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.0] — 2026-08-29
+
+### Note — Practice pass (public ticker, fail-loud, wait wording)
+
+The first synthetic Practice pass on Note found the public board narrating
+the practice. This minor closes the adopted items.
+
+- **Public ticker** no longer announces today's medical or admin request
+  counts. Unchecking "Requests today" now actually silences that volume.
+  Public lead line is "This room is…"; zero waiting is "No one waiting".
+- **Dead feed fails loud** on a public TV: hide wait, tempo, zeroes and
+  the ticker; full-face "This board is not updating / Please ask
+  reception". Demo mode is excluded. Staff sees a banner instead.
+- **Wait copy** is a band, not a personal promise: "Most waits are under
+  N minutes" plus "Not a promise for you" on the public tile.
+- **Tempo / pressure labels:** public tile is "This room"; staff is
+  "How busy we are" with "Includes today's requests". Pressure is
+  "Pressure index" so it does not twin Requests today.
+- **One companion opener:** "Open this profile on a TV tab". Opening Ops
+  confirms. Public kiosk hides the profile select; key 2 confirms too.
+- **Get set up** collapses on the Note tab ("Setup can wait. The TV
+  board is below") so the companion is not buried.
+- Companion flap: "Do not type patient names. This text goes on a
+  public TV." Demo button now shows the current state.
+
+Clinical Safety Notice and feature list re-pinned to 3.249.0 (limitation
+49 / H-067 controls i–l). Hazard-log product pin stays at 3.202.0.
+Does not move `last_cso_review_version`.
+
 ## [v3.248.0] — 2026-08-29
 
 ### Note — a software display board for TVs and monitors

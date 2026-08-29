@@ -48,6 +48,7 @@ const { pathToFileURL } = require('url');
     PUBLIC_WIDGETS,
     STAFF_ONLY_WIDGETS,
     TEMPO_LABEL,
+    feedIsDegraded,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -119,14 +120,14 @@ const { pathToFileURL } = require('url');
     check(none.label === 'No one waiting' && none.tone === 'quiet', 'empty room is quiet / no one waiting');
     const short = waitBand(3, 8, null);
     check(
-      short.label === 'Typical wait under 10 minutes' && short.tone === 'quiet',
+      short.label === 'Most waits are under 10 minutes' && short.tone === 'quiet',
       'under amber is a band, not a number'
     );
     const mid = waitBand(3, 15, null);
-    check(mid.label === 'Typical wait under 20 minutes', 'under red is the next band');
+    check(mid.label === 'Most waits are under 20 minutes', 'under red is the next band');
     const long = waitBand(3, 25, null);
     check(
-      long.label === 'Some waits over 20 minutes' && long.tone === 'busy',
+      long.label === 'Some waits are over 20 minutes' && long.tone === 'busy',
       'over red does not name the longest wait'
     );
     check(!/\d{2,}/.test(long.label.replace('20', '')), 'band label does not leak the 25-minute figure');
@@ -199,6 +200,10 @@ const { pathToFileURL } = require('url');
       snap.ticker.every((line) => !/Alice|Bob|Cara|Dee|Evan|antibiotics|chest pain/i.test(line)),
       'ticker lines carry no fixture PII'
     );
+    check(
+      snap.ticker.every((line) => !/medical|admin request/i.test(line)),
+      'public snapshot ticker omits request volume'
+    );
     check(snap.demand.medical === 28 && snap.demand.admin === 14, 'demand totals copied');
     check(snap.tempo === 'steady', 'public demo room is steady, not busy-from-demand');
   }
@@ -235,11 +240,33 @@ const { pathToFileURL } = require('url');
       audience: 'public',
       tempo: 'steady',
       tempoLabel: 'Steady',
-      waiting: { count: 1, band: 'Typical wait under 10 minutes' },
+      waiting: { count: 1, band: 'Most waits are under 10 minutes' },
       demand: { medical: 1, admin: 0 },
     });
     check(lines.includes('1 person waiting'), 'singular waiting line');
-    check(lines.includes('1 medical request today'), 'singular medical line');
+    check(lines.includes('This room is steady'), 'public ticker names the room, not the practice');
+    check(
+      !lines.some((line) => /medical|admin request/i.test(line)),
+      'public ticker omits request volume'
+    );
+    const staffLines = buildTickerLines({
+      audience: 'staff',
+      tempo: 'busy',
+      tempoLabel: 'Busy',
+      waiting: { count: 1, band: 'Most waits are under 10 minutes' },
+      demand: { medical: 1, admin: 0 },
+    });
+    check(staffLines.includes('1 medical request today'), 'staff ticker keeps singular medical line');
+    check(staffLines.includes('The practice is busy'), 'staff ticker may name the practice');
+    const empty = buildTickerLines({
+      audience: 'public',
+      tempo: 'quiet',
+      waiting: { count: 0 },
+    });
+    check(empty.includes('No one waiting'), 'zero waiting is a sentence, not a count');
+    check(feedIsDegraded({ errors: ['timeout'] }), 'errors mark the feed degraded');
+    check(!feedIsDegraded({ errors: [] }), 'empty errors is a live feed');
+    check(!feedIsDegraded(null), 'missing snapshot is not degraded');
   }
 
   console.log('\n--- snapshot leaf walker ---');
@@ -258,8 +285,14 @@ const { pathToFileURL } = require('url');
     check(!/\.appointments/.test(renderer), 'board.js does not walk waitingRoom.appointments');
     check(!/\.summary/.test(renderer), 'board.js does not read request summaries');
     check(renderer.includes('buildSnapshot'), 'board.js paints via buildSnapshot');
+    check(renderer.includes('This board is not updating'), 'public dead feed fails loud');
+    check(renderer.includes('Not a promise for you'), 'wait band is not a personal promise');
+    check(renderer.includes('confirmStaffProfile'), 'Ops open from a public profile confirms');
     const companion = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'board', 'board.js'), 'utf8');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
+    check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
+    check(companion.includes('Open this profile on a TV tab'), 'companion has one TV opener');
+    check(companion.includes('Open Ops anyway?'), 'companion confirms before opening Ops');
   }
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

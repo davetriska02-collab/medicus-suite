@@ -62,16 +62,14 @@ function render() {
       <header class="note-mod-head">
         <div>
           <div class="note-mod-title">Note</div>
-          <p class="note-mod-sub">A display board for TVs and monitors — waiting-room tempo, a request ticker, or a staff ops overview.</p>
+          <p class="note-mod-sub">A display board for TVs and monitors. Waiting room, a message board, or a staff ops overview.</p>
         </div>
       </header>
 
       <div class="note-mod-actions">
-        <button type="button" class="note-mod-btn note-mod-btn-primary" data-open="${esc(p.id)}">Open on this screen</button>
-        <button type="button" class="note-mod-btn" data-open="waiting-room">Waiting room</button>
-        <button type="button" class="note-mod-btn" data-open="ops">Ops</button>
+        <button type="button" class="note-mod-btn note-mod-btn-primary" data-open="${esc(p.id)}">Open this profile on a TV tab</button>
       </div>
-      <p class="note-mod-hint">Opens a full browser tab. Put that tab on the TV, then press F for fullscreen.</p>
+      <p class="note-mod-hint">Opens a new browser tab. Drag that tab onto the TV, then press F for fullscreen.</p>
 
       <section class="note-mod-card">
         <h2 class="note-mod-h">Profile</h2>
@@ -91,7 +89,10 @@ function render() {
       <section class="note-mod-card">
         <h2 class="note-mod-h">Message on the board</h2>
         <textarea id="noteModMessage" class="note-mod-msg" maxlength="${MAX_MESSAGE_CHARS}" rows="3" aria-label="Board message">${esc(msg)}</textarea>
-        <div class="note-mod-meta"><span id="noteModCount">${msg.length}</span> / ${MAX_MESSAGE_CHARS}</div>
+        <div class="note-mod-meta">
+          <span id="noteModCount">${msg.length}</span> / ${MAX_MESSAGE_CHARS}
+          <span class="note-mod-warn">Do not type patient names. This text goes on a public TV.</span>
+        </div>
       </section>
 
       <section class="note-mod-card">
@@ -121,8 +122,8 @@ function render() {
       <aside class="note-mod-privacy${publicLock ? '' : ' note-mod-privacy-staff'}">
         ${
           publicLock
-            ? `<strong>Public display.</strong> Waiting-room and Message profiles never show patient names, initials, or request wording — only counts, wait bands, and the message you type above. ${PUBLIC_WIDGETS.length} widgets are allowed; staff-only tiles are locked off.`
-            : `<strong>Staff display.</strong> Ops still paints aggregates only (no patient names). Keep this profile off the waiting-room TV — it shows triage inbox and pressure figures patients should not see.`
+            ? `<strong>Public display.</strong> Waiting-room and Message profiles never show patient names, initials, or request wording. The board shows counts, wait bands, and how busy this room is. It does not show today's medical or admin request volume. ${PUBLIC_WIDGETS.length} widgets are allowed; staff-only tiles are locked off.`
+            : `<strong>Staff display.</strong> Ops still paints aggregates only (no patient names). Keep this profile off the waiting-room TV. It shows the triage inbox and pressure figures patients should not see.`
         }
       </aside>
     </div>
@@ -134,7 +135,15 @@ function wire() {
     const open = e.target.closest('[data-open]');
     if (open) {
       persist();
-      openBoardTab(open.getAttribute('data-open'));
+      const id = open.getAttribute('data-open');
+      const prof = config.profiles.find((x) => x.id === id);
+      if (prof && prof.audience === 'staff') {
+        const ok = window.confirm(
+          'Ops is a staff display. It shows the triage inbox and pressure figures. Do not put this tab on the waiting-room TV.\n\nOpen Ops anyway?'
+        );
+        if (!ok) return;
+      }
+      openBoardTab(id);
       return;
     }
     const prof = e.target.closest('[data-profile]');

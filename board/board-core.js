@@ -39,7 +39,7 @@ export const ALL_WIDGETS = [...PUBLIC_WIDGETS, ...STAFF_ONLY_WIDGETS];
 
 export const WIDGET_META = {
   flap: { label: 'Message flaps', audience: 'public' },
-  tempo: { label: 'Tempo', audience: 'public' },
+  tempo: { label: 'How busy we are', audience: 'public' },
   waiting: { label: 'People waiting', audience: 'public' },
   ticker: { label: 'Request ticker', audience: 'public' },
   demand: { label: 'Requests today', audience: 'public' },
@@ -243,12 +243,12 @@ export function waitBand(count, maxWaitMinutes, thresholds) {
     return { label: 'People are waiting', tone: 'steady', maxWaitMinutes: null };
   }
   if (maxWaitMinutes < t.amberWaitMin) {
-    return { label: `Typical wait under ${t.amberWaitMin} minutes`, tone: 'quiet', maxWaitMinutes };
+    return { label: `Most waits are under ${t.amberWaitMin} minutes`, tone: 'quiet', maxWaitMinutes };
   }
   if (maxWaitMinutes < t.redWaitMin) {
-    return { label: `Typical wait under ${t.redWaitMin} minutes`, tone: 'steady', maxWaitMinutes };
+    return { label: `Most waits are under ${t.redWaitMin} minutes`, tone: 'steady', maxWaitMinutes };
   }
-  return { label: `Some waits over ${t.redWaitMin} minutes`, tone: 'busy', maxWaitMinutes };
+  return { label: `Some waits are over ${t.redWaitMin} minutes`, tone: 'busy', maxWaitMinutes };
 }
 
 export function deriveTempo({ waitingCount, maxWaitMinutes, demandAll }, thresholds, mode) {
@@ -332,20 +332,30 @@ function arrivedWaitStats(waitingRoom, nowMs) {
   return { count, maxWaitMinutes: maxWait };
 }
 
+export function feedIsDegraded(snapshot) {
+  return Boolean(snapshot && Array.isArray(snapshot.errors) && snapshot.errors.length);
+}
+
 export function buildTickerLines(snapshot) {
   const s = snapshot || {};
   const lines = [];
   const waiting = s.waiting && s.waiting.count;
   if (Number.isFinite(waiting)) {
-    lines.push(waiting === 1 ? '1 person waiting' : `${waiting} people waiting`);
+    if (waiting <= 0) lines.push('No one waiting');
+    else lines.push(waiting === 1 ? '1 person waiting' : `${waiting} people waiting`);
   }
   if (s.waiting && s.waiting.band && s.waiting.count > 0) lines.push(s.waiting.band);
-  if (s.tempo && TEMPO_LABEL[s.tempo]) lines.push(`The practice is ${TEMPO_LABEL[s.tempo].toLowerCase()}`);
-  const med = s.demand && s.demand.medical;
-  const admin = s.demand && s.demand.admin;
-  if (Number.isFinite(med)) lines.push(`${med} medical request${med === 1 ? '' : 's'} today`);
-  if (Number.isFinite(admin)) lines.push(`${admin} admin request${admin === 1 ? '' : 's'} today`);
+  if (s.tempo && TEMPO_LABEL[s.tempo]) {
+    const lead = s.audience === 'staff' ? 'The practice is' : 'This room is';
+    lines.push(`${lead} ${TEMPO_LABEL[s.tempo].toLowerCase()}`);
+  }
+  // Public TVs must not announce back-office request volume — patients
+  // read "28 medical requests" as people ahead of them.
   if (s.audience === 'staff') {
+    const med = s.demand && s.demand.medical;
+    const admin = s.demand && s.demand.admin;
+    if (Number.isFinite(med)) lines.push(`${med} medical request${med === 1 ? '' : 's'} today`);
+    if (Number.isFinite(admin)) lines.push(`${admin} admin request${admin === 1 ? '' : 's'} today`);
     const triage = s.triage && s.triage.total;
     if (Number.isFinite(triage)) lines.push(`${triage} in the triage inbox`);
     const urgent = s.triage && s.triage.urgent;

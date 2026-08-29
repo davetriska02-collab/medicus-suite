@@ -123,7 +123,7 @@ export const TAB_HELP = {
   board: {
     title: 'Note',
     what: 'A configurable display board for a waiting-room TV or a staff-room monitor. Public profiles show only counts, wait bands and the message you type — never patient names.',
-    firstStep: 'Pick Waiting room or Ops, type the flap message if you want one, then open the board on the screen that faces the room and press F for fullscreen.',
+    firstStep: 'Pick a profile, type the flap message if you want one, then open this profile on a TV tab. Drag that tab onto the TV and press F for fullscreen.',
   },
   'rota-app': {
     title: 'Rota manager',
