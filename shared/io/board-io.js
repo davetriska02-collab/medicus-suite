@@ -19,6 +19,18 @@
   const MAX_MESSAGE = 80;
   const MAX_NAME = 32;
   const STYLE_IDS = [
+    'standard',
+    'clear',
+    'plain',
+    'service',
+    'notice',
+    'sign',
+    'timetable',
+    'console',
+    'lobby',
+    'plaque',
+  ];
+  const COLOUR_IDS = [
     'flap',
     'daylight',
     'clinic',
@@ -65,10 +77,23 @@
       out.publicCountsRequests = raw.publicCountsRequests === true;
     }
     if (raw.styleId !== undefined) {
-      if (typeof raw.styleId !== 'string' || !STYLE_IDS.includes(raw.styleId)) {
+      if (typeof raw.styleId !== 'string') {
         throw new Error('board.config.styleId is not a known style.');
       }
-      out.styleId = raw.styleId;
+      if (COLOUR_IDS.includes(raw.styleId) && !STYLE_IDS.includes(raw.styleId)) {
+        out.styleId = 'standard';
+        out.colourId = raw.styleId;
+      } else if (STYLE_IDS.includes(raw.styleId)) {
+        out.styleId = raw.styleId;
+      } else {
+        throw new Error('board.config.styleId is not a known style.');
+      }
+    }
+    if (raw.colourId !== undefined) {
+      if (typeof raw.colourId !== 'string' || !COLOUR_IDS.includes(raw.colourId)) {
+        throw new Error('board.config.colourId is not a known colour.');
+      }
+      out.colourId = raw.colourId;
     }
     if (raw.copy !== undefined) {
       if (!isPlainObject(raw.copy)) throw new Error('board.config.copy must be an object.');

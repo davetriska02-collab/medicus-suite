@@ -59,8 +59,12 @@ const { pathToFileURL } = require('url');
     feedIsDegraded,
     MAX_CUSTOM_PROFILES,
     BOARD_STYLES,
+    BOARD_COLOURS,
     DEFAULT_STYLE_ID,
+    DEFAULT_COLOUR_ID,
     sanitiseStyleId,
+    sanitiseColourId,
+    resolveStyleAndColour,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -164,15 +168,28 @@ const { pathToFileURL } = require('url');
       'wait band uses practice wording'
     );
     check(DEFAULT_COPY.failTitle.length > 0, 'shipped fail copy is present');
-    check(DEFAULT_CONFIG.styleId === 'flap', 'default look is Split-flap');
-    check(sanitiseStyleId('harbour') === 'harbour', 'known look is kept');
-    check(sanitiseStyleId('neon-club') === DEFAULT_STYLE_ID, 'unknown look falls back to flap');
-    check(BOARD_STYLES.length === 10, 'ships ten looks');
-    check(new Set(BOARD_STYLES.map((s) => s.id)).size === 10, 'each look has a distinct id');
+    check(DEFAULT_CONFIG.styleId === 'standard', 'default style is Standard');
+    check(DEFAULT_CONFIG.colourId === 'flap', 'default Standard colour is Split-flap');
+    check(sanitiseStyleId('clear') === 'clear', 'known style is kept');
+    check(sanitiseStyleId('harbour') === DEFAULT_STYLE_ID, 'old colour id migrates to Standard');
+    check(sanitiseStyleId('neon-club') === DEFAULT_STYLE_ID, 'unknown style falls back to Standard');
+    check(sanitiseColourId('harbour') === 'harbour', 'known colour is kept');
+    check(sanitiseColourId('neon-club') === DEFAULT_COLOUR_ID, 'unknown colour falls back to flap');
+    check(BOARD_STYLES.length === 10, 'ships ten styles');
+    check(BOARD_COLOURS.length === 10, 'ships ten Standard colours');
+    check(new Set(BOARD_STYLES.map((s) => s.id)).size === 10, 'each style has a distinct id');
     check(
-      BOARD_STYLES.every((s) => s.name && s.blurb && s.swatches.length === 3),
-      'each look has a name, blurb and three swatches'
+      BOARD_STYLES.every((s) => s.name && s.blurb),
+      'each style has a name and blurb'
     );
+    check(
+      BOARD_COLOURS.every((c) => c.name && c.blurb && c.swatches.length === 3),
+      'each colour has a name, blurb and three swatches'
+    );
+    const migrated = sanitiseConfig({ styleId: 'harbour' });
+    check(migrated.styleId === 'standard' && migrated.colourId === 'harbour', 'old look id becomes Standard + colour');
+    const resolved = resolveStyleAndColour({ styleId: 'clear', colourId: 'daylight' });
+    check(resolved.styleId === 'clear' && resolved.colourId === 'daylight', 'style and colour resolve independently');
     const fullCopy = sanitiseCopy(null);
     check(fullCopy.failBody === DEFAULT_COPY.failBody, 'default fail body is not clipped to the flap limit');
     check(fullCopy.failBody.length > 80, 'fail body is allowed to be longer than a flap line');
@@ -419,16 +436,27 @@ const { pathToFileURL } = require('url');
     check(companion.includes('data-th="amberWaitMin"'), 'practice can set the wait-band minutes');
     check(companion.includes('data-th="busyWaiting"'), 'practice can set when the room reads Busy');
     check(companion.includes('noteModPublicDemand'), 'practice can let public TVs count requests');
-    check(companion.includes('Look of the board'), 'companion exposes the look picker');
-    check(companion.includes('data-look='), 'companion writes the chosen look');
-    check(renderer.includes('dataset.style'), 'kiosk applies the chosen look');
+    check(companion.includes('Style of the board'), 'companion exposes the style picker');
+    check(companion.includes('data-look='), 'companion writes the chosen style');
+    check(companion.includes('Colour of Standard'), 'companion exposes Standard colours');
+    check(companion.includes('data-colour='), 'companion writes the chosen colour');
+    check(renderer.includes('dataset.style'), 'kiosk applies the chosen style');
+    check(renderer.includes('dataset.colour'), 'kiosk applies the chosen colour');
     const html = fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8');
-    for (const style of BOARD_STYLES) {
+    for (const style of BOARD_STYLES.filter((s) => s.id !== 'standard')) {
       check(html.includes(`board/styles/${style.id}.css`), `kiosk loads ${style.id}.css`);
       const sheet = fs.readFileSync(path.join(__dirname, 'board', 'styles', `${style.id}.css`), 'utf8');
       check(
         sheet.includes(`[data-style='${style.id}']`) || sheet.includes(`[data-style="${style.id}"]`),
-        `${style.id} CSS is scoped to its look`
+        `${style.id} CSS is scoped to its style`
+      );
+    }
+    for (const colour of BOARD_COLOURS) {
+      check(html.includes(`board/styles/${colour.id}.css`), `kiosk loads colour ${colour.id}.css`);
+      const sheet = fs.readFileSync(path.join(__dirname, 'board', 'styles', `${colour.id}.css`), 'utf8');
+      check(
+        sheet.includes(`[data-colour='${colour.id}']`) || sheet.includes(`[data-colour="${colour.id}"]`),
+        `${colour.id} CSS is scoped to Standard + that colour`
       );
     }
   }

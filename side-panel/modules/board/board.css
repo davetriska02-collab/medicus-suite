@@ -320,6 +320,160 @@
   color: var(--text-1);
 }
 
+.note-mod-style-mark {
+  grid-row: 1 / span 2;
+  width: 42px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
+  margin-top: 2px;
+  background: var(--bg-elev);
+  position: relative;
+  overflow: hidden;
+}
+
+.note-mod-style-mark[data-kind='standard'] {
+  background:
+    repeating-linear-gradient(90deg, #e7dcc8 0 5px, #07080b 5px 6px),
+    #07080b;
+  background-size: 100% 14px, 100% 100%;
+  background-position: 0 7px, 0 0;
+  background-repeat: no-repeat, no-repeat;
+}
+
+.note-mod-style-mark[data-kind='clear'] {
+  background: #f5f5f7;
+}
+
+.note-mod-style-mark[data-kind='clear']::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 10px;
+  top: 9px;
+  height: 3px;
+  background: #1d1d1f;
+  border-radius: 2px;
+}
+
+.note-mod-style-mark[data-kind='plain'] {
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #000;
+}
+
+.note-mod-style-mark[data-kind='plain']::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 8px;
+  height: 1px;
+  background: #000;
+  box-shadow: 0 6px 0 #000;
+}
+
+.note-mod-style-mark[data-kind='service'] {
+  background: #fff;
+  border-top: 7px solid #005eb8;
+}
+
+.note-mod-style-mark[data-kind='service']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 4px;
+  bottom: 0;
+  background: #ffeb3b;
+}
+
+.note-mod-style-mark[data-kind='notice'] {
+  background: #f4ecd8;
+}
+
+.note-mod-style-mark[data-kind='notice']::before,
+.note-mod-style-mark[data-kind='notice']::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  height: 1px;
+  background: #14110c;
+}
+
+.note-mod-style-mark[data-kind='notice']::before {
+  top: 6px;
+}
+
+.note-mod-style-mark[data-kind='notice']::after {
+  top: 14px;
+}
+
+.note-mod-style-mark[data-kind='sign'] {
+  background: #071526;
+}
+
+.note-mod-style-mark[data-kind='sign']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: #ffe566;
+}
+
+.note-mod-style-mark[data-kind='sign']::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  width: 10px;
+  height: 14px;
+  background: #fff;
+}
+
+.note-mod-style-mark[data-kind='timetable'] {
+  background: repeating-linear-gradient(#050505 0 5px, #ffb000 5px 6px);
+}
+
+.note-mod-style-mark[data-kind='console'] {
+  background:
+    linear-gradient(#1d3a28 1px, transparent 1px) 0 0 / 100% 7px,
+    linear-gradient(90deg, #1d3a28 1px, transparent 1px) 0 0 / 10px 100%,
+    #070b08;
+}
+
+.note-mod-style-mark[data-kind='lobby'] {
+  background: #e8ddd0;
+}
+
+.note-mod-style-mark[data-kind='lobby']::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 11px;
+  height: 5px;
+  background: #2a221b;
+  opacity: 0.85;
+}
+
+.note-mod-style-mark[data-kind='plaque'] {
+  background: #3a3a38;
+}
+
+.note-mod-style-mark[data-kind='plaque']::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 6px;
+  bottom: 6px;
+  border: 1px solid #8a7a55;
+  background: #2a2a28;
+}
+
 .note-mod-style-swatches {
   grid-row: 1 / span 2;
   display: flex;

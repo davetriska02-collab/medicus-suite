@@ -30,11 +30,11 @@
 /* The canvas is painted by <html>, which sits outside .note-body and so never
  * sees the remapped tokens. Without this the overscroll gutter on a wall
  * mounted TV flashes the default near-black. */
-html:has(.note-body[data-style='ledger']) {
+html:has(.note-body[data-style='standard'][data-colour='ledger']) {
   background: #f2ece0;
 }
 
-.note-body[data-style='ledger'] {
+.note-body[data-style='standard'][data-colour='ledger'] {
   color-scheme: light;
 
   --note-void: #f2ece0;
@@ -69,12 +69,12 @@ html:has(.note-body[data-style='ledger']) {
 
 /* ── Chrome ─────────────────────────────────────────────────────────────── */
 
-.note-body[data-style='ledger'] .note-chrome {
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome {
   padding: 12px 20px 10px;
   border-bottom: 1px solid var(--note-hair);
 }
 
-.note-body[data-style='ledger'] .note-chrome-name {
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-name {
   font-family: var(--note-sans);
   font-weight: 700;
   font-size: 17px;
@@ -82,34 +82,34 @@ html:has(.note-body[data-style='ledger']) {
   color: var(--note-ink);
 }
 
-.note-body[data-style='ledger'] .note-chrome-sub {
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-sub {
   letter-spacing: 0.14em;
   color: var(--note-mute);
 }
 
 /* Controls carry a real 3:1 rim: the field rules stay quiet, but a boundary a
  * user has to click is not decoration. */
-.note-body[data-style='ledger'] .note-chrome-select select,
-.note-body[data-style='ledger'] .note-chrome-btn {
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-select select,
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-btn {
   background: var(--note-chassis);
   border: 1px solid var(--led-rim);
   border-radius: 2px;
   color: var(--note-soft);
 }
 
-.note-body[data-style='ledger'] .note-chrome-btn:hover,
-.note-body[data-style='ledger'] .note-chrome-select select:hover {
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-select select:hover {
   border-color: var(--note-ink);
   color: var(--note-ink);
 }
 
-.note-body[data-style='ledger'] .note-chrome-btn:focus-visible,
-.note-body[data-style='ledger'] .note-chrome-select select:focus-visible {
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-btn:focus-visible,
+.note-body[data-style='standard'][data-colour='ledger'] .note-chrome-select select:focus-visible {
   outline: 2px solid var(--note-steady);
   outline-offset: 2px;
 }
 
-.note-body[data-style='ledger'] .note-empty {
+.note-body[data-style='standard'][data-colour='ledger'] .note-empty {
   font-family: var(--note-sans);
   font-size: clamp(15px, 1.6vw, 20px);
   color: var(--note-mute);
@@ -118,7 +118,7 @@ html:has(.note-body[data-style='ledger']) {
 /* ── The message, set as type ───────────────────────────────────────────── */
 
 /* No chassis, no card: a masthead rule above, a hairline below, paper between. */
-.note-body[data-style='ledger'] .note-flaps {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps {
   gap: clamp(2px, 0.6vh, 10px);
   padding: clamp(18px, 3.4vh, 44px) clamp(8px, 1.4vw, 20px) clamp(20px, 3.6vh, 48px);
   background: none;
@@ -129,24 +129,24 @@ html:has(.note-body[data-style='ledger']) {
   box-shadow: none;
 }
 
-.note-body[data-style='ledger'] .note-board[data-profile='message'] .note-flaps {
+.note-body[data-style='standard'][data-colour='ledger'] .note-board[data-profile='message'] .note-flaps {
   --led-msg: clamp(38px, 6.4vw, 104px);
 }
 
-.note-body[data-style='ledger'] .note-flaps .note-flap-row {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap-row {
   gap: 0;
   align-items: baseline;
 }
 
 /* A row holding no letters is padding, not a line, and an empty line between
  * two rules reads as a printing fault. */
-.note-body[data-style='ledger'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
   display: none;
 }
 
 /* Auto width is the whole trick: fixed cells read as tiles, collapsed cells
  * let the serif kern and the line read as one printed sentence. */
-.note-body[data-style='ledger'] .note-flaps .note-flap {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap {
   width: auto;
   min-width: 0.06em;
   height: auto;
@@ -159,17 +159,17 @@ html:has(.note-body[data-style='ledger']) {
 }
 
 /* Spaces carry no glyph, so they need their own width or the words fuse. */
-.note-body[data-style='ledger'] .note-flaps .note-flap-blank {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap-blank {
   min-width: 0.27em;
   background: none;
   box-shadow: none;
 }
 
-.note-body[data-style='ledger'] .note-flaps .note-flap::after {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap::after {
   display: none;
 }
 
-.note-body[data-style='ledger'] .note-flaps .note-flap-glyph {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap-glyph {
   font-family: var(--note-sans);
   font-size: 1em;
   font-weight: 700;
@@ -181,20 +181,20 @@ html:has(.note-body[data-style='ledger']) {
 
 /* A split-flap flutter on printed type would be fancy dress. It also keeps
  * this style honest under prefers-reduced-motion with no extra rule. */
-.note-body[data-style='ledger'] .note-flaps .note-flap.is-flip .note-flap-glyph {
+.note-body[data-style='standard'][data-colour='ledger'] .note-flaps .note-flap.is-flip .note-flap-glyph {
   animation: none;
 }
 
 /* ── Metric slips ───────────────────────────────────────────────────────── */
 
-.note-body[data-style='ledger'] .note-tile {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile {
   background: var(--note-chassis);
   border: 1px solid var(--note-hair);
   border-radius: 2px;
   box-shadow: none;
 }
 
-.note-body[data-style='ledger'] .note-tile-k {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile-k {
   font-family: var(--note-sans);
   font-weight: 700;
   font-size: clamp(11px, 1.05vw, 14px);
@@ -203,7 +203,7 @@ html:has(.note-body[data-style='ledger']) {
   color: var(--note-mute);
 }
 
-.note-body[data-style='ledger'] .note-tile-v {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile-v {
   font-family: var(--note-mono);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -211,46 +211,46 @@ html:has(.note-body[data-style='ledger']) {
   color: var(--note-ink);
 }
 
-.note-body[data-style='ledger'] .note-tile-v-word {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile-v-word {
   font-family: var(--note-sans);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.note-body[data-style='ledger'] .note-tile-s {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile-s {
   font-family: var(--note-sans);
   color: var(--note-soft);
 }
 
-.note-body[data-style='ledger'] .note-tile-s-strong {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile-s-strong {
   color: var(--note-ink);
 }
 
 /* The tone rule sits in the margin like a printed sidebar rule. */
-.note-body[data-style='ledger'] .note-tile[data-tone='quiet'],
-.note-body[data-style='ledger'] .note-tile[data-tone='GREEN'] {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='quiet'],
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='GREEN'] {
   box-shadow: inset 4px 0 0 var(--note-quiet);
 }
-.note-body[data-style='ledger'] .note-tile[data-tone='steady'],
-.note-body[data-style='ledger'] .note-tile[data-tone='AMBER'] {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='steady'],
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='AMBER'] {
   box-shadow: inset 4px 0 0 var(--note-steady);
 }
-.note-body[data-style='ledger'] .note-tile[data-tone='busy'] {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='busy'] {
   box-shadow: inset 4px 0 0 var(--note-busy);
 }
-.note-body[data-style='ledger'] .note-tile[data-tone='very-busy'],
-.note-body[data-style='ledger'] .note-tile[data-tone='RED'] {
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='standard'][data-colour='ledger'] .note-tile[data-tone='RED'] {
   box-shadow: inset 4px 0 0 var(--note-very);
 }
 
-.note-body[data-style='ledger'] .note-dot {
+.note-body[data-style='standard'][data-colour='ledger'] .note-dot {
   background: #ded4c0;
   box-shadow: inset 0 0 0 1px rgba(28, 25, 19, 0.14);
 }
 
 /* ── Strapline ──────────────────────────────────────────────────────────── */
 
-.note-body[data-style='ledger'] .note-ticker {
+.note-body[data-style='standard'][data-colour='ledger'] .note-ticker {
   background: var(--note-well);
   border: 0;
   border-top: 1px solid var(--note-hair);
@@ -258,19 +258,19 @@ html:has(.note-body[data-style='ledger']) {
   border-radius: 0;
 }
 
-.note-body[data-style='ledger'] .note-ticker-seq {
+.note-body[data-style='standard'][data-colour='ledger'] .note-ticker-seq {
   color: var(--note-soft);
   letter-spacing: 0.1em;
 }
 
-.note-body[data-style='ledger'] .note-ticker-dot {
+.note-body[data-style='standard'][data-colour='ledger'] .note-ticker-dot {
   color: var(--led-rule);
 }
 
 /* ── Clock ──────────────────────────────────────────────────────────────── */
 
 /* Figures keep the machine voice even on paper. */
-.note-body[data-style='ledger'] .note-clock .note-flap {
+.note-body[data-style='standard'][data-colour='ledger'] .note-clock .note-flap {
   width: auto;
   min-width: 0.1em;
   height: auto;
@@ -281,17 +281,17 @@ html:has(.note-body[data-style='ledger']) {
   box-shadow: none;
 }
 
-.note-body[data-style='ledger'] .note-clock .note-flap-blank {
+.note-body[data-style='standard'][data-colour='ledger'] .note-clock .note-flap-blank {
   min-width: 0.3em;
   background: none;
   box-shadow: none;
 }
 
-.note-body[data-style='ledger'] .note-clock .note-flap::after {
+.note-body[data-style='standard'][data-colour='ledger'] .note-clock .note-flap::after {
   display: none;
 }
 
-.note-body[data-style='ledger'] .note-clock .note-flap-glyph {
+.note-body[data-style='standard'][data-colour='ledger'] .note-clock .note-flap-glyph {
   font-family: var(--note-mono);
   font-variant-numeric: tabular-nums;
   font-size: 1em;
@@ -301,25 +301,25 @@ html:has(.note-body[data-style='ledger']) {
   transform: none;
 }
 
-.note-body[data-style='ledger'] .note-clock .note-flap.is-flip .note-flap-glyph {
+.note-body[data-style='standard'][data-colour='ledger'] .note-clock .note-flap.is-flip .note-flap-glyph {
   animation: none;
 }
 
 /* ── Colophon ───────────────────────────────────────────────────────────── */
 
-.note-body[data-style='ledger'] .note-foot {
+.note-body[data-style='standard'][data-colour='ledger'] .note-foot {
   border-top: 1px solid var(--note-hair);
   padding: 10px 20px 12px;
   color: var(--note-mute);
   letter-spacing: 0.09em;
 }
 
-.note-body[data-style='ledger'] .note-demo-flag {
+.note-body[data-style='standard'][data-colour='ledger'] .note-demo-flag {
   color: var(--note-steady);
   font-weight: 700;
 }
 
-.note-body[data-style='ledger'] .note-error {
+.note-body[data-style='standard'][data-colour='ledger'] .note-error {
   color: var(--note-very);
   font-weight: 700;
 }
@@ -329,30 +329,30 @@ html:has(.note-body[data-style='ledger']) {
 /* The one place the paper breaks. A dead feed must read as wrong from the far
  * side of the room, so the panel floods crimson rather than sitting as a
  * politely ruled notice. */
-.note-body[data-style='ledger'] .note-fail {
+.note-body[data-style='standard'][data-colour='ledger'] .note-fail {
   background: var(--led-crimson);
   border: 4px solid var(--led-crimson-deep);
   border-radius: 2px;
   box-shadow: 0 10px 26px rgba(94, 10, 19, 0.28);
 }
 
-.note-body[data-style='ledger'] .note-fail-title {
+.note-body[data-style='standard'][data-colour='ledger'] .note-fail-title {
   font-family: var(--note-sans);
   font-weight: 700;
   color: var(--led-paper-white);
 }
 
-.note-body[data-style='ledger'] .note-fail-ask {
+.note-body[data-style='standard'][data-colour='ledger'] .note-fail-ask {
   font-family: var(--note-sans);
   color: #ffd7a1;
 }
 
-.note-body[data-style='ledger'] .note-fail-body {
+.note-body[data-style='standard'][data-colour='ledger'] .note-fail-body {
   font-family: var(--note-sans);
   color: var(--led-paper-white);
 }
 
-.note-body[data-style='ledger'] .note-fail-banner {
+.note-body[data-style='standard'][data-colour='ledger'] .note-fail-banner {
   background: var(--note-busy);
   border: 2px solid #6d2a05;
   border-radius: 2px;
@@ -365,13 +365,13 @@ html:has(.note-body[data-style='ledger']) {
 /* ── Small screens ──────────────────────────────────────────────────────── */
 
 @media (max-width: 720px) {
-  .note-body[data-style='ledger'] .note-flaps {
+  .note-body[data-style='standard'][data-colour='ledger'] .note-flaps {
     --led-msg: clamp(20px, 6.2vw, 34px);
   }
-  .note-body[data-style='ledger'] .note-board[data-profile='message'] .note-flaps {
+  .note-body[data-style='standard'][data-colour='ledger'] .note-board[data-profile='message'] .note-flaps {
     --led-msg: clamp(24px, 7.4vw, 40px);
   }
-  .note-body[data-style='ledger'] .note-clock .note-flap {
+  .note-body[data-style='standard'][data-colour='ledger'] .note-clock .note-flap {
     font-size: clamp(15px, 4.4vw, 24px);
   }
 }

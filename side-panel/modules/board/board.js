@@ -13,6 +13,7 @@ import {
   PUBLIC_WIDGETS,
   DEFAULT_COPY,
   BOARD_STYLES,
+  BOARD_COLOURS,
   MAX_COPY_CHARS,
   MAX_CUSTOM_PROFILES,
   MAX_PROFILE_NAME,
@@ -105,21 +106,39 @@ function render() {
       }</p>
 
       <section class="note-mod-card">
-        <h2 class="note-mod-h">Look of the board</h2>
-        <p class="note-mod-th-lead">Every board uses the same look. Pick the one that fits the room.</p>
-        <div class="note-mod-styles" role="radiogroup" aria-label="Board look">
+        <h2 class="note-mod-h">Style of the board</h2>
+        <p class="note-mod-th-lead">Ten different layouts. Standard is the split-flap board; the others change the type and the room.</p>
+        <div class="note-mod-styles" role="radiogroup" aria-label="Board style">
           ${BOARD_STYLES.map((style) => {
             const on = style.id === config.styleId;
             return `<button type="button" class="note-mod-style${on ? ' is-on' : ''}" data-look="${esc(style.id)}" role="radio" aria-checked="${on ? 'true' : 'false'}">
-              <span class="note-mod-style-swatches" aria-hidden="true" style="--s0:${esc(style.swatches[0])};--s1:${esc(style.swatches[1])};--s2:${esc(style.swatches[2])}">
-                <i></i><i></i><i></i>
-              </span>
+              <span class="note-mod-style-mark" data-kind="${esc(style.id)}" aria-hidden="true"></span>
               <span class="note-mod-style-name">${esc(style.name)}</span>
               <span class="note-mod-style-blurb">${esc(style.blurb)}</span>
             </button>`;
           }).join('')}
         </div>
       </section>
+      ${
+        config.styleId === 'standard'
+          ? `<section class="note-mod-card">
+        <h2 class="note-mod-h">Colour of Standard</h2>
+        <p class="note-mod-th-lead">These only apply to Standard. The other styles bring their own paint.</p>
+        <div class="note-mod-styles" role="radiogroup" aria-label="Standard colour">
+          ${BOARD_COLOURS.map((colour) => {
+            const on = colour.id === config.colourId;
+            return `<button type="button" class="note-mod-style${on ? ' is-on' : ''}" data-colour="${esc(colour.id)}" role="radio" aria-checked="${on ? 'true' : 'false'}">
+              <span class="note-mod-style-swatches" aria-hidden="true" style="--s0:${esc(colour.swatches[0])};--s1:${esc(colour.swatches[1])};--s2:${esc(colour.swatches[2])}">
+                <i></i><i></i><i></i>
+              </span>
+              <span class="note-mod-style-name">${esc(colour.name)}</span>
+              <span class="note-mod-style-blurb">${esc(colour.blurb)}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </section>`
+          : ''
+      }
 
       <section class="note-mod-card">
         <h2 class="note-mod-h">Boards</h2>
@@ -318,6 +337,13 @@ function wire() {
     const look = e.target.closest('[data-look]');
     if (look) {
       config.styleId = look.getAttribute('data-look');
+      persist();
+      render();
+      return;
+    }
+    const colour = e.target.closest('[data-colour]');
+    if (colour) {
+      config.colourId = colour.getAttribute('data-colour');
       persist();
       render();
       return;

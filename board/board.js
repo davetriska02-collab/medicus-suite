@@ -13,6 +13,7 @@ import {
   TEMPO_ORDER,
   sanitiseConfig,
   sanitiseStyleId,
+  sanitiseColourId,
   resolveProfile,
   widgetsForProfile,
   formatFlapRows,
@@ -304,8 +305,11 @@ function paintChrome() {
   document.body.dataset.audience = profile.audience;
   document.body.dataset.profile = profile.id;
   const styleId = sanitiseStyleId(config.styleId);
+  const colourId = sanitiseColourId(config.colourId);
   document.body.dataset.style = styleId;
+  document.body.dataset.colour = colourId;
   document.documentElement.dataset.style = styleId;
+  document.documentElement.dataset.colour = colourId;
   syncDemoBtn();
 
   const bits = ['Note · Medicus Suite'];

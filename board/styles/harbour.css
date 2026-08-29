@@ -23,11 +23,11 @@
 /* The canvas is painted by <html>, which sits outside .note-body and so never
  * sees the remapped tokens. Without this the overscroll gutter on a wall-
  * mounted TV flashes the default near-black. */
-html:has(.note-body[data-style='harbour']) {
+html:has(.note-body[data-style='standard'][data-colour='harbour']) {
   background: #06201e;
 }
 
-.note-body[data-style='harbour'] {
+.note-body[data-style='standard'][data-colour='harbour'] {
   color-scheme: dark;
 
   --note-void: #06201e;
@@ -59,7 +59,7 @@ html:has(.note-body[data-style='harbour']) {
 
 /* ── Message panel ──────────────────────────────────────────────────────── */
 
-.note-body[data-style='harbour'] .note-flaps {
+.note-body[data-style='standard'][data-colour='harbour'] .note-flaps {
   background: linear-gradient(180deg, rgba(246, 239, 223, 0.05), rgba(4, 22, 21, 0.4)), var(--note-chassis);
   box-shadow:
     inset 0 1px 0 rgba(200, 164, 94, 0.22),
@@ -68,7 +68,7 @@ html:has(.note-body[data-style='harbour']) {
 
 /* The shipped rim lights a cream face from above at 45% white, which on a
  * dark card reads as a scar. Brass rim, softer top light, weighted base. */
-.note-body[data-style='harbour'] .note-flap {
+.note-body[data-style='standard'][data-colour='harbour'] .note-flap {
   box-shadow:
     inset 0 0 0 1px rgba(200, 164, 94, 0.3),
     inset 0 1px 0 rgba(246, 237, 217, 0.14),
@@ -78,36 +78,36 @@ html:has(.note-body[data-style='harbour']) {
 
 /* Empty cells lose the rim entirely so they read as gaps in the run, not as
  * cards that happen to be blank. */
-.note-body[data-style='harbour'] .note-flap-blank {
+.note-body[data-style='standard'][data-colour='harbour'] .note-flap-blank {
   box-shadow: inset 0 0 0 1px rgba(200, 164, 94, 0.07);
 }
 
-.note-body[data-style='harbour'] .note-flap-blank::after {
+.note-body[data-style='standard'][data-colour='harbour'] .note-flap-blank::after {
   background: rgba(246, 237, 217, 0.06);
 }
 
 /* ── Tiles and ticker ───────────────────────────────────────────────────── */
 
 /* Set on background, not box-shadow, so the data-tone status bars survive. */
-.note-body[data-style='harbour'] .note-tile {
+.note-body[data-style='standard'][data-colour='harbour'] .note-tile {
   background: linear-gradient(180deg, rgba(246, 239, 223, 0.045), rgba(246, 239, 223, 0) 42%), var(--note-chassis);
 }
 
-.note-body[data-style='harbour'] .note-ticker {
+.note-body[data-style='standard'][data-colour='harbour'] .note-ticker {
   box-shadow: inset 0 1px 3px rgba(2, 12, 11, 0.6);
 }
 
 /* :not(.is-on) is load-bearing, not decoration. Without it this rule ties on
  * specificity with board.css's `.note-dot.is-on[data-tone=…]` and, being the
  * later sheet, would win and unlight every tempo dot. */
-.note-body[data-style='harbour'] .note-dot:not(.is-on) {
+.note-body[data-style='standard'][data-colour='harbour'] .note-dot:not(.is-on) {
   background: #1a3f39;
 }
 
 /* ── Chrome ─────────────────────────────────────────────────────────────── */
 
 /* The shipped hover border is a blue slate borrowed from the panel tokens. */
-.note-body[data-style='harbour'] .note-chrome-btn:hover,
-.note-body[data-style='harbour'] .note-chrome-select select:hover {
+.note-body[data-style='standard'][data-colour='harbour'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='harbour'] .note-chrome-select select:hover {
   border-color: var(--note-brass);
 }

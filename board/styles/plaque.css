@@ -1,0 +1,224 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: plaque
+ *
+ * Museum caption. A dark wall, a small centred plate, generous empty space.
+ * Didot / Bodoni if the OS has them, otherwise a high-contrast serif.
+ */
+
+html:has(.note-body[data-style='plaque']) {
+  background: #3a3a38;
+}
+
+.note-body[data-style='plaque'] {
+  color-scheme: dark;
+  --note-void: #3a3a38;
+  --note-chassis: #2a2a28;
+  --note-well: #242422;
+  --note-hair: #8a7a55;
+  --note-mute: #b7b1a4;
+  --note-soft: #e6e0d4;
+  --note-ink: #f4efe4;
+  --note-flap: transparent;
+  --note-flap-ink: #f4efe4;
+  --note-flap-split: transparent;
+  --note-flap-blank: transparent;
+  --note-quiet: #86c896;
+  --note-steady: #d4b06a;
+  --note-busy: #e08a4c;
+  --note-very: #e07a84;
+  --note-sans: Didot, 'Bodoni MT', 'Bodoni 72', 'Times New Roman', serif;
+  --note-mono: Didot, 'Bodoni MT', 'Times New Roman', serif;
+  --plq-msg: clamp(22px, 2.8vw, 40px);
+  background: #3a3a38;
+  color: #f4efe4;
+}
+
+.note-body[data-style='plaque'] .note-chrome {
+  justify-content: center;
+  padding: 20px 16px 0;
+  border-bottom: 0;
+}
+
+.note-body[data-style='plaque'] .note-chrome-name {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='plaque'] .note-chrome-sub {
+  display: none;
+}
+
+.note-body[data-style='plaque'] .note-chrome-select select,
+.note-body[data-style='plaque'] .note-chrome-btn {
+  background: transparent;
+  border: 1px solid #8a7a55;
+  border-radius: 0;
+  color: #e6e0d4;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='plaque'] .note-stage {
+  align-items: center;
+  justify-content: center;
+  padding: clamp(48px, 12vh, 140px) 24px;
+}
+
+.note-body[data-style='plaque'] .note-board {
+  width: min(560px, 86vw);
+  gap: 22px;
+  padding: 28px 32px 24px;
+  background: #2a2a28;
+  border: 1px solid #8a7a55;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.note-body[data-style='plaque'] .note-flaps {
+  align-items: center;
+  padding: 0 0 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid #8a7a55;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap-row {
+  gap: 0;
+  align-items: baseline;
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
+  display: none;
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap {
+  width: auto;
+  min-width: 0.04em;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  font-size: var(--plq-msg);
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap-blank {
+  min-width: 0.24em;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-size: 1em;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  transform: none;
+}
+
+.note-body[data-style='plaque'] .note-flaps .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='plaque'] .note-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.note-body[data-style='plaque'] .note-tile {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  text-align: center;
+  align-items: center;
+}
+
+.note-body[data-style='plaque'] .note-tile-k {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #b7b1a4;
+}
+
+.note-body[data-style='plaque'] .note-tile-v,
+.note-body[data-style='plaque'] .note-tile-v-word {
+  font-size: clamp(16px, 1.8vw, 24px);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.note-body[data-style='plaque'] .note-tile-s {
+  font-size: 12px;
+  color: #b7b1a4;
+}
+
+.note-body[data-style='plaque'] .note-tile[data-tone] {
+  box-shadow: none;
+}
+
+.note-body[data-style='plaque'] .note-dot:not(.is-on) {
+  background: #4a4a46;
+}
+
+.note-body[data-style='plaque'] .note-ticker {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.note-body[data-style='plaque'] .note-clock-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.note-body[data-style='plaque'] .note-clock .note-flap {
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='plaque'] .note-clock .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='plaque'] .note-fail {
+  background: #6d1820;
+  border: 1px solid #e07a84;
+  border-radius: 0;
+}
+
+.note-body[data-style='plaque'] .note-fail-title,
+.note-body[data-style='plaque'] .note-fail-body,
+.note-body[data-style='plaque'] .note-fail-ask {
+  color: #f4efe4;
+}
+
+.note-body[data-style='plaque'] .note-empty {
+  color: #b7b1a4;
+}
+
+.note-body[data-style='plaque'] .note-foot {
+  border-top: 0;
+  justify-content: center;
+  color: #b7b1a4;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}

@@ -1,0 +1,248 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: clear
+ *
+ * Air and a large sans. No flap tiles, no chassis card, no wood. The sentence
+ * is set as type on a pale field; the figures sit under it as a quiet caption
+ * row. System UI stack only (the face people already know from their phone).
+ *
+ * Status meaning is unchanged. Fail-loud stays a full-face red panel.
+ */
+
+html:has(.note-body[data-style='clear']) {
+  background: #f5f5f7;
+}
+
+.note-body[data-style='clear'] {
+  color-scheme: light;
+  --note-void: #f5f5f7;
+  --note-chassis: #ffffff;
+  --note-well: #ececef;
+  --note-hair: #d2d2d7;
+  --note-mute: #6e6e73;
+  --note-soft: #424245;
+  --note-ink: #1d1d1f;
+  --note-flap: transparent;
+  --note-flap-ink: #1d1d1f;
+  --note-flap-split: transparent;
+  --note-flap-blank: transparent;
+  --note-quiet: #248a3d;
+  --note-steady: #b25000;
+  --note-busy: #c93400;
+  --note-very: #d70015;
+  --note-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: -apple-system, BlinkMacSystemFont, 'SF Pro Display', ui-sans-serif, sans-serif;
+  --clr-msg: clamp(36px, 5.4vw, 88px);
+  background: #f5f5f7;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='clear'] .note-chrome {
+  padding: 18px 28px 10px;
+  border-bottom: 0;
+}
+
+.note-body[data-style='clear'] .note-chrome-name {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: -0.03em;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='clear'] .note-chrome-sub {
+  font-family: var(--note-sans);
+  text-transform: none;
+  letter-spacing: -0.01em;
+  font-size: 13px;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='clear'] .note-chrome-select select,
+.note-body[data-style='clear'] .note-chrome-btn {
+  background: #fff;
+  border: 1px solid var(--note-hair);
+  border-radius: 980px;
+  color: var(--note-soft);
+  padding: 6px 14px;
+}
+
+.note-body[data-style='clear'] .note-stage {
+  align-items: flex-start;
+  padding: clamp(28px, 6vh, 80px) clamp(28px, 6vw, 96px);
+}
+
+.note-body[data-style='clear'] .note-board {
+  gap: clamp(28px, 4vh, 48px);
+  width: min(1080px, 100%);
+}
+
+.note-body[data-style='clear'] .note-flaps {
+  align-items: flex-start;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 0;
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap-row {
+  gap: 0;
+  justify-content: flex-start;
+  align-items: baseline;
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
+  display: none;
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap {
+  width: auto;
+  min-width: 0.04em;
+  height: auto;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  font-size: var(--clr-msg);
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap-blank {
+  min-width: 0.28em;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-size: 1em;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  transform: none;
+}
+
+.note-body[data-style='clear'] .note-flaps .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='clear'] .note-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px 48px;
+}
+
+.note-body[data-style='clear'] .note-tile {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  gap: 4px;
+  flex: 1 1 160px;
+}
+
+.note-body[data-style='clear'] .note-tile-k {
+  order: 2;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='clear'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile-v-word {
+  order: 1;
+  font-family: var(--note-sans);
+  font-size: clamp(28px, 3.2vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+
+.note-body[data-style='clear'] .note-tile-s {
+  order: 3;
+  font-size: 13px;
+  color: var(--note-soft);
+}
+
+.note-body[data-style='clear'] .note-tile[data-tone] {
+  box-shadow: none;
+}
+
+.note-body[data-style='clear'] .note-tile[data-tone='quiet'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile[data-tone='GREEN'] .note-tile-v {
+  color: var(--note-quiet);
+}
+.note-body[data-style='clear'] .note-tile[data-tone='steady'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile[data-tone='AMBER'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile[data-tone='steady'] .note-tile-v-word {
+  color: var(--note-steady);
+}
+.note-body[data-style='clear'] .note-tile[data-tone='busy'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile[data-tone='busy'] .note-tile-v-word {
+  color: var(--note-busy);
+}
+.note-body[data-style='clear'] .note-tile[data-tone='very-busy'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile[data-tone='RED'] .note-tile-v,
+.note-body[data-style='clear'] .note-tile[data-tone='very-busy'] .note-tile-v-word {
+  color: var(--note-very);
+}
+
+.note-body[data-style='clear'] .note-dot:not(.is-on) {
+  background: #d2d2d7;
+}
+
+.note-body[data-style='clear'] .note-ticker {
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--note-hair);
+  border-radius: 0;
+  padding-top: 10px;
+}
+
+.note-body[data-style='clear'] .note-clock .note-flap {
+  width: auto;
+  height: auto;
+  min-width: 0.2em;
+  background: none;
+  box-shadow: none;
+  font-size: clamp(18px, 2vw, 28px);
+}
+
+.note-body[data-style='clear'] .note-clock .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='clear'] .note-clock .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  transform: none;
+}
+
+.note-body[data-style='clear'] .note-fail {
+  background: #d70015;
+  border: 0;
+  border-radius: 18px;
+  color: #fff;
+}
+
+.note-body[data-style='clear'] .note-fail-title,
+.note-body[data-style='clear'] .note-fail-body {
+  color: #fff;
+}
+
+.note-body[data-style='clear'] .note-fail-ask {
+  color: #ffe3e5;
+}
+
+.note-body[data-style='clear'] .note-foot {
+  border-top: 0;
+  color: var(--note-mute);
+  font-size: 11px;
+}
