@@ -340,6 +340,7 @@ function wire() {
     if (th) {
       config.thresholds = sanitiseThresholds({ ...config.thresholds, [th]: e.target.value });
       persist();
+      render();
       return;
     }
     const w = e.target.getAttribute && e.target.getAttribute('data-widget');

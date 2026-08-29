@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.251.5] — 2026-08-29
+
+### Note — close a public-board widget-lock gap and correctness fixes found on review of PR #350
+
+Review of the custom-boards PR found that the "Requests today" tile
+(`demand` widget: medical/admin counts) was classified as a **public**
+widget in `WIDGET_META`/`PUBLIC_WIDGETS`, pre-dating this PR (shipped at
+v3.248.0). The companion's "What this profile shows" checklist offered it
+on any public profile — including the waiting-room TV — and ticking it
+put an exact "N medical · M admin" tile on a public screen, contradicting
+this notice's own H-067 claim that request wording never reaches a public
+board. `demand` is now staff-only in both copies of the widget allow-list
+(`board/board-core.js`, `shared/io/board-io.js`), closing the gap at all
+three enforcement points (import, config load, render).
+
+Also fixed, found on the same review pass:
+
+- `deriveTempo()`'s demand-counting switch was a deny-list
+  (`mode !== 'public'`), so an unrecognised mode fell open into counting
+  requests toward "busy" — now an explicit allow-list
+  (`mode === 'staff' || mode === 'public-demand'`).
+- Clearing a wait-band/busy-count input field clamped to the numeric
+  floor (e.g. "1 minute") instead of the shipped default, because
+  `Number('')` is `0`, not `NaN`. Empty input now falls back to default.
+- Raising "Busy at" above "Very busy at" silently resets both thresholds
+  to shipped defaults but the companion form kept showing the rejected
+  values until the next full re-render; the threshold input handler now
+  re-renders immediately so the form never lies about what is saved.
+- The six-custom-board cap sliced the incoming list before de-duplicating
+  by id, so a single duplicate id could cost a real slot (7 distinct + 1
+  duplicate kept only 5, not 6). De-dupe now runs before the cap.
+- `newCustomProfileId()` used `Date.now()` alone; two boards created in
+  the same millisecond collided and one silently vanished. Added a random
+  suffix.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays at
+3.202.0.
+
 ## [v3.251.4] — 2026-08-29
 
 ### Note — custom boards, names and words

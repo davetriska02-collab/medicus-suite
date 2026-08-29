@@ -13,8 +13,8 @@
   const BOARD_KEYS = ['board.config'];
   const PROFILE_IDS = ['waiting-room', 'ops', 'message'];
   const CUSTOM_ID = /^c-[a-z0-9]{4,16}$/;
-  const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'demand', 'clock'];
-  const STAFF_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity'];
+  const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock'];
+  const STAFF_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity', 'demand'];
   const ALL_WIDGETS = PUBLIC_WIDGETS.concat(STAFF_WIDGETS);
   const MAX_MESSAGE = 80;
   const MAX_NAME = 32;

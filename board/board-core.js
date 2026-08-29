@@ -33,8 +33,8 @@ export const DEFAULT_POLL_SECONDS = 20;
 // Characters the split-flap will show. Anything else becomes a blank tile.
 export const FLAP_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?'-:/+&#";
 
-export const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'demand', 'clock'];
-export const STAFF_ONLY_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity'];
+export const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock'];
+export const STAFF_ONLY_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity', 'demand'];
 export const ALL_WIDGETS = [...PUBLIC_WIDGETS, ...STAFF_ONLY_WIDGETS];
 
 export const WIDGET_META = {
@@ -42,7 +42,7 @@ export const WIDGET_META = {
   tempo: { label: 'How busy we are', audience: 'public' },
   waiting: { label: 'People waiting', audience: 'public' },
   ticker: { label: 'Ticker', audience: 'public' },
-  demand: { label: 'Requests today', audience: 'public' },
+  demand: { label: 'Requests today', audience: 'staff' },
   clock: { label: 'Clock', audience: 'public' },
   pressure: { label: 'Pressure index', audience: 'staff' },
   triage: { label: 'Triage inbox', audience: 'staff' },
@@ -127,7 +127,11 @@ export function isKnownProfileId(id, extraIds) {
 }
 
 export function newCustomProfileId() {
-  return `c-${Date.now().toString(36)}`;
+  // A timestamp alone collides when two boards are created in the same
+  // millisecond (a double-fired click, a scripted batch add); the random
+  // suffix keeps ids unique without needing storage round-trips to check.
+  const rand = Math.random().toString(36).slice(2, 6);
+  return `c-${Date.now().toString(36)}${rand}`;
 }
 
 export function newCustomProfile(audience) {
@@ -242,6 +246,7 @@ function isPlainObject(v) {
 }
 
 function clampInt(n, lo, hi, fallback) {
+  if (n == null || (typeof n === 'string' && n.trim() === '')) return fallback;
   const v = Number(n);
   if (!Number.isFinite(v)) return fallback;
   return Math.min(hi, Math.max(lo, Math.round(v)));
@@ -343,10 +348,16 @@ export function sanitiseConfig(raw) {
     const found = incoming.find((p) => p && p.id === shipped.id);
     return sanitiseProfile(found || shipped, shipped);
   });
-  const extras = incoming
-    .filter((p) => p && isCustomProfileId(p.id))
-    .slice(0, MAX_CUSTOM_PROFILES)
-    .map((p) => sanitiseProfile(p, newCustomProfile(p.audience)));
+  // De-dupe by id BEFORE capping to MAX_CUSTOM_PROFILES — a duplicate id
+  // in the incoming list must not eat one of the cap's real slots.
+  const extraIds = new Set();
+  const extras = [];
+  for (const p of incoming) {
+    if (!p || !isCustomProfileId(p.id) || extraIds.has(p.id)) continue;
+    extraIds.add(p.id);
+    extras.push(sanitiseProfile(p, newCustomProfile(p.audience)));
+    if (extras.length >= MAX_CUSTOM_PROFILES) break;
+  }
   const seen = new Set(profiles.map((p) => p.id));
   for (const extra of extras) {
     if (seen.has(extra.id)) continue;
@@ -406,8 +417,10 @@ export function deriveTempo({ waitingCount, maxWaitMinutes, demandAll }, thresho
   const demand = Number(demandAll) || 0;
   const wait = Number.isFinite(maxWaitMinutes) ? maxWaitMinutes : 0;
   // Public TVs answer "how does the room feel?" unless the practice
-  // explicitly turns on publicCountsRequests.
-  const useDemand = mode !== 'public' || mode === 'public-demand';
+  // explicitly turns on publicCountsRequests. Allow-list, not a
+  // deny-list: an unrecognised mode must not fail open into counting
+  // requests on what could be a public screen.
+  const useDemand = mode === 'staff' || mode === 'public-demand';
   if (waiting >= t.veryBusyWaiting || wait >= t.redWaitMin || (useDemand && demand >= t.veryBusyDemand)) {
     return 'very-busy';
   }

@@ -54,8 +54,10 @@ const { pathToFileURL } = require('url');
     fillCopy,
     newCustomProfile,
     isCustomProfileId,
+    newCustomProfileId,
     DEFAULT_COPY,
     feedIsDegraded,
+    MAX_CUSTOM_PROFILES,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -132,6 +134,23 @@ const { pathToFileURL } = require('url');
     check(pharm.audience === 'public', 'custom public board stays public');
     check(!pharm.widgets.includes('pressure'), 'custom public board cannot grow staff tiles');
     check(isCustomProfileId(newCustomProfile('staff').id), 'new staff board gets a custom id');
+    check(newCustomProfileId() !== newCustomProfileId(), 'two ids minted back-to-back never collide');
+    {
+      // A duplicate id among 7 distinct incoming boards must not eat one of
+      // the cap's 6 real slots — de-dupe has to run before the cap, not after.
+      const seven = Array.from({ length: 7 }, (_, i) => ({
+        id: `c-board${i}xx`,
+        name: `Board ${i}`,
+        audience: 'public',
+      }));
+      const withDupe = [seven[0], ...seven];
+      const capped = sanitiseConfig({ profiles: withDupe });
+      const customCount = capped.profiles.filter((p) => isCustomProfileId(p.id)).length;
+      check(
+        customCount === MAX_CUSTOM_PROFILES,
+        `a duplicate id still leaves all ${MAX_CUSTOM_PROFILES} cap slots usable (got ${customCount})`
+      );
+    }
     const words = sanitiseCopy({ waitUnder: 'Usually under {n} min', tempoPublicSteady: '<b>Calm</b>' });
     check(words.waitUnder === 'Usually under {n} min', 'wait sentence keeps the {n} hole');
     check(words.tempoPublicSteady === 'Calm', 'copy strips markup');
@@ -198,7 +217,14 @@ const { pathToFileURL } = require('url');
     deriveTempo({ waitingCount: 1, maxWaitMinutes: 20, demandAll: 0 }) === 'very-busy',
     '20-minute wait is very busy'
   );
-  check(deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }) === 'very-busy', '60 demand is very busy');
+  check(
+    deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }, null, 'staff') === 'very-busy',
+    '60 demand is very busy (staff, where demand counts)'
+  );
+  check(
+    deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }, null, 'public') === 'quiet',
+    'an unrecognised or public mode never lets demand alone read busy'
+  );
   check(
     deriveTempo({ waitingCount: 4, maxWaitMinutes: 8, demandAll: 42 }, null, 'public') === 'steady',
     'public tempo ignores back-office request volume'
