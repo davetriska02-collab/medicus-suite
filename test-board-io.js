@@ -69,6 +69,34 @@ const { pathToFileURL } = require('url');
     check(threw, 'unknown profile id is rejected');
   }
 
+  {
+    const clean = io.sanitiseImported({
+      activeProfileId: 'c-abc1234',
+      publicCountsRequests: true,
+      copy: { tempoPublicSteady: '<b>Calm</b>' },
+      profiles: [
+        {
+          id: 'c-abc1234',
+          name: 'Pharmacy',
+          audience: 'public',
+          widgets: ['pressure', 'flap', 'tempo'],
+        },
+      ],
+    });
+    const pharm = clean.profiles.find((p) => p.id === 'c-abc1234');
+    check(Boolean(pharm), 'import keeps a custom public board');
+    check(pharm.audience === 'public', 'import locks a custom public board to public');
+    check(!pharm.widgets.includes('pressure'), 'import strips staff widgets from a custom public board');
+    check(pharm.name === 'Pharmacy', 'import keeps the custom board name');
+    check(clean.publicCountsRequests === true, 'import keeps the public-demand toggle');
+    const cfg = sanitiseConfig(clean);
+    check(cfg.copy.tempoPublicSteady === 'Calm', 'core strips markup from imported copy');
+    check(
+      cfg.profiles.find((p) => p.id === 'c-abc1234').name === 'Pharmacy',
+      'core keeps the custom board after import'
+    );
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => {

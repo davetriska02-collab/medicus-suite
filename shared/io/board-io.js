@@ -12,10 +12,16 @@
 
   const BOARD_KEYS = ['board.config'];
   const PROFILE_IDS = ['waiting-room', 'ops', 'message'];
+  const CUSTOM_ID = /^c-[a-z0-9]{4,16}$/;
   const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'demand', 'clock'];
   const STAFF_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity'];
   const ALL_WIDGETS = PUBLIC_WIDGETS.concat(STAFF_WIDGETS);
   const MAX_MESSAGE = 80;
+  const MAX_NAME = 32;
+
+  function isProfileId(id) {
+    return typeof id === 'string' && (PROFILE_IDS.includes(id) || CUSTOM_ID.test(id));
+  }
 
   function isPlainObject(v) {
     return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
@@ -36,12 +42,19 @@
 
   function sanitiseImported(raw) {
     if (!isPlainObject(raw)) throw new Error('board.config must be an object.');
-    const out = { version: 1 };
+    const out = { version: 2 };
     if (raw.activeProfileId !== undefined) {
-      if (typeof raw.activeProfileId !== 'string' || !PROFILE_IDS.includes(raw.activeProfileId)) {
+      if (!isProfileId(raw.activeProfileId)) {
         throw new Error('board.config.activeProfileId is not a known profile.');
       }
       out.activeProfileId = raw.activeProfileId;
+    }
+    if (raw.publicCountsRequests !== undefined) {
+      out.publicCountsRequests = raw.publicCountsRequests === true;
+    }
+    if (raw.copy !== undefined) {
+      if (!isPlainObject(raw.copy)) throw new Error('board.config.copy must be an object.');
+      out.copy = raw.copy;
     }
     if (raw.pollSeconds !== undefined) {
       const n = Number(raw.pollSeconds);
@@ -56,18 +69,20 @@
       if (!Array.isArray(raw.profiles)) throw new Error('board.config.profiles must be an array.');
       out.profiles = raw.profiles.map((p, i) => {
         if (!isPlainObject(p)) throw new Error(`board.config.profiles[${i}] must be an object.`);
-        if (p.id !== undefined && !PROFILE_IDS.includes(p.id)) {
+        if (p.id !== undefined && !isProfileId(p.id)) {
           throw new Error(`board.config.profiles[${i}].id is not a known profile.`);
         }
+        const shipped = p.id && PROFILE_IDS.includes(p.id);
         const shippedAudience = p.id === 'ops' ? 'staff' : 'public';
+        const audience = shipped ? shippedAudience : p.audience === 'staff' ? 'staff' : 'public';
         const widgets = Array.isArray(p.widgets)
           ? p.widgets.filter((w) => typeof w === 'string' && ALL_WIDGETS.includes(w))
           : undefined;
-        const locked =
-          shippedAudience === 'public' && widgets ? widgets.filter((w) => PUBLIC_WIDGETS.includes(w)) : widgets;
-        const clean = { id: p.id, audience: shippedAudience };
+        const locked = audience === 'public' && widgets ? widgets.filter((w) => PUBLIC_WIDGETS.includes(w)) : widgets;
+        const clean = { id: p.id, audience };
         if (locked) clean.widgets = locked;
         if (p.message !== undefined) clean.message = clampMessage(p.message);
+        if (p.name !== undefined) clean.name = clampMessage(p.name).slice(0, MAX_NAME);
         return clean;
       });
     }

@@ -50,6 +50,11 @@ const { pathToFileURL } = require('url');
     TEMPO_LABEL,
     PUBLIC_TEMPO_LABEL,
     tempoLabelFor,
+    sanitiseCopy,
+    fillCopy,
+    newCustomProfile,
+    isCustomProfileId,
+    DEFAULT_COPY,
     feedIsDegraded,
   } = await import(corePath);
 
@@ -104,6 +109,45 @@ const { pathToFileURL } = require('url');
     check(wr.message === 'Sit please', 'message sanitised on import');
     check(cfg.pollSeconds === 10, 'pollSeconds clamped to minimum');
     check(cfg.activeProfileId === 'ops', 'honours a known activeProfileId');
+    const named = sanitiseConfig({
+      profiles: [{ id: 'waiting-room', name: 'Front hall' }],
+    });
+    check(
+      named.profiles.find((p) => p.id === 'waiting-room').name === 'Front hall',
+      'practice can rename a shipped board'
+    );
+    const extra = sanitiseConfig({
+      profiles: [
+        {
+          id: 'c-abc1234',
+          name: 'Pharmacy',
+          audience: 'public',
+          widgets: ['pressure', 'flap', 'tempo'],
+        },
+      ],
+    });
+    const pharm = extra.profiles.find((p) => p.id === 'c-abc1234');
+    check(Boolean(pharm), 'custom public board is kept');
+    check(pharm.name === 'Pharmacy', 'custom board keeps its name');
+    check(pharm.audience === 'public', 'custom public board stays public');
+    check(!pharm.widgets.includes('pressure'), 'custom public board cannot grow staff tiles');
+    check(isCustomProfileId(newCustomProfile('staff').id), 'new staff board gets a custom id');
+    const words = sanitiseCopy({ waitUnder: 'Usually under {n} min', tempoPublicSteady: '<b>Calm</b>' });
+    check(words.waitUnder === 'Usually under {n} min', 'wait sentence keeps the {n} hole');
+    check(words.tempoPublicSteady === 'Calm', 'copy strips markup');
+    check(fillCopy(words.waitUnder, 12) === 'Usually under 12 min', 'fillCopy substitutes {n}');
+    check(
+      waitBand(2, 4, { amberWaitMin: 10, redWaitMin: 20 }, { waitUnder: 'Usually under {n} min' }).label ===
+        'Usually under 10 min',
+      'wait band uses practice wording'
+    );
+    check(DEFAULT_COPY.failTitle.length > 0, 'shipped fail copy is present');
+    const fullCopy = sanitiseCopy(null);
+    check(fullCopy.failBody === DEFAULT_COPY.failBody, 'default fail body is not clipped to the flap limit');
+    check(fullCopy.failBody.length > 80, 'fail body is allowed to be longer than a flap line');
+    const demandOn = sanitiseConfig({ publicCountsRequests: true });
+    check(demandOn.publicCountsRequests === true, 'practice can let public TVs count requests');
+    check(sanitiseConfig({}).publicCountsRequests === false, 'public TVs ignore request volume by default');
   }
   {
     const cfg = sanitiseConfig({ activeProfileId: 'not-a-profile' });
@@ -219,6 +263,8 @@ const { pathToFileURL } = require('url');
     );
     check(snap.demand.medical === 28 && snap.demand.admin === 14, 'demand totals copied');
     check(snap.tempo === 'steady', 'public demo room is steady, not busy-from-demand');
+    const demandSnap = buildSnapshot(streams, { nowMs: NOW, audience: 'public', publicCountsRequests: true });
+    check(demandSnap.tempo === 'busy', 'public tempo can count requests when the practice turns that on');
     check(snap.tempoLabel === 'Normal', 'public tempo word is Normal, not Steady');
     check(tempoLabelFor('steady', 'public') === 'Normal', 'public helper maps Steady to Normal');
     check(tempoLabelFor('steady', 'staff') === 'Steady', 'staff helper keeps Steady');
@@ -309,12 +355,12 @@ const { pathToFileURL } = require('url');
     check(!/\.appointments/.test(renderer), 'board.js does not walk waitingRoom.appointments');
     check(!/\.summary/.test(renderer), 'board.js does not read request summaries');
     check(renderer.includes('buildSnapshot'), 'board.js paints via buildSnapshot');
-    check(renderer.includes('This board is not updating'), 'public dead feed fails loud');
+    check(renderer.includes('failTitle'), 'public dead feed paints practice fail copy');
     check(!renderer.includes('Not a promise for you'), 'public tile does not lecture about promises');
     check(!renderer.includes('suite.waitingRoom.thresholds'), 'Note owns its own wait thresholds');
     check(renderer.includes('Live figures failed'), 'fail-loud chrome does not say Showing live');
-    check(renderer.includes('Weighted index'), 'pressure tile does not twin request count');
-    check(renderer.includes('A normal amount of people'), 'public Steady has a plain-language sub');
+    check(renderer.includes('pressureSub'), 'pressure tile uses practice caption');
+    check(renderer.includes('tempoSubSteady'), 'public tempo uses practice subtitle');
     check(renderer.includes('confirmStaffProfile'), 'Ops open from a public profile confirms');
     const css = fs.readFileSync(path.join(__dirname, 'board', 'board.css'), 'utf8');
     check(
@@ -325,18 +371,16 @@ const { pathToFileURL } = require('url');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
     check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
     check(companion.includes('This text goes on the staff-room board.'), 'staff flap warning names the staff room');
-    check(
-      companion.includes('Open the waiting-room board on a TV tab'),
-      'waiting-room opener names the waiting-room board'
-    );
-    check(companion.includes('Open the message board on a TV tab'), 'message opener names the message board');
-    check(companion.includes('Open the staff board on a TV tab'), 'Ops opener is not the same mindless tap');
+    check(companion.includes('Add a public board'), 'practice can add a public board');
+    check(companion.includes('Add a staff board'), 'practice can add a staff board');
+    check(companion.includes('Words on the board'), 'practice can edit the words');
     check(companion.includes('You will be asked to confirm'), 'Ops confirm is named on the companion');
     check(companion.includes('plugged into the TV'), 'companion names the computer on the TV');
-    check(companion.includes('Open Ops anyway?'), 'companion confirms before opening Ops');
+    check(companion.includes('Open it anyway?'), 'companion confirms before opening a staff board');
     check(companion.includes('When this room looks busy'), 'companion exposes wait and busy thresholds');
     check(companion.includes('data-th="amberWaitMin"'), 'practice can set the wait-band minutes');
     check(companion.includes('data-th="busyWaiting"'), 'practice can set when the room reads Busy');
+    check(companion.includes('noteModPublicDemand'), 'practice can let public TVs count requests');
   }
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

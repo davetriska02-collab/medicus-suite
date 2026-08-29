@@ -102,11 +102,16 @@ function tile(opts) {
   </article>`;
 }
 
+function boardCopy() {
+  return config.copy || {};
+}
+
 function confirmStaffProfile(id) {
-  if (id !== 'ops') return true;
-  if (profile && profile.audience === 'staff' && profile.id === 'ops') return true;
+  const next = (config.profiles || []).find((p) => p.id === id);
+  if (!next || next.audience !== 'staff') return true;
+  if (profile && profile.audience === 'staff' && profile.id === id) return true;
   return window.confirm(
-    'Ops is a staff display. It shows the triage inbox and pressure figures. Do not put this tab on the waiting-room TV.\n\nOpen Ops anyway?'
+    `${next.name} is a staff display. It shows the triage inbox and pressure figures. Do not put this tab on the waiting-room TV.\n\nOpen it anyway?`
   );
 }
 
@@ -148,10 +153,11 @@ function clockHtml(prev) {
 }
 
 function publicTempoSub(tempo) {
-  if (tempo === 'quiet') return 'Few people in this room';
-  if (tempo === 'steady') return 'A normal amount of people';
-  if (tempo === 'busy') return 'This room is busy';
-  if (tempo === 'very-busy') return 'This room is very busy';
+  const c = boardCopy();
+  if (tempo === 'quiet') return c.tempoSubQuiet || '';
+  if (tempo === 'steady') return c.tempoSubSteady || '';
+  if (tempo === 'busy') return c.tempoSubBusy || '';
+  if (tempo === 'very-busy') return c.tempoSubVery || '';
   return '';
 }
 
@@ -160,11 +166,12 @@ function widgetSet() {
 }
 
 function failLoudHtml() {
+  const c = boardCopy();
   return `<div class="note-board note-board-fail" data-profile="${esc(profile.id)}" data-audience="public">
     <div class="note-fail" role="alert">
-      <div class="note-fail-title">This board is not updating</div>
-      <div class="note-fail-ask">Please ask reception</div>
-      <p class="note-fail-body">The numbers are not available right now. Do not use this screen to judge how busy we are.</p>
+      <div class="note-fail-title">${esc(c.failTitle)}</div>
+      <div class="note-fail-ask">${esc(c.failAsk)}</div>
+      <p class="note-fail-body">${esc(c.failBody)}</p>
     </div>
     ${clockHtml(lastClock)}
   </div>`;
@@ -182,9 +189,7 @@ function render() {
   }
 
   if (s && profile.audience === 'staff' && !usingDemo && feedIsDegraded(s)) {
-    parts.push(
-      '<div class="note-fail-banner" role="alert">Live figures failed — do not trust these counts</div>'
-    );
+    parts.push(`<div class="note-fail-banner" role="alert">${esc(boardCopy().failBanner)}</div>`);
   }
 
   if (widgets.has('flap')) {
@@ -199,7 +204,7 @@ function render() {
   if (s && widgets.has('waiting')) {
     metrics.push(
       tile({
-        k: 'People waiting',
+        k: boardCopy().waitingLabel || 'People waiting',
         v: String(s.waiting.count),
         sub: esc(s.waiting.band),
         tone: s.waiting.tone,
@@ -210,11 +215,11 @@ function render() {
   if (s && widgets.has('tempo')) {
     metrics.push(
       tile({
-        k: profile.audience === 'staff' ? 'How busy we are' : 'This room',
+        k: profile.audience === 'staff' ? boardCopy().tempoLabelStaff : boardCopy().tempoLabelPublic,
         v: s.tempoLabel,
         word: true,
         tone: s.tempo,
-        sub: profile.audience === 'staff' ? esc("Includes today's requests") : esc(publicTempoSub(s.tempo)),
+        sub: profile.audience === 'staff' ? esc(boardCopy().tempoSubStaff) : esc(publicTempoSub(s.tempo)),
         dots: tempoDots(s.tempo),
       })
     );
@@ -223,7 +228,7 @@ function render() {
     const n = (s.demand.medical || 0) + (s.demand.admin || 0);
     metrics.push(
       tile({
-        k: 'Requests today',
+        k: boardCopy().demandLabel || 'Requests today',
         v: String(n),
         sub: esc(`${s.demand.medical} medical · ${s.demand.admin} admin`),
       })
@@ -232,13 +237,9 @@ function render() {
   if (s && widgets.has('pressure') && s.pressure) {
     metrics.push(
       tile({
-        k: 'Pressure index',
+        k: boardCopy().pressureLabel || 'Pressure index',
         v: s.pressure.ppi == null ? '—' : String(s.pressure.ppi),
-        sub: esc(
-          s.pressure.band
-            ? `${s.pressure.band} · Weighted index, not today's request count`
-            : "Weighted index, not today's request count"
-        ),
+        sub: esc(s.pressure.band ? `${s.pressure.band} · ${boardCopy().pressureSub}` : boardCopy().pressureSub),
         tone: s.pressure.band || '',
       })
     );
@@ -246,7 +247,7 @@ function render() {
   if (s && widgets.has('triage') && s.triage) {
     metrics.push(
       tile({
-        k: 'Triage inbox',
+        k: boardCopy().triageLabel || 'Triage inbox',
         v: s.triage.configured ? String(s.triage.total) : '—',
         sub: s.triage.configured ? esc(`${s.triage.urgent} urgent`) : 'Enable the request monitor in Settings',
       })
@@ -255,7 +256,7 @@ function render() {
   if (s && widgets.has('slots') && s.slots) {
     metrics.push(
       tile({
-        k: 'Slots remaining',
+        k: boardCopy().slotsLabel || 'Slots remaining',
         v: String(s.slots.total),
         sub: esc(`${s.slots.am} this morning · ${s.slots.pm} this afternoon`),
       })
@@ -264,7 +265,7 @@ function render() {
   if (s && widgets.has('urgent') && s.triage) {
     metrics.push(
       tile({
-        k: 'Urgent unactioned',
+        k: boardCopy().urgentLabel || 'Urgent unactioned',
         v: s.triage.configured ? String(s.triage.urgent) : '—',
         tone: s.triage.urgent > 0 ? 'busy' : 'quiet',
       })
@@ -273,7 +274,7 @@ function render() {
   if (s && widgets.has('activity') && s.activity) {
     metrics.push(
       tile({
-        k: 'Consultations today',
+        k: boardCopy().activityLabel || 'Consultations today',
         v: String(s.activity.consultations),
         sub: esc(`${s.activity.all} activity items`),
       })
@@ -285,7 +286,7 @@ function render() {
   if (widgets.has('clock')) parts.push(clockHtml(lastClock));
 
   if (!parts.length) {
-    stage.innerHTML = '<div class="note-empty">Nothing to show on this profile yet.</div>';
+    stage.innerHTML = `<div class="note-empty">${esc(boardCopy().emptyBoard)}</div>`;
   } else {
     stage.innerHTML = `<div class="note-board" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}</div>`;
   }
@@ -295,6 +296,8 @@ function render() {
 
 function paintChrome() {
   chromeProfile.textContent = profile.name;
+  const opts = (config.profiles || []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  if (profileSelect.innerHTML !== opts) profileSelect.innerHTML = opts;
   profileSelect.value = profile.id;
   document.title = `${profile.name} · Note — Medicus Suite`;
   document.body.dataset.audience = profile.audience;
@@ -363,11 +366,21 @@ async function refresh() {
     nowMs: Date.now(),
     audience: profile.audience,
     thresholds: config.thresholds,
+    copy: config.copy,
+    publicCountsRequests: config.publicCountsRequests,
     ppi,
   });
   if (forbiddenSnapshotKeys(snapshot).length) {
     console.warn('[Note] snapshot contained a forbidden key — refusing to paint it');
-    snapshot = buildSnapshot({}, { audience: profile.audience, nowMs: Date.now(), thresholds: config.thresholds });
+    snapshot = buildSnapshot(
+      {},
+      {
+        audience: profile.audience,
+        nowMs: Date.now(),
+        thresholds: config.thresholds,
+        copy: config.copy,
+      }
+    );
     snapshot.errors = ['Display refused a snapshot that was not aggregate-only'];
   }
   render();

@@ -69,9 +69,123 @@ export const PUBLIC_TEMPO_LABEL = {
   'very-busy': 'Very busy',
 };
 
-export function tempoLabelFor(tempo, audience) {
-  const map = audience === 'public' ? PUBLIC_TEMPO_LABEL : TEMPO_LABEL;
-  return map[tempo] || TEMPO_LABEL[tempo] || '';
+export const MAX_PROFILE_NAME = 32;
+export const MAX_COPY_CHARS = 160;
+export const MAX_CUSTOM_PROFILES = 6;
+export const SHIPPED_PROFILE_IDS = ['waiting-room', 'ops', 'message'];
+
+export const DEFAULT_COPY = {
+  tempoPublicQuiet: 'Quiet',
+  tempoPublicSteady: 'Normal',
+  tempoPublicBusy: 'Busy',
+  tempoPublicVery: 'Very busy',
+  tempoStaffQuiet: 'Quiet',
+  tempoStaffSteady: 'Steady',
+  tempoStaffBusy: 'Busy',
+  tempoStaffVery: 'Very busy',
+  tempoSubQuiet: 'Few people in this room',
+  tempoSubSteady: 'A normal amount of people',
+  tempoSubBusy: 'This room is busy',
+  tempoSubVery: 'This room is very busy',
+  tempoSubStaff: "Includes today's requests",
+  waitUnder: 'Most waits are under {n} minutes',
+  waitOver: 'Some waits are over {n} minutes',
+  waitEmpty: 'No one waiting',
+  waitUnknown: 'People are waiting',
+  waitingLabel: 'People waiting',
+  tempoLabelPublic: 'This room',
+  tempoLabelStaff: 'How busy we are',
+  demandLabel: 'Requests today',
+  pressureLabel: 'Pressure index',
+  pressureSub: "Weighted index, not today's request count",
+  triageLabel: 'Triage inbox',
+  slotsLabel: 'Slots remaining',
+  urgentLabel: 'Urgent unactioned',
+  activityLabel: 'Consultations today',
+  failTitle: 'This board is not updating',
+  failAsk: 'Please ask reception',
+  failBody: 'The numbers are not available right now. Do not use this screen to judge how busy we are.',
+  failBanner: 'Live figures failed. Do not trust these counts',
+  tickerRoomLead: 'This room is',
+  tickerPracticeLead: 'The practice is',
+  tickerWaitingOne: '1 person waiting',
+  tickerWaitingMany: '{n} people waiting',
+  emptyBoard: 'Nothing to show on this profile yet.',
+};
+
+const COPY_KEYS = Object.keys(DEFAULT_COPY);
+
+export function isCustomProfileId(id) {
+  return typeof id === 'string' && /^c-[a-z0-9]{4,16}$/.test(id);
+}
+
+export function isKnownProfileId(id, extraIds) {
+  if (SHIPPED_PROFILE_IDS.includes(id)) return true;
+  if (isCustomProfileId(id)) return true;
+  if (Array.isArray(extraIds) && extraIds.includes(id)) return true;
+  return false;
+}
+
+export function newCustomProfileId() {
+  return `c-${Date.now().toString(36)}`;
+}
+
+export function newCustomProfile(audience) {
+  const staff = audience === 'staff';
+  return {
+    id: newCustomProfileId(),
+    name: staff ? 'Staff board' : 'Public board',
+    audience: staff ? 'staff' : 'public',
+    widgets: staff
+      ? ['tempo', 'pressure', 'waiting', 'demand', 'triage', 'slots', 'clock']
+      : ['flap', 'tempo', 'waiting', 'ticker', 'clock'],
+    message: staff ? '' : 'Please take a seat.',
+  };
+}
+
+export function fillCopy(template, n) {
+  return String(template == null ? '' : template).replace(/\{n\}/g, String(n));
+}
+
+function stripMarkup(raw) {
+  let s = String(raw == null ? '' : raw);
+  s = s.replace(/<[^>]*>/g, '');
+  s = [...s]
+    .filter((ch) => {
+      const c = ch.charCodeAt(0);
+      return c === 10 || c === 13 || (c >= 32 && c !== 127);
+    })
+    .join('');
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+export function sanitiseCopy(raw) {
+  const r = isPlainObject(raw) ? raw : {};
+  const out = {};
+  for (const key of COPY_KEYS) {
+    const fallback = DEFAULT_COPY[key];
+    let next = stripMarkup(r[key] != null ? r[key] : fallback);
+    if (!next) next = fallback;
+    if (next.length > MAX_COPY_CHARS) next = next.slice(0, MAX_COPY_CHARS).trim() || fallback;
+    out[key] = next;
+  }
+  return out;
+}
+
+export function tempoLabelFor(tempo, audience, copy) {
+  const c = copy ? sanitiseCopy(copy) : DEFAULT_COPY;
+  if (audience === 'public') {
+    if (tempo === 'quiet') return c.tempoPublicQuiet;
+    if (tempo === 'steady') return c.tempoPublicSteady;
+    if (tempo === 'busy') return c.tempoPublicBusy;
+    if (tempo === 'very-busy') return c.tempoPublicVery;
+  } else {
+    if (tempo === 'quiet') return c.tempoStaffQuiet;
+    if (tempo === 'steady') return c.tempoStaffSteady;
+    if (tempo === 'busy') return c.tempoStaffBusy;
+    if (tempo === 'very-busy') return c.tempoStaffVery;
+  }
+  return TEMPO_LABEL[tempo] || '';
 }
 
 // Defaults match the waiting-room strip (amber 10 / red 20 minutes) and the
@@ -111,14 +225,16 @@ export const DEFAULT_PROFILES = [
 ];
 
 export const DEFAULT_CONFIG = {
-  version: 1,
+  version: 2,
   activeProfileId: 'waiting-room',
   pollSeconds: DEFAULT_POLL_SECONDS,
   thresholds: { ...DEFAULT_THRESHOLDS },
+  copy: { ...DEFAULT_COPY },
+  publicCountsRequests: false,
   profiles: DEFAULT_PROFILES.map((p) => ({ ...p, widgets: [...p.widgets] })),
 };
 
-const PROFILE_IDS = new Set(DEFAULT_PROFILES.map((p) => p.id));
+const PROFILE_IDS = new Set(SHIPPED_PROFILE_IDS);
 const WIDGET_SET = new Set(ALL_WIDGETS);
 
 function isPlainObject(v) {
@@ -134,15 +250,7 @@ function clampInt(n, lo, hi, fallback) {
 // Practice-authored flap text. Strips markup and control characters so a
 // crafted backup cannot smuggle HTML onto a waiting-room TV.
 export function sanitiseMessage(raw) {
-  let s = String(raw == null ? '' : raw);
-  s = s.replace(/<[^>]*>/g, '');
-  s = [...s]
-    .filter((ch) => {
-      const c = ch.charCodeAt(0);
-      return c === 10 || c === 13 || (c >= 32 && c !== 127);
-    })
-    .join('');
-  s = s.replace(/\s+/g, ' ').trim();
+  let s = stripMarkup(raw);
   if (s.length > MAX_MESSAGE_CHARS) s = s.slice(0, MAX_MESSAGE_CHARS).trim();
   return s;
 }
@@ -201,43 +309,68 @@ export function widgetsForProfile(profile) {
   return out;
 }
 
+function sanitiseName(raw, fallback) {
+  const s = sanitiseMessage(raw);
+  if (!s) return fallback;
+  return s.length > MAX_PROFILE_NAME ? s.slice(0, MAX_PROFILE_NAME).trim() : s;
+}
+
 function sanitiseProfile(raw, fallback) {
   const fb = fallback || DEFAULT_PROFILES[0];
   const r = isPlainObject(raw) ? raw : {};
-  const id = typeof r.id === 'string' && PROFILE_IDS.has(r.id) ? r.id : fb.id;
-  const shipped = DEFAULT_PROFILES.find((p) => p.id === id) || fb;
-  // Audience is owned by the shipped profile id — a backup cannot flip
-  // waiting-room to staff (or ops to public) and thereby change the PII rule.
-  const lockedAudience = shipped.audience;
+  const shipped = typeof r.id === 'string' ? DEFAULT_PROFILES.find((p) => p.id === r.id) : null;
+  const custom = typeof r.id === 'string' && isCustomProfileId(r.id);
+  const id = shipped ? shipped.id : custom ? r.id : fb.id;
+  // Shipped ids lock audience. Custom boards pick public or staff once,
+  // then keep it — flipping waiting-room to staff is still impossible.
+  const lockedAudience = shipped ? shipped.audience : r.audience === 'staff' ? 'staff' : 'public';
+  const nameFallback = shipped ? shipped.name : fb.name;
+  const widgetFallback = shipped ? shipped.widgets : fb.widgets;
+  const messageFallback = shipped ? shipped.message : fb.message;
   return {
     id,
-    name: shipped.name,
+    name: sanitiseName(r.name != null ? r.name : nameFallback, nameFallback),
     audience: lockedAudience,
-    widgets: sanitiseWidgets(r.widgets || shipped.widgets, lockedAudience),
-    message: sanitiseMessage(r.message != null ? r.message : shipped.message),
+    widgets: sanitiseWidgets(r.widgets || widgetFallback, lockedAudience),
+    message: sanitiseMessage(r.message != null ? r.message : messageFallback),
   };
 }
 
 export function sanitiseConfig(raw) {
   const r = isPlainObject(raw) ? raw : {};
+  const incoming = Array.isArray(r.profiles) ? r.profiles : [];
   const profiles = DEFAULT_PROFILES.map((shipped) => {
-    const incoming = Array.isArray(r.profiles) ? r.profiles.find((p) => p && p.id === shipped.id) : null;
-    return sanitiseProfile(incoming || shipped, shipped);
+    const found = incoming.find((p) => p && p.id === shipped.id);
+    return sanitiseProfile(found || shipped, shipped);
   });
+  const extras = incoming
+    .filter((p) => p && isCustomProfileId(p.id))
+    .slice(0, MAX_CUSTOM_PROFILES)
+    .map((p) => sanitiseProfile(p, newCustomProfile(p.audience)));
+  const seen = new Set(profiles.map((p) => p.id));
+  for (const extra of extras) {
+    if (seen.has(extra.id)) continue;
+    seen.add(extra.id);
+    profiles.push(extra);
+  }
+  const known = new Set(profiles.map((p) => p.id));
   let activeProfileId = typeof r.activeProfileId === 'string' ? r.activeProfileId : DEFAULT_CONFIG.activeProfileId;
-  if (!PROFILE_IDS.has(activeProfileId)) activeProfileId = DEFAULT_CONFIG.activeProfileId;
+  if (!known.has(activeProfileId)) activeProfileId = DEFAULT_CONFIG.activeProfileId;
   return {
-    version: 1,
+    version: 2,
     activeProfileId,
     pollSeconds: clampInt(r.pollSeconds, MIN_POLL_SECONDS, MAX_POLL_SECONDS, DEFAULT_POLL_SECONDS),
     thresholds: sanitiseThresholds(r.thresholds),
+    copy: sanitiseCopy(r.copy),
+    publicCountsRequests: r.publicCountsRequests === true,
     profiles,
   };
 }
 
 export function resolveProfile(config, requestedId) {
   const cfg = sanitiseConfig(config);
-  const id = typeof requestedId === 'string' && PROFILE_IDS.has(requestedId) ? requestedId : cfg.activeProfileId;
+  const known = new Set(cfg.profiles.map((p) => p.id));
+  const id = typeof requestedId === 'string' && known.has(requestedId) ? requestedId : cfg.activeProfileId;
   return cfg.profiles.find((p) => p.id === id) || cfg.profiles[0];
 }
 
@@ -250,20 +383,21 @@ export function waitMinutes(startDateTime, nowMs) {
   return m > 0 ? m : 0;
 }
 
-export function waitBand(count, maxWaitMinutes, thresholds) {
+export function waitBand(count, maxWaitMinutes, thresholds, copy) {
   const t = sanitiseThresholds(thresholds);
+  const c = sanitiseCopy(copy);
   const n = Number(count) || 0;
-  if (n <= 0) return { label: 'No one waiting', tone: 'quiet', maxWaitMinutes: null };
+  if (n <= 0) return { label: c.waitEmpty, tone: 'quiet', maxWaitMinutes: null };
   if (maxWaitMinutes == null || !Number.isFinite(maxWaitMinutes)) {
-    return { label: 'People are waiting', tone: 'steady', maxWaitMinutes: null };
+    return { label: c.waitUnknown, tone: 'steady', maxWaitMinutes: null };
   }
   if (maxWaitMinutes < t.amberWaitMin) {
-    return { label: `Most waits are under ${t.amberWaitMin} minutes`, tone: 'quiet', maxWaitMinutes };
+    return { label: fillCopy(c.waitUnder, t.amberWaitMin), tone: 'quiet', maxWaitMinutes };
   }
   if (maxWaitMinutes < t.redWaitMin) {
-    return { label: `Most waits are under ${t.redWaitMin} minutes`, tone: 'steady', maxWaitMinutes };
+    return { label: fillCopy(c.waitUnder, t.redWaitMin), tone: 'steady', maxWaitMinutes };
   }
-  return { label: `Some waits are over ${t.redWaitMin} minutes`, tone: 'busy', maxWaitMinutes };
+  return { label: fillCopy(c.waitOver, t.redWaitMin), tone: 'busy', maxWaitMinutes };
 }
 
 export function deriveTempo({ waitingCount, maxWaitMinutes, demandAll }, thresholds, mode) {
@@ -271,9 +405,9 @@ export function deriveTempo({ waitingCount, maxWaitMinutes, demandAll }, thresho
   const waiting = Number(waitingCount) || 0;
   const demand = Number(demandAll) || 0;
   const wait = Number.isFinite(maxWaitMinutes) ? maxWaitMinutes : 0;
-  // Public TVs answer "how does the room feel?" — today's request pile is
-  // back-office work and must not paint BUSY over an empty waiting room.
-  const useDemand = mode !== 'public';
+  // Public TVs answer "how does the room feel?" unless the practice
+  // explicitly turns on publicCountsRequests.
+  const useDemand = mode !== 'public' || mode === 'public-demand';
   if (waiting >= t.veryBusyWaiting || wait >= t.redWaitMin || (useDemand && demand >= t.veryBusyDemand)) {
     return 'very-busy';
   }
@@ -351,13 +485,14 @@ export function feedIsDegraded(snapshot) {
   return Boolean(snapshot && Array.isArray(snapshot.errors) && snapshot.errors.length);
 }
 
-export function buildTickerLines(snapshot) {
+export function buildTickerLines(snapshot, copy) {
   const s = snapshot || {};
+  const c = sanitiseCopy(copy);
   const lines = [];
   const waiting = s.waiting && s.waiting.count;
   if (Number.isFinite(waiting)) {
-    if (waiting <= 0) lines.push('No one waiting');
-    else lines.push(waiting === 1 ? '1 person waiting' : `${waiting} people waiting`);
+    if (waiting <= 0) lines.push(c.waitEmpty);
+    else lines.push(waiting === 1 ? c.tickerWaitingOne : fillCopy(c.tickerWaitingMany, waiting));
   }
   // Public ticker must not loop the wait-band minutes — those live
   // on the People waiting tile, which the practice can switch off.
@@ -365,8 +500,8 @@ export function buildTickerLines(snapshot) {
     lines.push(s.waiting.band);
   }
   if (s.tempo && TEMPO_LABEL[s.tempo]) {
-    const lead = s.audience === 'staff' ? 'The practice is' : 'This room is';
-    lines.push(`${lead} ${tempoLabelFor(s.tempo, s.audience).toLowerCase()}`);
+    const lead = s.audience === 'staff' ? c.tickerPracticeLead : c.tickerRoomLead;
+    lines.push(`${lead} ${tempoLabelFor(s.tempo, s.audience, c).toLowerCase()}`);
   }
   // Public TVs must not announce back-office request volume — patients
   // read "28 medical requests" as people ahead of them.
@@ -394,7 +529,9 @@ export function buildSnapshot(streams, opts) {
   const o = opts && typeof opts === 'object' ? opts : {};
   const nowMs = Number.isFinite(o.nowMs) ? o.nowMs : Date.now();
   const thresholds = sanitiseThresholds(o.thresholds);
+  const copy = sanitiseCopy(o.copy);
   const audience = o.audience === 'staff' ? 'staff' : 'public';
+  const tempoMode = audience === 'public' && o.publicCountsRequests === true ? 'public-demand' : audience;
   const d = streams && typeof streams === 'object' ? streams : {};
 
   const wr = arrivedWaitStats(d.waitingRoom, nowMs);
@@ -410,9 +547,9 @@ export function buildSnapshot(streams, opts) {
   const tempo = deriveTempo(
     { waitingCount: wr.count, maxWaitMinutes: wr.maxWaitMinutes, demandAll: demand.medical + demand.admin },
     thresholds,
-    audience
+    tempoMode
   );
-  const band = waitBand(wr.count, wr.maxWaitMinutes, thresholds);
+  const band = waitBand(wr.count, wr.maxWaitMinutes, thresholds, copy);
 
   const rm = d.requestMonitor && !d.requestMonitor.unavailable ? d.requestMonitor : null;
   const slotsIn = d.slots || {};
@@ -422,7 +559,7 @@ export function buildSnapshot(streams, opts) {
   const snapshot = {
     audience,
     tempo,
-    tempoLabel: tempoLabelFor(tempo, audience),
+    tempoLabel: tempoLabelFor(tempo, audience, copy),
     waiting: {
       count: wr.count,
       band: band.label,
@@ -467,7 +604,7 @@ export function buildSnapshot(streams, opts) {
     };
   }
 
-  snapshot.ticker = buildTickerLines(snapshot);
+  snapshot.ticker = buildTickerLines(snapshot, copy);
   return snapshot;
 }
 

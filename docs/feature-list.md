@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.250.0
+**Version:** v3.251.0
 **Generated:** 2026-08-29 (automated)
 
 ## What it is
@@ -133,11 +133,12 @@ The compact, glanceable half of the Rota Manager, available in the panel and pop
 The full **Rota Manager** (separate browser tab) additionally covers working-pattern templates, session-accounted leave, Bradford-factor/fit-note flags, a cover worklist and shift swaps, duty fairness, demand-led planning, and a drag-and-drop scheduling grid with an annealing solver. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, never block, and every threshold is a practice setting.
 
 ### Note
-Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Pick a profile, edit the flap message, toggle widgets, set when the room looks busy, and open the kiosk.
-- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), how-busy from occupancy only. The practice sets the wait-band minutes and the Busy / Very busy counts. Does not show medical/admin request counts. A dead feed fails loud rather than painting a quiet empty room.
+Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Add or rename boards, edit the flap message, toggle widgets, set the words and when the room looks busy, and open the kiosk.
+- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), how-busy from occupancy only by default. The practice sets the wait-band minutes, the Busy / Very busy counts, and every sentence on the board. Does not show medical/admin request counts. A dead feed fails loud rather than painting a quiet empty room.
 - **Ops overview** (staff) — the same aggregates plus Practice Pressure Index, triage inbox and slots remaining
 - **Message** (public) — flap text and clock
-- Public profiles never show patient names, initials or request wording
+- Extra public or staff boards (up to six) with their own names, tiles and flap text
+- Public profiles, including custom ones, never show patient names, initials or request wording
 
 ## In-page features (content scripts)
 
@@ -164,7 +165,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 - **Practice Report** — a printable snapshot built from Condor's pressure-index history.
 - **CQC Inspection Readiness** — a printable inspection-preparation summary.
-- **Note** — a TV/monitor kiosk (waiting room, staff ops, or message). Public profiles show aggregates and a practice-authored message only — never patient names.
+- **Note** — a TV/monitor kiosk (waiting room, staff ops, message, or a practice-made board). Public profiles show aggregates and practice-authored words only — never patient names.
 
 ## Alert engine
 

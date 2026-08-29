@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.251.0] — 2026-08-29
+
+### Note — custom boards, names and words
+
+The practice owns the boards, not just the busy numbers.
+
+- Add up to six extra public or staff boards, rename any board
+  including the three shipped ones, and remove a custom board
+- Edit every sentence the TV prints (tempo words, wait-band
+  templates with `{n}`, tile labels, fail-loud, ticker leads)
+- Optional: public TVs can count today's requests when judging
+  busy. Off by default, so a quiet waiting room still does not
+  read Busy because of inbox backlog
+
+Still locked (H-067): no names, initials or request wording on a
+public TV; no "show names" flag; staff-only tiles stay off public
+boards including custom ones; shipped profile ids still lock
+audience; wait time stays a band, never a named wait in minutes;
+a dead public feed still fails loud (the words can change, the
+behaviour cannot).
+
+Does not move `last_cso_review_version`. Hazard-log product pin
+stays at 3.202.0.
+
 ## [v3.250.0] — 2026-08-29
 
 ### Note — practice-owned busy and wait settings

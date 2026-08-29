@@ -253,3 +253,34 @@
   background: var(--amber-dim);
   border-color: var(--amber-line);
 }
+
+.note-mod-line {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.note-mod-line input {
+  width: 100%;
+  background: var(--bg-mid);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 7px;
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.note-mod-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.note-mod-btn-remove {
+  margin-top: 8px;
+}
