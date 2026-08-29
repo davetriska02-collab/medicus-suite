@@ -14,6 +14,7 @@
 | `options/` | Settings page |
 | `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
 | `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab) |
+| `board.html` / `board/` | Note — TV/monitor display board. `board/board-core.js` is pure (no DOM/`chrome.*`). Companion module is `side-panel/modules/board/`. Public profiles must never paint patient names (H-067) |
 
 ## Adding a new side-panel module
 

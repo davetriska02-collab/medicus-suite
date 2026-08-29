@@ -73,7 +73,7 @@ export default [
     // cqc-render.js — the CQC readiness renderer (root ES module, like report-render).
     // (engine/cqc-evidence.js is a classic dual-export IIFE like rule-currency.js, so it
     //  stays on the default 'script' config — not listed here.)
-    files: ['practice-report.js', 'cqc-readiness.js', 'cqc-render.js'],
+    files: ['practice-report.js', 'cqc-readiness.js', 'cqc-render.js', 'board/**/*.js'],
     languageOptions: { sourceType: 'module' },
   },
   {

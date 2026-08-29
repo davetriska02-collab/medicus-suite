@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.249.0] — 2026-08-29
+## [v3.250.0] — 2026-08-29
 
 ### Drug-monitoring and QOF-indicator monitoring fixes
 
@@ -33,7 +33,13 @@ registers (SMOK002, CHOL003, CHOL004, CD001, CD002) could show once per qualifyi
 register even though the check/points/threshold are identical — both now merge to a
 single card, the latter listing every register that triggered it.
 
-## [v3.248.0] — 2026-08-28
+Review fixes before merge: VTM regimen dedup now keeps the earliest parseable
+startDate alongside the longer display name (keeping the name alone was
+re-breaking post-initiation U&E); Signing and Sweep treat `medicationHistory`
+as best-effort, same as `clinicalSummary`, so a failed prescribing-history
+fetch no longer aborts the whole patient read.
+
+## [v3.249.0] — 2026-08-29
 
 ### QOF monitoring rework — disease-register-driven matching, July 2026 rule refresh, fewer false positives
 
@@ -68,6 +74,36 @@ QOF-code framing is gone.
 Tweaked the Companion app's QOF glance text so AST014/AST015 and DM006/DM020/DM036 no
 longer show identical generic text ("Asthma review" / "Diabetes review") for
 different required actions, without leaking into reception's booking wording.
+
+Review fix before merge: register-level `ageMin`/`ageMax` (NDH and obesity are
+18+) is now enforced at evaluate time. The field was previously JSON-only, so a
+16-year-old still raised those chips. Fail-open when age is unknown, same as
+every other age filter.
+
+## [v3.248.0] — 2026-08-29
+
+### Note — a software display board for TVs and monitors
+
+A Vestaboard-style board you can put on a waiting-room TV or a staff-room
+monitor, fed by the same live hooks Condor and the demand strips already
+use (waiting room, today’s requests, triage inbox, slots, activity).
+
+Three profiles:
+
+- **Waiting room** (public) — tempo (quiet / steady / busy / very busy),
+  people waiting as a count, wait time as a band (“typical wait under
+  10 minutes”), and a request ticker. Never names, initials, or request
+  wording. See **H-067**.
+- **Ops overview** (staff) — the same aggregates plus practice pressure,
+  triage inbox, slots remaining, urgent unactioned.
+- **Message** — split-flap text only, plus a clock.
+
+Configure the flap message and widgets from the new **Note** tab, then
+open the board on the TV and press F for fullscreen. `?demo=1` shows
+canned figures so you can preview without a Medicus session.
+
+Clinical Safety Notice and feature list re-pinned to 3.248.0 (limitation
+49 / H-067). Does not move `last_cso_review_version`.
 
 ## [v3.247.0] — 2026-08-27
 

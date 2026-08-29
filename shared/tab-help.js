@@ -120,6 +120,11 @@ export const TAB_HELP = {
     what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
     firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
   },
+  board: {
+    title: 'Note',
+    what: 'A configurable display board for a waiting-room TV or a staff-room monitor. Public profiles show only counts, wait bands and the message you type — never patient names.',
+    firstStep: 'Pick Waiting room or Ops, type the flap message if you want one, then open the board on the screen that faces the room and press F for fullscreen.',
+  },
   'rota-app': {
     title: 'Rota manager',
     what: 'Opens the full rota application in a new browser tab: working patterns, leave (April–March, session-accounted), registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.',

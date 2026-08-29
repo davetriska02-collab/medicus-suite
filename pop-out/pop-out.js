@@ -84,6 +84,10 @@ const MODULES = {
     js: () => import('../side-panel/modules/rota/rota.js'),
     css: '../side-panel/modules/rota/rota.css',
   },
+  board: {
+    js: () => import('../side-panel/modules/board/board.js'),
+    css: '../side-panel/modules/board/board.css',
+  },
 };
 
 // ── Per-tab help registry ──────────────────────────────────────────────────────

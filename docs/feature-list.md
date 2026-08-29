@@ -1,19 +1,19 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.249.0
+**Version:** v3.250.0
 **Generated:** 2026-08-29 (automated)
 
 ## What it is
 
-Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 19 tabs, a handful of full-tab tools, and a set of small additions layered onto Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks and reminds, never diagnoses, never recommends treatment, and runs no AI-based interpretation of patient data. A short, explicitly listed set of actions can write back to Medicus (booking, task creation, document filing, problem-list tidying and a few others), and each one requires the user to review and confirm before anything happens.
+Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 20 tabs, a handful of full-tab tools, and a set of small additions layered onto Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks and reminds, never diagnoses, never recommends treatment, and runs no AI-based interpretation of patient data. A short, explicitly listed set of actions can write back to Medicus (booking, task creation, document filing, problem-list tidying and a few others), and each one requires the user to review and confirm before anything happens.
 
 ## At a glance
 
-- 19 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, staff rota and reference material
-- 5 full-tab tools reached from the panel or from Medicus's own pages (Patient Record Visualiser, Duplicate Problem Checker, Rota Manager, Contacts Management, Practice Report / CQC Inspection Readiness)
+- 20 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, staff rota, the Note display board and reference material
+- 6 full-tab tools reached from the panel or from Medicus's own pages (Patient Record Visualiser, Duplicate Problem Checker, Rota Manager, Contacts Management, Practice Report / CQC Inspection Readiness, Note display board)
 - around 14 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools)
 - 8 rule types in the clinical alert engine
-- 32 built-in drug-monitoring rules (31 enabled), 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result threshold rules, and 37 starter alerts in the practice alert library (34 prescribing safety, 3 clinical review)
+- 32 built-in drug-monitoring rules (31 enabled), 81 QOF rules (15 register + 66 indicator), 5 vaccine rules, 44 investigation-result threshold rules, and 37 starter alerts in the practice alert library (34 prescribing safety, 3 clinical review)
 
 ## Side-panel modules
 
@@ -132,6 +132,13 @@ The compact, glanceable half of the Rota Manager, available in the panel and pop
 
 The full **Rota Manager** (separate browser tab) additionally covers working-pattern templates, session-accounted leave, Bradford-factor/fit-note flags, a cover worklist and shift swaps, duty fairness, demand-led planning, and a drag-and-drop scheduling grid with an annealing solver. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, never block, and every threshold is a practice setting.
 
+### Note
+Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Pick a profile, edit the flap message, toggle widgets, and open the kiosk.
+- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), tempo from occupancy only, medical/admin request counts
+- **Ops overview** (staff) — the same aggregates plus Practice Pressure Index, triage inbox and slots remaining
+- **Message** (public) — flap text and clock
+- Public profiles never show patient names, initials or request wording
+
 ## In-page features (content scripts)
 
 These run directly on live Medicus pages, on top of Medicus's own UI:
@@ -157,6 +164,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 - **Practice Report** — a printable snapshot built from Condor's pressure-index history.
 - **CQC Inspection Readiness** — a printable inspection-preparation summary.
+- **Note** — a TV/monitor kiosk (waiting room, staff ops, or message). Public profiles show aggregates and a practice-authored message only — never patient names.
 
 ## Alert engine
 
@@ -171,7 +179,7 @@ The Monitoring tab and Sweep both run patient data through the same rules engine
 - **Vaccine** — eligibility and due/given/declined status against seasonal or one-off schedules
 - **Composite** — combines the results of several other rules into one higher-level flag
 
-The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled), 74 QOF rules, 5 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
+The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled), 81 QOF rules, 5 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
 
 ## Settings & customisation
 
