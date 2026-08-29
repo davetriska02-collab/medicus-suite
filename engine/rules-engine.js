@@ -214,16 +214,19 @@
   }
 
   // === OBSERVATION LOOKUP ===
-  function findLatestObservation(observations, testSpec) {
-    if (!Array.isArray(observations)) return null;
-    // Optional exclude terms (audit H4, 2026-07-18): bare analyte substrings
-    // also match the wrong specimen — "potassium" matched "Urine potassium",
-    // whose latest date then WON the headline and fired a red hyperkalaemia
-    // alert off a urine value. Text matches are rejected when the observation
-    // name contains any exclude term; exact-SNOMED matches bypass excludes
-    // (a code is specimen-specific already).
+  // Shared match predicate for both findLatestObservation and the post-initiation
+  // "all qualifying results" lookup — kept in one place so the two never drift.
+  //
+  // Optional exclude terms (audit H4, 2026-07-18): bare analyte substrings
+  // also match the wrong specimen — "potassium" matched "Urine potassium",
+  // whose latest date then WON the headline and fired a red hyperkalaemia
+  // alert off a urine value. Text matches are rejected when the observation
+  // name contains any exclude term; exact-SNOMED matches bypass excludes
+  // (a code is specimen-specific already).
+  function filterMatchingObservations(observations, testSpec) {
+    if (!Array.isArray(observations)) return [];
     const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
-    const matches = observations.filter((obs) => {
+    return observations.filter((obs) => {
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
@@ -233,6 +236,58 @@
       }
       return false;
     });
+  }
+
+  // data.observations carries only the LATEST result per investigation type
+  // (normaliseObservations picks dataKeys[dataKeys.length-1] — one row per
+  // type). Anything that needs the FULL multi-year point series for a test —
+  // e.g. finding the EARLIEST qualifying result since a drug's start date,
+  // not just the latest ever — must read data.observationHistory instead
+  // (normaliseObservationHistory captures every non-empty dataYYYYMMDD cell).
+  //
+  // A test like "U&E" never appears as a literal investigationType on the raw
+  // API — it's split into Sodium/Potassium/Urea/Creatinine rows, each sharing
+  // one investigationGroup ("U&Es (Urea and electrolytes)") — confirmed via a
+  // real HAR. data.observations papers over this with a synthetic per-group
+  // aggregate row (normaliseMedications... normaliseObservations, "Emit
+  // synthetic per-group observations"), but normaliseObservationHistory's own
+  // comment says group aggregates are "intentionally NOT included" there — so
+  // matching only on `group.name` (as data.observations effectively does)
+  // finds nothing here; it must also check `group.group`. Because all of
+  // Sodium/Potassium/Urea/Creatinine share that one group and (per the HAR)
+  // the exact same result dates, matching via the group field returns the
+  // same date set several times over — de-duplicated by date below so a
+  // 4-analyte panel doesn't read as "repeated 4x" for one real result.
+  // observationHistory groups never carry a `code` (normaliser hardcodes it
+  // null), so matching here is text-only against testSpec.match — the same
+  // limitation already accepted everywhere else observationHistory is used.
+  function filterMatchingObservationHistoryPoints(observationHistory, testSpec) {
+    if (!Array.isArray(observationHistory) || !Array.isArray(testSpec.match)) return [];
+    const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
+    const seenDates = new Set();
+    const points = [];
+    observationHistory.forEach((group) => {
+      if (!group) return;
+      const nameLower = String(group.name || '').toLowerCase();
+      const groupLower = String(group.group || '').toLowerCase();
+      const matches = testSpec.match.some((m) => {
+        const term = String(m).toLowerCase();
+        return nameLower.includes(term) || groupLower.includes(term);
+      });
+      if (!matches) return;
+      if (excludeTerms && excludeTerms.some((e) => nameLower.includes(e) || groupLower.includes(e))) return;
+      (group.history || []).forEach((h) => {
+        if (h && h.date && !seenDates.has(h.date)) {
+          seenDates.add(h.date);
+          points.push({ name: group.name, date: h.date, value: h.rawValue });
+        }
+      });
+    });
+    return points;
+  }
+
+  function findLatestObservation(observations, testSpec) {
+    const matches = filterMatchingObservations(observations, testSpec);
     if (matches.length === 0) return null;
     // Priority = index of the first match term the observation name contains.
     // Used only as a tiebreak when two observations share the same (latest) date,
@@ -965,6 +1020,36 @@
       if (traceEntry) traceEntry.skipReason = 'no-drug-match';
       return [];
     }
+    // De-duplicate by underlying drug (vtmProductName) — the SAME live
+    // prescription can legitimately appear as more than one regimen record
+    // (docs/learnings-medication-regimen-duplicates.md: a superseded
+    // mid-course reauthorisation row that hasn't dropped off Medicus's own
+    // "current" bucket yet is real data, not a reimport artifact — nothing
+    // to delete). Left undeduplicated, that shows as two full monitoring
+    // cards for one drug (e.g. "Leflunomide 20mg tablets" AND a bare
+    // "Leflunomide" from the same superseded record's fallback name) even
+    // though the tests/intervals being checked are patient-level, not
+    // specific to whichever authorisation row backs them — one card is
+    // correct, not two. Only merges when vtmProductName is present on both
+    // sides; entries without it are left alone rather than risk collapsing
+    // two genuinely different drugs on a name-substring guess. Keeps the
+    // more detailed (longer) name of the group for display.
+    if (matchedMeds.length > 1) {
+      const byVtm = new Map();
+      const noVtm = [];
+      matchedMeds.forEach((m) => {
+        const key = m.vtm ? normaliseDrugString(m.vtm) : null;
+        if (!key) {
+          noVtm.push(m);
+          return;
+        }
+        const existing = byVtm.get(key);
+        if (!existing || String(m.name || '').length > String(existing.name || '').length) {
+          byVtm.set(key, m);
+        }
+      });
+      matchedMeds = [...byVtm.values(), ...noVtm];
+    }
     // Trace entry was created for the rule; for multi-med rules we emit one entry per med.
     // The base entry already pushed above becomes the first med's entry (or we create extras).
     return matchedMeds.map((med, idx) => {
@@ -973,7 +1058,43 @@
         // Post-initiation requirement (fires if missing after the drug was
         // started) — evaluated against med.startDate, not the rolling interval.
         if (test.postInitiationDays != null) {
-          return evalPostInitiationTest(test, obs, med.startDate, now);
+          const result = evalPostInitiationTest(test, obs, med.startDate, now);
+          // Diagnostic-only annotation for the evidence/"why" text — does NOT
+          // feed evalPostInitiationTest's own status decision (that stays the
+          // single latest-qualifying-observation check above). Surfaces the
+          // start date actually read, plus the EARLIEST qualifying result on
+          // or after it, so a clinician can see exactly what the engine used
+          // instead of having to trust an opaque status.
+          result.startDate = med.startDate || null;
+          if (med.startDate) {
+            // Prefer the full multi-year point series (data.observationHistory)
+            // over the latest-only data.observations — a drug started years ago
+            // can have several qualifying results since, and data.observations
+            // would only ever surface the single most recent one, making an
+            // earlier (or ANY earlier) qualifying result invisible to this count.
+            // Falls back to data.observations only when no matching history
+            // group exists at all (e.g. DOM-fallback extraction, which doesn't
+            // populate observationHistory).
+            const historyPoints = filterMatchingObservationHistoryPoints(data.observationHistory, test);
+            const sinceStartSource = historyPoints.length
+              ? historyPoints
+              : filterMatchingObservations(data.observations, test);
+            const sinceStart = sinceStartSource
+              .filter((o) => o && o.date && (daysBetween(med.startDate, o.date) ?? -1) >= 0)
+              .sort((a, b) => a.date.localeCompare(b.date));
+            result.sinceStartCount = sinceStart.length;
+            result.firstSinceStartDate = sinceStart.length ? sinceStart[0].date : null;
+            if (sinceStart.length) {
+              const daysToFirst = daysBetween(med.startDate, sinceStart[0].date);
+              const overdueAt = test.postInitiationDays || 21;
+              const dueSoonAt =
+                test.postInitiationDueSoonDays != null ? test.postInitiationDueSoonDays : Math.max(0, overdueAt - 7);
+              result.metWindow = daysToFirst != null && daysToFirst <= dueSoonAt;
+            } else {
+              result.metWindow = false;
+            }
+          }
+          return result;
         }
         if (!obs || !obs.date) {
           return { ...test, status: 'no_data', latestObs: null, days: null };
@@ -1080,6 +1201,23 @@
           te.chipRef = rule.id + '|' + med.name;
           te.drugMatch = { medName: med.name, matchedTerm: detail.matchedTerm, excludedBy: null };
           te.arithmetic = testEvaluations.slice(0, 15).map((tv) => {
+            // Post-initiation tests have no recall interval/due-date — the generic
+            // arithmetic below would produce a meaningless "interval 365d → due
+            // ..." line. Carry the diagnostic fields computed above instead.
+            if (tv.postInitiation) {
+              return {
+                test: tv.testName || tv.name || '',
+                postInitiation: true,
+                startDate: tv.startDate || null,
+                firstSinceStartDate: tv.firstSinceStartDate || null,
+                sinceStartCount: tv.sinceStartCount || 0,
+                metWindow: !!tv.metWindow,
+                postInitiationDays: tv.postInitiationDays,
+                postInitiationDueSoonDays: tv.postInitiationDueSoonDays,
+                daysSinceStart: tv.days,
+                status: tv.status,
+              };
+            }
             const lastDate = tv.latestObs ? tv.latestObs.date : null;
             // tv.intervalDays is the EFFECTIVE (post-banding) interval; due date is
             // computed off it so a banded shortening shows in the audited due date.
@@ -2479,8 +2617,10 @@
       if (rule.id) evaluatedById.set(rule.id, out);
     });
 
+    const mergedChips = mergeMultiRegisterQofIndicatorChips(chips, registerLookup);
+
     // Sort: worst status first; then by type to keep drug-monitoring grouped
-    chips.sort((a, b) => {
+    mergedChips.sort((a, b) => {
       const sa = STATUS_RANK[a.status] ?? 99;
       const sb = STATUS_RANK[b.status] ?? 99;
       if (sa !== sb) return sa - sb;
@@ -2488,10 +2628,68 @@
     });
 
     if (options.trace) {
-      const envelope = buildTraceEnvelope(trace, data, now, { ...options, _chips: chips });
-      return { chips, trace: envelope };
+      const envelope = buildTraceEnvelope(trace, data, now, { ...options, _chips: mergedChips });
+      return { chips: mergedChips, trace: envelope };
     }
-    return chips;
+    return mergedChips;
+  }
+
+  // Merges same-indicatorCode qof-indicator chips that fired for the SAME
+  // patient via more than one register — e.g. SMOK002 fires once per
+  // applicable register (CHD/PAD/STIA/HYP/DM/COPD/CKD/ASTHMA/SMI) because the
+  // engine's per-rule register gate can't express "any of these registers" in
+  // one rule object, so qof-rules.json models it as N separate rule objects
+  // sharing one indicatorCode. The ruleset's own notes on CD001/CHOL003/
+  // CHOL004/SMOK002 already flag this: "known cosmetic limitation... do not
+  // double-count if patient sees multiple chips" — that risk was never
+  // resolved, just documented. Points/thresholds/check are identical across
+  // every register-variant of a given code (verified against the ruleset), so
+  // a patient qualifying via several registers gets the exact SAME status
+  // from each variant — N near-identical cards is noise, not N distinct
+  // requirements, and summing `points` across them would overcount the
+  // indicator's real allocation.
+  // Only merges entries whose computed STATUS also matches (defensive: a
+  // future indicator with a genuine per-register difference would fail this
+  // check and correctly stay split rather than silently hiding a different
+  // requirement). The kept representative is whichever entry's indicatorName
+  // is longest — in practice the more general/combined-sounding one (e.g.
+  // "...CVD/CKD REGISTER PATIENTS" over "...CKD REGISTER PATIENTS") — and
+  // carries `mergedRegisters`, the deduplicated list of every requiresRegister
+  // that fired, for the renderer to display.
+  function mergeMultiRegisterQofIndicatorChips(chips, registerLookup) {
+    const groups = new Map(); // indicatorCode -> chip[]
+    chips.forEach((c) => {
+      if (c.type !== 'qof-indicator' || !c.indicatorCode) return;
+      if (!groups.has(c.indicatorCode)) groups.set(c.indicatorCode, []);
+      groups.get(c.indicatorCode).push(c);
+    });
+    const toRemove = new Set();
+    groups.forEach((group) => {
+      if (group.length < 2) return;
+      const byStatus = new Map();
+      group.forEach((c) => {
+        if (!byStatus.has(c.status)) byStatus.set(c.status, []);
+        byStatus.get(c.status).push(c);
+      });
+      byStatus.forEach((sameStatus) => {
+        if (sameStatus.length < 2) return;
+        const primary = sameStatus.reduce((best, c) =>
+          String(c.indicatorName || '').length > String(best.indicatorName || '').length ? c : best
+        );
+        const codes = sameStatus
+          .map((c) => c.requiresRegister)
+          .filter(Boolean)
+          .filter((r, i, arr) => arr.indexOf(r) === i);
+        primary.mergedRegisters = codes.map((code) => ({
+          code,
+          label: (registerLookup && registerLookup[code] && registerLookup[code].registerName) || code,
+        }));
+        sameStatus.forEach((c) => {
+          if (c !== primary) toRemove.add(c);
+        });
+      });
+    });
+    return chips.filter((c) => !toRemove.has(c));
   }
 
   function seasonStart(nowIso, startMonth, startDay) {

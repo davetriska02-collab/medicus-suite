@@ -539,6 +539,17 @@
   margin-top: 4px;
   font-family: var(--mono);
 }
+/* Shown when one qof-indicator card represents a merge of several
+   register-variant rules that all fired identically for this patient (e.g.
+   SMOK002 via both CHD and CKD) — see rules-engine.js
+   mergeMultiRegisterQofIndicatorChips. Muted, same family as .sent-chip-cat,
+   so it reads as extra context rather than a second status line. */
+.sent-chip-merged-registers {
+  font-size: 10px;
+  color: var(--text-4);
+  font-style: italic;
+  margin-top: 2px;
+}
 
 /* Reduced-confidence chips (unconfirmed diagnosis date behind a "new
    diagnosis" eligibility gate, or on-register-but-no-matching-problem-code —

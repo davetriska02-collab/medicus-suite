@@ -41,6 +41,49 @@
     };
   }
 
+  // Converts a medicationIssueHistory entry's startDate/endDate — a structured
+  // { year, month, day } object on the real API, NOT a flat date string — to
+  // "YYYY-MM-DD". Confirmed against real HAR captures while building the
+  // repeat-authorisation classifier (see shared/repeat-authorisation.js's
+  // _toUtcDays): every key on this endpoint was enumerated and there is no
+  // issueDate/date string field on these entries at all.
+  function _issueHistoryDateToIso(d) {
+    if (!d || d.year == null || d.month == null || d.day == null) return null;
+    const y = parseInt(d.year, 10);
+    const mo = parseInt(d.month, 10);
+    const da = parseInt(d.day, 10);
+    if (!y || !mo || !da) return null;
+    return `${String(y).padStart(4, '0')}-${String(mo).padStart(2, '0')}-${String(da).padStart(2, '0')}`;
+  }
+
+  // ---- Full prescribing history (from medication-history) ----
+  // Returns a Map of normalised substance name -> earliest EVER issueDate (ISO
+  // "YYYY-MM-DD"), across every prescriptionIssue for that substance regardless
+  // of prescriptionStatus — a discontinued course still counts, because the
+  // question is "how long ago did the patient first go on this drug", not
+  // "how long has the CURRENT authorisation run" (a brand/strength change, or a
+  // stop/restart, must not reset this). Confirmed against a real HAR (2026-08-29):
+  // medicationRegimen's own medicationIssueHistory is capped to a rolling ~12-month
+  // window server-side (its response carries a `range: {startDate, endDate}`
+  // proving this) — a repeat running since 2013 read as "started 16 Sep 2025" off
+  // that endpoint alone, while this one's full prescriptionIssues correctly go
+  // back to the real 2013-10-04 first issue. Returns null (not a Map) when the
+  // endpoint didn't return usable data, so callers fall back cleanly — same
+  // convention as normalisePatientRegisters.
+  function normaliseMedicationHistory(medicationHistory) {
+    if (!medicationHistory || !medicationHistory.items || typeof medicationHistory.items !== 'object') return null;
+    const out = new Map();
+    Object.entries(medicationHistory.items).forEach(([substance, entry]) => {
+      const issues = entry && Array.isArray(entry.prescriptionIssues) ? entry.prescriptionIssues : [];
+      const dates = issues
+        .map((i) => i.issueDate)
+        .filter(Boolean)
+        .sort();
+      if (dates.length) out.set(String(substance).trim().toLowerCase(), dates[0]);
+    });
+    return out;
+  }
+
   // ---- Medications from regimen ----
   // The regimen has multiple buckets:
   //   currentRepeatPrescribingMedications, currentVariableRepeatMedications,
@@ -49,7 +92,7 @@
   //   overTheCounterMedicationStatements, unIssuedAcutePrescriptions
   // For Sentinel's drug-monitoring purposes we want active meds only — i.e.
   // current repeats (any kind) + acute meds in last 12m, but NOT discontinued.
-  function normaliseMedications(regimen) {
+  function normaliseMedications(regimen, medicationHistory) {
     if (!regimen) return [];
     const out = [];
     const buckets = [
@@ -67,17 +110,31 @@
         // description is the full drug name e.g. "Atenolol 50mg tablets"
         const name = m.description || m.vtmProductName || null;
         if (!name) return;
-        // For repeat items, lastIssued can be derived from medicationIssueHistory
+        // For repeat items, the start date is derived from medicationIssueHistory
+        // — never assume array order, take the EARLIEST issue.
         let startDate = null;
         if (Array.isArray(m.medicationIssueHistory?.data) && m.medicationIssueHistory.data.length > 0) {
-          // Earliest issue is the start
           const dates = m.medicationIssueHistory.data
-            .map((i) => i.issueDate || i.date)
+            .map((i) => _issueHistoryDateToIso(i.startDate) || i.issueDate || i.date)
             .filter(Boolean)
             .sort();
           if (dates.length) startDate = dates[0];
-        } else if (m.issueDate) {
+        }
+        // Fall back to a flat issueDate whenever the history array didn't yield a
+        // usable date (missing entirely, OR present but its entries carried none
+        // of the recognised date shapes) — a med must never silently end up with
+        // no start date just because one of two paths uses `else if`.
+        if (!startDate && m.issueDate) {
           startDate = m.issueDate;
+        }
+        // Prefer the TRUE first-ever issue from medication-history when available —
+        // medicationIssueHistory above is capped to a rolling ~12-month window
+        // server-side, so it can only ever reflect the CURRENT authorisation batch's
+        // start, never the drug's real clinical start (see normaliseMedicationHistory).
+        if (medicationHistory && medicationHistory.size) {
+          const substanceKey = String(m.vtmProductName || '').trim().toLowerCase();
+          const trueStart = substanceKey ? medicationHistory.get(substanceKey) : null;
+          if (trueStart) startDate = trueStart;
         }
         out.push({
           name,
@@ -699,7 +756,10 @@
     const allProbs = normaliseProblemsAll(apiResults?.problemListing, onsetIndex);
     return {
       patientContext: normaliseBanner(apiResults?.banner, urlContext),
-      medications: normaliseMedications(apiResults?.medicationRegimen),
+      medications: normaliseMedications(
+        apiResults?.medicationRegimen,
+        normaliseMedicationHistory(apiResults?.medicationHistory)
+      ),
       observations: normaliseObservations(apiResults?.investigationDashboard),
       observationHistory: normaliseObservationHistory(apiResults?.investigationDashboard),
       problems: allProbs.active,
@@ -712,6 +772,7 @@
   const api = {
     normaliseBanner,
     normaliseMedications,
+    normaliseMedicationHistory,
     normaliseProblems,
     normaliseProblemsAll,
     normaliseObservations,

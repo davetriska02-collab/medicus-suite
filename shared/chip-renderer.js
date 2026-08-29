@@ -280,6 +280,11 @@
           ${evChevron}
         </div>
         ${chip.indicatorName ? `<div class="sent-chip-cat">${escHtml(chip.indicatorName)}${yearOrCustomTag}</div>` : yearOrCustomTag}
+        ${
+          Array.isArray(chip.mergedRegisters) && chip.mergedRegisters.length > 1
+            ? `<div class="sent-chip-merged-registers">Also applies via: ${chip.mergedRegisters.map((r) => escHtml(r.label)).join(', ')}</div>`
+            : ''
+        }
         ${obs ? `<div class="sent-chip-obs">${obs}</div>` : ''}
         ${renderChipUncertaintyNotesHtml(chip)}
       </div>`;
@@ -721,10 +726,27 @@
       }
 
       const parts = entry.arithmetic.map((ar) => {
+        const arStatus = STATUS_LABEL[ar.status] || ar.status || '';
+        if (ar.postInitiation) {
+          if (!ar.startDate) {
+            return `${ar.test}: start date not visible in record → ${arStatus.toLowerCase()}`;
+          }
+          const startStr = formatDate(ar.startDate);
+          if (!ar.firstSinceStartDate) {
+            const sinceBit = ar.daysSinceStart != null ? ` (${ar.daysSinceStart}d ago)` : '';
+            return `${ar.test}: start date ${startStr}; no ${ar.test.split(' (')[0]} recorded since starting${sinceBit} → ${arStatus.toLowerCase()}`;
+          }
+          const firstStr = formatDate(ar.firstSinceStartDate);
+          const windowBit = ar.metWindow
+            ? '≤2 weeks'
+            : ar.sinceStartCount >= 2
+              ? `>2 weeks but repeated ${ar.sinceStartCount} times since`
+              : '>2 weeks, not yet repeated';
+          return `${ar.test}: start date ${startStr}; next ${ar.test.split(' (')[0]} ${firstStr} (${windowBit}) → ${arStatus.toLowerCase()}`;
+        }
         const lastDateStr = ar.lastDate ? formatDate(ar.lastDate) : 'no result on record';
         const dueDateStr = ar.dueDate ? formatDate(ar.dueDate) : null;
         const daysSince = ar.daysSince != null ? `${ar.daysSince}d since last result` : '';
-        const arStatus = STATUS_LABEL[ar.status] || ar.status || '';
         if (dueDateStr) {
           return `${ar.test}: last ${lastDateStr}; interval ${ar.intervalDays}d → due ${dueDateStr}${daysSince ? ' (' + daysSince + ')' : ''} → ${arStatus.toLowerCase()}`;
         }

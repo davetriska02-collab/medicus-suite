@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.0] — 2026-08-29
+
+### Drug-monitoring and QOF-indicator monitoring fixes
+
+Live testing of the ramipril/thiazide "U&E within ~2 weeks of starting" checks surfaced
+two separate causes of a wrong medication start date. `medicationIssueHistory` entries
+carry a structured `{year, month, day}` date on the real API, not the flat string the
+normaliser expected, so it was silently reading `null` for every medication with real
+issue history; and even once parsed, that field is itself capped to a rolling ~12-month
+window server-side, so "earliest visible issue" could only ever reflect the *current*
+repeat-dispensing batch, never a drug's true clinical start (one patient's 2013 ramipril
+start was reading as ~2025). Added a new best-effort fetch of the full prescribing-history
+endpoint (grouped by substance, joined via `vtmProductName`) which now supplies the real
+first-ever-issue date when available.
+
+The post-initiation WHY-text evidence had two further bugs of its own: it searched
+`data.observations` (latest-result-only) instead of the full multi-year
+`data.observationHistory` series, so an earlier qualifying result was invisible; and "U&E"
+is never a literal test name on the API — it's split into four analyte rows (Sodium/
+Potassium/Urea/Creatinine) sharing one `investigationGroup` — so matching had to check
+the group field too, with de-duplication by date so a 4-analyte panel doesn't read as
+"repeated 4x" for one real result.
+
+Also fixed two pre-existing (not new) monitoring-panel display bugs: the same drug could
+show as two separate cards when Medicus carries two live regimen records for it (a
+superseded reauthorisation row that hasn't dropped off the "current" bucket yet — real
+data, not a duplicate to clean up), and QOF indicators that apply across several disease
+registers (SMOK002, CHOL003, CHOL004, CD001, CD002) could show once per qualifying
+register even though the check/points/threshold are identical — both now merge to a
+single card, the latter listing every register that triggered it.
+
 ## [v3.248.0] — 2026-08-28
 
 ### QOF monitoring rework — disease-register-driven matching, July 2026 rule refresh, fewer false positives

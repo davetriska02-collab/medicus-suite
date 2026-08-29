@@ -10,6 +10,8 @@
 'use strict';
 const path = require('path');
 const engine = require('./engine/rules-engine.js');
+const normalisers = require('./engine/normalisers.js');
+const chipRenderer = require('./shared/chip-renderer.js');
 const drugRules = require(path.join(__dirname, 'rules', 'drug-rules.json'));
 
 const aceArb = (drugRules.rules || []).find((r) => r.id === 'ace-arb');
@@ -100,6 +102,184 @@ console.log('\n--- no start date → post-init neutral, no false alert ---');
   const { chip, postInit } = evalAce({ startDate: null, observations: [ue('2026-03-21'), bp('2026-03-21')] });
   check(postInit && postInit.status === 'no_data', `post-init status no_data without a start date (got ${postInit?.status})`);
   check(chip.status !== 'overdue' && chip.status !== 'due_soon', `no post-init alert when start date unknown (chip ${chip.status})`);
+}
+
+// 7. REGRESSION (2026-08-29 real-patient report): medicationIssueHistory
+//    entries carry a structured { year, month, day } startDate on the real
+//    API (confirmed via HAR captures in shared/repeat-authorisation.js), NOT
+//    a flat issueDate/date string. Before the fix, normaliseMedications()
+//    only ever matched i.issueDate/i.date, so every med with real issue
+//    history silently got startDate=null — the post-init check then always
+//    read 'no_data', never firing (or clearing) for ANY real patient
+//    regardless of how long ago they actually started or how many U&Es
+//    they've had since. This drives the raw regimen shape through the real
+//    normaliser (not a hand-built { startDate } fixture) to pin the fix.
+console.log('\n--- real API shape: structured medicationIssueHistory startDate is read correctly ---');
+{
+  const rawRegimen = {
+    currentRepeatPrescribingMedications: [
+      {
+        description: 'Ramipril 5mg capsules',
+        status: 'active',
+        id: 'med-ramipril-1',
+        medicationIssueHistory: {
+          data: [
+            // Deliberately out of order — the derivation must not assume array order.
+            { startDate: { year: '2022', month: '02', day: '20' }, endDate: { year: '2022', month: '03', day: '20' } },
+            { startDate: { year: '2021', month: '11', day: '01' }, endDate: { year: '2021', month: '12', day: '01' } },
+          ],
+        },
+      },
+    ],
+  };
+  const meds = normalisers.normaliseMedications(rawRegimen);
+  check(meds.length === 1 && meds[0].startDate === '2021-11-01', `startDate parsed as earliest issue (got ${meds[0] && meds[0].startDate})`);
+
+  const chips = engine.evaluatePatient(meds, [ue('2022-02-23')], [aceArb], { now: NOW });
+  const chip = chips.find((c) => c.ruleId === 'ace-arb');
+  const postInit = chip ? (chip.tests || []).find((t) => t.postInitiation === true) : null;
+  check(postInit && postInit.status === 'in_date', `post-init reads real start date and clears on a later U&E (got ${postInit?.status})`);
+}
+
+// 7b. REGRESSION (2026-08-29 real-patient report, part 2): medicationIssueHistory
+// on the regimen endpoint is ALSO capped to a rolling ~12-month window server-side
+// (its own response carries a `range: {startDate, endDate}` proving this) — so
+// "earliest visible issue" from case 7 above is only ever the CURRENT repeat
+// batch's start, never the drug's true clinical start. A real patient on ramipril
+// since 2013 read as "started 16 Sep 2025" off medicationIssueHistory alone. The
+// separate medication-history endpoint (items.<substance>.prescriptionIssues[])
+// has the full history back to the real first issue and must win when available.
+console.log('\n--- real API shape: medicationIssueHistory is batch-scoped; medication-history gives the true start ---');
+{
+  const rawRegimen = {
+    currentRepeatDispensingMedications: [
+      {
+        description: 'Ramipril 5mg capsules',
+        status: 'active',
+        id: 'med-ramipril-2',
+        vtmProductName: 'Ramipril',
+        medicationIssueHistory: {
+          // Only the current ~12-month batch is visible here — matches the real
+          // HAR shape exactly (range.startDate proves the endpoint itself capped it).
+          data: [{ startDate: { year: '2025', month: '09', day: '16' }, endDate: { year: '2025', month: '10', day: '14' } }],
+          range: { startDate: '2025-08-29', endDate: '2026-12-23' },
+        },
+      },
+    ],
+  };
+  const medsWithoutHistory = normalisers.normaliseMedications(rawRegimen);
+  check(
+    medsWithoutHistory[0].startDate === '2025-09-16',
+    `without medication-history, falls back to the batch-scoped date (got ${medsWithoutHistory[0].startDate})`
+  );
+
+  const medicationHistory = normalisers.normaliseMedicationHistory({
+    items: {
+      Ramipril: {
+        prescriptionIssues: [
+          { issueDate: '2026-11-25', prescriptionStatus: 'authorised' },
+          { issueDate: '2013-10-04', prescriptionStatus: 'discontinued' }, // true first-ever issue
+          { issueDate: '2025-09-16', prescriptionStatus: 'authorised' },
+        ],
+      },
+    },
+  });
+  const medsWithHistory = normalisers.normaliseMedications(rawRegimen, medicationHistory);
+  check(
+    medsWithHistory[0].startDate === '2013-10-04',
+    `medication-history overrides with the TRUE first-ever issue (got ${medsWithHistory[0].startDate})`
+  );
+
+  const chips = engine.evaluatePatient(medsWithHistory, [ue('2014-01-15')], [aceArb], { now: NOW });
+  const postInit = (chips.find((c) => c.ruleId === 'ace-arb').tests || []).find((t) => t.postInitiation === true);
+  check(postInit.startDate === '2013-10-04', `post-init test carries the true start date through (got ${postInit.startDate})`);
+}
+
+// 8. WHY-text: the post-initiation line must show the start date the engine
+// actually read plus the earliest qualifying result since it, instead of the
+// generic "interval 365d → due ..." arithmetic that made no sense for a
+// one-off post-initiation check and was the only thing visible to a
+// clinician trying to diagnose case 7's original bug report.
+console.log('\n--- WHY text: shows start date + first-since-start reassurance ---');
+{
+  const { trace } = engine.evaluatePatient(
+    [{ name: 'Ramipril 5mg capsules', startDate: '2021-11-01' }],
+    [ue('2022-02-23'), ue('2026-07-15')],
+    [aceArb],
+    { now: NOW, trace: true }
+  );
+  const entry = trace.entries.find((e) => e.ruleId === 'ace-arb');
+  const why = chipRenderer.buildPlainExplanation(entry);
+  check(
+    why.includes('start date 1 Nov 2021') && why.includes('next U&E 23 Feb 2022') && why.includes('repeated 2 times since'),
+    `WHY text names start date + first U&E + repeat count (got: ${why})`
+  );
+}
+
+console.log('\n--- WHY text: single late test (not yet repeated) reads distinctly from 2+ ---');
+{
+  const { trace } = engine.evaluatePatient(
+    [{ name: 'Ramipril 5mg capsules', startDate: '2021-11-01' }],
+    [ue('2022-02-23')],
+    [aceArb],
+    { now: NOW, trace: true }
+  );
+  const entry = trace.entries.find((e) => e.ruleId === 'ace-arb');
+  const why = chipRenderer.buildPlainExplanation(entry);
+  check(why.includes('not yet repeated'), `WHY text flags a single late test as not yet repeated (got: ${why})`);
+}
+
+console.log('\n--- WHY text: no start date visible reads plainly, not as a silent gap ---');
+{
+  const { trace } = engine.evaluatePatient(
+    [{ name: 'Ramipril 5mg capsules', startDate: null }],
+    [ue('2026-03-21')],
+    [aceArb],
+    { now: NOW, trace: true }
+  );
+  const entry = trace.entries.find((e) => e.ruleId === 'ace-arb');
+  const why = chipRenderer.buildPlainExplanation(entry);
+  check(why.includes('start date not visible in record'), `WHY text states start date is unknown (got: ${why})`);
+}
+
+// 9. REGRESSION (2026-08-29 real-patient report, part 3): data.observations
+// carries only the LATEST result per investigation type (normaliseObservations
+// picks the single most recent dataYYYYMMDD cell) — it is NOT a history. A
+// real patient started 31 Aug 2021 with U&Es on 23 Mar 2022, 13 Apr 2023 and
+// 10 Jan 2025 read the WHY text as "next U&E 10 Jan 2025 (not yet repeated)"
+// — the code only ever saw the single latest result and had no way to find
+// the two earlier ones or count them. The full point series lives in
+// data.observationHistory (normaliseObservationHistory), which was fetched
+// all along but never consulted for this specific "earliest qualifying
+// result since start" computation. Reproduces the exact shape the two
+// normalisers actually produce: one latest-only entry in `observations`, the
+// full series in `observationHistory`.
+console.log('\n--- data.observations is latest-only; earliest-since-start must come from data.observationHistory ---');
+{
+  const meds = [{ name: 'Ramipril 5mg capsules', startDate: '2021-08-31' }];
+  const observations = [ue('2025-01-10')]; // what normaliseObservations would actually produce: latest only
+  // Real HAR shape (102-invresultsdashboard.har): "U&E" is never a literal
+  // investigationType — it's four separate analyte rows (Sodium, Potassium,
+  // Urea, Creatinine) sharing one investigationGroup, all with the IDENTICAL
+  // date set. This must match via the group field (not just name) AND
+  // de-duplicate by date, or a 4-analyte panel either matches nothing or
+  // reads as "repeated 4x" for what is really one result per date.
+  const ueDates = ['2025-01-10', '2023-04-13', '2022-03-23', '2021-07-07', '2021-01-11'];
+  const observationHistory = ['Sodium', 'Potassium', 'Urea', 'Creatinine'].map((name) => ({
+    name,
+    code: null,
+    group: 'U&Es (Urea and electrolytes)',
+    unit: 'mmol/L',
+    history: ueDates.map((date) => ({ date, value: 140, rawValue: '140' })),
+  }));
+  const { trace } = engine.evaluatePatient(meds, observations, [aceArb], { now: NOW, trace: true, observationHistory });
+  const entry = trace.entries.find((e) => e.ruleId === 'ace-arb');
+  const why = chipRenderer.buildPlainExplanation(entry);
+  check(
+    why.includes('next U&E 23 Mar 2022') && why.includes('repeated 3 times since'),
+    `WHY text finds the EARLIEST since-start result (2022, not 2025) and the correct de-duplicated count (3, not 12) (got: ${why})`
+  );
+  check(!why.includes('not yet repeated'), `no longer misreports a well-monitored patient as "not yet repeated" (got: ${why})`);
 }
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
