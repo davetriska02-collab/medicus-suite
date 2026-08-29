@@ -105,6 +105,7 @@ const VALID_SCOPES = [
   'problemDescriptionCleanup',
   'phrases',
   'rota',
+  'board',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -502,6 +503,20 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Rota');
+    if (m) lines.push(m);
+  }
+
+  if (mods.board) {
+    const cfg = mods.board.config || {};
+    const profile = cfg.activeProfileId || 'waiting-room';
+    const msg = cfg.profiles && cfg.profiles.find && cfg.profiles.find((p) => p && p.id === profile);
+    const widgets = (msg && msg.widgets) || [];
+    lines.push(
+      `Note board: ${profile} profile` +
+        (widgets.length ? `, ${widgets.length} widget${widgets.length === 1 ? '' : 's'}` : '')
+    );
+  } else {
+    const m = missing('Note board');
     if (m) lines.push(m);
   }
 

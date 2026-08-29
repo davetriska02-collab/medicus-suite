@@ -60,6 +60,7 @@ const APP_DIRS = [
   'content-scripts',
   'sentinel-options',
   'rota',
+  'board',
 ];
 const APP_FILES = [
   // Top-level JS
@@ -125,6 +126,7 @@ const KEY_PREFIXES = [
   // for labfiling/patientAlerts/followups/practice above.
   'contactsCanvas',
   'rota',
+  'board',
 ];
 
 function hasKeyPrefix(k) {

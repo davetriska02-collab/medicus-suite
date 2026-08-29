@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.248.0] — 2026-08-29
+
+### Note — a software display board for TVs and monitors
+
+A Vestaboard-style board you can put on a waiting-room TV or a staff-room
+monitor, fed by the same live hooks Condor and the demand strips already
+use (waiting room, today’s requests, triage inbox, slots, activity).
+
+Three profiles:
+
+- **Waiting room** (public) — tempo (quiet / steady / busy / very busy),
+  people waiting as a count, wait time as a band (“typical wait under
+  10 minutes”), and a request ticker. Never names, initials, or request
+  wording. See **H-067**.
+- **Ops overview** (staff) — the same aggregates plus practice pressure,
+  triage inbox, slots remaining, urgent unactioned.
+- **Message** — split-flap text only, plus a clock.
+
+Configure the flap message and widgets from the new **Note** tab, then
+open the board on the TV and press F for fullscreen. `?demo=1` shows
+canned figures so you can preview without a Medicus session.
+
 ## [v3.247.0] — 2026-08-27
 
 ### Routine-prescription "Send to routine list" — ghost pill and live-flow fixes
