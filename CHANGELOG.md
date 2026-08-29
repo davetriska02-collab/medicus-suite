@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.251.7] — 2026-08-29
+
+### Review fix — also exclude tacrolimus cream specials from immunosuppression/monitoring flags
+
+PR #351 review: licensed UK topical tacrolimus is ointment-only (Protopic), but
+unlicensed cream specials are prescribed for the same cutaneous indication and
+still matched the `tacrolimus` stem. The vaccine eligibility clauses and the
+high-risk unmatched-medication backstop now also exclude `"cream"`. Oral/IV
+tacrolimus is unaffected (regression-tested).
+
 ## [v3.251.6] — 2026-08-29
 
 ### Exclude topical tacrolimus from immunosuppression/monitoring flags
@@ -17,10 +27,10 @@ Per CKS (topical calcineurin inhibitors — <https://cks.nice.org.uk/topics/ecze
 topical tacrolimus "has not been observed to produce systemic concentrations similar to
 those observed with systemic use" — it carries none of the systemic immunosuppression or
 monitoring need that both checks exist to catch. Both now exclude any medication name
-containing "ointment" or "protopic" (the topical-only brand); oral/IV tacrolimus
+containing "ointment", "cream", or "protopic" (the topical-only brand); oral/IV tacrolimus
 (capsules, IV, or any other systemic form) is unaffected and still fires as before. No
-other drug in either check's list has a marketed UK topical/ointment form, so the exclude
-cannot suppress a genuine systemic hit.
+other drug in either check's list has a marketed UK topical/ointment/cream form, so the
+exclude cannot suppress a genuine systemic hit.
 
 ## [v3.251.5] — 2026-08-29
 

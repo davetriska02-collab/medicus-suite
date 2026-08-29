@@ -138,14 +138,17 @@
         'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
         'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
       ],
-      // Topical tacrolimus (Protopic ointment, for eczema) is "not been observed to
-      // produce systemic concentrations similar to those observed with systemic use"
-      // (CKS: topical calcineurin inhibitors) — it needs none of the systemic-drug
-      // blood monitoring this backstop exists to catch someone missing. None of the
-      // other stems above have a marketed topical/ointment form in the UK, so this
-      // exclude only ever suppresses tacrolimus ointment, never a genuine oral/IV hit.
+      // Topical tacrolimus (Protopic ointment; unlicensed cream specials) is "not
+      // been observed to produce systemic concentrations similar to those observed
+      // with systemic use" (CKS: topical calcineurin inhibitors) — it needs none of
+      // the systemic-drug blood monitoring this backstop exists to catch someone
+      // missing. Licensed UK topical tacrolimus is ointment-only; cream is the
+      // unlicensed special used for the same cutaneous indication. None of the
+      // other stems above have a marketed topical/ointment/cream form in the UK,
+      // so this exclude only ever suppresses topical tacrolimus, never a genuine
+      // oral/IV hit.
       // https://cks.nice.org.uk/topics/eczema-atopic/prescribing-information/topical-calcineurin-inhibitors/
-      exclude: ['ointment', 'protopic'],
+      exclude: ['ointment', 'cream', 'protopic'],
     },
     { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
     { label: 'Lithium', stems: ['lithium'] },
