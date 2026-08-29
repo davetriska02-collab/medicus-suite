@@ -160,6 +160,15 @@ body {
   gap: clamp(28px, 6vh, 72px);
 }
 
+.note-board[data-profile='message'] .note-flap {
+  width: clamp(36px, 4.2vw, 68px);
+  height: clamp(52px, 6.2vw, 96px);
+}
+
+.note-board[data-profile='message'] .note-flap-glyph {
+  font-size: clamp(22px, 3.2vw, 46px);
+}
+
 /* ── Split-flap row ─────────────────────────────────────────────────────── */
 
 .note-flaps {
@@ -251,8 +260,12 @@ body {
 
 .note-metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: clamp(10px, 1.4vw, 18px);
+}
+
+.note-board[data-profile='ops'] .note-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .note-tile {
@@ -458,5 +471,8 @@ body {
   }
   .note-tile-v {
     font-size: 36px;
+  }
+  .note-board[data-profile='ops'] .note-metrics {
+    grid-template-columns: 1fr;
   }
 }

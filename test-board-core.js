@@ -141,6 +141,14 @@ const { pathToFileURL } = require('url');
     '20-minute wait is very busy'
   );
   check(deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }) === 'very-busy', '60 demand is very busy');
+  check(
+    deriveTempo({ waitingCount: 4, maxWaitMinutes: 8, demandAll: 42 }, null, 'public') === 'steady',
+    'public tempo ignores back-office request volume'
+  );
+  check(
+    deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }, null, 'public') === 'quiet',
+    'empty public room stays quiet even on a heavy request day'
+  );
   check(TEMPO_LABEL.quiet === 'Quiet', 'tempo labels are sentence case');
 
   console.log('\n--- flap layout ---');
@@ -192,7 +200,7 @@ const { pathToFileURL } = require('url');
       'ticker lines carry no fixture PII'
     );
     check(snap.demand.medical === 28 && snap.demand.admin === 14, 'demand totals copied');
-    check(typeof snap.tempo === 'string' && TEMPO_LABEL[snap.tempo], 'tempo derived');
+    check(snap.tempo === 'steady', 'public demo room is steady, not busy-from-demand');
   }
 
   console.log('\n--- staff snapshot is still aggregate-only ---');

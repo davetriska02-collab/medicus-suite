@@ -136,8 +136,8 @@ function render() {
   const parts = [];
 
   if (widgets.has('flap')) {
-    const rows = profile.id === 'message' ? 3 : 2;
-    const cols = profile.id === 'message' ? 18 : 22;
+    const rows = 2;
+    const cols = profile.id === 'message' ? 16 : 22;
     const { html, joined } = flapsHtml(profile.message, rows, cols, lastFlap);
     lastFlap = joined;
     parts.push(`<div class="note-flaps" aria-label="Message">${html}</div>`);

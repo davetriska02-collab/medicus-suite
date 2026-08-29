@@ -84,7 +84,7 @@ export const DEFAULT_PROFILES = [
     id: 'ops',
     name: 'Ops overview',
     audience: 'staff',
-    widgets: ['tempo', 'pressure', 'waiting', 'demand', 'triage', 'slots', 'urgent', 'clock'],
+    widgets: ['tempo', 'pressure', 'waiting', 'demand', 'triage', 'slots', 'clock'],
     message: '',
   },
   {
@@ -251,14 +251,21 @@ export function waitBand(count, maxWaitMinutes, thresholds) {
   return { label: `Some waits over ${t.redWaitMin} minutes`, tone: 'busy', maxWaitMinutes };
 }
 
-export function deriveTempo({ waitingCount, maxWaitMinutes, demandAll }, thresholds) {
+export function deriveTempo({ waitingCount, maxWaitMinutes, demandAll }, thresholds, mode) {
   const t = sanitiseThresholds(thresholds);
   const waiting = Number(waitingCount) || 0;
   const demand = Number(demandAll) || 0;
   const wait = Number.isFinite(maxWaitMinutes) ? maxWaitMinutes : 0;
-  if (waiting >= t.veryBusyWaiting || wait >= t.redWaitMin || demand >= t.veryBusyDemand) return 'very-busy';
-  if (waiting >= t.busyWaiting || wait >= t.amberWaitMin || demand >= t.busyDemand) return 'busy';
-  if (waiting >= 1 || demand >= 10) return 'steady';
+  // Public TVs answer "how does the room feel?" — today's request pile is
+  // back-office work and must not paint BUSY over an empty waiting room.
+  const useDemand = mode !== 'public';
+  if (waiting >= t.veryBusyWaiting || wait >= t.redWaitMin || (useDemand && demand >= t.veryBusyDemand)) {
+    return 'very-busy';
+  }
+  if (waiting >= t.busyWaiting || wait >= t.amberWaitMin || (useDemand && demand >= t.busyDemand)) {
+    return 'busy';
+  }
+  if (waiting >= 1 || (useDemand && demand >= 10)) return 'steady';
   return 'quiet';
 }
 
@@ -373,7 +380,8 @@ export function buildSnapshot(streams, opts) {
   };
   const tempo = deriveTempo(
     { waitingCount: wr.count, maxWaitMinutes: wr.maxWaitMinutes, demandAll: demand.medical + demand.admin },
-    thresholds
+    thresholds,
+    audience
   );
   const band = waitBand(wr.count, wr.maxWaitMinutes, thresholds);
 
