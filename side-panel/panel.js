@@ -146,6 +146,7 @@ const MODULES = {
   },
   phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
+  board: { js: () => import('./modules/board/board.js'), css: './modules/board/board.css' },
   about: null,
 };
 // NOTE: 'rota-app' is deliberately absent. Like 'visualiser', it opens the full
@@ -419,6 +420,7 @@ const G_CHORD_MAP = {
   e: 'reception',
   d: 'record',
   n: 'trends',
+  b: 'board',
 };
 
 const G_CHORD_TIMEOUT_MS = 1500;

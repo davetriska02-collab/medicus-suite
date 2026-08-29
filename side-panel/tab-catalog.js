@@ -49,6 +49,11 @@ export const TAB_CATALOG = [
     blurb: 'Today’s duty cover, leave, uncovered sessions and staffing warnings.',
   },
   {
+    id: 'board',
+    name: 'Note',
+    blurb: 'TV and monitor display — waiting-room tempo, request ticker, ops overview.',
+  },
+  {
     id: 'rota-app',
     name: 'Rota manager',
     blurb: 'Opens the full rota in a new tab — patterns, leave, duty fairness and cover.',
@@ -98,7 +103,7 @@ export const ROLE_PRESETS = [
   {
     id: 'reception',
     label: 'Reception',
-    show: ['today', 'reception', 'patient-alerts', 'slots', 'submissions', 'knowledge', 'leaflets', 'about'],
+    show: ['today', 'reception', 'patient-alerts', 'slots', 'submissions', 'knowledge', 'leaflets', 'board', 'about'],
   },
   {
     id: 'manager',
@@ -113,6 +118,7 @@ export const ROLE_PRESETS = [
       'condor',
       'rota',
       'rota-app',
+      'board',
       'knowledge',
       'about',
     ],
