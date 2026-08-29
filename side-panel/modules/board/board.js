@@ -14,6 +14,7 @@ import {
   PUBLIC_WIDGETS,
   sanitiseConfig,
   sanitiseMessage,
+  sanitiseThresholds,
   MAX_MESSAGE_CHARS,
 } from '../../../board/board-core.js';
 
@@ -127,6 +128,42 @@ function render() {
       </section>
 
       <section class="note-mod-card">
+        <h2 class="note-mod-h">When this room looks busy</h2>
+        <p class="note-mod-th-lead">These numbers are yours. They apply to every profile.</p>
+        <label class="note-mod-th">
+          Most waits under
+          <input type="number" data-th="amberWaitMin" min="1" max="180" step="1" value="${esc(config.thresholds.amberWaitMin)}" />
+          minutes
+        </label>
+        <label class="note-mod-th">
+          Some waits over
+          <input type="number" data-th="redWaitMin" min="2" max="240" step="1" value="${esc(config.thresholds.redWaitMin)}" />
+          minutes
+        </label>
+        <label class="note-mod-th">
+          Busy at
+          <input type="number" data-th="busyWaiting" min="1" max="40" step="1" value="${esc(config.thresholds.busyWaiting)}" />
+          people waiting
+        </label>
+        <label class="note-mod-th">
+          Very busy at
+          <input type="number" data-th="veryBusyWaiting" min="2" max="80" step="1" value="${esc(config.thresholds.veryBusyWaiting)}" />
+          people waiting
+        </label>
+        <p class="note-mod-th-lead">Staff board only. Public TVs ignore today's request pile.</p>
+        <label class="note-mod-th">
+          Busy at
+          <input type="number" data-th="busyDemand" min="1" max="200" step="1" value="${esc(config.thresholds.busyDemand)}" />
+          requests today
+        </label>
+        <label class="note-mod-th">
+          Very busy at
+          <input type="number" data-th="veryBusyDemand" min="2" max="400" step="1" value="${esc(config.thresholds.veryBusyDemand)}" />
+          requests today
+        </label>
+      </section>
+
+      <section class="note-mod-card">
         <h2 class="note-mod-h">Refresh</h2>
         <label class="note-mod-poll">
           Every
@@ -138,7 +175,7 @@ function render() {
       <aside class="note-mod-privacy${publicLock ? '' : ' note-mod-privacy-staff'}">
         ${
           publicLock
-            ? `<strong>Public display.</strong> Waiting-room and Message profiles never show patient names, initials, or request wording. The board shows counts, wait bands, and how busy this room is. It does not show today's medical or admin request volume. ${PUBLIC_WIDGETS.length} widgets are allowed; staff-only tiles are locked off.`
+            ? `<strong>Public display.</strong> You pick the tiles, the flap text, and when the room reads busy. Waiting-room and Message profiles still never show patient names, initials, or request wording. ${PUBLIC_WIDGETS.length} widgets are allowed; staff-only tiles are locked off.`
             : `<strong>Staff display.</strong> No patient names. Keep this off the waiting-room TV. It shows the triage inbox and pressure figures patients should not see.`
         }
       </aside>
@@ -181,6 +218,12 @@ function wire() {
   onChange = (e) => {
     if (e.target.id === 'noteModPoll') {
       config.pollSeconds = Number(e.target.value);
+      persist();
+      return;
+    }
+    const th = e.target.getAttribute && e.target.getAttribute('data-th');
+    if (th) {
+      config.thresholds = sanitiseThresholds({ ...config.thresholds, [th]: e.target.value });
       persist();
       return;
     }

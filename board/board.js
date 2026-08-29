@@ -197,15 +197,11 @@ function render() {
 
   const metrics = [];
   if (s && widgets.has('waiting')) {
-    const waitSub =
-      s.waiting.count > 0
-        ? `${esc(s.waiting.band)}<span class="note-tile-s-caveat">Not a promise for you</span>`
-        : esc(s.waiting.band);
     metrics.push(
       tile({
         k: 'People waiting',
         v: String(s.waiting.count),
-        sub: waitSub,
+        sub: esc(s.waiting.band),
         tone: s.waiting.tone,
         strongSub: true,
       })
@@ -333,16 +329,8 @@ async function loadConfig() {
     config = sanitiseConfig(null);
     return;
   }
-  const stored = await chrome.storage.local.get([STORAGE_KEY, 'suite.waitingRoom.thresholds']);
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
   config = sanitiseConfig(stored[STORAGE_KEY]);
-  const wr = stored['suite.waitingRoom.thresholds'];
-  if (wr && Number.isFinite(wr.amber) && Number.isFinite(wr.red)) {
-    config.thresholds = {
-      ...config.thresholds,
-      amberWaitMin: wr.amber,
-      redWaitMin: wr.red,
-    };
-  }
 }
 
 async function loadStreams() {
@@ -446,7 +434,7 @@ if (hasChrome) {
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area && area !== 'local') return;
-    if (changes[STORAGE_KEY] || changes['suite.waitingRoom.thresholds']) {
+    if (changes[STORAGE_KEY]) {
       loadConfig().then(refresh);
     }
   });

@@ -114,6 +114,7 @@ export const DEFAULT_CONFIG = {
   version: 1,
   activeProfileId: 'waiting-room',
   pollSeconds: DEFAULT_POLL_SECONDS,
+  thresholds: { ...DEFAULT_THRESHOLDS },
   profiles: DEFAULT_PROFILES.map((p) => ({ ...p, widgets: [...p.widgets] })),
 };
 
@@ -358,8 +359,8 @@ export function buildTickerLines(snapshot) {
     if (waiting <= 0) lines.push('No one waiting');
     else lines.push(waiting === 1 ? '1 person waiting' : `${waiting} people waiting`);
   }
-  // Public ticker must not loop the wait-band minutes without the
-  // "not a promise" caveat that lives on the tile.
+  // Public ticker must not loop the wait-band minutes — those live
+  // on the People waiting tile, which the practice can switch off.
   if (s.audience === 'staff' && s.waiting && s.waiting.band && s.waiting.count > 0) {
     lines.push(s.waiting.band);
   }

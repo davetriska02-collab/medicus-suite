@@ -188,6 +188,38 @@
   color: var(--text-2);
 }
 
+.note-mod-th-lead {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.note-mod-th-lead + .note-mod-th {
+  margin-top: 2px;
+}
+
+.note-mod-th {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.note-mod-th input {
+  width: 56px;
+  background: var(--bg-mid);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
 .note-mod-poll {
   display: flex;
   align-items: center;

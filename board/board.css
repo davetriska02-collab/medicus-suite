@@ -319,14 +319,6 @@ body {
   color: var(--note-ink);
 }
 
-.note-tile-s-caveat {
-  display: block;
-  margin-top: 6px;
-  font-size: inherit;
-  font-weight: 550;
-  color: var(--note-ink);
-}
-
 .note-fail {
   display: flex;
   flex-direction: column;

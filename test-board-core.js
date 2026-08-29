@@ -66,6 +66,17 @@ const { pathToFileURL } = require('url');
   {
     const cfg = sanitiseConfig(null);
     check(cfg.activeProfileId === 'waiting-room', 'default active profile is waiting-room');
+    check(
+      cfg.thresholds.amberWaitMin === 10 && cfg.thresholds.busyWaiting === 5,
+      'ships default wait and busy thresholds'
+    );
+    const customTh = sanitiseConfig({
+      thresholds: { amberWaitMin: 15, redWaitMin: 30, busyWaiting: 6, veryBusyWaiting: 10 },
+    });
+    check(
+      customTh.thresholds.amberWaitMin === 15 && customTh.thresholds.busyWaiting === 6,
+      'practice thresholds survive sanitise'
+    );
     check(cfg.profiles.length === DEFAULT_PROFILES.length, 'ships all three profiles');
     check(
       cfg.profiles.every((p) => p.id && p.audience && Array.isArray(p.widgets)),
@@ -299,7 +310,8 @@ const { pathToFileURL } = require('url');
     check(!/\.summary/.test(renderer), 'board.js does not read request summaries');
     check(renderer.includes('buildSnapshot'), 'board.js paints via buildSnapshot');
     check(renderer.includes('This board is not updating'), 'public dead feed fails loud');
-    check(renderer.includes('Not a promise for you'), 'wait band is not a personal promise');
+    check(!renderer.includes('Not a promise for you'), 'public tile does not lecture about promises');
+    check(!renderer.includes('suite.waitingRoom.thresholds'), 'Note owns its own wait thresholds');
     check(renderer.includes('Live figures failed'), 'fail-loud chrome does not say Showing live');
     check(renderer.includes('Weighted index'), 'pressure tile does not twin request count');
     check(renderer.includes('A normal amount of people'), 'public Steady has a plain-language sub');
@@ -322,6 +334,9 @@ const { pathToFileURL } = require('url');
     check(companion.includes('You will be asked to confirm'), 'Ops confirm is named on the companion');
     check(companion.includes('plugged into the TV'), 'companion names the computer on the TV');
     check(companion.includes('Open Ops anyway?'), 'companion confirms before opening Ops');
+    check(companion.includes('When this room looks busy'), 'companion exposes wait and busy thresholds');
+    check(companion.includes('data-th="amberWaitMin"'), 'practice can set the wait-band minutes');
+    check(companion.includes('data-th="busyWaiting"'), 'practice can set when the room reads Busy');
   }
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

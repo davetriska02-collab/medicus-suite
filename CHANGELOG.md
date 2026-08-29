@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.250.0] — 2026-08-29
+
+### Note — practice-owned busy and wait settings
+
+The public tile no longer says "Not a promise for you". A wait band is
+still a band, not a named wait in minutes, and the practice decides
+whether that tile is on.
+
+The Note tab now has the numbers the board was already using:
+
+- most waits under / some waits over (minutes)
+- Busy / Very busy at N people waiting
+- staff-only Busy / Very busy at N requests today
+
+Public TVs still ignore today's request pile. They still cannot show
+names, initials, or request wording, and they still cannot grow
+staff-only tiles.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
 ## [v3.249.2] — 2026-08-29
 
 ### Note — Practice leftovers (Normal, fail body, named opener)
