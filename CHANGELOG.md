@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.251.8] — 2026-08-29
+
+### Contacts canvas: flag wrong-type phone numbers on open; flag monoclonal antibodies with no monitoring rule
+
+The contacts canvas already runs a duplicate-address check automatically whenever it opens for
+a patient; the same "fix a mobile-shaped number filed under the wrong type" logic previously
+only ran during an explicit manual-contact merge now runs the same way — on open, against the
+patient's own phone numbers — with a one-click "Fix type → Mobile" action, independent of any
+merge in progress.
+
+Added a new high-risk-unmatched-medication class for monoclonal antibodies and closely-related
+biologics (infliximab, adalimumab, secukinumab, guselkumab, denosumab, and ~30 others across
+rheumatology, dermatology, respiratory, gastroenterology, neurology, bone and oncology) — none
+of these have a dedicated drug-monitoring rule (they're specialist-initiated under shared care),
+so they now get the same "verify monitoring is in place" nudge tacrolimus and methotrexate
+already do. Deliberately includes hospital-administered oncology mAbs, since Medicus routinely
+codes hospital-initiated medication onto the GP record and the practice wants these flagged
+clinically when they appear. JAK inhibitors (baricitinib, tofacitinib) are real immunosuppressants
+but not monoclonal antibodies, and are deliberately excluded from this class.
+
 ## [v3.251.7] — 2026-08-29
 
 ### Review fix — also exclude tacrolimus cream specials from immunosuppression/monitoring flags

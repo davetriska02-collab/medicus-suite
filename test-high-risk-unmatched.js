@@ -182,6 +182,35 @@ console.log('\n--- topical tacrolimus is excluded; oral tacrolimus still flags -
   check(flagged.length === 3, 'exactly the three oral/IV forms are flagged, not the three topical ones');
 }
 
+// ── 9. Monoclonal antibodies / biologics with no drug-monitoring rule flag ─────
+// 2026-08-29 request: infliximab/adalimumab/secukinumab etc. have no dedicated
+// drug-monitoring rule (specialist-initiated under shared care), but should
+// still surface a "verify monitoring in place" nudge the same way tacrolimus does.
+
+console.log('\n--- monoclonal antibodies / biologics with no monitoring rule are flagged ---');
+
+{
+  const flagged = flagHighRiskUnmatched([
+    detail('Infliximab 100mg powder for concentrate for solution for infusion'),
+    detail('Adalimumab 40mg/0.8ml solution for injection pre-filled pen'),
+    detail('Secukinumab 150mg solution for injection pre-filled syringe'),
+    detail('Denosumab 60mg solution for injection pre-filled syringe'),
+    detail('Etanercept 50mg solution for injection pre-filled pen'),
+  ]);
+  check(flagged.length === 5, 'all five biologics are flagged (got ' + flagged.length + ')');
+  check(
+    flagged.every((f) => f.riskClass === 'Biologic / monoclonal antibody (specialist-initiated — verify shared-care monitoring)'),
+    'all classed as the new biologic/mAb risk class'
+  );
+}
+
+// A non-mAb JAK inhibitor (baricitinib/tofacitinib) is a real immunosuppressant but is
+// NOT a monoclonal antibody — must not be swept into this class by name alone.
+{
+  const flagged = flagHighRiskUnmatched([detail('Baricitinib 4mg tablets'), detail('Tofacitinib 5mg tablets')]);
+  check(flagged.length === 0, 'JAK inhibitors are not classed as monoclonal antibodies (not in this list)');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
