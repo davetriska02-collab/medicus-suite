@@ -97,6 +97,18 @@ const { pathToFileURL } = require('url');
     );
   }
 
+  {
+    const clean = io.sanitiseImported({ styleId: 'harbour' });
+    check(clean.styleId === 'harbour', 'import keeps a known look');
+    let threw = false;
+    try {
+      io.sanitiseImported({ styleId: 'neon-club' });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'unknown look is rejected on import');
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => {

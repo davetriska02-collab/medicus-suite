@@ -12,6 +12,7 @@ import {
   DEFAULT_POLL_SECONDS,
   TEMPO_ORDER,
   sanitiseConfig,
+  sanitiseStyleId,
   resolveProfile,
   widgetsForProfile,
   formatFlapRows,
@@ -302,6 +303,9 @@ function paintChrome() {
   document.title = `${profile.name} · Note — Medicus Suite`;
   document.body.dataset.audience = profile.audience;
   document.body.dataset.profile = profile.id;
+  const styleId = sanitiseStyleId(config.styleId);
+  document.body.dataset.style = styleId;
+  document.documentElement.dataset.style = styleId;
   syncDemoBtn();
 
   const bits = ['Note · Medicus Suite'];

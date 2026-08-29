@@ -18,6 +18,18 @@
   const ALL_WIDGETS = PUBLIC_WIDGETS.concat(STAFF_WIDGETS);
   const MAX_MESSAGE = 80;
   const MAX_NAME = 32;
+  const STYLE_IDS = [
+    'flap',
+    'daylight',
+    'clinic',
+    'wayfind',
+    'transit',
+    'instrument',
+    'nightwatch',
+    'ledger',
+    'gallery',
+    'harbour',
+  ];
 
   function isProfileId(id) {
     return typeof id === 'string' && (PROFILE_IDS.includes(id) || CUSTOM_ID.test(id));
@@ -51,6 +63,12 @@
     }
     if (raw.publicCountsRequests !== undefined) {
       out.publicCountsRequests = raw.publicCountsRequests === true;
+    }
+    if (raw.styleId !== undefined) {
+      if (typeof raw.styleId !== 'string' || !STYLE_IDS.includes(raw.styleId)) {
+        throw new Error('board.config.styleId is not a known style.');
+      }
+      out.styleId = raw.styleId;
     }
     if (raw.copy !== undefined) {
       if (!isPlainObject(raw.copy)) throw new Error('board.config.copy must be an object.');

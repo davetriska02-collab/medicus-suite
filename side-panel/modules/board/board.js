@@ -12,6 +12,7 @@ import {
   WIDGET_META,
   PUBLIC_WIDGETS,
   DEFAULT_COPY,
+  BOARD_STYLES,
   MAX_COPY_CHARS,
   MAX_CUSTOM_PROFILES,
   MAX_PROFILE_NAME,
@@ -102,6 +103,23 @@ function render() {
           ? 'Use the computer that is already plugged into the TV. Open this there, then press Fullscreen (or F). The tab will not jump to the TV by itself.'
           : 'You will be asked to confirm. Do not put this on the waiting-room TV. Use the computer already plugged into that screen, then press Fullscreen (or F).'
       }</p>
+
+      <section class="note-mod-card">
+        <h2 class="note-mod-h">Look of the board</h2>
+        <p class="note-mod-th-lead">Every board uses the same look. Pick the one that fits the room.</p>
+        <div class="note-mod-styles" role="radiogroup" aria-label="Board look">
+          ${BOARD_STYLES.map((style) => {
+            const on = style.id === config.styleId;
+            return `<button type="button" class="note-mod-style${on ? ' is-on' : ''}" data-look="${esc(style.id)}" role="radio" aria-checked="${on ? 'true' : 'false'}">
+              <span class="note-mod-style-swatches" aria-hidden="true" style="--s0:${esc(style.swatches[0])};--s1:${esc(style.swatches[1])};--s2:${esc(style.swatches[2])}">
+                <i></i><i></i><i></i>
+              </span>
+              <span class="note-mod-style-name">${esc(style.name)}</span>
+              <span class="note-mod-style-blurb">${esc(style.blurb)}</span>
+            </button>`;
+          }).join('')}
+        </div>
+      </section>
 
       <section class="note-mod-card">
         <h2 class="note-mod-h">Boards</h2>
@@ -293,6 +311,13 @@ function wire() {
       if (!window.confirm('Remove this board? The three shipped boards stay.')) return;
       config.profiles = config.profiles.filter((x) => x.id !== id);
       config.activeProfileId = SHIPPED_PROFILE_IDS[0];
+      persist();
+      render();
+      return;
+    }
+    const look = e.target.closest('[data-look]');
+    if (look) {
+      config.styleId = look.getAttribute('data-look');
       persist();
       render();
       return;

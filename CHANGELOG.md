@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.252.0] — 2026-08-29
+
+### Note — ten looks for the board
+
+A practice can pick the look of every Note board from ten distinct
+professional styles. Split-flap stays the default. The others are
+Daylight, Clinic, Wayfind, Transit, Instrument, Night watch, Ledger,
+Gallery and Harbour.
+
+Looks change paint only. They do not change the numbers, the words, or
+the public-TV lock. No names, no staff tiles on a public board, wait
+time still a band, a dead public feed still fails loud.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
 ## [v3.251.5] — 2026-08-29
 
 ### Note — close a public-board widget-lock gap and correctness fixes found on review of PR #350

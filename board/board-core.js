@@ -228,6 +228,75 @@ export const DEFAULT_PROFILES = [
   },
 ];
 
+export const DEFAULT_STYLE_ID = 'flap';
+
+export const BOARD_STYLES = [
+  {
+    id: 'flap',
+    name: 'Split-flap',
+    blurb: 'Cream flaps on a black chassis. The station board, quietly precise.',
+    swatches: ['#07080b', '#e7dcc8', '#fbbf24'],
+  },
+  {
+    id: 'daylight',
+    name: 'Daylight',
+    blurb: 'Paper-bright for sunlit halls. Navy ink on warm off-white cards.',
+    swatches: ['#f3efe6', '#1b2740', '#a8142b'],
+  },
+  {
+    id: 'clinic',
+    name: 'Clinic',
+    blurb: 'Calm NHS-blue sign. Pale flaps, white type, reads at four metres.',
+    swatches: ['#003087', '#f0f4f5', '#ffb81c'],
+  },
+  {
+    id: 'wayfind',
+    name: 'Wayfind',
+    blurb: 'Black corridor signage. Safety-yellow plates and heavy white type.',
+    swatches: ['#000000', '#ffd200', '#ffffff'],
+  },
+  {
+    id: 'transit',
+    name: 'Transit',
+    blurb: 'Deep black departure board. Amber glyphs, mono timetable voice.',
+    swatches: ['#000000', '#17130c', '#ffb000'],
+  },
+  {
+    id: 'instrument',
+    name: 'Instrument',
+    blurb: 'Cool slate precision. Hairline borders, mono numbers, quiet colour.',
+    swatches: ['#0e1725', '#1a2840', '#48d19b'],
+  },
+  {
+    id: 'nightwatch',
+    name: 'Night watch',
+    blurb: 'Darkened duty room. Phosphor figures, amber pressure, low glare.',
+    swatches: ['#05080a', '#9fe9bd', '#f5a33c'],
+  },
+  {
+    id: 'ledger',
+    name: 'Ledger',
+    blurb: 'Warm paper and a serif message. A practice notice, not a magazine.',
+    swatches: ['#f2ece0', '#1c1913', '#855510'],
+  },
+  {
+    id: 'gallery',
+    name: 'Gallery',
+    blurb: 'Pale stone and charcoal plates. The room is the gallery.',
+    swatches: ['#d6d3cc', '#2c2e2b', '#b08d4f'],
+  },
+  {
+    id: 'harbour',
+    name: 'Harbour',
+    blurb: 'Deep harbour teal, cream lettering, brass edges. A calm reception.',
+    swatches: ['#06201e', '#14403a', '#c8a45e'],
+  },
+];
+
+export function sanitiseStyleId(id) {
+  return BOARD_STYLES.some((s) => s.id === id) ? id : DEFAULT_STYLE_ID;
+}
+
 export const DEFAULT_CONFIG = {
   version: 2,
   activeProfileId: 'waiting-room',
@@ -235,6 +304,7 @@ export const DEFAULT_CONFIG = {
   thresholds: { ...DEFAULT_THRESHOLDS },
   copy: { ...DEFAULT_COPY },
   publicCountsRequests: false,
+  styleId: DEFAULT_STYLE_ID,
   profiles: DEFAULT_PROFILES.map((p) => ({ ...p, widgets: [...p.widgets] })),
 };
 
@@ -374,6 +444,7 @@ export function sanitiseConfig(raw) {
     thresholds: sanitiseThresholds(r.thresholds),
     copy: sanitiseCopy(r.copy),
     publicCountsRequests: r.publicCountsRequests === true,
+    styleId: sanitiseStyleId(r.styleId),
     profiles,
   };
 }

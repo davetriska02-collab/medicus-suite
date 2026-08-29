@@ -58,6 +58,9 @@ const { pathToFileURL } = require('url');
     DEFAULT_COPY,
     feedIsDegraded,
     MAX_CUSTOM_PROFILES,
+    BOARD_STYLES,
+    DEFAULT_STYLE_ID,
+    sanitiseStyleId,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -161,6 +164,15 @@ const { pathToFileURL } = require('url');
       'wait band uses practice wording'
     );
     check(DEFAULT_COPY.failTitle.length > 0, 'shipped fail copy is present');
+    check(DEFAULT_CONFIG.styleId === 'flap', 'default look is Split-flap');
+    check(sanitiseStyleId('harbour') === 'harbour', 'known look is kept');
+    check(sanitiseStyleId('neon-club') === DEFAULT_STYLE_ID, 'unknown look falls back to flap');
+    check(BOARD_STYLES.length === 10, 'ships ten looks');
+    check(new Set(BOARD_STYLES.map((s) => s.id)).size === 10, 'each look has a distinct id');
+    check(
+      BOARD_STYLES.every((s) => s.name && s.blurb && s.swatches.length === 3),
+      'each look has a name, blurb and three swatches'
+    );
     const fullCopy = sanitiseCopy(null);
     check(fullCopy.failBody === DEFAULT_COPY.failBody, 'default fail body is not clipped to the flap limit');
     check(fullCopy.failBody.length > 80, 'fail body is allowed to be longer than a flap line');
@@ -407,6 +419,18 @@ const { pathToFileURL } = require('url');
     check(companion.includes('data-th="amberWaitMin"'), 'practice can set the wait-band minutes');
     check(companion.includes('data-th="busyWaiting"'), 'practice can set when the room reads Busy');
     check(companion.includes('noteModPublicDemand'), 'practice can let public TVs count requests');
+    check(companion.includes('Look of the board'), 'companion exposes the look picker');
+    check(companion.includes('data-look='), 'companion writes the chosen look');
+    check(renderer.includes('dataset.style'), 'kiosk applies the chosen look');
+    const html = fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8');
+    for (const style of BOARD_STYLES) {
+      check(html.includes(`board/styles/${style.id}.css`), `kiosk loads ${style.id}.css`);
+      const sheet = fs.readFileSync(path.join(__dirname, 'board', 'styles', `${style.id}.css`), 'utf8');
+      check(
+        sheet.includes(`[data-style='${style.id}']`) || sheet.includes(`[data-style="${style.id}"]`),
+        `${style.id} CSS is scoped to its look`
+      );
+    }
   }
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

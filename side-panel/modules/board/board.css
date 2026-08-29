@@ -284,3 +284,78 @@
 .note-mod-btn-remove {
   margin-top: 8px;
 }
+
+.note-mod-styles {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.note-mod-style {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  align-items: start;
+  text-align: left;
+  background: var(--bg-mid);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 7px 8px;
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+.note-mod-style:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hi);
+}
+
+.note-mod-style.is-on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--text-1);
+}
+
+.note-mod-style-swatches {
+  grid-row: 1 / span 2;
+  display: flex;
+  width: 42px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.note-mod-style-swatches i {
+  flex: 1;
+  display: block;
+}
+
+.note-mod-style-swatches i:nth-child(1) {
+  background: var(--s0);
+}
+
+.note-mod-style-swatches i:nth-child(2) {
+  background: var(--s1);
+}
+
+.note-mod-style-swatches i:nth-child(3) {
+  background: var(--s2);
+}
+
+.note-mod-style-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.note-mod-style-blurb {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
