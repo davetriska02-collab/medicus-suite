@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.2] — 2026-08-29
+
+### Note — Practice leftovers (Normal, fail body, named opener)
+
+Third synthetic Practice pass closed the leftover list and left a floor
+of 7/10. This patch is the remaining polish that does not reverse a
+judgement call.
+
+- Public tempo big word is **Normal** (not Steady). Quiet / Busy /
+  Very busy stay. Staff still says Steady so the two formulas stay
+  visibly different. Public ticker: "This room is normal".
+- Fail-loud body ("Do not use this screen to judge how busy we are")
+  is the same size as "Please ask reception".
+- Companion opener names the board: "Open the waiting-room board",
+  "Open the message board", or "Open the staff board".
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0. Feature list / CSN stay on the 3.249 minor.
+
 ## [v3.249.1] — 2026-08-29
 
 ### Note — Practice leftovers (wait caveat, fail chrome, TV steps)

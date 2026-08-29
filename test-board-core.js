@@ -48,6 +48,8 @@ const { pathToFileURL } = require('url');
     PUBLIC_WIDGETS,
     STAFF_ONLY_WIDGETS,
     TEMPO_LABEL,
+    PUBLIC_TEMPO_LABEL,
+    tempoLabelFor,
     feedIsDegraded,
   } = await import(corePath);
 
@@ -206,6 +208,10 @@ const { pathToFileURL } = require('url');
     );
     check(snap.demand.medical === 28 && snap.demand.admin === 14, 'demand totals copied');
     check(snap.tempo === 'steady', 'public demo room is steady, not busy-from-demand');
+    check(snap.tempoLabel === 'Normal', 'public tempo word is Normal, not Steady');
+    check(tempoLabelFor('steady', 'public') === 'Normal', 'public helper maps Steady to Normal');
+    check(tempoLabelFor('steady', 'staff') === 'Steady', 'staff helper keeps Steady');
+    check(PUBLIC_TEMPO_LABEL.steady === 'Normal' && TEMPO_LABEL.steady === 'Steady', 'label maps stay split');
   }
 
   console.log('\n--- staff snapshot is still aggregate-only ---');
@@ -218,6 +224,14 @@ const { pathToFileURL } = require('url');
     });
     const json = JSON.stringify(snap);
     check(snap.audience === 'staff', 'staff audience stamped');
+    check(
+      snap.tempoLabel === 'Steady' ||
+        snap.tempoLabel === 'Busy' ||
+        snap.tempoLabel === 'Very busy' ||
+        snap.tempoLabel === 'Quiet',
+      'staff tempo word is not Normal'
+    );
+    check(snap.tempoLabel !== 'Normal', 'staff snapshot does not use the public Normal word');
     check(snap.triage.total === 9 && snap.triage.urgent === 1, 'triage counts copied');
     check(snap.slots.total === 24 && snap.slots.am === 6, 'slot totals copied');
     check(snap.activity.consultations === 41, 'activity totals copied');
@@ -239,20 +253,14 @@ const { pathToFileURL } = require('url');
     const lines = buildTickerLines({
       audience: 'public',
       tempo: 'steady',
-      tempoLabel: 'Steady',
+      tempoLabel: 'Normal',
       waiting: { count: 1, band: 'Most waits are under 10 minutes' },
       demand: { medical: 1, admin: 0 },
     });
     check(lines.includes('1 person waiting'), 'singular waiting line');
-    check(lines.includes('This room is steady'), 'public ticker names the room, not the practice');
-    check(
-      !lines.some((line) => /medical|admin request/i.test(line)),
-      'public ticker omits request volume'
-    );
-    check(
-      !lines.some((line) => /Most waits|under \d+ minutes/i.test(line)),
-      'public ticker omits wait-band minutes'
-    );
+    check(lines.includes('This room is normal'), 'public ticker names the room, not the practice');
+    check(!lines.some((line) => /medical|admin request/i.test(line)), 'public ticker omits request volume');
+    check(!lines.some((line) => /Most waits|under \d+ minutes/i.test(line)), 'public ticker omits wait-band minutes');
     const staffLines = buildTickerLines({
       audience: 'staff',
       tempo: 'busy',
@@ -296,11 +304,20 @@ const { pathToFileURL } = require('url');
     check(renderer.includes('Weighted index'), 'pressure tile does not twin request count');
     check(renderer.includes('A normal amount of people'), 'public Steady has a plain-language sub');
     check(renderer.includes('confirmStaffProfile'), 'Ops open from a public profile confirms');
+    const css = fs.readFileSync(path.join(__dirname, 'board', 'board.css'), 'utf8');
+    check(
+      /note-fail-body[\s\S]*?font-size:\s*clamp\(22px,\s*2\.8vw,\s*36px\)/.test(css),
+      'fail-loud body matches Please ask reception size'
+    );
     const companion = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'board', 'board.js'), 'utf8');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
     check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
     check(companion.includes('This text goes on the staff-room board.'), 'staff flap warning names the staff room');
-    check(companion.includes('Open this profile on a TV tab'), 'companion has one TV opener');
+    check(
+      companion.includes('Open the waiting-room board on a TV tab'),
+      'waiting-room opener names the waiting-room board'
+    );
+    check(companion.includes('Open the message board on a TV tab'), 'message opener names the message board');
     check(companion.includes('Open the staff board on a TV tab'), 'Ops opener is not the same mindless tap');
     check(companion.includes('You will be asked to confirm'), 'Ops confirm is named on the companion');
     check(companion.includes('plugged into the TV'), 'companion names the computer on the TV');

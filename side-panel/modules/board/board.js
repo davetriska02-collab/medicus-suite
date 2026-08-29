@@ -41,6 +41,12 @@ function allowedWidgets(profile) {
   });
 }
 
+function openerLabel(profile) {
+  if (profile.audience === 'staff') return 'Open the staff board on a TV tab';
+  if (profile.id === 'message') return 'Open the message board on a TV tab';
+  return 'Open the waiting-room board on a TV tab';
+}
+
 function persist() {
   config = sanitiseConfig(config);
   chrome.storage.local.set({ [STORAGE_KEY]: config });
@@ -67,9 +73,9 @@ function render() {
       </header>
 
       <div class="note-mod-actions">
-        <button type="button" class="note-mod-btn ${publicLock ? 'note-mod-btn-primary' : 'note-mod-btn-staff'}" data-open="${esc(p.id)}">${
-          publicLock ? 'Open this profile on a TV tab' : 'Open the staff board on a TV tab'
-        }</button>
+        <button type="button" class="note-mod-btn ${publicLock ? 'note-mod-btn-primary' : 'note-mod-btn-staff'}" data-open="${esc(p.id)}">${esc(
+          openerLabel(p)
+        )}</button>
       </div>
       <p class="note-mod-hint">${
         publicLock

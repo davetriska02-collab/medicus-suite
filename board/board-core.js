@@ -60,6 +60,20 @@ export const TEMPO_LABEL = {
   'very-busy': 'Very busy',
 };
 
+// Public TVs say Normal, not Steady. Staff keeps Steady so the two
+// formulas stay visibly different. Do not merge the words.
+export const PUBLIC_TEMPO_LABEL = {
+  quiet: 'Quiet',
+  steady: 'Normal',
+  busy: 'Busy',
+  'very-busy': 'Very busy',
+};
+
+export function tempoLabelFor(tempo, audience) {
+  const map = audience === 'public' ? PUBLIC_TEMPO_LABEL : TEMPO_LABEL;
+  return map[tempo] || TEMPO_LABEL[tempo] || '';
+}
+
 // Defaults match the waiting-room strip (amber 10 / red 20 minutes) and the
 // submissions demand defaults (medical amber 30 / red 60) so the board and
 // the panel do not disagree about "busy".
@@ -351,7 +365,7 @@ export function buildTickerLines(snapshot) {
   }
   if (s.tempo && TEMPO_LABEL[s.tempo]) {
     const lead = s.audience === 'staff' ? 'The practice is' : 'This room is';
-    lines.push(`${lead} ${TEMPO_LABEL[s.tempo].toLowerCase()}`);
+    lines.push(`${lead} ${tempoLabelFor(s.tempo, s.audience).toLowerCase()}`);
   }
   // Public TVs must not announce back-office request volume — patients
   // read "28 medical requests" as people ahead of them.
@@ -407,7 +421,7 @@ export function buildSnapshot(streams, opts) {
   const snapshot = {
     audience,
     tempo,
-    tempoLabel: TEMPO_LABEL[tempo],
+    tempoLabel: tempoLabelFor(tempo, audience),
     waiting: {
       count: wr.count,
       band: band.label,
