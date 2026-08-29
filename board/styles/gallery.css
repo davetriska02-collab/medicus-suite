@@ -1,0 +1,421 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: gallery
+ *
+ * A museum caption, not a magazine. The room is the exhibit: pale stone fills
+ * the field, and everything the board says is mounted on it as a charcoal
+ * plate with a bronze rim. Space is the material being spent, so the stage
+ * padding is deliberately generous and nothing fills the width it could.
+ *
+ * Deliberately far from the ledger style: that one is warm paper and kerned
+ * serif columns, this one is cool stone and evenly cut sans caps. It is also
+ * the opposite of the shipped dark board, where a near-black room carries
+ * cream tiles; here the room is light and the plates are dark.
+ *
+ * The message keeps the fixed cell grid (cast lettering is set on an even
+ * measure, not kerned), but the cream split-flap face is gone: cells carrying
+ * a letter become shallow raised tiles, blanks fall back to bare plate, and
+ * the seam across the middle is removed because a plaque does not flip.
+ *
+ * Two surfaces means two rules for text colour. The chrome and the footer get
+ * a charcoal rail so the muted tokens land on a dark ground everywhere they
+ * are used; the only string that sits directly on stone is the empty state,
+ * which takes a stone-ink override.
+ *
+ * Status meaning is unchanged (green calm, amber pressure, orange busy, red
+ * strain), re-picked for the charcoal plate. Fail-loud is not a caption: the
+ * dead-feed panel floods burnt orange with a heavy rim, because a screen that
+ * has silently stopped updating must never look like considered restraint.
+ *
+ * Contrast, measured against the surface each token actually lands on:
+ *   ink/chassis 12.1:1   soft/chassis 8.9:1   soft/well 10.0:1
+ *   mute/chassis 5.4:1   mute/well 6.1:1      flap-ink/flap 9.3:1
+ *   stone-ink/void 6.4:1    hair/chassis 3.6:1
+ *   quiet 5.1:1   steady 5.8:1   busy 4.6:1   very 5.0:1  (all on chassis)
+ *   fail title/burnt 5.9:1   fail ask/burnt 4.8:1
+ */
+
+/* The canvas is painted by <html>, which sits outside .note-body and so never
+ * sees the remapped tokens. Without this the overscroll gutter on a wall
+ * mounted TV flashes the default near-black. */
+html:has(.note-body[data-style='gallery']) {
+  background: #d6d3cc;
+}
+
+.note-body[data-style='gallery'] {
+  color-scheme: light;
+
+  --note-void: #d6d3cc;
+  --note-chassis: #2c2e2b;
+  --note-well: #232522;
+  --note-hair: #8f8269;
+  --note-mute: #a9a293;
+  --note-soft: #d5d0c4;
+  --note-ink: #f4f1e9;
+  --note-flap: #383a35;
+  --note-flap-ink: #efe6d2;
+  --note-flap-split: transparent;
+  --note-flap-blank: #2c2e2b;
+  --note-quiet: #5fae7d;
+  --note-steady: #d3a049;
+  --note-busy: #e07a35;
+  --note-very: #ea7b84;
+  --note-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Private to this style. */
+  --gal-bronze: rgba(176, 141, 79, 0.42);
+  --gal-stone-ink: #45463f;
+  --gal-mount: 0 12px 28px rgba(52, 49, 41, 0.22);
+  --gal-fail: #a83a10;
+  --gal-fail-deep: #6d2408;
+
+  background: linear-gradient(180deg, #dedbd4 0%, var(--note-void) 55%);
+  color: var(--note-ink);
+}
+
+/* ── Rails ──────────────────────────────────────────────────────────────── */
+
+/* The chrome and footer become charcoal rails. Aesthetically they read as the
+ * plinth the stone sits between; practically they put every muted token on a
+ * dark ground, so one value can serve the tiles and the footer both. */
+.note-body[data-style='gallery'] .note-chrome {
+  padding: 12px 24px 11px;
+  background: var(--note-chassis);
+  border-bottom: 1px solid var(--gal-bronze);
+}
+
+.note-body[data-style='gallery'] .note-chrome-name {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='gallery'] .note-chrome-sub {
+  letter-spacing: 0.16em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='gallery'] .note-chrome-select select,
+.note-body[data-style='gallery'] .note-chrome-btn {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 3px;
+  color: var(--note-soft);
+}
+
+.note-body[data-style='gallery'] .note-chrome-btn:hover,
+.note-body[data-style='gallery'] .note-chrome-select select:hover {
+  border-color: #c8a768;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='gallery'] .note-chrome-btn:focus-visible,
+.note-body[data-style='gallery'] .note-chrome-select select:focus-visible {
+  outline: 2px solid var(--note-steady);
+  outline-offset: 2px;
+}
+
+/* Space is the material. */
+.note-body[data-style='gallery'] .note-stage {
+  padding: clamp(24px, 5vh, 76px) clamp(24px, 6vw, 104px);
+}
+
+.note-body[data-style='gallery'] .note-board {
+  gap: clamp(20px, 3.2vh, 44px);
+}
+
+/* The only copy that sits directly on stone. */
+.note-body[data-style='gallery'] .note-empty {
+  font-size: clamp(15px, 1.6vw, 20px);
+  letter-spacing: 0.04em;
+  color: var(--gal-stone-ink);
+}
+
+/* ── The plaque ─────────────────────────────────────────────────────────── */
+
+.note-body[data-style='gallery'] .note-flaps {
+  gap: clamp(4px, 0.7vh, 10px);
+  padding: clamp(20px, 3.4vh, 46px) clamp(16px, 2.2vw, 34px);
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+
+.note-body[data-style='gallery'] .note-flaps .note-flap-row {
+  gap: clamp(3px, 0.4vw, 7px);
+}
+
+/* A row holding no letters is padding, not a line. Collapsing it keeps the
+ * plate fitted to the caption instead of leaving an empty lower half, which
+ * is what a short message on the two-row grid would otherwise cast. */
+.note-body[data-style='gallery'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
+  display: none;
+}
+
+/* Cast lettering sits on an even measure, so the cell grid stays. What goes is
+ * the cream face and the split seam: cells become shallow raised tiles. */
+.note-body[data-style='gallery'] .note-flaps .note-flap {
+  width: clamp(26px, 2.9vw, 50px);
+  height: clamp(38px, 4.3vw, 70px);
+  background: var(--note-flap);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.42),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.note-body[data-style='gallery'] .note-board[data-profile='message'] .note-flaps .note-flap {
+  width: clamp(34px, 3.9vw, 62px);
+  height: clamp(50px, 5.8vw, 88px);
+}
+
+/* Blanks take the plate colour and lose their edge entirely. A recessed blank
+ * reads as a missing tile, which is how a broken split-flap board looks; on a
+ * plaque the gap between words is simply plate, so only cast letters sit
+ * proud. This matters most on the message profile, which pads a short line out
+ * to a full empty grid. */
+.note-body[data-style='gallery'] .note-flaps .note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: none;
+}
+
+/* A plaque does not flip. */
+.note-body[data-style='gallery'] .note-flaps .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='gallery'] .note-flaps .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='gallery'] .note-flaps .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-size: clamp(17px, 2.2vw, 33px);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--note-flap-ink);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+  transform: none;
+}
+
+.note-body[data-style='gallery'] .note-board[data-profile='message'] .note-flaps .note-flap-glyph {
+  font-size: clamp(21px, 3vw, 43px);
+}
+
+/* ── Mounted plates ─────────────────────────────────────────────────────── */
+
+.note-body[data-style='gallery'] .note-tile {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+
+.note-body[data-style='gallery'] .note-tile-k {
+  font-family: var(--note-sans);
+  font-weight: 600;
+  font-size: clamp(11px, 1.05vw, 14px);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='gallery'] .note-tile-v {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='gallery'] .note-tile-v-word {
+  font-family: var(--note-sans);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='gallery'] .note-tile-s {
+  color: var(--note-soft);
+}
+
+.note-body[data-style='gallery'] .note-tile-s-strong {
+  color: var(--note-ink);
+}
+
+.note-body[data-style='gallery'] .note-tile[data-tone='quiet'],
+.note-body[data-style='gallery'] .note-tile[data-tone='GREEN'] {
+  box-shadow:
+    inset 4px 0 0 var(--note-quiet),
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+.note-body[data-style='gallery'] .note-tile[data-tone='steady'],
+.note-body[data-style='gallery'] .note-tile[data-tone='AMBER'] {
+  box-shadow:
+    inset 4px 0 0 var(--note-steady),
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+.note-body[data-style='gallery'] .note-tile[data-tone='busy'] {
+  box-shadow:
+    inset 4px 0 0 var(--note-busy),
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+.note-body[data-style='gallery'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='gallery'] .note-tile[data-tone='RED'] {
+  box-shadow:
+    inset 4px 0 0 var(--note-very),
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+
+.note-body[data-style='gallery'] .note-dot {
+  background: #4a4c47;
+}
+
+/* ── Caption rail ───────────────────────────────────────────────────────── */
+
+.note-body[data-style='gallery'] .note-ticker {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 3px;
+  box-shadow: var(--gal-mount);
+}
+
+.note-body[data-style='gallery'] .note-ticker-seq {
+  color: var(--note-soft);
+  letter-spacing: 0.12em;
+}
+
+.note-body[data-style='gallery'] .note-ticker-dot {
+  color: var(--note-mute);
+}
+
+/* ── Clock ──────────────────────────────────────────────────────────────── */
+
+/* Its own small plate, so everything on the stone is mounted. */
+.note-body[data-style='gallery'] .note-clock {
+  padding: clamp(8px, 1.2vh, 14px) clamp(10px, 1.4vw, 18px);
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px var(--gal-bronze),
+    var(--gal-mount);
+}
+
+.note-body[data-style='gallery'] .note-clock .note-flap {
+  width: auto;
+  min-width: 0.16em;
+  height: auto;
+  padding: 0;
+  font-size: clamp(20px, 2.4vw, 38px);
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='gallery'] .note-clock .note-flap-blank {
+  min-width: 0.34em;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='gallery'] .note-clock .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='gallery'] .note-clock .note-flap-glyph {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1em;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--note-ink);
+  text-shadow: none;
+  transform: none;
+}
+
+.note-body[data-style='gallery'] .note-clock .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+/* ── Footer rail ────────────────────────────────────────────────────────── */
+
+.note-body[data-style='gallery'] .note-foot {
+  padding: 11px 24px 12px;
+  background: var(--note-chassis);
+  border-top: 1px solid var(--gal-bronze);
+  color: var(--note-mute);
+  letter-spacing: 0.11em;
+}
+
+.note-body[data-style='gallery'] .note-demo-flag {
+  color: var(--note-steady);
+}
+
+.note-body[data-style='gallery'] .note-error {
+  color: var(--note-busy);
+}
+
+/* ── Fail-loud ──────────────────────────────────────────────────────────── */
+
+/* Restraint stops here. The plate floods burnt orange and keeps a heavy rim so
+ * a stale board cannot pass for a considered caption. */
+.note-body[data-style='gallery'] .note-fail {
+  background: var(--gal-fail);
+  border: 4px solid var(--gal-fail-deep);
+  border-radius: 3px;
+  box-shadow: 0 12px 30px rgba(109, 36, 8, 0.32);
+}
+
+.note-body[data-style='gallery'] .note-fail-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #fff4ea;
+}
+
+.note-body[data-style='gallery'] .note-fail-ask {
+  font-weight: 700;
+  color: #ffd9a3;
+}
+
+.note-body[data-style='gallery'] .note-fail-body {
+  color: #fff4ea;
+}
+
+.note-body[data-style='gallery'] .note-fail-banner {
+  background: var(--gal-fail);
+  border: 2px solid var(--gal-fail-deep);
+  border-radius: 3px;
+  color: #fff4ea;
+  font-weight: 700;
+}
+
+/* ── Small screens ──────────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  .note-body[data-style='gallery'] .note-stage {
+    padding: 20px 16px;
+  }
+  .note-body[data-style='gallery'] .note-flaps .note-flap {
+    width: clamp(15px, 3.6vw, 27px);
+    height: clamp(23px, 5.2vw, 38px);
+  }
+  .note-body[data-style='gallery'] .note-flaps .note-flap-glyph {
+    font-size: clamp(10px, 2.8vw, 17px);
+  }
+  .note-body[data-style='gallery'] .note-clock .note-flap {
+    font-size: clamp(15px, 4.4vw, 24px);
+  }
+}
