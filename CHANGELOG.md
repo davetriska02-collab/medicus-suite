@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.247.1] — 2026-08-27
+## [v3.248.1] — 2026-08-29
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,31 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.248.0] — 2026-08-29
+
+### Note — a software display board for TVs and monitors
+
+A Vestaboard-style board you can put on a waiting-room TV or a staff-room
+monitor, fed by the same live hooks Condor and the demand strips already
+use (waiting room, today’s requests, triage inbox, slots, activity).
+
+Three profiles:
+
+- **Waiting room** (public) — tempo (quiet / steady / busy / very busy),
+  people waiting as a count, wait time as a band (“typical wait under
+  10 minutes”), and a request ticker. Never names, initials, or request
+  wording. See **H-067**.
+- **Ops overview** (staff) — the same aggregates plus practice pressure,
+  triage inbox, slots remaining, urgent unactioned.
+- **Message** — split-flap text only, plus a clock.
+
+Configure the flap message and widgets from the new **Note** tab, then
+open the board on the TV and press F for fullscreen. `?demo=1` shows
+canned figures so you can preview without a Medicus session.
+
+Clinical Safety Notice and feature list re-pinned to 3.248.0 (limitation
+49 / H-067). Does not move `last_cso_review_version`.
 
 ## [v3.247.0] — 2026-08-27
 

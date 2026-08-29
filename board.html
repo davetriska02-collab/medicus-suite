@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. -->
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Note — Medicus Suite</title>
+    <link rel="stylesheet" href="board/board.css" />
+  </head>
+  <body class="note-body">
+    <div class="note-chrome" id="noteChrome">
+      <div class="note-chrome-brand">
+        <span class="note-chrome-name">Note</span>
+        <span class="note-chrome-sub" id="noteChromeProfile">Waiting room</span>
+      </div>
+      <div class="note-chrome-actions">
+        <label class="note-chrome-select">
+          <span class="note-sr">Profile</span>
+          <select id="noteProfileSelect" aria-label="Display profile">
+            <option value="waiting-room">Waiting room</option>
+            <option value="ops">Ops overview</option>
+            <option value="message">Message</option>
+          </select>
+        </label>
+        <button type="button" class="note-chrome-btn" id="noteDemoBtn" hidden>Demo</button>
+        <button type="button" class="note-chrome-btn" id="noteFsBtn">Fullscreen</button>
+      </div>
+    </div>
+
+    <main class="note-stage" id="noteStage" aria-live="polite">
+      <div class="note-empty">Opening Note…</div>
+    </main>
+
+    <footer class="note-foot" id="noteFoot">
+      <span id="noteFootLeft">Note · Medicus Suite</span>
+      <span id="noteFootRight"></span>
+    </footer>
+
+    <script type="module" src="board/board.js"></script>
+  </body>
+</html>
