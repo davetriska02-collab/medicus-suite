@@ -48,6 +48,16 @@ const { pathToFileURL } = require('url');
     PUBLIC_WIDGETS,
     STAFF_ONLY_WIDGETS,
     TEMPO_LABEL,
+    PUBLIC_TEMPO_LABEL,
+    tempoLabelFor,
+    sanitiseCopy,
+    fillCopy,
+    newCustomProfile,
+    isCustomProfileId,
+    newCustomProfileId,
+    DEFAULT_COPY,
+    feedIsDegraded,
+    MAX_CUSTOM_PROFILES,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -63,6 +73,17 @@ const { pathToFileURL } = require('url');
   {
     const cfg = sanitiseConfig(null);
     check(cfg.activeProfileId === 'waiting-room', 'default active profile is waiting-room');
+    check(
+      cfg.thresholds.amberWaitMin === 10 && cfg.thresholds.busyWaiting === 5,
+      'ships default wait and busy thresholds'
+    );
+    const customTh = sanitiseConfig({
+      thresholds: { amberWaitMin: 15, redWaitMin: 30, busyWaiting: 6, veryBusyWaiting: 10 },
+    });
+    check(
+      customTh.thresholds.amberWaitMin === 15 && customTh.thresholds.busyWaiting === 6,
+      'practice thresholds survive sanitise'
+    );
     check(cfg.profiles.length === DEFAULT_PROFILES.length, 'ships all three profiles');
     check(
       cfg.profiles.every((p) => p.id && p.audience && Array.isArray(p.widgets)),
@@ -90,6 +111,62 @@ const { pathToFileURL } = require('url');
     check(wr.message === 'Sit please', 'message sanitised on import');
     check(cfg.pollSeconds === 10, 'pollSeconds clamped to minimum');
     check(cfg.activeProfileId === 'ops', 'honours a known activeProfileId');
+    const named = sanitiseConfig({
+      profiles: [{ id: 'waiting-room', name: 'Front hall' }],
+    });
+    check(
+      named.profiles.find((p) => p.id === 'waiting-room').name === 'Front hall',
+      'practice can rename a shipped board'
+    );
+    const extra = sanitiseConfig({
+      profiles: [
+        {
+          id: 'c-abc1234',
+          name: 'Pharmacy',
+          audience: 'public',
+          widgets: ['pressure', 'flap', 'tempo'],
+        },
+      ],
+    });
+    const pharm = extra.profiles.find((p) => p.id === 'c-abc1234');
+    check(Boolean(pharm), 'custom public board is kept');
+    check(pharm.name === 'Pharmacy', 'custom board keeps its name');
+    check(pharm.audience === 'public', 'custom public board stays public');
+    check(!pharm.widgets.includes('pressure'), 'custom public board cannot grow staff tiles');
+    check(isCustomProfileId(newCustomProfile('staff').id), 'new staff board gets a custom id');
+    check(newCustomProfileId() !== newCustomProfileId(), 'two ids minted back-to-back never collide');
+    {
+      // A duplicate id among 7 distinct incoming boards must not eat one of
+      // the cap's 6 real slots — de-dupe has to run before the cap, not after.
+      const seven = Array.from({ length: 7 }, (_, i) => ({
+        id: `c-board${i}xx`,
+        name: `Board ${i}`,
+        audience: 'public',
+      }));
+      const withDupe = [seven[0], ...seven];
+      const capped = sanitiseConfig({ profiles: withDupe });
+      const customCount = capped.profiles.filter((p) => isCustomProfileId(p.id)).length;
+      check(
+        customCount === MAX_CUSTOM_PROFILES,
+        `a duplicate id still leaves all ${MAX_CUSTOM_PROFILES} cap slots usable (got ${customCount})`
+      );
+    }
+    const words = sanitiseCopy({ waitUnder: 'Usually under {n} min', tempoPublicSteady: '<b>Calm</b>' });
+    check(words.waitUnder === 'Usually under {n} min', 'wait sentence keeps the {n} hole');
+    check(words.tempoPublicSteady === 'Calm', 'copy strips markup');
+    check(fillCopy(words.waitUnder, 12) === 'Usually under 12 min', 'fillCopy substitutes {n}');
+    check(
+      waitBand(2, 4, { amberWaitMin: 10, redWaitMin: 20 }, { waitUnder: 'Usually under {n} min' }).label ===
+        'Usually under 10 min',
+      'wait band uses practice wording'
+    );
+    check(DEFAULT_COPY.failTitle.length > 0, 'shipped fail copy is present');
+    const fullCopy = sanitiseCopy(null);
+    check(fullCopy.failBody === DEFAULT_COPY.failBody, 'default fail body is not clipped to the flap limit');
+    check(fullCopy.failBody.length > 80, 'fail body is allowed to be longer than a flap line');
+    const demandOn = sanitiseConfig({ publicCountsRequests: true });
+    check(demandOn.publicCountsRequests === true, 'practice can let public TVs count requests');
+    check(sanitiseConfig({}).publicCountsRequests === false, 'public TVs ignore request volume by default');
   }
   {
     const cfg = sanitiseConfig({ activeProfileId: 'not-a-profile' });
@@ -119,14 +196,14 @@ const { pathToFileURL } = require('url');
     check(none.label === 'No one waiting' && none.tone === 'quiet', 'empty room is quiet / no one waiting');
     const short = waitBand(3, 8, null);
     check(
-      short.label === 'Typical wait under 10 minutes' && short.tone === 'quiet',
+      short.label === 'Most waits are under 10 minutes' && short.tone === 'quiet',
       'under amber is a band, not a number'
     );
     const mid = waitBand(3, 15, null);
-    check(mid.label === 'Typical wait under 20 minutes', 'under red is the next band');
+    check(mid.label === 'Most waits are under 20 minutes', 'under red is the next band');
     const long = waitBand(3, 25, null);
     check(
-      long.label === 'Some waits over 20 minutes' && long.tone === 'busy',
+      long.label === 'Some waits are over 20 minutes' && long.tone === 'busy',
       'over red does not name the longest wait'
     );
     check(!/\d{2,}/.test(long.label.replace('20', '')), 'band label does not leak the 25-minute figure');
@@ -140,7 +217,14 @@ const { pathToFileURL } = require('url');
     deriveTempo({ waitingCount: 1, maxWaitMinutes: 20, demandAll: 0 }) === 'very-busy',
     '20-minute wait is very busy'
   );
-  check(deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }) === 'very-busy', '60 demand is very busy');
+  check(
+    deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }, null, 'staff') === 'very-busy',
+    '60 demand is very busy (staff, where demand counts)'
+  );
+  check(
+    deriveTempo({ waitingCount: 0, maxWaitMinutes: 0, demandAll: 60 }, null, 'public') === 'quiet',
+    'an unrecognised or public mode never lets demand alone read busy'
+  );
   check(
     deriveTempo({ waitingCount: 4, maxWaitMinutes: 8, demandAll: 42 }, null, 'public') === 'steady',
     'public tempo ignores back-office request volume'
@@ -199,8 +283,18 @@ const { pathToFileURL } = require('url');
       snap.ticker.every((line) => !/Alice|Bob|Cara|Dee|Evan|antibiotics|chest pain/i.test(line)),
       'ticker lines carry no fixture PII'
     );
+    check(
+      snap.ticker.every((line) => !/medical|admin request/i.test(line)),
+      'public snapshot ticker omits request volume'
+    );
     check(snap.demand.medical === 28 && snap.demand.admin === 14, 'demand totals copied');
     check(snap.tempo === 'steady', 'public demo room is steady, not busy-from-demand');
+    const demandSnap = buildSnapshot(streams, { nowMs: NOW, audience: 'public', publicCountsRequests: true });
+    check(demandSnap.tempo === 'busy', 'public tempo can count requests when the practice turns that on');
+    check(snap.tempoLabel === 'Normal', 'public tempo word is Normal, not Steady');
+    check(tempoLabelFor('steady', 'public') === 'Normal', 'public helper maps Steady to Normal');
+    check(tempoLabelFor('steady', 'staff') === 'Steady', 'staff helper keeps Steady');
+    check(PUBLIC_TEMPO_LABEL.steady === 'Normal' && TEMPO_LABEL.steady === 'Steady', 'label maps stay split');
   }
 
   console.log('\n--- staff snapshot is still aggregate-only ---');
@@ -213,6 +307,14 @@ const { pathToFileURL } = require('url');
     });
     const json = JSON.stringify(snap);
     check(snap.audience === 'staff', 'staff audience stamped');
+    check(
+      snap.tempoLabel === 'Steady' ||
+        snap.tempoLabel === 'Busy' ||
+        snap.tempoLabel === 'Very busy' ||
+        snap.tempoLabel === 'Quiet',
+      'staff tempo word is not Normal'
+    );
+    check(snap.tempoLabel !== 'Normal', 'staff snapshot does not use the public Normal word');
     check(snap.triage.total === 9 && snap.triage.urgent === 1, 'triage counts copied');
     check(snap.slots.total === 24 && snap.slots.am === 6, 'slot totals copied');
     check(snap.activity.consultations === 41, 'activity totals copied');
@@ -234,12 +336,33 @@ const { pathToFileURL } = require('url');
     const lines = buildTickerLines({
       audience: 'public',
       tempo: 'steady',
-      tempoLabel: 'Steady',
-      waiting: { count: 1, band: 'Typical wait under 10 minutes' },
+      tempoLabel: 'Normal',
+      waiting: { count: 1, band: 'Most waits are under 10 minutes' },
       demand: { medical: 1, admin: 0 },
     });
     check(lines.includes('1 person waiting'), 'singular waiting line');
-    check(lines.includes('1 medical request today'), 'singular medical line');
+    check(lines.includes('This room is normal'), 'public ticker names the room, not the practice');
+    check(!lines.some((line) => /medical|admin request/i.test(line)), 'public ticker omits request volume');
+    check(!lines.some((line) => /Most waits|under \d+ minutes/i.test(line)), 'public ticker omits wait-band minutes');
+    const staffLines = buildTickerLines({
+      audience: 'staff',
+      tempo: 'busy',
+      tempoLabel: 'Busy',
+      waiting: { count: 1, band: 'Most waits are under 10 minutes' },
+      demand: { medical: 1, admin: 0 },
+    });
+    check(staffLines.includes('Most waits are under 10 minutes'), 'staff ticker may keep the wait band');
+    check(staffLines.includes('1 medical request today'), 'staff ticker keeps singular medical line');
+    check(staffLines.includes('The practice is busy'), 'staff ticker may name the practice');
+    const empty = buildTickerLines({
+      audience: 'public',
+      tempo: 'quiet',
+      waiting: { count: 0 },
+    });
+    check(empty.includes('No one waiting'), 'zero waiting is a sentence, not a count');
+    check(feedIsDegraded({ errors: ['timeout'] }), 'errors mark the feed degraded');
+    check(!feedIsDegraded({ errors: [] }), 'empty errors is a live feed');
+    check(!feedIsDegraded(null), 'missing snapshot is not degraded');
   }
 
   console.log('\n--- snapshot leaf walker ---');
@@ -258,8 +381,32 @@ const { pathToFileURL } = require('url');
     check(!/\.appointments/.test(renderer), 'board.js does not walk waitingRoom.appointments');
     check(!/\.summary/.test(renderer), 'board.js does not read request summaries');
     check(renderer.includes('buildSnapshot'), 'board.js paints via buildSnapshot');
+    check(renderer.includes('failTitle'), 'public dead feed paints practice fail copy');
+    check(!renderer.includes('Not a promise for you'), 'public tile does not lecture about promises');
+    check(!renderer.includes('suite.waitingRoom.thresholds'), 'Note owns its own wait thresholds');
+    check(renderer.includes('Live figures failed'), 'fail-loud chrome does not say Showing live');
+    check(renderer.includes('pressureSub'), 'pressure tile uses practice caption');
+    check(renderer.includes('tempoSubSteady'), 'public tempo uses practice subtitle');
+    check(renderer.includes('confirmStaffProfile'), 'Ops open from a public profile confirms');
+    const css = fs.readFileSync(path.join(__dirname, 'board', 'board.css'), 'utf8');
+    check(
+      /note-fail-body[\s\S]*?font-size:\s*clamp\(22px,\s*2\.8vw,\s*36px\)/.test(css),
+      'fail-loud body matches Please ask reception size'
+    );
     const companion = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'board', 'board.js'), 'utf8');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
+    check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
+    check(companion.includes('This text goes on the staff-room board.'), 'staff flap warning names the staff room');
+    check(companion.includes('Add a public board'), 'practice can add a public board');
+    check(companion.includes('Add a staff board'), 'practice can add a staff board');
+    check(companion.includes('Words on the board'), 'practice can edit the words');
+    check(companion.includes('You will be asked to confirm'), 'Ops confirm is named on the companion');
+    check(companion.includes('plugged into the TV'), 'companion names the computer on the TV');
+    check(companion.includes('Open it anyway?'), 'companion confirms before opening a staff board');
+    check(companion.includes('When this room looks busy'), 'companion exposes wait and busy thresholds');
+    check(companion.includes('data-th="amberWaitMin"'), 'practice can set the wait-band minutes');
+    check(companion.includes('data-th="busyWaiting"'), 'practice can set when the room reads Busy');
+    check(companion.includes('noteModPublicDemand'), 'practice can let public TVs count requests');
   }
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

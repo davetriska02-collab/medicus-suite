@@ -2,6 +2,158 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.251.5] — 2026-08-29
+
+### Note — close a public-board widget-lock gap and correctness fixes found on review of PR #350
+
+Review of the custom-boards PR found that the "Requests today" tile
+(`demand` widget: medical/admin counts) was classified as a **public**
+widget in `WIDGET_META`/`PUBLIC_WIDGETS`, pre-dating this PR (shipped at
+v3.248.0). The companion's "What this profile shows" checklist offered it
+on any public profile — including the waiting-room TV — and ticking it
+put an exact "N medical · M admin" tile on a public screen, contradicting
+this notice's own H-067 claim that request wording never reaches a public
+board. `demand` is now staff-only in both copies of the widget allow-list
+(`board/board-core.js`, `shared/io/board-io.js`), closing the gap at all
+three enforcement points (import, config load, render).
+
+Also fixed, found on the same review pass:
+
+- `deriveTempo()`'s demand-counting switch was a deny-list
+  (`mode !== 'public'`), so an unrecognised mode fell open into counting
+  requests toward "busy" — now an explicit allow-list
+  (`mode === 'staff' || mode === 'public-demand'`).
+- Clearing a wait-band/busy-count input field clamped to the numeric
+  floor (e.g. "1 minute") instead of the shipped default, because
+  `Number('')` is `0`, not `NaN`. Empty input now falls back to default.
+- Raising "Busy at" above "Very busy at" silently resets both thresholds
+  to shipped defaults but the companion form kept showing the rejected
+  values until the next full re-render; the threshold input handler now
+  re-renders immediately so the form never lies about what is saved.
+- The six-custom-board cap sliced the incoming list before de-duplicating
+  by id, so a single duplicate id could cost a real slot (7 distinct + 1
+  duplicate kept only 5, not 6). De-dupe now runs before the cap.
+- `newCustomProfileId()` used `Date.now()` alone; two boards created in
+  the same millisecond collided and one silently vanished. Added a random
+  suffix.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays at
+3.202.0.
+
+## [v3.251.4] — 2026-08-29
+
+### Note — custom boards, names and words
+
+The practice owns the boards, not just the busy numbers.
+
+- Add up to six extra public or staff boards, rename any board
+  including the three shipped ones, and remove a custom board
+- Edit every sentence the TV prints (tempo words, wait-band
+  templates with `{n}`, tile labels, fail-loud, ticker leads)
+- Optional: public TVs can count today's requests when judging
+  busy. Off by default, so a quiet waiting room still does not
+  read Busy because of inbox backlog
+
+Still locked (H-067): no names, initials or request wording on a
+public TV; no "show names" flag; staff-only tiles stay off public
+boards including custom ones; shipped profile ids still lock
+audience; wait time stays a band, never a named wait in minutes;
+a dead public feed still fails loud (the words can change, the
+behaviour cannot).
+
+Does not move `last_cso_review_version`. Hazard-log product pin
+stays at 3.202.0.
+
+## [v3.251.3] — 2026-08-29
+
+### Note — practice-owned busy and wait settings
+
+The public tile no longer says "Not a promise for you". A wait band is
+still a band, not a named wait in minutes, and the practice decides
+whether that tile is on.
+
+The Note tab now has the numbers the board was already using:
+
+- most waits under / some waits over (minutes)
+- Busy / Very busy at N people waiting
+- staff-only Busy / Very busy at N requests today
+
+Public TVs still ignore today's request pile. They still cannot show
+names, initials, or request wording, and they still cannot grow
+staff-only tiles.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.251.2] — 2026-08-29
+
+### Note — Practice leftovers (Normal, fail body, named opener)
+
+Third synthetic Practice pass closed the leftover list and left a floor
+of 7/10. This patch is the remaining polish that does not reverse a
+judgement call.
+
+- Public tempo big word is **Normal** (not Steady). Quiet / Busy /
+  Very busy stay. Staff still says Steady so the two formulas stay
+  visibly different. Public ticker: "This room is normal".
+- Fail-loud body ("Do not use this screen to judge how busy we are")
+  is the same size as "Please ask reception".
+- Companion opener names the board: "Open the waiting-room board",
+  "Open the message board", or "Open the staff board".
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0. Feature list / CSN stay on the 3.251 minor.
+
+## [v3.251.1] — 2026-08-29
+
+### Note — Practice leftovers (wait caveat, fail chrome, TV steps)
+
+Second synthetic Practice pass closed the blockers and left a floor of 6/10.
+This patch is the leftover list, aimed at the quoteable wait and the
+technophobe last step.
+
+- Public wait caveat is now the same weight as the band. The public
+  ticker no longer loops the wait-band minutes without that caveat.
+- Fail-loud chrome says "Live figures failed", not "Showing live".
+- Public Steady has a plain line: "A normal amount of people".
+- Pressure index caption: "Weighted index, not today's request count".
+- Companion: open from the computer already plugged into the TV;
+  Ops opener is a separate staff button that names the confirm;
+  staff flap warning names the staff-room board.
+- Widget label "Ticker" (it is no longer a request tape on public).
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0. Feature list / CSN stay on the 3.251 minor.
+
+## [v3.251.0] — 2026-08-29
+
+### Note — Practice pass (public ticker, fail-loud, wait wording)
+
+The first synthetic Practice pass on Note found the public board narrating
+the practice. This minor closes the adopted items.
+
+- **Public ticker** no longer announces today's medical or admin request
+  counts. Unchecking "Requests today" now actually silences that volume.
+  Public lead line is "This room is…"; zero waiting is "No one waiting".
+- **Dead feed fails loud** on a public TV: hide wait, tempo, zeroes and
+  the ticker; full-face "This board is not updating / Please ask
+  reception". Demo mode is excluded. Staff sees a banner instead.
+- **Wait copy** is a band, not a personal promise: "Most waits are under
+  N minutes" plus "Not a promise for you" on the public tile.
+- **Tempo / pressure labels:** public tile is "This room"; staff is
+  "How busy we are" with "Includes today's requests". Pressure is
+  "Pressure index" so it does not twin Requests today.
+- **One companion opener:** "Open this profile on a TV tab". Opening Ops
+  confirms. Public kiosk hides the profile select; key 2 confirms too.
+- **Get set up** collapses on the Note tab ("Setup can wait. The TV
+  board is below") so the companion is not buried.
+- Companion flap: "Do not type patient names. This text goes on a
+  public TV." Demo button now shows the current state.
+
+Clinical Safety Notice and feature list re-pinned to 3.251.0 (limitation
+49 / H-067 controls i–l). Hazard-log product pin stays at 3.202.0.
+Does not move `last_cso_review_version`.
+
 ## [v3.250.0] — 2026-08-29
 
 ### Drug-monitoring and QOF-indicator monitoring fixes

@@ -16,6 +16,8 @@
 // Exported:
 //   initSetup(hostEl)  — wire host, evaluate on boot; called by panel.js
 //   openSetup()        — force-show (called by palette command / CustomEvent)
+//   setSetupActiveModule(name) — collapse the checklist on Note so the TV
+//     board is not buried under Get set up
 
 'use strict';
 
@@ -38,6 +40,9 @@ let _stepStatus = {
   triage: { done: false, optional: true },
 };
 let _visible = false;
+// Which panel tab is open — Note collapses the checklist so the companion
+// (the thing you came here for) is not buried under Get set up.
+let _activeModule = null;
 // Session-only: once the mandatory practice code is detected the card collapses
 // to a thin strip; the user can Expand it for the rest of this session. Never
 // persisted — a fresh panel load starts collapsed again if the code is present.
@@ -255,6 +260,15 @@ function renderTriageStep() {
 
 // Thin one-line strip shown once the practice code (the mandatory first step) is
 // ready, instead of the full multi-step card dominating the module body.
+function renderNoteDeferStrip() {
+  return `
+    <div class="setup-card setup-card--collapsed setup-card--note-defer" role="region" aria-label="Suite setup">
+      <span class="setup-collapsed-text">Setup can wait. The TV board is below</span>
+      <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
+      <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
+    </div>`;
+}
+
 function renderCollapsedStrip() {
   const remaining = remainingStepCount();
   const optionalLabel = remaining === 0 ? 'all steps done' : `${remaining} optional step${remaining === 1 ? '' : 's'}`;
@@ -429,9 +443,11 @@ async function runConnectionTest() {
 
 function renderInto(host) {
   if (!host) return;
-  // Once the mandatory practice code is detected, collapse to a thin strip
-  // (unless the user has expanded it for this session).
-  if (_stepStatus.practiceCode.done && !_setupState.dismissedAt && !_expanded) {
+  // Note is a TV remote. The full Get set up card buries the board, so on
+  // that tab we collapse to a thin strip until the user expands or dismisses.
+  if (_activeModule === 'board' && !_setupState.dismissedAt && !_expanded) {
+    host.innerHTML = renderNoteDeferStrip();
+  } else if (_stepStatus.practiceCode.done && !_setupState.dismissedAt && !_expanded) {
     host.innerHTML = renderCollapsedStrip();
   } else {
     host.innerHTML = renderCard();
@@ -455,6 +471,17 @@ function hide() {
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Called from panel.js whenever the user switches tabs. On Note, collapse
+ * the checklist so the companion stays on screen.
+ */
+export function setSetupActiveModule(name) {
+  _activeModule = name;
+  if (!_host || !_visible || _tourActive) return;
+  renderInto(_host);
+  wireEvents();
+}
 
 /**
  * Force-show the setup card (called by palette command and suite:open-setup event).

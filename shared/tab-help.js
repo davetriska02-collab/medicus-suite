@@ -122,8 +122,9 @@ export const TAB_HELP = {
   },
   board: {
     title: 'Note',
-    what: 'A configurable display board for a waiting-room TV or a staff-room monitor. Public profiles show only counts, wait bands and the message you type — never patient names.',
-    firstStep: 'Pick Waiting room or Ops, type the flap message if you want one, then open the board on the screen that faces the room and press F for fullscreen.',
+    what: 'A configurable display board for a waiting-room TV or a staff-room monitor. You add boards and set the words. Public profiles show only counts, wait bands and the message you type — never patient names.',
+    firstStep:
+      'Add or rename a board, pick the tiles, set the words and when the room looks busy, then open it on the computer already plugged into the TV and press Fullscreen (or F).',
   },
   'rota-app': {
     title: 'Rota manager',
