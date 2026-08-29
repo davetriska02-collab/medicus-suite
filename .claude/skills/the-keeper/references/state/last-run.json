@@ -1,35 +1,40 @@
 {
-  "runDate": "2026-08-18",
-  "previousRunDate": "2026-08-01",
-  "manifestVersion": "3.233.0",
+  "runDate": "2026-08-29",
+  "previousRunDate": "2026-08-18",
+  "runType": "source-gap-run",
+  "manifestVersion": "3.247.0",
   "csoSignedOff": {
     "date": "2026-08-18",
     "by": "Dr D. Triska",
     "scope": "Applied additive set only (12 changes). Held items remain unsigned."
   },
   "ruleFileLastUpdated": {
-    "rules/drug-rules.json": "2026-08-18",
-    "rules/qof-rules.json": "2026-07-25",
-    "rules/vaccine-rules.json": "2026-08-18",
-    "rules/alert-library.json": "2026-08-18",
-    "rules/reception-pathways.json": "2026-08-18",
+    "rules/drug-rules.json": "2026-08-22",
+    "rules/qof-rules.json": "2026-08-22",
+    "rules/vaccine-rules.json": "2026-08-22",
+    "rules/alert-library.json": "2026-08-22",
+    "rules/reception-pathways.json": "2026-08-23",
     "engine/acb-scores.js": "2026-07-25",
     "engine/stopp-start.js": "2026-07-25",
     "engine/rules-engine.js": "2026-08-01"
   },
-  "sourcesChecked": [
-    "https://bnf.nice.org.uk/drugs/warfarin-sodium/",
-    "https://bnf.nice.org.uk/drugs/eprosartan/medicinal-forms/",
-    "https://bnf.nice.org.uk/drugs/quetiapine/medicinal-forms/",
-    "https://bnf.nice.org.uk/drugs/carbamazepine/medicinal-forms/",
-    "https://www.sps.nhs.uk/monitorings/mycophenolate-mofetil-and-mycophenolic-acid-monitoring/",
-    "https://www.gov.uk/drug-safety-update/fezolinetant-veoza-risk-of-liver-injury-new-recommendations-to-minimise-risk",
-    "https://www.gov.uk/drug-safety-update/topiramate-topamax-introduction-of-new-safety-measures-including-a-pregnancy-prevention-programme",
-    "https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals",
-    "https://cks.nice.org.uk/topics/sore-throat-acute/",
-    "https://cks.nice.org.uk/topics/headache-assessment/"
+  "sourcesChecked": [],
+  "sourceGaps": [
+    "EGRESS PROXY BLOCK (2026-08-29): All authoritative UK clinical guidance sources blocked — bnf.nice.org.uk, www.gov.uk/drug-safety-update, www.sps.nhs.uk, www.nice.org.uk, cks.nice.org.uk, www.england.nhs.uk, www.gov.uk (UKHSA/JCVI), www.acbcalc.com, www.nottingham.ac.uk/primis",
+    "NHS England PRN02356 July 2026 amendment PDF — 403-blocked (3rd consecutive run)"
   ],
+  "changesAppliedThisRun": [],
   "heldForNextRun": [
+    {
+      "id": "medreview-biperiden",
+      "description": "biperiden (Akineton) possibly missing from ACB_TABLE at score 3 — needs acbcalc.com verification. UK-licensed anticholinergic antiparkinson drug, same class as procyclidine/orphenadrine/trihexyphenidyl already in table.",
+      "heldSince": "2026-08-29"
+    },
+    {
+      "id": "vax-rsv-age-2026",
+      "description": "RSV eligibility: search result suggests age threshold changed from 75+ to 80+ in April 2026 JCVI advice. CSO to verify against current UKHSA RSV HCP letter before 2026 autumn season (effective 1 Sept 2026). Current rule flags 75+ which may over-flag if threshold raised. Weakens_safety if narrowed.",
+      "heldSince": "2026-08-29"
+    },
     {
       "id": "qof-ckd002-003-disable",
       "description": "CKD002/CKD003 disable (weakens_safety). Scanners say they are not in official 26/27 tables. Held for CSO sign-off.",
@@ -52,12 +57,12 @@
     },
     {
       "id": "drug-003-chc-brands",
-      "description": "CHC brand-list expansion (Drovelis / estetrol etc.) — not re-fetched brand-by-brand this apply pass.",
+      "description": "CHC brand-list expansion (Drovelis / estetrol etc.) — UK licensing status not verified this run (source blocked).",
       "heldSince": "2026-08-17"
     },
     {
       "id": "medreview-scan",
-      "description": "MEDREVIEW scanner hung. ACB / STOPP / visualiser PINCER tables still unchecked this cycle. Standing CSO verification of ACB/STOPP starter set still outstanding.",
+      "description": "MEDREVIEW scanner: ACB / STOPP / visualiser PINCER tables vs external sources (acbcalc.com, STOPP v3) still unchecked. Standing CSO verification of ACB/STOPP starter set still outstanding.",
       "heldSince": "2026-08-17"
     },
     {
@@ -68,88 +73,26 @@
     },
     {
       "id": "ob004-qof",
-      "description": "OB004/OB005 stay disabled (90-day / TA1026 SDM not expressible). Values confirmable from July PDF.",
+      "description": "OB004/OB005 stay disabled (90-day / TA1026 SDM not expressible). Values confirmable from July PDF once accessible.",
       "heldSince": "2026-07-25"
+    },
+    {
+      "id": "drug-digoxin-disabled",
+      "description": "digoxin-renal-monitoring rule exists but enabled:false — CSO activation decision pending.",
+      "heldSince": "2026-08-01"
+    },
+    {
+      "id": "pathway-fever-adult-cso",
+      "description": "fever-adult pathway PENDING CSO SIGN-OFF — including NICE CKS Malaria rf-travel verification (source geo-restricted).",
+      "heldSince": "2026-08-23"
     }
   ],
-  "sourceGaps": [
-    "BSR 2025 full-text PDF (Cloudflare)",
-    "NHS Digital QOF v51 extract files (landing page only)",
-    "MEDREVIEW domain not scanned (scanner hung)",
-    "CHC brand-completeness sweep not re-fetched this apply pass"
-  ],
-  "changesAppliedThisRun": [
-    {
-      "id": "drug-001",
-      "rag": "Red",
-      "description": "New warfarin-vka INR 84d rule (warfarin, marevan, acenocoumarol, sinthrome, phenindione, dindevan)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-002",
-      "rag": "Red",
-      "description": "ace-arb: add eprosartan, teveten",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-004",
-      "rag": "Red",
-      "description": "antipsychotic: add mintreleq, sondate",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-005",
-      "rag": "Red",
-      "description": "carbamazepine-maintenance: add curatil",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-006",
-      "rag": "Amber",
-      "description": "New mycophenolate-maintenance FBC/LFT/U&E 84d",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "drug-008",
-      "rag": "Amber",
-      "description": "New fezolinetant-lft 90d (Veoza)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "vax-001",
-      "rag": "Red",
-      "description": "RSV 65-74 COPD + immunosuppression eligibility encoded (effective 1 Sept 2026; no bare asthma)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-S004",
-      "rag": "Red",
-      "description": "New mhra-topiramate-ppp alert (F 12-55)",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-S006",
-      "rag": "Red",
-      "description": "New mhra-warfarin-tramadol interaction alert",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-pincer7-marevan",
-      "rag": "Red",
-      "description": "PINCER #7 match adds marevan",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "pathway-001",
-      "rag": "Red",
-      "description": "sore-throat rf-unwell-child duty→999",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "pathway-004",
-      "rag": "Red",
-      "description": "headache rf-household-co 999 added",
-      "appliedDate": "2026-08-18"
-    }
+  "actionableForCSO": [
+    "RSV eligibility age threshold: check current UKHSA RSV HCP letter — is eligibility now 80+ (not 75+) from April 2026? Season starts 1 Sept 2026.",
+    "digoxin-renal-monitoring: rule ready (enabled:false). CSO to decide activation.",
+    "fever-adult pathway: PENDING CSO SIGN-OFF.",
+    "PRN02356 July 2026 PDF: 3rd consecutive run blocked (403). Request directly from NHS England.",
+    "biperiden (Akineton): verify on ACBcalc.com — if score 3, can be added to ACB_TABLE next run.",
+    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0."
   ]
 }
