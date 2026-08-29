@@ -15,6 +15,28 @@ standard. Conformance is therefore claimed as *alignment*, not certification.
 
 ---
 
+> **Document currency note — added 2026-08-29 weekly release review.** This
+> CSCR's hazard count and table (§4) are frozen at the v3.84.2 baseline (30
+> hazards, H-001–H-030), issued 2026-06-14. `HAZARD-LOG.md` (MS-CSO-HL-001)
+> and `CLINICAL-SAFETY-NOTICE.md` (MS-CSO-CSN-001) have both moved well past
+> that baseline since — the hazard register now runs to **H-066**, carried as
+> incremental addenda pinned at product version 3.202.0 with the CSN pinned at
+> 3.247.0, and both remain within the tolerance enforced by
+> `scripts/check-doc-versions.js`/`docs/cso-review-ledger.json`. This CSCR
+> itself is **not** covered by that automated staleness guard (only the CSN,
+> HAZARD-LOG, SOUP and feature-list version pins are checked), so its drift
+> from the live register is not machine-enforced and is larger than either of
+> those: at the time of this note it summarises roughly half of the current
+> hazard register. `docs/CLINICAL-SAFETY-RESYNC-v3.84.2-DRAFT.md` is a
+> prior, never-applied change-proposal for resynchronising the three core
+> documents to v3.84.2 that itself now needs re-targeting to a current
+> version. This note does not alter §4's table or the §9 declaration — no
+> content is invented here — and is raised as an open action for CSO
+> attention: a full CSCR resync (or a decision to retire this document in
+> favour of `HAZARD-LOG.md`'s own §6 hazard summary as the current
+> single source of truth) is recommended before the next external reliance on
+> this report.
+
 ## 1. Purpose and scope
 
 This Clinical Safety Case Report (CSCR) presents the argument and supporting
