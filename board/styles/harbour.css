@@ -1,0 +1,113 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: harbour
+ *
+ * A private-practice reception, not a spa and not a pub. Deep harbour teal
+ * water for the room, lighter teal cards for the message, cream lettering,
+ * and brass only where a real reception has brass: hairlines, card rims and
+ * the warm spill of a lamp above the desk. No ropes, no anchors, no leaf.
+ *
+ * Green-leaning teal throughout (green channel above blue in every surface)
+ * so it never drifts towards NHS blue, and the flap faces sit LIGHTER than
+ * their chassis, which is the opposite of the shipped cream-on-black board.
+ *
+ * Status meaning is unchanged: green calm, amber pressure, orange busy, red
+ * strain. The hues are re-picked for a warm dark ground, not reassigned, and
+ * fail-loud keeps its full-strength orange border.
+ *
+ * Contrast, measured against the surface each token actually lands on:
+ *   ink/chassis 13.2:1   soft/chassis 10.1:1   mute/chassis 5.7:1
+ *   flap-ink/flap 9.9:1  steady/chassis 9.0:1  busy/chassis 7.0:1
+ *   very/chassis 5.5:1   quiet/chassis 8.5:1   mute/void 6.5:1
+ */
+
+/* The canvas is painted by <html>, which sits outside .note-body and so never
+ * sees the remapped tokens. Without this the overscroll gutter on a wall-
+ * mounted TV flashes the default near-black. */
+html:has(.note-body[data-style='harbour']) {
+  background: #06201e;
+}
+
+.note-body[data-style='harbour'] {
+  color-scheme: dark;
+
+  --note-void: #06201e;
+  --note-chassis: #0d2b28;
+  --note-well: #041615;
+  --note-hair: rgba(200, 164, 94, 0.32);
+  --note-mute: #a4a08d;
+  --note-soft: #ddd2bb;
+  --note-ink: #f6efdf;
+  --note-flap: #14403a;
+  --note-flap-ink: #f7edd9;
+  --note-flap-split: rgba(246, 237, 217, 0.16);
+  --note-flap-blank: #082220;
+  --note-quiet: #7bd694;
+  --note-steady: #f2c24e;
+  --note-busy: #f79a4d;
+  --note-very: #f4776f;
+  --note-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --note-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --note-fast: 190ms;
+
+  /* Local to this style. Kept a step duller than --note-steady so brass trim
+   * can never be mistaken for an amber status signal. */
+  --note-brass: #c8a45e;
+
+  background: radial-gradient(1100px 560px at 50% -12%, rgba(200, 164, 94, 0.1), transparent 62%), var(--note-void);
+}
+
+/* ── Message panel ──────────────────────────────────────────────────────── */
+
+.note-body[data-style='harbour'] .note-flaps {
+  background: linear-gradient(180deg, rgba(246, 239, 223, 0.05), rgba(4, 22, 21, 0.4)), var(--note-chassis);
+  box-shadow:
+    inset 0 1px 0 rgba(200, 164, 94, 0.22),
+    0 22px 48px rgba(2, 12, 11, 0.55);
+}
+
+/* The shipped rim lights a cream face from above at 45% white, which on a
+ * dark card reads as a scar. Brass rim, softer top light, weighted base. */
+.note-body[data-style='harbour'] .note-flap {
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 164, 94, 0.3),
+    inset 0 1px 0 rgba(246, 237, 217, 0.14),
+    inset 0 -1px 0 rgba(2, 12, 11, 0.5),
+    0 1px 2px rgba(2, 12, 11, 0.55);
+}
+
+/* Empty cells lose the rim entirely so they read as gaps in the run, not as
+ * cards that happen to be blank. */
+.note-body[data-style='harbour'] .note-flap-blank {
+  box-shadow: inset 0 0 0 1px rgba(200, 164, 94, 0.07);
+}
+
+.note-body[data-style='harbour'] .note-flap-blank::after {
+  background: rgba(246, 237, 217, 0.06);
+}
+
+/* ── Tiles and ticker ───────────────────────────────────────────────────── */
+
+/* Set on background, not box-shadow, so the data-tone status bars survive. */
+.note-body[data-style='harbour'] .note-tile {
+  background: linear-gradient(180deg, rgba(246, 239, 223, 0.045), rgba(246, 239, 223, 0) 42%), var(--note-chassis);
+}
+
+.note-body[data-style='harbour'] .note-ticker {
+  box-shadow: inset 0 1px 3px rgba(2, 12, 11, 0.6);
+}
+
+/* :not(.is-on) is load-bearing, not decoration. Without it this rule ties on
+ * specificity with board.css's `.note-dot.is-on[data-tone=…]` and, being the
+ * later sheet, would win and unlight every tempo dot. */
+.note-body[data-style='harbour'] .note-dot:not(.is-on) {
+  background: #1a3f39;
+}
+
+/* ── Chrome ─────────────────────────────────────────────────────────────── */
+
+/* The shipped hover border is a blue slate borrowed from the panel tokens. */
+.note-body[data-style='harbour'] .note-chrome-btn:hover,
+.note-body[data-style='harbour'] .note-chrome-select select:hover {
+  border-color: var(--note-brass);
+}
