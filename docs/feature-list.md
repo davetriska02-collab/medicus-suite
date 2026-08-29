@@ -134,7 +134,7 @@ The full **Rota Manager** (separate browser tab) additionally covers working-pat
 
 ### Note
 Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Pick a profile, edit the flap message, toggle widgets, and open the kiosk.
-- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), how-busy from occupancy only. Does not show medical/admin request counts. A dead feed fails loud rather than painting a quiet empty room.
+- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes, with "Not a promise for you"), how-busy from occupancy only. Does not show medical/admin request counts. A dead feed fails loud rather than painting a quiet empty room.
 - **Ops overview** (staff) — the same aggregates plus Practice Pressure Index, triage inbox and slots remaining
 - **Message** (public) — flap text and clock
 - Public profiles never show patient names, initials or request wording

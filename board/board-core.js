@@ -41,10 +41,10 @@ export const WIDGET_META = {
   flap: { label: 'Message flaps', audience: 'public' },
   tempo: { label: 'How busy we are', audience: 'public' },
   waiting: { label: 'People waiting', audience: 'public' },
-  ticker: { label: 'Request ticker', audience: 'public' },
+  ticker: { label: 'Ticker', audience: 'public' },
   demand: { label: 'Requests today', audience: 'public' },
   clock: { label: 'Clock', audience: 'public' },
-  pressure: { label: 'Practice pressure', audience: 'staff' },
+  pressure: { label: 'Pressure index', audience: 'staff' },
   triage: { label: 'Triage inbox', audience: 'staff' },
   slots: { label: 'Slots remaining', audience: 'staff' },
   urgent: { label: 'Urgent unactioned', audience: 'staff' },
@@ -344,7 +344,11 @@ export function buildTickerLines(snapshot) {
     if (waiting <= 0) lines.push('No one waiting');
     else lines.push(waiting === 1 ? '1 person waiting' : `${waiting} people waiting`);
   }
-  if (s.waiting && s.waiting.band && s.waiting.count > 0) lines.push(s.waiting.band);
+  // Public ticker must not loop the wait-band minutes without the
+  // "not a promise" caveat that lives on the tile.
+  if (s.audience === 'staff' && s.waiting && s.waiting.band && s.waiting.count > 0) {
+    lines.push(s.waiting.band);
+  }
   if (s.tempo && TEMPO_LABEL[s.tempo]) {
     const lead = s.audience === 'staff' ? 'The practice is' : 'This room is';
     lines.push(`${lead} ${TEMPO_LABEL[s.tempo].toLowerCase()}`);

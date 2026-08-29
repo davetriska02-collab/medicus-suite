@@ -59,6 +59,13 @@
   font-weight: 600;
 }
 
+.note-mod-btn-staff {
+  background: var(--amber-dim);
+  color: var(--text-1);
+  border-color: var(--amber-line);
+  font-weight: 600;
+}
+
 .note-mod-hint {
   margin: -4px 0 0;
   font-size: 11px;

@@ -113,7 +113,8 @@ function confirmStaffProfile(id) {
 function syncDemoBtn() {
   if (!hasChrome || !demoBtn) return;
   demoBtn.hidden = false;
-  demoBtn.textContent = usingDemo ? 'Showing demo' : 'Showing live';
+  if (publicFeedFailed()) demoBtn.textContent = 'Live figures failed';
+  else demoBtn.textContent = usingDemo ? 'Showing demo' : 'Showing live';
 }
 
 function publicFeedFailed() {
@@ -144,6 +145,14 @@ function clockHtml(prev) {
   const { html } = flapsHtml(text, 1, 5, prev);
   lastClock = formatFlapRows(text, 5, 1).join('\n');
   return `<div class="note-clock-wrap"><div class="note-clock" aria-label="Time">${html}</div></div>`;
+}
+
+function publicTempoSub(tempo) {
+  if (tempo === 'quiet') return 'Few people in this room';
+  if (tempo === 'steady') return 'A normal amount of people';
+  if (tempo === 'busy') return 'This room is busy';
+  if (tempo === 'very-busy') return 'This room is very busy';
+  return '';
 }
 
 function widgetSet() {
@@ -209,7 +218,7 @@ function render() {
         v: s.tempoLabel,
         word: true,
         tone: s.tempo,
-        sub: profile.audience === 'staff' ? esc("Includes today's requests") : '',
+        sub: profile.audience === 'staff' ? esc("Includes today's requests") : esc(publicTempoSub(s.tempo)),
         dots: tempoDots(s.tempo),
       })
     );
@@ -229,7 +238,11 @@ function render() {
       tile({
         k: 'Pressure index',
         v: s.pressure.ppi == null ? '—' : String(s.pressure.ppi),
-        sub: esc(s.pressure.band || 'Index from Condor'),
+        sub: esc(
+          s.pressure.band
+            ? `${s.pressure.band} · Weighted index, not today's request count`
+            : "Weighted index, not today's request count"
+        ),
         tone: s.pressure.band || '',
       })
     );

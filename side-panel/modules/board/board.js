@@ -67,9 +67,15 @@ function render() {
       </header>
 
       <div class="note-mod-actions">
-        <button type="button" class="note-mod-btn note-mod-btn-primary" data-open="${esc(p.id)}">Open this profile on a TV tab</button>
+        <button type="button" class="note-mod-btn ${publicLock ? 'note-mod-btn-primary' : 'note-mod-btn-staff'}" data-open="${esc(p.id)}">${
+          publicLock ? 'Open this profile on a TV tab' : 'Open the staff board on a TV tab'
+        }</button>
       </div>
-      <p class="note-mod-hint">Opens a new browser tab. Drag that tab onto the TV, then press F for fullscreen.</p>
+      <p class="note-mod-hint">${
+        publicLock
+          ? 'Use the computer that is already plugged into the TV. Open this there, then press Fullscreen (or F). The tab will not jump to the TV by itself.'
+          : 'You will be asked to confirm. Do not put this on the waiting-room TV. Use the computer already plugged into that screen, then press Fullscreen (or F).'
+      }</p>
 
       <section class="note-mod-card">
         <h2 class="note-mod-h">Profile</h2>
@@ -91,7 +97,11 @@ function render() {
         <textarea id="noteModMessage" class="note-mod-msg" maxlength="${MAX_MESSAGE_CHARS}" rows="3" aria-label="Board message">${esc(msg)}</textarea>
         <div class="note-mod-meta">
           <span id="noteModCount">${msg.length}</span> / ${MAX_MESSAGE_CHARS}
-          <span class="note-mod-warn">Do not type patient names. This text goes on a public TV.</span>
+          <span class="note-mod-warn">${
+            publicLock
+              ? 'Do not type patient names. This text goes on a public TV.'
+              : 'Do not type patient names. This text goes on the staff-room board.'
+          }</span>
         </div>
       </section>
 
@@ -123,7 +133,7 @@ function render() {
         ${
           publicLock
             ? `<strong>Public display.</strong> Waiting-room and Message profiles never show patient names, initials, or request wording. The board shows counts, wait bands, and how busy this room is. It does not show today's medical or admin request volume. ${PUBLIC_WIDGETS.length} widgets are allowed; staff-only tiles are locked off.`
-            : `<strong>Staff display.</strong> Ops still paints aggregates only (no patient names). Keep this profile off the waiting-room TV. It shows the triage inbox and pressure figures patients should not see.`
+            : `<strong>Staff display.</strong> No patient names. Keep this off the waiting-room TV. It shows the triage inbox and pressure figures patients should not see.`
         }
       </aside>
     </div>

@@ -249,6 +249,10 @@ const { pathToFileURL } = require('url');
       !lines.some((line) => /medical|admin request/i.test(line)),
       'public ticker omits request volume'
     );
+    check(
+      !lines.some((line) => /Most waits|under \d+ minutes/i.test(line)),
+      'public ticker omits wait-band minutes'
+    );
     const staffLines = buildTickerLines({
       audience: 'staff',
       tempo: 'busy',
@@ -256,6 +260,7 @@ const { pathToFileURL } = require('url');
       waiting: { count: 1, band: 'Most waits are under 10 minutes' },
       demand: { medical: 1, admin: 0 },
     });
+    check(staffLines.includes('Most waits are under 10 minutes'), 'staff ticker may keep the wait band');
     check(staffLines.includes('1 medical request today'), 'staff ticker keeps singular medical line');
     check(staffLines.includes('The practice is busy'), 'staff ticker may name the practice');
     const empty = buildTickerLines({
@@ -287,11 +292,18 @@ const { pathToFileURL } = require('url');
     check(renderer.includes('buildSnapshot'), 'board.js paints via buildSnapshot');
     check(renderer.includes('This board is not updating'), 'public dead feed fails loud');
     check(renderer.includes('Not a promise for you'), 'wait band is not a personal promise');
+    check(renderer.includes('Live figures failed'), 'fail-loud chrome does not say Showing live');
+    check(renderer.includes('Weighted index'), 'pressure tile does not twin request count');
+    check(renderer.includes('A normal amount of people'), 'public Steady has a plain-language sub');
     check(renderer.includes('confirmStaffProfile'), 'Ops open from a public profile confirms');
     const companion = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'board', 'board.js'), 'utf8');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
     check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
+    check(companion.includes('This text goes on the staff-room board.'), 'staff flap warning names the staff room');
     check(companion.includes('Open this profile on a TV tab'), 'companion has one TV opener');
+    check(companion.includes('Open the staff board on a TV tab'), 'Ops opener is not the same mindless tap');
+    check(companion.includes('You will be asked to confirm'), 'Ops confirm is named on the companion');
+    check(companion.includes('plugged into the TV'), 'companion names the computer on the TV');
     check(companion.includes('Open Ops anyway?'), 'companion confirms before opening Ops');
   }
 

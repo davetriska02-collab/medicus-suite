@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.1] — 2026-08-29
+
+### Note — Practice leftovers (wait caveat, fail chrome, TV steps)
+
+Second synthetic Practice pass closed the blockers and left a floor of 6/10.
+This patch is the leftover list, aimed at the quoteable wait and the
+technophobe last step.
+
+- Public wait caveat is now the same weight as the band. The public
+  ticker no longer loops the wait-band minutes without that caveat.
+- Fail-loud chrome says "Live figures failed", not "Showing live".
+- Public Steady has a plain line: "A normal amount of people".
+- Pressure index caption: "Weighted index, not today's request count".
+- Companion: open from the computer already plugged into the TV;
+  Ops opener is a separate staff button that names the confirm;
+  staff flap warning names the staff-room board.
+- Widget label "Ticker" (it is no longer a request tape on public).
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0. Feature list / CSN stay on the 3.249 minor.
+
 ## [v3.249.0] — 2026-08-29
 
 ### Note — Practice pass (public ticker, fail-loud, wait wording)

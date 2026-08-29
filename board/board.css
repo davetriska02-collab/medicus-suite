@@ -321,10 +321,10 @@ body {
 
 .note-tile-s-caveat {
   display: block;
-  margin-top: 4px;
-  font-size: clamp(11px, 1.05vw, 14px);
-  font-weight: 500;
-  color: var(--note-mute);
+  margin-top: 6px;
+  font-size: inherit;
+  font-weight: 550;
+  color: var(--note-ink);
 }
 
 .note-fail {
