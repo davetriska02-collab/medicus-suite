@@ -190,6 +190,75 @@ check(
 if (qofChip.valueText) check(qofHtml.includes(esc(qofChip.valueText)), 'renderer reads chip.valueText');
 check(/class="sent-chip /.test(qofHtml), 'qof chip top-level class is .sent-chip (token-scope invariant)');
 
+// 2b. Reduced-confidence contract (2026-08-27): engine's registerDateIsOnset /
+// noMatchingProblemCode → renderer's sent-chip-uncertain class + explicit
+// note text. Driven through the REAL AST014 rule + ASTHMA register end-to-end
+// (evaluatePatient → evaluateQofIndicatorRule → renderQofIndicatorChip), not
+// a hand-built chip, so a field-name drift on either side fails here.
+console.log('\n2b. qof-indicator uncertainty: engine registerDateIsOnset/noMatchingProblemCode → renderer sent-chip-uncertain');
+const ast014Rule = qofDoc.rules.find((r) => r.indicatorCode === 'AST014');
+const asthmaReg = qofDoc.rules.find((r) => r.type === 'qof-register' && r.registerCode === 'ASTHMA');
+check(!!ast014Rule && !!asthmaReg, 'found AST014 + ASTHMA register in the real shipped qof-rules.json');
+if (ast014Rule && asthmaReg) {
+  const unconfirmedChips = engine.evaluatePatient([], [], [ast014Rule, asthmaReg], {
+    now: NOW,
+    problems: [{ label: 'Asthma', codedDate: '2026-05-01', hasOnsetDate: false }],
+    patientContext: { ageYears: 40, sex: 'female' },
+    observationHistory: [],
+  });
+  const unconfirmedChip = unconfirmedChips.find((c) => c && c.type === 'qof-indicator');
+  check(!!unconfirmedChip, 'AST014 fires for an unconfirmed-but-post-cutoff asthma diagnosis');
+  check(unconfirmedChip && unconfirmedChip.registerDateIsOnset === false, 'engine emits registerDateIsOnset: false for an unconfirmed date');
+  const unconfirmedHtml = unconfirmedChip ? CR.renderQofIndicatorChip(unconfirmedChip) : '';
+  check(/sent-chip-uncertain/.test(unconfirmedHtml), 'renderer applies sent-chip-uncertain for registerDateIsOnset: false');
+  check(unconfirmedHtml.includes('sent-chip-uncertain-note'), 'renderer emits a sent-chip-uncertain-note element');
+  check(unconfirmedHtml.includes('Diagnosis date unconfirmed'), 'renderer surfaces the unconfirmed-date note text');
+  check(
+    unconfirmedHtml.includes(`sent-chip-${CR.STATUS_COLOUR[unconfirmedChip.status]}`),
+    'status colour class is still present and unchanged — uncertainty never dilutes it'
+  );
+
+  const confirmedChips = engine.evaluatePatient([], [], [ast014Rule, asthmaReg], {
+    now: NOW,
+    problems: [{ label: 'Asthma', codedDate: '2026-05-01', hasOnsetDate: true }],
+    patientContext: { ageYears: 40, sex: 'female' },
+    observationHistory: [],
+  });
+  const confirmedChip = confirmedChips.find((c) => c && c.type === 'qof-indicator');
+  check(confirmedChip && confirmedChip.registerDateIsOnset === true, 'engine emits registerDateIsOnset: true for a confirmed onset date');
+  const confirmedHtml = confirmedChip ? CR.renderQofIndicatorChip(confirmedChip) : '';
+  check(!/sent-chip-uncertain/.test(confirmedHtml), 'renderer does NOT apply sent-chip-uncertain when the onset date is confirmed');
+
+  // noMatchingProblemCode path: AST014 fail-closes without a problem-coded
+  // date, so drive this through AST015 (register-gated, no date eligibility).
+  const ast015Rule = qofDoc.rules.find((r) => r.indicatorCode === 'AST015');
+  check(!!ast015Rule, 'found AST015 in the real shipped qof-rules.json');
+  if (ast015Rule) {
+    const noCodeChips = engine.evaluatePatient([], [], [ast015Rule, asthmaReg], {
+      now: NOW,
+      problems: [],
+      patientRegisters: [{ registerType: 'medicus-health/register-asthma', registerLabel: 'Asthma' }],
+      patientContext: { ageYears: 40, sex: 'female' },
+      observationHistory: [],
+    });
+    const noCodeChip = noCodeChips.find((c) => c && c.type === 'qof-indicator');
+    check(
+      !!noCodeChip && noCodeChip.noMatchingProblemCode === true,
+      'AST015 on an authoritative register with no problem code sets noMatchingProblemCode'
+    );
+    const noCodeHtml = noCodeChip ? CR.renderQofIndicatorChip(noCodeChip) : '';
+    check(/sent-chip-uncertain/.test(noCodeHtml), 'renderer applies sent-chip-uncertain for noMatchingProblemCode');
+    check(
+      noCodeHtml.includes('On register — no matching problem code'),
+      'renderer surfaces the no-matching-problem-code note text'
+    );
+    check(
+      noCodeHtml.includes(`sent-chip-${CR.STATUS_COLOUR[noCodeChip.status]}`),
+      'status colour class is still present — noMatchingProblemCode never dilutes it'
+    );
+  }
+}
+
 // ============================================================
 // 3. drug-combo → renderDrugComboChip
 // ============================================================

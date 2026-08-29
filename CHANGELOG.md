@@ -2,6 +2,84 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.250.0] — 2026-08-29
+
+### Drug-monitoring and QOF-indicator monitoring fixes
+
+Live testing of the ramipril/thiazide "U&E within ~2 weeks of starting" checks surfaced
+two separate causes of a wrong medication start date. `medicationIssueHistory` entries
+carry a structured `{year, month, day}` date on the real API, not the flat string the
+normaliser expected, so it was silently reading `null` for every medication with real
+issue history; and even once parsed, that field is itself capped to a rolling ~12-month
+window server-side, so "earliest visible issue" could only ever reflect the *current*
+repeat-dispensing batch, never a drug's true clinical start (one patient's 2013 ramipril
+start was reading as ~2025). Added a new best-effort fetch of the full prescribing-history
+endpoint (grouped by substance, joined via `vtmProductName`) which now supplies the real
+first-ever-issue date when available.
+
+The post-initiation WHY-text evidence had two further bugs of its own: it searched
+`data.observations` (latest-result-only) instead of the full multi-year
+`data.observationHistory` series, so an earlier qualifying result was invisible; and "U&E"
+is never a literal test name on the API — it's split into four analyte rows (Sodium/
+Potassium/Urea/Creatinine) sharing one `investigationGroup` — so matching had to check
+the group field too, with de-duplication by date so a 4-analyte panel doesn't read as
+"repeated 4x" for one real result.
+
+Also fixed two pre-existing (not new) monitoring-panel display bugs: the same drug could
+show as two separate cards when Medicus carries two live regimen records for it (a
+superseded reauthorisation row that hasn't dropped off the "current" bucket yet — real
+data, not a duplicate to clean up), and QOF indicators that apply across several disease
+registers (SMOK002, CHOL003, CHOL004, CD001, CD002) could show once per qualifying
+register even though the check/points/threshold are identical — both now merge to a
+single card, the latter listing every register that triggered it.
+
+Review fixes before merge: VTM regimen dedup now keeps the earliest parseable
+startDate alongside the longer display name (keeping the name alone was
+re-breaking post-initiation U&E); Signing and Sweep treat `medicationHistory`
+as best-effort, same as `clinicalSummary`, so a failed prescribing-history
+fetch no longer aborts the whole patient read.
+
+## [v3.249.0] — 2026-08-29
+
+### QOF monitoring rework — disease-register-driven matching, July 2026 rule refresh, fewer false positives
+
+Full update of monitoring rules against the July 2026 QOF 2026/27 guidance, rework of
+monitoring rules to work from Medicus's own disease registers where these exist, and
+cross-checking of diagnosis dates against the problem list's onset-date confidence.
+
+AST014 ("objective test for new asthma diagnosis") previously fired red for every
+asthma patient regardless of diagnosis date — it's now gated to patients actually
+coded on or after 1 April 2025, using the earliest confirmed date across their
+problem list rather than a single lookup that a stray "family history of asthma"
+entry could poison. A long-standing asthma patient (AST014) or asthma-register
+patient with no annual review ever recorded (AST015) now correctly shows overdue
+instead of neutral "no data". Chips built on an unconfirmed onset date, or on
+register membership with no corresponding problem code, now show a dashed border
+and an explicit note — status colour is never diluted, only flagged for a second
+look — and the evidence panel now shows the actual date driving the check.
+
+Register membership can now be read directly from Medicus's own computed register
+list (via a new `clinical-summary` fetch) for 8 registers with confirmed register
+IDs, falling back to problem-list text-matching elsewhere — reducing both
+false-positive and false-negative register membership.
+
+Cross-checked all 79 rules in `qof-rules.json` against the current NHS England QOF
+guidance: renumbered AST012→AST014 and AST007→AST015 (thresholds/points unchanged),
+added the previously-missing NDH register/indicator, enabled OB004/OB005 (values now
+confirmed) and completed OB005's weight-loss drug brand list, and relabelled
+CKD002/CKD003 to non-QOF safety-monitoring codes (CKD-BP/CKD-RASI) after confirming
+CKD has no QOF domain at all this year — the checks still fire, only the misleading
+QOF-code framing is gone.
+
+Tweaked the Companion app's QOF glance text so AST014/AST015 and DM006/DM020/DM036 no
+longer show identical generic text ("Asthma review" / "Diabetes review") for
+different required actions, without leaking into reception's booking wording.
+
+Review fix before merge: register-level `ageMin`/`ageMax` (NDH and obesity are
+18+) is now enforced at evaluate time. The field was previously JSON-only, so a
+16-year-old still raised those chips. Fail-open when age is unknown, same as
+every other age filter.
+
 ## [v3.248.0] — 2026-08-29
 
 ### Note — a software display board for TVs and monitors

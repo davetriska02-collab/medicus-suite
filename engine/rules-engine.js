@@ -214,16 +214,19 @@
   }
 
   // === OBSERVATION LOOKUP ===
-  function findLatestObservation(observations, testSpec) {
-    if (!Array.isArray(observations)) return null;
-    // Optional exclude terms (audit H4, 2026-07-18): bare analyte substrings
-    // also match the wrong specimen — "potassium" matched "Urine potassium",
-    // whose latest date then WON the headline and fired a red hyperkalaemia
-    // alert off a urine value. Text matches are rejected when the observation
-    // name contains any exclude term; exact-SNOMED matches bypass excludes
-    // (a code is specimen-specific already).
+  // Shared match predicate for both findLatestObservation and the post-initiation
+  // "all qualifying results" lookup — kept in one place so the two never drift.
+  //
+  // Optional exclude terms (audit H4, 2026-07-18): bare analyte substrings
+  // also match the wrong specimen — "potassium" matched "Urine potassium",
+  // whose latest date then WON the headline and fired a red hyperkalaemia
+  // alert off a urine value. Text matches are rejected when the observation
+  // name contains any exclude term; exact-SNOMED matches bypass excludes
+  // (a code is specimen-specific already).
+  function filterMatchingObservations(observations, testSpec) {
+    if (!Array.isArray(observations)) return [];
     const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
-    const matches = observations.filter((obs) => {
+    return observations.filter((obs) => {
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
@@ -233,6 +236,58 @@
       }
       return false;
     });
+  }
+
+  // data.observations carries only the LATEST result per investigation type
+  // (normaliseObservations picks dataKeys[dataKeys.length-1] — one row per
+  // type). Anything that needs the FULL multi-year point series for a test —
+  // e.g. finding the EARLIEST qualifying result since a drug's start date,
+  // not just the latest ever — must read data.observationHistory instead
+  // (normaliseObservationHistory captures every non-empty dataYYYYMMDD cell).
+  //
+  // A test like "U&E" never appears as a literal investigationType on the raw
+  // API — it's split into Sodium/Potassium/Urea/Creatinine rows, each sharing
+  // one investigationGroup ("U&Es (Urea and electrolytes)") — confirmed via a
+  // real HAR. data.observations papers over this with a synthetic per-group
+  // aggregate row (normaliseMedications... normaliseObservations, "Emit
+  // synthetic per-group observations"), but normaliseObservationHistory's own
+  // comment says group aggregates are "intentionally NOT included" there — so
+  // matching only on `group.name` (as data.observations effectively does)
+  // finds nothing here; it must also check `group.group`. Because all of
+  // Sodium/Potassium/Urea/Creatinine share that one group and (per the HAR)
+  // the exact same result dates, matching via the group field returns the
+  // same date set several times over — de-duplicated by date below so a
+  // 4-analyte panel doesn't read as "repeated 4x" for one real result.
+  // observationHistory groups never carry a `code` (normaliser hardcodes it
+  // null), so matching here is text-only against testSpec.match — the same
+  // limitation already accepted everywhere else observationHistory is used.
+  function filterMatchingObservationHistoryPoints(observationHistory, testSpec) {
+    if (!Array.isArray(observationHistory) || !Array.isArray(testSpec.match)) return [];
+    const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
+    const seenDates = new Set();
+    const points = [];
+    observationHistory.forEach((group) => {
+      if (!group) return;
+      const nameLower = String(group.name || '').toLowerCase();
+      const groupLower = String(group.group || '').toLowerCase();
+      const matches = testSpec.match.some((m) => {
+        const term = String(m).toLowerCase();
+        return nameLower.includes(term) || groupLower.includes(term);
+      });
+      if (!matches) return;
+      if (excludeTerms && excludeTerms.some((e) => nameLower.includes(e) || groupLower.includes(e))) return;
+      (group.history || []).forEach((h) => {
+        if (h && h.date && !seenDates.has(h.date)) {
+          seenDates.add(h.date);
+          points.push({ name: group.name, date: h.date, value: h.rawValue });
+        }
+      });
+    });
+    return points;
+  }
+
+  function findLatestObservation(observations, testSpec) {
+    const matches = filterMatchingObservations(observations, testSpec);
     if (matches.length === 0) return null;
     // Priority = index of the first match term the observation name contains.
     // Used only as a tiebreak when two observations share the same (latest) date,
@@ -511,7 +566,22 @@
     return label.includes(t);
   }
 
-  function patientOnRegister(problems, registerRule) {
+  // patientRegisters (optional 3rd arg): Medicus's OWN computed register
+  // membership from clinical-summary — [{ registerType, registerLabel }] or
+  // null when unavailable. When it's a real array (fetched successfully,
+  // possibly empty) AND this registerRule carries a confirmed
+  // medicusRegisterTypes mapping, it is authoritative and used INSTEAD of
+  // text-matching — Medicus's own computation doesn't fall for a stray
+  // "family history of X" mention the way substring-matching the problem list
+  // can. Falls back to text-matching whenever patientRegisters is null (not
+  // fetched) or this register has no confirmed medicusRegisterTypes (most
+  // registers — only the ones verified against a real clinical-summary
+  // capture carry the mapping; see rules/qof-rules.json).
+  // findMatchingProblem: the text-match scan shared by patientOnRegister's own
+  // fallback path AND its authoritative path (to detect a register/problem-
+  // code mismatch — see patientOnRegister below). Returns the first matching,
+  // non-excluded problem, or null.
+  function findMatchingProblem(problems, registerRule) {
     if (!Array.isArray(problems) || !registerRule.problemMatch) return null;
     const excluded = registerRule.problemExclude || [];
     for (const p of problems) {
@@ -521,11 +591,80 @@
       // labels such as "pre-diabetic retinopathy").
       if (excluded.some((e) => label.includes(String(e).toLowerCase()))) continue;
       // Matches — word-boundary aware (see registerTermInLabel).
-      if (registerRule.problemMatch.some((m) => registerTermInLabel(label, m))) {
-        return { matched: true, problem: p };
-      }
+      if (registerRule.problemMatch.some((m) => registerTermInLabel(label, m))) return p;
     }
-    return { matched: false };
+    return null;
+  }
+
+  function patientOnRegister(problems, registerRule, patientRegisters) {
+    if (!registerRule) return null;
+    if (
+      Array.isArray(patientRegisters) &&
+      Array.isArray(registerRule.medicusRegisterTypes) &&
+      registerRule.medicusRegisterTypes.length
+    ) {
+      const hit = patientRegisters.find(
+        (r) => r && registerRule.medicusRegisterTypes.includes(r.registerType)
+      );
+      if (!hit) return { matched: false };
+      // Data-quality check: Medicus itself says the patient is on this
+      // register, but does anything on their OWN problem list actually say
+      // why? A register with no corresponding problem code is worth a
+      // clinician's second look — could be a coding gap, a stale register
+      // entry, or a genuine miss in problemMatch/problemExclude — surfaced as
+      // a warning rather than silently trusted either way.
+      const matchingProblem = findMatchingProblem(problems, registerRule);
+      return {
+        matched: true,
+        problem: null,
+        source: 'medicus-register',
+        apiRegister: hit,
+        noMatchingProblemCode: !matchingProblem,
+      };
+    }
+    if (!Array.isArray(problems) || !registerRule.problemMatch) return null;
+    const matched = findMatchingProblem(problems, registerRule);
+    return matched ? { matched: true, problem: matched, source: 'problem-text-match' } : { matched: false };
+  }
+
+  // earliestRegisterCodedDate: for "new to register on/after DATE" indicators
+  // (e.g. AST014), we need the date the condition was FIRST coded — not just
+  // whichever matching problem patientOnRegister happens to return (it returns
+  // on the first array match, which is not guaranteed to be chronological, and
+  // a patient can have more than one register-matching problem entry, e.g. a
+  // duplicate/re-coded diagnosis). Scans every non-excluded matching problem.
+  //
+  // Most problems carry no confirmed onset date at all — p.hasOnsetDate (see
+  // normalisers.js buildOnsetDateIndex, joined from clinical-summary) is
+  // true/false/null (null = unknown, e.g. clinical-summary wasn't fetched).
+  // When ANY matching problem has a CONFIRMED onset date, only those count —
+  // an unconfirmed fallback date on some other matching entry could be
+  // arbitrarily wrong (e.g. a GP2GP migration artefact) and must not drag the
+  // "earliest" computation off a genuine onset date. Only when NONE of the
+  // matches have a confirmed onset do we fall back to the earliest across all
+  // of them, flagged as unconfirmed via dateIsOnset: false.
+  //
+  // Returns { date: Date|null, dateIsOnset: true|false|null }. dateIsOnset is
+  // null only when date is also null (nothing usable found at all).
+  function earliestRegisterCodedDate(problems, registerRule) {
+    if (!Array.isArray(problems) || !registerRule.problemMatch) return { date: null, dateIsOnset: null };
+    const excluded = registerRule.problemExclude || [];
+    let earliestConfirmed = null;
+    let earliestAny = null;
+    problems.forEach((p) => {
+      const label = String(p.label || '').toLowerCase();
+      if (excluded.some((e) => label.includes(String(e).toLowerCase()))) return;
+      if (!registerRule.problemMatch.some((m) => registerTermInLabel(label, m))) return;
+      const d = p.codedDate ? new Date(p.codedDate) : null;
+      if (!d || isNaN(d.getTime())) return;
+      if (!earliestAny || d.getTime() < earliestAny.getTime()) earliestAny = d;
+      if (p.hasOnsetDate === true) {
+        if (!earliestConfirmed || d.getTime() < earliestConfirmed.getTime()) earliestConfirmed = d;
+      }
+    });
+    if (earliestConfirmed) return { date: earliestConfirmed, dateIsOnset: true };
+    if (earliestAny) return { date: earliestAny, dateIsOnset: false };
+    return { date: null, dateIsOnset: null };
   }
 
   // === EVIDENCE BUILDERS ===
@@ -679,8 +818,24 @@
     if (ctx.matchedRegisterProblem) {
       facts.push({
         label: 'Register precondition',
-        value: `${ctx.matchedRegisterProblem.registerName} (${ctx.matchedRegisterProblem.label})`,
+        value: ctx.matchedRegisterProblem.label
+          ? `${ctx.matchedRegisterProblem.registerName} (${ctx.matchedRegisterProblem.label})`
+          : `${ctx.matchedRegisterProblem.registerName} (via Medicus register list)`,
         date: ctx.matchedRegisterProblem.codedDate,
+      });
+    }
+    // Distinct from the fact above: this is the specific date a
+    // requiresRegisterCodedFrom gate (e.g. AST014's "new diagnosis") actually
+    // used, which can differ from matchedRegisterProblem's date (that comes
+    // from a separate, single-match lookup — see the comment where
+    // registerEligibilityDate is set in evaluateQofIndicatorRule) or be
+    // missing entirely (matchedRegisterProblem.date is null when the register
+    // match itself was authoritative-only, with no underlying problem).
+    if (ctx.registerEligibilityDate) {
+      facts.push({
+        label: 'Diagnosis date used',
+        value: ctx.registerDateIsOnset === true ? 'confirmed onset date' : 'unconfirmed — no onset date on record',
+        date: ctx.registerEligibilityDate,
       });
     }
 
@@ -865,6 +1020,57 @@
       if (traceEntry) traceEntry.skipReason = 'no-drug-match';
       return [];
     }
+    // De-duplicate by underlying drug (vtmProductName) — the SAME live
+    // prescription can legitimately appear as more than one regimen record
+    // (docs/learnings-medication-regimen-duplicates.md: a superseded
+    // mid-course reauthorisation row that hasn't dropped off Medicus's own
+    // "current" bucket yet is real data, not a reimport artifact — nothing
+    // to delete). Left undeduplicated, that shows as two full monitoring
+    // cards for one drug (e.g. "Leflunomide 20mg tablets" AND a bare
+    // "Leflunomide" from the same superseded record's fallback name) even
+    // though the tests/intervals being checked are patient-level, not
+    // specific to whichever authorisation row backs them — one card is
+    // correct, not two. Only merges when vtmProductName is present on both
+    // sides; entries without it are left alone rather than risk collapsing
+    // two genuinely different drugs on a name-substring guess. Keeps the
+    // more detailed (longer) name of the group for display. When the
+    // rows disagree on startDate, keep the earliest parseable one — the
+    // batch-scoped regimen date is often ~12 months of the current
+    // authorisation, while a sibling row (or the prescribing-history
+    // join) can carry the true clinical start. Picking the longer name
+    // alone was dropping that earlier date and re-breaking post-init
+    // U&E checks.
+    if (matchedMeds.length > 1) {
+      const byVtm = new Map();
+      const noVtm = [];
+      const parseStart = (d) => {
+        if (!d) return null;
+        const t = new Date(d);
+        return isNaN(t.getTime()) ? null : t.getTime();
+      };
+      matchedMeds.forEach((m) => {
+        const key = m.vtm ? normaliseDrugString(m.vtm) : null;
+        if (!key) {
+          noVtm.push(m);
+          return;
+        }
+        const existing = byVtm.get(key);
+        if (!existing) {
+          byVtm.set(key, m);
+          return;
+        }
+        const keep = String(m.name || '').length > String(existing.name || '').length ? m : existing;
+        const other = keep === m ? existing : m;
+        const keepStart = parseStart(keep.startDate);
+        const otherStart = parseStart(other.startDate);
+        if (otherStart != null && (keepStart == null || otherStart < keepStart)) {
+          byVtm.set(key, { ...keep, startDate: other.startDate });
+        } else {
+          byVtm.set(key, keep);
+        }
+      });
+      matchedMeds = [...byVtm.values(), ...noVtm];
+    }
     // Trace entry was created for the rule; for multi-med rules we emit one entry per med.
     // The base entry already pushed above becomes the first med's entry (or we create extras).
     return matchedMeds.map((med, idx) => {
@@ -873,7 +1079,43 @@
         // Post-initiation requirement (fires if missing after the drug was
         // started) — evaluated against med.startDate, not the rolling interval.
         if (test.postInitiationDays != null) {
-          return evalPostInitiationTest(test, obs, med.startDate, now);
+          const result = evalPostInitiationTest(test, obs, med.startDate, now);
+          // Diagnostic-only annotation for the evidence/"why" text — does NOT
+          // feed evalPostInitiationTest's own status decision (that stays the
+          // single latest-qualifying-observation check above). Surfaces the
+          // start date actually read, plus the EARLIEST qualifying result on
+          // or after it, so a clinician can see exactly what the engine used
+          // instead of having to trust an opaque status.
+          result.startDate = med.startDate || null;
+          if (med.startDate) {
+            // Prefer the full multi-year point series (data.observationHistory)
+            // over the latest-only data.observations — a drug started years ago
+            // can have several qualifying results since, and data.observations
+            // would only ever surface the single most recent one, making an
+            // earlier (or ANY earlier) qualifying result invisible to this count.
+            // Falls back to data.observations only when no matching history
+            // group exists at all (e.g. DOM-fallback extraction, which doesn't
+            // populate observationHistory).
+            const historyPoints = filterMatchingObservationHistoryPoints(data.observationHistory, test);
+            const sinceStartSource = historyPoints.length
+              ? historyPoints
+              : filterMatchingObservations(data.observations, test);
+            const sinceStart = sinceStartSource
+              .filter((o) => o && o.date && (daysBetween(med.startDate, o.date) ?? -1) >= 0)
+              .sort((a, b) => a.date.localeCompare(b.date));
+            result.sinceStartCount = sinceStart.length;
+            result.firstSinceStartDate = sinceStart.length ? sinceStart[0].date : null;
+            if (sinceStart.length) {
+              const daysToFirst = daysBetween(med.startDate, sinceStart[0].date);
+              const overdueAt = test.postInitiationDays || 21;
+              const dueSoonAt =
+                test.postInitiationDueSoonDays != null ? test.postInitiationDueSoonDays : Math.max(0, overdueAt - 7);
+              result.metWindow = daysToFirst != null && daysToFirst <= dueSoonAt;
+            } else {
+              result.metWindow = false;
+            }
+          }
+          return result;
         }
         if (!obs || !obs.date) {
           return { ...test, status: 'no_data', latestObs: null, days: null };
@@ -980,6 +1222,23 @@
           te.chipRef = rule.id + '|' + med.name;
           te.drugMatch = { medName: med.name, matchedTerm: detail.matchedTerm, excludedBy: null };
           te.arithmetic = testEvaluations.slice(0, 15).map((tv) => {
+            // Post-initiation tests have no recall interval/due-date — the generic
+            // arithmetic below would produce a meaningless "interval 365d → due
+            // ..." line. Carry the diagnostic fields computed above instead.
+            if (tv.postInitiation) {
+              return {
+                test: tv.testName || tv.name || '',
+                postInitiation: true,
+                startDate: tv.startDate || null,
+                firstSinceStartDate: tv.firstSinceStartDate || null,
+                sinceStartCount: tv.sinceStartCount || 0,
+                metWindow: !!tv.metWindow,
+                postInitiationDays: tv.postInitiationDays,
+                postInitiationDueSoonDays: tv.postInitiationDueSoonDays,
+                daysSinceStart: tv.days,
+                status: tv.status,
+              };
+            }
             const lastDate = tv.latestObs ? tv.latestObs.date : null;
             // tv.intervalDays is the EFFECTIVE (post-banding) interval; due date is
             // computed off it so a banded shortening shows in the audited due date.
@@ -1039,7 +1298,7 @@
   // QOF register rule evaluator -> chip if patient is on register
   function evaluateQofRegisterRule(rule, data) {
     const traceEntry = _traceBase(data, rule);
-    if (!passesAgeFilter(rule.ageRange, data.patientContext)) {
+    if (!passesAgeFilter(registerAgeRange(rule), data.patientContext)) {
       if (traceEntry) traceEntry.skipReason = 'age-filter';
       return [];
     }
@@ -1047,7 +1306,7 @@
       if (traceEntry) traceEntry.skipReason = 'sex-filter';
       return [];
     }
-    const result = patientOnRegister(data.problems, rule);
+    const result = patientOnRegister(data.problems, rule, data.patientRegisters);
     if (!result || !result.matched) {
       if (traceEntry) traceEntry.skipReason = 'not-on-register';
       return [];
@@ -1055,12 +1314,34 @@
     if (traceEntry) {
       traceEntry.fired = true;
       traceEntry.status = 'achieved';
-      // Find which problemMatch term actually hit
-      const matchedLabel = result.problem.label.toLowerCase();
-      const matchedTerm = (rule.problemMatch || []).find((m) => registerTermInLabel(matchedLabel, m)) || null;
-      traceEntry.matchedProblem = { label: result.problem.label, codedDate: result.problem.codedDate || null };
-      traceEntry.matchedTerm = matchedTerm;
+      if (result.problem) {
+        // Find which problemMatch term actually hit
+        const matchedLabel = result.problem.label.toLowerCase();
+        const matchedTerm = (rule.problemMatch || []).find((m) => registerTermInLabel(matchedLabel, m)) || null;
+        traceEntry.matchedProblem = { label: result.problem.label, codedDate: result.problem.codedDate || null };
+        traceEntry.matchedTerm = matchedTerm;
+      } else {
+        // Authoritative match via Medicus's own patientRegisters — no
+        // underlying problem-list entry to report.
+        traceEntry.matchedProblem = null;
+        traceEntry.matchedTerm = null;
+        traceEntry.matchedViaApiRegister = result.apiRegister || null;
+      }
     }
+    // Authoritative (patientRegisters) matches carry no problem entry — fall
+    // back to the register's own label/type for the evidence text instead.
+    const matchedLabel = result.problem
+      ? result.problem.label
+      : (result.apiRegister && result.apiRegister.registerLabel) || rule.registerName || rule.registerCode || '';
+    const matchedCodedDate = result.problem ? result.problem.codedDate : null;
+    const warningFacts = result.noMatchingProblemCode
+      ? [
+          {
+            label: 'Warning',
+            value: `On the ${rule.registerName || rule.registerCode} register per Medicus, but no matching problem code found on this patient's record — worth a second look.`,
+          },
+        ]
+      : [];
     return [
       {
         type: 'qof-register',
@@ -1068,15 +1349,19 @@
         registerCode: rule.registerCode,
         registerName: rule.registerName,
         status: 'achieved', // membership = "on register" — neutral but rendered green
-        matchedProblem: result.problem.label,
-        codedDate: result.problem.codedDate,
+        matchedProblem: matchedLabel,
+        codedDate: matchedCodedDate,
+        // true only when authoritatively on-register with no corresponding
+        // problem-list entry at all — see patientOnRegister's noMatchingProblemCode.
+        noMatchingProblemCode: !!result.noMatchingProblemCode,
         source: rule.source || null,
         notes: rule.notes || null,
         evidence: {
-          summary: `On ${rule.registerName || rule.registerCode || 'register'} (matched: ${result.problem.label})`,
+          summary: `On ${rule.registerName || rule.registerCode || 'register'} (matched: ${matchedLabel})`,
           facts: [
             { label: 'Register', value: rule.registerName || rule.registerCode || '' },
-            { label: 'Matched problem', value: result.problem.label, date: result.problem.codedDate || null },
+            { label: 'Matched problem', value: matchedLabel, date: matchedCodedDate },
+            ...warningFacts,
           ],
         },
       },
@@ -1111,6 +1396,19 @@
     if (ageRange.min != null && age < ageRange.min) return false;
     if (ageRange.max != null && age > ageRange.max) return false;
     return true;
+  }
+
+  // Register rules historically used a top-level ageMin/ageMax (OB, NDH)
+  // while indicators use ageRange: { min, max }. Both mean the same thing.
+  // Without this alias, ageMin on a register was JSON-only documentation
+  // and a 16-year-old on the NDH/obesity problem list still raised chips.
+  function registerAgeRange(rule) {
+    if (!rule) return null;
+    if (rule.ageRange) return rule.ageRange;
+    if (rule.ageMin != null || rule.ageMax != null) {
+      return { min: rule.ageMin != null ? rule.ageMin : null, max: rule.ageMax != null ? rule.ageMax : null };
+    }
+    return null;
   }
 
   function passesSexFilter(sex, patientContext) {
@@ -1604,7 +1902,15 @@
     // evidenceCtx accumulates the matched data the evaluator consults so the
     // evidence panel can show "we looked here, we found X" without re-running
     // the match logic.
-    const evidenceCtx = { matchedRegisterProblem: null, matchedObs: null, matchedMed: null, trendSeries: null };
+    const evidenceCtx = {
+      matchedRegisterProblem: null,
+      matchedObs: null,
+      matchedMed: null,
+      trendSeries: null,
+      noMatchingProblemCode: false,
+      registerDateIsOnset: null,
+      registerEligibilityDate: null,
+    };
 
     // Step 1: register membership precondition
     if (rule.requiresRegister) {
@@ -1613,16 +1919,86 @@
         if (traceEntry) traceEntry.skipReason = 'register-precondition';
         return []; // register rule not configured/disabled
       }
-      const reg = patientOnRegister(data.problems, registerRule);
+      const reg = patientOnRegister(data.problems, registerRule, data.patientRegisters);
       if (!reg || !reg.matched) {
         if (traceEntry) traceEntry.skipReason = 'register-precondition';
         return [];
       }
-      evidenceCtx.matchedRegisterProblem = {
-        label: reg.problem.label,
-        codedDate: reg.problem.codedDate || null,
-        registerName: registerRule.registerName || registerRule.registerCode,
-      };
+      // Register-level age (ageMin/ageMax or ageRange) applies to every
+      // indicator gated on that register — NDH/OB are 18+ in the QOF
+      // definition. Fail-open when age is unknown, same as Step 2 below.
+      if (!passesAgeFilter(registerAgeRange(registerRule), data.patientContext)) {
+        if (traceEntry) traceEntry.skipReason = 'register-age-filter';
+        return [];
+      }
+      evidenceCtx.matchedRegisterProblem = reg.problem
+        ? {
+            label: reg.problem.label,
+            codedDate: reg.problem.codedDate || null,
+            registerName: registerRule.registerName || registerRule.registerCode,
+          }
+        : {
+            // Authoritative match via Medicus's own patientRegisters — no
+            // underlying problem-list entry to report.
+            label: (reg.apiRegister && reg.apiRegister.registerLabel) || null,
+            codedDate: null,
+            registerName: registerRule.registerName || registerRule.registerCode,
+            source: 'medicus-register',
+          };
+      // Data-quality flag: authoritatively on-register (Medicus's own
+      // patientRegisters) but nothing on the problem list explains why. Rides
+      // on the chip so the UI can surface it — see evaluateQofRegisterRule's
+      // matching warning for the plain register-membership chip.
+      evidenceCtx.noMatchingProblemCode = !!reg.noMatchingProblemCode;
+      // requiresRegisterCodedFrom: some QOF indicators (e.g. AST014) apply only
+      // to patients newly added to the register on/after a given date ("new
+      // diagnosis" indicators). Uses the EARLIEST coded date across ALL of the
+      // patient's register-matching problems (earliestRegisterCodedDate), not
+      // just whichever single entry patientOnRegister happened to match first —
+      // a patient can carry more than one matching problem (e.g. a re-coded or
+      // duplicate diagnosis), and only the earliest reflects true first-ever
+      // diagnosis, PREFERRING a confirmed onset date over an unconfirmed
+      // fallback one when both exist (see earliestRegisterCodedDate). Fail-
+      // closed (unlike the age filter below): this is an eligibility
+      // criterion, and a patient whose diagnosis date is unknown or
+      // unparseable cannot be positively confirmed as newly diagnosed, so no
+      // chip is raised rather than risking a false positive on a long-standing
+      // diagnosis.
+      if (rule.requiresRegisterCodedFrom) {
+        const { date: earliest, dateIsOnset } = earliestRegisterCodedDate(data.problems, registerRule);
+        if (!earliest || earliest < new Date(rule.requiresRegisterCodedFrom)) {
+          if (traceEntry) traceEntry.skipReason = 'register-coded-before-cutoff';
+          return [];
+        }
+        // Confidence signal for the eligibility date itself (distinct from
+        // noMatchingProblemCode, which is about register membership, not this
+        // date) — false/null means the date backing "newly diagnosed" is an
+        // unconfirmed fallback, not a genuine clinical onset date. Stored
+        // separately from matchedRegisterProblem's own date: that comes from
+        // patientOnRegister's single (possibly different, possibly null when
+        // the register match was authoritative) match, whereas this IS the
+        // actual date the gate above just used — the evidence panel must show
+        // THIS one, not whichever problem patientOnRegister happened to hit.
+        evidenceCtx.registerDateIsOnset = dateIsOnset;
+        evidenceCtx.registerEligibilityDate = earliest.toISOString().slice(0, 10);
+      } else if (rule.treatNeverRecordedAsOverdue) {
+        // treatNeverRecordedAsOverdue (e.g. AST015, 2026-08-28): a plain
+        // register-membership-gated periodic-review indicator with NO
+        // requiresRegisterCodedFrom eligibility gate — register age must
+        // never suppress the chip the way it does above. Only computed here
+        // so the observation-recent "never recorded" branch below can tell a
+        // long-standing register member (definitively overdue) apart from a
+        // recent one (not yet due) — see that branch for the actual status
+        // decision. Same date, same onset-preference logic, opt-in per rule
+        // rather than automatic for every requiresRegister indicator, so
+        // existing indicators' red/amber semantics don't change without
+        // being explicitly reviewed one at a time.
+        const { date: sinceDate, dateIsOnset: sinceIsOnset } = earliestRegisterCodedDate(data.problems, registerRule);
+        if (sinceDate) {
+          evidenceCtx.registerDateIsOnset = sinceIsOnset;
+          evidenceCtx.registerEligibilityDate = sinceDate.toISOString().slice(0, 10);
+        }
+      }
     }
 
     // Step 2: age + sex constraints. Age is FAIL-OPEN — an unknown/unextractable
@@ -1766,6 +2142,8 @@
           check: rule.check,
           source: rule.source || null,
           notes: rule.notes || null,
+          noMatchingProblemCode: evidenceCtx.noMatchingProblemCode || false,
+          registerDateIsOnset: evidenceCtx.registerDateIsOnset,
           evidence: buildQofIndicatorEvidence(rule, alertStatus, alertValueText, obs.date, alertDays, evidenceCtx),
         },
       ];
@@ -1860,6 +2238,28 @@
         const _inWindow = _useFloor2 ? _obsDate2 >= _qofStart2 : _obsDate2 >= _rollingCutoff2;
         if (_inWindow) status = 'achieved';
         else status = 'overdue';
+      } else if ((rule.requiresRegisterCodedFrom || rule.treatNeverRecordedAsOverdue) && evidenceCtx.registerEligibilityDate) {
+        // No matching observation has EVER been recorded. For a plain
+        // periodic-review indicator with NEITHER flag set, that's genuinely
+        // ambiguous — stays no_data, since a recent registration might
+        // legitimately not be due yet. But a requiresRegisterCodedFrom
+        // indicator (AST014's "new diagnosis") already has a known diagnosis
+        // date, and a treatNeverRecordedAsOverdue indicator (AST015) has an
+        // explicit opt-in to use the register's own earliest coded date the
+        // same way — either way, evidenceCtx.registerEligibilityDate (set in
+        // Step 1) is populated; if that date is itself outside this check's
+        // own window, no test dated within the window could possibly exist
+        // yet be missing from the record — "never recorded" is unambiguous
+        // here, not merely unknown. Same window math as the in-window branch
+        // above.
+        const _diagDate = new Date(evidenceCtx.registerEligibilityDate);
+        const _qofStartND = qofYearStart(now);
+        const _useFloorND = rule.useQofYearFloor !== false;
+        const _withinDaysND = check.withinDays || 365;
+        const _rollingCutoffND = new Date(now);
+        _rollingCutoffND.setDate(_rollingCutoffND.getDate() - _withinDaysND);
+        const _diagInWindow = _useFloorND ? _diagDate >= _qofStartND : _diagDate >= _rollingCutoffND;
+        if (!_diagInWindow) status = 'overdue';
       }
     } else if (check.kind === 'observation-bundle') {
       // observation-bundle: checks that EACH observation group (array of name aliases)
@@ -2081,6 +2481,12 @@
         check: rule.check,
         source: rule.source || null,
         notes: rule.notes || null,
+        // Data-quality/confidence flags — see patientOnRegister's
+        // noMatchingProblemCode and earliestRegisterCodedDate's dateIsOnset.
+        // registerDateIsOnset stays null for indicators without
+        // requiresRegisterCodedFrom (nothing to be confident/unconfident about).
+        noMatchingProblemCode: evidenceCtx.noMatchingProblemCode || false,
+        registerDateIsOnset: evidenceCtx.registerDateIsOnset,
         evidence: buildQofIndicatorEvidence(rule, status, valueText, dateText, days, evidenceCtx),
       },
     ];
@@ -2148,8 +2554,26 @@
     // which normaliseProblemsAll routes here) — evaluatePatient used to drop
     // it, so the HRT progestogen-cover context never saw a hysterectomy.
     const pastProblems = options.pastProblems || [];
+    // patientRegisters: Medicus's OWN computed register membership (from
+    // clinical-summary), used as the authoritative source in patientOnRegister
+    // in place of text-matching problems, when a register rule has a confirmed
+    // medicusRegisterTypes mapping. null = not fetched/unavailable — falls back
+    // to text-matching. [] (an actual empty array) = fetched successfully and
+    // the patient is authoritatively on none of them — also trusted, not a
+    // fallback trigger. Only `options.patientRegisters === undefined` (never
+    // set at all — old callers, DOM fallback, mock/tests) collapses to null.
+    const patientRegisters = options.patientRegisters !== undefined ? options.patientRegisters : null;
 
-    const data = { medications, observations, observationHistory, problems, patientContext, allergies, pastProblems };
+    const data = {
+      medications,
+      observations,
+      observationHistory,
+      problems,
+      patientContext,
+      allergies,
+      pastProblems,
+      patientRegisters,
+    };
 
     // Trace sink: attach only when tracing is requested (never on the hot path).
     const trace = options.trace ? [] : null;
@@ -2234,8 +2658,10 @@
       if (rule.id) evaluatedById.set(rule.id, out);
     });
 
+    const mergedChips = mergeMultiRegisterQofIndicatorChips(chips, registerLookup);
+
     // Sort: worst status first; then by type to keep drug-monitoring grouped
-    chips.sort((a, b) => {
+    mergedChips.sort((a, b) => {
       const sa = STATUS_RANK[a.status] ?? 99;
       const sb = STATUS_RANK[b.status] ?? 99;
       if (sa !== sb) return sa - sb;
@@ -2243,10 +2669,68 @@
     });
 
     if (options.trace) {
-      const envelope = buildTraceEnvelope(trace, data, now, { ...options, _chips: chips });
-      return { chips, trace: envelope };
+      const envelope = buildTraceEnvelope(trace, data, now, { ...options, _chips: mergedChips });
+      return { chips: mergedChips, trace: envelope };
     }
-    return chips;
+    return mergedChips;
+  }
+
+  // Merges same-indicatorCode qof-indicator chips that fired for the SAME
+  // patient via more than one register — e.g. SMOK002 fires once per
+  // applicable register (CHD/PAD/STIA/HYP/DM/COPD/CKD/ASTHMA/SMI) because the
+  // engine's per-rule register gate can't express "any of these registers" in
+  // one rule object, so qof-rules.json models it as N separate rule objects
+  // sharing one indicatorCode. The ruleset's own notes on CD001/CHOL003/
+  // CHOL004/SMOK002 already flag this: "known cosmetic limitation... do not
+  // double-count if patient sees multiple chips" — that risk was never
+  // resolved, just documented. Points/thresholds/check are identical across
+  // every register-variant of a given code (verified against the ruleset), so
+  // a patient qualifying via several registers gets the exact SAME status
+  // from each variant — N near-identical cards is noise, not N distinct
+  // requirements, and summing `points` across them would overcount the
+  // indicator's real allocation.
+  // Only merges entries whose computed STATUS also matches (defensive: a
+  // future indicator with a genuine per-register difference would fail this
+  // check and correctly stay split rather than silently hiding a different
+  // requirement). The kept representative is whichever entry's indicatorName
+  // is longest — in practice the more general/combined-sounding one (e.g.
+  // "...CVD/CKD REGISTER PATIENTS" over "...CKD REGISTER PATIENTS") — and
+  // carries `mergedRegisters`, the deduplicated list of every requiresRegister
+  // that fired, for the renderer to display.
+  function mergeMultiRegisterQofIndicatorChips(chips, registerLookup) {
+    const groups = new Map(); // indicatorCode -> chip[]
+    chips.forEach((c) => {
+      if (c.type !== 'qof-indicator' || !c.indicatorCode) return;
+      if (!groups.has(c.indicatorCode)) groups.set(c.indicatorCode, []);
+      groups.get(c.indicatorCode).push(c);
+    });
+    const toRemove = new Set();
+    groups.forEach((group) => {
+      if (group.length < 2) return;
+      const byStatus = new Map();
+      group.forEach((c) => {
+        if (!byStatus.has(c.status)) byStatus.set(c.status, []);
+        byStatus.get(c.status).push(c);
+      });
+      byStatus.forEach((sameStatus) => {
+        if (sameStatus.length < 2) return;
+        const primary = sameStatus.reduce((best, c) =>
+          String(c.indicatorName || '').length > String(best.indicatorName || '').length ? c : best
+        );
+        const codes = sameStatus
+          .map((c) => c.requiresRegister)
+          .filter(Boolean)
+          .filter((r, i, arr) => arr.indexOf(r) === i);
+        primary.mergedRegisters = codes.map((code) => ({
+          code,
+          label: (registerLookup && registerLookup[code] && registerLookup[code].registerName) || code,
+        }));
+        sameStatus.forEach((c) => {
+          if (c !== primary) toRemove.add(c);
+        });
+      });
+    });
+    return chips.filter((c) => !toRemove.has(c));
   }
 
   function seasonStart(nowIso, startMonth, startDay) {
@@ -2353,7 +2837,7 @@
         for (const code of regs) {
           const regRule = (data._registerLookup || {})[code];
           if (!regRule) continue;
-          const res = patientOnRegister(data.problems, regRule);
+          const res = patientOnRegister(data.problems, regRule, data.patientRegisters);
           if (res && res.matched) {
             matchedReg = { regRule, problem: res.problem };
             break;
@@ -2407,7 +2891,7 @@
         // Register must be active
         const regRule = (data._registerLookup || {})[clause.register];
         if (!regRule) continue;
-        const regRes = patientOnRegister(data.problems, regRule);
+        const regRes = patientOnRegister(data.problems, regRule, data.patientRegisters);
         if (!regRes || !regRes.matched) continue;
         // AND any of the sub-conditions — capture which one hit
         let subDetail = null;
@@ -2573,6 +3057,7 @@
     parseNumeric,
     resolveEffectiveInterval,
     patientOnRegister,
+    earliestRegisterCodedDate,
     evaluateDrugRule,
     evaluateQofRegisterRule,
     evaluateQofIndicatorRule,
