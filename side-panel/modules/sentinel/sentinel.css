@@ -539,6 +539,34 @@
   margin-top: 4px;
   font-family: var(--mono);
 }
+/* Shown when one qof-indicator card represents a merge of several
+   register-variant rules that all fired identically for this patient (e.g.
+   SMOK002 via both CHD and CKD) — see rules-engine.js
+   mergeMultiRegisterQofIndicatorChips. Muted, same family as .sent-chip-cat,
+   so it reads as extra context rather than a second status line. */
+.sent-chip-merged-registers {
+  font-size: 10px;
+  color: var(--text-4);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* Reduced-confidence chips (unconfirmed diagnosis date behind a "new
+   diagnosis" eligibility gate, or on-register-but-no-matching-problem-code —
+   see chip-renderer.js isUncertainChip). Deliberately does NOT touch the
+   red/amber/green status colour or its tinted background — urgency must
+   never be diluted. The dashed border + explicit note carry the "this claim
+   is less certain, verify it" signal instead, since colour/opacity alone is
+   too easy to miss on a busy panel. */
+.sent-chip-uncertain {
+  border-style: dashed;
+}
+.sent-chip-uncertain-note {
+  font-size: 10px;
+  color: var(--text-4);
+  font-style: italic;
+  margin-top: 4px;
+}
 
 /* L: .sent-chip-resurfaced — full-width mini banner at chip top */
 .sent-chip-resurfaced {

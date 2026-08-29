@@ -346,7 +346,16 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
 
     const raw = await apiClient.fetchAll(apiBase, patientUuid, { useCache: false });
 
-    const failedEndpoints = Object.keys(raw.errors || {});
+    // clinicalSummary (patientRegisters) and medicationHistory (true
+    // clinical start dates) are best-effort, same treatment as
+    // data-fetcher.js's fetchLive() / api-client.js fetchAll(): their own
+    // failure must not abort a sweep that would otherwise have succeeded
+    // on the four endpoints this fail-closed contract actually depends
+    // on — register matching falls back to text-matching problems, and
+    // start-date derivation falls back to the batch-scoped regimen date.
+    const failedEndpoints = Object.keys(raw.errors || {}).filter(
+      (k) => k !== 'clinicalSummary' && k !== 'medicationHistory'
+    );
     if (!raw.banner) {
       throw new Error(
         'patient banner unavailable — record not read' +
@@ -373,6 +382,7 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     patientContext: data.patientContext,
     observationHistory: data.observationHistory || [],
     allergies: data.allergies || [],
+    patientRegisters: data.patientRegisters != null ? data.patientRegisters : null,
   });
 
   return { chips, source: feedSourceLabel(data) };

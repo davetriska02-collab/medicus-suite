@@ -14,7 +14,7 @@ import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
-import { initSetup } from './setup/setup.js';
+import { initSetup, setSetupActiveModule } from './setup/setup.js';
 import { openRotaTab } from './modules/rota/rota-open.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
@@ -787,6 +787,7 @@ const switchModule = createModuleLoader({
   },
   setActive: (name) => {
     activeModule = name;
+    setSetupActiveModule(name);
     // Keep an open help popover in step with the tab the user just switched to.
     if (helpOpen) renderHelpPopover();
   },

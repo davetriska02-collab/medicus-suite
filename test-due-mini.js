@@ -217,10 +217,13 @@ console.log('\n--- hidden red is counted ---');
 
 console.log('\n--- QOF + vaccine wording ---');
 {
+  // 2026-08-28: DM006 now gets its own short disambiguator (was plain
+  // "Diabetes review", indistinguishable from DM020/DM036 which need a
+  // different action) — see QOF_CODE_DISAMBIGUATORS in due-mini.js.
   const mini = due.buildDueMini([dmChip, fluChip]);
   check(
-    mini.items[0].text === 'Diabetes review',
-    `QOF glance is the review, not the code+threshold (got ${JSON.stringify(mini.items[0].text)})`
+    mini.items[0].text === 'DM006: ACE-I/ARB',
+    `QOF glance disambiguates DM006 from the generic "Diabetes review" (got ${JSON.stringify(mini.items[0].text)})`
   );
   check(mini.items[0].label === mini.items[0].text, 'QOF label matches text — no trailing status word to strip');
   const vax = mini.items.find((i) => /Flu/.test(i.text));
@@ -494,8 +497,8 @@ console.log('\n--- nursing voice (treatment room, no clinical jargon / no Book) 
     'nursing drops test names and combo alerts'
   );
   check(
-    nurse.items.some((i) => i.text === 'Diabetes review'),
-    'nursing QOF names the review, not "Book a …"'
+    nurse.items.some((i) => i.text === 'DM006: ACE-I/ARB'),
+    'nursing QOF names the specific review (DM006 disambiguator), not "Book a …"'
   );
   check(
     !nurse.items.some((i) => /^Book /.test(i.text)),
@@ -523,6 +526,68 @@ console.log('\n--- nothingDue is not an all-clear claim ---');
   const src = require('fs').readFileSync(path.join(__dirname, 'shared', 'due-mini.js'), 'utf8');
   check(!/\ball clear\b/i.test(src), 'due-mini source never says "all clear"');
   check(!/\bsafe to\b/i.test(src), 'due-mini source never says "safe to"');
+}
+
+console.log('\n--- 2026-08-28: QOF code disambiguators (AST014/015, DM006/020/036) ---');
+{
+  // Reported live: AST014 (new-diagnosis objective test) and AST015 (annual
+  // review) both fell through to the same generic "Asthma review" prefix
+  // text, so a clinic user couldn't tell which was which at a glance. Same
+  // problem for DM006/DM020/DM036 all showing "Diabetes review".
+  const ast014Chip = { type: 'qof-indicator', status: 'overdue', indicatorCode: 'AST014' };
+  const ast015Chip = { type: 'qof-indicator', status: 'overdue', indicatorCode: 'AST015' };
+  const dm020Chip = { type: 'qof-indicator', status: 'not_met', indicatorCode: 'DM020' };
+  const dm036Chip = { type: 'qof-indicator', status: 'not_met', indicatorCode: 'DM036' };
+
+  const clinicAst = due.buildDueMini([ast014Chip, ast015Chip]);
+  check(
+    clinicAst.items.find((i) => i.text.startsWith('AST014')).text === 'AST014: test <3m of diag',
+    'clinic: AST014 gets its own short disambiguator'
+  );
+  check(
+    clinicAst.items.some((i) => i.text === 'Asthma review'),
+    'clinic: AST015 keeps the plain "Asthma review" text (it IS the review — only AST014 needed disambiguating)'
+  );
+  check(
+    clinicAst.items[0].text !== clinicAst.items[1].text,
+    'AST014 and AST015 no longer produce identical glance text'
+  );
+
+  const clinicDm = due.buildDueMini([dm020Chip, dm036Chip]);
+  check(
+    clinicDm.items.find((i) => i.text.startsWith('DM020')).text === 'DM020: HbA1c ≤58',
+    'clinic: DM020 gets its own short disambiguator'
+  );
+  check(
+    clinicDm.items.find((i) => i.text.startsWith('DM036')).text === 'DM036: BP target',
+    'clinic: DM036 gets its own short disambiguator'
+  );
+
+  // Critical: the raw "CODE: " disambiguator must NEVER leak into the
+  // reception booking sentence — "Book an AST014: test <3m of diag" would
+  // read as nonsense to someone booking an appointment slot. Reception keeps
+  // the broader, booking-appropriate prefix wording instead.
+  const recAst = due.buildDueMini([ast014Chip], { voice: 'reception' });
+  check(
+    recAst.items[0].text === 'Book an asthma review',
+    `reception: AST014 still books the broad appointment type, not the raw disambiguator (got ${JSON.stringify(recAst.items[0].text)})`
+  );
+  check(!/AST014/.test(recAst.items[0].text), 'reception: the raw QOF code never appears in a booking sentence');
+
+  const recDm = due.buildDueMini([dm020Chip], { voice: 'reception' });
+  check(
+    recDm.items[0].text === 'Book a diabetes review',
+    `reception: DM020 still books the broad appointment type (got ${JSON.stringify(recDm.items[0].text)})`
+  );
+  check(!/DM020/.test(recDm.items[0].text), 'reception: the raw QOF code never appears in a booking sentence');
+
+  // Nursing shares the clinic glance directly (same as the pre-existing MH011
+  // behaviour) — the disambiguator is useful there too, not just clinic.
+  const nurseAst = due.buildDueMini([ast014Chip], { voice: 'nursing' });
+  check(
+    nurseAst.items[0].text === 'AST014: test <3m of diag',
+    'nursing: gets the same short disambiguator as clinic (not the booking sentence)'
+  );
 }
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

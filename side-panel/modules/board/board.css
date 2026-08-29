@@ -59,6 +59,13 @@
   font-weight: 600;
 }
 
+.note-mod-btn-staff {
+  background: var(--amber-dim);
+  color: var(--text-1);
+  border-color: var(--amber-line);
+  font-weight: 600;
+}
+
 .note-mod-hint {
   margin: -4px 0 0;
   font-size: 11px;
@@ -151,9 +158,20 @@
 
 .note-mod-meta {
   margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
+}
+
+.note-mod-warn {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-2);
 }
 
 .note-mod-widgets {
@@ -168,6 +186,38 @@
   gap: 8px;
   font-size: 12px;
   color: var(--text-2);
+}
+
+.note-mod-th-lead {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.note-mod-th-lead + .note-mod-th {
+  margin-top: 2px;
+}
+
+.note-mod-th {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.note-mod-th input {
+  width: 56px;
+  background: var(--bg-mid);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
 }
 
 .note-mod-poll {
@@ -202,4 +252,35 @@
 .note-mod-privacy-staff {
   background: var(--amber-dim);
   border-color: var(--amber-line);
+}
+
+.note-mod-line {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.note-mod-line input {
+  width: 100%;
+  background: var(--bg-mid);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 7px;
+  font-family: var(--sans);
+  font-size: 12px;
+}
+
+.note-mod-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.note-mod-btn-remove {
+  margin-top: 8px;
 }
