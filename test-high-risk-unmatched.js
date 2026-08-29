@@ -150,6 +150,38 @@ console.log('\n--- end-to-end: listUnmatchedMedicationsDetailed → flagHighRisk
   );
 }
 
+// ── 8. Topical tacrolimus is excluded; oral/systemic tacrolimus still flags ────
+// CKS (topical calcineurin inhibitors): topical tacrolimus "has not been
+// observed to produce systemic concentrations similar to those observed with
+// systemic use" — it needs none of the blood monitoring this backstop exists
+// to catch someone missing on the oral/IV form.
+
+console.log('\n--- topical tacrolimus is excluded; oral tacrolimus still flags ---');
+
+{
+  const flagged = flagHighRiskUnmatched([
+    detail('Tacrolimus 0.1% ointment'),
+    detail('Protopic 0.03% ointment'),
+    detail('Tacrolimus 0.1% cream'),
+    detail('Tacrolimus 1mg capsules'),
+    detail('Tacrolimus 0.5mg modified-release capsules'),
+    detail('Tacrolimus 5mg/1ml concentrate for solution for infusion'),
+  ]);
+  const byName = Object.fromEntries(flagged.map((f) => [f.name, f]));
+  check(!byName['Tacrolimus 0.1% ointment'], 'generic topical tacrolimus ointment is NOT flagged');
+  check(!byName['Protopic 0.03% ointment'], 'Protopic brand (topical-only) is NOT flagged');
+  check(!byName['Tacrolimus 0.1% cream'], 'unlicensed tacrolimus cream special is NOT flagged (same topical route)');
+  check(
+    byName['Tacrolimus 1mg capsules']?.riskClass === 'DMARD / immunosuppressant',
+    'oral tacrolimus capsules ARE still flagged (systemic form needs monitoring)'
+  );
+  check(
+    byName['Tacrolimus 5mg/1ml concentrate for solution for infusion']?.riskClass === 'DMARD / immunosuppressant',
+    'IV tacrolimus infusion IS still flagged (systemic form needs monitoring)'
+  );
+  check(flagged.length === 3, 'exactly the three oral/IV forms are flagged, not the three topical ones');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
