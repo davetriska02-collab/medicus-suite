@@ -307,9 +307,12 @@ export function formatFlapRows(message, cols = FLAP_COLS, rows = FLAP_ROWS) {
   if (cur) lines.push(cur);
 
   const shown = lines.slice(0, r);
+  // Centre vertically as well as horizontally — a short message on a tall
+  // board sits mid-grid, blank flap rows above and below (Vestaboard-style).
+  const drop = Math.max(0, Math.floor((r - shown.length) / 2));
   shown.forEach((line, i) => {
     const pad = Math.max(0, Math.floor((c - line.length) / 2));
-    for (let k = 0; k < line.length && pad + k < c; k++) grid[i][pad + k] = flapChar(line[k]);
+    for (let k = 0; k < line.length && pad + k < c; k++) grid[drop + i][pad + k] = flapChar(line[k]);
   });
   return grid.map((row) => row.join(''));
 }

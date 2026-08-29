@@ -16,10 +16,13 @@
   --note-mute: #8b8478;
   --note-soft: #c8c0b2;
   --note-ink: #f4efe4;
-  --note-flap: #e7dcc8;
-  --note-flap-ink: #1c1814;
-  --note-flap-split: rgba(28, 24, 20, 0.22);
-  --note-flap-blank: #12141a;
+  /* Vestaboard bit: black flap, white character, lit from above — the top
+   * half of each flap catches the light, the bottom half falls into shadow. */
+  --note-flap-top: #24262a;
+  --note-flap-bot: #17181c;
+  --note-flap: linear-gradient(180deg, var(--note-flap-top) 0%, #1f2125 48%, #16171b 52%, var(--note-flap-bot) 100%);
+  --note-flap-ink: #f6f4ed;
+  --note-flap-split: rgba(0, 0, 0, 0.55);
   --note-quiet: #4ade80;
   --note-steady: #fbbf24;
   --note-busy: #fb923c;
@@ -161,12 +164,12 @@ body {
 }
 
 .note-board[data-profile='message'] .note-flap {
-  width: clamp(36px, 4.2vw, 68px);
-  height: clamp(52px, 6.2vw, 96px);
+  width: clamp(34px, 3.9vw, 62px);
+  height: clamp(48px, 5.7vw, 88px);
 }
 
 .note-board[data-profile='message'] .note-flap-glyph {
-  font-size: clamp(22px, 3.2vw, 46px);
+  font-size: clamp(20px, 3vw, 42px);
 }
 
 /* ── Split-flap row ─────────────────────────────────────────────────────── */
@@ -175,13 +178,14 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(6px, 0.8vh, 12px);
-  padding: clamp(14px, 2vh, 28px) clamp(12px, 1.6vw, 24px);
-  background: var(--note-chassis);
-  border: 1px solid var(--note-hair);
-  border-radius: 14px;
+  gap: clamp(4px, 0.6vh, 9px);
+  padding: clamp(16px, 2.2vh, 30px) clamp(14px, 1.8vw, 28px);
+  background: #0b0c0e;
+  border: 1px solid #1a1c20;
+  border-radius: 16px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 2px 6px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
     0 18px 40px rgba(0, 0, 0, 0.35);
 }
 
@@ -200,55 +204,60 @@ body {
   height: clamp(40px, 4.6vw, 76px);
   background: var(--note-flap);
   color: var(--note-flap-ink);
-  border-radius: 3px;
+  border-radius: 4px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -1px 0 rgba(28, 24, 20, 0.12),
-    0 1px 1px rgba(0, 0, 0, 0.4);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.55);
   overflow: hidden;
+  perspective: 240px;
 }
 
+/* The horizontal split every flap character breaks across. */
 .note-flap::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   top: 50%;
-  height: 1px;
+  height: 2px;
+  margin-top: -1px;
   background: var(--note-flap-split);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.045);
   pointer-events: none;
 }
 
 .note-flap-glyph {
   font-family: var(--note-sans);
   font-size: clamp(18px, 2.4vw, 36px);
-  font-weight: 700;
+  font-weight: 650;
   letter-spacing: 0.02em;
   line-height: 1;
   transform: translateY(1px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
-.note-flap-blank {
-  background: var(--note-flap-blank);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-}
-
+/* Blank bits are the same black flaps — a Vestaboard shows a full board of
+ * tiles whether or not a character is set. */
 .note-flap-blank .note-flap-glyph {
   opacity: 0;
 }
 
-.note-flap-blank::after {
-  background: rgba(255, 255, 255, 0.04);
-}
-
+/* Cascade: board.js stamps --note-flip-delay per column so a change sweeps
+ * left-to-right, the way a real board clatters through. fill-mode both holds
+ * the folded-away frame until this column's turn. */
 .note-flap.is-flip .note-flap-glyph {
-  animation: note-flip var(--note-fast) var(--note-ease);
+  animation: note-flip 260ms var(--note-ease) var(--note-flip-delay, 0ms) both;
 }
 
 @keyframes note-flip {
   0% {
-    transform: translateY(1px) rotateX(80deg);
-    opacity: 0.2;
+    transform: translateY(1px) rotateX(-95deg);
+    opacity: 0.1;
+  }
+  55% {
+    transform: translateY(1px) rotateX(22deg);
+    opacity: 1;
   }
   100% {
     transform: translateY(1px) rotateX(0deg);
@@ -341,30 +350,54 @@ body {
     inset 3px 0 0 var(--note-quiet);
 }
 
+/* Tempo scale as Vestaboard colour chips — square bits with the same split
+ * and top-lit shading as the character flaps. */
 .note-dots {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   margin-top: 8px;
 }
 
 .note-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: #2a2e38;
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #24262a 0 50%, #131417 50% 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 1px rgba(0, 0, 0, 0.5);
+}
+
+.note-dot::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .note-dot.is-on[data-tone='quiet'] {
-  background: var(--note-quiet);
+  background: linear-gradient(
+    180deg,
+    var(--note-quiet) 0 50%,
+    color-mix(in srgb, var(--note-quiet) 72%, black) 50% 100%
+  );
 }
 .note-dot.is-on[data-tone='steady'] {
-  background: var(--note-steady);
+  background: linear-gradient(
+    180deg,
+    var(--note-steady) 0 50%,
+    color-mix(in srgb, var(--note-steady) 72%, black) 50% 100%
+  );
 }
 .note-dot.is-on[data-tone='busy'] {
-  background: var(--note-busy);
+  background: linear-gradient(180deg, var(--note-busy) 0 50%, color-mix(in srgb, var(--note-busy) 72%, black) 50% 100%);
 }
 .note-dot.is-on[data-tone='very-busy'] {
-  background: var(--note-very);
+  background: linear-gradient(180deg, var(--note-very) 0 50%, color-mix(in srgb, var(--note-very) 72%, black) 50% 100%);
 }
 
 /* ── Ticker ─────────────────────────────────────────────────────────────── */

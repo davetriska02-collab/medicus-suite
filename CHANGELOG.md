@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.248.1] — 2026-08-29
+
+### Note — proper Vestaboard look and feel
+
+Visual pass on the display board so it reads like the real thing:
+
+- **Black flap bits, white characters.** The flap faces were cream with dark
+  ink (a Solari departure-board look); they are now top-lit black bits with
+  warm-white glyphs and a pronounced horizontal split — the Vestaboard
+  signature. Blank tiles are the same black bits, so the board always reads
+  as a full grid of flaps.
+- **Cascading flip.** Changed columns now animate with a per-column stagger,
+  sweeping left-to-right like a board clattering through, with a proper 3D
+  fold (still fully disabled under `prefers-reduced-motion`).
+- **Colour-chip tempo scale.** The tempo dots are now square Vestaboard-style
+  colour chips with the same split and top-lit shading as the flaps.
+- **Fuller Message board.** The Message profile shows a 4-row board;
+  `formatFlapRows` now centres short messages vertically as well as
+  horizontally, blank flap rows above and below.
+- The clock only repaints when a digit actually flips (was re-rendering every
+  second), and the board refreshes immediately when its tab becomes visible
+  again, so a TV woken from standby never shows stale figures.
+
+No data-path or config changes — H-067 posture, snapshot shape and backup
+scope are untouched.
+
 ## [v3.248.0] — 2026-08-29
 
 ### Note — a software display board for TVs and monitors
