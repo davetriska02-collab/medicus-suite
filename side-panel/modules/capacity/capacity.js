@@ -13,6 +13,8 @@ import {
   validatePreset,
   normaliseLookahead,
   validateLookahead,
+  normalisePresets,
+  resolveActivePreset,
   effectiveMinimumForDate,
   evaluateDay,
   scanHorizon,
@@ -21,6 +23,14 @@ import {
   horizonDateList,
   STATUS_TEXT,
 } from './capacity-core.js';
+
+const DIVISION_OPTIONS = [
+  { id: 'england-and-wales', label: 'England & Wales' },
+  { id: 'scotland', label: 'Scotland' },
+  { id: 'northern-ireland', label: 'Northern Ireland' },
+];
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 import {
   fetchManyDates,
@@ -76,10 +86,12 @@ export async function init(el) {
     'capacity.viewMode',
     'capacity.showWeekends',
     'capacity.lookahead',
+    'capacity.jumpToDate',
   ]);
   if (stored['suite.practiceCode']) SITE_ID = stored['suite.practiceCode'];
-  state.presets = stored['capacity.presets'] || [];
+  state.presets = normalisePresets(stored['capacity.presets']);
   state.activePresetId = stored['capacity.activePresetId'] || state.presets[0]?.id || null;
+  reconcileActivePreset();
   state.viewMode = stored['capacity.viewMode'] || 'week';
   state.showWeekends = !!stored['capacity.showWeekends'];
   state.lookahead = normaliseLookahead(stored['capacity.lookahead']);
@@ -87,10 +99,19 @@ export async function init(el) {
   // Restore persisted focusDate / monthAnchor (per-machine view position)
   const savedUi = await loadUiState('capacity');
   if (savedUi) {
-    const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
-    if (typeof savedUi.focusDate === 'string' && ISO_RE.test(savedUi.focusDate)) state.focusDate = savedUi.focusDate;
-    if (typeof savedUi.monthAnchor === 'string' && ISO_RE.test(savedUi.monthAnchor))
+    if (typeof savedUi.focusDate === 'string' && ISO_DATE_RE.test(savedUi.focusDate))
+      state.focusDate = savedUi.focusDate;
+    if (typeof savedUi.monthAnchor === 'string' && ISO_DATE_RE.test(savedUi.monthAnchor))
       state.monthAnchor = savedUi.monthAnchor;
+  }
+
+  // Today-card chip handoff: open that day, then drop the transient key.
+  const jump = stored['capacity.jumpToDate'];
+  if (typeof jump === 'string' && ISO_DATE_RE.test(jump)) {
+    state.focusDate = jump;
+    state.viewMode = 'day';
+    chrome.storage.local.remove('capacity.jumpToDate');
+    chrome.storage.local.set({ 'capacity.viewMode': 'day' });
   }
 
   // First-load: if no presets, prompt onboarding
@@ -121,7 +142,7 @@ function onStorageChange(changes) {
   if (selfWriteInProgress) return;
   let changed = false;
   if (changes['capacity.presets']) {
-    state.presets = changes['capacity.presets'].newValue || [];
+    state.presets = normalisePresets(changes['capacity.presets'].newValue);
     changed = true;
   }
   if (changes['capacity.activePresetId']) {
@@ -143,6 +164,7 @@ function onStorageChange(changes) {
     changed = true;
   }
   if (changed) {
+    reconcileActivePreset();
     render();
     loadVisibleDates();
   }
@@ -215,6 +237,7 @@ function publishScanCache() {
 }
 
 async function loadVisibleDates() {
+  rollCalendarDateIfNeeded();
   // Re-resolve practice code (auto-detect from tab if available)
   if (window.PracticeCode) {
     const { code } = await window.PracticeCode.resolve();
@@ -251,14 +274,71 @@ async function loadVisibleDates() {
       } else {
         state.error = raw?.error || null;
       }
-      computeScan();
-      render();
+      // Coalesce: a 28–84 day scan used to rebuild the whole tab per date.
+      scheduleRender();
     },
   });
+  computeScan();
+  render();
 }
 
 function activePreset() {
-  return state.presets.find((p) => p.id === state.activePresetId) || null;
+  return resolveActivePreset(state.presets, state.activePresetId);
+}
+
+/** Stale activePresetId (deleted preset, restored backup) falls back to the first. */
+function reconcileActivePreset() {
+  const resolved = resolveActivePreset(state.presets, state.activePresetId);
+  if (resolved && resolved.id !== state.activePresetId) {
+    state.activePresetId = resolved.id;
+    chrome.storage.local.set({ 'capacity.activePresetId': resolved.id });
+  } else if (!resolved) {
+    state.activePresetId = null;
+  }
+  return resolved;
+}
+
+let seenTodayISO = todayISO();
+
+/** After midnight, yesterday's remaining-slot filter must not keep painting as today. */
+function rollCalendarDateIfNeeded() {
+  const now = todayISO();
+  if (now === seenTodayISO) return false;
+  delete state.data[seenTodayISO];
+  delete state.data[now];
+  if (state.focusDate === seenTodayISO) state.focusDate = now;
+  seenTodayISO = now;
+  return true;
+}
+
+let renderFrame = null;
+function scheduleRender() {
+  if (renderFrame != null) return;
+  const kick = () => {
+    renderFrame = null;
+    computeScan();
+    render();
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    renderFrame = requestAnimationFrame(kick);
+  } else {
+    kick();
+  }
+}
+
+/**
+ * Status to PAINT a calendar cell with — not the same as the scan status.
+ *
+ * Today's count is remaining slots while the target covers the whole day, so
+ * colouring it critical every afternoon would contradict the look-ahead banner
+ * (which correctly excludes today). Today gets a neutral treatment instead.
+ */
+function displayStatus(ev) {
+  if (!ev) return 'empty';
+  if (ev.isToday && ev.status !== 'closed' && ev.status !== 'loading' && ev.status !== 'empty') {
+    return 'partial';
+  }
+  return ev.status;
 }
 
 function dayEval(date) {
@@ -324,6 +404,10 @@ function bhMonthMarkerHtml(minInfo) {
 
 function render() {
   if (!container) return;
+  if (rollCalendarDateIfNeeded()) {
+    loadVisibleDates();
+    return;
+  }
   const preset = activePreset();
 
   // Editor / look-ahead settings take over the whole view when active
@@ -427,8 +511,10 @@ function renderDayView(preset) {
   const agg = state.data[date];
   const ev = dayEval(date);
   const status = ev.status;
+  const paint = displayStatus(ev);
   const isToday = date === todayISO();
   const minInfo = ev.minInfo || effectiveMinimumForDate(preset, date, state.lookahead);
+  const statusLabel = isToday && paint === 'partial' ? 'Left today' : STATUS_TEXT[status] || status;
 
   let hero = '';
   if (state.loading.has(date)) {
@@ -440,11 +526,11 @@ function renderDayView(preset) {
     const vsLabel = minimumVsLabel(ev);
     hero = `
       <div class="cap-day-hero">
-        <div class="cap-day-count cap-status-${status}">${agg.total}</div>
+        <div class="cap-day-count cap-status-${paint}">${agg.total}</div>
         <div class="cap-day-meta">
           <span class="cap-day-vs">${escHtml(vsLabel)}</span>
           ${bhBadgesHtml(minInfo)}
-          <span class="cap-status-pill cap-status-${status}">${STATUS_TEXT[status] || status}</span>
+          <span class="cap-status-pill cap-status-${paint}">${escHtml(statusLabel)}</span>
         </div>
         <div class="cap-day-sub">${remaining} · ${agg.sessionsCount} session${agg.sessionsCount !== 1 ? 's' : ''}</div>
       </div>
@@ -540,26 +626,33 @@ function renderWeekView(preset) {
     (d) => state.showWeekends || !isWeekend(d)
   );
 
-  const weekTotal = dates.reduce((sum, d) => sum + (state.data[d]?.total || 0), 0);
-  const weekMin = dates.reduce((sum, d) => sum + dayEval(d).minInfo.effective, 0);
+  // Today counts only the slots still to come, so comparing it with a whole-day
+  // target would drag the week red every afternoon. Judge the week on the days
+  // that can still be compared like for like, and say so when today is in it.
+  const comparable = dates.filter((d) => d !== todayISO());
+  const weekTotal = comparable.reduce((sum, d) => sum + (state.data[d]?.total || 0), 0);
+  const weekMin = comparable.reduce((sum, d) => sum + dayEval(d).minInfo.effective, 0);
   const weekStatus =
     weekMin > 0 ? computeStatus(weekTotal, weekMin, preset.thresholds || { tight: 75, low: 50 }) : 'sufficient';
+  const excludesToday = comparable.length !== dates.length;
 
   const pills = dates
     .map((date) => {
       const agg = state.data[date];
       const ev = dayEval(date);
-      const status = ev.status;
+      const isCurr = date === todayISO();
+      const status = displayStatus(ev);
       const minimum = ev.minInfo.effective;
       const closed = minimum === 0 || (agg && agg.sessionsCount === 0);
       const count = agg ? agg.total : '…';
       const label = formatDateShort(date);
+      const foot = closed ? STATUS_TEXT[ev.status] || ev.status : isCurr ? 'left today' : `/ ${minimum}`;
       return `
-      <div class="cap-day-pill cap-status-${status}${date === todayISO() ? ' cap-today' : ''}" data-date="${date}">
+      <div class="cap-day-pill cap-status-${status}${isCurr ? ' cap-today' : ''}" data-date="${date}">
         <div class="cap-day-pill-label">${escHtml(label)}</div>
         <div class="cap-day-pill-badges">${bhBadgesHtml(ev.minInfo)}</div>
         <div class="cap-day-pill-count">${closed && !agg ? '—' : count}</div>
-        <div class="cap-day-pill-min">${closed ? STATUS_TEXT[status] || status : `/ ${minimum}`}</div>
+        <div class="cap-day-pill-min">${escHtml(foot)}</div>
       </div>
     `;
     })
@@ -582,11 +675,11 @@ function renderWeekView(preset) {
     <div class="cap-week-summary cap-status-${weekStatus}">
       <span class="cap-summary-label">Week total</span>
       <span class="cap-summary-num">${weekTotal}</span>
-      <span class="cap-summary-vs">/ ${weekMin} target</span>
+      <span class="cap-summary-vs">/ ${weekMin} target${excludesToday ? ' · today not counted' : ''}</span>
     </div>
 
     <div class="cap-week-grid">${pills}</div>
-    <div class="section-hint">Click a day for detail.</div>
+    <div class="section-hint">Click a day for detail.${excludesToday ? ' Today shows what is left, so it is not compared with a whole-day target.' : ''}</div>
   `;
 }
 
@@ -641,12 +734,12 @@ function renderMonthView(preset) {
     const date = addDays(start, i);
     const dayNum = i + 1;
     const ev = dayEval(date);
-    const status = ev.status;
+    const status = displayStatus(ev);
     const agg = state.data[date];
     const isCurr = date === todayISO();
 
     cells.push(`
-      <div class="cap-month-cell cap-status-${status}${isCurr ? ' cap-today' : ''}${isWeekend(date) ? ' cap-weekend' : ''}" data-date="${date}">
+      <div class="cap-month-cell cap-status-${status}${isCurr ? ' cap-today' : ''}${isWeekend(date) ? ' cap-weekend' : ''}" data-date="${date}"${isCurr ? ' title="Today — shows slots still left, not compared with a whole-day target"' : ''}>
         <div class="cap-month-dow">${dayNum}</div>
         <div class="cap-month-badges">${bhMonthMarkerHtml(ev.minInfo)}</div>
         <div class="cap-month-count">${agg ? agg.total : state.loading.has(date) ? '·' : ''}</div>
@@ -796,9 +889,9 @@ function bindControls() {
         alert('Not a Medicus Suite backup file.');
         return;
       }
-      const incoming = raw.modules?.capacity?.presets || [];
+      const incoming = normalisePresets(raw.modules?.capacity?.presets || []);
       if (!Array.isArray(incoming) || incoming.length === 0) {
-        alert('No presets found in this file.');
+        alert('No usable presets found in this file.');
         return;
       }
       const mode = await showImportModeDialog(incoming.length);
@@ -823,7 +916,7 @@ function bindControls() {
       const noConflict = incoming.filter((p) => !existingMap.has(p.id));
 
       if (conflicts.length === 0) {
-        const merged = [...existingPresets, ...noConflict];
+        const merged = normalisePresets([...existingPresets, ...noConflict]);
         await chrome.storage.local.set({ 'capacity.presets': merged });
         state.presets = merged;
         render();
@@ -846,8 +939,9 @@ function bindControls() {
           resolvedPresets.push({ ...incoming_p, id: copyId, name: incoming_p.name + ' (imported)' });
         }
       }
-      await chrome.storage.local.set({ 'capacity.presets': resolvedPresets });
-      state.presets = resolvedPresets;
+      const cleaned = normalisePresets(resolvedPresets);
+      await chrome.storage.local.set({ 'capacity.presets': cleaned });
+      state.presets = cleaned;
       render();
       loadVisibleDates();
     } catch (err) {
@@ -882,7 +976,9 @@ function renderLookaheadBanner(preset) {
   const atRisk = summary.atRiskCount || 0;
   const isChecking = state.loading.size > 0 || summary.uncheckedDays > 0;
   let toneKey = scanTone(summary);
-  if (isChecking) toneKey = 'unknown';
+  // Known risk stays visible while the rest of the horizon is still loading.
+  // Only withhold a green all-clear — never hide a red or amber we already have.
+  if (isChecking && toneKey === 'green') toneKey = 'unknown';
 
   const toneClass = {
     red: 'cap-lookahead-critical',
@@ -897,7 +993,9 @@ function renderLookaheadBanner(preset) {
       ? 'Capacity not fully checked'
       : `${atRisk} day${atRisk === 1 ? '' : 's'} at risk in the next ${summary.horizonDays} days`;
 
-  const checkingHtml = isChecking ? '<span class="cap-lookahead-checking">Checking…</span>' : '';
+  const checkingHtml = isChecking
+    ? `<span class="cap-lookahead-checking">Checking ${summary.loadedDays} of ${summary.workingDays}…</span>`
+    : '';
 
   const chips = (scan.atRisk || [])
     .slice(0, 5)
@@ -910,6 +1008,24 @@ function renderLookaheadBanner(preset) {
       </button>`;
     })
     .join('');
+
+  // Nothing to act on: a calm one-line strip. A full alert block with three
+  // buttons for "all clear" reads as an alarm about zero and crowds out the
+  // calendar it sits above.
+  if (toneKey === 'green') {
+    return `
+    <section class="cap-lookahead cap-lookahead-ok cap-lookahead-quiet" aria-label="Capacity look-ahead">
+      <div class="cap-lookahead-row">
+        <span class="cap-lookahead-tick" aria-hidden="true">✓</span>
+        <p class="cap-lookahead-text">${escHtml(sentence)}</p>
+        <div class="cap-lookahead-links">
+          <button type="button" class="cap-lookahead-link" id="capPrintPack">Print pack</button>
+          <button type="button" class="cap-lookahead-link" id="capLookaheadSettings">Settings</button>
+        </div>
+      </div>
+    </section>
+  `;
+  }
 
   return `
     <section class="cap-lookahead ${toneClass}" aria-label="Capacity look-ahead">
@@ -973,6 +1089,17 @@ function renderLookaheadSettings() {
         </div>
 
         <div class="cap-field">
+          <label class="cap-field-label" for="capLHDivision">Bank holiday calendar</label>
+          <select class="cap-input cap-select" id="capLHDivision">
+            ${DIVISION_OPTIONS.map(
+              (o) =>
+                `<option value="${escAttr(o.id)}"${o.id === la.division ? ' selected' : ''}>${escHtml(o.label)}</option>`
+            ).join('')}
+          </select>
+          <div class="cap-field-hint">Which nation’s bank holidays close your practice.</div>
+        </div>
+
+        <div class="cap-field">
           <label class="cap-lookahead-check">
             <input type="checkbox" id="capLHIncludeTight" ${la.includeTight ? 'checked' : ''} />
             Include &ldquo;Tight&rdquo; days as at-risk
@@ -1003,7 +1130,9 @@ function renderLookaheadSettings() {
             </label>
           </div>
           <div class="cap-field-hint cap-lookahead-note">
-            Uplifts are editable estimates for post&ndash;bank-holiday rebound, not published F2F figures.
+            These are your own estimates of how much busier the first day back is. They are not
+            published NHS figures &mdash; start from the defaults and adjust once you have watched a
+            few bank holidays.
           </div>
         </div>
 
@@ -1038,6 +1167,7 @@ function bindLookaheadSettings() {
 
 async function saveLookaheadSettings() {
   const form = {
+    division: container.querySelector('#capLHDivision')?.value,
     horizonDays: parseInt(container.querySelector('#capLHHorizon')?.value, 10),
     includeTight: container.querySelector('#capLHIncludeTight')?.checked,
     upliftEnabled: container.querySelector('#capLHUpliftEnabled')?.checked,
@@ -1096,7 +1226,10 @@ function onExportRiskCsv() {
   const atRisk = scan.atRisk || [];
   let rows;
   if (atRisk.length === 0) {
-    rows = [['—', '—', '—', '—', '—', '—', '—', 'No days at risk in this horizon']];
+    const note = scan.summary?.complete
+      ? 'No days at risk in this horizon'
+      : `Checked ${scan.summary?.loadedDays ?? 0} of ${scan.summary?.workingDays ?? 0} days — scan incomplete, do not treat as all-clear`;
+    rows = [['—', '—', '—', '—', '—', '—', '—', note]];
   } else {
     rows = atRisk.map((d) => [
       d.dateISO,

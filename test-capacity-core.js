@@ -30,6 +30,10 @@ const path = require('path');
     validatePreset,
     normaliseLookahead,
     validateLookahead,
+    normalisePreset,
+    normalisePresets,
+    resolveActivePreset,
+    evaluateDay,
     effectiveMinimumForDate,
     upliftKindForBlock,
     scanHorizon,
@@ -223,6 +227,20 @@ const path = require('path');
   check(scanTone(full.summary) === 'green', 'complete + clear → green');
   check(/No days at risk/.test(lookAheadSentence(full.summary, 'GP')), 'complete + clear → all-clear sentence');
 
+  const mixedData = { '2026-09-02': { total: 1, sessionsCount: 4, byType: {}, byStaff: [] } };
+  const mixed = scanHorizon({
+    preset,
+    dataByDate: mixedData,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 8 },
+  });
+  check(
+    mixed.summary.complete === false && mixed.summary.critical >= 1,
+    'partial + depleted → incomplete with critical'
+  );
+  check(scanTone(mixed.summary) === 'red', 'known critical stays red even when other days are unchecked');
+
   console.log('\n--- holiday classification ---');
   check(
     effectiveMinimumForDate(preset, '2027-03-26', la).effective === 0,
@@ -254,6 +272,52 @@ const path = require('path');
   }
   check(!threw, 'a bad stored division cannot take down the tab');
   check(validateLookahead({ division: 'wales' }).valid === false, 'settings reject an unknown division');
+
+  console.log('\n--- preset resolve / sanitise ---');
+  check(resolveActivePreset([{ id: 'a' }, { id: 'b' }], 'b').id === 'b', 'resolve hits the stored id');
+  check(resolveActivePreset([{ id: 'a' }, { id: 'b' }], 'gone').id === 'a', 'stale id falls back to first');
+  check(resolveActivePreset([], 'x') === null, 'empty list → null');
+
+  const dirty = normalisePreset({
+    id: ' p1 ',
+    name: '  GP Routine  ',
+    slotTypes: ['GP', 12, '', 'Telephone'],
+    thresholds: { tight: 200, low: 90 },
+    extra: '<script>alert(1)</script>',
+  });
+  check(dirty && dirty.id === 'p1' && dirty.name === 'GP Routine', 'preset id/name trimmed');
+  check(dirty.slotTypes.join(',') === 'GP,Telephone', 'non-string slot types dropped');
+  check(
+    dirty.thresholds.tight === 99 && dirty.thresholds.low < dirty.thresholds.tight,
+    'thresholds clamped with low < tight'
+  );
+  check(dirty.extra === undefined, 'unknown keys are not copied onto the preset');
+  check(normalisePreset({ name: 'x' }) === null, 'missing id rejected');
+  check(
+    normalisePresets([
+      { id: 'a', name: 'A' },
+      { id: 'a', name: 'Dup' },
+    ]).length === 1,
+    'duplicate ids dropped'
+  );
+
+  const evToday = evaluateDay({
+    preset,
+    dateISO: '2026-05-26',
+    agg: { total: 2, sessionsCount: 5 },
+    today: '2026-05-26',
+    lookahead: la,
+  });
+  check(evToday.isToday === true, 'evaluated today is tagged isToday');
+  const evLoad = evaluateDay({
+    preset,
+    dateISO: '2026-05-26',
+    agg: null,
+    today: '2026-05-26',
+    loading: true,
+    lookahead: la,
+  });
+  check(evLoad.isToday === true && evLoad.status === 'loading', 'loading today still tagged isToday');
 
   const clear = filterAtRisk(
     [{ dateISO: '2026-05-27', status: 'sufficient', minInfo: { countsForRisk: true } }],

@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.249.2] — 2026-08-29
+
+### Forecast look-ahead — design pass and remaining 9/10 hardening
+
+Rendered every look-ahead state and fixed what the pixels and the second
+pass still got wrong:
+
+- **The calendar no longer contradicts the banner.** Today was painted
+  critical-red from its remaining-slot count while the look-ahead correctly
+  excluded it, so "no days at risk" sat directly above a red cell. Today now
+  renders in a neutral treatment labelled "left today" in week, month **and
+  day** views, and the week total says "today not counted".
+- Known risk stays visible while the rest of the horizon is still loading.
+  The banner no longer flips to a neutral "Checking…" and hides a red or
+  amber already found.
+- Forecast and Today now share one preset-resolution rule: a stale or
+  deleted active id falls back to the first remaining preset.
+- Imported and stored presets are rebuilt before use, so a missing
+  `thresholds` object or hostile extra keys cannot crash the editor.
+- After midnight, yesterday's remaining-slot snapshot is dropped instead of
+  continuing to paint as "today".
+- The 28–84 day fetch no longer rebuilds the whole tab on every date;
+  progress is coalesced to a frame.
+- Incomplete CSV exports no longer write "No days at risk" when days could
+  not be read.
+- Today-card at-risk chips open that day in Forecast.
+- The all-clear banner stays one calm line, with Print pack still one click
+  away for the meeting pack.
+- Bank-holiday calendar picker (England & Wales / Scotland / Northern
+  Ireland) — the setting existed in the model but had no UI.
+- The extra-demand fields were clipping their own values ("1.25" showed as
+  "1.2").
+- The preset row overflowed the panel: the import button was clipped
+  off-screen and the preset name truncated.
+- Print pack: dates no longer wrap mid-date, and the post-bank-holiday note
+  reads as English.
+- Plain-English settings note in place of the "uplift / F2F" wording.
+
 ## [v3.249.1] — 2026-08-28
 
 ### Forecast look-ahead — red-team hardening

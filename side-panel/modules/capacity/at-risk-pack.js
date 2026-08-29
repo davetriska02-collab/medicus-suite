@@ -118,7 +118,7 @@ function postHolidayHeaderNote(summary) {
   if (!summary?.postHolidayRisk) return '';
   const n = summary.postHolidayRisk;
   return `
-    <p class="post-holiday-note">${esc(n)} at-risk day${n === 1 ? '' : 's'} include extra demand after a bank holiday (adjusted target shown in the table).</p>`;
+    <p class="post-holiday-note">${n === 1 ? 'One of these days is' : `${esc(n)} of these days are`} the first working day after a bank holiday, so ${n === 1 ? 'its' : 'their'} target has been raised (see the table).</p>`;
 }
 
 function whyCell(d) {
@@ -137,7 +137,7 @@ function rowHtml(d) {
   const min = d.minInfo?.effective ?? '';
   return `
     <tr>
-      <td>${esc(fmtDateShort(d.dateISO))}</td>
+      <td class="date-cell">${esc(fmtDateShort(d.dateISO))}</td>
       <td>${esc(d.weekday || '')}</td>
       <td class="num">${esc(d.total ?? '')}</td>
       <td class="num">${esc(min)}</td>
@@ -152,7 +152,7 @@ function atRiskTable(atRisk) {
     <table>
       <thead>
         <tr>
-          <th>Date</th>
+          <th class="date-cell">Date</th>
           <th>Day</th>
           <th class="num">Free slots</th>
           <th class="num">Target</th>

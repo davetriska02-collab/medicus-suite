@@ -26,6 +26,11 @@
 .cap-status-closed {
   --c: var(--text-5);
 }
+/* Today: a part-day count that cannot be compared with a whole-day target.
+   Deliberately outside the RAG ladder so it never contradicts the look-ahead. */
+.cap-status-partial {
+  --c: var(--accent);
+}
 .cap-status-historic {
   --c: var(--text-5);
 }
@@ -106,6 +111,16 @@ html[data-theme='dark'] .cap-status-tight {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
+  /* A label, a select and four icon buttons overflow the 400px panel: the last
+     button used to be clipped off-screen and the preset name truncated. Let the
+     select own the first row and the buttons wrap beneath it. */
+  flex-wrap: wrap;
+}
+.cap-preset-row .cap-preset-select {
+  min-width: 0;
+  /* Own row: the preset name is the thing being read, and this keeps the four
+     icon buttons together beneath rather than one orphaning onto a third row. */
+  flex: 1 1 100%;
 }
 .cap-preset-label {
   font-family: var(--sans);
@@ -255,6 +270,45 @@ html[data-theme='dark'] .cap-status-tight {
   border-color: var(--green-line);
   color: var(--green);
 }
+/* All-clear: one calm line, not an alert block about zero. */
+.cap-lookahead-quiet {
+  padding: 8px 10px;
+}
+.cap-lookahead-quiet .cap-lookahead-row {
+  align-items: center;
+  gap: 8px;
+}
+.cap-lookahead-quiet .cap-lookahead-text {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.cap-lookahead-tick {
+  color: var(--green);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.cap-lookahead-links {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.cap-lookahead-link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 10px;
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+.cap-lookahead-link:hover,
+.cap-lookahead-link:focus-visible {
+  color: var(--text-2);
+}
+
 .cap-lookahead-actions {
   display: flex;
   flex-wrap: wrap;
@@ -376,6 +430,13 @@ html[data-theme='dark'] .cap-status-tight {
   flex-direction: column;
   gap: 6px;
   margin-top: 4px;
+}
+/* A 4-character decimal plus the number spinner does not fit the 56px used by
+   the whole-number minimum fields — "1.25" was rendering clipped as "1.2". */
+.cap-uplift-row .cap-input-tiny {
+  max-width: 78px;
+  text-align: right;
+  padding-right: 4px;
 }
 .cap-uplift-row {
   display: flex;
@@ -935,6 +996,10 @@ html[data-theme='dark'] .cap-status-tight {
   line-height: 1.5;
 }
 
+select.cap-select {
+  font-family: var(--sans);
+  cursor: pointer;
+}
 .cap-input {
   background: var(--bg-mid);
   border: 1px solid var(--border-hi);

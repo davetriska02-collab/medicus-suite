@@ -3,6 +3,7 @@
 //
 // Exported:
 //   DOW_KEYS, WEEKDAYS, minimumForDate, defaultMinimumByDay, presetSummary, validatePreset
+//   normalisePreset, normalisePresets, resolveActivePreset
 //   DEFAULT_LOOKAHEAD, normaliseLookahead, validateLookahead
 //   upliftKindForBlock, upliftMultiplier, effectiveMinimumForDate
 //   evaluateDay, scanHorizon, filterAtRisk, summariseScan, STATUS_RANK
@@ -165,6 +166,73 @@ export function validatePreset({ name, slotTypes, tight, low }) {
 }
 
 /**
+ * Rebuild a stored/imported preset so hostile or half-written objects cannot
+ * crash the editor (`thresholds.tight` on undefined) or carry extra keys.
+ * Returns null when the record is not usable at all.
+ */
+export function normalisePreset(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim().slice(0, 80) : null;
+  const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : '';
+  if (!id || !name) return null;
+  const slotTypes = Array.isArray(raw.slotTypes)
+    ? raw.slotTypes
+        .filter((t) => typeof t === 'string' && t.trim())
+        .map((t) => t.trim())
+        .slice(0, 80)
+    : [];
+  const th = raw.thresholds && typeof raw.thresholds === 'object' ? raw.thresholds : {};
+  const tight = clampInt(th.tight, 1, 99, 75);
+  let low = clampInt(th.low, 1, 99, 50);
+  if (low >= tight) low = Math.max(1, tight - 1);
+  const out = {
+    id,
+    name,
+    slotTypes,
+    minimumByDay: normaliseMinimumByDay(raw.minimumByDay, raw.minimumPerDay),
+    thresholds: { tight, low },
+  };
+  if (typeof raw.createdAt === 'string') out.createdAt = raw.createdAt;
+  return out;
+}
+
+export function normalisePresets(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of list) {
+    const p = normalisePreset(raw);
+    if (!p || seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+/** Shared Forecast/Today rule: a stale active id falls back to the first preset. */
+export function resolveActivePreset(presets, activeId) {
+  const list = Array.isArray(presets) ? presets : [];
+  if (list.length === 0) return null;
+  return list.find((p) => p.id === activeId) || list[0];
+}
+
+function normaliseMinimumByDay(raw, legacyMin) {
+  const fallback = clampInt(legacyMin, 0, 999, 0);
+  const src = raw && typeof raw === 'object' ? raw : null;
+  const out = {};
+  for (const { key } of WEEKDAYS) {
+    if (src && src[key] !== undefined) {
+      out[key] = clampInt(src[key], 0, 999, fallback);
+    } else if (src) {
+      out[key] = key === 'sat' || key === 'sun' ? 0 : fallback;
+    } else {
+      out[key] = key === 'sat' || key === 'sun' ? 0 : fallback;
+    }
+  }
+  return out;
+}
+
+/**
  * Classify a closed block for uplift: xmas / easter / single / null.
  * Hypothesis-grade — see DEFAULT_LOOKAHEAD comment.
  */
@@ -282,6 +350,7 @@ export function evaluateDay({
       minInfo,
       sessionsCount: null,
       reason: 'Loading…',
+      isToday,
     });
   }
   if (!agg) {
@@ -292,6 +361,7 @@ export function evaluateDay({
       minInfo,
       sessionsCount: null,
       reason: 'No data yet',
+      isToday,
     });
   }
   if (past && !isToday) {
@@ -317,6 +387,7 @@ export function evaluateDay({
       minInfo,
       sessionsCount: agg.sessionsCount,
       reason: closedWhy,
+      isToday,
     });
   }
 

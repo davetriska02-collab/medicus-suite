@@ -460,6 +460,15 @@
   border-radius: var(--r-pill);
   padding: 2px 8px;
 }
+button.today-name-chip {
+  cursor: pointer;
+  appearance: none;
+}
+button.today-name-chip:hover,
+button.today-name-chip:focus-visible {
+  border-color: var(--border-hi);
+  color: var(--text-1);
+}
 
 .today-name-chip--amber {
   background: var(--amber-dim);

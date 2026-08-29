@@ -215,6 +215,10 @@ const ALLOWLIST = new Set([
   // and recomputed from live data — derived, never user config:
   'capacity.scanCache',
 
+  // Transient Today→Forecast handoff: the at-risk chip writes the ISO date,
+  // Forecast consumes it on init and removes it. Not user config:
+  'capacity.jumpToDate',
+
   // Transient batch-output payload — written on "Generate batch", read once by
   // batch-handout.html, overwritten on every generate. Not user config (mirrors
   // sweep.handout; see side-panel/modules/sweep/sweep.js):

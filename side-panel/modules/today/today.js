@@ -24,6 +24,8 @@ import { recordTaskLists } from '../submissions/submissions-ledger.js';
 import { followupCounts } from '../followups/followups-core.js';
 import {
   normaliseLookahead,
+  normalisePresets,
+  resolveActivePreset,
   scanHorizon,
   scanTone,
   lookAheadSentence,
@@ -341,9 +343,8 @@ async function fetchCapacity() {
       'capacity.lookahead',
       'capacity.scanCache',
     ]);
-    const presets = Array.isArray(stored['capacity.presets']) ? stored['capacity.presets'] : [];
-    const activeId = stored['capacity.activePresetId'];
-    const preset = presets.find((p) => p.id === activeId) || presets[0] || null;
+    const presets = normalisePresets(stored['capacity.presets']);
+    const preset = resolveActivePreset(presets, stored['capacity.activePresetId']);
     if (!preset) {
       _capacityData = { noPreset: true, summary: null, atRisk: [], sentence: null };
       renderCard('capacity');
@@ -757,7 +758,7 @@ function buildCapacityBody() {
         day: 'numeric',
         month: 'short',
       });
-      return `<span class="today-name-chip ${cls}">${esc(when)} · ${esc(STATUS_TEXT[d.status] || d.status)}</span>`;
+      return `<button type="button" class="today-name-chip ${cls}" data-action="open-capacity-day" data-date="${esc(d.dateISO)}" aria-label="Open ${esc(when)} in Forecast">${esc(when)} · ${esc(STATUS_TEXT[d.status] || d.status)}</button>`;
     })
     .join('');
 
@@ -925,6 +926,11 @@ function wireCardInteractions() {
 
     if (action === 'open-setup') openSetup();
     if (action === 'open-sweep') navTo('sweep');
+    if (action === 'open-capacity-day') {
+      const date = actionEl.dataset.date;
+      if (date) chrome.storage.local.set({ 'capacity.jumpToDate': date });
+      navTo('capacity');
+    }
   };
   container.addEventListener('click', _cardActionHandler);
 
