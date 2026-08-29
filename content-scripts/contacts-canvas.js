@@ -188,6 +188,14 @@
       duplicatePhoneGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicatePhoneGroups(indexPhones)
       duplicatePhoneDeleting: new Set(), // telephoneNumberIds currently being deleted from THIS (duplicate-cleanup) flow — kept separate from phoneDeleting below, which is scoped to an active merge-panel review of a DIFFERENT (candidate) patient's numbers
       duplicatePhoneError: null,
+      // Wrong-type phone detection (2026-08-29 request) — same "hub/index patient's own record"
+      // scoping as duplicates above, same wrongType heuristic buildPhoneRows already uses for the
+      // merge-compare panel (a mobile-shaped number filed under Home/Work/Temporary — a known
+      // recurring GP2GP-import pattern), just run unconditionally on canvas open instead of only
+      // surfacing once a manual contact happens to be merged against this patient.
+      wrongTypePhones: [], // indexes into indexPhones whose telephoneNumberType isn't Mobile but ContactRelationships.isUkMobileNumber(telephoneNumber) is true
+      wrongTypePhoneFixing: new Set(), // telephoneNumberIds currently mid-fix
+      wrongTypePhoneError: null,
       indexEmails: [], // the hub/index patient's OWN patientContactInformationSection.patientEmailAddresses — feeds duplicateEmailGroups
       duplicateEmailGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicateEmailGroups(indexEmails)
       duplicateEmailDeleting: new Set(), // emailAddressIds currently being deleted
@@ -527,6 +535,14 @@
         const keepPos = window.ContactRelationships.choosePhoneToKeep(indexes.map((idx) => st.indexPhones[idx]));
         return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
       });
+      // Wrong-type phones (2026-08-29 request) — never flags an entry already typed Mobile,
+      // same rule buildPhoneRows uses for the merge-compare panel's "Fix type" button.
+      st.wrongTypePhones = st.indexPhones.reduce((acc, entry, idx) => {
+        if (entry.telephoneNumberType !== 'Mobile' && window.ContactRelationships.isUkMobileNumber(entry.telephoneNumber)) {
+          acc.push(idx);
+        }
+        return acc;
+      }, []);
       st.indexEmails = (cinfo && cinfo.patientEmailAddresses) || [];
       st.duplicateEmailGroups = window.ContactRelationships.findDuplicateEmailGroups(st.indexEmails).map((indexes) => {
         const keepPos = window.ContactRelationships.chooseEmailToKeep(indexes.map((idx) => st.indexEmails[idx]));
@@ -2325,6 +2341,36 @@
     `;
   }
 
+  // renderWrongTypePhoneWarning (2026-08-29 request) — the on-open counterpart to fixPhoneType's
+  // merge-compare "Fix type" button, for the hub/index patient's own record. One row per flagged
+  // number (no radio group — each is an independent fix, unlike the duplicate-group "pick one to
+  // keep" choice above) with its own "Fix type" button, disabled while its own fix is in flight.
+  function renderWrongTypePhoneWarning() {
+    if (!cs.wrongTypePhones.length) return '';
+    const rows = cs.wrongTypePhones
+      .map((idx) => {
+        const entry = cs.indexPhones[idx];
+        if (!entry) return '';
+        const fixing = cs.wrongTypePhoneFixing.has(entry.telephoneNumberId);
+        return `
+          <div class="ms-cv-dupaddr-line">
+            ${esc(entry.telephoneNumber || '(no number)')} <span class="ms-ct-note">(currently filed as ${esc(entry.telephoneNumberType || 'unknown')})</span>
+            <button class="ms-ct-btn-ghost ms-cv-wrongtypephone-fix" data-telephone-id="${esc(entry.telephoneNumberId)}" ${fixing ? 'disabled' : ''}>${fixing ? 'Fixing…' : 'Fix type → Mobile'}</button>
+          </div>
+        `;
+      })
+      .join('');
+    const n = cs.wrongTypePhones.length;
+    return `
+      <div class="ms-ct-warn ms-cv-dupaddr-warn">
+        <strong>${n} phone number${n === 1 ? '' : 's'} on this patient's own record ${n === 1 ? 'looks' : 'look'} like a mobile number filed under the wrong type</strong> —
+        a known GP2GP-import pattern. Fixing the type doesn't change the number itself.
+        ${rows}
+        ${cs.wrongTypePhoneError ? `<div class="ms-ct-error">${esc(cs.wrongTypePhoneError)}</div>` : ''}
+      </div>
+    `;
+  }
+
   function renderDuplicateEmailWarning() {
     if (!cs.duplicateEmailGroups.length) return '';
     const groups = cs.duplicateEmailGroups
@@ -2401,6 +2447,7 @@
                    ${renderRemoveZone()}
                    ${renderDuplicateAddressWarning()}
                    ${renderDuplicatePhoneWarning()}
+                   ${renderWrongTypePhoneWarning()}
                    ${renderDuplicateEmailWarning()}
                    ${renderTree()}
                    ${cs.pendingMerge ? renderMergePanel() : renderConfirmPanel()}
@@ -3022,6 +3069,61 @@
     } finally {
       if (st === cs) {
         st.duplicatePhoneDeleting.delete(groupKey);
+        render();
+      }
+    }
+  }
+
+  // fixWrongTypePhone(telephoneNumberId) — the on-open counterpart to fixPhoneType above, for the
+  // hub/index patient's OWN phone numbers (st.wrongTypePhones), independent of any pendingMerge.
+  // Same underlying write and "clicking it IS the confirmation" reasoning as fixPhoneType — the
+  // warning next to the button already states what's wrong. Fetches fresh (getEditTelephoneNumber)
+  // rather than trusting the cached entry, for the same reason fixPhoneType does: changeTelephoneNumber
+  // is a full replace, and resolving the write-side "Mobile" option value from telephoneNumberTypes
+  // (not assuming it matches the read-side string) is the exact bug that shipped once already.
+  async function fixWrongTypePhone(telephoneNumberId) {
+    const st = cs;
+    if (st.wrongTypePhoneFixing.has(telephoneNumberId)) return; // already mid-fix — never fire twice
+    if (anyWriteInFlight()) {
+      st.wrongTypePhoneError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.wrongTypePhoneError = null;
+    st.wrongTypePhoneFixing.add(telephoneNumberId);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const current = await window.ContactsApi.getEditTelephoneNumber(st.apiBase, telephoneNumberId);
+      if (st !== cs) return;
+      const mobileOption = (current.telephoneNumberTypes || []).find(
+        (t) =>
+          String((t && t.label) || '')
+            .trim()
+            .toLowerCase() === 'mobile'
+      );
+      if (!mobileOption) {
+        throw new Error('Could not find a "Mobile" option for this phone number — nothing was changed.');
+      }
+      await window.ContactsApi.changeTelephoneNumber(st.apiBase, {
+        id: telephoneNumberId,
+        telephoneNumber: current.telephoneNumber,
+        telephoneNumberType: mobileOption.value,
+        preferredTelephoneNumberForSms: !!current.preferredTelephoneNumberForSms,
+        notes: current.notes || '',
+      });
+      if (st !== cs) return;
+      const entry = st.indexPhones.find((p) => p.telephoneNumberId === telephoneNumberId);
+      if (entry) entry.telephoneNumberType = 'Mobile';
+      st.wrongTypePhones = st.wrongTypePhones.filter((idx) => st.indexPhones[idx] !== entry);
+    } catch (err) {
+      st.wrongTypePhoneError = err.message || "Failed to fix this phone number's type.";
+    } finally {
+      if (st === cs) {
+        st.wrongTypePhoneFixing.delete(telephoneNumberId);
         render();
       }
     }
@@ -4340,6 +4442,9 @@
     });
     overlay.querySelectorAll('.ms-cv-dupphone-delete').forEach((btn) => {
       btn.addEventListener('click', () => deleteDuplicatePhoneGroup(btn.getAttribute('data-phone-group')));
+    });
+    overlay.querySelectorAll('.ms-cv-wrongtypephone-fix').forEach((btn) => {
+      btn.addEventListener('click', () => fixWrongTypePhone(btn.getAttribute('data-telephone-id')));
     });
     overlay.querySelectorAll('.ms-cv-dupemail-keep-radio').forEach((r) => {
       r.addEventListener('change', (e) => {
