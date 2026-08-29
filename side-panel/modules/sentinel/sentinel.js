@@ -1433,7 +1433,7 @@ function render(payload) {
 
   // Journal-augment failure indicator — shown when the content script's
   // fetchJournalObservations threw. QOF chips that rely on journal-coded
-  // evidence (AST007, COPD010, HF007, etc.) may show no_data incorrectly.
+  // evidence (AST015, COPD010, HF007, etc.) may show no_data incorrectly.
   // Deliberately unobtrusive: a small muted line near the extraction health
   // block, not a banner (the chip list is still usable; this is advisory only).
   const journalAugmentHtml = journalAugmentFailed
@@ -1867,8 +1867,20 @@ function renderChip(chip) {
         ? datePart.replace(/^ · /, '')
         : '';
     const yearTag = chip.qofYear ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '';
+    // Reduced-confidence treatment (see chip-renderer.js's isUncertainChip /
+    // renderChipUncertaintyNotesHtml — duplicated inline here since this is a
+    // defensive fallback path used only when ChipRenderer itself isn't
+    // loaded, so its helpers aren't available either).
+    const fbUncertain = chip.registerDateIsOnset === false || !!chip.noMatchingProblemCode;
+    const fbUncertainNotes = [
+      chip.registerDateIsOnset === false ? '~ Diagnosis date unconfirmed (no confirmed onset date on record)' : null,
+      chip.noMatchingProblemCode ? '⚠ On register — no matching problem code found on this record' : null,
+    ]
+      .filter(Boolean)
+      .map((n) => `<div class="sent-chip-uncertain-note">${escHtml(n)}</div>`)
+      .join('');
     return `
-      <div class="sent-chip sent-chip-${col}">
+      <div class="sent-chip sent-chip-${col}${fbUncertain ? ' sent-chip-uncertain' : ''}">
         ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}</span>
@@ -1876,18 +1888,32 @@ function renderChip(chip) {
         </div>
         ${chip.indicatorName ? `<div class="sent-chip-cat">${escHtml(chip.indicatorName)}${yearTag}</div>` : yearTag}
         ${obs ? `<div class="sent-chip-obs">${obs}</div>` : ''}
+        ${fbUncertainNotes}
       </div>`;
   }
 
   if (chip.type === 'qof-register') {
+    // qof-register chips have no shared-renderer counterpart (chip-renderer.js
+    // has no renderQofRegisterChip) — this IS the primary implementation, not
+    // a fallback, so prefer CR's helpers when available (kept in sync with
+    // renderQofIndicatorChip's treatment) with the same inline fallback logic
+    // as above if CR somehow isn't loaded.
+    const regUncertain = CR && CR.isUncertainChip ? CR.isUncertainChip(chip) : !!chip.noMatchingProblemCode;
+    const regUncertainNotes =
+      CR && CR.renderChipUncertaintyNotesHtml
+        ? CR.renderChipUncertaintyNotesHtml(chip)
+        : chip.noMatchingProblemCode
+          ? `<div class="sent-chip-uncertain-note">${escHtml('⚠ On register — no matching problem code found on this record')}</div>`
+          : '';
     return `
-      <div class="sent-chip sent-chip-${col}">
+      <div class="sent-chip sent-chip-${col}${regUncertain ? ' sent-chip-uncertain' : ''}">
         ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.registerName || chip.registerCode || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         ${chip.matchedProblem ? `<div class="sent-chip-cat">${escHtml(chip.matchedProblem)}</div>` : ''}
+        ${regUncertainNotes}
       </div>`;
   }
 

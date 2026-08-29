@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.251.0
+**Version:** v3.251.4
 **Generated:** 2026-08-29 (automated)
 
 ## What it is
@@ -13,7 +13,7 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 - 6 full-tab tools reached from the panel or from Medicus's own pages (Patient Record Visualiser, Duplicate Problem Checker, Rota Manager, Contacts Management, Practice Report / CQC Inspection Readiness, Note display board)
 - around 14 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools)
 - 8 rule types in the clinical alert engine
-- 32 built-in drug-monitoring rules (31 enabled), 74 QOF rules (14 register + 60 indicator), 5 vaccine rules, 44 investigation-result threshold rules, and 37 starter alerts in the practice alert library (34 prescribing safety, 3 clinical review)
+- 32 built-in drug-monitoring rules (31 enabled), 81 QOF rules (15 register + 66 indicator), 5 vaccine rules, 44 investigation-result threshold rules, and 37 starter alerts in the practice alert library (34 prescribing safety, 3 clinical review)
 
 ## Side-panel modules
 
@@ -180,7 +180,7 @@ The Monitoring tab and Sweep both run patient data through the same rules engine
 - **Vaccine** — eligibility and due/given/declined status against seasonal or one-off schedules
 - **Composite** — combines the results of several other rules into one higher-level flag
 
-The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled), 74 QOF rules, 5 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
+The shipped alert library carries 37 starter alerts a practice can enable (34 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 32 built-in drug-monitoring rules (31 enabled), 81 QOF rules, 5 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
 
 ## Settings & customisation
 

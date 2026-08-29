@@ -1946,7 +1946,8 @@
       now,
       problems: data.problems || [],
       patientContext: data.patientContext || null,
-      observationHistory: data.observationHistory || []
+      observationHistory: data.observationHistory || [],
+      patientRegisters: data.patientRegisters != null ? data.patientRegisters : null
     };
     // Memoise the EVALUATION (not the fetch). data was just fetched fresh above,
     // so hashing it and reusing the last result when nothing changed skips the
@@ -4218,7 +4219,8 @@
         rules,
         { now: new Date().toISOString(), problems: normalised.problems || [],
           patientContext: normalised.patientContext || null,
-          observationHistory: normalised.observationHistory || [] }
+          observationHistory: normalised.observationHistory || [],
+          patientRegisters: normalised.patientRegisters != null ? normalised.patientRegisters : null }
       );
     } catch (e) { log('queue-mon: evaluatePatient threw', e.message); return null; }
     return selectMonitoringDue(chips);
