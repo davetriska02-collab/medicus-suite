@@ -1,0 +1,362 @@
+/* © 2026 Graysbrook Ltd. Proprietary. All rights reserved. See LICENSE. */
+/* Medicus Suite — Note display board: "Transit" style.
+ *
+ * A railway departure board. Deep black carcass, dark charcoal flap faces,
+ * amber glyphs with a hint of LED bloom, and one tabular monospace voice for
+ * the whole board so it reads as a timetable rather than a document.
+ *
+ * Deliberately not "Wayfind": that style is yellow-on-black civic signage
+ * with light plates and a grotesque face; this one is amber-on-black
+ * station timetable with dark plates and a mono face. Neither can be
+ * mistaken for the cream Vestaboard.
+ *
+ * The bloom is one soft text-shadow at low alpha. It sits behind the glyph,
+ * never lightens the face, and the amber stays above 10:1 on black. No
+ * scanlines, no curvature, no glass.
+ *
+ * Status meaning is unchanged: quiet green, steady amber, busy orange,
+ * very busy red. Because the whole board is already amber, hue alone would
+ * be a weak signal here, so severity also climbs as a left LED rail
+ * (4 / 8 / 12 / 16px) and the tempo dots stay an ordinal count of lit
+ * pixels. Very busy additionally takes a red frame.
+ *
+ * Every rule is scoped to .note-body[data-style='transit'].
+ */
+
+.note-body[data-style='transit'] {
+  --note-void: #000000;
+  --note-chassis: #0a0a0b;
+  --note-well: #060504;
+  /* Hairlines are amber-tinted, never neutral grey. */
+  --note-hair: #3a2a08;
+  --note-mute: #b7801f;
+  --note-soft: #f2a71c;
+  --note-ink: #ffb62a;
+
+  /* Solari flaps: the plate is dark, the legend is the lit part. */
+  --note-flap: #17130c;
+  --note-flap-ink: #ffb000;
+  --note-flap-split: rgba(0, 0, 0, 0.9);
+  --note-flap-blank: #0a0806;
+
+  --note-quiet: #3ddc84;
+  --note-steady: #ffb000;
+  --note-busy: #ff7a18;
+  --note-very: #ff4133;
+
+  /* One voice, and it is the timetable's: mono everywhere, so counts,
+   * times and labels all sit on the same rhythm. */
+  --note-sans: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  background: radial-gradient(1200px 520px at 50% 0%, rgba(255, 176, 0, 0.045), transparent 62%), var(--note-void);
+}
+
+/* ── Chrome ─────────────────────────────────────────────────────────────── */
+
+.note-body[data-style='transit'] .note-chrome {
+  border-bottom: 1px solid var(--note-hair);
+}
+
+.note-body[data-style='transit'] .note-chrome-name {
+  color: var(--note-ink);
+  font-family: var(--note-mono);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='transit'] .note-chrome-sub {
+  color: var(--note-mute);
+  letter-spacing: 0.14em;
+}
+
+.note-body[data-style='transit'] .note-chrome-select select,
+.note-body[data-style='transit'] .note-chrome-btn {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 2px;
+  color: var(--note-soft);
+  font-family: var(--note-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='transit'] .note-chrome-btn:hover,
+.note-body[data-style='transit'] .note-chrome-select select:hover {
+  border-color: var(--note-flap-ink);
+  color: var(--note-ink);
+}
+
+.note-body[data-style='transit'] .note-chrome-select select:focus-visible,
+.note-body[data-style='transit'] .note-chrome-btn:focus-visible {
+  outline: 3px solid var(--note-flap-ink);
+  outline-offset: 2px;
+}
+
+.note-body[data-style='transit'] .note-empty {
+  color: var(--note-soft);
+  font-family: var(--note-mono);
+  font-size: clamp(14px, 1.3vw, 18px);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── Flaps: dark plates, lit legend ─────────────────────────────────────── */
+
+.note-body[data-style='transit'] .note-flaps {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 176, 0, 0.07),
+    0 20px 48px rgba(0, 0, 0, 0.6);
+}
+
+.note-body[data-style='transit'] .note-flap {
+  background: var(--note-flap);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 176, 0, 0.09),
+    inset 0 1px 0 rgba(255, 226, 168, 0.05),
+    0 1px 0 rgba(0, 0, 0, 0.9);
+}
+
+/* The hinge is a black seam with the faintest lit edge below it. */
+.note-body[data-style='transit'] .note-flap::after {
+  background: var(--note-flap-split);
+  box-shadow: 0 1px 0 rgba(255, 176, 0, 0.08);
+}
+
+.note-body[data-style='transit'] .note-flap-glyph {
+  font-family: var(--note-mono);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-shadow:
+    0 0 2px rgba(255, 176, 0, 0.45),
+    0 0 12px rgba(255, 176, 0, 0.3);
+}
+
+.note-body[data-style='transit'] .note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 0, 0.05);
+}
+
+.note-body[data-style='transit'] .note-flap-blank::after {
+  background: rgba(255, 176, 0, 0.05);
+  box-shadow: none;
+}
+
+.note-body[data-style='transit'] .note-clock .note-flap-glyph {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* ── Tiles: timetable rows with a left LED rail ─────────────────────────── */
+
+.note-body[data-style='transit'] .note-metrics {
+  gap: clamp(10px, 1.3vw, 18px);
+}
+
+.note-body[data-style='transit'] .note-tile {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 4px;
+  /* Left padding clears the thickest (16px) severity rail. */
+  padding: clamp(16px, 2.2vh, 24px) clamp(16px, 1.8vw, 22px) clamp(14px, 1.8vh, 20px) clamp(26px, 2.4vw, 34px);
+  box-shadow: inset 0 1px 0 rgba(255, 176, 0, 0.05);
+}
+
+.note-body[data-style='transit'] .note-tile-k {
+  color: var(--note-soft);
+  font-family: var(--note-mono);
+  font-size: clamp(11px, 1.15vw, 15px);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='transit'] .note-tile-v {
+  color: var(--note-ink);
+  font-size: clamp(42px, 6.4vw, 92px);
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  text-shadow:
+    0 0 3px rgba(255, 176, 0, 0.35),
+    0 0 22px rgba(255, 176, 0, 0.22);
+}
+
+.note-body[data-style='transit'] .note-tile-v-word {
+  font-family: var(--note-mono);
+  font-size: clamp(22px, 2.9vw, 42px);
+  letter-spacing: 0.05em;
+  line-height: 1.04;
+  overflow-wrap: break-word;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='transit'] .note-tile-s {
+  color: var(--note-soft);
+  font-family: var(--note-mono);
+  font-size: clamp(12px, 1.2vw, 16px);
+  letter-spacing: 0.02em;
+}
+
+.note-body[data-style='transit'] .note-tile-s-strong {
+  color: var(--note-ink);
+  font-size: clamp(16px, 1.7vw, 22px);
+  font-weight: 700;
+}
+
+/* Severity rail: hue AND thickness climb together. */
+.note-body[data-style='transit'] .note-tile[data-tone='quiet'],
+.note-body[data-style='transit'] .note-tile[data-tone='GREEN'] {
+  box-shadow: inset 4px 0 0 var(--note-quiet);
+}
+
+.note-body[data-style='transit'] .note-tile[data-tone='steady'],
+.note-body[data-style='transit'] .note-tile[data-tone='AMBER'] {
+  box-shadow: inset 8px 0 0 var(--note-steady);
+}
+
+.note-body[data-style='transit'] .note-tile[data-tone='busy'] {
+  box-shadow: inset 12px 0 0 var(--note-busy);
+}
+
+.note-body[data-style='transit'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='transit'] .note-tile[data-tone='RED'] {
+  border-color: var(--note-very);
+  box-shadow: inset 16px 0 0 var(--note-very);
+}
+
+/* Dots are lit LED pixels, and the count is the real signal. */
+.note-body[data-style='transit'] .note-dots {
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.note-body[data-style='transit'] .note-dot {
+  width: 12px;
+  height: 12px;
+  background: transparent;
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px var(--note-hair);
+}
+
+.note-body[data-style='transit'] .note-dot.is-on[data-tone='quiet'] {
+  background: var(--note-quiet);
+  box-shadow: 0 0 8px rgba(61, 220, 132, 0.55);
+}
+
+.note-body[data-style='transit'] .note-dot.is-on[data-tone='steady'] {
+  background: var(--note-steady);
+  box-shadow: 0 0 8px rgba(255, 176, 0, 0.55);
+}
+
+.note-body[data-style='transit'] .note-dot.is-on[data-tone='busy'] {
+  background: var(--note-busy);
+  box-shadow: 0 0 8px rgba(255, 122, 24, 0.55);
+}
+
+.note-body[data-style='transit'] .note-dot.is-on[data-tone='very-busy'] {
+  background: var(--note-very);
+  box-shadow: 0 0 8px rgba(255, 65, 51, 0.6);
+}
+
+/* ── Ticker: the running service message under the board ────────────────── */
+
+.note-body[data-style='transit'] .note-ticker {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 4px;
+  padding: 11px 0;
+}
+
+.note-body[data-style='transit'] .note-ticker-seq {
+  color: var(--note-soft);
+  font-size: clamp(14px, 1.4vw, 19px);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 12px rgba(255, 176, 0, 0.2);
+}
+
+.note-body[data-style='transit'] .note-ticker-dot {
+  color: var(--note-mute);
+}
+
+/* ── Foot ───────────────────────────────────────────────────────────────── */
+
+.note-body[data-style='transit'] .note-foot {
+  border-top: 1px solid var(--note-hair);
+  color: var(--note-mute);
+  letter-spacing: 0.14em;
+}
+
+.note-body[data-style='transit'] .note-demo-flag {
+  color: var(--note-steady);
+}
+
+.note-body[data-style='transit'] .note-error {
+  color: var(--note-very);
+}
+
+/* ── Fail loud: the red "service cancelled" state ───────────────────────── */
+
+.note-body[data-style='transit'] .note-fail {
+  background: var(--note-void);
+  border: 3px solid var(--note-very);
+  border-radius: 4px;
+  box-shadow: inset 0 0 70px rgba(255, 65, 51, 0.12);
+  gap: 16px;
+}
+
+.note-body[data-style='transit'] .note-fail-title {
+  color: #ffffff;
+  font-family: var(--note-mono);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='transit'] .note-fail-ask {
+  color: var(--note-very);
+  font-family: var(--note-mono);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 0 0 16px rgba(255, 65, 51, 0.4);
+}
+
+.note-body[data-style='transit'] .note-fail-body {
+  color: var(--note-ink);
+  font-family: var(--note-mono);
+  font-weight: 500;
+  max-width: 32em;
+}
+
+.note-body[data-style='transit'] .note-fail-banner {
+  background: rgba(255, 65, 51, 0.2);
+  border: 2px solid var(--note-very);
+  border-radius: 2px;
+  color: #ffffff;
+  font-family: var(--note-mono);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Small screens (a laptop preview of a TV layout) ────────────────────── */
+
+@media (max-width: 720px) {
+  .note-body[data-style='transit'] .note-tile-v {
+    font-size: 34px;
+  }
+
+  .note-body[data-style='transit'] .note-tile-v-word {
+    font-size: 22px;
+  }
+
+  .note-body[data-style='transit'] .note-tile {
+    padding-left: 22px;
+  }
+}
