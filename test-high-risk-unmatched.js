@@ -150,6 +150,31 @@ console.log('\n--- end-to-end: listUnmatchedMedicationsDetailed → flagHighRisk
   );
 }
 
+// ── 8. Topical tacrolimus is excluded; oral/systemic tacrolimus still flags ────
+// CKS (topical calcineurin inhibitors): topical tacrolimus "has not been
+// observed to produce systemic concentrations similar to those observed with
+// systemic use" — it needs none of the blood monitoring this backstop exists
+// to catch someone missing on the oral/IV form.
+
+console.log('\n--- topical tacrolimus is excluded; oral tacrolimus still flags ---');
+
+{
+  const flagged = flagHighRiskUnmatched([
+    detail('Tacrolimus 0.1% ointment'),
+    detail('Protopic 0.03% ointment'),
+    detail('Tacrolimus 1mg capsules'),
+    detail('Tacrolimus 0.5mg modified-release capsules'),
+  ]);
+  const byName = Object.fromEntries(flagged.map((f) => [f.name, f]));
+  check(!byName['Tacrolimus 0.1% ointment'], 'generic topical tacrolimus ointment is NOT flagged');
+  check(!byName['Protopic 0.03% ointment'], 'Protopic brand (topical-only) is NOT flagged');
+  check(
+    byName['Tacrolimus 1mg capsules']?.riskClass === 'DMARD / immunosuppressant',
+    'oral tacrolimus capsules ARE still flagged (systemic form needs monitoring)'
+  );
+  check(flagged.length === 2, 'exactly the two oral/systemic forms are flagged, not the two topical ones');
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

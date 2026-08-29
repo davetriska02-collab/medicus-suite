@@ -377,6 +377,27 @@ assert(!!dmRegRule, 'DM register rule found in qof-rules.json (register clause d
   assert(chips.length === 1, 'pneumo-risk: age 40 + methotrexate → chip (medication clause)');
 }
 
+// Age 40 + topical tacrolimus (Protopic ointment) → does NOT fire. CKS: topical
+// tacrolimus "has not been observed to produce systemic concentrations similar
+// to those observed with systemic use" — the immunosuppression eligibility
+// clause must not treat it the same as the oral/IV form.
+{
+  const data = { ...baseData(40), medications: [{ name: 'Tacrolimus 0.1% ointment' }] };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 0, 'pneumo-risk: age 40 + topical tacrolimus ointment → NO chip');
+}
+{
+  const data = { ...baseData(40), medications: [{ name: 'Protopic 0.03% ointment' }] };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 0, 'pneumo-risk: age 40 + Protopic (topical-only brand) → NO chip');
+}
+// Oral tacrolimus for the same age must still fire — only the topical form is excluded.
+{
+  const data = { ...baseData(40), medications: [{ name: 'Tacrolimus 1mg capsules' }] };
+  const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
+  assert(chips.length === 1, 'pneumo-risk: age 40 + oral tacrolimus capsules → chip (still systemic immunosuppression)');
+}
+
 // Infant PCV13 record must NOT suppress a 40-year-old asplenic's due status
 // ('pneumococcal conjugate vaccin' deliberately absent from this rule's given list).
 {

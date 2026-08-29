@@ -20,7 +20,7 @@
           { "kind": "problem", "match": ["homeless","rough sleeper","no fixed abode","night shelter resident","hostel resident"], "ageMin": 16, "label": "Experiencing homelessness (age 16+)" },
           { "kind": "register", "registers": ["DM","CKD","COPD","CHD","HF","STIA","AF","PAD"], "label": "Clinical risk group (QOF register)" },
           { "kind": "problem", "match": ["cirrhosis","chronic hepatitis b","chronic hepatitis c","chronic liver disease","primary biliary","primary sclerosing cholangitis","biliary atresia","epilepsy","multiple sclerosis","parkinson","cerebral palsy","motor neurone","huntington","splenectomy","asplenia","hyposplenism","sickle cell","thalassaemia major","hereditary spherocytosis","hiv","aids","transplant","leukaemia","lymphoma","myeloma","bronchiectasis","cystic fibrosis","pulmonary fibrosis","interstitial lung","learning disabilit","downs syndrome","down syndrome"], "label": "Clinical risk group (problem)" },
-          { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "label": "Immunosuppressive medication" },
+          { "kind": "medication", "match": ["rituximab","adalimumab","infliximab","etanercept","abatacept","tocilizumab","secukinumab","ustekinumab","baricitinib","tofacitinib","azathioprine","ciclosporin","mycophenolate","tacrolimus","sirolimus","methotrexate","cyclophosphamide","chlorambucil","prednisolone","dexamethasone","chemotherapy"], "exclude": ["ointment","protopic"], "label": "Immunosuppressive medication" },
           { "kind": "observation-threshold", "observation": ["bmi","body mass index"], "operator": ">=", "value": 40, "label": "BMI ≥40 kg/m²" },
           { "kind": "conditional-register", "register": "ASTHMA", "andAnyOf": [{ "medication": ["beclometasone","budesonide","fluticasone","mometasone","ciclesonide","seretide","symbicort","fostair","clenil","relvar","trimbow"] },{ "problem": ["brittle asthma","severe asthma","admission for asthma","hospitalisation for asthma"] }], "label": "Asthma on inhaled/systemic steroids" }
         ]
@@ -44,7 +44,7 @@
           { "kind": "age", "ageMin": 75, "label": "Age 75+" },
           { "kind": "problem", "match": ["care home resident","nursing home resident","residential care"], "label": "Care home resident" },
           { "kind": "problem", "match": ["transplant","stem cell","bone marrow","leukaemia","lymphoma","myeloma","hiv","aids","primary immunodeficiency","severe combined immunodeficiency","scid","chronic leukaemia","hodgkin"], "label": "Immunosuppressed (problem)" },
-          { "kind": "medication", "match": ["rituximab","ciclosporin","mycophenolate","tacrolimus","azathioprine","methotrexate","cyclophosphamide","chemotherapy","alemtuzumab","ofatumumab","ibrutinib","venetoclax"], "label": "Immunosuppressed (medication)" }
+          { "kind": "medication", "match": ["rituximab","ciclosporin","mycophenolate","tacrolimus","azathioprine","methotrexate","cyclophosphamide","chemotherapy","alemtuzumab","ofatumumab","ibrutinib","venetoclax"], "exclude": ["ointment","protopic"], "label": "Immunosuppressed (medication)" }
         ]
       },
       "statusTerms": {
@@ -85,7 +85,7 @@
         { "kind": "problem", "match": ["asplenia", "splenectomy", "hyposplenism", "splenic dysfunction", "sickle cell", "thalassaemia major", "hereditary spherocytosis"], "ageMin": 2, "ageMax": 64, "label": "Asplenia or splenic dysfunction (age 2–64)" },
         { "kind": "register", "registers": ["DM", "CKD", "COPD", "CHD", "HF"], "ageMin": 2, "ageMax": 64, "label": "Clinical risk group (QOF register, under 65)" },
         { "kind": "problem", "match": ["bronchiectasis", "cystic fibrosis", "interstitial lung", "pulmonary fibrosis", "pneumoconiosis", "cerebral palsy", "cirrhosis", "biliary atresia", "chronic hepatitis", "nephrotic syndrome", "cochlear implant", "cerebrospinal fluid leak", "csf leak", "complement deficiency", "complement disorder", "hiv", "aids", "transplant", "leukaemia", "lymphoma", "myeloma", "primary immunodeficiency"], "ageMin": 2, "ageMax": 64, "label": "Clinical risk group — problem (age 2–64)" },
-        { "kind": "medication", "match": ["rituximab", "azathioprine", "ciclosporin", "mycophenolate", "tacrolimus", "sirolimus", "methotrexate", "cyclophosphamide", "chemotherapy", "prednisolone", "dexamethasone"], "ageMin": 2, "ageMax": 64, "label": "Immunosuppressive medication (age 2–64)" }
+        { "kind": "medication", "match": ["rituximab", "azathioprine", "ciclosporin", "mycophenolate", "tacrolimus", "sirolimus", "methotrexate", "cyclophosphamide", "chemotherapy", "prednisolone", "dexamethasone"], "exclude": ["ointment", "protopic"], "ageMin": 2, "ageMax": 64, "label": "Immunosuppressive medication (age 2–64)" }
       ] },
       "statusTerms": {
         "given": ["pneumococcal vaccination", "pneumococcal vaccine", "pneumococcal polysaccharide vaccin", "pneumovax", "ppv23", "23-valent pneumococcal", "pcv20", "20-valent pneumococcal", "apexxnar", "prevenar 20", "pneumococcal immunisation"],
@@ -123,7 +123,7 @@
       "notes": "DOUBLE-CHECK ELIGIBILITY AND DOSES: Cohort is SEVERELY immunosuppressed per Green Book ch 28a — match terms deliberately conservative (no methotrexate / low-dose steroids, unlike the flu rule's broader immunosuppression list). Shingrix is a 2-dose course (0 and 8 weeks–6 months in the immunosuppressed) — this chip shows GIVEN on ANY recorded shingles/zoster vaccination and CANNOT verify 2-dose completion; check dose count manually (same documented limitation as vax-shingles). statusTerms.given deliberately OMITS 'zostavax': a patient given Zostavax (live vaccine) before becoming immunosuppressed still needs Shingrix, so a historic Zostavax record must NOT show GIVEN on this rule — the over-flag is the fail-safe direction. 65–79 immunosuppressed patients may double-chip with vax-shingles while due — both resolve on vaccination. Anticipatory pre-immunosuppression vaccination is in-policy but not detectable.",
       "eligibility": { "anyOf": [
         { "kind": "problem", "match": ["transplant", "stem cell", "bone marrow", "leukaemia", "leukemia", "lymphoma", "myeloma", "primary immunodeficiency", "severe combined immunodeficiency", "scid", "hiv", "aids"], "ageMin": 18, "label": "Severely immunosuppressed — disease (18+, from 1 Sept 2025)" },
-        { "kind": "medication", "match": ["rituximab", "alemtuzumab", "ofatumumab", "ciclosporin", "mycophenolate", "tacrolimus", "azathioprine", "cyclophosphamide", "chemotherapy", "ibrutinib", "venetoclax"], "ageMin": 18, "label": "Severely immunosuppressed — medication (18+, from 1 Sept 2025)" }
+        { "kind": "medication", "match": ["rituximab", "alemtuzumab", "ofatumumab", "ciclosporin", "mycophenolate", "tacrolimus", "azathioprine", "cyclophosphamide", "chemotherapy", "ibrutinib", "venetoclax"], "exclude": ["ointment", "protopic"], "ageMin": 18, "label": "Severely immunosuppressed — medication (18+, from 1 Sept 2025)" }
       ] },
       "statusTerms": {
         "given": ["shingles vaccination", "shingles vaccine", "herpes zoster vaccin", "shingrix", "zoster vaccination"],
@@ -145,7 +145,7 @@
         { "kind": "problem", "match": ["care home resident", "nursing home resident", "residential care"], "label": "Care-home resident (adult, all ages)" },
         { "kind": "problem", "match": ["copd", "chronic obstructive", "emphysema", "chronic bronchitis", "cystic fibrosis", "bronchiectasis"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 chronic respiratory disease (from 1 Sept 2026; asthma not included)" },
         { "kind": "problem", "match": ["immunosuppress", "immunodeficiency", "chemotherapy", "leukaemia", "leukemia", "lymphoma", "myeloma", "transplant", "hiv", "aids"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 immunosuppression — disease (from 1 Sept 2026)" },
-        { "kind": "medication", "match": ["rituximab", "ciclosporin", "mycophenolate", "tacrolimus", "azathioprine", "methotrexate", "cyclophosphamide", "chemotherapy", "alemtuzumab", "ofatumumab", "ibrutinib", "venetoclax"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 immunosuppression — medication (from 1 Sept 2026)" }
+        { "kind": "medication", "match": ["rituximab", "ciclosporin", "mycophenolate", "tacrolimus", "azathioprine", "methotrexate", "cyclophosphamide", "chemotherapy", "alemtuzumab", "ofatumumab", "ibrutinib", "venetoclax"], "exclude": ["ointment", "protopic"], "ageMin": 65, "ageMax": 74, "label": "Age 65–74 immunosuppression — medication (from 1 Sept 2026)" }
       ] },
       "statusTerms": {
         "given": ["respiratory syncytial virus vaccin", "rsv vaccination", "rsv vaccine", "abrysvo", "arexvy", "mresvia"],
