@@ -24,6 +24,9 @@ Configure the flap message and widgets from the new **Note** tab, then
 open the board on the TV and press F for fullscreen. `?demo=1` shows
 canned figures so you can preview without a Medicus session.
 
+Clinical Safety Notice and feature list re-pinned to 3.248.0 (limitation
+49 / H-067). Does not move `last_cso_review_version`.
+
 ## [v3.247.0] — 2026-08-27
 
 ### Routine-prescription "Send to routine list" — ghost pill and live-flow fixes
