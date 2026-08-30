@@ -186,6 +186,45 @@ body {
   font-size: clamp(22px, 3.2vw, 46px);
 }
 
+.note-body[data-style] .note-board.note-board-has-yt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
+  align-items: center;
+  width: min(1680px, 100%);
+}
+
+.note-yt-main {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  min-width: 0;
+}
+
+.note-yt {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.note-yt-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .note-body[data-style] .note-board.note-board-has-yt {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Split-flap row ─────────────────────────────────────────────────────── */
 
 .note-flaps {

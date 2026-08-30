@@ -13,7 +13,39 @@
   const BOARD_KEYS = ['board.config'];
   const PROFILE_IDS = ['waiting-room', 'ops', 'message'];
   const CUSTOM_ID = /^c-[a-z0-9]{4,16}$/;
-  const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock'];
+  const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock', 'youtube'];
+  const YOUTUBE_LIST_RE = /^[A-Za-z0-9_-]{10,80}$/;
+  const YOUTUBE_HOSTS = [
+    'youtube.com',
+    'www.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'youtube-nocookie.com',
+    'www.youtube-nocookie.com',
+    'youtu.be',
+  ];
+
+  function sanitiseYoutubeList(raw) {
+    if (raw == null) return '';
+    const s = String(raw).trim();
+    if (!s) return '';
+    if (YOUTUBE_LIST_RE.test(s)) return s;
+    const lower = s.toLowerCase();
+    if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
+      return '';
+    }
+    let url;
+    try {
+      url = new URL(s);
+    } catch {
+      return '';
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+    if (YOUTUBE_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return '';
+    const list = url.searchParams.get('list');
+    if (!list || !YOUTUBE_LIST_RE.test(list)) return '';
+    return list;
+  }
   const STAFF_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity', 'demand'];
   const ALL_WIDGETS = PUBLIC_WIDGETS.concat(STAFF_WIDGETS);
   const MAX_MESSAGE = 80;
@@ -126,6 +158,13 @@
         if (locked) clean.widgets = locked;
         if (p.message !== undefined) clean.message = clampMessage(p.message);
         if (p.name !== undefined) clean.name = clampMessage(p.name).slice(0, MAX_NAME);
+        if (p.youtubeListId !== undefined) {
+          const id = sanitiseYoutubeList(p.youtubeListId);
+          if (String(p.youtubeListId).trim() && !id) {
+            throw new Error(`board.config.profiles[${i}].youtubeListId is not a YouTube playlist.`);
+          }
+          clean.youtubeListId = id;
+        }
         return clean;
       });
     }

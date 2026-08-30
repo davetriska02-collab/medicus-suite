@@ -21,6 +21,7 @@ import {
   demoStreams,
   forbiddenSnapshotKeys,
   feedIsDegraded,
+  youtubeEmbedUrl,
 } from './board-core.js';
 
 const stage = document.getElementById('noteStage');
@@ -179,6 +180,13 @@ function failLoudHtml() {
   </div>`;
 }
 
+function youtubeHtml() {
+  if (!widgetSet().has('youtube')) return '';
+  const src = youtubeEmbedUrl(profile.youtubeListId);
+  if (!src) return '';
+  return `<aside class="note-yt" aria-label="Practice playlist"><iframe class="note-yt-frame" title="Practice playlist" src="${esc(src)}" allow="autoplay; fullscreen" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation"></iframe></aside>`;
+}
+
 function render() {
   const widgets = widgetSet();
   const s = snapshot;
@@ -287,8 +295,11 @@ function render() {
   if (s && widgets.has('ticker')) parts.push(tickerHtml(s.ticker));
   if (widgets.has('clock')) parts.push(clockHtml(lastClock));
 
-  if (!parts.length) {
+  const yt = youtubeHtml();
+  if (!parts.length && !yt) {
     stage.innerHTML = `<div class="note-empty">${esc(boardCopy().emptyBoard)}</div>`;
+  } else if (yt) {
+    stage.innerHTML = `<div class="note-board note-board-has-yt" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}"><div class="note-yt-main">${parts.join('')}</div>${yt}</div>`;
   } else {
     stage.innerHTML = `<div class="note-board" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}</div>`;
   }

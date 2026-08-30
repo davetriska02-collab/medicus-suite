@@ -65,6 +65,8 @@ const { pathToFileURL } = require('url');
     sanitiseStyleId,
     sanitiseColourId,
     resolveStyleAndColour,
+    sanitiseYoutubeList,
+    youtubeEmbedUrl,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -213,6 +215,64 @@ const { pathToFileURL } = require('url');
       'widgetsForProfile strips staff-only on public'
     );
     check(publicWidgets.includes('tempo'), 'keeps the public widget that was listed');
+    check(PUBLIC_WIDGETS.includes('youtube'), 'youtube playlist is a public widget');
+    check(!STAFF_ONLY_WIDGETS.includes('youtube'), 'youtube is not staff-only');
+    const ytCustom = sanitiseConfig({
+      profiles: [
+        {
+          id: 'c-abc1234',
+          audience: 'public',
+          widgets: ['youtube', 'flap', 'pressure'],
+          youtubeListId: 'https://www.youtube.com/playlist?list=PLtestlistid1234567890',
+        },
+      ],
+    });
+    const ytBoard = ytCustom.profiles.find((p) => p.id === 'c-abc1234');
+    check(ytBoard.widgets.includes('youtube'), 'custom public board can show a playlist');
+    check(!ytBoard.widgets.includes('pressure'), 'playlist does not unlock staff tiles');
+    check(ytBoard.youtubeListId === 'PLtestlistid1234567890', 'playlist URL is stored as an id');
+    const shipped = sanitiseConfig(null).profiles.find((p) => p.id === 'waiting-room');
+    check(!shipped.widgets.includes('youtube'), 'waiting room does not ship the playlist on');
+  }
+
+  console.log('\n--- youtube playlist sanitise ---');
+  {
+    const good = 'PLtestlistid1234567890';
+    check(sanitiseYoutubeList(good) === good, 'bare playlist id is kept');
+    check(sanitiseYoutubeList(`https://www.youtube.com/playlist?list=${good}`) === good, 'playlist URL yields the id');
+    check(
+      sanitiseYoutubeList(`https://www.youtube.com/watch?v=abc123&list=${good}`) === good,
+      'watch URL with list= yields the id'
+    );
+    check(sanitiseYoutubeList(`https://youtu.be/dQw4w9wg?list=${good}`) === good, 'youtu.be with list= yields the id');
+    check(
+      sanitiseYoutubeList(`https://music.youtube.com/playlist?list=${good}`) === good,
+      'music.youtube.com playlist URL is accepted'
+    );
+    check(
+      sanitiseYoutubeList(`https://m.youtube.com/playlist?list=${good}`) === good,
+      'm.youtube.com playlist URL is accepted'
+    );
+    check(
+      sanitiseYoutubeList(`https://www.youtube-nocookie.com/embed/videoseries?list=${good}`) === good,
+      'youtube-nocookie embed URL yields the id'
+    );
+    check(sanitiseYoutubeList('') === '' && sanitiseYoutubeList(null) === '', 'empty or null becomes none');
+    check(sanitiseYoutubeList('https://evil.example/playlist?list=' + good) === '', 'foreign host is rejected');
+    check(
+      sanitiseYoutubeList('https://youtube.com.evil.example/playlist?list=' + good) === '',
+      'lookalike host is rejected'
+    );
+    check(sanitiseYoutubeList('javascript:alert(1)') === '', 'javascript: is rejected');
+    check(sanitiseYoutubeList('data:text/html,<iframe>') === '', 'data: is rejected');
+    check(sanitiseYoutubeList('https://www.youtube.com/playlist?list=WL') === '', 'short personal list id is rejected');
+    const embed = youtubeEmbedUrl('https://evil.example/?list=' + good);
+    check(embed === '', 'embed URL refuses an unsanitised host');
+    const src = youtubeEmbedUrl(`https://www.youtube.com/playlist?list=${good}`);
+    check(src.startsWith('https://www.youtube-nocookie.com/embed/videoseries?'), 'embed is youtube-nocookie only');
+    check(src.includes(`list=${good}`), 'embed carries the sanitised id');
+    check(src.includes('mute=1') && src.includes('autoplay=1'), 'embed starts muted so autoplay can run');
+    check(!src.includes('evil'), 'embed never interpolates a rejected host');
   }
 
   console.log('\n--- wait math ---');
@@ -463,6 +523,25 @@ const { pathToFileURL } = require('url');
     );
     check(renderer.includes('dataset.style'), 'kiosk applies the chosen style');
     check(renderer.includes('dataset.colour'), 'kiosk applies the chosen colour');
+    check(renderer.includes('youtubeEmbedUrl'), 'kiosk builds the playlist iframe from the sanitised helper');
+    check(renderer.includes('class="note-yt"'), 'kiosk paints the playlist pane');
+    check(
+      !/iframe[\s\S]{0,400}youtubeListId/.test(renderer),
+      'kiosk never interpolates the raw playlist field into an iframe'
+    );
+    check(!renderer.includes('youtube.com/embed'), 'kiosk does not embed youtube.com');
+    const failFn = renderer.slice(renderer.indexOf('function failLoudHtml'), renderer.indexOf('function youtubeHtml'));
+    check(!failFn.includes('note-yt') && !failFn.includes('youtube'), 'fail-loud HTML has no playlist player');
+    const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
+    check(
+      manifest.content_security_policy.extension_pages.includes("frame-src 'self' https://www.youtube-nocookie.com"),
+      'CSP allows youtube-nocookie iframes and keeps extension-page frames'
+    );
+    check(!(manifest.host_permissions || []).some((p) => /youtube/i.test(p)), 'YouTube is not a host permission');
+    check(companion.includes('YouTube playlist'), 'companion exposes the playlist field');
+    check(companion.includes('This plays on a public TV'), 'companion warns the playlist is for a public TV');
+    check(companion.includes('starts muted'), 'companion says the TV starts muted');
+    check(companion.includes('noteModYoutube'), 'companion writes the playlist field');
     const html = fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8');
     for (const style of BOARD_STYLES.filter((s) => s.id !== 'standard')) {
       check(html.includes(`board/styles/${style.id}.css`), `kiosk loads ${style.id}.css`);

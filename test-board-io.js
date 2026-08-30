@@ -121,6 +121,52 @@ const { pathToFileURL } = require('url');
     check(threw, 'unknown colour is rejected on import');
   }
 
+  {
+    const clean = io.sanitiseImported({
+      profiles: [
+        {
+          id: 'waiting-room',
+          widgets: ['flap', 'youtube'],
+          youtubeListId: 'https://www.youtube.com/playlist?list=PLtestlistid1234567890',
+        },
+      ],
+    });
+    const wr = clean.profiles.find((p) => p.id === 'waiting-room');
+    check(wr.widgets.includes('youtube'), 'import keeps the public playlist widget');
+    check(wr.youtubeListId === 'PLtestlistid1234567890', 'import stores a sanitised playlist id');
+    const custom = io.sanitiseImported({
+      profiles: [
+        {
+          id: 'c-abc1234',
+          audience: 'public',
+          widgets: ['youtube', 'pressure'],
+          youtubeListId: 'PLtestlistid1234567890',
+        },
+      ],
+    });
+    const pharm = custom.profiles.find((p) => p.id === 'c-abc1234');
+    check(pharm.widgets.includes('youtube'), 'import lets a custom public board keep the playlist widget');
+    check(!pharm.widgets.includes('pressure'), 'import still strips staff tiles when a playlist is present');
+    let threw = false;
+    try {
+      io.sanitiseImported({
+        profiles: [{ id: 'waiting-room', youtubeListId: 'https://evil.example/?list=PLtestlistid1234567890' }],
+      });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'import rejects a playlist URL from a foreign host');
+    threw = false;
+    try {
+      io.sanitiseImported({
+        profiles: [{ id: 'waiting-room', youtubeListId: 'javascript:alert(1)' }],
+      });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'import rejects a javascript: playlist value');
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => {

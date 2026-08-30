@@ -33,7 +33,7 @@ export const DEFAULT_POLL_SECONDS = 20;
 // Characters the split-flap will show. Anything else becomes a blank tile.
 export const FLAP_CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?'-:/+&#";
 
-export const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock'];
+export const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock', 'youtube'];
 export const STAFF_ONLY_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity', 'demand'];
 export const ALL_WIDGETS = [...PUBLIC_WIDGETS, ...STAFF_ONLY_WIDGETS];
 
@@ -44,12 +44,64 @@ export const WIDGET_META = {
   ticker: { label: 'Ticker', audience: 'public' },
   demand: { label: 'Requests today', audience: 'staff' },
   clock: { label: 'Clock', audience: 'public' },
+  youtube: { label: 'YouTube playlist', audience: 'public' },
   pressure: { label: 'Pressure index', audience: 'staff' },
   triage: { label: 'Triage inbox', audience: 'staff' },
   slots: { label: 'Slots remaining', audience: 'staff' },
   urgent: { label: 'Urgent unactioned', audience: 'staff' },
   activity: { label: 'Activity today', audience: 'staff' },
 };
+
+// Playlist ids only. Never put a raw practice-pasted URL in an iframe.
+const YOUTUBE_LIST_RE = /^[A-Za-z0-9_-]{10,80}$/;
+const YOUTUBE_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'music.youtube.com',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+  'youtu.be',
+]);
+
+export function sanitiseYoutubeList(raw) {
+  if (raw == null) return '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  if (YOUTUBE_LIST_RE.test(s)) return s;
+  const lower = s.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
+    return '';
+  }
+  let url;
+  try {
+    url = new URL(s);
+  } catch {
+    return '';
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+  if (!YOUTUBE_HOSTS.has(url.hostname.toLowerCase())) return '';
+  const list = url.searchParams.get('list');
+  if (!list || !YOUTUBE_LIST_RE.test(list)) return '';
+  return list;
+}
+
+export function youtubeEmbedUrl(listId) {
+  const id = sanitiseYoutubeList(listId);
+  if (!id) return '';
+  const q = new URLSearchParams({
+    list: id,
+    autoplay: '1',
+    mute: '1',
+    loop: '1',
+    playlist: id,
+    rel: '0',
+    modestbranding: '1',
+    playsinline: '1',
+    iv_load_policy: '3',
+  });
+  return `https://www.youtube-nocookie.com/embed/videoseries?${q}`;
+}
 
 export const TEMPO_ORDER = ['quiet', 'steady', 'busy', 'very-busy'];
 
@@ -490,6 +542,7 @@ function sanitiseProfile(raw, fallback) {
     audience: lockedAudience,
     widgets: sanitiseWidgets(r.widgets || widgetFallback, lockedAudience),
     message: sanitiseMessage(r.message != null ? r.message : messageFallback),
+    youtubeListId: sanitiseYoutubeList(r.youtubeListId),
   };
 }
 
