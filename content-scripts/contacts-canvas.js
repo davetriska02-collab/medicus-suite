@@ -275,7 +275,13 @@
   // per caller is the one that eventually gets it wrong.
   function anyWriteInFlight() {
     if (!cs) return false;
-    return !!(cs.confirming || cs.flagUpdating.size || cs.reciprocalDowngrading.size || cs.addressMerging.size);
+    return !!(
+      cs.confirming ||
+      cs.flagUpdating.size ||
+      cs.reciprocalDowngrading.size ||
+      cs.addressMerging.size ||
+      cs.wrongTypePhoneFixing.size
+    );
   }
 
   // ── Data loading ──────────────────────────────────────────────────────────────────────────────
@@ -537,12 +543,7 @@
       });
       // Wrong-type phones (2026-08-29 request) — never flags an entry already typed Mobile,
       // same rule buildPhoneRows uses for the merge-compare panel's "Fix type" button.
-      st.wrongTypePhones = st.indexPhones.reduce((acc, entry, idx) => {
-        if (entry.telephoneNumberType !== 'Mobile' && window.ContactRelationships.isUkMobileNumber(entry.telephoneNumber)) {
-          acc.push(idx);
-        }
-        return acc;
-      }, []);
+      st.wrongTypePhones = findWrongTypePhoneIndexes(st.indexPhones);
       st.indexEmails = (cinfo && cinfo.patientEmailAddresses) || [];
       st.duplicateEmailGroups = window.ContactRelationships.findDuplicateEmailGroups(st.indexEmails).map((indexes) => {
         const keepPos = window.ContactRelationships.chooseEmailToKeep(indexes.map((idx) => st.indexEmails[idx]));
@@ -2480,6 +2481,26 @@
   // one value per type, so a second entry of the same type has nothing of its own to compare
   // against and renders as a plain extra row instead. A type with a manual value but no Medicus
   // entry at all still gets its own row (manual side visible, Medicus side "(none recorded)").
+  // findWrongTypePhoneIndexes(phones) — indexes whose type isn't Mobile but the number itself
+  // is a UK mobile (ContactRelationships.isUkMobileNumber). Same heuristic buildPhoneRows uses
+  // for the merge-compare "Fix type" button; used on canvas open and after a successful
+  // fixWrongTypePhone re-fetch so the warning list is always derived from what Medicus holds.
+  function findWrongTypePhoneIndexes(phones) {
+    const list = phones || [];
+    const acc = [];
+    for (let idx = 0; idx < list.length; idx++) {
+      const entry = list[idx];
+      if (
+        entry &&
+        entry.telephoneNumberType !== 'Mobile' &&
+        window.ContactRelationships.isUkMobileNumber(entry.telephoneNumber)
+      ) {
+        acc.push(idx);
+      }
+    }
+    return acc;
+  }
+
   function buildPhoneRows(manualPhones, medicusPhones) {
     const byType = { Home: [], Mobile: [], Work: [], Temporary: [] };
     for (const p of medicusPhones || []) {
@@ -3108,6 +3129,13 @@
       if (!mobileOption) {
         throw new Error('Could not find a "Mobile" option for this phone number — nothing was changed.');
       }
+      // Re-check identity immediately before the write — H-043 / H-056: the GET above may have
+      // raced a navigation, and changeTelephoneNumber is a full replace on the hub patient's
+      // own record.
+      const ctxAfter = window.ContactsApi.resolveContext();
+      if (!ctxAfter || ctxAfter.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
       await window.ContactsApi.changeTelephoneNumber(st.apiBase, {
         id: telephoneNumberId,
         telephoneNumber: current.telephoneNumber,
@@ -3116,9 +3144,18 @@
         notes: current.notes || '',
       });
       if (st !== cs) return;
-      const entry = st.indexPhones.find((p) => p.telephoneNumberId === telephoneNumberId);
-      if (entry) entry.telephoneNumberType = 'Mobile';
-      st.wrongTypePhones = st.wrongTypePhones.filter((idx) => st.indexPhones[idx] !== entry);
+      // Re-fetch rather than patch the cached entry — H-056 control (h), same as fixPhoneType.
+      // The warning list is rebuilt from what Medicus actually holds so a failed or partial
+      // type change cannot leave a locally-optimistic "fixed" row.
+      const fresh = await window.ContactsApi.getPatientDetails(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      const cinfo = fresh.patientContactInformationSection;
+      st.indexPhones = (cinfo && cinfo.patientTelephoneNumbers) || [];
+      st.wrongTypePhones = findWrongTypePhoneIndexes(st.indexPhones);
+      st.duplicatePhoneGroups = window.ContactRelationships.findDuplicatePhoneGroups(st.indexPhones).map((indexes) => {
+        const keepPos = window.ContactRelationships.choosePhoneToKeep(indexes.map((idx) => st.indexPhones[idx]));
+        return { indexes, keepIndex: indexes[keepPos === -1 ? 0 : keepPos] };
+      });
     } catch (err) {
       st.wrongTypePhoneError = err.message || "Failed to fix this phone number's type.";
     } finally {

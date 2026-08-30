@@ -16,6 +16,7 @@
 
 'use strict';
 const engine = require('./engine/rules-engine.js');
+const drugRules = require('./rules/drug-rules.json');
 const { flagHighRiskUnmatched, listUnmatchedMedicationsDetailed } = engine;
 
 let passed = 0,
@@ -186,6 +187,7 @@ console.log('\n--- topical tacrolimus is excluded; oral tacrolimus still flags -
 // 2026-08-29 request: infliximab/adalimumab/secukinumab etc. have no dedicated
 // drug-monitoring rule (specialist-initiated under shared care), but should
 // still surface a "verify monitoring in place" nudge the same way tacrolimus does.
+// denosumab is listed as a BACKSTOP only — denosumab-calcium already matches it.
 
 console.log('\n--- monoclonal antibodies / biologics with no monitoring rule are flagged ---');
 
@@ -197,7 +199,7 @@ console.log('\n--- monoclonal antibodies / biologics with no monitoring rule are
     detail('Denosumab 60mg solution for injection pre-filled syringe'),
     detail('Etanercept 50mg solution for injection pre-filled pen'),
   ]);
-  check(flagged.length === 5, 'all five biologics are flagged (got ' + flagged.length + ')');
+  check(flagged.length === 5, 'all five biologics are flagged when unmatched (got ' + flagged.length + ')');
   check(
     flagged.every((f) => f.riskClass === 'Biologic / monoclonal antibody (specialist-initiated — verify shared-care monitoring)'),
     'all classed as the new biologic/mAb risk class'
@@ -209,6 +211,68 @@ console.log('\n--- monoclonal antibodies / biologics with no monitoring rule are
 {
   const flagged = flagHighRiskUnmatched([detail('Baricitinib 4mg tablets'), detail('Tofacitinib 5mg tablets')]);
   check(flagged.length === 0, 'JAK inhibitors are not classed as monoclonal antibodies (not in this list)');
+}
+
+// denosumab-calcium already covers generic + Prolia. Through the real unmatched pipeline
+// these must NOT raise a second "no monitoring rule" banner.
+{
+  const unmatched = listUnmatchedMedicationsDetailed(
+    [
+      { name: 'Denosumab 60mg solution for injection pre-filled syringe' },
+      { name: 'Prolia 60mg solution for injection pre-filled syringe' },
+    ],
+    drugRules.rules
+  );
+  const flagged = flagHighRiskUnmatched(unmatched);
+  check(
+    !unmatched.some((u) => /denosumab|prolia/i.test(u.name)),
+    'denosumab-calcium matches generic and Prolia — neither is unmatched'
+  );
+  check(flagged.length === 0, 'matched denosumab is not high-risk-unmatched (got ' + flagged.length + ')');
+}
+
+// Local / ophthalmic bevacizumab is the non-systemic analog of topical tacrolimus:
+// GPs are asked to record AMD eye injections, and they do not need shared-care bloods.
+// Systemic IV bevacizumab (oncology) must still flag. Do NOT copy ointment/cream here —
+// none of these mAbs have a marketed UK topical form.
+console.log('\n--- local/intravitreal bevacizumab is excluded; systemic bevacizumab still flags ---');
+
+{
+  const flagged = flagHighRiskUnmatched([
+    detail('Bevacizumab 25mg/ml concentrate for solution for infusion'),
+    detail('Avastin 100mg/4ml concentrate for solution for infusion bevacizumab'),
+    detail('Avastin 100mg/4ml concentrate for solution for infusion'),
+    detail('Bevacizumab 1.25mg/0.05ml intravitreal injection'),
+    detail('Bevacizumab gamma 25mg/ml solution for injection'),
+    detail('Lytenava 25mg/ml solution for injection bevacizumab gamma'),
+    detail('Infliximab 0.1% ointment'),
+  ]);
+  const byName = Object.fromEntries(flagged.map((f) => [f.name, f]));
+  check(
+    byName['Bevacizumab 25mg/ml concentrate for solution for infusion']?.riskClass ===
+      'Biologic / monoclonal antibody (specialist-initiated — verify shared-care monitoring)',
+    'systemic IV bevacizumab IS still flagged'
+  );
+  check(
+    byName['Avastin 100mg/4ml concentrate for solution for infusion bevacizumab']?.riskClass ===
+      'Biologic / monoclonal antibody (specialist-initiated — verify shared-care monitoring)',
+    'Avastin infusion named with the generic stem (no local-route words) IS still flagged'
+  );
+  check(
+    !byName['Avastin 100mg/4ml concentrate for solution for infusion'],
+    'brand-only Avastin without a generic stem is not classifiable (documented HIGH_RISK limit)'
+  );
+  check(!byName['Bevacizumab 1.25mg/0.05ml intravitreal injection'], 'intravitreal bevacizumab is NOT flagged');
+  check(!byName['Bevacizumab gamma 25mg/ml solution for injection'], 'licensed bevacizumab gamma (AMD) is NOT flagged');
+  check(
+    !byName['Lytenava 25mg/ml solution for injection bevacizumab gamma'],
+    'Lytenava / bevacizumab gamma combination name is NOT flagged'
+  );
+  check(
+    byName['Infliximab 0.1% ointment']?.riskClass ===
+      'Biologic / monoclonal antibody (specialist-initiated — verify shared-care monitoring)',
+    'ointment/cream is NOT copied onto this class (no marketed UK topical mAb)'
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
