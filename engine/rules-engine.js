@@ -138,6 +138,17 @@
         'ciclosporin', 'cyclosporin', 'tacrolimus', 'mycophenolate', 'penicillamine',
         'sirolimus', 'everolimus', 'hydroxycarbamide', 'cyclophosphamide',
       ],
+      // Topical tacrolimus (Protopic ointment; unlicensed cream specials) is "not
+      // been observed to produce systemic concentrations similar to those observed
+      // with systemic use" (CKS: topical calcineurin inhibitors) — it needs none of
+      // the systemic-drug blood monitoring this backstop exists to catch someone
+      // missing. Licensed UK topical tacrolimus is ointment-only; cream is the
+      // unlicensed special used for the same cutaneous indication. None of the
+      // other stems above have a marketed topical/ointment/cream form in the UK,
+      // so this exclude only ever suppresses topical tacrolimus, never a genuine
+      // oral/IV hit.
+      // https://cks.nice.org.uk/topics/eczema-atopic/prescribing-information/topical-calcineurin-inhibitors/
+      exclude: ['ointment', 'cream', 'protopic'],
     },
     { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
     { label: 'Lithium', stems: ['lithium'] },
@@ -167,6 +178,8 @@
       if (!name) continue;
       const norm = normaliseDrugString(name);
       for (const cls of HIGH_RISK_UNMATCHED_CLASSES) {
+        const excluded = (cls.exclude || []).some((e) => norm.includes(normaliseDrugString(e)));
+        if (excluded) continue;
         const matchedStem = cls.stems.find((stem) => norm.includes(normaliseDrugString(stem)));
         if (matchedStem) {
           out.push({
@@ -2857,7 +2870,11 @@
         if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
         if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const terms = clause.match || [];
-        const hit = (data.medications || []).find((m) => matchesAnyTerm(m.name, terms));
+        const excludeTerms = clause.exclude || [];
+        const hit = (data.medications || []).find((m) => {
+          if (excludeTerms.length && matchesAnyTerm(m.name, excludeTerms)) return false;
+          return matchesAnyTerm(m.name, terms);
+        });
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.name}` };
       }
 
