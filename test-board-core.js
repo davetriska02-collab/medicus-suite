@@ -58,6 +58,13 @@ const { pathToFileURL } = require('url');
     DEFAULT_COPY,
     feedIsDegraded,
     MAX_CUSTOM_PROFILES,
+    BOARD_STYLES,
+    BOARD_COLOURS,
+    DEFAULT_STYLE_ID,
+    DEFAULT_COLOUR_ID,
+    sanitiseStyleId,
+    sanitiseColourId,
+    resolveStyleAndColour,
   } = await import(corePath);
 
   const NOW = Date.parse('2026-08-29T11:00:00+01:00');
@@ -161,6 +168,28 @@ const { pathToFileURL } = require('url');
       'wait band uses practice wording'
     );
     check(DEFAULT_COPY.failTitle.length > 0, 'shipped fail copy is present');
+    check(DEFAULT_CONFIG.styleId === 'standard', 'default style is Standard');
+    check(DEFAULT_CONFIG.colourId === 'flap', 'default Standard colour is Split-flap');
+    check(sanitiseStyleId('clear') === 'clear', 'known style is kept');
+    check(sanitiseStyleId('harbour') === DEFAULT_STYLE_ID, 'old colour id migrates to Standard');
+    check(sanitiseStyleId('neon-club') === DEFAULT_STYLE_ID, 'unknown style falls back to Standard');
+    check(sanitiseColourId('harbour') === 'harbour', 'known colour is kept');
+    check(sanitiseColourId('neon-club') === DEFAULT_COLOUR_ID, 'unknown colour falls back to flap');
+    check(BOARD_STYLES.length === 10, 'ships ten styles');
+    check(BOARD_COLOURS.length === 10, 'ships ten Standard colours');
+    check(new Set(BOARD_STYLES.map((s) => s.id)).size === 10, 'each style has a distinct id');
+    check(
+      BOARD_STYLES.every((s) => s.name && s.blurb),
+      'each style has a name and blurb'
+    );
+    check(
+      BOARD_COLOURS.every((c) => c.name && c.blurb && c.swatches.length === 3),
+      'each colour has a name, blurb and three swatches'
+    );
+    const migrated = sanitiseConfig({ styleId: 'harbour' });
+    check(migrated.styleId === 'standard' && migrated.colourId === 'harbour', 'old look id becomes Standard + colour');
+    const resolved = resolveStyleAndColour({ styleId: 'clear', colourId: 'daylight' });
+    check(resolved.styleId === 'clear' && resolved.colourId === 'daylight', 'style and colour resolve independently');
     const fullCopy = sanitiseCopy(null);
     check(fullCopy.failBody === DEFAULT_COPY.failBody, 'default fail body is not clipped to the flap limit');
     check(fullCopy.failBody.length > 80, 'fail body is allowed to be longer than a flap line');
@@ -393,6 +422,23 @@ const { pathToFileURL } = require('url');
       /note-fail-body[\s\S]*?font-size:\s*clamp\(22px,\s*2\.8vw,\s*36px\)/.test(css),
       'fail-loud body matches Please ask reception size'
     );
+    check(css.includes('.note-body.is-fullscreen .note-chrome'), 'fullscreen hides setup chrome by default');
+    check(
+      css.includes(".note-body.is-fullscreen[data-style='service'] .note-chrome") &&
+        css.includes(".note-body.is-fullscreen[data-style='notice'] .note-chrome"),
+      'Service and Notice keep the masthead in fullscreen'
+    );
+    check(
+      css.includes(".note-body.is-fullscreen[data-style='service'] .note-chrome-actions") &&
+        css.includes(".note-body.is-fullscreen[data-style='notice'] .note-chrome-actions"),
+      'Service and Notice hide only the setup buttons in fullscreen'
+    );
+    const plain = fs.readFileSync(path.join(__dirname, 'board', 'styles', 'plain.css'), 'utf8');
+    const lobby = fs.readFileSync(path.join(__dirname, 'board', 'styles', 'lobby.css'), 'utf8');
+    const plaque = fs.readFileSync(path.join(__dirname, 'board', 'styles', 'plaque.css'), 'utf8');
+    check(plain.includes(':has(.note-board-fail)') && plain.includes('#9b1c1c'), 'Plain dead feed floods the page');
+    check(lobby.includes(':has(.note-board-fail)') && lobby.includes('#9f1239'), 'Lobby dead feed floods the page');
+    check(plaque.includes(':has(.note-board-fail)') && plaque.includes('#8a1420'), 'Plaque dead feed floods the wall');
     const companion = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'board', 'board.js'), 'utf8');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
     check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
@@ -407,6 +453,33 @@ const { pathToFileURL } = require('url');
     check(companion.includes('data-th="amberWaitMin"'), 'practice can set the wait-band minutes');
     check(companion.includes('data-th="busyWaiting"'), 'practice can set when the room reads Busy');
     check(companion.includes('noteModPublicDemand'), 'practice can let public TVs count requests');
+    check(companion.includes('Style of the board'), 'companion exposes the style picker');
+    check(companion.includes('data-look='), 'companion writes the chosen style');
+    check(companion.includes('Colour of Standard'), 'companion exposes Standard colours');
+    check(companion.includes('data-colour='), 'companion writes the chosen colour');
+    check(
+      DEFAULT_CONFIG.styleId && DEFAULT_CONFIG.profiles.every((p) => !Object.hasOwn(p, 'styleId')),
+      'one style for the whole practice, not per board'
+    );
+    check(renderer.includes('dataset.style'), 'kiosk applies the chosen style');
+    check(renderer.includes('dataset.colour'), 'kiosk applies the chosen colour');
+    const html = fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8');
+    for (const style of BOARD_STYLES.filter((s) => s.id !== 'standard')) {
+      check(html.includes(`board/styles/${style.id}.css`), `kiosk loads ${style.id}.css`);
+      const sheet = fs.readFileSync(path.join(__dirname, 'board', 'styles', `${style.id}.css`), 'utf8');
+      check(
+        sheet.includes(`[data-style='${style.id}']`) || sheet.includes(`[data-style="${style.id}"]`),
+        `${style.id} CSS is scoped to its style`
+      );
+    }
+    for (const colour of BOARD_COLOURS) {
+      check(html.includes(`board/styles/${colour.id}.css`), `kiosk loads colour ${colour.id}.css`);
+      const sheet = fs.readFileSync(path.join(__dirname, 'board', 'styles', `${colour.id}.css`), 'utf8');
+      check(
+        sheet.includes(`[data-colour='${colour.id}']`) || sheet.includes(`[data-colour="${colour.id}"]`),
+        `${colour.id} CSS is scoped to Standard + that colour`
+      );
+    }
   }
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

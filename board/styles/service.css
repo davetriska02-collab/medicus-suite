@@ -1,0 +1,231 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: service
+ *
+ * Clinical public-service notice. A blue header bar, a white page, and a
+ * yellow emphasis rule on the live sentence. Frutiger-like system stack.
+ * This is not the official NHS lozenge and must never claim to be.
+ *
+ * Fail-loud floods the NHS emergency red so a dead board cannot look official.
+ */
+
+html:has(.note-body[data-style='service']) {
+  background: #ffffff;
+}
+
+.note-body[data-style='service'] {
+  color-scheme: light;
+  --note-void: #ffffff;
+  --note-chassis: #ffffff;
+  --note-well: #f0f4f5;
+  --note-hair: #b1b4b6;
+  --note-mute: #505a5f;
+  --note-soft: #0b0c0c;
+  --note-ink: #0b0c0c;
+  --note-flap: transparent;
+  --note-flap-ink: #0b0c0c;
+  --note-flap-split: transparent;
+  --note-flap-blank: transparent;
+  --note-quiet: #00703c;
+  --note-steady: #f47738;
+  --note-busy: #d4351c;
+  --note-very: #942514;
+  --note-sans: Frutiger, 'Source Sans 3', Arial, Helvetica, sans-serif;
+  --note-mono: Arial, Helvetica, sans-serif;
+  --svc-blue: #005eb8;
+  --svc-yellow: #ffeb3b;
+  --svc-msg: clamp(28px, 3.8vw, 52px);
+  background: #fff;
+  color: #0b0c0c;
+}
+
+.note-body[data-style='service'] .note-chrome {
+  background: var(--svc-blue);
+  padding: 16px 20px;
+  border-bottom: 8px solid var(--svc-yellow);
+}
+
+.note-body[data-style='service'] .note-chrome-name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #fff;
+}
+
+.note-body[data-style='service'] .note-chrome-sub {
+  font-family: var(--note-sans);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 16px;
+  color: #d4e5f7;
+}
+
+.note-body[data-style='service'] .note-chrome-select select,
+.note-body[data-style='service'] .note-chrome-btn {
+  background: #fff;
+  border: 2px solid #fff;
+  border-radius: 0;
+  color: #0b0c0c;
+  font-weight: 700;
+}
+
+.note-body[data-style='service'] .note-stage {
+  align-items: stretch;
+  padding: 24px 20px 32px;
+}
+
+.note-body[data-style='service'] .note-board {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  gap: 20px;
+}
+
+.note-body[data-style='service'] .note-flaps {
+  align-items: flex-start;
+  padding: 12px 16px 16px 20px;
+  background: #fff;
+  border: 0;
+  border-left: 10px solid var(--svc-yellow);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap-row {
+  gap: 0;
+  justify-content: flex-start;
+  align-items: baseline;
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
+  display: none;
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap {
+  width: auto;
+  min-width: 0.05em;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  font-size: var(--svc-msg);
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap-blank {
+  min-width: 0.28em;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.15;
+  transform: none;
+}
+
+.note-body[data-style='service'] .note-flaps .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='service'] .note-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.note-body[data-style='service'] .note-tile {
+  background: var(--note-well);
+  border: 0;
+  border-left: 8px solid var(--svc-blue);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px 16px;
+  min-height: 0;
+}
+
+.note-body[data-style='service'] .note-tile-k {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--svc-blue);
+  letter-spacing: 0;
+}
+
+.note-body[data-style='service'] .note-tile-v,
+.note-body[data-style='service'] .note-tile-v-word {
+  font-family: var(--note-sans);
+  font-size: clamp(26px, 3vw, 40px);
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.note-body[data-style='service'] .note-tile[data-tone='quiet'],
+.note-body[data-style='service'] .note-tile[data-tone='GREEN'] {
+  border-left-color: var(--note-quiet);
+  box-shadow: none;
+}
+.note-body[data-style='service'] .note-tile[data-tone='steady'],
+.note-body[data-style='service'] .note-tile[data-tone='AMBER'] {
+  border-left-color: var(--note-steady);
+  box-shadow: none;
+}
+.note-body[data-style='service'] .note-tile[data-tone='busy'] {
+  border-left-color: var(--note-busy);
+  box-shadow: none;
+}
+.note-body[data-style='service'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='service'] .note-tile[data-tone='RED'] {
+  border-left-color: var(--note-very);
+  box-shadow: none;
+}
+
+.note-body[data-style='service'] .note-dot:not(.is-on) {
+  background: #b1b4b6;
+}
+
+.note-body[data-style='service'] .note-ticker {
+  background: var(--note-well);
+  border: 0;
+  border-radius: 0;
+}
+
+.note-body[data-style='service'] .note-clock .note-flap {
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='service'] .note-clock .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='service'] .note-fail {
+  background: #d4351c;
+  border: 0;
+  border-radius: 0;
+}
+
+.note-body[data-style='service'] .note-fail-title,
+.note-body[data-style='service'] .note-fail-body {
+  color: #fff;
+}
+
+.note-body[data-style='service'] .note-fail-ask {
+  color: #ffe8e5;
+}
+
+.note-body[data-style='service'] .note-foot {
+  background: #212b32;
+  color: #fff;
+  border-top: 0;
+}
+
+.note-body[data-style='service'] .note-foot .note-error {
+  color: #f47738;
+}

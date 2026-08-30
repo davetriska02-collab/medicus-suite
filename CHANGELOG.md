@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.251.8] — 2026-08-29
+## [v3.253.2] — 2026-08-30
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,63 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.253.1] — 2026-08-30
+
+### Note — fullscreen mastheads and louder dead feeds on quiet styles
+
+Service and Notice keep their masthead on a fullscreen TV (blue bar /
+broadsheet title). Only the setup buttons hide. Other styles still hide
+the whole chrome strip.
+
+Plain, Lobby and Plaque flood the page when a public feed is dead, so a
+tasteful layout cannot look like an empty surgery.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.253.0] — 2026-08-29
+
+### Note — ten styles, and colour options on Standard
+
+The ten palettes shipped in v3.252.0 are now the **Standard** style with
+colour options (Split-flap, Daylight, Clinic, Wayfind, Transit,
+Instrument, Night watch, Ledger, Gallery, Harbour).
+
+Nine more styles change the layout and the type, not just the hue:
+
+- **Clear** — light, airy, large sans
+- **Plain** — black on white, no decoration
+- **Service** — clinical public-service notice (not the NHS logo)
+- **Notice** — broadsheet masthead
+- **Sign** — corridor wayfinding, numbers first
+- **Timetable** — amber LED departure rows
+- **Console** — dense instrument panel
+- **Lobby** — one large sentence, quiet figures
+- **Plaque** — museum caption on a large wall
+
+Styles and colours change paint only. They do not change the numbers,
+the words, or the public-TV lock. Saved boards that still store an old
+look id become Standard plus that colour.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.252.0] — 2026-08-29
+
+### Note — ten looks for the board
+
+A practice can pick the look of every Note board from ten distinct
+professional styles. Split-flap stays the default. The others are
+Daylight, Clinic, Wayfind, Transit, Instrument, Night watch, Ledger,
+Gallery and Harbour.
+
+Looks change paint only. They do not change the numbers, the words, or
+the public-TV lock. No names, no staff tiles on a public board, wait
+time still a band, a dead public feed still fails loud.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
 
 ## [v3.251.7] — 2026-08-29
 

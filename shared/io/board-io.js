@@ -18,6 +18,30 @@
   const ALL_WIDGETS = PUBLIC_WIDGETS.concat(STAFF_WIDGETS);
   const MAX_MESSAGE = 80;
   const MAX_NAME = 32;
+  const STYLE_IDS = [
+    'standard',
+    'clear',
+    'plain',
+    'service',
+    'notice',
+    'sign',
+    'timetable',
+    'console',
+    'lobby',
+    'plaque',
+  ];
+  const COLOUR_IDS = [
+    'flap',
+    'daylight',
+    'clinic',
+    'wayfind',
+    'transit',
+    'instrument',
+    'nightwatch',
+    'ledger',
+    'gallery',
+    'harbour',
+  ];
 
   function isProfileId(id) {
     return typeof id === 'string' && (PROFILE_IDS.includes(id) || CUSTOM_ID.test(id));
@@ -51,6 +75,25 @@
     }
     if (raw.publicCountsRequests !== undefined) {
       out.publicCountsRequests = raw.publicCountsRequests === true;
+    }
+    if (raw.styleId !== undefined) {
+      if (typeof raw.styleId !== 'string') {
+        throw new Error('board.config.styleId is not a known style.');
+      }
+      if (COLOUR_IDS.includes(raw.styleId) && !STYLE_IDS.includes(raw.styleId)) {
+        out.styleId = 'standard';
+        out.colourId = raw.styleId;
+      } else if (STYLE_IDS.includes(raw.styleId)) {
+        out.styleId = raw.styleId;
+      } else {
+        throw new Error('board.config.styleId is not a known style.');
+      }
+    }
+    if (raw.colourId !== undefined) {
+      if (typeof raw.colourId !== 'string' || !COLOUR_IDS.includes(raw.colourId)) {
+        throw new Error('board.config.colourId is not a known colour.');
+      }
+      out.colourId = raw.colourId;
     }
     if (raw.copy !== undefined) {
       if (!isPlainObject(raw.copy)) throw new Error('board.config.copy must be an object.');
