@@ -1,0 +1,299 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Note board style: daylight
+ *
+ * Intent: a printed surgery noticeboard for a bright, sunlit waiting hall.
+ * Warm off-white field, ink-navy type, and the message carried on dark
+ * split-flap tiles so the darkest thing on the board is the thing you read.
+ *
+ * Contrast (measured against the actual field and card colours below):
+ *   ink #101a2e on paper #f3efe6 .......... 15.1:1
+ *   ink #101a2e on card #fffdf8 ........... 17.1:1
+ *   soft #3a4256 on well #e9e3d5 ........... 7.8:1
+ *   mute #5c6478 on paper #f3efe6 .......... 5.2:1  (labels, footer)
+ *   flap ink #f7f3e9 on flap #1b2740 ...... 13.4:1
+ *   quiet #0f7f40 / steady #8f5800 / busy #a13508 / very #96101f on card
+ *     ....................................  5.0 / 5.8 / 6.8 / 8.6:1
+ *   fail: #fdf6e6 on #a8142b 7.0:1, #ffd88a on #a8142b 5.5:1
+ * All body copy clears 4.5:1 and every large or bold item clears 3:1.
+ * Status keeps the locked traffic-light meaning and never rides on hue
+ * alone. Three redundant channels: the status colours darken as severity
+ * rises (relative luminance 0.157, 0.128, 0.101, 0.070), the tile rule
+ * widens (4 / 6 / 8 / 10px), and the band label gains weight. A viewer who
+ * cannot separate the greens from the reds still reads the ladder.
+ */
+
+.note-body[data-style='standard'][data-colour='daylight'] {
+  --note-void: #f3efe6;
+  --note-chassis: #fffdf8;
+  --note-well: #e9e3d5;
+  --note-hair: #d5cebd;
+  --note-mute: #5c6478;
+  --note-soft: #3a4256;
+  --note-ink: #101a2e;
+  --note-flap: #1b2740;
+  --note-flap-ink: #f7f3e9;
+  --note-flap-split: rgba(247, 243, 233, 0.18);
+  --note-flap-blank: #e7e1d2;
+  --note-quiet: #0f7f40;
+  --note-steady: #8f5800;
+  --note-busy: #a13508;
+  --note-very: #96101f;
+  --note-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Local, not part of the kiosk token contract. */
+  --daylight-serif: Georgia, 'Times New Roman', serif;
+  --daylight-lift: 0 1px 2px rgba(16, 26, 46, 0.06), 0 10px 24px rgba(16, 26, 46, 0.07);
+  --daylight-fail: #a8142b;
+  --daylight-fail-edge: #7d0f1f;
+  --daylight-fail-ink: #fdf6e6;
+
+  color-scheme: light;
+  color: var(--note-ink);
+  background: linear-gradient(180deg, #fbf8f1 0%, var(--note-void) 46%), var(--note-void);
+}
+
+/* Chrome: quiet navy on paper, no dark furniture. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-name {
+  font-family: var(--daylight-serif);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-sub {
+  color: var(--note-mute);
+  letter-spacing: 0.1em;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-select select,
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-btn {
+  border-radius: 4px;
+  box-shadow: 0 1px 1px rgba(16, 26, 46, 0.05);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-select select:hover {
+  border-color: #b3a894;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-select select:focus-visible,
+.note-body[data-style='standard'][data-colour='daylight'] .note-chrome-btn:focus-visible {
+  outline: 3px solid #10306b;
+  outline-offset: 1px;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-empty {
+  font-family: var(--daylight-serif);
+  font-size: clamp(16px, 1.6vw, 22px);
+  color: var(--note-mute);
+}
+
+/* Flaps: the one dark element. Crisp print, minimal bevel. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-flaps {
+  border-radius: 8px;
+  box-shadow: var(--daylight-lift);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-flap {
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(247, 243, 233, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 1px 0 rgba(16, 26, 46, 0.14);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-flap-glyph {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-flap-blank {
+  box-shadow: inset 0 0 0 1px rgba(16, 26, 46, 0.07);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-flap-blank::after {
+  background: rgba(16, 26, 46, 0.07);
+}
+
+/* Tiles: white cards on paper, lifted by a hairline plus a soft shadow. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile {
+  border-radius: 8px;
+  box-shadow: var(--daylight-lift);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile-k {
+  font-size: clamp(12px, 1.2vw, 16px);
+  font-weight: 650;
+  letter-spacing: 0.005em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile-v {
+  font-weight: 700;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile-v-word {
+  font-family: var(--daylight-serif);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  /* Georgia descends further than the sans, so give the tail clearance. */
+  line-height: 1.06;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile-s {
+  font-size: clamp(13px, 1.2vw, 17px);
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile-s-strong {
+  font-weight: 700;
+  color: var(--note-ink);
+}
+
+/* Status: rule width carries the ladder, colour and weight confirm it. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='quiet'],
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='GREEN'] {
+  box-shadow:
+    var(--daylight-lift),
+    inset 4px 0 0 var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='steady'],
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='AMBER'] {
+  box-shadow:
+    var(--daylight-lift),
+    inset 6px 0 0 var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='busy'] {
+  box-shadow:
+    var(--daylight-lift),
+    inset 8px 0 0 var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='RED'] {
+  border-color: var(--note-very);
+  box-shadow:
+    var(--daylight-lift),
+    inset 10px 0 0 var(--note-very);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='quiet'] .note-tile-s-strong,
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='GREEN'] .note-tile-s-strong {
+  color: var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='steady'] .note-tile-s-strong,
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='AMBER'] .note-tile-s-strong {
+  color: var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='busy'] .note-tile-s-strong {
+  color: var(--note-busy);
+  font-weight: 800;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='very-busy'] .note-tile-s-strong,
+.note-body[data-style='standard'][data-colour='daylight'] .note-tile[data-tone='RED'] .note-tile-s-strong {
+  color: var(--note-very);
+  font-weight: 800;
+}
+
+/* Dots repeat the tempo word, so size them to be read across the room
+ * rather than at panel distance. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-dots {
+  gap: 8px;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-dot {
+  width: 13px;
+  height: 13px;
+  box-shadow: inset 0 0 0 1px rgba(16, 26, 46, 0.16);
+}
+
+/* Only the unlit dots are repainted. Declaring a background on .note-dot
+ * would tie on specificity with the base .is-on[data-tone] rules and, being
+ * loaded second, would silently erase the lit tone colours. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-dot:not(.is-on) {
+  background: #ded7c7;
+}
+
+/* Ticker: a printed strapline, so sans and sentence case, not a caps rail. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-ticker {
+  border-radius: 6px;
+  box-shadow: inset 0 1px 2px rgba(16, 26, 46, 0.06);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-ticker-seq {
+  font-family: var(--note-sans);
+  font-size: clamp(14px, 1.4vw, 19px);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-ticker-dot {
+  color: #a89c85;
+}
+
+/* Fail loud: the only saturated field on a paper board, so it cannot be
+ * mistaken for resting state. */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-fail {
+  background: var(--daylight-fail);
+  border: 3px solid var(--daylight-fail-edge);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(125, 15, 31, 0.24);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-fail-title {
+  font-family: var(--daylight-serif);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--daylight-fail-ink);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-fail-ask {
+  font-weight: 800;
+  color: #ffd88a;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-fail-body {
+  color: var(--daylight-fail-ink);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-fail-banner {
+  background: var(--daylight-fail);
+  border: 2px solid var(--daylight-fail-edge);
+  border-radius: 6px;
+  color: var(--daylight-fail-ink);
+  font-weight: 700;
+}
+
+/* Footer */
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-foot {
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-demo-flag {
+  color: var(--note-steady);
+  font-weight: 600;
+}
+
+.note-body[data-style='standard'][data-colour='daylight'] .note-error {
+  color: var(--note-busy);
+  font-weight: 600;
+}

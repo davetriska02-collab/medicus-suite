@@ -97,6 +97,30 @@ const { pathToFileURL } = require('url');
     );
   }
 
+  {
+    const clean = io.sanitiseImported({ styleId: 'harbour' });
+    check(
+      clean.styleId === 'standard' && clean.colourId === 'harbour',
+      'import migrates an old look to Standard + colour'
+    );
+    const styled = io.sanitiseImported({ styleId: 'clear', colourId: 'daylight' });
+    check(styled.styleId === 'clear' && styled.colourId === 'daylight', 'import keeps a known style and colour');
+    let threw = false;
+    try {
+      io.sanitiseImported({ styleId: 'neon-club' });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'unknown style is rejected on import');
+    threw = false;
+    try {
+      io.sanitiseImported({ colourId: 'neon-club' });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'unknown colour is rejected on import');
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   process.exit(failed ? 1 : 0);
 })().catch((e) => {

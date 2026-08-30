@@ -1,0 +1,310 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Note board style: clinic
+ *
+ * Intent: NHS service-manual calm. An NHS-blue field, square panels, white
+ * type and a pale sign-face flap row, sized to be read across four metres.
+ * A wayfinding sign, not a consumer health app, and no official lozenge.
+ *
+ * Contrast (measured against the actual field and panel colours below):
+ *   ink #ffffff on field #003087 .......... 11.8:1
+ *   ink #ffffff on panel #00408f ........... 9.9:1
+ *   mute #cfe2f5 on panel #00408f .......... 7.4:1  (labels)
+ *   soft #eaf2fb on well #002569 .......... 12.7:1  (ticker)
+ *   flap ink #003087 on flap #f0f4f5 ...... 10.7:1
+ *   focus #ffdd00 on field #003087 ......... 8.8:1
+ *   fail: #ffffff on #d4351c 4.9:1, #ffdd00 on #d4351c 3.6:1 (large bold)
+ * All body copy clears 4.5:1 and every large or bold item clears 3:1. The
+ * status colours are indicators rather than body copy and clear 3:1 on the
+ * panel (quiet 4.6, steady 5.7, busy 3.9, very 3.2). Status keeps the locked
+ * traffic-light meaning without relying on hue: the panel rule widens with
+ * severity (4 / 7 / 10 / 13px), the band label gains weight, and very busy
+ * also takes a full status keyline, so the ladder has a shape as well as a
+ * colour. Red on blue is only 2.4:1 as a pair, which is why the fail panel
+ * carries a 6px white keyline: white clears 11.9:1 on the field and 4.9:1
+ * on the red, so the boundary is drawn by the keyline, not by the two
+ * fields meeting.
+ */
+
+.note-body[data-style='standard'][data-colour='clinic'] {
+  --note-void: #003087;
+  --note-chassis: #00408f;
+  --note-well: #002569;
+  --note-hair: rgba(255, 255, 255, 0.32);
+  --note-mute: #cfe2f5;
+  --note-soft: #eaf2fb;
+  --note-ink: #ffffff;
+  --note-flap: #f0f4f5;
+  --note-flap-ink: #003087;
+  --note-flap-split: rgba(0, 48, 135, 0.2);
+  --note-flap-blank: #002a76;
+  --note-quiet: #44c97c;
+  --note-steady: #ffb81c;
+  --note-busy: #ed8b00;
+  --note-very: #ff5c4d;
+  --note-sans: Arial, 'Helvetica Neue', Helvetica, system-ui, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Local, not part of the kiosk token contract. */
+  --clinic-focus: #ffdd00;
+  --clinic-focus-bar: #0b0c0c;
+  --clinic-fail: #d4351c;
+
+  color-scheme: dark;
+  color: var(--note-ink);
+  background: var(--note-void);
+}
+
+/* Chrome: flat institutional furniture, square edges, no bevels. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-name {
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-sub {
+  color: var(--note-mute);
+  letter-spacing: 0.09em;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-select select,
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-btn {
+  border-radius: 0;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-select select:hover {
+  border-color: #ffffff;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-select select:focus-visible,
+.note-body[data-style='standard'][data-colour='clinic'] .note-chrome-btn:focus-visible {
+  outline: 3px solid var(--clinic-focus);
+  outline-offset: 0;
+  box-shadow: 0 4px 0 0 var(--clinic-focus-bar);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-empty {
+  font-size: clamp(16px, 1.6vw, 22px);
+  font-weight: 700;
+  color: var(--note-mute);
+}
+
+/* Flaps: pale sign faces set square into a flat blue panel. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-flaps {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-flap {
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(0, 48, 135, 0.18);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-flap::after {
+  height: 2px;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-flap-glyph {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-flap-blank {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-flap-blank::after {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Panels: square, flat, hairline ruled. Type sized for four metres. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile {
+  border-radius: 0;
+  box-shadow: none;
+  /* Room for the widest status rule without crowding the label. */
+  padding-left: clamp(22px, 2vw, 30px);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile-k {
+  font-size: clamp(14px, 1.5vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile-v {
+  font-size: clamp(42px, 6.6vw, 92px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--note-ink);
+}
+
+/* The word variant needs its own size: the numeral size above outranks the
+ * base .note-tile-v-word rule, which would render tempo words at figure
+ * scale and crowd the line below. Doubled class keeps it order-independent. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile-v.note-tile-v-word {
+  font-family: var(--note-sans);
+  font-size: clamp(30px, 4.2vw, 60px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile-s {
+  font-size: clamp(14px, 1.35vw, 19px);
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile-s-strong {
+  font-size: clamp(18px, 1.9vw, 24px);
+  font-weight: 700;
+  color: var(--note-ink);
+}
+
+/* Status: rule width is the ladder, colour confirms it, band label carries
+ * the weight. Label text stays white so it never depends on the hue. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='quiet'],
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='GREEN'] {
+  box-shadow: inset 4px 0 0 var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='steady'],
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='AMBER'] {
+  box-shadow: inset 7px 0 0 var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='busy'] {
+  box-shadow: inset 10px 0 0 var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='busy'] .note-tile-s-strong {
+  font-weight: 800;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='RED'] {
+  border-color: var(--note-very);
+  box-shadow: inset 13px 0 0 var(--note-very);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='very-busy'] .note-tile-s-strong,
+.note-body[data-style='standard'][data-colour='clinic'] .note-tile[data-tone='RED'] .note-tile-s-strong {
+  font-weight: 800;
+}
+
+/* Dots repeat the tempo word, so size them to be read across the room
+ * rather than at panel distance. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-dots {
+  gap: 8px;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+/* Only the unlit dots are repainted. Declaring a background on .note-dot
+ * would tie on specificity with the base .is-on[data-tone] rules and, being
+ * loaded second, would silently erase the lit tone colours. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-dot:not(.is-on) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* Ticker: a recessed instrument rail. Mono stays, shouting caps do not,
+ * because sentence case is quicker to read across a room. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-ticker {
+  border-radius: 0;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-ticker-seq {
+  font-size: clamp(14px, 1.4vw, 19px);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-ticker-dot {
+  color: var(--note-mute);
+}
+
+/* Fail loud: a GOV.UK red panel with a white keyline, so it separates from
+ * the blue field instead of blending into it. */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-fail {
+  background: var(--clinic-fail);
+  border: 6px solid #ffffff;
+  border-radius: 0;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-fail-title {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-fail-ask {
+  font-weight: 800;
+  color: var(--clinic-focus);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-fail-body {
+  color: #ffffff;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-fail-banner {
+  background: var(--clinic-fail);
+  border: 2px solid #ffffff;
+  border-radius: 0;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Narrow windows: the four-metre type bump above would otherwise override
+ * the base stylesheet's small-screen sizes. */
+
+@media (max-width: 720px) {
+  .note-body[data-style='standard'][data-colour='clinic'] .note-tile-v {
+    font-size: 38px;
+  }
+
+  .note-body[data-style='standard'][data-colour='clinic'] .note-tile-v.note-tile-v-word {
+    font-size: 28px;
+  }
+
+  .note-body[data-style='standard'][data-colour='clinic'] .note-tile-k {
+    font-size: 13px;
+  }
+
+  .note-body[data-style='standard'][data-colour='clinic'] .note-tile-s-strong {
+    font-size: 17px;
+  }
+}
+
+/* Footer */
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-foot {
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-demo-flag {
+  color: var(--note-steady);
+  font-weight: 700;
+}
+
+.note-body[data-style='standard'][data-colour='clinic'] .note-error {
+  color: var(--note-busy);
+  font-weight: 700;
+}

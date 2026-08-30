@@ -1,0 +1,214 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: console
+ *
+ * Dense instrument / avionics panel. Small type, hairline rules, CRT green.
+ * Metrics pack into a tight grid. The message is a data header, not a poster.
+ */
+
+html:has(.note-body[data-style='console']) {
+  background: #070b08;
+}
+
+.note-body[data-style='console'] {
+  color-scheme: dark;
+  --note-void: #070b08;
+  --note-chassis: #0d1410;
+  --note-well: #0a100c;
+  --note-hair: #1d3a28;
+  --note-mute: #6f9a7c;
+  --note-soft: #9fd4ae;
+  --note-ink: #c8f5d4;
+  --note-flap: #0d1410;
+  --note-flap-ink: #c8f5d4;
+  --note-flap-split: transparent;
+  --note-flap-blank: #0a100c;
+  --note-quiet: #5eead4;
+  --note-steady: #f5d76e;
+  --note-busy: #f0a202;
+  --note-very: #ff6b6b;
+  --note-sans: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  background: #070b08;
+  color: #c8f5d4;
+}
+
+.note-body[data-style='console'] .note-chrome {
+  padding: 6px 10px;
+  border-bottom: 1px solid #1d3a28;
+}
+
+.note-body[data-style='console'] .note-chrome-name {
+  font-family: var(--note-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='console'] .note-chrome-sub {
+  font-size: 10px;
+}
+
+.note-body[data-style='console'] .note-chrome-select select,
+.note-body[data-style='console'] .note-chrome-btn {
+  background: #0d1410;
+  border: 1px solid #1d3a28;
+  border-radius: 0;
+  color: #9fd4ae;
+  font-family: var(--note-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+}
+
+.note-body[data-style='console'] .note-stage {
+  padding: 8px 10px;
+  align-items: stretch;
+}
+
+.note-body[data-style='console'] .note-board {
+  width: 100%;
+  gap: 8px;
+}
+
+.note-body[data-style='console'] .note-flaps {
+  align-items: flex-start;
+  padding: 6px 8px;
+  background: #0d1410;
+  border: 1px solid #1d3a28;
+  border-radius: 0;
+  box-shadow: inset 0 0 0 1px #0a100c;
+  gap: 2px;
+}
+
+.note-body[data-style='console'] .note-flap-row {
+  justify-content: flex-start;
+  gap: 1px;
+}
+
+.note-body[data-style='console'] .note-flap {
+  width: clamp(14px, 1.6vw, 22px);
+  height: clamp(18px, 2vw, 26px);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='console'] .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='console'] .note-flap-glyph {
+  font-family: var(--note-mono);
+  font-size: clamp(10px, 1.1vw, 14px);
+  font-weight: 600;
+  letter-spacing: 0;
+  transform: none;
+}
+
+.note-body[data-style='console'] .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='console'] .note-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.note-body[data-style='console'] .note-board[data-profile='ops'] .note-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.note-body[data-style='console'] .note-tile {
+  background: #0d1410;
+  border: 1px solid #1d3a28;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 6px 8px;
+  min-height: 0;
+  gap: 2px;
+}
+
+.note-body[data-style='console'] .note-tile-k {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6f9a7c;
+}
+
+.note-body[data-style='console'] .note-tile-v,
+.note-body[data-style='console'] .note-tile-v-word {
+  font-size: clamp(16px, 1.8vw, 26px);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.note-body[data-style='console'] .note-tile-s {
+  font-size: 10px;
+  color: #6f9a7c;
+}
+
+.note-body[data-style='console'] .note-tile[data-tone] {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+
+.note-body[data-style='console'] .note-tile[data-tone='quiet'],
+.note-body[data-style='console'] .note-tile[data-tone='GREEN'] {
+  box-shadow: inset 0 0 0 1px var(--note-quiet);
+}
+.note-body[data-style='console'] .note-tile[data-tone='steady'],
+.note-body[data-style='console'] .note-tile[data-tone='AMBER'] {
+  box-shadow: inset 0 0 0 1px var(--note-steady);
+}
+.note-body[data-style='console'] .note-tile[data-tone='busy'] {
+  box-shadow: inset 0 0 0 1px var(--note-busy);
+}
+.note-body[data-style='console'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='console'] .note-tile[data-tone='RED'] {
+  box-shadow: inset 0 0 0 1px var(--note-very);
+}
+
+.note-body[data-style='console'] .note-dot:not(.is-on) {
+  background: #1d3a28;
+}
+
+.note-body[data-style='console'] .note-ticker {
+  background: #0d1410;
+  border: 1px solid #1d3a28;
+  border-radius: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='console'] .note-clock .note-flap {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='console'] .note-clock .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='console'] .note-fail {
+  background: #2a0b0b;
+  border: 2px solid #ff6b6b;
+  border-radius: 0;
+}
+
+.note-body[data-style='console'] .note-fail-title,
+.note-body[data-style='console'] .note-fail-ask,
+.note-body[data-style='console'] .note-fail-body {
+  color: #ff6b6b;
+  font-family: var(--note-mono);
+  text-transform: uppercase;
+}
+
+.note-body[data-style='console'] .note-foot {
+  border-top: 1px solid #1d3a28;
+  font-family: var(--note-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6f9a7c;
+}

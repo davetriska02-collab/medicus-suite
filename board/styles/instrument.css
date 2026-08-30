@@ -1,0 +1,369 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite - Note display board - style: INSTRUMENT
+ *
+ * Voice: a precision clinical instrument seen across a dim staff room.
+ * Linear's issue list, a Leica top plate, the readout panel on an
+ * anaesthetic machine. Cool blue-slate throughout, hairline borders, flat
+ * dark cells instead of cream split-flap tiles, and a strict dual voice:
+ * sans for words, mono for every number.
+ *
+ * The cream flap face of the house Note theme is deliberately dropped here.
+ * A warm ivory tile on cool slate reads as a souvenir departure board, not
+ * an instrument, so the flaps are flattened into unlit slate cells with a
+ * single hairline seam keeping the split-flap lineage.
+ *
+ * Status meaning is fixed suite-wide and unchanged: quiet = calm,
+ * steady = normal, steady traffic, busy = pressure, very-busy = strain.
+ * Colour is spent, never decorated with: a tone shows as a keyline along
+ * the top edge of its tile, and only strain reaches the number itself.
+ *
+ * Self-contained by design (see DOCTRINE.md "Injected surfaces"): the kiosk
+ * never loads panel.css, so this scope carries its own values. Taste comes
+ * from the slate family in TOKENS.md, values are re-picked for wall
+ * distance rather than 360px panel distance.
+ *
+ * Every rule is scoped to .note-body[data-style='standard'][data-colour='instrument'].
+ */
+
+.note-body[data-style='standard'][data-colour='instrument'] {
+  --note-void: #0e1725;
+  --note-chassis: #1a2840;
+  --note-well: #0a1220;
+  --note-hair: #476899;
+  --note-mute: #9db2cf;
+  --note-soft: #c6d6ea;
+  --note-ink: #f3f8ff;
+  --note-flap: #1c2b45;
+  --note-flap-ink: #ecf3ff;
+  --note-flap-split: rgba(190, 214, 240, 0.09);
+  --note-flap-blank: #111c2e;
+  --note-quiet: #48d19b;
+  --note-steady: #efb63a;
+  --note-busy: #f8834e;
+  --note-very: #ff6f6f;
+  --note-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Private to this style, not part of the shared Note contract. */
+  --note-focus: #7fb0ea;
+  --note-edge: rgba(190, 214, 240, 0.06);
+  --note-fail-wash: rgba(248, 131, 78, 0.05);
+  --note-ease: cubic-bezier(0.2, 0, 0, 1);
+  --note-fast: 130ms;
+}
+
+/* --- Field ------------------------------------------------------------- */
+
+.note-body[data-style='standard'][data-colour='instrument'] {
+  background: radial-gradient(1400px 700px at 50% -22%, rgba(122, 170, 230, 0.055), transparent 62%), var(--note-void);
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-empty {
+  font-family: var(--note-sans);
+  font-weight: 500;
+  color: var(--note-mute);
+}
+
+/* --- Chrome ------------------------------------------------------------ */
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-name {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-sub {
+  font-family: var(--note-mono);
+  letter-spacing: 0.09em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-select select,
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-btn {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 4px;
+  color: var(--note-soft);
+  font-weight: 500;
+  transition:
+    border-color var(--note-fast) var(--note-ease),
+    color var(--note-fast) var(--note-ease),
+    background var(--note-fast) var(--note-ease);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-select select:hover {
+  background: #223252;
+  border-color: var(--note-focus);
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-btn:active {
+  background: #16223a;
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-select select:focus-visible,
+.note-body[data-style='standard'][data-colour='instrument'] .note-chrome-btn:focus-visible {
+  outline: 2px solid var(--note-focus);
+  outline-offset: 2px;
+}
+
+/* --- Flap deck: flattened slate cells, no cream ------------------------ */
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-flaps {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 1px 0 var(--note-edge),
+    0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-flap {
+  background: var(--note-flap);
+  color: var(--note-flap-ink);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(190, 214, 240, 0.05);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-flap::after {
+  height: 1px;
+  background: var(--note-flap-split);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: inset 0 0 0 1px rgba(190, 214, 240, 0.03);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-flap-blank::after {
+  background: rgba(190, 214, 240, 0.04);
+}
+
+/* --- Metric tiles ------------------------------------------------------ */
+
+/* Every tile carries the channel rail along its top edge, coloured when the
+ * tile has a tone and neutral when it has none, so a tone arriving or
+ * clearing never changes the tile's geometry. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 6px;
+  box-shadow: inset 0 3px 0 rgba(190, 214, 240, 0.09);
+}
+
+/* Card label: sans, sentence case, weight over letter-spacing. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile-k {
+  font-family: var(--note-sans);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--note-mute);
+}
+
+/* Data: mono, tabular, tight. This is the machine voice. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile-v {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  color: var(--note-ink);
+}
+
+/* A tempo word is a word, so it goes back into the sans voice. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile-v-word {
+  font-family: var(--note-sans);
+  font-weight: 620;
+  letter-spacing: -0.025em;
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile-s {
+  font-family: var(--note-sans);
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile-s-strong {
+  font-weight: 560;
+  color: var(--note-ink);
+}
+
+/* Tone rides that keyline, the way an instrument marks a live channel. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='quiet'],
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='GREEN'] {
+  box-shadow: inset 0 3px 0 var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='steady'] {
+  box-shadow: inset 0 3px 0 var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='busy'],
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='AMBER'] {
+  box-shadow: inset 0 3px 0 var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='RED'] {
+  border-color: rgba(255, 111, 111, 0.55);
+  box-shadow: inset 0 3px 0 var(--note-very);
+}
+
+/* A count is a count: only strain reaches a number. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='very-busy'] .note-tile-v,
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='RED'] .note-tile-v {
+  color: var(--note-very);
+}
+
+/* The tempo word is not a count, it IS the status, so it carries the tone
+ * from pressure upward. Calm and normal stay in the reading ink: nobody
+ * needs a waiting room told in amber that today is normal. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='busy'] .note-tile-v-word,
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='AMBER'] .note-tile-v-word {
+  color: var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='very-busy'] .note-tile-v-word,
+.note-body[data-style='standard'][data-colour='instrument'] .note-tile[data-tone='RED'] .note-tile-v-word {
+  color: var(--note-very);
+}
+
+/* --- Tempo dots: squared segments, an instrument scale ----------------- */
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-dots {
+  gap: 4px;
+}
+
+/* Read from a doorway, not from 400mm: the house 8px dot is a full stop at
+ * this distance, so the scale becomes wide flat segments. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-dot {
+  width: 18px;
+  height: 5px;
+  border-radius: 1px;
+  background: #2a3d5e;
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-dot.is-on[data-tone='quiet'] {
+  background: var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-dot.is-on[data-tone='steady'] {
+  background: var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-dot.is-on[data-tone='busy'] {
+  background: var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-dot.is-on[data-tone='very-busy'] {
+  background: var(--note-very);
+}
+
+/* --- Ticker: a status bar, not a departures crawl ---------------------- */
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-ticker {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 6px;
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-ticker-seq {
+  font-family: var(--note-sans);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-ticker-dot {
+  color: var(--note-hair);
+}
+
+/* --- Clock: a readout, so no split seam and mono digits ---------------- */
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-clock .note-flap {
+  background: var(--note-well);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(190, 214, 240, 0.07);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-clock .note-flap::after {
+  display: none;
+}
+
+/* The pad cells either side of the time are not part of the readout, so
+ * they stop being drawn as empty boxes flanking it. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-clock .note-flap-blank {
+  background: transparent;
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-clock .note-flap-glyph {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--note-soft);
+}
+
+/* --- Fail loud: the loudest thing this style can render ---------------- */
+
+/* Dropped into the well rather than washed warm: 10% amber over a blue
+ * chassis composites to mauve, which reads as decoration. Near-black behind
+ * a 2px amber frame reads as an alarm, and stays the loudest thing here. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-fail {
+  background: linear-gradient(var(--note-fail-wash), var(--note-fail-wash)), var(--note-well);
+  border: 2px solid var(--note-busy);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px rgba(248, 131, 78, 0.3),
+    0 0 56px rgba(248, 131, 78, 0.2);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-fail-title {
+  font-weight: 640;
+  letter-spacing: -0.025em;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-fail-ask {
+  font-weight: 650;
+  color: var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-fail-body {
+  color: var(--note-ink);
+}
+
+/* The staff-board degraded banner sits above the tiles it is warning about,
+ * so it needs to out-shout them, not match them. */
+.note-body[data-style='standard'][data-colour='instrument'] .note-fail-banner {
+  background: linear-gradient(var(--note-fail-wash), var(--note-fail-wash)), var(--note-well);
+  border: 2px solid var(--note-busy);
+  border-radius: 6px;
+  color: var(--note-ink);
+  box-shadow:
+    0 0 0 1px rgba(248, 131, 78, 0.28),
+    0 0 34px rgba(248, 131, 78, 0.16);
+}
+
+/* --- Footer ------------------------------------------------------------ */
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-foot {
+  font-family: var(--note-mono);
+  letter-spacing: 0.05em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-demo-flag {
+  color: var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='instrument'] .note-error {
+  color: var(--note-busy);
+}

@@ -1,0 +1,379 @@
+/* © 2026 Graysbrook Ltd. Proprietary. All rights reserved. See LICENSE. */
+/* Medicus Suite — Note display board: "Wayfind" style.
+ *
+ * Airport and hospital corridor signage. A flat black light-box field,
+ * safety-yellow flap faces with black glyphs, and one grotesque voice at
+ * heavy weight for everything (numerals included), so the board reads like
+ * "Outpatients this way" rather than a departure hall or a nightclub.
+ *
+ * Read distance is 8 metres, so: flat surfaces (no gloss, no gradient), 2px
+ * frames, square corners, caps and tracking on the small labels only. Body
+ * sentences stay sentence case because caps sentences lose legibility at
+ * distance.
+ *
+ * Status meaning is unchanged: quiet green, steady amber, busy orange,
+ * very busy red. Hue never carries it alone. Each tile wears a coloured
+ * header band whose THICKNESS climbs with severity (6 / 9 / 12 / 16px) and
+ * the tempo dots stay an ordinal count, so the ramp survives a colourblind
+ * viewer, a washed-out panel, or a monochrome screenshot.
+ *
+ * Every rule is scoped to .note-body[data-style='standard'][data-colour='wayfind'].
+ */
+
+.note-body[data-style='standard'][data-colour='wayfind'] {
+  /* Signage is a black light box: pure black, no blue-slate tint. */
+  --note-void: #000000;
+  --note-chassis: #0c0c0d;
+  --note-well: #050505;
+  --note-hair: #34332c;
+  --note-mute: #a8a59b;
+  --note-soft: #dedbd2;
+  --note-ink: #ffffff;
+
+  /* Safety yellow on black is the corridor-sign pair: 15:1 either way. */
+  --note-flap: #ffd200;
+  --note-flap-ink: #100d00;
+  --note-flap-split: rgba(16, 13, 0, 0.16);
+  --note-flap-blank: #0e0e0c;
+
+  /* Status ramp re-saturated for a pure black field. */
+  --note-quiet: #3fe08a;
+  --note-steady: #ffb300;
+  --note-busy: #ff7518;
+  --note-very: #ff4436;
+
+  /* One voice. Wayfinding signage sets numerals in the same grotesque as
+   * the words, so --note-mono points at the sign face too and the data
+   * elements get tabular figures instead of a second family. */
+  --note-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  background: var(--note-void);
+}
+
+/* ── Chrome ─────────────────────────────────────────────────────────────── */
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome {
+  border-bottom: 1px solid var(--note-hair);
+  padding: 10px 20px 9px;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-name {
+  color: var(--note-flap);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-sub {
+  color: var(--note-soft);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-select select,
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-btn {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 2px;
+  color: var(--note-soft);
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-select select:hover {
+  border-color: var(--note-flap);
+  color: var(--note-flap);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-select select:focus-visible,
+.note-body[data-style='standard'][data-colour='wayfind'] .note-chrome-btn:focus-visible {
+  outline: 3px solid var(--note-flap);
+  outline-offset: 2px;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-empty {
+  color: var(--note-soft);
+  font-size: clamp(15px, 1.4vw, 19px);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── Flaps: yellow legend plates in a black frame ───────────────────────── */
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-flaps {
+  background: var(--note-void);
+  border: 2px solid var(--note-hair);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-flap {
+  background: var(--note-flap);
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px rgba(16, 13, 0, 0.22);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-flap::after {
+  background: var(--note-flap-split);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-flap-glyph {
+  font-size: clamp(19px, 2.5vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.005em;
+}
+
+/* Blanks keep a faint yellow rule so the plate grid still reads on black. */
+.note-body[data-style='standard'][data-colour='wayfind'] .note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 0, 0.14);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-flap-blank::after {
+  background: rgba(255, 210, 0, 0.1);
+}
+
+/* The clock inverts: a black time strip with yellow numerals, so it reads
+ * as sign furniture rather than a second message. */
+.note-body[data-style='standard'][data-colour='wayfind'] .note-clock .note-flap {
+  background: var(--note-void);
+  box-shadow: inset 0 0 0 1px rgba(255, 210, 0, 0.34);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-clock .note-flap::after {
+  background: rgba(255, 210, 0, 0.14);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-clock .note-flap-glyph {
+  color: var(--note-flap);
+  font-size: clamp(15px, 1.9vw, 28px);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tiles: sign panels with a coloured header band ─────────────────────── */
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: clamp(12px, 1.6vw, 22px);
+}
+
+/* Signage panels need a wider minimum than the house grid, but ops stays the
+ * three-across layout board.css sets, so re-state it above this override. */
+.note-body[data-style='standard'][data-colour='wayfind'] .note-board[data-profile='ops'] .note-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile {
+  background: var(--note-chassis);
+  border: 2px solid var(--note-hair);
+  border-radius: 4px;
+  /* Top padding clears the thickest (16px) severity band. */
+  padding: clamp(24px, 3vh, 36px) clamp(16px, 1.8vw, 24px) clamp(14px, 1.8vh, 20px);
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile-k {
+  color: var(--note-flap);
+  font-size: clamp(12px, 1.2vw, 16px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile-v {
+  color: var(--note-ink);
+  font-size: clamp(46px, 6.8vw, 100px);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 0.92;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile-v-word {
+  font-size: clamp(26px, 3.3vw, 46px);
+  letter-spacing: 0.005em;
+  line-height: 1.02;
+  overflow-wrap: break-word;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile-s {
+  color: var(--note-soft);
+  font-size: clamp(13px, 1.25vw, 17px);
+  font-weight: 500;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile-s-strong {
+  color: var(--note-ink);
+  font-size: clamp(17px, 1.8vw, 24px);
+  font-weight: 700;
+}
+
+/* Severity band: hue AND thickness climb together. */
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='quiet'],
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='GREEN'] {
+  box-shadow: inset 0 6px 0 var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='steady'],
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='AMBER'] {
+  box-shadow: inset 0 9px 0 var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='busy'] {
+  box-shadow: inset 0 12px 0 var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='standard'][data-colour='wayfind'] .note-tile[data-tone='RED'] {
+  border-color: var(--note-very);
+  box-shadow: inset 0 16px 0 var(--note-very);
+}
+
+/* Dots are square sign lamps, and the count is the real signal. */
+.note-body[data-style='standard'][data-colour='wayfind'] .note-dots {
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-dot {
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 2px var(--note-hair);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-dot.is-on[data-tone='quiet'] {
+  background: var(--note-quiet);
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-dot.is-on[data-tone='steady'] {
+  background: var(--note-steady);
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-dot.is-on[data-tone='busy'] {
+  background: var(--note-busy);
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-dot.is-on[data-tone='very-busy'] {
+  background: var(--note-very);
+  box-shadow: none;
+}
+
+/* ── Ticker: the yellow information band across the foot of a sign ──────── */
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-ticker {
+  background: var(--note-void);
+  border: 0;
+  border-top: 3px solid var(--note-flap);
+  border-bottom: 3px solid var(--note-flap);
+  border-radius: 0;
+  padding: 12px 0;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-ticker-seq {
+  color: var(--note-flap);
+  font-size: clamp(15px, 1.5vw, 20px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-ticker-dot {
+  color: rgba(255, 210, 0, 0.5);
+}
+
+/* ── Foot ───────────────────────────────────────────────────────────────── */
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-foot {
+  border-top: 1px solid var(--note-hair);
+  color: var(--note-mute);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  padding: 9px 20px 12px;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-demo-flag {
+  color: var(--note-flap);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-error {
+  color: var(--note-very);
+}
+
+/* ── Fail loud: hazard band, red frame, sign-voice instruction ──────────── */
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-fail {
+  position: relative;
+  background: var(--note-void);
+  border: 3px solid var(--note-very);
+  border-radius: 4px;
+  padding-top: clamp(38px, 6vw, 84px);
+  gap: 16px;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-fail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 14px;
+  background: repeating-linear-gradient(45deg, #ffd200 0 18px, #100d00 18px 36px);
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-fail-title {
+  color: var(--note-ink);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-fail-ask {
+  color: var(--note-flap);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-fail-body {
+  color: var(--note-ink);
+  font-weight: 600;
+  max-width: 30em;
+}
+
+.note-body[data-style='standard'][data-colour='wayfind'] .note-fail-banner {
+  background: rgba(255, 68, 54, 0.18);
+  border: 3px solid var(--note-very);
+  border-radius: 2px;
+  color: var(--note-ink);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Small screens (a laptop preview of a TV layout) ────────────────────── */
+
+@media (max-width: 720px) {
+  .note-body[data-style='standard'][data-colour='wayfind'] .note-flap-glyph {
+    font-size: clamp(11px, 3vw, 18px);
+  }
+
+  .note-body[data-style='standard'][data-colour='wayfind'] .note-clock .note-flap-glyph {
+    font-size: clamp(10px, 2.6vw, 16px);
+  }
+
+  .note-body[data-style='standard'][data-colour='wayfind'] .note-tile-v {
+    font-size: 38px;
+  }
+
+  .note-body[data-style='standard'][data-colour='wayfind'] .note-tile-v-word {
+    font-size: 26px;
+  }
+}
