@@ -246,6 +246,10 @@ const { pathToFileURL } = require('url');
     );
     check(sanitiseYoutubeList(`https://youtu.be/dQw4w9wg?list=${good}`) === good, 'youtu.be with list= yields the id');
     check(
+      sanitiseYoutubeList(`www.youtube.com/playlist?list=${good}`) === good,
+      'scheme-less playlist URL is accepted'
+    );
+    check(
       sanitiseYoutubeList(`https://music.youtube.com/playlist?list=${good}`) === good,
       'music.youtube.com playlist URL is accepted'
     );
@@ -272,6 +276,7 @@ const { pathToFileURL } = require('url');
     check(src.startsWith('https://www.youtube-nocookie.com/embed/videoseries?'), 'embed is youtube-nocookie only');
     check(src.includes(`list=${good}`), 'embed carries the sanitised id');
     check(src.includes('mute=1') && src.includes('autoplay=1'), 'embed starts muted so autoplay can run');
+    check(!/[&?]playlist=/.test(src), 'embed does not pass playlist= on a videoseries URL');
     check(!src.includes('evil'), 'embed never interpolates a rejected host');
   }
 
@@ -524,14 +529,23 @@ const { pathToFileURL } = require('url');
     check(renderer.includes('dataset.style'), 'kiosk applies the chosen style');
     check(renderer.includes('dataset.colour'), 'kiosk applies the chosen colour');
     check(renderer.includes('youtubeEmbedUrl'), 'kiosk builds the playlist iframe from the sanitised helper');
-    check(renderer.includes('class="note-yt"'), 'kiosk paints the playlist pane');
+    check(renderer.includes('function ensureYtPane'), 'kiosk keeps the playlist iframe across poll ticks');
+    check(renderer.includes('ytFrame.src === src'), 'kiosk leaves an unchanged player alone');
+    check(renderer.includes('note-yt'), 'kiosk paints the playlist pane');
     check(
       !/iframe[\s\S]{0,400}youtubeListId/.test(renderer),
       'kiosk never interpolates the raw playlist field into an iframe'
     );
     check(!renderer.includes('youtube.com/embed'), 'kiosk does not embed youtube.com');
-    const failFn = renderer.slice(renderer.indexOf('function failLoudHtml'), renderer.indexOf('function youtubeHtml'));
+    const failFn = renderer.slice(
+      renderer.indexOf('function failLoudHtml'),
+      renderer.indexOf('function wantsYoutubePane')
+    );
     check(!failFn.includes('note-yt') && !failFn.includes('youtube'), 'fail-loud HTML has no playlist player');
+    const ioSrc = fs.readFileSync(path.join(__dirname, 'shared', 'io', 'board-io.js'), 'utf8');
+    const coreSrc = fs.readFileSync(path.join(__dirname, 'board', 'board-core.js'), 'utf8');
+    const listRe = 'YOUTUBE_LIST_RE = /^[A-Za-z0-9_-]{10,80}$/';
+    check(coreSrc.includes(listRe) && ioSrc.includes(listRe), 'playlist id regex is locked across core and import IO');
     const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
     check(
       manifest.content_security_policy.extension_pages.includes("frame-src 'self' https://www.youtube-nocookie.com"),
@@ -542,6 +556,8 @@ const { pathToFileURL } = require('url');
     check(companion.includes('This plays on a public TV'), 'companion warns the playlist is for a public TV');
     check(companion.includes('starts muted'), 'companion says the TV starts muted');
     check(companion.includes('noteModYoutube'), 'companion writes the playlist field');
+    check(companion.includes("That's not a YouTube playlist link"), 'companion names a bad playlist paste');
+    check(companion.includes('music or TV licence'), 'companion names the waiting-room licence');
     const html = fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8');
     for (const style of BOARD_STYLES.filter((s) => s.id !== 'standard')) {
       check(html.includes(`board/styles/${style.id}.css`), `kiosk loads ${style.id}.css`);

@@ -73,9 +73,13 @@ export function sanitiseYoutubeList(raw) {
   if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
     return '';
   }
+  let candidate = s;
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+    candidate = `https://${s.replace(/^\/\//, '')}`;
+  }
   let url;
   try {
-    url = new URL(s);
+    url = new URL(candidate);
   } catch {
     return '';
   }
@@ -94,7 +98,6 @@ export function youtubeEmbedUrl(listId) {
     autoplay: '1',
     mute: '1',
     loop: '1',
-    playlist: id,
     rel: '0',
     modestbranding: '1',
     playsinline: '1',

@@ -34,9 +34,13 @@
     if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
       return '';
     }
+    let candidate = s;
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+      candidate = 'https://' + s.replace(/^\/\//, '');
+    }
     let url;
     try {
-      url = new URL(s);
+      url = new URL(candidate);
     } catch {
       return '';
     }

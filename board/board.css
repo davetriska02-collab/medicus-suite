@@ -210,7 +210,7 @@ body {
   grid-area: ticker;
 }
 
-.note-board-has-yt .note-clock {
+.note-board-has-yt .note-clock-wrap {
   grid-area: clock;
 }
 
@@ -224,6 +224,16 @@ body {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.note-yt-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--note-mute);
+  font-size: clamp(13px, 1.2vw, 16px);
 }
 
 .note-yt-frame {

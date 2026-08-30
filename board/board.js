@@ -42,6 +42,7 @@ let pollTimer = null;
 let clockTimer = null;
 let lastFlap = '';
 let lastClock = '';
+let ytFrame = null;
 
 function requestedProfileId() {
   const q = new URLSearchParams(location.search);
@@ -180,11 +181,59 @@ function failLoudHtml() {
   </div>`;
 }
 
-function youtubeHtml() {
-  if (!widgetSet().has('youtube')) return '';
+function wantsYoutubePane() {
+  return widgetSet().has('youtube') && Boolean(youtubeEmbedUrl(profile.youtubeListId));
+}
+
+function ensureYtPane(board) {
   const src = youtubeEmbedUrl(profile.youtubeListId);
-  if (!src) return '';
-  return `<aside class="note-yt" aria-label="Practice playlist"><iframe class="note-yt-frame" title="Practice playlist" src="${esc(src)}" allow="autoplay; fullscreen" referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation"></iframe></aside>`;
+  if (!src) {
+    board.querySelector('.note-yt')?.remove();
+    ytFrame = null;
+    return;
+  }
+  if (ytFrame && ytFrame.isConnected && ytFrame.src === src) return;
+  board.querySelector('.note-yt')?.remove();
+  const pane = document.createElement('aside');
+  pane.className = 'note-yt';
+  pane.setAttribute('aria-label', 'Practice playlist');
+  const fallback = document.createElement('span');
+  fallback.className = 'note-yt-fallback';
+  fallback.textContent = 'Playlist unavailable';
+  pane.appendChild(fallback);
+  ytFrame = document.createElement('iframe');
+  ytFrame.className = 'note-yt-frame';
+  ytFrame.title = 'Practice playlist';
+  ytFrame.setAttribute('allow', 'autoplay; fullscreen');
+  ytFrame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+  ytFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+  ytFrame.src = src;
+  pane.appendChild(ytFrame);
+  board.appendChild(pane);
+}
+
+function paintLiveBoard(partsHtml, showYt) {
+  const className = showYt ? 'note-board note-board-has-yt' : 'note-board';
+  let board = stage.firstElementChild;
+  const same =
+    board &&
+    board.className === className &&
+    board.getAttribute('data-profile') === profile.id &&
+    board.getAttribute('data-audience') === profile.audience;
+  if (!same) {
+    stage.innerHTML = `<div class="${className}" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}"></div>`;
+    board = stage.firstElementChild;
+    ytFrame = null;
+  }
+  for (const child of [...board.children]) {
+    if (!child.classList.contains('note-yt')) child.remove();
+  }
+  if (partsHtml) board.insertAdjacentHTML('afterbegin', partsHtml);
+  if (showYt) ensureYtPane(board);
+  else {
+    board.querySelector('.note-yt')?.remove();
+    ytFrame = null;
+  }
 }
 
 function render() {
@@ -193,6 +242,7 @@ function render() {
   const parts = [];
 
   if (publicFeedFailed()) {
+    ytFrame = null;
     stage.innerHTML = failLoudHtml();
     paintChrome();
     return;
@@ -295,13 +345,12 @@ function render() {
   if (s && widgets.has('ticker')) parts.push(tickerHtml(s.ticker));
   if (widgets.has('clock')) parts.push(clockHtml(lastClock));
 
-  const yt = youtubeHtml();
-  if (!parts.length && !yt) {
+  const showYt = wantsYoutubePane();
+  if (!parts.length && !showYt) {
+    ytFrame = null;
     stage.innerHTML = `<div class="note-empty">${esc(boardCopy().emptyBoard)}</div>`;
-  } else if (yt) {
-    stage.innerHTML = `<div class="note-board note-board-has-yt" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}${yt}</div>`;
   } else {
-    stage.innerHTML = `<div class="note-board" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}</div>`;
+    paintLiveBoard(parts.join(''), showYt);
   }
 
   paintChrome();

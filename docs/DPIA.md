@@ -58,6 +58,12 @@ all already visible to the authorised clinician in the source record.
   the user selected — never a patient identifier or any other patient data.
   The key is stored locally on that device only and is excluded from suite
   backups.
+- **Note YouTube playlist (optional, off by default, from v3.254.0).** A
+  practice-authored playlist can play on a waiting-room TV. No patient data is
+  sent. The request is an iframe to `youtube-nocookie.com` carrying only a
+  sanitised playlist id. Google sees the practice workstation's public IP and
+  ordinary playback telemetry. The practice elects this path and owns the
+  transfer; it is not on by default.
 
 **Employee data — a second data class (rota, from v3.211.0).** The rota surface
 processes **staff** rather than patient data, and it is the only part of the

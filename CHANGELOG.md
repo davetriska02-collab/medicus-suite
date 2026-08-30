@@ -13,8 +13,9 @@ the TV. The player starts muted so the browser will autoplay; unmute on
 the TV if you want sound.
 
 Only a sanitised playlist id is stored and embedded, and only through
-YouTube's privacy-enhanced player. A dead public feed still hides the
-player. The playlist cannot unlock names or staff-only tiles.
+YouTube's privacy-enhanced player. The player stays put across live-figure
+refreshes so the playlist does not restart every poll. A dead public feed
+still hides the player. The playlist cannot unlock names or staff-only tiles.
 
 ## [v3.253.2] — 2026-08-30
 
