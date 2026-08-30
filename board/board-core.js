@@ -228,6 +228,156 @@ export const DEFAULT_PROFILES = [
   },
 ];
 
+export const DEFAULT_STYLE_ID = 'standard';
+export const DEFAULT_COLOUR_ID = 'flap';
+
+// Ten structural styles. Standard keeps the split-flap chassis and then
+// takes a colour option. The other nine change layout, type and chrome.
+export const BOARD_STYLES = [
+  {
+    id: 'standard',
+    name: 'Standard',
+    blurb: 'Split-flap station board. Colour options below.',
+  },
+  {
+    id: 'clear',
+    name: 'Clear',
+    blurb: 'Light, airy, large sans. Soft and spare, like a modern phone.',
+  },
+  {
+    id: 'plain',
+    name: 'Plain',
+    blurb: 'Black on white. No decoration. The words do the work.',
+  },
+  {
+    id: 'service',
+    name: 'Service',
+    blurb: 'Clinical notice. Blue bar, white page, the NHS service voice.',
+  },
+  {
+    id: 'notice',
+    name: 'Notice',
+    blurb: 'Broadsheet masthead. Serif headline, thin rules, paper.',
+  },
+  {
+    id: 'sign',
+    name: 'Sign',
+    blurb: 'Corridor wayfinding. Huge condensed type, numbers first.',
+  },
+  {
+    id: 'timetable',
+    name: 'Timetable',
+    blurb: 'Departure board. Amber LED rows, one line per figure.',
+  },
+  {
+    id: 'console',
+    name: 'Console',
+    blurb: 'Dense instrument panel. Small type, many rules, low glare.',
+  },
+  {
+    id: 'lobby',
+    name: 'Lobby',
+    blurb: 'One large sentence. Quiet figures. A hotel desk, not a clinic.',
+  },
+  {
+    id: 'plaque',
+    name: 'Plaque',
+    blurb: 'Museum caption. Small type on a large wall. Space is the material.',
+  },
+];
+
+// Colour options apply only to Standard. Older configs stored one of these
+// as styleId; sanitiseConfig migrates that to style=standard + colour=id.
+export const BOARD_COLOURS = [
+  {
+    id: 'flap',
+    name: 'Split-flap',
+    blurb: 'Cream flaps on a black chassis.',
+    swatches: ['#07080b', '#e7dcc8', '#fbbf24'],
+  },
+  {
+    id: 'daylight',
+    name: 'Daylight',
+    blurb: 'Navy ink on warm off-white cards.',
+    swatches: ['#f3efe6', '#1b2740', '#a8142b'],
+  },
+  {
+    id: 'clinic',
+    name: 'Clinic',
+    blurb: 'Pale flaps on an NHS-blue sign.',
+    swatches: ['#003087', '#f0f4f5', '#ffb81c'],
+  },
+  {
+    id: 'wayfind',
+    name: 'Wayfind',
+    blurb: 'Safety-yellow plates on black.',
+    swatches: ['#000000', '#ffd200', '#ffffff'],
+  },
+  {
+    id: 'transit',
+    name: 'Transit',
+    blurb: 'Amber glyphs on a departure board.',
+    swatches: ['#000000', '#17130c', '#ffb000'],
+  },
+  {
+    id: 'instrument',
+    name: 'Instrument',
+    blurb: 'Cool slate, hairline borders.',
+    swatches: ['#0e1725', '#1a2840', '#48d19b'],
+  },
+  {
+    id: 'nightwatch',
+    name: 'Night watch',
+    blurb: 'Phosphor figures, low glare.',
+    swatches: ['#05080a', '#9fe9bd', '#f5a33c'],
+  },
+  {
+    id: 'ledger',
+    name: 'Ledger',
+    blurb: 'Warm paper and a serif message.',
+    swatches: ['#f2ece0', '#1c1913', '#855510'],
+  },
+  {
+    id: 'gallery',
+    name: 'Gallery',
+    blurb: 'Pale stone and charcoal plates.',
+    swatches: ['#d6d3cc', '#2c2e2b', '#b08d4f'],
+  },
+  {
+    id: 'harbour',
+    name: 'Harbour',
+    blurb: 'Harbour teal and brass edges.',
+    swatches: ['#06201e', '#14403a', '#c8a45e'],
+  },
+];
+
+const STYLE_ID_SET = new Set(BOARD_STYLES.map((s) => s.id));
+const COLOUR_ID_SET = new Set(BOARD_COLOURS.map((c) => c.id));
+
+export function isLegacyColourAsStyle(id) {
+  return typeof id === 'string' && COLOUR_ID_SET.has(id) && !STYLE_ID_SET.has(id);
+}
+
+export function sanitiseStyleId(id) {
+  if (isLegacyColourAsStyle(id)) return DEFAULT_STYLE_ID;
+  return STYLE_ID_SET.has(id) ? id : DEFAULT_STYLE_ID;
+}
+
+export function sanitiseColourId(id) {
+  return COLOUR_ID_SET.has(id) ? id : DEFAULT_COLOUR_ID;
+}
+
+export function resolveStyleAndColour(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  if (isLegacyColourAsStyle(r.styleId)) {
+    return { styleId: DEFAULT_STYLE_ID, colourId: sanitiseColourId(r.styleId) };
+  }
+  return {
+    styleId: sanitiseStyleId(r.styleId),
+    colourId: sanitiseColourId(r.colourId),
+  };
+}
+
 export const DEFAULT_CONFIG = {
   version: 2,
   activeProfileId: 'waiting-room',
@@ -235,6 +385,8 @@ export const DEFAULT_CONFIG = {
   thresholds: { ...DEFAULT_THRESHOLDS },
   copy: { ...DEFAULT_COPY },
   publicCountsRequests: false,
+  styleId: DEFAULT_STYLE_ID,
+  colourId: DEFAULT_COLOUR_ID,
   profiles: DEFAULT_PROFILES.map((p) => ({ ...p, widgets: [...p.widgets] })),
 };
 
@@ -374,6 +526,7 @@ export function sanitiseConfig(raw) {
     thresholds: sanitiseThresholds(r.thresholds),
     copy: sanitiseCopy(r.copy),
     publicCountsRequests: r.publicCountsRequests === true,
+    ...resolveStyleAndColour(r),
     profiles,
   };
 }

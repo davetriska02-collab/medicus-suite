@@ -1,0 +1,228 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: lobby
+ *
+ * Hospitality desk. One enormous sentence on warm stone. Figures shrink to a
+ * quiet strip along the bottom. Palatino, not a clinic face.
+ */
+
+html:has(.note-body[data-style='lobby']) {
+  background: #e8ddd0;
+}
+
+.note-body[data-style='lobby'] {
+  color-scheme: light;
+  --note-void: #e8ddd0;
+  --note-chassis: #f3ebe2;
+  --note-well: #ddd0c0;
+  --note-hair: #c4b4a2;
+  --note-mute: #6b5b4b;
+  --note-soft: #3f342b;
+  --note-ink: #2a221b;
+  --note-flap: transparent;
+  --note-flap-ink: #2a221b;
+  --note-flap-split: transparent;
+  --note-flap-blank: transparent;
+  --note-quiet: #2f6b45;
+  --note-steady: #9a6b1f;
+  --note-busy: #b45309;
+  --note-very: #9f1239;
+  --note-sans: Palatino, 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --note-mono: Palatino, 'Palatino Linotype', Georgia, serif;
+  --lby-msg: clamp(40px, 6.2vw, 104px);
+  background: radial-gradient(900px 500px at 50% 20%, #f6efe7, #e8ddd0 70%);
+  color: #2a221b;
+}
+
+.note-body[data-style='lobby'] .note-chrome {
+  padding: 16px 28px 8px;
+  border-bottom: 0;
+}
+
+.note-body[data-style='lobby'] .note-chrome-name {
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='lobby'] .note-chrome-sub {
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--note-sans);
+}
+
+.note-body[data-style='lobby'] .note-chrome-select select,
+.note-body[data-style='lobby'] .note-chrome-btn {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #6b5b4b;
+  border-radius: 0;
+  color: #3f342b;
+}
+
+.note-body[data-style='lobby'] .note-stage {
+  align-items: center;
+  padding: clamp(24px, 8vh, 96px) clamp(24px, 8vw, 120px);
+}
+
+.note-body[data-style='lobby'] .note-board {
+  width: min(1040px, 100%);
+  gap: clamp(48px, 10vh, 120px);
+  align-items: center;
+}
+
+.note-body[data-style='lobby'] .note-flaps {
+  align-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap-row {
+  gap: 0;
+  align-items: baseline;
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap-row:not(:has(.note-flap:not(.note-flap-blank))) {
+  display: none;
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap {
+  width: auto;
+  min-width: 0.04em;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  font-size: var(--lby-msg);
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap-blank {
+  min-width: 0.28em;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-size: 1em;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  transform: none;
+}
+
+.note-body[data-style='lobby'] .note-flaps .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='lobby'] .note-metrics {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 36px;
+  width: 100%;
+  border-top: 1px solid #c4b4a2;
+  padding-top: 18px;
+}
+
+.note-body[data-style='lobby'] .note-tile {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  min-height: 0;
+  text-align: center;
+  align-items: center;
+}
+
+.note-body[data-style='lobby'] .note-tile-k {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='lobby'] .note-tile-v,
+.note-body[data-style='lobby'] .note-tile-v-word {
+  font-size: clamp(18px, 2vw, 26px);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.note-body[data-style='lobby'] .note-tile-s {
+  font-size: 12px;
+  font-style: italic;
+}
+
+.note-body[data-style='lobby'] .note-tile[data-tone] {
+  box-shadow: none;
+}
+
+.note-body[data-style='lobby'] .note-dot:not(.is-on) {
+  background: #c4b4a2;
+}
+
+.note-body[data-style='lobby'] .note-ticker {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font-style: italic;
+  text-align: center;
+}
+
+.note-body[data-style='lobby'] .note-clock .note-flap {
+  width: auto;
+  height: auto;
+  background: none;
+  box-shadow: none;
+}
+
+.note-body[data-style='lobby'] .note-clock .note-flap::after {
+  display: none;
+}
+
+html:has(.note-body[data-style='lobby'] .note-board-fail) {
+  background: #9f1239;
+}
+
+.note-body[data-style='lobby']:has(.note-board-fail) {
+  background: #9f1239;
+}
+
+.note-body[data-style='lobby'] .note-board-fail {
+  width: 100%;
+  gap: 24px;
+}
+
+.note-body[data-style='lobby'] .note-fail {
+  min-height: min(68vh, 720px);
+  background: #9f1239;
+  border: 0;
+  border-radius: 0;
+}
+
+.note-body[data-style='lobby'] .note-fail-title,
+.note-body[data-style='lobby'] .note-fail-body,
+.note-body[data-style='lobby'] .note-fail-ask {
+  color: #f6efe7;
+}
+
+.note-body[data-style='lobby'] .note-fail-ask {
+  font-size: clamp(28px, 3.6vw, 48px);
+}
+
+.note-body[data-style='lobby'] .note-foot {
+  border-top: 0;
+  color: #6b5b4b;
+  font-style: italic;
+}

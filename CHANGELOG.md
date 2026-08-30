@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.251.8] — 2026-08-29
+## [v3.253.2] — 2026-08-30
 
 ### Contacts canvas: flag wrong-type phone numbers on open; flag monoclonal antibodies with no monitoring rule
 
@@ -13,14 +13,78 @@ patient's own phone numbers — with a one-click "Fix type → Mobile" action, i
 merge in progress.
 
 Added a new high-risk-unmatched-medication class for monoclonal antibodies and closely-related
-biologics (infliximab, adalimumab, secukinumab, guselkumab, denosumab, and ~30 others across
-rheumatology, dermatology, respiratory, gastroenterology, neurology, bone and oncology) — none
-of these have a dedicated drug-monitoring rule (they're specialist-initiated under shared care),
-so they now get the same "verify monitoring is in place" nudge tacrolimus and methotrexate
-already do. Deliberately includes hospital-administered oncology mAbs, since Medicus routinely
-codes hospital-initiated medication onto the GP record and the practice wants these flagged
-clinically when they appear. JAK inhibitors (baricitinib, tofacitinib) are real immunosuppressants
-but not monoclonal antibodies, and are deliberately excluded from this class.
+biologics (infliximab, adalimumab, secukinumab, guselkumab and ~30 others across rheumatology,
+dermatology, respiratory, gastroenterology, neurology, bone and oncology) that have no dedicated
+drug-monitoring rule — they now get the same "verify monitoring is in place" nudge tacrolimus
+already does. Denosumab stays on the class list as a backstop only: it already has
+`denosumab-calcium`. Deliberately includes hospital-administered oncology mAbs, since Medicus
+routinely codes hospital-initiated medication onto the GP record. Local/intravitreal bevacizumab
+(including licensed bevacizumab gamma / Lytenava for wet AMD) is excluded — GPs are asked to
+record those eye injections, and they do not need shared-care blood monitoring. The ointment/cream
+exclude from topical tacrolimus is not copied onto this class: none of these mAbs have a marketed
+UK topical form. JAK inhibitors (baricitinib, tofacitinib) are real immunosuppressants but not
+monoclonal antibodies, and are deliberately excluded from this class.
+
+The on-open phone-type write now re-fetches the index patient's numbers after a successful change
+(H-056 control (h) — same as the merge-panel Fix type) and joins `anyWriteInFlight()`, so it
+cannot interleave with another canvas write.
+
+## [v3.253.1] — 2026-08-30
+
+### Note — fullscreen mastheads and louder dead feeds on quiet styles
+
+Service and Notice keep their masthead on a fullscreen TV (blue bar /
+broadsheet title). Only the setup buttons hide. Other styles still hide
+the whole chrome strip.
+
+Plain, Lobby and Plaque flood the page when a public feed is dead, so a
+tasteful layout cannot look like an empty surgery.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.253.0] — 2026-08-29
+
+### Note — ten styles, and colour options on Standard
+
+The ten palettes shipped in v3.252.0 are now the **Standard** style with
+colour options (Split-flap, Daylight, Clinic, Wayfind, Transit,
+Instrument, Night watch, Ledger, Gallery, Harbour).
+
+Nine more styles change the layout and the type, not just the hue:
+
+- **Clear** — light, airy, large sans
+- **Plain** — black on white, no decoration
+- **Service** — clinical public-service notice (not the NHS logo)
+- **Notice** — broadsheet masthead
+- **Sign** — corridor wayfinding, numbers first
+- **Timetable** — amber LED departure rows
+- **Console** — dense instrument panel
+- **Lobby** — one large sentence, quiet figures
+- **Plaque** — museum caption on a large wall
+
+Styles and colours change paint only. They do not change the numbers,
+the words, or the public-TV lock. Saved boards that still store an old
+look id become Standard plus that colour.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.252.0] — 2026-08-29
+
+### Note — ten looks for the board
+
+A practice can pick the look of every Note board from ten distinct
+professional styles. Split-flap stays the default. The others are
+Daylight, Clinic, Wayfind, Transit, Instrument, Night watch, Ledger,
+Gallery and Harbour.
+
+Looks change paint only. They do not change the numbers, the words, or
+the public-TV lock. No names, no staff tiles on a public board, wait
+time still a band, a dead public feed still fails loud.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
 
 ## [v3.251.7] — 2026-08-29
 

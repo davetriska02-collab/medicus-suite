@@ -1,0 +1,205 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / style: timetable
+ *
+ * A departure board, not a 2-up card grid. Black field, amber LED rows, one
+ * stacked line per figure. The message is a pair of LED strips.
+ */
+
+html:has(.note-body[data-style='timetable']) {
+  background: #050505;
+}
+
+.note-body[data-style='timetable'] {
+  color-scheme: dark;
+  --note-void: #050505;
+  --note-chassis: #0c0c0c;
+  --note-well: #080808;
+  --note-hair: #2a220c;
+  --note-mute: #8a7020;
+  --note-soft: #d4a017;
+  --note-ink: #ffb000;
+  --note-flap: #17130c;
+  --note-flap-ink: #ffb000;
+  --note-flap-split: transparent;
+  --note-flap-blank: #0c0c0c;
+  --note-quiet: #7dce6a;
+  --note-steady: #ffb000;
+  --note-busy: #ff7a18;
+  --note-very: #ff4d4d;
+  --note-sans: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  background: #050505;
+  color: #ffb000;
+}
+
+.note-body[data-style='timetable'] .note-chrome {
+  padding: 8px 14px;
+  border-bottom: 1px solid #2a220c;
+}
+
+.note-body[data-style='timetable'] .note-chrome-name {
+  font-family: var(--note-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.note-body[data-style='timetable'] .note-chrome-select select,
+.note-body[data-style='timetable'] .note-chrome-btn {
+  background: #0c0c0c;
+  border: 1px solid #ffb000;
+  border-radius: 0;
+  color: #ffb000;
+  font-family: var(--note-mono);
+  text-transform: uppercase;
+}
+
+.note-body[data-style='timetable'] .note-stage {
+  padding: 12px 16px;
+  align-items: stretch;
+}
+
+.note-body[data-style='timetable'] .note-board {
+  width: 100%;
+  gap: 8px;
+}
+
+.note-body[data-style='timetable'] .note-flaps {
+  align-items: stretch;
+  padding: 8px 10px;
+  background: #0c0c0c;
+  border: 1px solid #2a220c;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 4px;
+}
+
+.note-body[data-style='timetable'] .note-flap-row {
+  justify-content: flex-start;
+  gap: 2px;
+  background: #080808;
+  padding: 4px 6px;
+}
+
+.note-body[data-style='timetable'] .note-flap {
+  width: clamp(18px, 2.2vw, 32px);
+  height: clamp(26px, 3vw, 40px);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='timetable'] .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='timetable'] .note-flap-glyph {
+  font-family: var(--note-mono);
+  font-weight: 700;
+  letter-spacing: 0;
+  transform: none;
+}
+
+.note-body[data-style='timetable'] .note-flap.is-flip .note-flap-glyph {
+  animation: none;
+}
+
+.note-body[data-style='timetable'] .note-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.note-body[data-style='timetable'] .note-tile {
+  display: grid;
+  grid-template-columns: 14em 8em 1fr;
+  align-items: baseline;
+  gap: 12px;
+  background: #0c0c0c;
+  border: 0;
+  border-bottom: 1px solid #2a220c;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 8px 10px;
+  min-height: 0;
+}
+
+.note-body[data-style='timetable'] .note-tile-k {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a7020;
+}
+
+.note-body[data-style='timetable'] .note-tile-v,
+.note-body[data-style='timetable'] .note-tile-v-word {
+  font-size: clamp(18px, 2vw, 28px);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #ffb000;
+}
+
+.note-body[data-style='timetable'] .note-tile-s {
+  font-size: 13px;
+  color: #8a7020;
+}
+
+.note-body[data-style='timetable'] .note-tile[data-tone] {
+  box-shadow: none;
+}
+
+.note-body[data-style='timetable'] .note-tile[data-tone='quiet'] .note-tile-v {
+  color: var(--note-quiet);
+}
+.note-body[data-style='timetable'] .note-tile[data-tone='busy'] .note-tile-v,
+.note-body[data-style='timetable'] .note-tile[data-tone='busy'] .note-tile-v-word {
+  color: var(--note-busy);
+}
+.note-body[data-style='timetable'] .note-tile[data-tone='very-busy'] .note-tile-v,
+.note-body[data-style='timetable'] .note-tile[data-tone='RED'] .note-tile-v,
+.note-body[data-style='timetable'] .note-tile[data-tone='very-busy'] .note-tile-v-word {
+  color: var(--note-very);
+}
+
+.note-body[data-style='timetable'] .note-dot:not(.is-on) {
+  background: #2a220c;
+}
+
+.note-body[data-style='timetable'] .note-ticker {
+  background: #0c0c0c;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--note-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.note-body[data-style='timetable'] .note-clock .note-flap {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.note-body[data-style='timetable'] .note-clock .note-flap::after {
+  display: none;
+}
+
+.note-body[data-style='timetable'] .note-fail {
+  background: #3b0a0a;
+  border: 2px solid #ff4d4d;
+  border-radius: 0;
+}
+
+.note-body[data-style='timetable'] .note-fail-title,
+.note-body[data-style='timetable'] .note-fail-ask,
+.note-body[data-style='timetable'] .note-fail-body {
+  color: #ff4d4d;
+  font-family: var(--note-mono);
+  text-transform: uppercase;
+}
+
+.note-body[data-style='timetable'] .note-foot {
+  border-top: 1px solid #2a220c;
+  font-family: var(--note-mono);
+  color: #8a7020;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}

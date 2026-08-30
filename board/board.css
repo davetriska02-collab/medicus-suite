@@ -129,6 +129,19 @@ body {
   display: none;
 }
 
+/* Service and Notice use the chrome strip as the masthead (blue bar /
+ * broadsheet title). Hiding the whole strip on a TV loses the style.
+ * Keep the brand rail; hide only the setup buttons. */
+.note-body.is-fullscreen[data-style='service'] .note-chrome,
+.note-body.is-fullscreen[data-style='notice'] .note-chrome {
+  display: flex;
+}
+
+.note-body.is-fullscreen[data-style='service'] .note-chrome-actions,
+.note-body.is-fullscreen[data-style='notice'] .note-chrome-actions {
+  display: none;
+}
+
 .note-body.is-idle {
   cursor: none;
 }

@@ -1,0 +1,35 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / Standard colour: flap (the shipped default)
+ *
+ * Colour option for the Standard style. There are no tokens in this file on
+ * purpose. `flap` IS the default token set already declared on `:root` in
+ * board.css: cream flap faces on a black chassis. A board with no
+ * data-colour attribute renders this, so nothing here redeclares a --note-*
+ * value except the trim below.
+ *
+ * What is below applies only when Standard + colour=flap is set. It is trim,
+ * not a restyle: three values in board.css are neutral leftovers from the
+ * panel palette. The split-flap language is untouched.
+ */
+
+/* The ambient spill above the board is neutral white in board.css. Warming it
+ * to the flap-face cream reads as one lamp over the whole unit. */
+.note-body[data-style='standard'][data-colour='flap'] {
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(244, 239, 228, 0.05), transparent 60%), var(--note-void);
+}
+
+/* Unlit tempo positions: blue slate (#2a2e38) into the chassis family, and a
+ * touch more visible than before so the row still reads as four positions.
+ * :not(.is-on) is load-bearing: without it this ties on specificity with
+ * board.css's `.note-dot.is-on[data-tone=…]` and, being the later sheet,
+ * would win and unlight every dot. */
+.note-body[data-style='standard'][data-colour='flap'] .note-dot:not(.is-on) {
+  background: #332f26;
+}
+
+/* Hover border: blue slate (#2a3348) into the same warm family, and lifted
+ * from 1.48:1 to 1.82:1 against the chassis so the hover actually registers. */
+.note-body[data-style='standard'][data-colour='flap'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='flap'] .note-chrome-select select:hover {
+  border-color: #454036;
+}
