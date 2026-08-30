@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.253.3] — 2026-08-30
+## [v3.254.1] — 2026-08-30
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,21 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.254.0] — 2026-08-30
+
+### Note: embed a practice YouTube playlist on the TV
+
+A public Note board can now play a YouTube playlist beside the flaps and
+figures. Off by default. Paste a playlist URL in the Note tab, tick
+YouTube playlist, and open the board on the computer already plugged into
+the TV. The player starts muted so the browser will autoplay; unmute on
+the TV if you want sound.
+
+Only a sanitised playlist id is stored and embedded, and only through
+YouTube's privacy-enhanced player. The player stays put across live-figure
+refreshes so the playlist does not restart every poll. A dead public feed
+still hides the player. The playlist cannot unlock names or staff-only tiles.
 
 ## [v3.253.2] — 2026-08-30
 

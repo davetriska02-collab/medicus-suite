@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.253.2
+**Version:** v3.254.0
 **Generated:** 2026-08-30 (automated)
 
 ## What it is
@@ -91,8 +91,8 @@ The compact, glanceable half of the Rota Manager, available in the panel and pop
 The full **Rota Manager** (separate browser tab) additionally covers working-pattern templates, session-accounted leave, Bradford-factor/fit-note flags, a cover worklist and shift swaps, duty fairness, demand-led planning, and a drag-and-drop scheduling grid with an annealing solver. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, never block, and every threshold is a practice setting.
 
 ### Note
-Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Pick a style, add or rename boards, edit the flap message, toggle widgets, set the words and when the room looks busy, and open the kiosk.
-- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), how-busy from occupancy only by default; a dead feed fails loud rather than painting a quiet empty room
+Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Pick a style, add or rename boards, edit the flap message, toggle widgets, set the words and when the room looks busy, optionally paste a practice YouTube playlist, and open the kiosk.
+- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), how-busy from occupancy only by default; optional YouTube playlist (off by default); a dead feed fails loud rather than painting a quiet empty room
 - **Ops overview** (staff) — the same aggregates plus Practice Pressure Index, triage inbox and slots remaining; **Message** (public) — flap text and clock
 - Up to six extra public or staff boards with their own names, tiles and flap text
 - Ten styles (Standard, Clear, Plain, Service, Notice, Sign, Timetable, Console, Lobby, Plaque); Standard also has ten colour options. Paint only — the public-TV lock does not change
@@ -123,7 +123,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 - **Practice Report** — a printable snapshot built from Condor's pressure-index history.
 - **CQC Inspection Readiness** — a printable inspection-preparation summary.
-- **Note** — a TV/monitor kiosk (waiting room, staff ops, message, or a practice-made board). Public profiles show aggregates and practice-authored words only — never patient names.
+- **Note** — a TV/monitor kiosk (waiting room, staff ops, message, or a practice-made board). Public profiles show aggregates and practice-authored words only — never patient names. An optional YouTube playlist is off by default.
 
 ## Alert engine
 
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.254.0 (30 Aug)** — Note: optional YouTube playlist on a public TV (off by default; sanitised id only; fail-loud hides the player)
 - **v3.248.0–v3.253.1 (29–30 Aug)** — Note: a new full-tab TV/monitor display board (waiting room, ops overview, message and up to six custom boards), now with ten visual styles and ten colour options on the default style
 - **v3.249.0–v3.250.0 (29 Aug)** — QOF monitoring rework: disease-register-driven matching, a July 2026 rule refresh, fewer false positives
 - **v3.247.0 (27 Aug)** — "Send to routine list": one-click routine-prescription reassignment from the task page

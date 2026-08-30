@@ -77,6 +77,20 @@ html:has(.note-body[data-style='sign']) {
   gap: 20px 36px;
 }
 
+.note-body[data-style='sign'] .note-board.note-board-has-yt {
+  display: grid;
+  grid-template-columns: minmax(200px, 32%) 1fr minmax(280px, 34%);
+  grid-template-areas:
+    'metrics flaps yt'
+    'metrics ticker yt'
+    'clock clock yt';
+}
+
+.note-body[data-style='sign'] .note-yt {
+  grid-area: yt;
+  align-self: center;
+}
+
 .note-body[data-style='sign'] .note-flaps {
   grid-area: flaps;
   align-items: flex-start;

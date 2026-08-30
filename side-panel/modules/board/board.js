@@ -22,6 +22,7 @@ import {
   sanitiseMessage,
   sanitiseThresholds,
   sanitiseCopy,
+  sanitiseYoutubeList,
   isCustomProfileId,
   newCustomProfile,
   MAX_MESSAGE_CHARS,
@@ -197,6 +198,20 @@ function render() {
       </section>
 
       <section class="note-mod-card">
+        <h2 class="note-mod-h">YouTube playlist</h2>
+        <p class="note-mod-th-lead">Paste a playlist URL. This plays on a public TV. Use a practice playlist, not a personal Watch Later list. Check your practice's music or TV licence covers playing this in the waiting room. The TV starts muted so autoplay works. Unmute on the TV if you want sound.</p>
+        <label class="note-mod-line">
+          <span>Playlist URL</span>
+          <input type="text" id="noteModYoutube" placeholder="https://www.youtube.com/playlist?list=..." value="${esc(p.youtubeListId || '')}" />
+        </label>
+        <p class="note-mod-yt-echo" id="noteModYoutubeEcho">${
+          p.youtubeListId
+            ? `Saved as playlist ${esc(p.youtubeListId)}.`
+            : 'Paste a YouTube playlist link. It needs list= in the URL.'
+        }</p>
+      </section>
+
+      <section class="note-mod-card">
         <h2 class="note-mod-h">When this room looks busy</h2>
         <p class="note-mod-th-lead">These numbers are yours. They apply to every board.</p>
         <label class="note-mod-th">
@@ -367,6 +382,20 @@ function wire() {
     if (e.target.id === 'noteModName') {
       const p = activeProfile();
       p.name = sanitiseMessage(e.target.value).slice(0, MAX_PROFILE_NAME);
+      persistSoon();
+      return;
+    }
+    if (e.target.id === 'noteModYoutube') {
+      const p = activeProfile();
+      p.youtubeListId = sanitiseYoutubeList(e.target.value);
+      const echo = container.querySelector('#noteModYoutubeEcho');
+      if (echo) {
+        echo.textContent = p.youtubeListId
+          ? `Saved as playlist ${p.youtubeListId}.`
+          : e.target.value.trim()
+            ? "That's not a YouTube playlist link. It needs list= in the URL."
+            : 'Paste a YouTube playlist link. It needs list= in the URL.';
+      }
       persistSoon();
       return;
     }
