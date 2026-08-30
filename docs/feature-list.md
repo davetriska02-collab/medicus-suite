@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.253.1
+**Version:** v3.253.2
 **Generated:** 2026-08-30 (automated)
 
 ## What it is

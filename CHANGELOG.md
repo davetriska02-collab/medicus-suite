@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.253.2] — 2026-08-30
+## [v3.253.3] — 2026-08-30
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,33 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.253.2] — 2026-08-30
+
+### Contacts canvas: flag wrong-type phone numbers on open; flag monoclonal antibodies with no monitoring rule
+
+The contacts canvas already runs a duplicate-address check automatically whenever it opens for
+a patient; the same "fix a mobile-shaped number filed under the wrong type" logic previously
+only ran during an explicit manual-contact merge now runs the same way — on open, against the
+patient's own phone numbers — with a one-click "Fix type → Mobile" action, independent of any
+merge in progress.
+
+Added a new high-risk-unmatched-medication class for monoclonal antibodies and closely-related
+biologics (infliximab, adalimumab, secukinumab, guselkumab and ~30 others across rheumatology,
+dermatology, respiratory, gastroenterology, neurology, bone and oncology) that have no dedicated
+drug-monitoring rule — they now get the same "verify monitoring is in place" nudge tacrolimus
+already does. Denosumab stays on the class list as a backstop only: it already has
+`denosumab-calcium`. Deliberately includes hospital-administered oncology mAbs, since Medicus
+routinely codes hospital-initiated medication onto the GP record. Local/intravitreal bevacizumab
+(including licensed bevacizumab gamma / Lytenava for wet AMD) is excluded — GPs are asked to
+record those eye injections, and they do not need shared-care blood monitoring. The ointment/cream
+exclude from topical tacrolimus is not copied onto this class: none of these mAbs have a marketed
+UK topical form. JAK inhibitors (baricitinib, tofacitinib) are real immunosuppressants but not
+monoclonal antibodies, and are deliberately excluded from this class.
+
+The on-open phone-type write now re-fetches the index patient's numbers after a successful change
+(H-056 control (h) — same as the merge-panel Fix type) and joins `anyWriteInFlight()`, so it
+cannot interleave with another canvas write.
 
 ## [v3.253.1] — 2026-08-30
 

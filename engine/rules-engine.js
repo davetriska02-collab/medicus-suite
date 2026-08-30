@@ -150,6 +150,55 @@
       // https://cks.nice.org.uk/topics/eczema-atopic/prescribing-information/topical-calcineurin-inhibitors/
       exclude: ['ointment', 'cream', 'protopic'],
     },
+    {
+      // Most of these have no dedicated drug-monitoring rule (2026-08-29 request) — unlike
+      // the conventional DMARDs above, they're specialist-initiated under a shared-care
+      // agreement, so this is a "verify shared-care monitoring is in place" nudge, not a claim
+      // that the GP owns the blood tests. denosumab is the exception: `denosumab-calcium` already
+      // matches it (and its UK brands); the stem stays here as a backstop if that rule is
+      // disabled or a new brand slips the match list — same shape as methotrexate in the DMARD
+      // class. "-mab" is a WHO/INN substem reserved exclusively for monoclonal antibodies (and
+      // antibody fragments/conjugates) — no unrelated drug coincidentally ends in it, so this
+      // list is generic-name stems, matching this codebase's existing explicit-list convention
+      // (see drug-rules.json) rather than a suffix regex. etanercept and abatacept are
+      // technically fusion proteins, not antibodies, but carry the same specialist-biologic /
+      // no-GP-rule profile and are already grouped with the true mAbs in vaccine-rules.json's
+      // immunosuppression clauses — kept consistent with that here.
+      //
+      // Deliberately includes the oncology mAbs (nivolumab, pembrolizumab, trastuzumab, etc.)
+      // even though they're hospital-administered: Medicus routinely codes hospital-initiated
+      // medication onto the GP record (discharge letters, GP2GP, shared-care notifications), so
+      // these genuinely do appear as a patient's current medication here — and the practice wants
+      // them flagged clinically when they do (interaction-checking, immunosuppression awareness),
+      // not filtered out on an assumption that "the hospital already has this covered".
+      //
+      // Local / non-systemic exception — bevacizumab only. Intravitreal anti-VEGF (off-label
+      // Avastin and licensed bevacizumab gamma / Lytenava for wet AMD) is hospital-administered
+      // into the eye; ICBs ask the GP to record it, and it does not need shared-care bloods.
+      // Systemic IV bevacizumab (oncology infusion) still flags. None of the other stems have a
+      // marketed UK topical cream/ointment form, so the topical-tacrolimus exclude is NOT copied
+      // here — an "Infliximab ointment" string would still match (no such product exists).
+      //
+      // JAK inhibitors (baricitinib, tofacitinib, upadacitinib) are real immunosuppressants but are
+      // NOT monoclonal antibodies — deliberately absent from this list (see test coverage).
+      label: 'Biologic / monoclonal antibody (specialist-initiated — verify shared-care monitoring)',
+      stems: [
+        'infliximab', 'adalimumab', 'etanercept', 'golimumab', 'certolizumab',
+        'secukinumab', 'ixekizumab', 'bimekizumab', 'guselkumab', 'risankizumab', 'tildrakizumab', 'ustekinumab',
+        'mepolizumab', 'reslizumab', 'benralizumab', 'dupilumab', 'omalizumab',
+        'tocilizumab', 'sarilumab', 'canakinumab',
+        'vedolizumab', 'natalizumab',
+        'rituximab', 'ocrelizumab', 'ofatumumab', 'obinutuzumab',
+        'belimumab', 'abatacept',
+        'eculizumab', 'ravulizumab',
+        'denosumab',
+        'erenumab', 'fremanezumab', 'galcanezumab', 'eptinezumab',
+        'nivolumab', 'pembrolizumab', 'atezolizumab', 'durvalumab', 'ipilimumab', 'avelumab', 'cemiplimab',
+        'trastuzumab', 'pertuzumab', 'bevacizumab', 'cetuximab', 'panitumumab', 'ramucirumab',
+        'alemtuzumab', 'brentuximab', 'daratumumab',
+      ],
+      exclude: ['intravitreal', 'intravitreous', 'ophthalm', 'bevacizumab gamma', 'lytenava'],
+    },
     { label: 'Antimalarial (retinopathy/marrow monitoring)', stems: ['hydroxychloroquine'] },
     { label: 'Lithium', stems: ['lithium'] },
     { label: 'Antiarrhythmic', stems: ['amiodarone', 'dronedarone', 'digoxin'] },
