@@ -274,6 +274,13 @@
   font-size: 12px;
 }
 
+.note-mod-yt-echo {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
 .note-mod-add {
   display: flex;
   flex-wrap: wrap;
