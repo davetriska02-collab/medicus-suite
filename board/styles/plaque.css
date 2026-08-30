@@ -198,16 +198,38 @@ html:has(.note-body[data-style='plaque']) {
   display: none;
 }
 
+html:has(.note-body[data-style='plaque'] .note-board-fail) {
+  background: #8a1420;
+}
+
+.note-body[data-style='plaque']:has(.note-board-fail) {
+  background: #8a1420;
+}
+
+.note-body[data-style='plaque'] .note-board-fail {
+  width: 100%;
+  max-width: none;
+  padding: clamp(28px, 6vh, 80px) 24px;
+  background: #8a1420;
+  border: 0;
+  box-shadow: none;
+}
+
 .note-body[data-style='plaque'] .note-fail {
-  background: #6d1820;
-  border: 1px solid #e07a84;
+  background: transparent;
+  border: 0;
   border-radius: 0;
+  min-height: min(56vh, 640px);
 }
 
 .note-body[data-style='plaque'] .note-fail-title,
 .note-body[data-style='plaque'] .note-fail-body,
 .note-body[data-style='plaque'] .note-fail-ask {
   color: #f4efe4;
+}
+
+.note-body[data-style='plaque'] .note-fail-ask {
+  font-size: clamp(28px, 3.6vw, 48px);
 }
 
 .note-body[data-style='plaque'] .note-empty {

@@ -422,6 +422,23 @@ const { pathToFileURL } = require('url');
       /note-fail-body[\s\S]*?font-size:\s*clamp\(22px,\s*2\.8vw,\s*36px\)/.test(css),
       'fail-loud body matches Please ask reception size'
     );
+    check(css.includes('.note-body.is-fullscreen .note-chrome'), 'fullscreen hides setup chrome by default');
+    check(
+      css.includes(".note-body.is-fullscreen[data-style='service'] .note-chrome") &&
+        css.includes(".note-body.is-fullscreen[data-style='notice'] .note-chrome"),
+      'Service and Notice keep the masthead in fullscreen'
+    );
+    check(
+      css.includes(".note-body.is-fullscreen[data-style='service'] .note-chrome-actions") &&
+        css.includes(".note-body.is-fullscreen[data-style='notice'] .note-chrome-actions"),
+      'Service and Notice hide only the setup buttons in fullscreen'
+    );
+    const plain = fs.readFileSync(path.join(__dirname, 'board', 'styles', 'plain.css'), 'utf8');
+    const lobby = fs.readFileSync(path.join(__dirname, 'board', 'styles', 'lobby.css'), 'utf8');
+    const plaque = fs.readFileSync(path.join(__dirname, 'board', 'styles', 'plaque.css'), 'utf8');
+    check(plain.includes(':has(.note-board-fail)') && plain.includes('#9b1c1c'), 'Plain dead feed floods the page');
+    check(lobby.includes(':has(.note-board-fail)') && lobby.includes('#9f1239'), 'Lobby dead feed floods the page');
+    check(plaque.includes(':has(.note-board-fail)') && plaque.includes('#8a1420'), 'Plaque dead feed floods the wall');
     const companion = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'board', 'board.js'), 'utf8');
     check(!/patientName/.test(companion), 'companion never mentions patientName');
     check(companion.includes('Do not type patient names'), 'companion warns against names on the flap');
@@ -440,6 +457,10 @@ const { pathToFileURL } = require('url');
     check(companion.includes('data-look='), 'companion writes the chosen style');
     check(companion.includes('Colour of Standard'), 'companion exposes Standard colours');
     check(companion.includes('data-colour='), 'companion writes the chosen colour');
+    check(
+      DEFAULT_CONFIG.styleId && DEFAULT_CONFIG.profiles.every((p) => !Object.hasOwn(p, 'styleId')),
+      'one style for the whole practice, not per board'
+    );
     check(renderer.includes('dataset.style'), 'kiosk applies the chosen style');
     check(renderer.includes('dataset.colour'), 'kiosk applies the chosen colour');
     const html = fs.readFileSync(path.join(__dirname, 'board.html'), 'utf8');

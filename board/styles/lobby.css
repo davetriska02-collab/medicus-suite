@@ -191,7 +191,21 @@ html:has(.note-body[data-style='lobby']) {
   display: none;
 }
 
+html:has(.note-body[data-style='lobby'] .note-board-fail) {
+  background: #9f1239;
+}
+
+.note-body[data-style='lobby']:has(.note-board-fail) {
+  background: #9f1239;
+}
+
+.note-body[data-style='lobby'] .note-board-fail {
+  width: 100%;
+  gap: 24px;
+}
+
 .note-body[data-style='lobby'] .note-fail {
+  min-height: min(68vh, 720px);
   background: #9f1239;
   border: 0;
   border-radius: 0;
@@ -201,6 +215,10 @@ html:has(.note-body[data-style='lobby']) {
 .note-body[data-style='lobby'] .note-fail-body,
 .note-body[data-style='lobby'] .note-fail-ask {
   color: #f6efe7;
+}
+
+.note-body[data-style='lobby'] .note-fail-ask {
+  font-size: clamp(28px, 3.6vw, 48px);
 }
 
 .note-body[data-style='lobby'] .note-foot {

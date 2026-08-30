@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.253.1] — 2026-08-30
+
+### Note — fullscreen mastheads and louder dead feeds on quiet styles
+
+Service and Notice keep their masthead on a fullscreen TV (blue bar /
+broadsheet title). Only the setup buttons hide. Other styles still hide
+the whole chrome strip.
+
+Plain, Lobby and Plaque flood the page when a public feed is dead, so a
+tasteful layout cannot look like an empty surgery.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
 ## [v3.253.0] — 2026-08-29
 
 ### Note — ten styles, and colour options on Standard

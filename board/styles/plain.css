@@ -193,19 +193,34 @@ html:has(.note-body[data-style='plain']) {
   display: none;
 }
 
+html:has(.note-body[data-style='plain'] .note-board-fail) {
+  background: #9b1c1c;
+}
+
+.note-body[data-style='plain']:has(.note-board-fail) {
+  background: #9b1c1c;
+}
+
+.note-body[data-style='plain'] .note-board-fail {
+  width: 100%;
+}
+
 .note-body[data-style='plain'] .note-fail {
-  background: #fff;
-  border: 4px solid #9b1c1c;
+  min-height: min(68vh, 720px);
+  background: #9b1c1c;
+  border: 0;
   border-radius: 0;
 }
 
-.note-body[data-style='plain'] .note-fail-title {
-  color: #9b1c1c;
+.note-body[data-style='plain'] .note-fail-title,
+.note-body[data-style='plain'] .note-fail-body {
+  color: #fff;
 }
 
 .note-body[data-style='plain'] .note-fail-ask {
-  color: #9b1c1c;
-  text-decoration: underline;
+  color: #ffe8e5;
+  text-decoration: none;
+  font-size: clamp(28px, 3.6vw, 48px);
 }
 
 .note-body[data-style='plain'] .note-foot {
