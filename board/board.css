@@ -188,19 +188,34 @@ body {
 
 .note-body[data-style] .note-board.note-board-has-yt {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 38%);
+  grid-template-areas:
+    'flaps flaps'
+    'metrics yt'
+    'ticker yt'
+    'clock clock';
   align-items: center;
   width: min(1680px, 100%);
 }
 
-.note-yt-main {
-  display: flex;
-  flex-direction: column;
-  gap: inherit;
-  min-width: 0;
+.note-board-has-yt .note-flaps {
+  grid-area: flaps;
+}
+
+.note-board-has-yt .note-metrics {
+  grid-area: metrics;
+}
+
+.note-board-has-yt .note-ticker {
+  grid-area: ticker;
+}
+
+.note-board-has-yt .note-clock {
+  grid-area: clock;
 }
 
 .note-yt {
+  grid-area: yt;
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -222,6 +237,12 @@ body {
 @media (max-width: 900px) {
   .note-body[data-style] .note-board.note-board-has-yt {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      'flaps'
+      'metrics'
+      'ticker'
+      'yt'
+      'clock';
   }
 }
 

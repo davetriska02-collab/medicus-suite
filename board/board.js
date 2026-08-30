@@ -299,7 +299,7 @@ function render() {
   if (!parts.length && !yt) {
     stage.innerHTML = `<div class="note-empty">${esc(boardCopy().emptyBoard)}</div>`;
   } else if (yt) {
-    stage.innerHTML = `<div class="note-board note-board-has-yt" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}"><div class="note-yt-main">${parts.join('')}</div>${yt}</div>`;
+    stage.innerHTML = `<div class="note-board note-board-has-yt" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}${yt}</div>`;
   } else {
     stage.innerHTML = `<div class="note-board" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}</div>`;
   }

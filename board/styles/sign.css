@@ -79,15 +79,11 @@ html:has(.note-body[data-style='sign']) {
 
 .note-body[data-style='sign'] .note-board.note-board-has-yt {
   display: grid;
-  grid-template-columns: minmax(200px, 32%) 1fr minmax(280px, 38%);
+  grid-template-columns: minmax(200px, 32%) 1fr minmax(280px, 34%);
   grid-template-areas:
     'metrics flaps yt'
     'metrics ticker yt'
     'clock clock yt';
-}
-
-.note-body[data-style='sign'] .note-yt-main {
-  display: contents;
 }
 
 .note-body[data-style='sign'] .note-yt {
