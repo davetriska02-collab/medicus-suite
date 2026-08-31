@@ -33,7 +33,10 @@ hyphen; after Write the canvas shows Medicus, it does not re-split.
 
 On open, the even split is the starting board (staged, not written).
 Drag a request onto another doctor to move it; **Re-split equally**
-puts the even split back.
+puts the even split back. That button sat inside the unallocated pool
+(a drop target) and a failed split only whispered to the live region,
+so the click looked dead. It now sits above the board, always
+re-renders, and writes a visible note.
 
 Sequential Write used to stop at the first doctor whose POST failed, so
 only that share (a couple of requests) actually moved; the rest stayed

@@ -290,6 +290,18 @@ console.log('\n--- write stays on the lab client ---');
   check(/decorateRxRow/.test(canvas), 'rows are decorated after the task-list GET');
   check(/Re-split equally/.test(canvas), 're-split button resets to an even split');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied as the default board');
+  check(
+    /#ms-rxac-split[\s\S]{0,500}?stopPropagation/.test(canvas),
+    're-split click is not swallowed by the pool drop target'
+  );
+  check(
+    /Re-split ' \+[\s\S]{0,400}?_copyNote/.test(canvas) || /_copyNote\s*=[\s\S]{0,400}?Re-split /.test(canvas),
+    're-split writes a visible note, not only a live-region whisper'
+  );
+  check(
+    /evenSplitHtml\(\) \+[\s\S]{0,80}?<div class="ms-lac-workspace">/.test(canvas),
+    'even-split box is outside the unallocated pool drop target'
+  );
   check(/Drag a request onto another doctor/.test(canvas), 'copy says you can still move requests by hand');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');

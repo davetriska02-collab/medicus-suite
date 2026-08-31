@@ -40,7 +40,9 @@ Reject:
   still get work).
 - Applied as the starting board on open (staged, not written).
 - Drag a request onto another doctor to move it. **Re-split equally**
-  resets to the even split.
+  resets to the even split. The control lives outside the unallocated
+  pool (that column is a drop target). Click always re-renders with a
+  visible note — a failed split must not look like a dead button.
 - Review then write is unchanged.
 
 ## Write path (same class of bugs as the lab canvas)

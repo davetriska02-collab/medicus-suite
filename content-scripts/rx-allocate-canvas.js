@@ -688,24 +688,25 @@
         '</div>'
       );
     }
-    var canResplit = !!(_rows.length && dests.length);
+    var poolN = tilesForPlan().length;
+    var canResplit = !!(poolN && dests.length);
     return (
       '<div class="ms-lac-split" id="ms-rxac-split-box">' +
       '<p class="ms-lac-split-title">Split among doctors working ' +
       esc(phrase) +
       '</p>' +
       dayRow +
+      '<button type="button" class="ms-lac-confirm-btn" id="ms-rxac-split"' +
+      (canResplit ? '' : ' disabled') +
+      '>' +
+      (canResplit ? 'Re-split equally' : 'Nothing to split') +
+      '</button>' +
       '<p class="ms-lac-split-note">' +
       (_splitDefaulted
         ? 'Even split is the starting point. Drag a request onto another doctor to move it. Nothing is written until you confirm.'
         : 'No even split yet — drag requests onto a doctor, or re-split equally.') +
       '</p>' +
       (rows ? '<ul class="ms-lac-split-list">' + rows + '</ul>' : '') +
-      '<button type="button" class="ms-lac-confirm-btn" id="ms-rxac-split"' +
-      (canResplit ? '' : ' disabled') +
-      '>' +
-      (canResplit ? 'Re-split equally' : 'Nothing to split') +
-      '</button>' +
       '</div>'
     );
   }
@@ -723,6 +724,7 @@
     var clinicians = sortClinicianFields(board.clinicians);
     var teams = board.teams || [];
     return (
+      evenSplitHtml() +
       '<div class="ms-lac-workspace">' +
       '<div class="ms-lac-col ms-lac-pool" data-col-key="' +
       esc(pool.key) +
@@ -741,7 +743,6 @@
       '</span>' +
       '<span class="ms-lac-col-meta">Click a request, or a clinician heading for the lot. Ctrl-click adds more</span>' +
       '</div>' +
-      evenSplitHtml() +
       (body || emptyPoolHtml()) +
       '</div>' +
       '<aside class="ms-lac-rail" aria-label="Clinician and team fields">' +
@@ -1034,27 +1035,24 @@
       });
     var splitBtn = root.querySelector('#ms-rxac-split');
     if (splitBtn)
-      splitBtn.addEventListener('click', function () {
-        var plan = currentSplitPlan();
-        if (!plan.ok) {
-          announce(plan.reason);
-          return;
-        }
+      splitBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_writing) return;
         var applied = applyDefaultEvenSplit();
         _selected = {};
-        announce(
+        _confirmWrite = null;
+        _copyNote =
           applied && applied.ok
             ? 'Re-split ' +
-                applied.total +
-                ' equally onto ' +
-                applied.doctors +
-                ' doctors working ' +
-                dayPhrase() +
-                '. Drag a request to move it. Review then write to save.'
-            : applied && applied.reason
-              ? applied.reason
-              : 'Could not re-split.'
-        );
+              applied.total +
+              ' equally onto ' +
+              applied.doctors +
+              ' doctors working ' +
+              dayPhrase() +
+              '. Drag a request to move it. Review then write to save.'
+            : (applied && applied.reason) || 'Could not re-split.';
+        announce(_copyNote);
         render();
       });
     var addBtn = root.querySelector('#ms-lac-add-btn');

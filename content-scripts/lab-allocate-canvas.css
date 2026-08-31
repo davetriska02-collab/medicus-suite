@@ -954,6 +954,21 @@
   width: 100%;
 }
 
+#ms-rxac-overlay .ms-lac-board {
+  flex-direction: column;
+  gap: 10px;
+}
+
+#ms-rxac-overlay .ms-lac-split {
+  flex: 0 0 auto;
+  margin: 0;
+  max-height: 42%;
+  overflow: auto;
+  pointer-events: auto;
+  position: relative;
+  z-index: 4;
+}
+
 .ms-lac-split .ms-lac-confirm-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
