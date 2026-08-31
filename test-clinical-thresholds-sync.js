@@ -1,19 +1,13 @@
 // Medicus Suite — clinical threshold drift-guard test
 // Run with:  node test-clinical-thresholds-sync.js
 //
-// PURPOSE: Pin the clinical boundary values that are duplicated between
-// trends.js (eGFR/ACR stage functions + band arrays) and
-// visualiser-core.js (CLINICAL_ZONES). If either file's thresholds change,
-// this test fails and forces a deliberate, synchronised edit.
+// PURPOSE: Pin the clinical boundary values in trends.js (eGFR/ACR stage
+// functions + band arrays) and trend-chart.js (bpTarget). If those
+// thresholds change, this test fails and forces a deliberate edit.
 //
 // This is a CHARACTERISATION test — it pins the REAL current values found
 // in the source. Do not edit the expected values here without first verifying
-// the change in both source files.
-//
-// FUTURE OPTION (deferred — disproportionate risk for hygiene work):
-//   Extract a shared/clinical-thresholds.js (ESM with the repo's UMD guard)
-//   and import from both trends.js and visualiser-core.js. Only do this when
-//   the duplicated set grows materially. See ws4-hygiene.md §C1.
+// the change in the source files.
 //
 // TECHNIQUE: vm-extraction (see test-viewer-phase1.js / test-sentinel-panel-state.js
 // for the established pattern). trend-chart.js is imported dynamically since
@@ -116,61 +110,7 @@ if (acrBands) {
   );
 }
 
-// ── 3. visualiser-core.js — CLINICAL_ZONES ───────────────────────────────────
-//
-// visualiser-core.js runs browser globals at top level; we extract only
-// the CLINICAL_ZONES literal and evaluate it in isolation.
-
-const vcSrc = fs.readFileSync(path.join(__dirname, 'visualiser-core.js'), 'utf8');
-
-// Match the full CLINICAL_ZONES object literal (multiline, ends at `};`)
-const czM = vcSrc.match(/const CLINICAL_ZONES = \{[\s\S]*?\n\};/);
-check(!!czM, 'CLINICAL_ZONES extracted from visualiser-core.js');
-
-let CLINICAL_ZONES = null;
-if (czM) {
-  const sb = {};
-  vm.runInNewContext(czM[0] + '\nthis.CLINICAL_ZONES = CLINICAL_ZONES;', sb);
-  CLINICAL_ZONES = sb.CLINICAL_ZONES;
-}
-
-console.log('\n--- CLINICAL_ZONES.egfr boundary set ---');
-if (CLINICAL_ZONES) {
-  const egfr = CLINICAL_ZONES.egfr;
-  check(Array.isArray(egfr) && egfr.length > 0, 'CLINICAL_ZONES.egfr is a non-empty array');
-  const boundaries = new Set([...egfr.map(z => z.from), ...egfr.map(z => z.to)]);
-  const expected = new Set([0, 15, 30, 45, 60, 90, 250]);
-  check(
-    [...expected].every(v => boundaries.has(v)) && [...boundaries].every(v => expected.has(v)),
-    'CLINICAL_ZONES.egfr boundary set === {0,15,30,45,60,90,250}'
-  );
-}
-
-console.log('\n--- CLINICAL_ZONES.hba1c boundary set ---');
-if (CLINICAL_ZONES) {
-  const hba1c = CLINICAL_ZONES.hba1c;
-  check(Array.isArray(hba1c) && hba1c.length > 0, 'CLINICAL_ZONES.hba1c is a non-empty array');
-  const boundaries = new Set([...hba1c.map(z => z.from), ...hba1c.map(z => z.to)]);
-  const expected = new Set([0, 42, 48, 58, 75, 250]);
-  check(
-    [...expected].every(v => boundaries.has(v)) && [...boundaries].every(v => expected.has(v)),
-    'CLINICAL_ZONES.hba1c boundary set === {0,42,48,58,75,250}'
-  );
-}
-
-console.log('\n--- CLINICAL_ZONES[systolic blood pressure] boundary set ---');
-if (CLINICAL_ZONES) {
-  const sbp = CLINICAL_ZONES['systolic blood pressure'];
-  check(Array.isArray(sbp) && sbp.length > 0, 'CLINICAL_ZONES[systolic blood pressure] is a non-empty array');
-  const boundaries = new Set([...sbp.map(z => z.from), ...sbp.map(z => z.to)]);
-  const expected = new Set([0, 120, 140, 160, 300]);
-  check(
-    [...expected].every(v => boundaries.has(v)) && [...boundaries].every(v => expected.has(v)),
-    'CLINICAL_ZONES[systolic] boundary set === {0,120,140,160,300}'
-  );
-}
-
-// ── 4. trend-chart.js — bpTarget() ───────────────────────────────────────────
+// ── 3. trend-chart.js — bpTarget() ───────────────────────────────────────────
 //
 // trend-chart.js is a pure ESM with no browser globals — import it dynamically.
 
@@ -206,23 +146,6 @@ async function testBpTarget() {
   // No register → null
   const none = bpTarget([], 55, false);
   check(none === null, 'no relevant register → null');
-}
-
-// ── 5. RCV_TABLE — spot-check key entries ─────────────────────────────────────
-
-console.log('\n--- RCV_TABLE spot-check ---');
-const rcvM = vcSrc.match(/const RCV_TABLE = \{[\s\S]*?\};/);
-check(!!rcvM, 'RCV_TABLE extracted from visualiser-core.js');
-
-let RCV_TABLE = null;
-if (rcvM) {
-  const sb = {};
-  vm.runInNewContext(rcvM[0] + '\nthis.RCV_TABLE = RCV_TABLE;', sb);
-  RCV_TABLE = sb.RCV_TABLE;
-  check(RCV_TABLE['sodium']    === 0.013, 'sodium    RCV = 0.013');
-  check(RCV_TABLE['potassium'] === 0.05,  'potassium RCV = 0.05');
-  check(RCV_TABLE['egfr']      === 0.14,  'egfr      RCV = 0.14');
-  check(RCV_TABLE['hba1c']     === 0.12,  'hba1c     RCV = 0.12');
 }
 
 // ── Run async then report ────────────────────────────────────────────────────

@@ -128,14 +128,9 @@ const MODULES = {
   sentinel: { js: () => import('./modules/sentinel/sentinel.js'), css: './modules/sentinel/sentinel.css' },
   activity: { js: () => import('./modules/activity/activity.js'), css: './modules/activity/activity.css' },
   referrals: { js: () => import('./modules/referrals/referrals.js'), css: './modules/referrals/referrals.css' },
-  condor: { js: () => import('./modules/condor/condor.js'), css: './modules/condor/condor.css' },
   trends: { js: () => import('./modules/trends/trends.js'), css: './modules/trends/trends.css' },
   reception: { js: () => import('./modules/reception/reception.js'), css: './modules/reception/reception.css' },
   signing: { js: () => import('./modules/signing/signing.js'), css: './modules/signing/signing.css' },
-  followups: {
-    js: () => import('./modules/followups/followups.js'),
-    css: './modules/followups/followups.css',
-  },
   sweep: { js: () => import('./modules/sweep/sweep.js'), css: './modules/sweep/sweep.css' },
   knowledge: { js: () => import('./modules/knowledge/knowledge.js'), css: './modules/knowledge/knowledge.css' },
   leaflets: { js: () => import('./modules/leaflets/leaflets.js'), css: './modules/leaflets/leaflets.css' },
@@ -147,12 +142,11 @@ const MODULES = {
   phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
   board: { js: () => import('./modules/board/board.js'), css: './modules/board/board.css' },
-  about: null,
 };
-// NOTE: 'rota-app' is deliberately absent. Like 'visualiser', it opens the full
-// application in a browser tab; the nav click handler returns before
+// NOTE: 'rota-app' and 'duplicate-checker' are deliberately absent. They open
+// a full application in a browser tab; the nav click handler returns before
 // switchModule is reached, and the boot guard (`m in MODULES`) then correctly
-// refuses to restore the panel into it.
+// refuses to restore the panel into them.
 
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
@@ -348,18 +342,20 @@ function isTypingTarget(el) {
 
 // Visible, jumpable nav tabs in current DOM order — shared by the Ctrl/Cmd+Alt
 // cycler below and by wireKeyboardNav's digit-jump / "g" chord (item 6.1/6.2):
-// hidden tabs (suite.hiddenTabs) and the Visualiser special-case (it opens a
-// full browser tab, not an in-panel switch) are excluded from all three.
+// hidden tabs (suite.hiddenTabs) and full-tab launchers (rota manager,
+// duplicates) are excluded from all three.
 function jumpableTabs() {
   return Array.from(document.querySelectorAll('.nav-tab')).filter(
     (t) =>
-      !t.classList.contains('nav-tab-hidden') && t.dataset.module !== 'visualiser' && t.dataset.module !== 'rota-app'
+      !t.classList.contains('nav-tab-hidden') &&
+      t.dataset.module !== 'rota-app' &&
+      t.dataset.module !== 'duplicate-checker'
   );
 }
 
 // Keyboard tab navigation (power-user finding R4): Ctrl/Cmd+Alt+Left/Right cycle
 // the visible in-panel tabs without the mouse. Skipped while typing in a field,
-// and skips Visualiser and Rota manager (both open a full browser tab, not an
+// and skips Rota manager and Duplicates (both open a full browser tab, not an
 // in-panel switch — the compact 'rota' module stays in the cycle).
 function wireTabNavShortcuts() {
   document.addEventListener(
@@ -402,7 +398,7 @@ function wireTabNavShortcuts() {
 // their name so every entry stays mnemonic. Collisions and their resolutions:
 //   s* → slots keeps 's'; sentinel → 'm' (Monitoring), submissions → 'u',
 //        sweep → 'w'
-//   c* → condor keeps 'c'; capacity → 'p'
+//   c* → capacity keeps 'c'
 //   r* → referrals keeps 'r'; record → 'd', reception → 'e'
 //   t* → today keeps 't'; trends → 'n'
 const G_CHORD_MAP = {
@@ -410,12 +406,11 @@ const G_CHORD_MAP = {
   s: 'slots',
   m: 'sentinel',
   r: 'referrals',
-  c: 'condor',
+  c: 'capacity',
   a: 'activity',
   u: 'submissions',
   k: 'knowledge',
   l: 'leaflets',
-  p: 'capacity',
   w: 'sweep',
   e: 'reception',
   d: 'record',
@@ -645,10 +640,6 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
       return;
     }
     const mod = tab.dataset.module;
-    if (mod === 'visualiser') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
-      return;
-    }
     if (mod === 'duplicate-checker') {
       chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') });
       return;
@@ -791,287 +782,11 @@ const switchModule = createModuleLoader({
     // Keep an open help popover in step with the tab the user just switched to.
     if (helpOpen) renderHelpPopover();
   },
-  onSpecial: (name) => {
-    if (name === 'about') {
-      renderAbout();
-      return true;
-    }
-    return false;
-  },
   onPersist: (name) => {
-    // Don't persist 'about' as a boot target — it's a static info page,
-    // not a real module, so restoring it on next open is useless.
-    if (name === 'about') return;
     chrome.storage.local.set({ 'panel.activeModule': name });
   },
   escFn: escStrip,
 });
-
-// ── About module (inline) ─────────────────────────────────────────────────────
-
-function renderAbout() {
-  content.innerHTML = `
-    <div class="about-module">
-      <div class="about-brand">
-        <img class="about-brand-logo" src="../brand/app-icon.png" alt="Medicus Suite" width="40" height="40" />
-        <div class="about-brand-text">
-          <div class="about-brand-name">Medicus Suite</div>
-          <div class="about-brand-tagline">The clinical intelligence layer for Medicus</div>
-        </div>
-      </div>
-
-      <div class="feature-list-link">
-        <a href="https://github.com/davetriska02-collab/medicus-suite/raw/main/docs/feature-list.docx" target="_blank" rel="noopener noreferrer">
-          📄 Download the latest feature list (.docx)
-        </a>
-        <div class="feature-list-link-sub">Regenerated weekly. Source: <a href="https://github.com/davetriska02-collab/medicus-suite/blob/main/docs/feature-list.md" target="_blank" rel="noopener noreferrer">view on GitHub</a></div>
-      </div>
-
-      <h2>Modules</h2>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Today</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Morning command centre: waiting room, triage load, demand counts, available slots and
-          the pre-clinic sweep — one screen answers "what does today look like?" before clinic starts.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Slot Counter</span>
-          <span class="module-card-version">v2.2</span>
-        </div>
-        <div class="module-card-desc">
-          Available appointment slots by type for any date. API-based; no scheduling page required.
-          Updates live via Pusher when a Medicus tab is open.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Submissions Tracker</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Daily inbound task counts across medical, admin, investigation and prescription categories.
-          Today view, date range, day-vs-day comparison.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Triage Lens</span>
-          <span class="module-card-version">v0.5.0</span>
-        </div>
-        <div class="module-card-desc">
-          In-page overlay on Medicus patient records and triage queues.
-          User-defined keyword rules with severity chips. Runs as a content script.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Monitoring (Sentinel)</span>
-          <span class="module-card-version">v0.5.1</span>
-        </div>
-        <div class="module-card-desc">
-          Clinical context sidebar on patient records. Drug monitoring and QOF (Quality and Outcomes Framework) 25/26 indicators.
-          Runs as a content script; requires a patient page to be open.
-        </div>
-        <div class="purpose-box">
-          Software that displays, against the patient's active medication list, active problem list,
-          and recent observations as already recorded in the Medicus electronic patient record,
-          the most recent recorded values relevant to published drug-monitoring guidance and to QOF
-          2025/26 indicator criteria, and indicates whether those values fall within the recommended
-          interval or whether the relevant QOF indicator is achieved. The software does not recommend
-          clinical actions, does not order investigations, does not write to the patient record, does
-          not modify QOF claims data, does not transmit any data outside the user's browser, does
-          not analyse images, does not generate synthetic data, and does not constitute clinical
-          decision support. It is a passive display tool for use by the clinician as a memory aid.
-          All clinical decisions, including verification of any displayed value against the source
-          record, remain the responsibility of the clinician.
-        </div>
-        <a class="disclaimer-link" href="../docs/sentinel-DISCLAIMER.txt" target="_blank">View DISCLAIMER ↗</a>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Activity Report</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Practice activity per staff member across a configurable date range. Shows period totals
-          and a stacked horizontal bar chart broken down by consultations, prescription requests,
-          medication reviews, document tasks, and investigation results. API-based.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Referrals Tracker</span>
-          <span class="module-card-version">v1.0</span>
-        </div>
-        <div class="module-card-desc">
-          Referral audit data across a configurable date range. Shows total referral count with
-          priority (Routine / Urgent / 2WW) and status breakdowns, plus horizontal bar charts
-          by referring clinician, specialty, and hospital. Fetches from the Medicus
-          clinical-audit-report endpoint. API-based.
-        </div>
-      </div>
-
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Rota Manager</span>
-          <span class="module-card-version">v1.10</span>
-        </div>
-        <div class="module-card-desc">
-          Practice rota built in sessions: working patterns, leave (April–March, session-accounted),
-          registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.
-          The Rota manager tab opens the full app in a new browser tab; the Rota tab is the compact
-          morning view. Formerly a standalone extension, now part of the suite. Local storage only;
-          read-only where it reads Medicus, and no patient data is ever persisted.
-        </div>
-      </div>
-
-      <h2>Suite</h2>
-      <div class="module-card">
-        <div class="module-card-header">
-          <span class="module-card-name">Medicus Suite</span>
-          <span class="module-card-version">v${chrome.runtime.getManifest().version}</span>
-        </div>
-        <div class="module-card-desc">
-          This extension is a runtime container. It provides a side panel and shared infrastructure.
-          Each module above retains its own purpose, scope, and regulatory positioning.
-          The suite itself makes no clinical claims and provides no decision support.
-        </div>
-        <div style="margin-top:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <button id="checkUpdateBtn" style="font-size:11px; font-family:var(--mono); font-weight:600; color:var(--accent); background:rgba(59,130,246,0.12); border:1px solid rgba(59,130,246,0.25); border-radius:5px; padding:4px 10px; cursor:pointer;">Check for updates</button>
-          <span id="updateStatus" style="font-size:11px; font-family:var(--mono); color:var(--text-3);"></span>
-        </div>
-      </div>
-
-      <h2>Feedback</h2>
-      <div class="module-card">
-        <div class="module-card-desc" style="margin-bottom:10px;">
-          Found a bug, want a new feature, or have general feedback? Send it straight to the developer.
-          Your email client opens pre-filled — review and hit send.
-        </div>
-        <div class="fb-types" role="group" aria-label="Feedback type">
-          <button type="button" class="fb-type-btn active" data-fb-type="Feedback">Feedback</button>
-          <button type="button" class="fb-type-btn" data-fb-type="Feature request">Feature request</button>
-          <button type="button" class="fb-type-btn" data-fb-type="Bug report">Bug report</button>
-        </div>
-        <div class="fb-field">
-          <label for="fbSubject">Subject</label>
-          <input id="fbSubject" type="text" maxlength="120" placeholder="Short summary" />
-        </div>
-        <div class="fb-field">
-          <label for="fbDetails">Details</label>
-          <textarea id="fbDetails" rows="5" placeholder="What happened, what you expected, steps to reproduce…"></textarea>
-        </div>
-        <div class="fb-warn" role="note">⚠ Do not include patient-identifiable information (names, NHS numbers, dates of birth). Suite version and browser details are attached automatically.</div>
-        <div class="fb-actions">
-          <button id="fbSendBtn" type="button" class="fb-send-btn">Open email</button>
-          <span id="fbStatus" class="fb-status"></span>
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.getElementById('checkUpdateBtn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('checkUpdateBtn');
-    const status = document.getElementById('updateStatus');
-    if (!btn || !status) return;
-    btn.disabled = true;
-    btn.textContent = 'Checking…';
-    status.textContent = '';
-    try {
-      const result = await window.UpdateChecker.checkForUpdate({ force: true });
-      const installed = window.UpdateChecker.getInstalledVersion();
-      if (!result.ok) {
-        status.style.color = 'var(--red)';
-        status.textContent = result.error || 'Check failed';
-      } else if (window.UpdateChecker.isNewer(result.latestVersion, installed)) {
-        status.style.color = 'var(--amber)';
-        // Validate releaseUrl is a github.com https URL before injecting (defends against
-        // a spoofed/poisoned GitHub API response that could deliver a javascript: URL).
-        const safeUrl = /^https:\/\/github\.com\//.test(result.releaseUrl || '') ? result.releaseUrl : '#';
-        status.innerHTML = `v${escStrip(result.latestVersion)} available — <a href="${escStrip(safeUrl)}" target="_blank" rel="noopener noreferrer" style="color:var(--accent);">view release ↗</a>`;
-      } else {
-        status.style.color = 'var(--green)';
-        status.textContent = `v${installed} is up to date`;
-      }
-    } catch (e) {
-      status.style.color = 'var(--red)';
-      status.textContent = e.message || 'Unknown error';
-    }
-    btn.disabled = false;
-    btn.textContent = 'Check for updates';
-  });
-
-  // ── Feedback / feature request / bug report (mailto) ──────────────────────────
-  // Recipient is configurable in Options › Suite (suite.feedbackEmail); falls back
-  // to the default below when unset.
-  const FEEDBACK_EMAIL_DEFAULT = 'davetriska02@gmail.com';
-  const fbTypeBtns = document.querySelectorAll('.fb-type-btn');
-  fbTypeBtns.forEach((b) =>
-    b.addEventListener('click', () => {
-      fbTypeBtns.forEach((x) => x.classList.remove('active'));
-      b.classList.add('active');
-    })
-  );
-
-  document.getElementById('fbSendBtn')?.addEventListener('click', async () => {
-    const status = document.getElementById('fbStatus');
-    const subjectEl = document.getElementById('fbSubject');
-    const detailsEl = document.getElementById('fbDetails');
-    const type = document.querySelector('.fb-type-btn.active')?.dataset.fbType || 'Feedback';
-    const subject = (subjectEl?.value || '').trim();
-    const details = (detailsEl?.value || '').trim();
-
-    if (!subject && !details) {
-      if (status) {
-        status.style.color = 'var(--red)';
-        status.textContent = 'Add a subject or details first';
-      }
-      subjectEl?.focus();
-      return;
-    }
-
-    const version = chrome.runtime.getManifest().version;
-    const diag = [
-      '',
-      '──────────',
-      '(Diagnostics — please keep)',
-      `Type: ${type}`,
-      `Suite version: v${version}`,
-      `Browser: ${navigator.userAgent}`,
-      `Date: ${new Date().toISOString()}`,
-    ].join('\n');
-    const mailSubject = `[Medicus Suite] ${type}${subject ? ': ' + subject : ''}`;
-    const mailBody = `${details}\n${diag}`;
-    const stored = await chrome.storage.local.get('suite.feedbackEmail');
-    const recipient = (stored['suite.feedbackEmail'] || '').trim() || FEEDBACK_EMAIL_DEFAULT;
-    const url = `mailto:${recipient}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
-
-    // Use a transient anchor click rather than navigating the panel away.
-    const a = document.createElement('a');
-    a.href = url;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    if (status) {
-      status.style.color = 'var(--green)';
-      status.textContent = 'Opening your email client…';
-    }
-  });
-}
 
 // ── Service worker messages ────────────────────────────────────────────────────
 
@@ -2384,9 +2099,9 @@ wireKeyboardNav();
   const r = await chrome.storage.local.get(['panel.activeModule', 'suite.hiddenTabs']);
   const saved = r['panel.activeModule'];
   applyTabVisibility(r['suite.hiddenTabs']);
-  // Guard: must be a non-'about' key present in MODULES, and not a hidden tab.
+  // Guard: must be a real MODULES key, and not a hidden tab.
   const hiddenSet = new Set(sanitiseHiddenTabs(r['suite.hiddenTabs']));
-  const usable = (m) => m && m !== 'about' && m in MODULES && MODULES[m] !== null && !hiddenSet.has(m);
+  const usable = (m) => m && m in MODULES && MODULES[m] !== null && !hiddenSet.has(m);
   let startMod = usable(saved) ? saved : usable('today') ? 'today' : null;
   if (!startMod) {
     // Every preferred candidate hidden — first visible nav tab wins.

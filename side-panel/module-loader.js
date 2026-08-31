@@ -75,7 +75,7 @@ export function createModuleLoader({
     setActive(name);
     container.innerHTML = '';
 
-    // Handle special tabs (e.g. 'about', 'visualiser' in panel)
+    // Handle special tabs (panel-only launchers, if any)
     if (onSpecial && onSpecial(name)) return;
 
     if (onPersist) onPersist(name);

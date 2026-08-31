@@ -58,7 +58,7 @@ const GAP_BLOCK = [
   },
   {
     label: 'Consultation history',
-    note: 'Not shown in this pack — use the full visualiser for the timeline',
+    note: 'Not shown in this pack — read the record in Medicus for the timeline',
   },
 ];
 

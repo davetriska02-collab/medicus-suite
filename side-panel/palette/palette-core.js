@@ -21,12 +21,11 @@
 // signal it already has to gate presence.
 //
 // Distinct ids from the always-present nav:record / nav:trends / nav:sentinel
-// / open:visualiser commands — those jump to a tab regardless of context; these
+// commands — those jump to a tab regardless of context; these
 // are the "I'm mid-consultation, patient is open" quick actions, grouped
 // together under "Patient" so they float to the top of that context.
 export const PATIENT_COMMAND_IDS = Object.freeze({
   COPY_SUMMARY: 'patient:copy-summary',
-  OPEN_VISUALISER: 'patient:open-visualiser',
   JUMP_RECORD: 'patient:jump-record',
   JUMP_TRENDS: 'patient:jump-trends',
   JUMP_SENTINEL: 'patient:jump-sentinel',
@@ -34,11 +33,6 @@ export const PATIENT_COMMAND_IDS = Object.freeze({
 
 const PATIENT_COMMAND_DESCRIPTORS = [
   { id: PATIENT_COMMAND_IDS.COPY_SUMMARY, label: 'Copy patient summary', keywords: 'clipboard copy snapshot' },
-  {
-    id: PATIENT_COMMAND_IDS.OPEN_VISUALISER,
-    label: 'Open visualiser',
-    keywords: 'visualiser sar pdf record patient',
-  },
   { id: PATIENT_COMMAND_IDS.JUMP_RECORD, label: 'Jump to Record', keywords: 'patient record live summary' },
   { id: PATIENT_COMMAND_IDS.JUMP_TRENDS, label: 'Jump to Trends', keywords: 'patient trends chart metric' },
   { id: PATIENT_COMMAND_IDS.JUMP_SENTINEL, label: 'Jump to Sentinel', keywords: 'patient monitoring qof drug' },
