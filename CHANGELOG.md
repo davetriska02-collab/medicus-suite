@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.255.1] — 2026-08-31
+
+### Review fixes on the v3.255.0 prune
+
+- **Feedback / feature request / bug report is back.** The composer was deleted
+  with the About tab in v3.255.0 and had no replacement, leaving the suite with
+  no general route for a clinician to report a wrong chip, a missing rule or a
+  defect (only Monitoring's narrow "Report a possible missing brand" link
+  survived). Restored, unchanged, under **Settings → Suite → Send feedback**,
+  next to the recipient setting that drives it. Still a `mailto:` — nothing is
+  transmitted by the extension.
+- **Stale Settings copy.** The "Feedback recipient email" help text still
+  pointed at the "About-tab" button that no longer exists; it now names the
+  composer below it and the Monitoring link.
+- **Orphaned CSS removed.** ~250 lines left behind by the prune:
+  `.about-*` / `.module-card*` / `.purpose-box` / `.disclaimer-link*` /
+  `.feature-list-link*` / `.fb-*` in `side-panel/panel.css`, and
+  `.rec-foot` / `.rec-deep-btn*` / `.rec-foot-note` in `record.css` (the
+  "Open full visualiser" footer).
+- Dropped the deleted `visualiser-core.html` from the Atelier screenshot
+  harness, and closed a stray gap in `sentinel.js`'s import block.
+
 ## [v3.255.0] — 2026-08-31
 
 ### Prune unused and low-value surfaces

@@ -342,6 +342,18 @@
         cursor: not-allowed;
       }
 
+      /* Feedback type toggle (Settings › Suite › Send feedback) — a ghost
+         button that also carries a selected state. */
+      button.fb-type-btn {
+        padding: 6px 12px;
+        letter-spacing: 0.06em;
+      }
+      button.fb-type-btn.active {
+        border-color: var(--accent);
+        color: var(--text-1);
+        background: var(--accent-dim);
+      }
+
       .saved {
         color: var(--green);
         font-family: var(--mono);
@@ -1131,8 +1143,51 @@
             <label class="field-label">Feedback recipient email</label>
             <input type="email" id="feedbackEmail" placeholder="davetriska02@gmail.com" maxlength="120" />
             <span class="field-help">
-              Where the About-tab <strong>Feedback / feature request / bug report</strong> button sends email. Leave
-              blank to use the default (<code style="color: var(--text-3)">davetriska02@gmail.com</code>).
+              Where the <strong>Send feedback</strong> composer below sends email. Also used by the Monitoring panel's
+              "Report a possible missing brand" link. Leave blank to use the default
+              (<code style="color: var(--text-3)">davetriska02@gmail.com</code>).
+            </span>
+          </div>
+
+          <!-- Feedback / feature request / bug report composer ─────────────────
+               Moved here from the About tab when that tab was removed in
+               v3.255.0. This is the suite's only general-purpose route for a
+               clinician to report a wrong chip, a missing rule or a defect, so
+               it follows the tab rather than being dropped with it. -->
+          <div class="field">
+            <label class="field-label">Send feedback</label>
+            <div class="fb-types" role="group" aria-label="Feedback type" style="display: flex; gap: 6px; margin-bottom: 8px">
+              <button type="button" class="ghost fb-type-btn active" data-fb-type="Feedback">Feedback</button>
+              <button type="button" class="ghost fb-type-btn" data-fb-type="Feature request">Feature request</button>
+              <button type="button" class="ghost fb-type-btn" data-fb-type="Bug report">Bug report</button>
+            </div>
+            <input type="text" id="fbSubject" placeholder="Short summary" maxlength="120" />
+            <textarea
+              id="fbDetails"
+              rows="5"
+              placeholder="What happened, what you expected, steps to reproduce…"
+              style="
+                width: 100%;
+                box-sizing: border-box;
+                margin-top: 6px;
+                background: var(--bg-mid);
+                border: 1px solid var(--border-hi);
+                color: var(--text-1);
+                font-family: inherit;
+                font-size: 12px;
+                border-radius: var(--r-md);
+                padding: 8px 10px;
+                resize: vertical;
+                line-height: 1.5;
+              "
+            ></textarea>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px">
+              <button class="ghost" id="fbSendBtn">Open email</button>
+              <span id="fbStatus" style="font-family: var(--mono); font-size: 10px"></span>
+            </div>
+            <span class="field-help">
+              ⚠ Do not include patient-identifiable information (names, NHS numbers, dates of birth). Your email client
+              opens pre-filled — review it before sending. Suite version and browser details are attached automatically.
             </span>
           </div>
 

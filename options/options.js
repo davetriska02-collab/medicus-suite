@@ -203,6 +203,69 @@ document.getElementById('replayTourBtn')?.addEventListener('click', () => {
   }
 });
 
+// ── Feedback / feature request / bug report (mailto) ─────────────────────────
+// Ported verbatim from the About tab's composer when that tab was removed in
+// v3.255.0 — this is the suite's only general-purpose defect-reporting route,
+// so it follows the tab rather than being dropped with it. Recipient is the
+// suite.feedbackEmail set just above; falls back to the default below.
+// Nothing is transmitted here: a mailto: hands the draft to the user's own
+// mail client, which they review and send themselves.
+const FEEDBACK_EMAIL_DEFAULT = 'davetriska02@gmail.com';
+const fbTypeBtns = document.querySelectorAll('.fb-type-btn');
+fbTypeBtns.forEach((b) =>
+  b.addEventListener('click', () => {
+    fbTypeBtns.forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+  })
+);
+
+document.getElementById('fbSendBtn')?.addEventListener('click', async () => {
+  const status = document.getElementById('fbStatus');
+  const subjectEl = document.getElementById('fbSubject');
+  const detailsEl = document.getElementById('fbDetails');
+  const type = document.querySelector('.fb-type-btn.active')?.dataset.fbType || 'Feedback';
+  const subject = (subjectEl?.value || '').trim();
+  const details = (detailsEl?.value || '').trim();
+
+  if (!subject && !details) {
+    if (status) {
+      status.style.color = 'var(--red)';
+      status.textContent = 'Add a subject or details first';
+    }
+    subjectEl?.focus();
+    return;
+  }
+
+  const version = chrome.runtime.getManifest().version;
+  const diag = [
+    '',
+    '──────────',
+    '(Diagnostics — please keep)',
+    `Type: ${type}`,
+    `Suite version: v${version}`,
+    `Browser: ${navigator.userAgent}`,
+    `Date: ${new Date().toISOString()}`,
+  ].join('\n');
+  const mailSubject = `[Medicus Suite] ${type}${subject ? ': ' + subject : ''}`;
+  const mailBody = `${details}\n${diag}`;
+  const stored = await chrome.storage.local.get('suite.feedbackEmail');
+  const recipient = (stored['suite.feedbackEmail'] || '').trim() || FEEDBACK_EMAIL_DEFAULT;
+  const url = `mailto:${recipient}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+
+  // Transient anchor click rather than navigating the settings page away.
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  if (status) {
+    status.style.color = 'var(--green)';
+    status.textContent = 'Opening your email client…';
+  }
+});
+
 testConnectionBtn?.addEventListener('click', async () => {
   if (testConnectionResult) {
     testConnectionResult.textContent = 'Testing...';
