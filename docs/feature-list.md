@@ -97,7 +97,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue
 - **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who requested them, with clinician fields to drag reports onto; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
 - **Workflow allocation canvas** — the same workbench on inbound-document queues and any task-list with a workflow view, grouped by registered GP; confirming writes the same bulk-reassign (it does not file the document)
-- **Non-routine prescription allocation canvas** — the same workbench on the non-routine prescription-request queue, with an even-split preview among doctors working today; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
+- **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only) and Distribute equally (rebalances sitting plus new work) among doctors working today; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
 - **Companion (inline booking, tasks, and monitoring)** — a floating role-toggled box (Clinic / Reception / Triage / Nursing) on patient and task pages carrying appointment-booking and create-task panels plus a read-only "What's due" pocket of Sentinel chips for the page's patient. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document, and a checklist that turns a document's coded journal entries into new Problems
 - **Reception quick-actions composer** — chip rows above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit
@@ -140,7 +140,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.256.0 (31 Aug)** — Non-routine prescription allocation canvas, with even-split among doctors working today
+- **v3.256.0 (31 Aug)** — Prescription-request canvas on routine and non-routine queues, with Split equally / Top up / Distribute equally among doctors working today
 - **v3.255.0 (31 Aug)** — Pruned Follow-ups, Visualiser, About, Condor, CQC Inspection Readiness and Practice Report; Settings collapsed into Queue rules and Diagnostics
 - **v3.254.0 (30 Aug)** — Note: optional YouTube playlist on a public TV (off by default; sanitised id only; fail-loud hides the player)
 - **v3.248.0–v3.253.1 (29–30 Aug)** — Note: a new full-tab TV/monitor display board (waiting room, ops overview, message and up to six custom boards), now with ten visual styles and ten colour options on the default style

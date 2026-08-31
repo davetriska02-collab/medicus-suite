@@ -4,104 +4,37 @@ All notable changes to Medicus Suite are documented here.
 
 ## [v3.256.0] — 2026-08-31
 
-### Non-routine prescription allocation canvas
+### Prescription allocation canvas
 
-A sibling of the lab / workflow allocation canvases on the non-routine
-prescription-request queue (`prescription_request_task_non_routine`).
-Unallocated requests sit in a pile grouped by registered GP (a caption,
-never auto-placement). Drag onto a clinician field to stage; writing is
-the same W23 bulk-reassign (`LabAllocateCore.createClient`) and does not
-issue, sign, or file the prescription.
+Routine and non-routine prescription-request queues now have the same
+allocation canvas as labs and workflows. The board opens **un-proposed**:
+Unallocated is the large pane, doctors with a session on today’s book
+sit in a smaller sidebar, and usual GP is a caption on a tile — never
+auto-placement. Writing is the same W23 bulk-reassign as the lab canvas:
+it changes who the task sits with. **W23 does not issue, sign, or file
+the prescription.**
 
-The canvas also shows what an **even split** of the unallocated pile
-would look like for each doctor with a session on today’s appointment
-book, and can stage that split on the canvas. Cancelled sessions,
-absences, and (when any GP-looking session exists) nurses / pharmacists /
-HCAs are not destinations. Already-sitting work is not rebalanced.
-Staging the split still requires Review then write. The working day
-defaults to the calendar date; Tonight you can set it to tomorrow
-(date picker, or Today / Tomorrow) so the split uses that day’s book.
+**Split equally**, **Top up empty boxes**, and **Distribute equally**
+are user-initiated, not applied on load. Split proposes an even share
+of the unallocated pile only (already-sitting work stays put). Later
+in the day, Top up gives new work to whoever has least; Distribute
+rebalances sitting plus new so in-today totals differ by at most one.
+**Share this box** on a doctor folder splits only that doctor’s
+requests among those in today (holiday leftover). Cancelled sessions,
+absences, and (when any GP-looking session exists) nurses /
+pharmacists / HCAs are not destinations; Medicus teams can be. The
+working day defaults to today; Tonight you can set it to tomorrow so
+the split uses that day’s book.
 
-Write now actually reassigns. Same class of bugs as the lab canvas:
-the page filter could make the pre-write re-GET look empty (vanished
-abort, no POST); the hyphen twin of the slug was never tried on 404;
-even-split dests had names but no staff UUID so assigneeId was a
-guess; sitting work was restaged after Write so the board looked
-unchanged. Dest staff ids are pinned from the appointment book;
-Write re-reads the same open pile; POST tries underscore then
-hyphen; after Write the canvas shows Medicus, it does not re-split.
-
-After even-split (and after Clear) the board is a **folder grid**:
-Unallocated plus one folder per doctor showing what is in their box
-of this task type. Patients are always visible; drag between folders.
-Usual GP is a caption on a tile, not a folder. Proposed rows use the
-accent wash and a “not saved” token; already-sitting rows stay quiet.
-
-The twelve (or however many) in that inbox **are** the unallocated
-pile. They are assigned to the box UUID, so `assignedTo` looks like a
-person and the canvas used to show “12 tasks · 0 unallocated”. Those
-rows are now stamped as the inbox pile.
-
-The canvas launches on the **routine** prescription-request list as well
-as non-routine. Live inbox (2026-08-31) is
-`prescription_request_task_routine?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>`
-— that UUID is the routine box, and the GET keeps it. Bare GET of the
-slug was showing already-allocated GP work and hiding the inbox.
-
-Clinician fields have a dedicated **Expand** control (same patient list
-as investigations) that always opens the drawer.
-
-Even-split is the **unallocated** inbox pile only. Requests already
-sitting with a GP stay on that field and are not in the split counts.
-The queue inbox name is a team, not a person.
-
-On open the board is **un-proposed**: Unallocated is the large pane,
-doctors working today sit in a smaller sidebar. **Split equally** is
-a large primary control — a user-initiated proposal, not applied on
-load. After you click it, a **Proposal — not written yet** banner
-sits on the board and each doctor’s proposed count pops. Drag a
-patient from one doctor onto another to change who gets them.
-**Re-split equally** is gone on that proposal — it was the same
-split again. Later in the day, **Top up empty boxes** gives new
-unallocated work to whoever has least (so trickles do not land on
-the first two dests). **Distribute equally** rebalances sitting plus
-new work so in-today totals differ by at most one. After the pile
-is empty, Unallocated greens out as clear and the doctors populate
-as a grid. **Share this box** on a doctor folder splits only that
-doctor’s requests among those in today (holiday leftover).
-**Review then write N…** is the prominent start of the write;
-the next card is **Confirm write to Medicus**, then **Write to
-Medicus**. The review card floats inside the panel and does not
-cover the folders.
-
-Top-up and distribute name **who they go to** (To: Dr A, Dr B,
-Duty GP). Button styles match. Hover titles explain the working
-day, split/top-up/distribute, Share this box, Review, and Write.
-Medicus **teams** harvested from assignee options can be added as
-destinations and join the split. After the inbox is actually
-empty, the count is the visible unallocated pile — rows already
-sitting with a GP on the inbox GET are not restamped as the 32.
-
-**Distribute equally** then Write aborted with “the queue changed”
-because the pre-write re-GET used only the inbox filter, which
-does not contain work already sitting with a GP. Write now
-re-reads inbox plus sitting (same merge as the board).
-
-Sequential Write used to stop at the first doctor whose POST failed, so
-only that share (a couple of requests) actually moved; the rest stayed
-staged until the next click. Write now continues the remaining dests.
-The post-write re-GET also used the browser HTTP cache of the open
-list, so Suite still showed the old queue number after a reload.
-Task-list reads now use `cache: 'no-store'` (Signing too). Reassign
-changes who the task sits with — it does not take it off the open
-non-routine list, so the open-list total may stay the same while
-unallocated drops.
-
-The canvas reads the open pile with the same bare task-list GET as
-Signing (no page `statuses[]` / `viewContext` filter). Replaying the
-page query was returning an empty list while the grid still showed rows.
-
-Routine, EPS, and investigation-result queues stay on their own
+Staging still requires **Review then write**. Proposed rows are marked
+not saved; drag a patient between doctors, then **Confirm write to
+Medicus** and **Write to Medicus**. After write, Unallocated greens
+out and the doctors populate as a folder grid you can still drag
+between. Write now actually reassigns (and continues if one dest
+fails); it does not take work off the open list, so the list total
+may stay the same while unallocated drops. The pre-write re-GET is
+inbox plus sitting work, so Distribute equally does not abort as
+vanished. EPS and investigation-result queues stay on their own
 surfaces.
 
 ## [v3.255.1] — 2026-08-31

@@ -478,6 +478,14 @@ console.log('\n--- write stays on the lab client ---');
   check(/addTeamColumn/.test(canvas), 'adding a team uses addTeamColumn, not a doctor field');
   check(/visibleUnallocatedCount/.test(canvas), 'unallocated count is the visible pile, not sitting work');
   check(/splitDestinations/.test(canvas), 'split dests include in-today doctors plus added teams');
+  check(
+    /splitDestinations[\s\S]{0,900}?away-pending/.test(canvas),
+    'extra dests that are away do not get the even split'
+  );
+  check(
+    /var keepDraft = opts\.skipSplit/.test(canvas),
+    'loadBoard snapshots the draft at entry so a successful Write cannot restage during re-GET'
+  );
   check(/ms-rxac-folder-clear/.test(canvas), 'empty unallocated is greened out');
   check(/ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas), 'unallocated is the main pane, doctors sit in a rail');
   check(/ms-rxac-board-clear/.test(canvas), 'an empty unallocated pile lays doctors out as a grid');

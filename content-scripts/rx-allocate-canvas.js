@@ -1,12 +1,13 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
-// Medicus Suite — non-routine prescription-request allocation canvas
+// Medicus Suite — prescription-request canvas (routine and non-routine)
 //
-// Sibling of the lab / workflow allocation canvases. Same drag / stage /
-// confirm / bulk-reassign pattern on the non-routine prescription-request
-// task-list. The large left box is UNALLOCATED requests, grouped by
-// registered GP when that is on the row. Named GP is a grouping caption,
-// never auto-placement. Even-split among doctors working today stages
-// locally — it does not write. Does not issue, sign, or file a prescription.
+// Sibling of the lab / workflow canvases. Same drag / stage /
+// confirm / bulk-reassign pattern on the routine and non-routine
+// prescription-request task-lists. The large left box is UNALLOCATED
+// requests, grouped by registered GP when that is on the row. Named GP
+// is a grouping caption, never auto-placement. Split equally / Top up /
+// Distribute equally stage locally — they do not write. Does not issue,
+// sign, or file a prescription.
 //
 // Writing uses LabAllocateCore.createClient (W23). This file never POSTs.
 // Confirm lists patient → destination. UI copy never claims the write
@@ -233,6 +234,7 @@
 
   async function loadBoard(opts) {
     opts = opts || {};
+    var keepDraft = opts.skipSplit ? _draft || C.emptyDraft() : null;
     _loading = true;
     _error = null;
     render();
@@ -255,7 +257,7 @@
       harvestStaffFromBook(_book);
       await harvestStaffFromOverviews(_rows);
       _draft = C.ensureWorkingTodayColumns(
-        opts.skipSplit ? _draft || C.emptyDraft() : C.emptyDraft(),
+        keepDraft || C.emptyDraft(),
         currentDestinations()
       );
       if (!opts.skipSplit) _splitDefaulted = false;
@@ -701,6 +703,15 @@
         return;
       }
       if (String(key).indexOf('clinician:') === 0 && title) {
+        var pres = C.presenceForName({
+          name: title,
+          dateISO: workDate(),
+          book: _book,
+          absences: _absences,
+          staffList: _rota.staff,
+          leaveList: _rota.leave,
+        });
+        if (pres.state === 'away' || pres.state === 'away-pending') return;
         dests.push({
           key: key,
           name: title,
