@@ -148,7 +148,7 @@
   // Page query string only — the filters the results queue is already showing
   // (masterAssignee, statuses[], …). Reject anything that looks like a path
   // or host so it cannot be smuggled into the GET.
-  function queryStringForList(search) {
+  function queryStringForList(search, opts) {
     var raw = String(search == null ? '' : search).trim();
     if (!raw) return '';
     if (raw.charAt(0) === '?') raw = raw.slice(1);
@@ -158,12 +158,14 @@
     // The allocation board must see work already sitting with people, not
     // only the current inbox filter. masterAssignee on the page URL is that
     // filter — keep statuses/viewContext, drop the assignee scope.
+    var keepAssignee = opts && opts.keepMasterAssignee;
     var kept = raw.split('&').filter(function (part) {
       if (!part) return false;
       var k = part.split('=')[0];
       try {
         k = decodeURIComponent(k);
       } catch (_) {}
+      if (keepAssignee) return true;
       return !/^masterAssignee/i.test(k);
     });
     return kept.length ? '?' + kept.join('&') : '';
@@ -2258,11 +2260,11 @@
       }
     }
 
-    async function fetchTaskList(slug, search) {
+    async function fetchTaskList(slug, search, opts) {
       var tried = [slug];
       var alt = altSlug(slug);
       if (alt) tried.push(alt);
-      var qs = queryStringForList(search);
+      var qs = queryStringForList(search, opts);
       var lastErr = null;
       for (var i = 0; i < tried.length; i++) {
         var safe = sanitizeSlug(tried[i]);

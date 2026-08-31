@@ -36,6 +36,10 @@
     /\b(nurse|nursing|hca|phlebotom|reception|secretar|dispenser|pharmacist|paramedic|hcs\s?w|healthcare assistant|health care assistant)\b/i;
   var DOCTOR_HINT_RE = /\b(dr|doctor|gp|partner|locum|salaried|registrar|consultant|gpst)\b/i;
 
+  function isRoutineRxQueueSlug(slug) {
+    return ROUTINE_ONLY_SLUG_RE.test(String(slug || ''));
+  }
+
   function isNonRoutineRxQueueSlug(slug) {
     var s = String(slug || '');
     if (!s) return false;
@@ -43,8 +47,27 @@
     if (EXCLUDE_SLUG_RE.test(s)) return false;
     if (!PRESCRIPTION_SLUG_RE.test(s)) return false;
     if (NON_ROUTINE_SLUG_RE.test(s)) return true;
-    if (ROUTINE_ONLY_SLUG_RE.test(s)) return false;
     return false;
+  }
+
+  function isRxQueueSlug(slug) {
+    return isNonRoutineRxQueueSlug(slug) || isRoutineRxQueueSlug(slug);
+  }
+
+  // The live routine inbox is
+  //   ?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>
+  // That masterAssignee IS the routine box. Lab lists drop it so sitting
+  // work is visible; here dropping it hides the inbox and only the
+  // already-allocated GP piles remain.
+  function queryStringForRxList(search) {
+    var raw = String(search == null ? '' : search).trim();
+    if (!raw) return '';
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    if (!raw) return '';
+    if (/[:/\\]/.test(raw)) return '';
+    if (!/^[A-Za-z0-9._~%+\-\[\]=&,]+$/.test(raw)) return '';
+    var kept = raw.split('&').filter(Boolean);
+    return kept.length ? '?' + kept.join('&') : '';
   }
 
   function parseRxQueueRoute(pathname, search) {
@@ -52,13 +75,14 @@
     var m = path.match(/^\/?([0-9a-z]{2,})\/tasks\/(?:data\/)?([^/]+)\/task-list\/?$/i);
     if (!m) return null;
     var slug = m[2];
-    if (!isNonRoutineRxQueueSlug(slug)) return null;
+    if (!isRxQueueSlug(slug)) return null;
     return {
       siteId: m[1],
       slug: slug,
-      search: Lab.queryStringForList(search),
+      search: queryStringForRxList(search),
       apiBase: 'https://' + m[1] + '.api.england.medicus.health',
       kind: 'rx',
+      routine: isRoutineRxQueueSlug(slug),
     };
   }
 
@@ -162,12 +186,18 @@
       });
   }
 
+  function poolTitle(opts) {
+    if (opts && opts.poolTitle) return opts.poolTitle;
+    if (opts && (opts.routine || opts.kind === 'rx-routine')) return 'Routine prescriptions';
+    return 'Non-routine prescriptions';
+  }
+
   function buildWorkspace(rows, draft, opts) {
     opts = opts || {};
     var board = Lab.buildWorkspace(rows, draft, opts);
     var aliases = board.aliases;
     if (board.pool) {
-      board.pool.title = opts.poolTitle || 'Non-routine prescriptions';
+      board.pool.title = poolTitle(opts);
       board.pool.groups = groupTiles(board.pool.tiles || []);
       var poolCountByKey = {};
       board.pool.groups.forEach(function (g) {
@@ -415,24 +445,29 @@
     });
   }
 
-  // Signing loads this pile with GET /tasks/data/{slug}/task-list and no
-  // query string — that is the outstanding open list. Replaying the page's
-  // statuses[] / viewContext can return an empty envelope while the grid
-  // still shows rows (those params are for other queue families). Try the
-  // bare GET first; fall back to the page query only if that is empty.
+  // Live routine inbox (2026-08-31): statuses[]=pending-review, homepage,
+  // masterAssignee=<inbox uuid>. That filtered GET is the box on the page.
+  // Bare GET returns every open task of the type, including already
+  // allocated to GPs. Prefer the page query; fall back to bare GET only
+  // if the inbox filter comes back empty.
   async function fetchRxTaskList(apiBase, slug, search, deps) {
     var client = Lab.createClient(apiBase, deps);
+    var pageQs = queryStringForRxList(search);
+    var filtered = null;
+    if (pageQs) {
+      filtered = await client.fetchTaskList(slug, pageQs, { keepMasterAssignee: true });
+      if (filtered && filtered.rows && filtered.rows.length) return filtered;
+    }
     var openPile = await client.fetchTaskList(slug, '');
     if (openPile && openPile.rows && openPile.rows.length) return openPile;
-    var pageQs = Lab.queryStringForList(search);
-    if (!pageQs) return openPile;
-    var filtered = await client.fetchTaskList(slug, pageQs);
-    if (filtered && filtered.rows && filtered.rows.length) return filtered;
-    return openPile || filtered;
+    return filtered || openPile;
   }
 
   var api = {
     isNonRoutineRxQueueSlug: isNonRoutineRxQueueSlug,
+    isRoutineRxQueueSlug: isRoutineRxQueueSlug,
+    isRxQueueSlug: isRxQueueSlug,
+    queryStringForRxList: queryStringForRxList,
     parseRxQueueRoute: parseRxQueueRoute,
     decorateRxRow: decorateRxRow,
     isRxInboxName: isRxInboxName,
@@ -442,6 +477,7 @@
     buildWorkspace: buildWorkspace,
     buildBoard: buildWorkspace,
     copyList: copyList,
+    poolTitle: poolTitle,
     columnTitle: columnTitle,
     isLikelyDoctor: isLikelyDoctor,
     coerceWorkDate: coerceWorkDate,

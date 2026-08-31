@@ -15,14 +15,22 @@ prescription-request** task-lists. Same W23 write
 Accept:
 
 - `/{site}/tasks/{slug}/task-list` (also `/tasks/data/{slug}/task-list`)
-- slug matches `/non[_-]?routine/` **and** `/prescription/`
+- `prescription_request_task_non_routine` **and** `prescription_request_task_routine`
+  (hyphen twins too)
+
+The live routine inbox (Witley 2026-08-31) is
+`?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>`.
+That UUID **is** the routine box. Keep it on the GET. Bare GET of the
+slug returns already-allocated GP work as well.
 
 Reject:
 
-- `prescription_request_task_routine` (W8 send-to-routine)
 - EPS / cancellation slugs (W21)
 - investigation/result slugs (lab canvas)
 - document / workflow slugs (workflow canvas)
+
+W8 (send-to-routine) is the overview DOM macro. This canvas is the
+task-list bulk-reassign. They do not share a page.
 
 ## Placement / grouping
 

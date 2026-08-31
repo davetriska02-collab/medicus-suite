@@ -31,9 +31,17 @@ unchanged. Dest staff ids are pinned from the appointment book;
 Write re-reads the same open pile; POST tries underscore then
 hyphen; after Write the canvas shows Medicus, it does not re-split.
 
-Even-split is the **unallocated** Non-Routine Prescription Requests
-pile only. The open-list GET also returns requests already sitting with
-a GP; those stay on that field and are not in the split or its counts.
+The canvas launches on the **routine** prescription-request list as well
+as non-routine. Live inbox (2026-08-31) is
+`prescription_request_task_routine?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>`
+— that UUID is the routine box, and the GET keeps it. Bare GET of the
+slug was showing already-allocated GP work and hiding the inbox.
+
+Clinician fields have a dedicated **Expand** control (same patient list
+as investigations) that always opens the drawer.
+
+Even-split is the **unallocated** inbox pile only. Requests already
+sitting with a GP stay on that field and are not in the split counts.
 The queue inbox name is a team, not a person.
 
 On open, the even split is the starting board (staged, not written).

@@ -120,10 +120,15 @@
       .filter(Boolean);
   }
 
+  function queueTitle() {
+    return C.poolTitle({ routine: _route && _route.routine });
+  }
+
   function currentWorkspace() {
     return C.buildWorkspace(_rows, _draft, {
       teams: (_teamDir && _teamDir.list) || [],
       kind: _route && _route.kind,
+      routine: _route && _route.routine,
     });
   }
 
@@ -545,9 +550,14 @@
       '<span class="ms-lac-chip-count">' +
       esc(fieldCounts(col)) +
       '</span>' +
-      (selCount
-        ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>'
-        : '<span class="ms-lac-field-expand">' + esc(open ? 'Hide' : 'Expand') + '</span>') +
+      (selCount ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>' : '') +
+      '</button>' +
+      '<button type="button" class="ms-lac-field-expand" data-expand-key="' +
+      esc(col.key) +
+      '" aria-expanded="' +
+      (open ? 'true' : 'false') +
+      '">' +
+      esc(open ? 'Hide' : 'Expand') +
       '</button>' +
       (open
         ? '<div class="ms-lac-chip-drawer" role="listbox" aria-label="' +
@@ -939,7 +949,9 @@
       (_writing ? ' ms-lac-panel-writing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
-      '<h2 class="ms-lac-title" id="ms-lac-title">Allocate non-routine prescriptions</h2>' +
+      '<h2 class="ms-lac-title" id="ms-lac-title">Allocate ' +
+      esc(queueTitle().toLowerCase()) +
+      '</h2>' +
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
@@ -1308,11 +1320,19 @@
         var key = btn.getAttribute('data-chip-key') || '';
         var ids = selectedIds();
         if (ids.length) {
-          // The non-drag path: an active selection makes every chip a
-          // one-click stage target.
           requestStage(ids, key, btn.closest('.ms-lac-chip-wrap'));
           return;
         }
+        _expandedChip = _expandedChip === key ? '' : key;
+        render();
+      });
+    });
+    root.querySelectorAll('.ms-lac-field-expand').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var key = btn.getAttribute('data-expand-key') || '';
+        if (!key) return;
         _expandedChip = _expandedChip === key ? '' : key;
         render();
       });
@@ -1569,7 +1589,7 @@
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Allocate non-routine prescriptions on canvas…';
+    var launchLabel = 'Allocate ' + queueTitle().toLowerCase() + ' on canvas…';
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';

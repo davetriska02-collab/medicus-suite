@@ -56,10 +56,19 @@ console.log('--- parseRxQueueRoute ---');
     !!C.parseRxQueueRoute('/e38a9f/tasks/prescription-request-task-non-routine/task-list'),
     'hyphenated non-routine slug is claimed'
   );
-  check(
-    C.parseRxQueueRoute('/e38a9f/tasks/prescription_request_task_routine/task-list') === null,
-    'routine prescription queue is not claimed'
+  const routine = C.parseRxQueueRoute(
+    '/560b6c/tasks/prescription_request_task_routine/task-list',
+    '?statuses[]=pending-review&viewContext=homepage&masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3'
   );
+  check(!!routine && routine.slug === 'prescription_request_task_routine', 'routine prescription queue is claimed');
+  check(routine && routine.routine === true, 'routine route is flagged');
+  check(
+    /masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3/.test(routine.search),
+    'routine inbox keeps masterAssignee — that UUID is the box on the page'
+  );
+  check(/statuses\[\]=pending-review/.test(routine.search), 'routine inbox keeps pending-review');
+  check(C.isRoutineRxQueueSlug('prescription_request_task_routine') === true, 'routine slug matches');
+  check(C.isRxQueueSlug('prescription_request_task_routine') === true, 'rx canvas claims routine and non-routine');
   check(
     C.parseRxQueueRoute('/e38a9f/tasks/review_investigation_results_task/task-list') === null,
     'results queue stays on the lab canvas'
@@ -78,6 +87,22 @@ console.log('--- parseRxQueueRoute ---');
     Wf.parseWorkflowQueueRoute('/e38a9f/tasks/prescription_request_task_non_routine/task-list') === null,
     'workflow canvas still excludes prescription slugs'
   );
+  check(
+    Wf.parseWorkflowQueueRoute('/560b6c/tasks/prescription_request_task_routine/task-list') === null,
+    'workflow canvas still excludes the routine prescription queue'
+  );
+  check(
+    C.queryStringForRxList(
+      '?statuses[]=pending-review&viewContext=homepage&masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3'
+    ).indexOf('masterAssignee=') !== -1,
+    'Rx query keeps the inbox masterAssignee'
+  );
+  check(
+    Lab.queryStringForList(
+      '?statuses[]=pending-review&viewContext=homepage&masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3'
+    ).indexOf('masterAssignee=') === -1,
+    'lab query still drops masterAssignee'
+  );
 }
 
 console.log('\n--- named GP groups the pile, never auto-places ---');
@@ -91,6 +116,10 @@ console.log('\n--- named GP groups the pile, never auto-places ---');
   const assigned = rxRow(2, { assignedTo: 'Dr Jane Cole', namedGp: 'Dr David Triska' });
   const board = C.buildWorkspace([row, assigned], C.emptyDraft());
   check(board.pool && board.pool.title === 'Non-routine prescriptions', 'rx pool title');
+  check(
+    C.buildWorkspace([row], C.emptyDraft(), { routine: true }).pool.title === 'Routine prescriptions',
+    'routine queue pool title'
+  );
   check(board.pool.tiles.length === 1, 'unassigned named-GP row stays in the pool');
   check(
     board.pool.groups[0] && board.pool.groups[0].groupName === 'Dr David Triska' && board.pool.groups[0].count === 1,
@@ -321,7 +350,8 @@ console.log('\n--- write stays on the lab client ---');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
   check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
   check(/Defaults to today/.test(canvas), 'date picker copy says it defaults to today');
-  check(/Allocate non-routine prescriptions on canvas/.test(canvas), 'launcher names non-routine prescriptions');
+  check(/queueTitle\(\)/.test(canvas) && /on canvas/.test(canvas), 'launcher names this prescription queue');
+  check(/data-expand-key/.test(canvas), 'clinician fields have a dedicated Expand control for the patient list');
   check(/ms-rxac-overlay/.test(canvas) && /ms-rxac-launch/.test(canvas), 'overlay and launcher use rxac ids');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas), 'reuses the lab layout classes');
   check(
@@ -361,40 +391,64 @@ console.log('\n--- canvas + manifest + css source locks ---');
 }
 
 (async function () {
-  console.log('\n--- fetchRxTaskList prefers the open pile (no page filter) ---');
+  console.log('\n--- fetchRxTaskList prefers the page inbox (masterAssignee) ---');
   const idA = uuid(21);
   const idB = uuid(22);
-  const openBody = {
+  const inboxBody = {
     tasks: [
-      { id: idA, patientName: 'FORD, A', assignedTo: 'Unassigned', summary: 'Acute A' },
-      { id: idB, patientName: 'FORD, B', assignedTo: 'Unassigned', summary: 'Acute B' },
+      { id: idA, patientName: 'FORD, A', assignedTo: 'Routine Prescription Requests', summary: 'Repeat A' },
+      { id: idB, patientName: 'FORD, B', assignedTo: 'Routine Prescription Requests', summary: 'Repeat B' },
     ],
+  };
+  const allocatedBody = {
+    tasks: [{ id: uuid(99), patientName: 'OTHER, C', assignedTo: 'Dr Jane Cole', summary: 'Already allocated' }],
   };
   const calls = [];
   const fetchImpl = async (url) => {
     calls.push(String(url));
     const path = String(url).replace(/^https?:\/\/[^/]+/, '');
-    let body = { tasks: [] };
-    if (path.indexOf('statuses') !== -1) body = { tasks: [] };
-    else if (path.indexOf('/tasks/data/prescription_request_task_non_routine/task-list') !== -1) body = openBody;
+    let body = allocatedBody;
+    if (path.indexOf('masterAssignee') !== -1) body = inboxBody;
     return {
       ok: true,
       status: 200,
       text: async () => JSON.stringify(body),
     };
   };
+  const qs =
+    '?statuses[]=pending-review&viewContext=homepage&masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3';
   const out = await C.fetchRxTaskList(
-    'https://e38a9f.api.england.medicus.health',
-    'prescription_request_task_non_routine',
-    '?statuses[]=incomplete&viewContext=workflow',
+    'https://560b6c.api.england.medicus.health',
+    'prescription_request_task_routine',
+    qs,
     { fetchImpl: fetchImpl }
   );
-  check(out.rows && out.rows.length === 2, 'bare GET returns the open pile (got ' + ((out.rows && out.rows.length) || 0) + ')');
+  check(out.rows && out.rows.length === 2, 'page inbox GET returns the routine box (got ' + ((out.rows && out.rows.length) || 0) + ')');
   check(
-    calls.some((u) => u.indexOf('/task-list') !== -1 && u.indexOf('?') === -1),
-    'first request has no query string'
+    calls[0] && calls[0].indexOf('masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3') !== -1,
+    'first request keeps the inbox masterAssignee'
   );
+  check(C.isRxUnallocated(out.rows[0]) === true, 'inbox-assigned routine requests are the unallocated pile');
   check(/fetchRxTaskList/.test(fs.readFileSync(path.join(__dirname, 'content-scripts/rx-allocate-canvas.js'), 'utf8')), 'canvas calls fetchRxTaskList');
+
+  const emptyCalls = [];
+  const emptyThenBare = async (url) => {
+    emptyCalls.push(String(url));
+    const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+    const empty = path.indexOf('?') !== -1;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(empty ? { tasks: [] } : inboxBody),
+    };
+  };
+  const fallback = await C.fetchRxTaskList(
+    'https://560b6c.api.england.medicus.health',
+    'prescription_request_task_routine',
+    qs,
+    { fetchImpl: emptyThenBare }
+  );
+  check(fallback.rows && fallback.rows.length === 2, 'empty inbox filter falls back to the bare GET');
 
   if (failed) {
     console.error('\n' + failed + ' failed, ' + passed + ' passed');
