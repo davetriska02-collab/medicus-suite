@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.255.0 (31 Aug)** — Pruned Follow-ups, Visualiser, About, Condor, CQC Inspection Readiness and Practice Report; Settings collapsed into Queue rules and Diagnostics
 - **v3.254.0 (30 Aug)** — Note: optional YouTube playlist on a public TV (off by default; sanitised id only; fail-loud hides the player)
 - **v3.248.0–v3.253.1 (29–30 Aug)** — Note: a new full-tab TV/monitor display board (waiting room, ops overview, message and up to six custom boards), now with ten visual styles and ten colour options on the default style
 - **v3.249.0–v3.250.0 (29 Aug)** — QOF monitoring rework: disease-register-driven matching, a July 2026 rule refresh, fewer false positives

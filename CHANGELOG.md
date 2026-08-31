@@ -21,6 +21,14 @@ Settings collapsed: **Queue rules** (Triage Lens + Result Rules + Outstanding Re
 
 Duplicates and Rota manager stay.
 
+### Safety-doc pin and Tests CI
+
+`docs/CLINICAL-SAFETY-NOTICE.md` product version re-pinned to 3.255.0 so
+`check-doc-versions.js` tracks the minor. Does not move
+`last_cso_review_version` (CSN 3.237.1, hazard log 3.202.0, feature-list
+3.233.0). The Tests workflow no longer runs the Visualiser Playwright job
+(`scripts/verify-visualiser.mjs` was removed with the tab).
+
 ## [v3.254.1] — 2026-08-31
 
 ### CSO sign-off of PR #351 and PR #353 (documentation only)
