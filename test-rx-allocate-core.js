@@ -246,6 +246,24 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   check(Lab.isTeamAssignee('Non-Routine Prescription Requests') === true, 'the queue name is an inbox, not a person');
   check(Lab.homeColumnKey(inbox) === Lab.POOL, 'inbox-assigned Rx stays in the unallocated pool');
   check(Lab.homeColumnKey(sittingGp) !== Lab.POOL, 'GP-assigned Rx sits on that clinician field');
+
+  const boxId = '0198ef96-6a17-71e4-8354-78de2b371ef3';
+  const inBox = rxRow(6, { assignedTo: 'Dr Jane Cole', assignedId: boxId });
+  const marked = C.markInboxRows(
+    [inBox],
+    '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId
+  );
+  check(marked[0] && marked[0].rxInboxPile === true, 'page-inbox rows are stamped as the box to work');
+  check(C.isRxUnallocated(marked[0]) === true, 'the twelve in the box are unallocated for the split');
+  check(Lab.homeColumnKey(marked[0]) === Lab.POOL, 'inbox rows sit in the unallocated list, not on a GP field');
+  check(
+    C.inboxAssigneeId(
+      '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId
+    ) === boxId,
+    'inboxAssigneeId reads masterAssignee from the page query'
+  );
+  const untouched = C.markInboxRows([sittingGp], '');
+  check(C.isRxUnallocated(untouched[0]) === false, 'without an inbox filter, GP-assigned work stays sitting');
   const mixed = C.planEvenSplit([inbox, sittingGp, rxRow(5)], dests);
   check(mixed.total === 2, 'even split is the unallocated inbox pile, not already-allocated GP work');
   check(
@@ -330,7 +348,7 @@ console.log('\n--- write stays on the lab client ---');
   check(/does not issue, sign, or file the prescription/.test(canvas), 'confirm says the write does not issue the Rx');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated|Filed|Issued|Signed)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(!/Ordered by|who ordered|Who ordered/.test(canvas), 'canvas copy never claims who ordered');
-  check(/decorateRxRow/.test(canvas), 'rows are decorated after the task-list GET');
+  check(/markInboxRows/.test(canvas) || /decorateRxRow/.test(canvas), 'rows are decorated after the task-list GET');
   check(/Re-split equally/.test(canvas), 're-split button resets to an even split');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied as the default board');
   check(
@@ -381,6 +399,7 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
   check(/fetchRxTaskList/.test(canvas), 'canvas loads the pile via fetchRxTaskList');
+  check(/markInboxRows/.test(canvas), 'canvas treats the page-inbox GET as the unallocated pile');
   check(/isRxUnallocated/.test(canvas), 'canvas even-split only stages unallocated Non-Routine requests');
   check(/isRxUnallocated\(t\)/.test(canvas), 'split counts ignore requests already sitting with a GP');
   check(/skipSplit/.test(canvas), 'after Write the canvas does not re-stage an even split');

@@ -20,8 +20,11 @@ Accept:
 
 The live routine inbox (Witley 2026-08-31) is
 `?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>`.
-That UUID **is** the routine box. Keep it on the GET. Bare GET of the
-slug returns already-allocated GP work as well.
+That UUID **is** the routine box. Keep it on the GET. Rows from that
+GET are the pile to allocate even when `assignedTo` is a person name
+(they sit with the box, not a working-today GP). Stamp them
+`rxInboxPile` / Unassigned so they appear in the unallocated list.
+Bare GET of the slug returns already-allocated GP work as well.
 
 Reject:
 

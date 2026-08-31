@@ -216,22 +216,20 @@
     try {
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
       var out = await C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
-      _rows = out.rows || [];
+      _rows = C.markInboxRows(out.rows || [], _route.search);
       _route.slug = out.slug || _route.slug;
-      if (out.search != null) _route.search = out.search;
+      if (out.search) _route.search = out.search;
       _taskList = out.taskList;
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
       render();
       await presenceP;
       harvestStaffFromBook(_book);
-      _rows = (_rows || []).map(function (row) {
-        return C.decorateRxRow(row);
-      });
+      _rows = C.markInboxRows(_rows, _route.search);
       await harvestStaffFromOverviews(_rows);
       if (!opts.skipSplit) applyDefaultEvenSplit();
     } catch (err) {
-      _error = err && err.message ? err.message : 'Could not read this non-routine prescription queue.';
+      _error = err && err.message ? err.message : 'Could not read this prescription queue.';
       _rows = [];
     } finally {
       _loading = false;

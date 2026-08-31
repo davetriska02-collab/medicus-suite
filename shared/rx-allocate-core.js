@@ -91,11 +91,33 @@
     if (!s) return true;
     if (/^unassigned$/i.test(s)) return true;
     if (Lab.isTeamAssignee(s)) return true;
-    return /prescription/i.test(s) || /non[-\s]?routine/i.test(s);
+    return /prescription/i.test(s) || /non[-\s]?routine/i.test(s) || /^routine$/i.test(s);
+  }
+
+  function inboxAssigneeId(search) {
+    var qs = queryStringForRxList(search);
+    var parts = String(qs || '')
+      .replace(/^\?/, '')
+      .split('&');
+    for (var i = 0; i < parts.length; i++) {
+      var kv = parts[i].split('=');
+      var k = kv[0] || '';
+      try {
+        k = decodeURIComponent(k);
+      } catch (_) {}
+      if (!/^masterAssignee$/i.test(k)) continue;
+      var v = kv.slice(1).join('=');
+      try {
+        v = decodeURIComponent(v);
+      } catch (_) {}
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return v;
+    }
+    return '';
   }
 
   function isRxUnallocated(row) {
     if (!row || !row.id) return false;
+    if (row.rxInboxPile) return true;
     if (isRxInboxName(row.assignedTo)) return true;
     return Lab.homeColumnKey(row) === Lab.POOL;
   }
@@ -105,6 +127,23 @@
     var next = Object.assign({}, row);
     next.kind = 'rx';
     return next;
+  }
+
+  // The page filter is the box to work. Those rows are assigned to the
+  // inbox UUID (often a person-shaped name on assignedTo), which made
+  // homeColumnKey treat the whole pile as already sitting with a GP.
+  // Stamp them Unassigned so they stay in the unallocated list.
+  function markInboxRows(rows, search) {
+    var inboxId = inboxAssigneeId(search);
+    return (Array.isArray(rows) ? rows : []).map(function (row) {
+      var next = decorateRxRow(row);
+      if (!next) return next;
+      if (!inboxId) return next;
+      next.rxInboxPile = true;
+      next.rxInboxAssignedTo = next.assignedTo || '';
+      next.assignedTo = 'Unassigned';
+      return next;
+    }).filter(Boolean);
   }
 
   function rxGroupName(tile) {
@@ -470,6 +509,8 @@
     queryStringForRxList: queryStringForRxList,
     parseRxQueueRoute: parseRxQueueRoute,
     decorateRxRow: decorateRxRow,
+    markInboxRows: markInboxRows,
+    inboxAssigneeId: inboxAssigneeId,
     isRxInboxName: isRxInboxName,
     isRxUnallocated: isRxUnallocated,
     rxGroupName: rxGroupName,

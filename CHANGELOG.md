@@ -31,6 +31,11 @@ unchanged. Dest staff ids are pinned from the appointment book;
 Write re-reads the same open pile; POST tries underscore then
 hyphen; after Write the canvas shows Medicus, it does not re-split.
 
+The twelve (or however many) in that inbox **are** the unallocated
+pile. They are assigned to the box UUID, so `assignedTo` looks like a
+person and the canvas used to show “12 tasks · 0 unallocated”. Those
+rows are now stamped as the inbox pile.
+
 The canvas launches on the **routine** prescription-request list as well
 as non-routine. Live inbox (2026-08-31) is
 `prescription_request_task_routine?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>`
