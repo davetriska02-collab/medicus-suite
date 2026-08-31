@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.254.1] — 2026-08-30
+## [v3.254.2] — 2026-08-31
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,40 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.254.1] — 2026-08-31
+
+### CSO sign-off of PR #351 and PR #353 (documentation only)
+
+Incremental Clinical-Safety-Officer review, signed in session by Dr D. Triska on
+2026-08-31, of two already-merged PRs by Nick Grundy — and of nothing else:
+
+- **#351** — exclude topical tacrolimus (Protopic ointment, and the unlicensed
+  cream specials prescribed for the same cutaneous indication) from the vaccine
+  "immunosuppressive medication" eligibility clauses and the high-risk
+  unmatched-medication monitoring backstop (v3.251.6, follow-up v3.251.7).
+- **#353** — flag a mobile-shaped phone number filed under the wrong type when
+  the contacts canvas opens, and add a high-risk-unmatched class for specialist
+  biologics / monoclonal antibodies that carry no dedicated monitoring rule
+  (v3.253.2, including the ophthalmic-bevacizumab exclude and the post-write
+  re-fetch).
+
+Verified at review, independently of the PRs' own tests: oral, modified-release,
+oral-suspension and IV tacrolimus still fire on both the vaccine clauses and the
+monitoring backstop; ointment / cream / Protopic do not; no other stem in either
+list is suppressed by the new exclude. The mAb class fires across rheumatology,
+dermatology, respiratory, gastroenterology, neurology, bone and oncology agents
+and on systemic IV bevacizumab; intravitreal / ophthalmic bevacizumab and
+licensed bevacizumab gamma (Lytenava) do not. JAK inhibitors are not treated as
+monoclonal antibodies. The on-open "Fix type → Mobile" write is click-only, is
+built from a fresh read, re-checks patient identity immediately before the write,
+re-fetches afterwards rather than patching cached state, and joins
+`anyWriteInFlight()`; it is the existing W18 `change-telephone-number` contract,
+not a new write path.
+
+Documentation only — no product code changed. This is an incremental sign-off,
+not a re-baseline: `last_cso_review_version` does not move on any document, and
+the hazard-log product pin stays at 3.202.0.
 
 ## [v3.254.0] — 2026-08-30
 
