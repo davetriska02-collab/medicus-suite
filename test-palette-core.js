@@ -87,7 +87,7 @@ function check(cond, msg) {
   check(patientScopedCommands(null).length === 0, 'null patient context → no patient-scoped commands (falsy)');
 
   const patientCmds = patientScopedCommands(true);
-  check(patientCmds.length === 5, `patient context present → 5 patient-scoped commands (got ${patientCmds.length})`);
+  check(patientCmds.length === 4, `patient context present → 4 patient-scoped commands (got ${patientCmds.length})`);
   check(
     patientCmds.every((c) => c.group === 'Patient'),
     'every patient-scoped command is tagged group "Patient"'
@@ -97,10 +97,6 @@ function check(cond, msg) {
   check(
     patientIds.includes(PATIENT_COMMAND_IDS.COPY_SUMMARY),
     '"Copy patient summary" present when patient context exists'
-  );
-  check(
-    patientIds.includes(PATIENT_COMMAND_IDS.OPEN_VISUALISER),
-    '"Open visualiser" present when patient context exists'
   );
   check(patientIds.includes(PATIENT_COMMAND_IDS.JUMP_RECORD), '"Jump to Record" present when patient context exists');
   check(patientIds.includes(PATIENT_COMMAND_IDS.JUMP_TRENDS), '"Jump to Trends" present when patient context exists');
@@ -124,7 +120,7 @@ function check(cond, msg) {
 
   // Gating is re-evaluated fresh each call, not cached/stateful.
   check(
-    patientScopedCommands(true).length === 5 && patientScopedCommands(false).length === 0,
+    patientScopedCommands(true).length === 4 && patientScopedCommands(false).length === 0,
     'gating re-evaluates per call (true then false in sequence both correct)'
   );
 

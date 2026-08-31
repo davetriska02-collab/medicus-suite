@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.255.0] — 2026-08-31
+
+### Prune unused and low-value surfaces
+
+Removed four side-panel tabs and two full-page tools that were either launchers, yearly, or machine-local dead-ends:
+
+- **Follow-ups** — personal this-machine-only reminder ledger, including the Monitoring "Add follow-up reminder" action and the Today line.
+- **Visualiser** — PDF-drop record analyser (`visualiser-core.*`, PDF.js / Chart.js / D3). Record remains the live snapshot.
+- **About** — static brochure tab; version and update check stay on Settings → Suite.
+- **Condor** — ops dashboard tab. Note's TV board still uses `condor-data.js` / `condor-index-core.js` for live feeds and the pressure index.
+- **CQC Inspection Readiness** — yearly evidence pack and its Settings launcher.
+- **Practice Report** — palette-only Condor snapshot PDF, unused from the menu.
+
+Dead code: old Sentinel `sidebar/` (never mounted), `companion-preview.html`.
+
+Settings collapsed: **Queue rules** (Triage Lens + Result Rules + Outstanding Requests) and **Diagnostics** (Event Ledger + Suite health + Debug). Legacy `#sect-triage` / `#sect-health` hashes still work.
+
+Duplicates and Rota manager stay.
+
+### Safety-doc pin and Tests CI
+
+`docs/CLINICAL-SAFETY-NOTICE.md` product version re-pinned to 3.255.0 so
+`check-doc-versions.js` tracks the minor. Does not move
+`last_cso_review_version` (CSN 3.237.1, hazard log 3.202.0, feature-list
+3.233.0). The Tests workflow no longer runs the Visualiser Playwright job
+(`scripts/verify-visualiser.mjs` was removed with the tab).
+
 ## [v3.254.1] — 2026-08-31
 
 ### CSO sign-off of PR #351 and PR #353 (documentation only)

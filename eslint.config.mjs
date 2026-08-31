@@ -13,7 +13,7 @@ export default [
   js.configs.recommended,
   {
     // Default: classic browser scripts (engine/, content-scripts/, shared/,
-    // options/, sentinel-options/, sidebar/, service-worker.js, visualiser-core.js)
+    // options/, sentinel-options/, service-worker.js)
     files: ['**/*.js'],
     languageOptions: {
       ecmaVersion: 2023,
@@ -25,11 +25,11 @@ export default [
       'no-empty': ['error', { allowEmptyCatch: true }],
       // Rules disabled after survey — see comments for triggering files:
       'no-unused-vars': 'off', // widespread across existing codebase (31 instances); rename-to-_foo deferred
-      'no-useless-escape': 'off', // content-scripts/triage-lens/content.js, engine/extractors/*, visualiser-core.js, sentinel-options/options.js
+      'no-useless-escape': 'off', // content-scripts/triage-lens/content.js, engine/extractors/*, sentinel-options/options.js
       'no-regex-spaces': 'off', // test-extraction-health.js, test-monitoring-chip.js, test-prescribing-flags.js (vm-extraction regexes — must not be autofixed)
       'no-func-assign': 'off', // sentinel-options/options.js:1261
       'no-redeclare': 'off', // engine/rules-engine.js, shared/ dual-context guards
-      'no-undef': 'off', // visualiser-core.js (pdfjsLib, document, chrome globals called before chrome-api override)
+      'no-undef': 'off', // dual-context files (chrome/document globals)
       'no-prototype-builtins': 'off', // shared/io/*.js, engine/*.js
     },
   },
@@ -67,13 +67,7 @@ export default [
     languageOptions: { sourceType: 'module' },
   },
   {
-    // practice-report.js — the Practice Report page controller, loaded as
-    // <script type="module"> from practice-report.html (root, like the visualiser).
-    // cqc-readiness.js — the CQC Inspection Readiness controller, same pattern.
-    // cqc-render.js — the CQC readiness renderer (root ES module, like report-render).
-    // (engine/cqc-evidence.js is a classic dual-export IIFE like rule-currency.js, so it
-    //  stays on the default 'script' config — not listed here.)
-    files: ['practice-report.js', 'cqc-readiness.js', 'cqc-render.js', 'board/**/*.js'],
+    files: ['board/**/*.js'],
     languageOptions: { sourceType: 'module' },
   },
   {

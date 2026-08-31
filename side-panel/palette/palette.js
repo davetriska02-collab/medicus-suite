@@ -10,7 +10,7 @@
 //   - navigation commands are read from the live .nav-tab DOM, so they
 //     automatically respect the context (panel vs pop-out), custom tab order
 //     and any future tabs — running one simply clicks the real tab, reusing
-//     all existing nav behaviour (visualiser special-case included);
+//     all existing nav behaviour (full-tab launchers included);
 //   - everything else is a small static registry below.
 //
 // Recents ('suite.palette.recents', localStorage) hold command ids only —
@@ -102,13 +102,12 @@ const OPTIONS_SECTIONS = [
   ['capacity', 'Capacity Forecast', 'forecast'],
   ['submissions', 'Submissions', 'demand thresholds'],
   ['sentinel', 'Monitoring', 'sentinel drug rules qof chips'],
-  ['triage', 'Triage Lens', 'red flags keywords hud'],
+  ['queue', 'Queue rules', 'triage lens red flags keywords hud result rules outstanding requests oir'],
   ['reception', 'Reception', 'pathways'],
   ['knowledge', 'Knowledge', 'reference'],
   ['safety', 'Clinical Safety', 'hazard disclaimer'],
-  ['cqc', 'CQC Readiness', 'cqc inspection evidence pack safe well-led compliance audit'],
+  ['diagnostics', 'Diagnostics', 'event ledger suite health debug api log'],
   ['backup', 'Backup & Restore', 'export import suite backup'],
-  ['debug', 'Debug', 'api diagnostics log'],
 ];
 
 // Build the command list from the live DOM + static registry.
@@ -131,18 +130,6 @@ function buildCommands(hasPatient) {
       run: () => tab.click(),
     });
   });
-
-  // Visualiser opens as a full tab; the pop-out has no nav tab for it.
-  if (!document.querySelector('.nav-tab[data-module="visualiser"]')) {
-    cmds.push({
-      id: 'open:visualiser',
-      label: 'Open Patient Record Visualiser',
-      group: 'Open',
-      keywords: 'sar pdf record',
-      icon: GENERIC_ICONS.doc,
-      run: () => chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') }),
-    });
-  }
 
   // Rota (full app) opens as a browser tab; the pop-out has no nav tab for it,
   // so the palette is how the floating window reaches it. Same focus-or-create
@@ -183,26 +170,6 @@ function buildCommands(hasPatient) {
       run: () => import('../quick-leaflet/quick-leaflet.js').then((m) => m.openQuickLeaflet()),
     });
   }
-
-  // Practice Report — opens the full report page (a browser tab, like the visualiser).
-  cmds.push({
-    id: 'open:practice-report',
-    label: 'Generate practice report…',
-    group: 'Open',
-    keywords: 'report practice management icb staff condor demand capacity export pdf',
-    icon: GENERIC_ICONS.doc,
-    run: () => chrome.tabs.create({ url: chrome.runtime.getURL('practice-report.html?preset=7d') }),
-  });
-
-  // CQC Inspection Readiness — opens the full readiness page (a browser tab).
-  cmds.push({
-    id: 'open:cqc-readiness',
-    label: 'CQC inspection readiness…',
-    group: 'Open',
-    keywords: 'cqc inspection readiness evidence pack safe well-led compliance audit export pdf',
-    icon: GENERIC_ICONS.doc,
-    run: () => chrome.tabs.create({ url: chrome.runtime.getURL('cqc-readiness.html') }),
-  });
 
   // Note display board — full-tab kiosk (waiting-room TV / ops monitor).
   cmds.push({
@@ -356,8 +323,6 @@ function buildCommands(hasPatient) {
   if (hasPatient) {
     const runners = {
       [PATIENT_COMMAND_IDS.COPY_SUMMARY]: runCopyPatientSummary,
-      [PATIENT_COMMAND_IDS.OPEN_VISUALISER]: () =>
-        chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') }),
       [PATIENT_COMMAND_IDS.JUMP_RECORD]: () => clickNavTab('record'),
       [PATIENT_COMMAND_IDS.JUMP_TRENDS]: () => clickNavTab('trends'),
       [PATIENT_COMMAND_IDS.JUMP_SENTINEL]: () => clickNavTab('sentinel'),

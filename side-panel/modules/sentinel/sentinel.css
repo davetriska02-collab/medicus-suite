@@ -2344,9 +2344,7 @@
 
 .sent-task-assignee,
 .sent-task-priority,
-.sent-task-desc,
-.sent-fu-what,
-.sent-fu-due {
+.sent-task-desc {
   font-size: 12px;
   font-family: inherit;
   color: var(--text-1);
@@ -2366,8 +2364,7 @@
   gap: 6px;
 }
 
-.sent-task-create,
-.sent-fu-save {
+.sent-task-create {
   font-size: 12px;
   color: #fff;
   background: var(--accent);
@@ -2376,8 +2373,7 @@
   padding: 4px 12px;
   cursor: pointer;
 }
-.sent-task-create:disabled,
-.sent-fu-save:disabled {
+.sent-task-create:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

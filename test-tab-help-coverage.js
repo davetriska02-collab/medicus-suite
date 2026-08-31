@@ -6,7 +6,7 @@
 // (previously duplicated per shell; converged in the top-10 plan batch A).
 // This guard mirrors test-tab-catalog.js / test-tour-steps.js: it parses the
 // real data-module set out of BOTH panel.html and pop-out.html and fails CI
-// if any tab — including the panel-only tabs (visualiser, about; see
+// if any tab — including the panel-only tabs (duplicate-checker, rota-app; see
 // CLAUDE.md "Panel-only tabs (intentional exceptions)") — has no TAB_HELP
 // entry, or if an entry's copy is too thin to be useful.
 
@@ -53,8 +53,6 @@ function check(cond, msg) {
 
   // Panel-only tabs are a deliberate exception to "every real module in both
   // shells" (CLAUDE.md), but help coverage must still include them.
-  check('visualiser' in TAB_HELP, 'panel-only tab "visualiser" has a help entry');
-  check('about' in TAB_HELP, 'panel-only tab "about" has a help entry');
   check('duplicate-checker' in TAB_HELP, 'panel-only tab "duplicate-checker" has a help entry');
   check('rota-app' in TAB_HELP, 'panel-only tab "rota-app" has a help entry');
 
@@ -81,7 +79,7 @@ function check(cond, msg) {
   //    appear in both, per CLAUDE.md — same guarantee test-tab-catalog.js
   //    doesn't check across shells, so pin it here too since we're already
   //    parsing both files.
-  const PANEL_ONLY_ALLOWED = new Set(['visualiser', 'about', 'duplicate-checker', 'rota-app']);
+  const PANEL_ONLY_ALLOWED = new Set(['duplicate-checker', 'rota-app']);
   const missingFromPopout = [...panelIds].filter((id) => !popoutIds.has(id) && !PANEL_ONLY_ALLOWED.has(id));
   check(
     missingFromPopout.length === 0,
