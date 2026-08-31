@@ -9,7 +9,7 @@
 
 // Storage key holding the user's global preferred tab order (array of module ids).
 // One key is shared by panel and pop-out; each shell reconciles against its own
-// tab set, so the pop-out simply ignores ids it doesn't have (e.g. visualiser).
+// tab set, so the pop-out simply ignores ids it doesn't have (e.g. rota-app).
 const STORAGE_KEY = 'suite.tabOrder';
 
 // Reconcile a stored order against a shell's default tab ids.

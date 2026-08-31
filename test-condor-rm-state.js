@@ -70,7 +70,7 @@ const path = require('path');
   // raising a signal, never lowering one.
   console.log('\n--- PPI band-floor ---');
   const condorPath = new URL(
-    'side-panel/modules/condor/condor.js',
+    'side-panel/modules/condor/condor-index-core.js',
     `file://${path.resolve(__dirname)}/`
   ).href;
   const { computeIndex } = await import(condorPath);

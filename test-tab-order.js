@@ -10,7 +10,7 @@
 //   - stored id not in defaults → ignored
 //   - default id missing from stored → appended
 //   - no duplicates ever (even if stored repeats an id)
-//   - pop-out subset case: stored contains an id (visualiser) the shell lacks
+//   - pop-out subset case: stored contains an id (rota-app) the shell lacks
 
 'use strict';
 
@@ -47,10 +47,10 @@ const path = require('path');
 
   // The panel's default DOM order (from CLAUDE.md task brief).
   const PANEL = ['slots', 'sentinel', 'trends', 'capacity', 'submissions',
-    'activity', 'referrals', 'condor', 'reception', 'sweep', 'visualiser', 'about'];
-  // The pop-out has the same set minus visualiser & about.
+    'activity', 'referrals', 'reception', 'sweep', 'duplicate-checker'];
+  // The pop-out has the same set minus panel-only launchers.
   const POPOUT = ['slots', 'sentinel', 'trends', 'capacity', 'submissions',
-    'activity', 'referrals', 'condor', 'reception', 'sweep'];
+    'activity', 'referrals', 'reception', 'sweep'];
 
   // Empty / unset stored → defaults unchanged.
   check(eq(reconcileTabOrder(PANEL, []), PANEL), 'empty stored → defaults unchanged');
@@ -61,7 +61,7 @@ const path = require('path');
   {
     const stored = ['referrals', 'sweep'];
     const expected = ['referrals', 'sweep', 'slots', 'sentinel', 'trends',
-      'capacity', 'submissions', 'activity', 'condor', 'reception', 'visualiser', 'about'];
+      'capacity', 'submissions', 'activity', 'reception', 'duplicate-checker'];
     check(eq(reconcileTabOrder(PANEL, stored), expected),
       'partial stored → favourites first, rest in default order');
   }
@@ -76,10 +76,10 @@ const path = require('path');
 
   // Default id missing from stored → appended (in default order).
   {
-    const stored = ['condor'];
+    const stored = ['reception'];
     const out = reconcileTabOrder(PANEL, stored);
-    check(out[0] === 'condor', 'stored favourite leads');
-    check(eq(out.slice(1), PANEL.filter(id => id !== 'condor')),
+    check(out[0] === 'reception', 'stored favourite leads');
+    check(eq(out.slice(1), PANEL.filter(id => id !== 'reception')),
       'remaining defaults appended in original order');
   }
 
@@ -97,13 +97,13 @@ const path = require('path');
     check(eq(reconcileTabOrder(PANEL, reversed), reversed), 'full stored order is honoured exactly');
   }
 
-  // Pop-out subset case: stored (a panel order) contains visualiser & about,
+  // Pop-out subset case: stored (a panel order) contains duplicate-checker,
   // which the pop-out shell lacks — those are ignored, pop-out tabs reorder.
   {
-    const stored = ['referrals', 'visualiser', 'sweep', 'about', 'slots'];
+    const stored = ['referrals', 'duplicate-checker', 'sweep', 'slots'];
     const out = reconcileTabOrder(POPOUT, stored);
-    check(!out.includes('visualiser') && !out.includes('about'),
-      'pop-out ignores stored ids it does not have (visualiser/about)');
+    check(!out.includes('duplicate-checker'),
+      'pop-out ignores stored ids it does not have (duplicate-checker)');
     check(out.length === POPOUT.length, 'pop-out keeps its full tab set');
     check(eq(out.slice(0, 3), ['referrals', 'sweep', 'slots']),
       'pop-out honours stored order for the ids it does have');

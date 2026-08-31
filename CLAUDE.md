@@ -13,8 +13,7 @@
 | `content-scripts/` | Injected into Medicus pages |
 | `options/` | Settings page |
 | `rota/` | Rota Manager subtree — self-contained ESM app with its own `package.json` (`"type": "module"`). `rota/engine/` is **pure** (no DOM/`chrome.*`/`fetch`), `rota/shared/` is storage + helpers, `rota/app/app.html` is the full app (opens as a full tab). Tests are the root-level `test-rota-*.js` files |
-| `visualiser.html` / `visualiser-core.html` | Patient record visualiser (opens as full tab) |
-| `board.html` / `board/` | Note — TV/monitor display board. `board/board-core.js` is pure (no DOM/`chrome.*`). Companion module is `side-panel/modules/board/`. Public profiles must never paint patient names (H-067) |
+| `board.html` / `board/` | Note — TV/monitor display board. `board/board-core.js` is pure (no DOM/`chrome.*`). Companion module is `side-panel/modules/board/`. Public profiles must never paint patient names (H-067). Live feeds/PPI still live in `side-panel/modules/condor/condor-data.js` and `condor-index-core.js` (the Condor tab itself was removed). |
 
 ## Adding a new side-panel module
 
@@ -24,7 +23,7 @@
 4. Add `<name>: { js: () => import('./modules/<name>/<name>.js'), css: '...' }` to `MODULES` in `side-panel/panel.js` AND `pop-out/pop-out.js`
 5. Follow the backup convention below
 
-> **Panel-only tabs (intentional exceptions):** `visualiser`, `duplicate-checker`, `rota-app` and `about` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. `visualiser`, `duplicate-checker` and `rota-app` are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `visualiser`/`duplicate-checker` via `chrome.tabs.create`, `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates), and `about` renders inline static text — none makes sense in the floating pop-out, so they are deliberately omitted there. The full-tab openers are also excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback command so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota` (labelled "Rota"), the compact companion to the full-tab "Rota manager" (`rota-app`), which does.
+> **Panel-only tabs (intentional exceptions):** `duplicate-checker` and `rota-app` exist in `side-panel/panel.html` but NOT in `pop-out/pop-out.html`. Both are special-cased in `panel.js`'s nav click handler (each opens a full browser tab, not a module — `duplicate-checker` via `chrome.tabs.create`, `rota-app` via `openRotaTab()` in `side-panel/modules/rota/rota-open.js`, which focuses an existing tab rather than stacking duplicates). They are omitted from the floating pop-out, excluded from `MODULES` (so the boot guard can't restore into them) and from the Ctrl/Cmd+Alt+Arrow tab cycle; the command palette carries an `open:*` fallback so the pop-out can still reach them. All *real* modules must still appear in both shells — including `rota` (labelled "Rota"), the compact companion to the full-tab "Rota manager" (`rota-app`), which does.
 
 ## chrome.storage.local keys — backup convention
 

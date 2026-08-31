@@ -59,33 +59,49 @@ function capPresetMinimumSummary(p) {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
+// One nav item can light up several stacked sections (Queue rules, Diagnostics).
+const SECTION_GROUPS = {
+  queue: ['triage', 'result-rules', 'oir'],
+  diagnostics: ['ledger', 'health', 'debug'],
+};
+const SECTION_ALIASES = {
+  triage: 'queue',
+  'result-rules': 'queue',
+  oir: 'queue',
+  ledger: 'diagnostics',
+  health: 'diagnostics',
+  debug: 'diagnostics',
+};
+
+function showOptionsSection(navId, scrollToId) {
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
+  document.querySelectorAll('.opt-section').forEach((s) => s.classList.remove('active'));
+  document.querySelector(`.nav-item[data-section="${navId}"]`)?.classList.add('active');
+  const ids = SECTION_GROUPS[navId] || [navId];
+  ids.forEach((id) => document.getElementById(`sect-${id}`)?.classList.add('active'));
+  if (scrollToId) document.getElementById(`sect-${scrollToId}`)?.scrollIntoView({ block: 'start' });
+}
+
 document.querySelectorAll('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => {
-    const target = btn.dataset.section;
-    document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
-    document.querySelectorAll('.opt-section').forEach((s) => s.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(`sect-${target}`)?.classList.add('active');
+    showOptionsSection(btn.dataset.section);
   });
 });
 
 // Deep-linking: options.html#sect-<name> opens straight onto that section.
 // Used by the command palette and the Monitoring panel's settings item; also
 // honoured on in-page hash changes so links can retarget an open options tab.
+// Legacy hashes (#sect-triage, #sect-ledger, …) still work after the collapse.
 function activateSectionFromHash() {
   const m = /^#sect-([a-z-]+)$/.exec(location.hash || '');
   if (!m) return;
-  const btn = document.querySelector(`.nav-item[data-section="${m[1]}"]`);
-  if (btn) btn.click();
+  const raw = m[1];
+  const navId = SECTION_ALIASES[raw] || raw;
+  const scrollTo = SECTION_GROUPS[navId] && SECTION_GROUPS[navId].includes(raw) ? raw : null;
+  showOptionsSection(navId, scrollTo);
 }
 activateSectionFromHash();
 window.addEventListener('hashchange', activateSectionFromHash);
-
-// CQC Inspection Readiness — opens the full readiness page in its own tab (so it
-// prints/exports cleanly), discoverable from the new Settings section.
-document.getElementById('cqcOpenBtn')?.addEventListener('click', () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('cqc-readiness.html') });
-});
 
 // ── Suite settings (practice code) ────────────────────────────────────────────
 
@@ -184,6 +200,69 @@ document.getElementById('replayTourBtn')?.addEventListener('click', () => {
     setTimeout(() => {
       status.textContent = '';
     }, 4000);
+  }
+});
+
+// ── Feedback / feature request / bug report (mailto) ─────────────────────────
+// Ported verbatim from the About tab's composer when that tab was removed in
+// v3.255.0 — this is the suite's only general-purpose defect-reporting route,
+// so it follows the tab rather than being dropped with it. Recipient is the
+// suite.feedbackEmail set just above; falls back to the default below.
+// Nothing is transmitted here: a mailto: hands the draft to the user's own
+// mail client, which they review and send themselves.
+const FEEDBACK_EMAIL_DEFAULT = 'davetriska02@gmail.com';
+const fbTypeBtns = document.querySelectorAll('.fb-type-btn');
+fbTypeBtns.forEach((b) =>
+  b.addEventListener('click', () => {
+    fbTypeBtns.forEach((x) => x.classList.remove('active'));
+    b.classList.add('active');
+  })
+);
+
+document.getElementById('fbSendBtn')?.addEventListener('click', async () => {
+  const status = document.getElementById('fbStatus');
+  const subjectEl = document.getElementById('fbSubject');
+  const detailsEl = document.getElementById('fbDetails');
+  const type = document.querySelector('.fb-type-btn.active')?.dataset.fbType || 'Feedback';
+  const subject = (subjectEl?.value || '').trim();
+  const details = (detailsEl?.value || '').trim();
+
+  if (!subject && !details) {
+    if (status) {
+      status.style.color = 'var(--red)';
+      status.textContent = 'Add a subject or details first';
+    }
+    subjectEl?.focus();
+    return;
+  }
+
+  const version = chrome.runtime.getManifest().version;
+  const diag = [
+    '',
+    '──────────',
+    '(Diagnostics — please keep)',
+    `Type: ${type}`,
+    `Suite version: v${version}`,
+    `Browser: ${navigator.userAgent}`,
+    `Date: ${new Date().toISOString()}`,
+  ].join('\n');
+  const mailSubject = `[Medicus Suite] ${type}${subject ? ': ' + subject : ''}`;
+  const mailBody = `${details}\n${diag}`;
+  const stored = await chrome.storage.local.get('suite.feedbackEmail');
+  const recipient = (stored['suite.feedbackEmail'] || '').trim() || FEEDBACK_EMAIL_DEFAULT;
+  const url = `mailto:${recipient}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+
+  // Transient anchor click rather than navigating the settings page away.
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  if (status) {
+    status.style.color = 'var(--green)';
+    status.textContent = 'Opening your email client…';
   }
 });
 
@@ -847,7 +926,6 @@ async function doFullExport() {
     popout,
     referrals,
     requestMonitor,
-    condor,
     reception,
     knowledge,
     labfiling,
@@ -868,7 +946,6 @@ async function doFullExport() {
     popoutExport(),
     referralsExport(),
     requestMonitorExport(),
-    condorExport(),
     receptionExport(),
     knowledgeExport(),
     labfilingExport(),
@@ -893,7 +970,6 @@ async function doFullExport() {
       popout,
       referrals,
       requestMonitor,
-      condor,
       reception,
       knowledge,
       labfiling,
@@ -921,7 +997,6 @@ async function doModuleExport(scope) {
     popout: () => popoutExport(),
     referrals: () => referralsExport(),
     requestMonitor: () => requestMonitorExport(),
-    condor: () => condorExport(),
     reception: () => receptionExport(),
     knowledge: () => knowledgeExport(),
     labfiling: () => labfilingExport(),
@@ -963,7 +1038,6 @@ async function applyEnvelope(envelope) {
     mods.popout && (() => popoutImport(mods.popout)),
     mods.referrals && (() => referralsImport(mods.referrals)),
     mods.requestMonitor && (() => requestMonitorImport(mods.requestMonitor)),
-    mods.condor && (() => condorImport(mods.condor)),
     mods.reception && (() => receptionImport(mods.reception)),
     mods.knowledge && (() => knowledgeImport(mods.knowledge)),
     mods.labfiling && (() => labfilingImport(mods.labfiling)),
@@ -2264,7 +2338,7 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
 });
 
 // Refresh debug state when the Debug tab is opened
-document.querySelectorAll('.nav-item[data-section="debug"]').forEach((btn) => {
+document.querySelectorAll('.nav-item[data-section="diagnostics"]').forEach((btn) => {
   btn.addEventListener('click', refreshDebugState);
 });
 
@@ -4608,7 +4682,7 @@ initPdcTallySection({
     refreshLedger();
   }
   document
-    .querySelectorAll('.nav-item[data-section="ledger"]')
+    .querySelectorAll('.nav-item[data-section="diagnostics"]')
     .forEach((btn) => btn.addEventListener('click', refreshLedger));
 })();
 
@@ -4688,7 +4762,7 @@ initPdcTallySection({
     refreshHealth();
   }
   document
-    .querySelectorAll('.nav-item[data-section="health"]')
+    .querySelectorAll('.nav-item[data-section="diagnostics"]')
     .forEach((btn) => btn.addEventListener('click', refreshHealth));
 
   // Snappier than a re-open: the canary writes this key directly from the

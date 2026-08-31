@@ -808,45 +808,6 @@
   padding: 6px 9px;
 }
 
-/* footer — sticky so the deep-view launch is always reachable ---------------- */
-.rec-foot {
-  position: sticky;
-  bottom: 0;
-  background: var(--bg-deep);
-  padding-top: 8px;
-  margin-top: 2px;
-}
-.rec-deep-btn {
-  width: 100%;
-  border: 1px solid var(--accent);
-  background: var(--bg-elev);
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-.rec-deep-btn:hover {
-  background: var(--accent-dim);
-}
-.rec-deep-sub {
-  font-size: 10px;
-  font-weight: 400;
-  opacity: 0.85;
-  text-transform: none;
-}
-.rec-foot-note {
-  font-size: 10.5px;
-  color: var(--text-4);
-  margin: 6px 2px 0;
-  line-height: 1.35;
-}
-
 /* state cards --------------------------------------------------------------- */
 .rec-state {
   text-align: center;

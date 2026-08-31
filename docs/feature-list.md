@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.254.0
-**Generated:** 2026-08-30 (automated)
+**Version:** v3.255.0
+**Generated:** 2026-08-31
 
 ## What it is
 
@@ -9,8 +9,8 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 
 ## At a glance
 
-- 20 side-panel modules covering morning workflow, monitoring, capacity/demand, reception, referrals, reminders, staff rota, the Note display board and reference material
-- 6 full-tab tools reached from the panel or from Medicus's own pages (Patient Record Visualiser, Duplicate Problem Checker, Rota Manager, Contacts Management, Practice Report / CQC Inspection Readiness, Note display board)
+- 20 side-panel tabs covering morning workflow, monitoring, capacity/demand, reception, referrals, staff rota, the Note display board and reference material (two of those tabs open a full-tab tool)
+- 3 full-tab tools reached from the panel or from Medicus's own pages (Duplicate Problem Checker, Rota Manager, Note display board)
 - around 14 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools)
 - 8 rule types in the clinical alert engine
 - 39 built-in drug-monitoring rules (38 enabled), 81 QOF rules (15 register + 66 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
@@ -30,7 +30,7 @@ Available appointment slots by type for any date, read live from Medicus's sched
 The clinical context sidebar for whichever patient record is open. Checks active medications, problems and recent results against drug-monitoring intervals and this year's QOF indicators, showing a plain green/amber/red chip for each. Passive display only — never writes to the record, never orders anything, never tells the clinician what to do.
 - Drug-monitoring and QOF register/indicator chips; prescribing-safety scores (ACB, STOPP/START-style)
 - Practice-editable custom alert rules; a coverage view for meds/problems with no matching rule
-- One-click "create task" / "add to Follow-ups" from a chip
+- One-click "create task" from a chip
 
 ### Trends
 Charts a patient's blood pressure, renal function, DOAC creatinine clearance, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses. Includes a DOAC-only view (Cockcroft-Gault CrCl, not eGFR) and CSV export.
@@ -47,11 +47,6 @@ Practice activity per staff member over a configurable date range, as a stacked 
 ### Referrals Tracker — v1.0
 Referral audit data over a configurable date range: totals, priority mix (Routine/Urgent/2WW) and status, as bar charts by clinician, specialty and hospital.
 
-### Condor
-A single live "practice pressure" gauge combining waiting-room load, queue backlog, urgent-task count and remaining capacity into one score.
-- Configurable weightings/thresholds and a capacity safety floor (never shows green while demand already exceeds capacity)
-- Daily snapshot history feeding the Practice Report tool
-
 ### Reception
 A reception-facing view of whichever patient's record is open, plus optional guided-capture question sets for common presenting problems and an inline appointment-booking panel. Guided pathways ship switched off until a practice administrator accepts the disclaimer.
 - Guided capture with a signed-off call script (red flags, then a short history set), output as plain text to paste into triage
@@ -60,9 +55,6 @@ A reception-facing view of whichever patient's record is open, plus optional gui
 
 ### Signing Queue — v1.0
 Every open repeat-prescription request, alongside that patient's recorded drug-monitoring currency, so the pile can be worked riskiest-first. Never implies a request is safe to sign — only that no flag was found.
-
-### Follow-ups — v1.0
-A personal safety-net reminder list — "chase Friday" logged in seconds, resurfacing when the due date passes. Explicitly a personal reminder, not the clinical safety-netting record; entries stay device-local, not part of suite backups.
 
 ### Pre-clinic Sweep
 Runs the Monitoring rules across every patient booked in today's clinic (or one clinician's list), producing a morning-huddle worklist and printable reception handout before the consultation. Ignores per-workstation dismissed-rule settings by design.
@@ -118,11 +110,8 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
-- **Patient Record Visualiser** — analyses an exported Medicus PDF locally into a multi-tab clinical dashboard (continuity, investigation trends, medication compliance, frailty, prescribing-safety flags, QOF status, event timeline). Nothing leaves the browser.
 - **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
-- **Practice Report** — a printable snapshot built from Condor's pressure-index history.
-- **CQC Inspection Readiness** — a printable inspection-preparation summary.
 - **Note** — a TV/monitor kiosk (waiting room, staff ops, message, or a practice-made board). Public profiles show aggregates and practice-authored words only — never patient names. An optional YouTube playlist is off by default.
 
 ## Alert engine
@@ -146,11 +135,11 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
-- **Event Ledger** — a machine-local record of what the suite has flagged, for audit and troubleshooting
-- **Suite health** — self-diagnosis of the extension's own data pipeline, surfaced as an amber-only strip when something is degraded
+- **Diagnostics** — Event Ledger (machine-local record of what the suite has flagged), Suite health (self-diagnosis of the extension's own data pipeline), and Debug, collapsed into one Settings page
 
 ## Recent additions (last 4 weeks)
 
+- **v3.255.0 (31 Aug)** — Pruned Follow-ups, Visualiser, About, Condor, CQC Inspection Readiness and Practice Report; Settings collapsed into Queue rules and Diagnostics
 - **v3.254.0 (30 Aug)** — Note: optional YouTube playlist on a public TV (off by default; sanitised id only; fail-loud hides the player)
 - **v3.248.0–v3.253.1 (29–30 Aug)** — Note: a new full-tab TV/monitor display board (waiting room, ops overview, message and up to six custom boards), now with ten visual styles and ten colour options on the default style
 - **v3.249.0–v3.250.0 (29 Aug)** — QOF monitoring rework: disease-register-driven matching, a July 2026 rule refresh, fewer false positives

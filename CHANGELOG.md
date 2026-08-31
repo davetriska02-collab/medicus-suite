@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.254.2] — 2026-08-31
+## [v3.255.2] — 2026-08-31
 
 ### Lab allocation canvas — name the team on the confirm list
 
@@ -19,6 +19,55 @@ asked for — a dashed edge, so an inbox does not read as a person.
 
 Formatting on the five lab-allocation files restored to Prettier's
 output; the 3.243.3–3.243.9 pass had drifted them off it.
+
+## [v3.255.1] — 2026-08-31
+
+### Review fixes on the v3.255.0 prune
+
+- **Feedback / feature request / bug report is back.** The composer was deleted
+  with the About tab in v3.255.0 and had no replacement, leaving the suite with
+  no general route for a clinician to report a wrong chip, a missing rule or a
+  defect (only Monitoring's narrow "Report a possible missing brand" link
+  survived). Restored, unchanged, under **Settings → Suite → Send feedback**,
+  next to the recipient setting that drives it. Still a `mailto:` — nothing is
+  transmitted by the extension.
+- **Stale Settings copy.** The "Feedback recipient email" help text still
+  pointed at the "About-tab" button that no longer exists; it now names the
+  composer below it and the Monitoring link.
+- **Orphaned CSS removed.** ~250 lines left behind by the prune:
+  `.about-*` / `.module-card*` / `.purpose-box` / `.disclaimer-link*` /
+  `.feature-list-link*` / `.fb-*` in `side-panel/panel.css`, and
+  `.rec-foot` / `.rec-deep-btn*` / `.rec-foot-note` in `record.css` (the
+  "Open full visualiser" footer).
+- Dropped the deleted `visualiser-core.html` from the Atelier screenshot
+  harness, and closed a stray gap in `sentinel.js`'s import block.
+
+## [v3.255.0] — 2026-08-31
+
+### Prune unused and low-value surfaces
+
+Removed four side-panel tabs and two full-page tools that were either launchers, yearly, or machine-local dead-ends:
+
+- **Follow-ups** — personal this-machine-only reminder ledger, including the Monitoring "Add follow-up reminder" action and the Today line.
+- **Visualiser** — PDF-drop record analyser (`visualiser-core.*`, PDF.js / Chart.js / D3). Record remains the live snapshot.
+- **About** — static brochure tab; version and update check stay on Settings → Suite.
+- **Condor** — ops dashboard tab. Note's TV board still uses `condor-data.js` / `condor-index-core.js` for live feeds and the pressure index.
+- **CQC Inspection Readiness** — yearly evidence pack and its Settings launcher.
+- **Practice Report** — palette-only Condor snapshot PDF, unused from the menu.
+
+Dead code: old Sentinel `sidebar/` (never mounted), `companion-preview.html`.
+
+Settings collapsed: **Queue rules** (Triage Lens + Result Rules + Outstanding Requests) and **Diagnostics** (Event Ledger + Suite health + Debug). Legacy `#sect-triage` / `#sect-health` hashes still work.
+
+Duplicates and Rota manager stay.
+
+### Safety-doc pin and Tests CI
+
+`docs/CLINICAL-SAFETY-NOTICE.md` product version re-pinned to 3.255.0 so
+`check-doc-versions.js` tracks the minor. Does not move
+`last_cso_review_version` (CSN 3.237.1, hazard log 3.202.0, feature-list
+3.233.0). The Tests workflow no longer runs the Visualiser Playwright job
+(`scripts/verify-visualiser.mjs` was removed with the tab).
 
 ## [v3.254.1] — 2026-08-31
 
