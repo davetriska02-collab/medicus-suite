@@ -210,6 +210,38 @@
     return false;
   }
 
+  function coerceWorkDate(iso, fallback) {
+    var day = String(iso || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      var check = new Date(day + 'T12:00:00');
+      if (!isNaN(check.getTime())) return day;
+    }
+    var fb = String(fallback || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fb)) return fb;
+    return Lab.todayISO();
+  }
+
+  function addDaysISO(iso, days) {
+    var day = coerceWorkDate(iso, Lab.todayISO());
+    var d = new Date(day + 'T12:00:00');
+    if (isNaN(d.getTime())) return day;
+    d.setDate(d.getDate() + (Number(days) || 0));
+    return (
+      d.getFullYear() +
+      '-' +
+      String(d.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(d.getDate()).padStart(2, '0')
+    );
+  }
+
+  function workDayPhrase(iso, calendarToday) {
+    var day = coerceWorkDate(iso, calendarToday);
+    var cal = coerceWorkDate(calendarToday, Lab.todayISO());
+    if (day === cal) return 'today';
+    return Lab.formatLeaveDate(day);
+  }
+
   function workingTodayDoctors(opts) {
     opts = opts || {};
     var book = opts.book || null;
@@ -256,17 +288,19 @@
     return chosen;
   }
 
-  function planEvenSplit(tiles, destinations) {
+  function planEvenSplit(tiles, destinations, opts) {
+    opts = opts || {};
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
       return t && t.id;
     });
     var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
       return d && d.key && String(d.key).indexOf('clinician:') === 0;
     });
+    var dayPhrase = opts.dayPhrase || 'today';
     if (!dests.length) {
       return {
         ok: false,
-        reason: 'No doctors with a session on today’s appointment book to split onto.',
+        reason: 'No doctors with a session on the appointment book for ' + dayPhrase + ' to split onto.',
         total: pool.length,
         shares: [],
         leftover: pool.length,
@@ -317,7 +351,8 @@
         k +
         ' doctor' +
         (k === 1 ? '' : 's') +
-        ' working today',
+        ' working ' +
+        dayPhrase,
     };
   }
 
@@ -351,6 +386,10 @@
     copyList: copyList,
     columnTitle: columnTitle,
     isLikelyDoctor: isLikelyDoctor,
+    coerceWorkDate: coerceWorkDate,
+    addDaysISO: addDaysISO,
+    workDayPhrase: workDayPhrase,
+    formatLeaveDate: Lab.formatLeaveDate,
     workingTodayDoctors: workingTodayDoctors,
     planEvenSplit: planEvenSplit,
     applyEvenSplit: applyEvenSplit,

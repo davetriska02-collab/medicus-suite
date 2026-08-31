@@ -109,6 +109,21 @@ console.log('\n--- copy list is honest ---');
   check(!/\b(Done|Sent|Allocated|Submitted|Booked|Filed|Issued|Signed)\b/.test(text), 'no completion verbs');
 }
 
+console.log('\n--- working day defaults to the calendar and can look ahead ---');
+{
+  check(C.coerceWorkDate('2026-09-01', '2026-08-31') === '2026-09-01', 'valid ISO is kept');
+  check(C.coerceWorkDate('', '2026-08-31') === '2026-08-31', 'empty falls back to calendar day');
+  check(C.coerceWorkDate('nights', '2026-08-31') === '2026-08-31', 'garbage falls back to calendar day');
+  check(C.addDaysISO('2026-08-31', 1) === '2026-09-01', 'tomorrow is calendar day + 1');
+  check(C.workDayPhrase('2026-08-31', '2026-08-31') === 'today', 'same day reads as today');
+  check(/1 Sep 2026/.test(C.workDayPhrase('2026-09-01', '2026-08-31')), 'ahead day is named, not called today');
+  const tomorrowPlan = C.planEvenSplit([rxRow(1)], [], { dayPhrase: '1 Sep 2026' });
+  check(
+    /1 Sep 2026/.test(tomorrowPlan.reason) && !/working today/.test(tomorrowPlan.reason),
+    'no-doctors reason uses the picked day'
+  );
+}
+
 console.log('\n--- even split among doctors working today ---');
 {
   const book = Lab.parseTodayBook({
@@ -234,6 +249,9 @@ console.log('\n--- write stays on the lab client ---');
   check(/decorateRxRow/.test(canvas), 'rows are decorated after the task-list GET');
   check(/Stage even split on canvas/.test(canvas), 'even-split button stages, it does not write');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
+  check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
+  check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
+  check(/Defaults to today/.test(canvas), 'date picker copy says it defaults to today');
   check(/Allocate non-routine prescriptions on canvas/.test(canvas), 'launcher names non-routine prescriptions');
   check(/ms-rxac-overlay/.test(canvas) && /ms-rxac-launch/.test(canvas), 'overlay and launcher use rxac ids');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas), 'reuses the lab layout classes');

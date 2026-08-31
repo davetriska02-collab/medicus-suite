@@ -59,6 +59,19 @@
   var _dragGhost = null;
   var _expandedChip = '';
   var _collapsed = {};
+  var _workDate = '';
+
+  function calendarToday() {
+    return C.todayISO();
+  }
+
+  function workDate() {
+    return C.coerceWorkDate(_workDate, calendarToday());
+  }
+
+  function dayPhrase() {
+    return C.workDayPhrase(workDate(), calendarToday());
+  }
 
   function announce(text) {
     setTimeout(function () {
@@ -212,6 +225,7 @@
           absences: _absences,
           staffList: _rota.staff,
           leaveList: _rota.leave,
+          dateISO: workDate(),
         })
       );
       render();
@@ -249,7 +263,7 @@
     _absences = [];
     if (!_route) return;
     var cli = client();
-    var date = C.todayISO();
+    var date = workDate();
     try {
       _book = await cli.fetchTodayBook(date);
     } catch (_) {
@@ -262,12 +276,35 @@
     }
   }
 
+  async function reloadWorkingDay() {
+    if (!_open || !_route) return;
+    _overviewProgress = 'Reading the appointment book for ' + dayPhrase() + '…';
+    render();
+    try {
+      await loadMedicusPresence();
+      harvestStaffFromBook(_book);
+      _draft = C.ensureWorkingTodayColumns(_draft, currentDestinations());
+    } catch (_) {
+      _book = null;
+    }
+    _overviewProgress = '';
+    announce('Even split is for doctors working ' + dayPhrase() + '.');
+    render();
+  }
+
+  function setWorkDate(iso) {
+    var next = C.coerceWorkDate(iso, calendarToday());
+    if (next === workDate()) return;
+    _workDate = next;
+    reloadWorkingDay();
+  }
+
   function presenceForClinician(col) {
     if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
     // Display casing — matching is case-insensitive, labels are user-facing.
     return C.presenceForName({
       name: C.displayClinicianName(col.title),
-      dateISO: C.todayISO(),
+      dateISO: workDate(),
       book: _book,
       absences: _absences,
       staffList: _rota.staff,
@@ -438,7 +475,9 @@
     var flag = away
       ? '<span class="ms-lac-chip-flag">AWAY</span>'
       : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In today</span>'
+        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In ' +
+          esc(dayPhrase()) +
+          '</span>'
         : col.kind === 'team'
           ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
           : '';
@@ -552,17 +591,23 @@
       absences: _absences,
       staffList: _rota.staff,
       leaveList: _rota.leave,
+      dateISO: workDate(),
     });
   }
 
   function currentSplitPlan() {
     var board = currentWorkspace();
-    return C.planEvenSplit((board.pool && board.pool.tiles) || [], currentDestinations());
+    return C.planEvenSplit((board.pool && board.pool.tiles) || [], currentDestinations(), {
+      dayPhrase: dayPhrase(),
+    });
   }
 
   function evenSplitHtml() {
     var dests = currentDestinations();
     var plan = currentSplitPlan();
+    var phrase = dayPhrase();
+    var cal = calendarToday();
+    var picked = workDate();
     var rows = (plan.shares || [])
       .map(function (s) {
         return (
@@ -574,18 +619,40 @@
         );
       })
       .join('');
+    var dayRow =
+      '<div class="ms-lac-split-day">' +
+      '<label class="ms-lac-split-day-label" for="ms-rxac-day">Working day</label>' +
+      '<input type="date" id="ms-rxac-day" value="' +
+      esc(picked) +
+      '" aria-label="Working day for the even split. Defaults to today.">' +
+      '<button type="button" class="ms-lac-ghost' +
+      (picked === cal ? ' ms-lac-split-day-on' : '') +
+      '" id="ms-rxac-day-today">Today</button>' +
+      '<button type="button" class="ms-lac-ghost' +
+      (picked === C.addDaysISO(cal, 1) ? ' ms-lac-split-day-on' : '') +
+      '" id="ms-rxac-day-tomorrow">Tomorrow</button>' +
+      '</div>' +
+      '<p class="ms-lac-split-note">Defaults to today. Change this if you are allocating the night before.</p>';
     if (!dests.length) {
       return (
         '<div class="ms-lac-split" id="ms-rxac-split-box">' +
-        '<p class="ms-lac-split-title">Even split</p>' +
-        '<p class="ms-lac-split-note">No doctors with a session on today’s appointment book, so there is nobody to split onto. Add a clinician field by hand, or wait until the book is readable.</p>' +
+        '<p class="ms-lac-split-title">Even split among doctors working ' +
+        esc(phrase) +
+        '</p>' +
+        dayRow +
+        '<p class="ms-lac-split-note">No doctors with a session on the appointment book for ' +
+        esc(phrase) +
+        ', so there is nobody to split onto. Add a clinician field by hand, or pick another day.</p>' +
         '</div>'
       );
     }
     var canStage = !!(plan.ok && plan.total);
     return (
       '<div class="ms-lac-split" id="ms-rxac-split-box">' +
-      '<p class="ms-lac-split-title">Even split among doctors working today</p>' +
+      '<p class="ms-lac-split-title">Even split among doctors working ' +
+      esc(phrase) +
+      '</p>' +
+      dayRow +
       '<p class="ms-lac-split-note">' +
       esc(plan.ok ? plan.summary : plan.reason) +
       '. Staging only — it does not write until you review and confirm.</p>' +
@@ -639,7 +706,7 @@
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Click a field to stage the selection'
-        : 'In today at the top. Drag onto a field — hover near the edge to scroll') +
+        : 'Working ' + dayPhrase() + ' at the top. Drag onto a field — hover near the edge to scroll') +
       '</span>' +
       '</div>' +
       (clinicians.length
@@ -906,6 +973,21 @@
       });
     var discardBtn = root.querySelector('#ms-lac-close-discard');
     if (discardBtn) discardBtn.addEventListener('click', closeOverlay);
+    var dayInput = root.querySelector('#ms-rxac-day');
+    if (dayInput)
+      dayInput.addEventListener('change', function () {
+        setWorkDate(dayInput.value);
+      });
+    var dayToday = root.querySelector('#ms-rxac-day-today');
+    if (dayToday)
+      dayToday.addEventListener('click', function () {
+        setWorkDate(calendarToday());
+      });
+    var dayTomorrow = root.querySelector('#ms-rxac-day-tomorrow');
+    if (dayTomorrow)
+      dayTomorrow.addEventListener('click', function () {
+        setWorkDate(C.addDaysISO(calendarToday(), 1));
+      });
     var splitBtn = root.querySelector('#ms-rxac-split');
     if (splitBtn)
       splitBtn.addEventListener('click', function () {
@@ -921,7 +1003,9 @@
             plan.total +
             ' onto ' +
             plan.doctors +
-            ' doctors working today. Review then write to change who the requests sit with.'
+            ' doctors working ' +
+            dayPhrase() +
+            '. Review then write to change who the requests sit with.'
         );
         render();
       });
@@ -1194,7 +1278,7 @@
     if (kind === 'clinician') {
       var abs = C.presenceForName({
         name: title,
-        dateISO: C.todayISO(),
+        dateISO: workDate(),
         book: _book,
         absences: _absences,
         staffList: _rota.staff,
@@ -1376,6 +1460,7 @@
     _staffDir = C.harvestStaffDirectory([], null);
     _teamDir = C.harvestTeamDirectory([], null);
     _collapsed = {};
+    _workDate = '';
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1400,6 +1485,7 @@
     _copyNote = '';
     _error = null;
     _collapsed = {};
+    _workDate = calendarToday();
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');

@@ -18,7 +18,9 @@ would look like for each doctor with a session on today’s appointment
 book, and can stage that split on the canvas. Cancelled sessions,
 absences, and (when any GP-looking session exists) nurses / pharmacists /
 HCAs are not destinations. Already-sitting work is not rebalanced.
-Staging the split still requires Review then write.
+Staging the split still requires Review then write. The working day
+defaults to the calendar date; Tonight you can set it to tomorrow
+(date picker, or Today / Tomorrow) so the split uses that day’s book.
 
 Routine, EPS, and investigation-result queues stay on their own
 surfaces.
