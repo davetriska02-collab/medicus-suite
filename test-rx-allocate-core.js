@@ -264,6 +264,13 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   );
   const untouched = C.markInboxRows([sittingGp], '');
   check(C.isRxUnallocated(untouched[0]) === false, 'without an inbox filter, GP-assigned work stays sitting');
+  const merged = C.mergeInboxAndSitting(
+    [rxRow(7, { assignedTo: 'Dr Jane Cole', assignedId: boxId })],
+    [rxRow(7, { assignedTo: 'Dr Jane Cole', assignedId: boxId }), rxRow(8, { assignedTo: 'Dr David Triska' })],
+    '?masterAssignee=' + boxId
+  );
+  check(merged.length === 2, 'inbox + already-sitting merge to two rows');
+  check(merged.filter((r) => C.isRxUnallocated(r)).length === 1, 'inbox row stays the pile; GP-sitting stays sitting');
   const mixed = C.planEvenSplit([inbox, sittingGp, rxRow(5)], dests);
   check(mixed.total === 2, 'even split is the unallocated inbox pile, not already-allocated GP work');
   check(
@@ -348,7 +355,7 @@ console.log('\n--- write stays on the lab client ---');
   check(/does not issue, sign, or file the prescription/.test(canvas), 'confirm says the write does not issue the Rx');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated|Filed|Issued|Signed)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(!/Ordered by|who ordered|Who ordered/.test(canvas), 'canvas copy never claims who ordered');
-  check(/markInboxRows/.test(canvas) || /decorateRxRow/.test(canvas), 'rows are decorated after the task-list GET');
+  check(/mergeInboxAndSitting/.test(canvas), 'rows are decorated after the task-list GET');
   check(/Re-split equally/.test(canvas), 're-split button resets to an even split');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied as the default board');
   check(
@@ -360,18 +367,18 @@ console.log('\n--- write stays on the lab client ---');
     're-split writes a visible note, not only a live-region whisper'
   );
   check(
-    /evenSplitHtml\(\) \+[\s\S]{0,80}?<div class="ms-lac-workspace">/.test(canvas),
+    /evenSplitHtml\(\) \+[\s\S]{0,80}?ms-rxac-folders/.test(canvas),
     'even-split box is outside the unallocated pool drop target'
   );
-  check(/Drag to move one/.test(canvas), 'copy says you can still move requests by hand');
+  check(/Each folder is a doctor/.test(canvas), 'copy says you can still move requests by hand');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
   check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
   check(/Working day/.test(canvas) && /ms-rxac-day-today/.test(canvas), 'date picker copy says it defaults to today');
   check(/Share out this inbox/.test(canvas), 'launcher names the inbox, not a canvas');
-  check(/data-expand-key/.test(canvas), 'clinician fields have a dedicated Expand control for the patient list');
+  check(/ms-rxac-folder-body/.test(canvas), 'folder patient lists are always visible');
   check(/ms-rxac-overlay/.test(canvas) && /ms-rxac-launch/.test(canvas), 'overlay and launcher use rxac ids');
-  check(/ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas), 'reuses the lab layout classes');
+  check(/ms-rxac-folder/.test(canvas) && /ms-rxac-folders/.test(canvas), 'board is a grid of clinician folders');
   check(
     /result\.written > 0[\s\S]{0,240}?await loadBoard\(\{ skipSplit: true \}\)/.test(canvas),
     'a partly-written batch re-reads the queue without restaging the even split'
@@ -399,7 +406,7 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
   check(/fetchRxTaskList/.test(canvas), 'canvas loads the pile via fetchRxTaskList');
-  check(/markInboxRows/.test(canvas), 'canvas treats the page-inbox GET as the unallocated pile');
+  check(/mergeInboxAndSitting/.test(canvas), 'canvas treats the page-inbox GET as the unallocated pile');
   check(/isRxUnallocated/.test(canvas), 'canvas even-split only stages unallocated Non-Routine requests');
   check(/isRxUnallocated\(t\)/.test(canvas), 'split counts ignore requests already sitting with a GP');
   check(/skipSplit/.test(canvas), 'after Write the canvas does not re-stage an even split');

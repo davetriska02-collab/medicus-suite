@@ -129,6 +129,32 @@
     return next;
   }
 
+  // Inbox GET (page masterAssignee) is the box to share out. Bare GET of
+  // the same slug is everyone already sitting with a GP. Folders need both.
+  function mergeInboxAndSitting(inboxRows, sittingRows, search) {
+    var inbox = markInboxRows(inboxRows, search);
+    var seen = {};
+    inbox.forEach(function (r) {
+      if (r && r.id) seen[r.id] = true;
+    });
+    var sitting = [];
+    (Array.isArray(sittingRows) ? sittingRows : []).forEach(function (raw) {
+      var row = decorateRxRow(raw);
+      if (!row || !row.id || seen[row.id]) return;
+      if (isRxUnallocated(row)) {
+        row.rxInboxPile = true;
+        row.rxInboxAssignedTo = row.assignedTo || '';
+        row.assignedTo = 'Unassigned';
+        inbox.push(row);
+        seen[row.id] = true;
+        return;
+      }
+      sitting.push(row);
+      seen[row.id] = true;
+    });
+    return inbox.concat(sitting);
+  }
+
   // The page filter is the box to work. Those rows are assigned to the
   // inbox UUID (often a person-shaped name on assignedTo), which made
   // homeColumnKey treat the whole pile as already sitting with a GP.
@@ -510,6 +536,7 @@
     parseRxQueueRoute: parseRxQueueRoute,
     decorateRxRow: decorateRxRow,
     markInboxRows: markInboxRows,
+    mergeInboxAndSitting: mergeInboxAndSitting,
     inboxAssigneeId: inboxAssigneeId,
     isRxInboxName: isRxInboxName,
     isRxUnallocated: isRxUnallocated,

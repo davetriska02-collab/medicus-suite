@@ -238,8 +238,13 @@
     render();
     try {
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
-      var out = await C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
-      _rows = C.markInboxRows(out.rows || [], _route.search);
+      var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
+      var sittingP = C.fetchRxTaskList(_route.apiBase, _route.slug, '').catch(function () {
+        return { rows: [] };
+      });
+      var out = await inboxP;
+      var sitting = await sittingP;
+      _rows = C.mergeInboxAndSitting(out.rows || [], (sitting && sitting.rows) || [], _route.search);
       _route.slug = out.slug || _route.slug;
       if (out.search) _route.search = out.search;
       _taskList = out.taskList;
@@ -248,7 +253,6 @@
       render();
       await presenceP;
       harvestStaffFromBook(_book);
-      _rows = C.markInboxRows(_rows, _route.search);
       await harvestStaffFromOverviews(_rows);
       if (!opts.skipSplit) applyDefaultEvenSplit();
     } catch (err) {
@@ -366,13 +370,14 @@
         ? '<span class="ms-lac-tile-token">with ' + esc(C.displayClinicianName(tile.assignedTo)) + '</span>'
         : '';
     var whoLine = '';
-    if (opts.showWho) {
-      var who = tile.requester
-        ? 'Usual GP ' + C.displayClinicianName(tile.requester)
-        : tile.namedGp
-          ? 'Usual GP ' + tile.namedGp
-          : 'No usual GP on the request';
-      whoLine = '<span class="ms-lac-tile-who">' + esc(who) + '</span>';
+    if (opts.showWho && (tile.requester || tile.namedGp)) {
+      whoLine =
+        '<span class="ms-lac-tile-token">' +
+        esc('Usual GP ' + C.displayClinicianName(tile.requester || tile.namedGp)) +
+        '</span>';
+    }
+    if (tile.staged) {
+      whoLine += '<span class="ms-lac-tile-token">not saved</span>';
     }
     return (
       '<div class="' +
@@ -722,78 +727,87 @@
     );
   }
 
+  function folderHtml(col, opts) {
+    opts = opts || {};
+    var inbox = !!opts.inbox;
+    var abs = inbox ? { state: 'n/a', label: '' } : presenceForClinician(col);
+    var away = abs.state === 'away' || abs.state === 'away-pending';
+    var inToday = abs.state === 'present' && abs.reason === 'in-today';
+    var name = inbox ? 'Unallocated' : C.displayClinicianName(col.title);
+    var flag = away
+      ? '<span class="ms-lac-chip-flag">AWAY</span>'
+      : inToday
+        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In ' + esc(dayPhrase()) + '</span>'
+        : col.kind === 'team'
+          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
+          : '';
+    var meta = inbox ? col.count + ' in this box' : fieldCounts(col);
+    var body = (col.tiles || [])
+      .map(function (t) {
+        return tileHtml(t, { showWho: true, showAssignee: false });
+      })
+      .join('');
+    if (!body) {
+      body =
+        '<div class="ms-lac-empty-sm">' +
+        (inbox ? 'Empty — patients are in the doctor boxes.' : 'Nothing in this box yet. Drag a patient here.') +
+        '</div>';
+    }
+    return (
+      '<div class="ms-rxac-folder' +
+      (inbox ? ' ms-rxac-folder-inbox' : '') +
+      (away ? ' ms-lac-chip-away' : '') +
+      (inToday ? ' ms-lac-chip-in' : '') +
+      '" data-col-key="' +
+      esc(col.key) +
+      '" data-col-kind="' +
+      esc(inbox ? 'pool' : col.kind || 'clinician') +
+      '">' +
+      '<div class="ms-rxac-folder-head">' +
+      '<span class="ms-rxac-folder-name">' +
+      esc(name) +
+      '</span>' +
+      flag +
+      '<span class="ms-rxac-folder-count">' +
+      esc(String(col.count || 0)) +
+      '</span>' +
+      '<span class="ms-rxac-folder-meta">' +
+      esc(meta) +
+      '</span></div>' +
+      '<div class="ms-rxac-folder-body" role="listbox" aria-label="' +
+      esc(name) +
+      '">' +
+      body +
+      '</div></div>'
+    );
+  }
+
   function boardHtml() {
     var board = currentWorkspace();
     var pool = board.pool;
-    var selCount = selectedIds().length;
-    var body = pool.groups && pool.groups.length ? pool.groups.map(groupHtml).join('') : '';
-    if (!body && board.count > 0) {
-      body = _splitDefaulted
-        ? '<div class="ms-lac-empty"><div class="ms-lac-empty-title">On the right — not saved yet</div>' +
-          '<div class="ms-lac-empty-sub">' +
-          esc(String(C.draftSummary(_rows, _draft).count || board.count)) +
-          ' proposed for doctors working ' +
-          esc(dayPhrase()) +
-          '. Open a doctor to see who, or drag to move. Medicus does not change until you confirm.</div></div>'
-        : '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left in the inbox</div>' +
-          '<div class="ms-lac-empty-sub">Everything on this queue already sits with a doctor, or is proposed on the right.</div></div>';
-    }
     var clinicians = sortClinicianFields(board.clinicians);
     var teams = board.teams || [];
+    var folders = [folderHtml(pool, { inbox: true })]
+      .concat(
+        clinicians.map(function (col) {
+          return folderHtml(col, {});
+        })
+      )
+      .concat(
+        teams.map(function (col) {
+          return folderHtml(col, {});
+        })
+      )
+      .join('');
     return (
       evenSplitHtml() +
-      '<div class="ms-lac-workspace">' +
-      '<div class="ms-lac-col ms-lac-pool" data-col-key="' +
-      esc(pool.key) +
-      '" data-col-kind="pool">' +
-      '<div class="ms-lac-pool-head">' +
-      '<div class="ms-lac-pool-titles">' +
-      '<p class="ms-lac-pool-eyebrow">' +
-      esc(pool.title) +
-      '</p>' +
-      '<h3 class="ms-lac-pool-title">Inbox</h3>' +
+      '<div class="ms-rxac-folders" id="ms-rxac-folders">' +
+      folders +
       '</div>' +
-      '<span class="ms-lac-pool-count">' +
-      pool.count +
-      ' of ' +
-      board.count +
-      '</span>' +
-      '<span class="ms-lac-col-meta">Usual GP is a label, not who they sit with</span>' +
-      '</div>' +
-      (body || emptyPoolHtml()) +
-      '</div>' +
-      '<aside class="ms-lac-rail" aria-label="Clinician and team fields">' +
-      '<div class="ms-lac-rail-head">' +
-      '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
-      '<span class="ms-lac-col-meta">' +
-      (selCount
-        ? 'Click a field to stage the selection'
-        : 'Doctors working ' + dayPhrase() + ' first. Open a name to see patients.') +
-      '</span>' +
-      '</div>' +
-      (clinicians.length
-        ? clinicians
-            .map(function (col) {
-              return fieldHtml(col, selCount);
-            })
-            .join('')
-        : '<div class="ms-lac-empty-sm">No clinician fields yet — add one below if you need a drop target.</div>') +
-      (teams.length
-        ? '<div class="ms-lac-rail-head ms-lac-rail-teams">' +
-          '<h3 class="ms-lac-col-heading">Teams</h3>' +
-          '<span class="ms-lac-col-meta">Drop here to send back to a team inbox</span>' +
-          '</div>' +
-          teams
-            .map(function (col) {
-              return fieldHtml(col, selCount);
-            })
-            .join('')
-        : '') +
       '<div class="ms-lac-add-row">' +
-      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a clinician field — e.g. Dr Jane Cole" aria-label="Add a clinician field">' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add clinician</button>' +
-      '</div>' +
-      '</aside></div>'
+      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a doctor — e.g. Dr Jane Cole" aria-label="Add a doctor">' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add doctor</button>' +
+      '</div>'
     );
   }
 
@@ -955,7 +969,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">These are split among doctors working today. Drag to move one. Nothing changes in Medicus until you confirm.</span>' +
+      '<span class="ms-lac-header-note">Each folder is a doctor’s box. Drag a patient to move them. Nothing changes in Medicus until you confirm.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1173,12 +1187,14 @@
       _dragIds = ids;
       var from = e.currentTarget;
       var wrap = from && from.closest && from.closest('.ms-lac-chip-wrap');
+      var folder = from && from.closest && from.closest('.ms-rxac-folder');
       _dragOriginKind =
-        from && from.closest && from.closest('.ms-lac-pool')
+        (folder && folder.getAttribute('data-col-kind')) ||
+        (from && from.closest && from.closest('.ms-lac-pool')
           ? 'pool'
           : wrap
             ? wrap.getAttribute('data-col-kind') || 'clinician'
-            : '';
+            : '');
       markDragSources(ids);
       var preview = C.dragPreview(_rows, ids);
       if (e.dataTransfer) {
@@ -1312,7 +1328,7 @@
         requestStage(ids, key, el);
       });
     }
-    root.querySelectorAll('.ms-lac-col, .ms-lac-chip-wrap').forEach(bindDropTarget);
+    root.querySelectorAll('.ms-lac-col, .ms-lac-chip-wrap, .ms-rxac-folder').forEach(bindDropTarget);
     root.querySelectorAll('.ms-lac-chip').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.preventDefault();

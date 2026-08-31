@@ -31,11 +31,11 @@ unchanged. Dest staff ids are pinned from the appointment book;
 Write re-reads the same open pile; POST tries underscore then
 hyphen; after Write the canvas shows Medicus, it does not re-split.
 
-UI (10-agent pass): the job is now one sequence. Split chrome is a
-day toolbar, not a second roster. After even-split the doctors who
-received work open so you can see patients. Footer is **Review N…**
-then **Write to Medicus**. Usual GP is a label. Empty inbox says
-“on the right — not saved yet”, not “nothing left”.
+After even-split (and after Clear) the board is a **folder grid**:
+Unallocated plus one folder per doctor showing what is in their box
+of this task type. Patients are always visible; drag between folders.
+Usual GP is a caption on a tile, not a folder. Proposed rows use the
+accent wash and a “not saved” token; already-sitting rows stay quiet.
 
 The twelve (or however many) in that inbox **are** the unallocated
 pile. They are assigned to the box UUID, so `assignedTo` looks like a

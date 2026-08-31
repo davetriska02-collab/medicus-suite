@@ -72,8 +72,15 @@
   --r-pill: 999px;
   --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  --med: 200ms;
+  --text-5: #5f6f85;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
   position: fixed;
   inset: 0;
   z-index: 2147483000;
@@ -1030,6 +1037,87 @@
 
 #ms-rxac-overlay .ms-lac-header-note {
   white-space: normal;
+}
+
+#ms-rxac-overlay .ms-lac-pool-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-rxac-folders {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+#ms-rxac-overlay .ms-rxac-folder {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  max-height: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox {
+  background: var(--bg-mid);
+  border-style: dashed;
+  border-color: var(--border-hi);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-meta {
+  flex: 1 1 100%;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-body {
+  flex: 1 1 auto;
+  min-height: 72px;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+
+#ms-rxac-overlay .ms-lac-tile-staged {
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+#ms-rxac-overlay .ms-lac-tile-staged .ms-lac-tile-name {
+  color: var(--text-1);
 }
 
 .ms-lac-split .ms-lac-confirm-btn:disabled {
