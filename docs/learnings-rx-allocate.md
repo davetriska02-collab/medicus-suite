@@ -38,7 +38,10 @@ Reject:
 - Nurses / pharmacists / HCAs are excluded when any GP-looking session
   exists; otherwise fall back to everyone in today (so untitled locums
   still get work).
-- Staging only. Review then write is unchanged.
+- Applied as the starting board on open (staged, not written).
+- Drag a request onto another doctor to move it. **Re-split equally**
+  resets to the even split.
+- Review then write is unchanged.
 
 ## Copy that must not ship
 

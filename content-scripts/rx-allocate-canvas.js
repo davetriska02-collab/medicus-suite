@@ -60,6 +60,7 @@
   var _expandedChip = '';
   var _collapsed = {};
   var _workDate = '';
+  var _splitDefaulted = false;
 
   function calendarToday() {
     return C.todayISO();
@@ -218,21 +219,11 @@
       render();
       await presenceP;
       harvestStaffFromBook(_book);
-      _draft = C.ensureWorkingTodayColumns(
-        _draft,
-        C.workingTodayDoctors({
-          book: _book,
-          absences: _absences,
-          staffList: _rota.staff,
-          leaveList: _rota.leave,
-          dateISO: workDate(),
-        })
-      );
-      render();
       _rows = (_rows || []).map(function (row) {
         return C.decorateRxRow(row);
       });
       await harvestStaffFromOverviews(_rows);
+      applyDefaultEvenSplit();
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read this non-routine prescription queue.';
       _rows = [];
@@ -283,12 +274,16 @@
     try {
       await loadMedicusPresence();
       harvestStaffFromBook(_book);
-      _draft = C.ensureWorkingTodayColumns(_draft, currentDestinations());
+      applyDefaultEvenSplit();
     } catch (_) {
       _book = null;
     }
     _overviewProgress = '';
-    announce('Even split is for doctors working ' + dayPhrase() + '.');
+    announce(
+      _splitDefaulted
+        ? 'Even split staged for doctors working ' + dayPhrase() + '. Drag a request to move it.'
+        : 'Even split is for doctors working ' + dayPhrase() + '.'
+    );
     render();
   }
 
@@ -586,11 +581,13 @@
       '</div>' +
       '<div class="ms-lac-empty-sub">' +
       (_rows.length
-        ? 'All ' +
-          _rows.length +
-          ' request' +
-          (_rows.length === 1 ? '' : 's') +
-          ' already sit with a clinician — they are in the fields on the right. Even-split only covers the unallocated pile.'
+        ? _splitDefaulted
+          ? 'Even split is on the right. Drag a request onto another doctor to move it. Nothing is written until you confirm.'
+          : 'All ' +
+            _rows.length +
+            ' request' +
+            (_rows.length === 1 ? '' : 's') +
+            ' already sit with a clinician — they are in the fields on the right. Drag a request onto another doctor to move it.'
         : 'The canvas reads the same open non-routine list as Signing (no page filter). If the grid on this page still shows rows, reload the list then open the canvas again.') +
       '</div>' +
       '</div>'
@@ -607,32 +604,49 @@
     });
   }
 
-  function tilesForEvenSplit(board) {
-    var pool = (board && board.pool && board.pool.tiles) || [];
-    if (pool.length) return pool;
-    var all = [];
-    ((board && board.clinicians) || []).concat((board && board.teams) || []).forEach(function (col) {
-      (col.tiles || []).forEach(function (t) {
-        if (t && t.id) all.push(t);
-      });
+  function tilesForPlan() {
+    return (_rows || []).filter(function (r) {
+      return r && r.id;
     });
-    return all;
   }
 
   function currentSplitPlan() {
+    return C.planEvenSplit(tilesForPlan(), currentDestinations(), { dayPhrase: dayPhrase() });
+  }
+
+  function applyDefaultEvenSplit() {
+    var dests = currentDestinations();
+    _draft = C.ensureWorkingTodayColumns(_draft || C.emptyDraft(), dests);
+    var plan = currentSplitPlan();
+    if (!plan.ok) {
+      _splitDefaulted = false;
+      return plan;
+    }
+    var next = C.emptyDraft();
+    next = C.ensureWorkingTodayColumns(next, dests);
+    _draft = C.applyEvenSplit(next, plan);
+    _splitDefaulted = true;
+    return plan;
+  }
+
+  function currentAllocationRows() {
     var board = currentWorkspace();
-    return C.planEvenSplit(tilesForEvenSplit(board), currentDestinations(), {
-      dayPhrase: dayPhrase(),
+    var counts = {};
+    (board.clinicians || []).forEach(function (col) {
+      counts[col.key] = col.count || 0;
+    });
+    return currentDestinations().map(function (d) {
+      return { name: d.name, key: d.key, count: counts[d.key] || 0 };
     });
   }
 
   function evenSplitHtml() {
     var dests = currentDestinations();
-    var plan = currentSplitPlan();
     var phrase = dayPhrase();
     var cal = calendarToday();
     var picked = workDate();
-    var rows = (plan.shares || [])
+    var shown = _splitDefaulted ? currentAllocationRows() : currentSplitPlan().shares || [];
+    var rows = shown
       .map(function (s) {
         return (
           '<li><span class="ms-lac-split-name">' +
@@ -660,31 +674,33 @@
     if (!dests.length) {
       return (
         '<div class="ms-lac-split" id="ms-rxac-split-box">' +
-        '<p class="ms-lac-split-title">Even split among doctors working ' +
+        '<p class="ms-lac-split-title">Split among doctors working ' +
         esc(phrase) +
         '</p>' +
         dayRow +
         '<p class="ms-lac-split-note">No doctors with a session on the appointment book for ' +
         esc(phrase) +
-        ', so there is nobody to split onto. Add a clinician field by hand, or pick another day.</p>' +
+        ', so there is nobody to split onto. Add a clinician field by hand, or pick another day, then drag requests onto them.</p>' +
         '</div>'
       );
     }
-    var canStage = !!(plan.ok && plan.total);
+    var canResplit = !!(_rows.length && dests.length);
     return (
       '<div class="ms-lac-split" id="ms-rxac-split-box">' +
-      '<p class="ms-lac-split-title">Even split among doctors working ' +
+      '<p class="ms-lac-split-title">Split among doctors working ' +
       esc(phrase) +
       '</p>' +
       dayRow +
       '<p class="ms-lac-split-note">' +
-      esc(plan.ok ? plan.summary : plan.reason) +
-      '. Staging only — it does not write until you review and confirm.</p>' +
+      (_splitDefaulted
+        ? 'Even split is the starting point. Drag a request onto another doctor to move it. Nothing is written until you confirm.'
+        : 'No even split yet — drag requests onto a doctor, or re-split equally.') +
+      '</p>' +
       (rows ? '<ul class="ms-lac-split-list">' + rows + '</ul>' : '') +
       '<button type="button" class="ms-lac-confirm-btn" id="ms-rxac-split"' +
-      (canStage ? '' : ' disabled') +
+      (canResplit ? '' : ' disabled') +
       '>' +
-      (canStage ? 'Stage even split on canvas' : 'Nothing to split') +
+      (canResplit ? 'Re-split equally' : 'Nothing to split') +
       '</button>' +
       '</div>'
     );
@@ -918,7 +934,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Unallocated on the left. Click a task, or a clinician heading for the lot. Ctrl-click to add more. Drag onto a field — or click the field. Writing happens only when you confirm.</span>' +
+      '<span class="ms-lac-header-note">Even split is the starting board. Drag a request onto another doctor to move it, or re-split equally. Writing happens only when you confirm.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1020,16 +1036,20 @@
           announce(plan.reason);
           return;
         }
-        _draft = C.applyEvenSplit(_draft, plan);
+        var applied = applyDefaultEvenSplit();
         _selected = {};
         announce(
-          'Staged even split of ' +
-            plan.total +
-            ' onto ' +
-            plan.doctors +
-            ' doctors working ' +
-            dayPhrase() +
-            '. Review then write to change who the requests sit with.'
+          applied && applied.ok
+            ? 'Re-split ' +
+                applied.total +
+                ' equally onto ' +
+                applied.doctors +
+                ' doctors working ' +
+                dayPhrase() +
+                '. Drag a request to move it. Review then write to save.'
+            : applied && applied.reason
+              ? applied.reason
+              : 'Could not re-split.'
         );
         render();
       });
@@ -1485,6 +1505,7 @@
     _teamDir = C.harvestTeamDirectory([], null);
     _collapsed = {};
     _workDate = '';
+    _splitDefaulted = false;
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1510,6 +1531,7 @@
     _error = null;
     _collapsed = {};
     _workDate = calendarToday();
+    _splitDefaulted = false;
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');

@@ -22,6 +22,10 @@ Staging the split still requires Review then write. The working day
 defaults to the calendar date; Tonight you can set it to tomorrow
 (date picker, or Today / Tomorrow) so the split uses that day’s book.
 
+On open, the even split is the starting board (staged, not written).
+Drag a request onto another doctor to move it; **Re-split equally**
+puts the even split back.
+
 The canvas reads the open pile with the same bare task-list GET as
 Signing (no page `statuses[]` / `viewContext` filter). Replaying the
 page query was returning an empty list while the grid still showed rows.
