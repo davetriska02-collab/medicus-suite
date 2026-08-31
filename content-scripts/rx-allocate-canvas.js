@@ -702,12 +702,28 @@
     var picked = workDate();
     var poolN = tilesForPlan().length;
     var canResplit = !!(poolN && dests.length);
+    var stagedN = C.draftSummary(_rows, _draft).count;
     var summary = dests.length
       ? poolN + ' unallocated · ' + dests.length + ' doctor' + (dests.length === 1 ? '' : 's') + ' working ' + phrase
       : 'No sessions on the book for ' + phrase;
     var splitLabel = _splitDefaulted ? 'Re-split equally' : 'Split equally';
+    var splitBtn = dests.length
+      ? canResplit
+        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go" id="ms-rxac-split">' +
+          splitLabel +
+          '</button>'
+        : '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among those in today.</span>'
+      : '<span class="ms-lac-split-note">Pick another day, or add a doctor.</span>';
+    var proposal = stagedN
+      ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal — not written yet.</strong> ' +
+        stagedN +
+        ' would move. The number on each doctor is the proposal. Review when it looks right.</div>'
+      : '';
     return (
-      '<div class="ms-lac-split" id="ms-rxac-split-box">' +
+      '<div class="ms-lac-split' +
+      (stagedN ? ' ms-rxac-split-proposing' : '') +
+      '" id="ms-rxac-split-box">' +
+      '<div class="ms-rxac-split-row">' +
       '<label class="ms-lac-split-day-label" for="ms-rxac-day">Working day</label>' +
       '<input type="date" id="ms-rxac-day" value="' +
       esc(picked) +
@@ -721,13 +737,9 @@
       '<span class="ms-lac-split-summary">' +
       esc(summary) +
       '</span>' +
-      (dests.length
-        ? canResplit
-          ? '<button type="button" class="ms-lac-ghost" id="ms-rxac-split">' +
-            splitLabel +
-            '</button>'
-          : '<span class="ms-lac-split-note">Inbox is clear. Share out next to a name splits that box among those in today.</span>'
-        : '<span class="ms-lac-split-note">Pick another day, or add a doctor.</span>') +
+      splitBtn +
+      '</div>' +
+      proposal +
       '</div>'
     );
   }
@@ -793,18 +805,20 @@
       meta = (meta ? meta + ' · ' : '') + 'No doctors in today to share onto';
     }
     var shareTitle = canShare
-      ? 'Split these equally among ' +
+      ? 'Share only ' +
+        name +
+        '’s box equally among ' +
         shareDests.length +
         ' doctor' +
         (shareDests.length === 1 ? '' : 's') +
-        ' in today'
+        ' in today — not the unallocated pile'
       : !inbox && nTiles
         ? 'No doctors in today to share onto. Pick another working day.'
         : '';
     var shareBtn = '';
     if (!inbox && nTiles && col.kind !== 'team') {
       shareBtn =
-        '<button type="button" class="ms-rxac-share' +
+        '<button type="button" class="ms-rxac-share ms-rxac-folder-action' +
         (loud ? ' ms-rxac-share-away' : ' ms-rxac-share-quiet') +
         (canShare ? '' : ' ms-rxac-share-off') +
         '"' +
@@ -812,9 +826,26 @@
         ' title="' +
         esc(shareTitle) +
         '" aria-label="' +
-        esc(name + '. ' + shareTitle) +
-        '">Share out</button>';
+        esc(shareTitle) +
+        '">Share this box</button>';
     }
+    var proposedN = 0;
+    var sittingN = 0;
+    (col.tiles || []).forEach(function (t) {
+      if (!t) return;
+      if (t.staged) proposedN += 1;
+      else sittingN += 1;
+    });
+    var countHtml =
+      !inbox && proposedN
+        ? '<span class="ms-rxac-folder-count ms-rxac-count-proposed">' +
+          '<span class="ms-rxac-count-pop">' +
+          proposedN +
+          '</span>' +
+          '<span class="ms-rxac-count-label">proposed</span>' +
+          (sittingN ? '<span class="ms-rxac-count-sit">' + sittingN + ' sitting</span>' : '') +
+          '</span>'
+        : '<span class="ms-rxac-folder-count">' + esc(String(col.count || 0)) + '</span>';
     var body = (col.tiles || [])
       .map(function (t) {
         return tileHtml(t, { showWho: true, showAssignee: false });
@@ -835,6 +866,7 @@
       (inbox ? ' ms-rxac-folder-inbox' : '') +
       (clear ? ' ms-rxac-folder-clear' : '') +
       (away ? ' ms-rxac-folder-away' : '') +
+      (proposedN ? ' ms-rxac-folder-proposed' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="' +
@@ -845,15 +877,14 @@
       '<span class="ms-rxac-folder-name">' +
       esc(name) +
       '</span>' +
-      shareBtn +
       '</div>' +
-      '<span class="ms-rxac-folder-count">' +
-      esc(String(col.count || 0)) +
-      '</span>' +
+      countHtml +
       '<div class="ms-rxac-folder-meta">' +
       flag +
       (meta ? '<span class="ms-rxac-folder-meta-text">' + esc(meta) + '</span>' : '') +
-      '</div></div>' +
+      '</div>' +
+      shareBtn +
+      '</div>' +
       '<div class="ms-rxac-folder-body" role="listbox" aria-label="' +
       esc(name) +
       '">' +
@@ -987,15 +1018,18 @@
           '. Those stay on this canvas.</p>';
       }
       return (
-        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
+        '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn ms-rxac-review-open" role="region" aria-label="Review this proposal">' +
+        '<div class="ms-rxac-review-copy">' +
+        '<div class="ms-rxac-review-title">Review this proposal</div>' +
         '<strong>Medicus will reassign these requests.</strong> This changes who the task sits with — it does not issue, sign, or file the prescription.' +
         '<ul class="ms-lac-writelist">' +
         lines +
         '</ul>' +
         refusedNote +
+        '</div>' +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-write-go">Write to Medicus</button>' +
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go">Write to Medicus</button>' +
         '</div></div>'
       );
     }
@@ -1016,24 +1050,27 @@
     var status = blockReason
       ? '<strong>Cannot move these yet.</strong> ' + esc(blockReason)
       : sum.count
-        ? '<strong>' +
+        ? '<div class="ms-rxac-review-title">Proposal — not written yet</div><strong>' +
           sum.count +
-          ' proposed — not saved yet.</strong> Drag to move one. Confirm does not issue, sign, or file the prescription.'
+          ' would sit with the doctors above.</strong> Drag to move one. Review when it looks right.'
         : 'Drag a patient into a doctor’s box. Medicus does not change until you confirm.';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
+      (sum.count && !blockReason ? ' ms-rxac-review-dock' : '') +
       '">' +
+      '<div class="ms-rxac-review-copy">' +
       '<span class="ms-lac-confirmbar-note">' +
       status +
       '</span>' +
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
+      '</div>' +
       '<div class="ms-lac-confirmbar-actions">' +
       (sum.count
         ? '<button type="button" class="ms-lac-ghost" id="ms-lac-clear">Clear proposals</button>'
         : '') +
       (canWrite
-        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-finalise" title="' +
+        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-finalise" title="' +
           esc(writeTitle) +
           '">' +
           esc(writeLabel) +
@@ -1057,6 +1094,7 @@
     return (
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
+      (stagedN ? ' ms-rxac-proposing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate ' +
@@ -1065,7 +1103,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Unallocated is the pile. Split equally, or drag into a doctor’s box. Share out next to a name splits that box among doctors in today.</span>' +
+      '<span class="ms-lac-header-note">Unallocated is the pile. Split equally, or drag into a doctor’s box. Share this box on a doctor splits only that doctor’s requests among those in today.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1180,7 +1218,7 @@
               applied.doctors +
               ' doctors working ' +
               dayPhrase() +
-              '. Drag to move one. Review then write to save.'
+              '. Proposal — not written yet.'
             : (applied && applied.reason) || 'Could not split.';
         announce(_copyNote);
         render();
@@ -1203,11 +1241,11 @@
         _copyNote =
           applied && applied.ok
             ? 'Shared ' +
-              (applied.fromName ? applied.fromName + '’s ' : '') +
+              (applied.fromName ? applied.fromName + '’s box — ' : '') +
               applied.total +
               ' equally among ' +
               applied.doctors +
-              ' doctors in today. Review then write to save.'
+              ' doctors in today. Proposal — not written yet.'
             : (applied && applied.reason) || 'Could not share that box out.';
         announce(_copyNote);
         render();

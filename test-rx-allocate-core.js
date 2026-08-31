@@ -381,10 +381,15 @@ console.log('\n--- write stays on the lab client ---');
   check(/Split equally/.test(canvas), 'split equally is a user-initiated proposal');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied when you ask for it');
   check(/data-share-key/.test(canvas), 'each doctor folder can share its box among those in today');
-  check(/ms-rxac-folder-title/.test(canvas), 'share-out sits in the title row by the doctor name');
-  check(/>Share out</.test(canvas), 'the per-doc control is labelled Share out');
-  check(/ms-rxac-share-away/.test(canvas), 'an away doctor’s share-out is marked for the holiday case');
-  check(/ms-rxac-share-quiet/.test(canvas), 'in-today share-out stays a quiet name-adjacent action');
+  check(/ms-rxac-folder-action/.test(canvas), 'share-this-box sits on that doctor’s folder');
+  check(/>Share this box</.test(canvas), 'the per-doc control shares that doctor’s box only');
+  check(/ms-rxac-share-away/.test(canvas), 'an away doctor’s share-this-box is marked for the holiday case');
+  check(/ms-rxac-share-quiet/.test(canvas), 'in-today share-this-box stays a quieter folder action');
+  check(/ms-rxac-split-go/.test(canvas), 'split equally is a primary control');
+  check(/ms-rxac-proposal/.test(canvas), 'after split the board names it a proposal');
+  check(/ms-rxac-count-pop/.test(canvas), 'proposed numbers on each doctor pop');
+  check(/ms-rxac-review-dock/.test(canvas) && /ms-rxac-review-go/.test(canvas), 'review is a floating dock in the panel');
+  check(/ms-rxac-review-open/.test(canvas), 'confirm list opens in the review dock, not a scrim');
   check(/col\.kind !== 'team'/.test(canvas), 'team folders are not shared out among doctors');
   check(/ms-rxac-folder-clear/.test(canvas), 'empty unallocated is greened out');
   check(/ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas), 'unallocated is the main pane, doctors sit in a rail');
@@ -410,7 +415,7 @@ console.log('\n--- write stays on the lab client ---');
     'even-split box is outside the unallocated pool drop target'
   );
   check(/Unallocated is the pile/.test(canvas) && /drag into a doctor/.test(canvas), 'copy says you can still move requests by hand');
-  check(/Share out next to a name/.test(canvas), 'header says a name’s Share out splits that box among those in today');
+  check(/Share this box/.test(canvas), 'header says Share this box splits only that doctor’s requests');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
   check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
@@ -445,8 +450,11 @@ console.log('\n--- canvas + manifest + css source locks ---');
   );
   check(
     /#ms-rxac-overlay \.ms-rxac-share:focus-visible/.test(css),
-    'share-out has an overlay-local keyboard ring'
+    'share-this-box has an overlay-local keyboard ring'
   );
+  check(/#ms-rxac-overlay \.ms-rxac-split-go/.test(css), 'split equally is sized as the primary action');
+  check(/#ms-rxac-overlay \.ms-rxac-count-pop/.test(css), 'proposed dest counts are a pop number');
+  check(/#ms-rxac-overlay \.ms-rxac-review-dock/.test(css), 'review docks inside the panel');
   check(/#ms-rxac-launch/.test(css), 'rx launcher has the same chrome as the lab launcher');
   check(/#ms-rxac-launch:focus-visible/.test(css), 'launcher focus ring is a literal (html-appended)');
   check(!/ms-rxac-overlay/.test(labCanvas), 'lab canvas does not open the rx overlay');

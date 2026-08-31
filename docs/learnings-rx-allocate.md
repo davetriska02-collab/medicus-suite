@@ -56,12 +56,15 @@ task-list bulk-reassign. They do not share a page.
 - Not applied on open. Unallocated is the large pane; doctors sit in
   a sidebar. User clicks **Split equally** to propose. When the pile
   is empty, Unallocated greens out and doctors lay out as a grid.
-- **Share out** next to a doctor name (grid and rail) even-splits
-  that folder among doctors in today (`planEvenSplit` `anyTile`).
-  Holiday/AWAY boxes with leftover work are the point — one click.
+- **Share this box** on a doctor folder even-splits *that folder
+  only* among doctors in today (`planEvenSplit` `anyTile`). It is
+  not the unallocated pile. Holiday/AWAY leftover is the point.
   Destinations skip the source and anyone away. Nothing in the box,
   or nobody in today, disables the control rather than hiding it
   when they still have tiles.
+- After Split equally the board is explicitly a **proposal**: banner
+  plus popping dest counts. Review is a docked card in the panel,
+  not a scrim over the folders.
 - Drag a request onto another doctor to move it. **Re-split equally**
   resets the unallocated split. The control lives outside the
   unallocated pool (that column is a drop target). Click always

@@ -57,14 +57,15 @@ The queue inbox name is a team, not a person.
 
 On open the board is **un-proposed**: Unallocated is the large pane,
 doctors working today sit in a smaller sidebar. **Split equally** is
-a user-initiated proposal, not applied on load. After the pile is
-empty, Unallocated greens out as clear and the doctors populate as a
-grid. **Share out** next to a doctor’s name (especially an AWAY
-folder with leftover work) splits that box equally among doctors in
-today — same as Unallocated, one click if they are on holiday.
-Drag still moves one. **Re-split equally** puts the unallocated even
-split back. The split control sits above the board, always
-re-renders, and writes a visible note.
+a large primary control — a user-initiated proposal, not applied on
+load. After you click it, a **Proposal — not written yet** banner
+sits on the board and each doctor’s proposed count pops. After the
+pile is empty, Unallocated greens out as clear and the doctors
+populate as a grid. **Share this box** on a doctor folder splits
+only that doctor’s requests among those in today (holiday leftover).
+Drag still moves one. **Review** is a floating card inside the
+panel — it does not cover the folders. **Re-split equally** puts the
+unallocated even split back.
 
 Sequential Write used to stop at the first doctor whose POST failed, so
 only that share (a couple of requests) actually moved; the rest stayed
