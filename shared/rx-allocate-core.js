@@ -272,6 +272,7 @@
         site: rec.site || presence.site || '',
         service: rec.service || '',
         likelyDoctor: isLikelyDoctor(rec.name, rec.service),
+        staffId: rec.staffId || '',
       });
     });
     var doctors = people.filter(function (p) {
@@ -291,7 +292,7 @@
   function planEvenSplit(tiles, destinations, opts) {
     opts = opts || {};
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
-      return t && t.id;
+      return t && t.id && Lab.homeColumnKey(t) === Lab.POOL;
     });
     var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
       return d && d.key && String(d.key).indexOf('clinician:') === 0;
@@ -325,6 +326,7 @@
       return {
         key: d.key,
         name: d.name,
+        staffId: d.staffId || '',
         count: base + (i < rem ? 1 : 0),
         tileIds: [],
       };
@@ -361,7 +363,7 @@
     if (!plan || !plan.ok) return next;
     (plan.shares || []).forEach(function (share) {
       if (!share || !share.key) return;
-      next = Lab.addColumn(next, share.name);
+      next = Lab.addColumn(next, share.name, share.staffId);
       next = Lab.stageMoves(next, share.tileIds || [], share.key);
     });
     return next;
@@ -370,9 +372,21 @@
   function ensureWorkingTodayColumns(draft, destinations) {
     var next = draft || Lab.emptyDraft();
     (Array.isArray(destinations) ? destinations : []).forEach(function (d) {
-      if (d && d.name) next = Lab.addColumn(next, d.name);
+      if (d && d.name) next = Lab.addColumn(next, d.name, d.staffId);
     });
     return next;
+  }
+
+  function pinDestStaffIds(dests, directory) {
+    return (Array.isArray(dests) ? dests : []).map(function (d) {
+      if (!d) return d;
+      if (d.staffId) return d;
+      var resolved = Lab.resolveStaffForColumn(d.key, d.name, directory, [], null, '');
+      if (resolved && resolved.ok && resolved.staff && resolved.staff.id) {
+        return Object.assign({}, d, { staffId: resolved.staff.id });
+      }
+      return d;
+    });
   }
 
   // Signing loads this pile with GET /tasks/data/{slug}/task-list and no
@@ -410,6 +424,7 @@
     planEvenSplit: planEvenSplit,
     applyEvenSplit: applyEvenSplit,
     ensureWorkingTodayColumns: ensureWorkingTodayColumns,
+    pinDestStaffIds: pinDestStaffIds,
     fetchRxTaskList: fetchRxTaskList,
     isResultsQueueSlug: Lab.isResultsQueueSlug,
     queryStringForList: Lab.queryStringForList,

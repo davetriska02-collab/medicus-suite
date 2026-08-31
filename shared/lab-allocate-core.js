@@ -188,8 +188,16 @@
   function bulkReassignPaths(slug) {
     var s = sanitizeSlug(slug);
     var paths = [];
-    if (s) paths.push('/tasks/' + s + '/task-list/bulk-reassign');
-    paths.push(BULK_REASSIGN_PATH);
+    var seen = {};
+    function add(p) {
+      if (!p || seen[p]) return;
+      seen[p] = true;
+      paths.push(p);
+    }
+    if (s) add('/tasks/' + s + '/task-list/bulk-reassign');
+    var alt = sanitizeSlug(altSlug(s));
+    if (alt) add('/tasks/' + alt + '/task-list/bulk-reassign');
+    add(BULK_REASSIGN_PATH);
     return paths;
   }
 
@@ -642,7 +650,7 @@
   }
 
   function emptyDraft() {
-    return { moves: {}, extraColumns: [], columnTitles: {} };
+    return { moves: {}, extraColumns: [], columnTitles: {}, columnStaffIds: {} };
   }
 
   function cloneDraft(draft) {
@@ -650,6 +658,7 @@
       moves: Object.assign({}, (draft && draft.moves) || {}),
       extraColumns: ((draft && draft.extraColumns) || []).slice(),
       columnTitles: Object.assign({}, (draft && draft.columnTitles) || {}),
+      columnStaffIds: Object.assign({}, (draft && draft.columnStaffIds) || {}),
     };
   }
 
@@ -692,13 +701,15 @@
     return key;
   }
 
-  function addColumn(draft, name) {
+  function addColumn(draft, name, staffId) {
     var next = cloneDraft(draft);
     if (isTeamAssignee(name)) return next;
     var key = clinicianColumnKey(name);
     if (key === UNALLOCATED) return next;
     if (next.extraColumns.indexOf(key) === -1) next.extraColumns.push(key);
     next.columnTitles[key] = clip(name, 80);
+    var id = pickUuid(staffId);
+    if (id) next.columnStaffIds[key] = id;
     return next;
   }
 
@@ -1395,7 +1406,7 @@
     return { ok: false, reason: 'ambiguous-team', hits: hits, assigneeType: ASSIGNEE_TYPE_TEAM };
   }
 
-  function resolveStaffForColumn(key, title, directory, rows, aliases) {
+  function resolveStaffForColumn(key, title, directory, rows, aliases, knownId) {
     var sitting = assignedIdsOnColumn(rows, key, aliases);
     if (sitting.ids.length === 1) {
       var fromField = {
@@ -1413,6 +1424,11 @@
           return { id: id, name: sitting.name || title || '' };
         }),
       };
+    }
+    var pinned = pickUuid(knownId);
+    if (pinned) {
+      var fromBook = { id: pinned, name: sitting.name || title || '', source: 'today-book' };
+      return { ok: true, staff: fromBook, hits: [fromBook], source: 'today-book' };
     }
     var list = (directory && directory.list) || [];
     var chipKeys = personNameKeys(title);
@@ -1515,9 +1531,10 @@
     var refusedKeys = {};
     var writableItems = [];
     sum.items.forEach(function (item) {
+      var knownId = draft && draft.columnStaffIds && draft.columnStaffIds[item.toKey];
       var resolved = isTeamKey(item.toKey)
         ? resolveTeamForColumn(item.toKey, item.toTitle, teamDir)
-        : resolveStaffForColumn(item.toKey, item.toTitle, directory, rows, aliases);
+        : resolveStaffForColumn(item.toKey, item.toTitle, directory, rows, aliases, knownId);
       if (!resolved.ok) {
         if (!refusedKeys[item.toKey]) {
           refusedKeys[item.toKey] = true;
@@ -2012,7 +2029,14 @@
       if (!sessions) continue;
       var key = clinicianColumnKey(name);
       if (key === UNALLOCATED) continue;
-      var rec = { name: name, key: key, sessions: sessions, site: site, service: service };
+      var rec = {
+        name: name,
+        key: key,
+        sessions: sessions,
+        site: site,
+        service: service,
+        staffId: pickUuid(sched) || '',
+      };
       present.push(rec);
       if (!presentByKey[key]) presentByKey[key] = rec;
     }
@@ -2323,7 +2347,7 @@
       }
       var fresh;
       try {
-        fresh = await fetchTaskList(slug, opts.search);
+        fresh = opts.fetchList ? await opts.fetchList() : await fetchTaskList(slug, opts.search);
       } catch (e) {
         return {
           ok: false,

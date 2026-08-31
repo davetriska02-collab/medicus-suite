@@ -202,12 +202,38 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   ];
   const pool = [rxRow(1, { namedGp: 'Dr A' }), rxRow(2, { namedGp: 'Dr A' })];
   const sitting = rxRow(9, { assignedTo: 'Dr A' });
-  const plan = C.planEvenSplit(pool, dests);
+  const plan = C.planEvenSplit(pool.concat([sitting]), dests);
   check(plan.shares.every((s) => s.count === 1), 'two pool tiles split 1+1, ignoring named GP');
   check(
     !plan.shares.some((s) => (s.tileIds || []).indexOf(sitting.id) !== -1),
     'already-sitting work is not in the even-split plan'
   );
+  check(plan.total === 2, 'sitting rows are not counted in the split total');
+}
+
+console.log('\n--- even-split dest staff UUID is what Write uses ---');
+{
+  const staffId = uuid(77);
+  const dests = [
+    { key: Lab.clinicianColumnKey('Dr Natalie Azadian'), name: 'Dr Natalie Azadian', staffId: staffId },
+  ];
+  const tiles = [rxRow(1), rxRow(2)];
+  const plan = C.planEvenSplit(tiles, dests);
+  check(plan.shares[0] && plan.shares[0].staffId === staffId, 'share carries the book staff UUID');
+  const draft = C.applyEvenSplit(C.emptyDraft(), plan);
+  check(draft.columnStaffIds[dests[0].key] === staffId, 'draft pins the staff UUID on the dest column');
+  const wrote = Lab.planBulkReassign(tiles, draft, 'prescription_request_task_non_routine', { list: [] });
+  check(wrote.ok === true, 'Write does not need a staff directory when the dest UUID is pinned');
+  check(wrote.batches[0] && wrote.batches[0].assigneeId === staffId, 'POST assigneeId is the pinned UUID');
+
+  const dirId = uuid(88);
+  const nameless = [{ key: Lab.clinicianColumnKey('Dr Jane Cole'), name: 'Dr Jane Cole' }];
+  const pinned = C.pinDestStaffIds(nameless, {
+    list: [{ id: dirId, name: 'Dr Jane Cole' }],
+  });
+  check(pinned[0] && pinned[0].staffId === dirId, 'empty In-today UUID is filled from a unique directory match');
+  const missed = C.pinDestStaffIds(nameless, { list: [] });
+  check(!missed[0].staffId, 'no directory match leaves staffId empty rather than inventing one');
 }
 
 console.log('\n--- cancelled sessions and absences drop out of working-today ---');
@@ -265,8 +291,8 @@ console.log('\n--- write stays on the lab client ---');
   check(/ms-rxac-overlay/.test(canvas) && /ms-rxac-launch/.test(canvas), 'overlay and launcher use rxac ids');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas), 'reuses the lab layout classes');
   check(
-    /result\.written > 0[\s\S]{0,200}?await loadBoard\(\)/.test(canvas),
-    'a partly-written batch re-reads the queue'
+    /result\.written > 0[\s\S]{0,240}?await loadBoard\(\{ skipSplit: true \}\)/.test(canvas),
+    'a partly-written batch re-reads the queue without restaging the even split'
   );
 }
 
@@ -291,6 +317,9 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
   check(/fetchRxTaskList/.test(canvas), 'canvas loads the pile via fetchRxTaskList');
+  check(/skipSplit/.test(canvas), 'after Write the canvas does not re-stage an even split');
+  check(/fetchList:/.test(canvas), 'Write re-GETs via fetchRxTaskList, not a page-filter fetchTaskList');
+  check(/if \(!_open\) _route = route/.test(canvas), 'open overlay pins _route so ensureLauncher cannot clobber search');
 }
 
 (async function () {

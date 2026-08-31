@@ -203,7 +203,8 @@
     absorbDirectories(null, book.source);
   }
 
-  async function loadBoard() {
+  async function loadBoard(opts) {
+    opts = opts || {};
     _loading = true;
     _error = null;
     render();
@@ -223,7 +224,7 @@
         return C.decorateRxRow(row);
       });
       await harvestStaffFromOverviews(_rows);
-      applyDefaultEvenSplit();
+      if (!opts.skipSplit) applyDefaultEvenSplit();
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read this non-routine prescription queue.';
       _rows = [];
@@ -595,18 +596,21 @@
   }
 
   function currentDestinations() {
-    return C.workingTodayDoctors({
-      book: _book,
-      absences: _absences,
-      staffList: _rota.staff,
-      leaveList: _rota.leave,
-      dateISO: workDate(),
-    });
+    return C.pinDestStaffIds(
+      C.workingTodayDoctors({
+        book: _book,
+        absences: _absences,
+        staffList: _rota.staff,
+        leaveList: _rota.leave,
+        dateISO: workDate(),
+      }),
+      _staffDir
+    );
   }
 
   function tilesForPlan() {
     return (_rows || []).filter(function (r) {
-      return r && r.id;
+      return r && r.id && C.homeColumnKey(r) === C.POOL;
     });
   }
 
@@ -1427,6 +1431,9 @@
         taskList: _taskList,
         directory: _staffDir,
         teamDirectory: _teamDir,
+        fetchList: function () {
+          return C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
+        },
       });
       if (!result || !result.ok) {
         var failReason =
@@ -1440,7 +1447,7 @@
         // took. Re-read before telling the clinician to check the queue —
         // loadBoard() clears _error, so restore the message after it.
         if (result && result.written > 0) {
-          await loadBoard();
+          await loadBoard({ skipSplit: true });
           _error = failReason;
           render();
           return;
@@ -1460,7 +1467,7 @@
         '. Check the queue — this canvas is a working copy.';
       _writing = false;
       announce(_copyNote);
-      await loadBoard();
+      await loadBoard({ skipSplit: true });
     } catch (err) {
       _writing = false;
       _confirmWrite = null;
@@ -1555,7 +1562,7 @@
       if (_open) closeOverlay();
       return;
     }
-    _route = route;
+    if (!_open) _route = route;
     var launchLabel = 'Allocate non-routine prescriptions on canvas…';
     if (!launch) {
       launch = document.createElement('button');

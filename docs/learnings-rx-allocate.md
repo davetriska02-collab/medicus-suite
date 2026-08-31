@@ -43,6 +43,28 @@ Reject:
   resets to the even split.
 - Review then write is unchanged.
 
+## Write path (same class of bugs as the lab canvas)
+
+Write clicked, Medicus did not move the tasks. Four stacked no-ops:
+
+1. `ensureLauncher` (1.5s) was overwriting `_route.search` with the page
+   query. Pre-write re-GET then looked empty → vanished abort, no POST.
+   Pin `_route` while the overlay is open. Re-GET via `fetchRxTaskList`
+   (bare GET first), not `fetchTaskList(slug, pageSearch)`.
+2. POST 404 on `/tasks/{slug}/task-list/bulk-reassign` never tried the
+   hyphen/underscore twin. `bulkReassignPaths` is slug, twin, then the
+   captured literal `/tasks/task-list/bulk-reassign`.
+3. Even-split dests were names without a staff UUID. Empty In-today
+   fields have no sitting `assignedId`, so name-match against an empty
+   directory failed. Pin `columnStaffIds` from the appointment book
+   (or a unique directory match) and pass that into `resolveStaffForColumn`.
+4. After Write, `loadBoard()` restaged the even split, so the canvas
+   looked unchanged even when Medicus had moved them. Pass
+   `{ skipSplit: true }`. `draftSummary` already drops `to === from`;
+   even-split must only stage `homeColumnKey === POOL` rows.
+
+After Write the canvas shows Medicus, it does not re-split.
+
 ## Copy that must not ship
 
 - No Done / Sent / Filed / Allocated / Submitted / Booked / Issued / Signed

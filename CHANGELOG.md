@@ -22,6 +22,15 @@ Staging the split still requires Review then write. The working day
 defaults to the calendar date; Tonight you can set it to tomorrow
 (date picker, or Today / Tomorrow) so the split uses that day’s book.
 
+Write now actually reassigns. Same class of bugs as the lab canvas:
+the page filter could make the pre-write re-GET look empty (vanished
+abort, no POST); the hyphen twin of the slug was never tried on 404;
+even-split dests had names but no staff UUID so assigneeId was a
+guess; sitting work was restaged after Write so the board looked
+unchanged. Dest staff ids are pinned from the appointment book;
+Write re-reads the same open pile; POST tries underscore then
+hyphen; after Write the canvas shows Medicus, it does not re-split.
+
 On open, the even split is the starting board (staged, not written).
 Drag a request onto another doctor to move it; **Re-split equally**
 puts the even split back.

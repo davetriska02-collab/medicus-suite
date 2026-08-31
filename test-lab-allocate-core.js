@@ -286,8 +286,13 @@ console.log('\n--- write contract is the captured bulk-reassign ---');
     'first POST path nests the queue slug'
   );
   check(
-    C.bulkReassignPaths('review_investigation_results_task')[1] === '/tasks/task-list/bulk-reassign',
-    'second POST path is the captured literal'
+    C.bulkReassignPaths('review_investigation_results_task')[1] ===
+      '/tasks/review-investigation-results-task/task-list/bulk-reassign',
+    'second POST path is the hyphen/underscore twin'
+  );
+  check(
+    C.bulkReassignPaths('review_investigation_results_task')[2] === '/tasks/task-list/bulk-reassign',
+    'captured literal is still the last 404 fallback'
   );
   check(!/method:\s*['"]PUT['"]/.test(src), 'core has no PUT');
   check(!/method:\s*['"]PATCH['"]/.test(src), 'core has no PATCH');
@@ -810,6 +815,16 @@ console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
   check(!!C.bookPresenceForName(book, 'Natalie Azadian'), 'title-stripped name still matches the book');
   check(!C.bookPresenceForName(book, 'Emma Heylen'), 'a clinician not on today’s book is not present');
   check(!C.bookPresenceForName(book, 'Dr David Triska'), 'a cancelled-only diary is not In today');
+  const withId = C.parseTodayBook({
+    date: '2026-08-25',
+    staffSchedules: [
+      { id: uuid(21), name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] },
+    ],
+  });
+  check(
+    withId.present[0] && withId.present[0].staffId === uuid(21),
+    'book staff UUID is copied onto present[] when the schedule carries one'
+  );
 
   const inToday = C.presenceForName({ name: 'Dr Natalie Azadian', dateISO: '2026-08-25', book: book });
   check(inToday.state === 'present' && inToday.reason === 'in-today', 'book hit → In today');
@@ -1236,13 +1251,69 @@ async function testClient() {
   });
   check(
     written404.ok === true && written404.written === 1,
-    '404 on the slug path still writes via the captured fallback'
+    '404 on the slug path still writes via the hyphen/underscore twin'
   );
   const posts404 = calls404.filter(function (c) {
     return c.method === 'POST';
   });
-  check(posts404.length === 2, 'slug path 404 then one fallback POST');
-  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts404[1].url), 'fallback POST is the captured literal');
+  check(posts404.length === 2, 'slug path 404 then one twin POST');
+  check(
+    /\/tasks\/review_investigation_report\/task-list\/bulk-reassign$/.test(posts404[1].url),
+    'second POST is the hyphen/underscore twin'
+  );
+
+  const calls404lit = [];
+  const client404lit = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      calls404lit.push({ url: url, method: opts.method });
+      if (/\/tasks\/review[-_]investigation[-_]report\/task-list\/bulk-reassign$/.test(url)) {
+        return {
+          ok: false,
+          status: 404,
+          text: async function () {
+            return '';
+          },
+        };
+      }
+      var bodyLit = { ok: true };
+      if (/\/tasks\/data\/.+\/task-list/.test(url)) {
+        bodyLit = {
+          taskList: 'envelope-token',
+          tasks: [
+            {
+              id: uuid(1),
+              patientName: 'A',
+              assignedTo: 'Investigation Reports',
+              requestedBy: 'AZADIAN N',
+            },
+          ],
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify(bodyLit);
+        },
+      };
+    },
+  });
+  const written404lit = await client404lit.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(
+    written404lit.ok === true && written404lit.written === 1,
+    '404 on both slug twins still writes via the captured literal'
+  );
+  const posts404lit = calls404lit.filter(function (c) {
+    return c.method === 'POST';
+  });
+  check(posts404lit.length === 3, 'slug, twin, then captured literal');
+  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts404lit[2].url), 'third POST is the captured literal');
 
   taskListGone = true;
   const vanished = await client.commitAllocations({
