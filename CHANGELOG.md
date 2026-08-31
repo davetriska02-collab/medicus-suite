@@ -2,6 +2,41 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.256.0] — 2026-08-31
+
+### Prescription allocation canvas
+
+Routine and non-routine prescription-request queues now have the same
+allocation canvas as labs and workflows. The board opens **un-proposed**:
+Unallocated is the large pane, doctors with a session on today’s book
+sit in a smaller sidebar, and usual GP is a caption on a tile — never
+auto-placement. Writing is the same W23 bulk-reassign as the lab canvas:
+it changes who the task sits with. **W23 does not issue, sign, or file
+the prescription.**
+
+**Split equally**, **Top up empty boxes**, and **Distribute equally**
+are user-initiated, not applied on load. Split proposes an even share
+of the unallocated pile only (already-sitting work stays put). Later
+in the day, Top up gives new work to whoever has least; Distribute
+rebalances sitting plus new so in-today totals differ by at most one.
+**Share this box** on a doctor folder splits only that doctor’s
+requests among those in today (holiday leftover). Cancelled sessions,
+absences, and (when any GP-looking session exists) nurses /
+pharmacists / HCAs are not destinations; Medicus teams can be. The
+working day defaults to today; Tonight you can set it to tomorrow so
+the split uses that day’s book.
+
+Staging still requires **Review then write**. Proposed rows are marked
+not saved; drag a patient between doctors, then **Confirm write to
+Medicus** and **Write to Medicus**. After write, Unallocated greens
+out and the doctors populate as a folder grid you can still drag
+between. Write now actually reassigns (and continues if one dest
+fails); it does not take work off the open list, so the list total
+may stay the same while unallocated drops. The pre-write re-GET is
+inbox plus sitting work, so Distribute equally does not abort as
+vanished. EPS and investigation-result queues stay on their own
+surfaces.
+
 ## [v3.255.1] — 2026-08-31
 
 ### Review fixes on the v3.255.0 prune

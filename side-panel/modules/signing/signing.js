@@ -144,7 +144,10 @@ async function fetchAndRun() {
     const selected = TASK_TYPES.filter((tt) => state.types[tt.key]);
     const rows = [];
     for (const tt of selected) {
-      const r = await fetch(`${apiBase}/tasks/data/${tt.slug}/task-list`, { credentials: 'include' });
+      const r = await fetch(`${apiBase}/tasks/data/${tt.slug}/task-list`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!r.ok) throw new Error(`${tt.label} requests HTTP ${r.status}`);
       const tasks = extractTaskArray(await r.json());
       for (const t of tasks) {
