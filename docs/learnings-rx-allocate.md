@@ -63,14 +63,20 @@ task-list bulk-reassign. They do not share a page.
   or nobody in today, disables the control rather than hiding it
   when they still have tiles.
 - After Split equally the board is explicitly a **proposal**: banner
-  plus popping dest counts. Review is a docked card in the panel,
-  not a scrim over the folders.
-- Drag a request onto another doctor to move it. **Re-split equally**
-  resets the unallocated split. The control lives outside the
-  unallocated pool (that column is a drop target). Click always
-  re-renders with a visible note — a failed split must not look like
-  a dead button.
-- Review then write is unchanged.
+  plus popping dest counts. **Re-split equally** is not offered —
+  staged tiles have left the pile. Prompt: drag a patient from one
+  doctor onto another. Review is a docked card in the panel, not a
+  scrim over the folders. The prominent control is **Review then
+  write N…**; confirm is **Write to Medicus**.
+- **Top up empty boxes** (`planTopUp`) gives remaining unallocated
+  work to dests with the fewest current tiles, so a trickle later in
+  the day does not land on the first dests. **Distribute equally**
+  (`planLevel`) re-deals in-today sitting + unallocated so totals
+  differ by at most one. Away boxes are left unless Share this box.
+- Drag a request onto another doctor to move it. The split / top-up /
+  level controls live outside the unallocated pool (that column is a
+  drop target). Click always re-renders with a visible note — a
+  failed split must not look like a dead button.
 
 ## Write path (same class of bugs as the lab canvas)
 

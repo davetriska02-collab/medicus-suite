@@ -59,13 +59,20 @@ On open the board is **un-proposed**: Unallocated is the large pane,
 doctors working today sit in a smaller sidebar. **Split equally** is
 a large primary control — a user-initiated proposal, not applied on
 load. After you click it, a **Proposal — not written yet** banner
-sits on the board and each doctor’s proposed count pops. After the
-pile is empty, Unallocated greens out as clear and the doctors
-populate as a grid. **Share this box** on a doctor folder splits
-only that doctor’s requests among those in today (holiday leftover).
-Drag still moves one. **Review** is a floating card inside the
-panel — it does not cover the folders. **Re-split equally** puts the
-unallocated even split back.
+sits on the board and each doctor’s proposed count pops. Drag a
+patient from one doctor onto another to change who gets them.
+**Re-split equally** is gone on that proposal — it was the same
+split again. Later in the day, **Top up empty boxes** gives new
+unallocated work to whoever has least (so trickles do not land on
+the first two dests). **Distribute equally** rebalances sitting plus
+new work so in-today totals differ by at most one. After the pile
+is empty, Unallocated greens out as clear and the doctors populate
+as a grid. **Share this box** on a doctor folder splits only that
+doctor’s requests among those in today (holiday leftover).
+**Review then write N…** is the prominent start of the write;
+the next card is **Confirm write to Medicus**, then **Write to
+Medicus**. The review card floats inside the panel and does not
+cover the folders.
 
 Sequential Write used to stop at the first doctor whose POST failed, so
 only that share (a couple of requests) actually moved; the rest stayed

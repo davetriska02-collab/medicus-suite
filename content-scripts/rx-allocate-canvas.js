@@ -654,25 +654,79 @@
   }
 
   function tilesForPlan() {
-    return (_rows || []).filter(function (r) {
-      return C.isRxUnallocated(r);
+    return C.unallocatedNotStaged(_rows, _draft);
+  }
+
+  function destBoxCounts() {
+    var dests = currentDestinations();
+    var counts = {};
+    dests.forEach(function (d) {
+      counts[d.key] = 0;
+    });
+    var board = currentWorkspace();
+    (board.clinicians || []).forEach(function (col) {
+      if (!col || counts[col.key] == null) return;
+      counts[col.key] = (col.tiles || []).length;
+    });
+    return counts;
+  }
+
+  function destsHaveWork() {
+    var counts = destBoxCounts();
+    return Object.keys(counts).some(function (k) {
+      return counts[k] > 0;
     });
   }
 
-  function currentSplitPlan() {
-    return C.planEvenSplit(tilesForPlan(), currentDestinations(), { dayPhrase: dayPhrase() });
+  function inTodayBoxTiles() {
+    var dests = currentDestinations();
+    var want = {};
+    dests.forEach(function (d) {
+      want[d.key] = true;
+    });
+    var tiles = [];
+    var seen = {};
+    var board = currentWorkspace();
+    (board.clinicians || []).forEach(function (col) {
+      if (!col || !want[col.key]) return;
+      (col.tiles || []).forEach(function (t) {
+        if (!t || !t.id || seen[t.id]) return;
+        seen[t.id] = true;
+        tiles.push(t);
+      });
+    });
+    return tiles;
   }
 
-  function applyDefaultEvenSplit() {
+  function applyPileSplit() {
     var dests = currentDestinations();
-    _draft = C.ensureWorkingTodayColumns(_draft || C.emptyDraft(), dests);
-    var plan = currentSplitPlan();
+    var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
       return plan;
     }
-    var next = C.emptyDraft();
-    next = C.ensureWorkingTodayColumns(next, dests);
+    _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
+    _splitDefaulted = true;
+    _selected = {};
+    openDestsFromPlan(plan);
+    return plan;
+  }
+
+  function applyDefaultEvenSplit() {
+    return applyPileSplit();
+  }
+
+  function applyLevel() {
+    var dests = currentDestinations();
+    var seen = {};
+    var tiles = inTodayBoxTiles().concat(tilesForPlan()).filter(function (t) {
+      if (!t || !t.id || seen[t.id]) return false;
+      seen[t.id] = true;
+      return true;
+    });
+    var plan = C.planLevel(tiles, dests, { dayPhrase: dayPhrase() });
+    if (!plan.ok) return plan;
+    var next = C.ensureWorkingTodayColumns(C.emptyDraft(), dests);
     _draft = C.applyEvenSplit(next, plan);
     _splitDefaulted = true;
     _selected = {};
@@ -701,23 +755,35 @@
     var cal = calendarToday();
     var picked = workDate();
     var poolN = tilesForPlan().length;
-    var canResplit = !!(poolN && dests.length);
     var stagedN = C.draftSummary(_rows, _draft).count;
+    var haveWork = destsHaveWork();
     var summary = dests.length
       ? poolN + ' unallocated · ' + dests.length + ' doctor' + (dests.length === 1 ? '' : 's') + ' working ' + phrase
       : 'No sessions on the book for ' + phrase;
-    var splitLabel = _splitDefaulted ? 'Re-split equally' : 'Split equally';
-    var splitBtn = dests.length
-      ? canResplit
-        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go" id="ms-rxac-split">' +
-          splitLabel +
-          '</button>'
-        : '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among those in today.</span>'
-      : '<span class="ms-lac-split-note">Pick another day, or add a doctor.</span>';
+    var actions = '';
+    if (!dests.length) {
+      actions = '<span class="ms-lac-split-note">Pick another day, or add a doctor.</span>';
+    } else if (poolN && !haveWork) {
+      actions =
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go" id="ms-rxac-split">Split equally</button>';
+    } else if (poolN && haveWork) {
+      actions =
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go" id="ms-rxac-topup">Top up empty boxes</button>' +
+        '<button type="button" class="ms-lac-ghost" id="ms-rxac-level">Distribute equally</button>';
+    } else if (haveWork) {
+      actions =
+        '<button type="button" class="ms-lac-ghost" id="ms-rxac-level">Distribute equally</button>';
+    } else {
+      actions =
+        '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among those in today.</span>';
+    }
     var proposal = stagedN
-      ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal — not written yet.</strong> ' +
+      ? '<div class="ms-rxac-proposal" role="status">' +
+        '<strong>Proposal — not written yet.</strong> ' +
         stagedN +
-        ' would move. The number on each doctor is the proposal. Review when it looks right.</div>'
+        ' would move. The number on each doctor is the proposal.' +
+        '<span class="ms-rxac-drag-hint">Drag a patient from one doctor onto another to change who gets them.</span>' +
+        '</div>'
       : '';
     return (
       '<div class="ms-lac-split' +
@@ -737,7 +803,7 @@
       '<span class="ms-lac-split-summary">' +
       esc(summary) +
       '</span>' +
-      splitBtn +
+      actions +
       '</div>' +
       proposal +
       '</div>'
@@ -1020,8 +1086,8 @@
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn ms-rxac-review-open" role="region" aria-label="Review this proposal">' +
         '<div class="ms-rxac-review-copy">' +
-        '<div class="ms-rxac-review-title">Review this proposal</div>' +
-        '<strong>Medicus will reassign these requests.</strong> This changes who the task sits with — it does not issue, sign, or file the prescription.' +
+        '<div class="ms-rxac-review-title">Confirm write to Medicus</div>' +
+        '<strong>This is the write.</strong> Medicus will reassign these requests. This changes who the task sits with — it does not issue, sign, or file the prescription.' +
         '<ul class="ms-lac-writelist">' +
         lines +
         '</ul>' +
@@ -1044,15 +1110,15 @@
       blockReason = !gate.ok ? gate.reason : C.writeBlockReason(plan);
     }
     var writeTitle = canWrite
-      ? 'Opens the patient → destination list. Nothing is sent yet.'
+      ? 'Opens the patient → destination list. You still confirm before anything is written to Medicus.'
       : blockReason;
-    var writeLabel = 'Review ' + sum.count + '…';
+    var writeLabel = 'Review then write ' + sum.count + '…';
     var status = blockReason
       ? '<strong>Cannot move these yet.</strong> ' + esc(blockReason)
       : sum.count
         ? '<div class="ms-rxac-review-title">Proposal — not written yet</div><strong>' +
           sum.count +
-          ' would sit with the doctors above.</strong> Drag to move one. Review when it looks right.'
+          ' would sit with the doctors above.</strong> Drag a patient onto another doctor to change who gets them. Review then write starts the write — you still confirm on the next step.'
         : 'Drag a patient into a doctor’s box. Medicus does not change until you confirm.';
     return (
       '<div class="ms-lac-confirmbar' +
@@ -1103,7 +1169,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Unallocated is the pile. Split equally, or drag into a doctor’s box. Share this box on a doctor splits only that doctor’s requests among those in today.</span>' +
+      '<span class="ms-lac-header-note">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among those in today.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1201,28 +1267,55 @@
       dayTomorrow.addEventListener('click', function () {
         setWorkDate(C.addDaysISO(calendarToday(), 1));
       });
-    var splitBtn = root.querySelector('#ms-rxac-split');
-    if (splitBtn)
-      splitBtn.addEventListener('click', function (e) {
+    function bindPileAction(id, applyFn, okNote) {
+      var btn = root.querySelector(id);
+      if (!btn) return;
+      btn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
         if (_writing) return;
-        var applied = applyDefaultEvenSplit();
+        var applied = applyFn();
         _selected = {};
         _confirmWrite = null;
         _copyNote =
           applied && applied.ok
-            ? 'Split ' +
-              applied.total +
-              ' equally onto ' +
-              applied.doctors +
-              ' doctors working ' +
-              dayPhrase() +
-              '. Proposal — not written yet.'
+            ? okNote(applied)
             : (applied && applied.reason) || 'Could not split.';
         announce(_copyNote);
         render();
       });
+    }
+    bindPileAction('#ms-rxac-split', applyPileSplit, function (applied) {
+      return (
+        'Split ' +
+        applied.total +
+        ' equally onto ' +
+        applied.doctors +
+        ' doctors working ' +
+        dayPhrase() +
+        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
+      );
+    });
+    bindPileAction('#ms-rxac-topup', applyPileSplit, function (applied) {
+      return (
+        'Topped up empty boxes with ' +
+        applied.total +
+        ' among doctors working ' +
+        dayPhrase() +
+        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
+      );
+    });
+    bindPileAction('#ms-rxac-level', applyLevel, function (applied) {
+      return (
+        'Distributed ' +
+        applied.total +
+        ' equally among ' +
+        applied.doctors +
+        ' doctors working ' +
+        dayPhrase() +
+        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
+      );
+    });
     root.querySelectorAll('.ms-rxac-share').forEach(function (btn) {
       ['dragover', 'drop'].forEach(function (ev) {
         btn.addEventListener(ev, function (e) {

@@ -480,6 +480,112 @@
     return next;
   }
 
+  function unallocatedNotStaged(rows, draft) {
+    var moves = (draft && draft.moves) || {};
+    return (Array.isArray(rows) ? rows : []).filter(function (r) {
+      return r && r.id && isRxUnallocated(r) && !moves[r.id];
+    });
+  }
+
+  function planTopUp(tiles, destinations, boxCounts, opts) {
+    opts = opts || {};
+    var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      return t && t.id;
+    });
+    var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
+      return d && d.key && String(d.key).indexOf('clinician:') === 0;
+    });
+    var counts = boxCounts || {};
+    var dayPhrase = opts.dayPhrase || 'today';
+    if (!dests.length) {
+      return {
+        ok: false,
+        reason: 'No doctors with a session on the appointment book for ' + dayPhrase + ' to split onto.',
+        total: pool.length,
+        shares: [],
+        leftover: pool.length,
+        mode: 'top-up',
+      };
+    }
+    if (!pool.length) {
+      return {
+        ok: false,
+        reason: 'Nothing unallocated to top up with.',
+        total: 0,
+        shares: dests.map(function (d) {
+          return { key: d.key, name: d.name, staffId: d.staffId || '', count: 0, tileIds: [] };
+        }),
+        leftover: 0,
+        mode: 'top-up',
+      };
+    }
+    var bags = dests.map(function (d) {
+      return {
+        key: d.key,
+        name: d.name,
+        staffId: d.staffId || '',
+        start: counts[d.key] || 0,
+        tileIds: [],
+      };
+    });
+    pool.forEach(function (tile) {
+      var best = 0;
+      var bestLoad = bags[0].start + bags[0].tileIds.length;
+      for (var i = 1; i < bags.length; i++) {
+        var load = bags[i].start + bags[i].tileIds.length;
+        if (load < bestLoad) {
+          best = i;
+          bestLoad = load;
+        }
+      }
+      bags[best].tileIds.push(tile.id);
+    });
+    var shares = bags.map(function (b) {
+      return {
+        key: b.key,
+        name: b.name,
+        staffId: b.staffId,
+        count: b.tileIds.length,
+        tileIds: b.tileIds,
+      };
+    });
+    return {
+      ok: true,
+      mode: 'top-up',
+      total: pool.length,
+      doctors: dests.length,
+      shares: shares,
+      leftover: 0,
+      summary:
+        pool.length +
+        ' unallocated · top up empty boxes among ' +
+        dests.length +
+        ' doctor' +
+        (dests.length === 1 ? '' : 's') +
+        ' working ' +
+        dayPhrase,
+    };
+  }
+
+  function planLevel(tiles, destinations, opts) {
+    var plan = planEvenSplit(tiles, destinations, Object.assign({}, opts || {}, { anyTile: true }));
+    if (plan && plan.ok) {
+      plan.mode = 'level';
+      var dayPhrase = (opts && opts.dayPhrase) || 'today';
+      plan.summary =
+        plan.total +
+        ' · even across ' +
+        plan.doctors +
+        ' doctor' +
+        (plan.doctors === 1 ? '' : 's') +
+        ' working ' +
+        dayPhrase;
+    } else if (plan && !plan.ok && plan.reason === 'Nothing in that box to share out.') {
+      plan.reason = 'Nothing to distribute equally.';
+    }
+    return plan;
+  }
+
   function ensureWorkingTodayColumns(draft, destinations) {
     var next = draft || Lab.emptyDraft();
     (Array.isArray(destinations) ? destinations : []).forEach(function (d) {
@@ -556,6 +662,9 @@
     formatLeaveDate: Lab.formatLeaveDate,
     workingTodayDoctors: workingTodayDoctors,
     planEvenSplit: planEvenSplit,
+    planTopUp: planTopUp,
+    planLevel: planLevel,
+    unallocatedNotStaged: unallocatedNotStaged,
     applyEvenSplit: applyEvenSplit,
     ensureWorkingTodayColumns: ensureWorkingTodayColumns,
     pinDestStaffIds: pinDestStaffIds,

@@ -301,6 +301,59 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   );
 }
 
+console.log('\n--- top-up empty boxes and distribute equally ---');
+{
+  const dests = [
+    { key: Lab.clinicianColumnKey('Dr A'), name: 'Dr A' },
+    { key: Lab.clinicianColumnKey('Dr B'), name: 'Dr B' },
+    { key: Lab.clinicianColumnKey('Dr C'), name: 'Dr C' },
+  ];
+  const pile = [rxRow(1), rxRow(2), rxRow(3)];
+  const counts = {};
+  counts[dests[0].key] = 5;
+  counts[dests[1].key] = 5;
+  counts[dests[2].key] = 0;
+  const top = C.planTopUp(pile, dests, counts);
+  check(top.ok === true && top.total === 3, 'top-up of 3 is ok');
+  const byName = {};
+  top.shares.forEach((s) => {
+    byName[s.name] = s.count;
+  });
+  check(
+    byName['Dr C'] === 3 && byName['Dr A'] === 0 && byName['Dr B'] === 0,
+    'all three go to the empty box (got ' + JSON.stringify(byName) + ')'
+  );
+  const evenish = C.planTopUp(pile, dests, {});
+  check(
+    evenish.shares.map((s) => s.count).sort().join(',') === '1,1,1',
+    'top-up from empty dests is even'
+  );
+  const sitting = [
+    rxRow(11, { assignedTo: 'Dr A' }),
+    rxRow(12, { assignedTo: 'Dr A' }),
+    rxRow(13, { assignedTo: 'Dr A' }),
+    rxRow(14, { assignedTo: 'Dr A' }),
+    rxRow(15, { assignedTo: 'Dr A' }),
+    rxRow(16, { assignedTo: 'Dr B' }),
+    rxRow(17, { assignedTo: 'Dr B' }),
+    rxRow(18, { assignedTo: 'Dr B' }),
+    rxRow(19, { assignedTo: 'Dr B' }),
+    rxRow(20, { assignedTo: 'Dr B' }),
+  ];
+  const level = C.planLevel(sitting.concat(pile), dests);
+  check(level.ok && level.total === 13, 'level uses sitting plus pile');
+  const levelCounts = level.shares.map((s) => s.count).sort((a, b) => a - b);
+  check(levelCounts[levelCounts.length - 1] - levelCounts[0] <= 1, 'levelled counts differ by at most one');
+  const draft = C.applyEvenSplit(C.emptyDraft(), C.planEvenSplit(pile, dests.slice(0, 2)));
+  check(C.unallocatedNotStaged(pile, draft).length === 0, 'staged unallocated tiles are not still in the pile');
+  check(C.unallocatedNotStaged(pile, C.emptyDraft()).length === 3, 'without a draft they stay in the pile');
+  const trickle = C.planEvenSplit([rxRow(31), rxRow(32)], dests);
+  check(
+    trickle.shares.map((s) => s.count).join(',') === '1,1,0',
+    'plain even-split of a 2-item trickle onto 3 dests is 1,1,0 — empty dest stays empty'
+  );
+}
+
 console.log('\n--- even-split dest staff UUID is what Write uses ---');
 {
   const staffId = uuid(77);
@@ -380,6 +433,15 @@ console.log('\n--- write stays on the lab client ---');
   check(/mergeInboxAndSitting/.test(canvas), 'rows are decorated after the task-list GET');
   check(/Split equally/.test(canvas), 'split equally is a user-initiated proposal');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied when you ask for it');
+  check(/applyPileSplit/.test(canvas) && /planTopUp/.test(canvas), 'new unallocated work can top up empty boxes');
+  check(/applyLevel/.test(canvas) && /planLevel/.test(canvas), 'distribute equally levels sitting plus new work');
+  check(/unallocatedNotStaged/.test(canvas), 'staged unallocated tiles leave the split pile');
+  check(/Top up empty boxes/.test(canvas), 'top-up is a named action');
+  check(/Distribute equally/.test(canvas), 'distribute equally is a named action');
+  check(!/Re-split equally/.test(canvas), 'proposal page does not offer a redundant re-split');
+  check(/Drag a patient from one doctor onto another/.test(canvas), 'proposal explains drag and drop');
+  check(/Review then write/.test(canvas), 'the review control says it starts the write');
+  check(/Confirm write to Medicus/.test(canvas), 'the confirm card is the write step');
   check(/data-share-key/.test(canvas), 'each doctor folder can share its box among those in today');
   check(/ms-rxac-folder-action/.test(canvas), 'share-this-box sits on that doctor’s folder');
   check(/>Share this box</.test(canvas), 'the per-doc control shares that doctor’s box only');
@@ -395,8 +457,8 @@ console.log('\n--- write stays on the lab client ---');
   check(/ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas), 'unallocated is the main pane, doctors sit in a rail');
   check(/ms-rxac-board-clear/.test(canvas), 'an empty unallocated pile lays doctors out as a grid');
   check(
-    /#ms-rxac-split[\s\S]{0,500}?stopPropagation/.test(canvas),
-    're-split click is not swallowed by the pool drop target'
+    /function bindPileAction[\s\S]{0,400}?stopPropagation/.test(canvas) && /bindPileAction\('#ms-rxac-split'/.test(canvas),
+    'split click is not swallowed by the pool drop target'
   );
   check(
     /\[data-share-key\][\s\S]{0,400}?stopPropagation/.test(canvas),
@@ -414,7 +476,7 @@ console.log('\n--- write stays on the lab client ---');
     /evenSplitHtml\(\) \+[\s\S]{0,80}?ms-rxac-folders/.test(canvas),
     'even-split box is outside the unallocated pool drop target'
   );
-  check(/Unallocated is the pile/.test(canvas) && /drag into a doctor/.test(canvas), 'copy says you can still move requests by hand');
+  check(/Unallocated is the pile/.test(canvas) && /drag a patient onto a doctor/.test(canvas), 'copy says you can still move requests by hand');
   check(/Share this box/.test(canvas), 'header says Share this box splits only that doctor’s requests');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');

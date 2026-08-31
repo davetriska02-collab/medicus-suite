@@ -1061,6 +1061,19 @@
   font-weight: 650;
 }
 
+#ms-rxac-overlay .ms-rxac-drag-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+#ms-rxac-overlay #ms-rxac-level {
+  padding: 8px 14px;
+  min-height: 36px;
+}
+
 #ms-rxac-overlay #ms-rxac-day {
   padding: 3px 6px;
   border: 1px solid var(--border);
@@ -1484,10 +1497,10 @@
 }
 
 #ms-rxac-overlay .ms-rxac-review-go {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 650;
-  padding: 12px 22px;
-  min-height: 44px;
+  padding: 14px 24px;
+  min-height: 52px;
   border-radius: var(--r-md);
   white-space: nowrap;
 }
