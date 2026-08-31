@@ -922,7 +922,7 @@
         ? '<strong>' +
           sum.count +
           ' proposed — not saved yet.</strong> Drag to move one. Confirm does not issue, sign, or file the prescription.'
-        : 'Inbox is on the right after the even split. Drag to move one, then review.';
+        : 'Drag a patient into a doctor’s box. Medicus does not change until you confirm.';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
@@ -1109,10 +1109,13 @@
     var clearBtn = root.querySelector('#ms-lac-clear');
     if (clearBtn)
       clearBtn.addEventListener('click', function () {
-        _draft = C.emptyDraft();
+        _draft = C.ensureWorkingTodayColumns(C.emptyDraft(), currentDestinations());
+        _splitDefaulted = false;
+        _openDests = {};
+        _expandedChip = '';
         _copyNote = '';
         _pendingAbsence = null;
-        announce('Staged moves cleared. The queue itself is unchanged.');
+        announce('Proposals cleared. Doctor boxes show what already sits with them. The queue itself is unchanged.');
         render();
       });
     var absCancel = root.querySelector('#ms-lac-abs-cancel');
