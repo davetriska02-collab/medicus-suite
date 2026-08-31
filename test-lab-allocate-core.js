@@ -159,6 +159,10 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
   check(C.isTeamAssignee('Results inbox') === true, 'Results inbox is a team');
   check(C.isTeamAssignee('Triage Doctor') === true, 'Triage Doctor is a team-like inbox');
   check(C.isTeamAssignee('Investigation Reports') === true, 'Investigation Reports is the results inbox, not a person');
+  check(
+    C.isTeamAssignee('Non-Routine Prescription Requests') === true,
+    'Non-Routine Prescription Requests is an inbox, not a person'
+  );
   check(C.isTeamAssignee('Dr Jane Cole') === false, 'a named doctor is not a team');
   check(
     C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'),

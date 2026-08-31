@@ -62,6 +62,20 @@
     };
   }
 
+  function isRxInboxName(name) {
+    var s = String(name || '').trim();
+    if (!s) return true;
+    if (/^unassigned$/i.test(s)) return true;
+    if (Lab.isTeamAssignee(s)) return true;
+    return /prescription/i.test(s) || /non[-\s]?routine/i.test(s);
+  }
+
+  function isRxUnallocated(row) {
+    if (!row || !row.id) return false;
+    if (isRxInboxName(row.assignedTo)) return true;
+    return Lab.homeColumnKey(row) === Lab.POOL;
+  }
+
   function decorateRxRow(row) {
     if (!row) return row;
     var next = Object.assign({}, row);
@@ -292,7 +306,7 @@
   function planEvenSplit(tiles, destinations, opts) {
     opts = opts || {};
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
-      return t && t.id && Lab.homeColumnKey(t) === Lab.POOL;
+      return isRxUnallocated(t);
     });
     var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
       return d && d.key && String(d.key).indexOf('clinician:') === 0;
@@ -421,6 +435,8 @@
     isNonRoutineRxQueueSlug: isNonRoutineRxQueueSlug,
     parseRxQueueRoute: parseRxQueueRoute,
     decorateRxRow: decorateRxRow,
+    isRxInboxName: isRxInboxName,
+    isRxUnallocated: isRxUnallocated,
     rxGroupName: rxGroupName,
     groupTiles: groupTiles,
     buildWorkspace: buildWorkspace,

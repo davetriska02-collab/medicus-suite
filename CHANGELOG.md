@@ -31,6 +31,11 @@ unchanged. Dest staff ids are pinned from the appointment book;
 Write re-reads the same open pile; POST tries underscore then
 hyphen; after Write the canvas shows Medicus, it does not re-split.
 
+Even-split is the **unallocated** Non-Routine Prescription Requests
+pile only. The open-list GET also returns requests already sitting with
+a GP; those stay on that field and are not in the split or its counts.
+The queue inbox name is a team, not a person.
+
 On open, the even split is the starting board (staged, not written).
 Drag a request onto another doctor to move it; **Re-split equally**
 puts the even split back. That button sat inside the unallocated pool

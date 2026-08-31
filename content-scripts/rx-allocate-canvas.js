@@ -610,7 +610,7 @@
 
   function tilesForPlan() {
     return (_rows || []).filter(function (r) {
-      return r && r.id && C.homeColumnKey(r) === C.POOL;
+      return C.isRxUnallocated(r);
     });
   }
 
@@ -637,7 +637,11 @@
     var board = currentWorkspace();
     var counts = {};
     (board.clinicians || []).forEach(function (col) {
-      counts[col.key] = col.count || 0;
+      var n = 0;
+      (col.tiles || []).forEach(function (t) {
+        if (C.isRxUnallocated(t)) n += 1;
+      });
+      counts[col.key] = n;
     });
     return currentDestinations().map(function (d) {
       return { name: d.name, key: d.key, count: counts[d.key] || 0 };

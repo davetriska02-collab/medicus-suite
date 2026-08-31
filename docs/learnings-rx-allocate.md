@@ -29,7 +29,11 @@ Reject:
 - `homeColumnKey` stays assignment-only. Named GP is **never** auto-placement.
 - Pool groups by requester if present, else registered GP.
 - Even-split among doctors working today **ignores named GP** and does
-  not rebalance already-sitting work.
+  not rebalance already-sitting work. Only the unallocated Non-Routine
+  Prescription Requests pile (Unassigned / that inbox name). Requests
+  already sitting with a GP stay on that field and are not in the split
+  counts. The bare task-list GET returns the whole open list of that
+  type — do not even-split the ones that already have a person assignee.
 
 ## Even split
 

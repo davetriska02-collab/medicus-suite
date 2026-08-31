@@ -209,6 +209,20 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
     'already-sitting work is not in the even-split plan'
   );
   check(plan.total === 2, 'sitting rows are not counted in the split total');
+
+  const inbox = rxRow(3, { assignedTo: 'Non-Routine Prescription Requests' });
+  const sittingGp = rxRow(4, { assignedTo: 'Dr Jane Cole' });
+  check(C.isRxUnallocated(inbox) === true, 'the Non-Routine Prescription Requests inbox is the unallocated pile');
+  check(C.isRxUnallocated(sittingGp) === false, 'a request already sitting with a GP is not in the split');
+  check(Lab.isTeamAssignee('Non-Routine Prescription Requests') === true, 'the queue name is an inbox, not a person');
+  check(Lab.homeColumnKey(inbox) === Lab.POOL, 'inbox-assigned Rx stays in the unallocated pool');
+  check(Lab.homeColumnKey(sittingGp) !== Lab.POOL, 'GP-assigned Rx sits on that clinician field');
+  const mixed = C.planEvenSplit([inbox, sittingGp, rxRow(5)], dests);
+  check(mixed.total === 2, 'even split is the unallocated inbox pile, not already-allocated GP work');
+  check(
+    !mixed.shares.some((s) => (s.tileIds || []).indexOf(sittingGp.id) !== -1),
+    'already-allocated GP work is not in the even-split tile list'
+  );
 }
 
 console.log('\n--- even-split dest staff UUID is what Write uses ---');
@@ -337,6 +351,8 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
   check(/fetchRxTaskList/.test(canvas), 'canvas loads the pile via fetchRxTaskList');
+  check(/isRxUnallocated/.test(canvas), 'canvas even-split only stages unallocated Non-Routine requests');
+  check(/isRxUnallocated\(t\)/.test(canvas), 'split counts ignore requests already sitting with a GP');
   check(/skipSplit/.test(canvas), 'after Write the canvas does not re-stage an even split');
   check(/fetchList:/.test(canvas), 'Write re-GETs via fetchRxTaskList, not a page-filter fetchTaskList');
   check(/if \(!_open\) _route = route/.test(canvas), 'open overlay pins _route so ensureLauncher cannot clobber search');
