@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.256.0] — 2026-08-31
+
+### Non-routine prescription allocation canvas
+
+A sibling of the lab / workflow allocation canvases on the non-routine
+prescription-request queue (`prescription_request_task_non_routine`).
+Unallocated requests sit in a pile grouped by registered GP (a caption,
+never auto-placement). Drag onto a clinician field to stage; writing is
+the same W23 bulk-reassign (`LabAllocateCore.createClient`) and does not
+issue, sign, or file the prescription.
+
+The canvas also shows what an **even split** of the unallocated pile
+would look like for each doctor with a session on today’s appointment
+book, and can stage that split on the canvas. Cancelled sessions,
+absences, and (when any GP-looking session exists) nurses / pharmacists /
+HCAs are not destinations. Already-sitting work is not rebalanced.
+Staging the split still requires Review then write.
+
+Routine, EPS, and investigation-result queues stay on their own
+surfaces.
+
 ## [v3.255.1] — 2026-08-31
 
 ### Review fixes on the v3.255.0 prune

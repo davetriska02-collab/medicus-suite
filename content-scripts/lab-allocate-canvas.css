@@ -1,9 +1,10 @@
-/* Lab + workflow allocation canvases. Injected surfaces: #ms-lac-overlay
-   and #ms-wac-overlay carry their own token block (panel.css :root is not
-   available on Medicus pages) — values mirror the canon light column in
-   .claude/skills/ui-design/TOKENS.md. */
+/* Lab + workflow + non-routine Rx allocation canvases. Injected surfaces:
+   #ms-lac-overlay, #ms-wac-overlay and #ms-rxac-overlay carry their own
+   token block (panel.css :root is not available on Medicus pages) — values
+   mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
 #ms-lac-launch,
-#ms-wac-launch {
+#ms-wac-launch,
+#ms-rxac-launch {
   position: fixed;
   top: 12px;
   right: 16px;
@@ -24,7 +25,8 @@
 }
 
 #ms-lac-launch:hover,
-#ms-wac-launch:hover {
+#ms-wac-launch:hover,
+#ms-rxac-launch:hover {
   border-color: #2563eb;
   background: #eff4fd;
 }
@@ -34,13 +36,15 @@
    to nothing and invalidate the whole `outline` shorthand, leaving the
    button with no keyboard focus ring. Literal value, same colour. */
 #ms-lac-launch:focus-visible,
-#ms-wac-launch:focus-visible {
+#ms-wac-launch:focus-visible,
+#ms-rxac-launch:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
 #ms-lac-overlay,
-#ms-wac-overlay {
+#ms-wac-overlay,
+#ms-rxac-overlay {
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
   --bg-elev: #ffffff;
@@ -866,9 +870,70 @@
   background: var(--accent-dim);
 }
 
+.ms-lac-split {
+  margin: 8px 10px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+
+.ms-lac-split-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.ms-lac-split-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.ms-lac-split-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.ms-lac-split-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border);
+}
+
+.ms-lac-split-list li:last-child {
+  border-bottom: 0;
+}
+
+.ms-lac-split-name {
+  color: var(--text-2);
+}
+
+.ms-lac-split-count {
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.ms-lac-split .ms-lac-confirm-btn {
+  width: 100%;
+}
+
+.ms-lac-split .ms-lac-confirm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   #ms-lac-overlay *,
-  #ms-wac-overlay * {
+  #ms-wac-overlay *,
+  #ms-rxac-overlay * {
     transition: none !important;
   }
 }
