@@ -55,6 +55,8 @@ console.log('\n--- extractTaskArray / pickTaskId ---');
   check(C.extractTaskArray({ tasks: [{ id: uuid(1) }] }).length === 1, 'tasks envelope');
   check(C.extractTaskArray({ data: { tasks: [{ id: uuid(2) }] } }).length === 1, 'data.tasks envelope');
   check(C.extractTaskArray({ data: [{ id: uuid(3) }] }).length === 1, 'data array envelope');
+  check(C.extractTaskArray({ items: [{ id: uuid(8) }] }).length === 1, 'items envelope');
+  check(C.extractTaskArray({ taskList: { tasks: [{ id: uuid(9) }] } }).length === 1, 'taskList.tasks envelope');
   check(C.pickTaskId({ taskUuid: uuid(4) }) === uuid(4), 'prefers taskUuid');
   check(C.pickTaskId({ id: 'not-a-uuid' }) === '', 'rejects non-uuid id');
 }
@@ -157,6 +159,10 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
   check(C.isTeamAssignee('Results inbox') === true, 'Results inbox is a team');
   check(C.isTeamAssignee('Triage Doctor') === true, 'Triage Doctor is a team-like inbox');
   check(C.isTeamAssignee('Investigation Reports') === true, 'Investigation Reports is the results inbox, not a person');
+  check(
+    C.isTeamAssignee('Non-Routine Prescription Requests') === true,
+    'Non-Routine Prescription Requests is an inbox, not a person'
+  );
   check(C.isTeamAssignee('Dr Jane Cole') === false, 'a named doctor is not a team');
   check(
     C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'),
@@ -284,8 +290,13 @@ console.log('\n--- write contract is the captured bulk-reassign ---');
     'first POST path nests the queue slug'
   );
   check(
-    C.bulkReassignPaths('review_investigation_results_task')[1] === '/tasks/task-list/bulk-reassign',
-    'second POST path is the captured literal'
+    C.bulkReassignPaths('review_investigation_results_task')[1] ===
+      '/tasks/review-investigation-results-task/task-list/bulk-reassign',
+    'second POST path is the hyphen/underscore twin'
+  );
+  check(
+    C.bulkReassignPaths('review_investigation_results_task')[2] === '/tasks/task-list/bulk-reassign',
+    'captured literal is still the last 404 fallback'
   );
   check(!/method:\s*['"]PUT['"]/.test(src), 'core has no PUT');
   check(!/method:\s*['"]PATCH['"]/.test(src), 'core has no PATCH');
@@ -350,10 +361,7 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
   check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
   check(!/list\.length >= 8/.test(canvas), 'overview harvest does not stop at eight staff ids');
-  check(
-    /fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas),
-    'task-list GET uses the page query (minus masterAssignee)'
-  );
+  check(/fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas), 'task-list GET uses the page query (minus masterAssignee)');
   check(/search: _route && _route\.search/.test(canvas), 'write re-GET keeps the page filters');
   check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
@@ -511,10 +519,7 @@ console.log('\n--- multi-select and drag origin ---');
   );
   check(C.dropTargetShowsHover('pool', 'pool') === false, 'lifting from unallocated does not shade the pile');
   check(C.dropTargetShowsHover('pool', 'clinician') === true, 'a clinician field still highlights as the drop');
-  check(
-    C.dropTargetShowsHover('clinician', 'pool') === true,
-    'bringing work back to unallocated does highlight the well'
-  );
+  check(C.dropTargetShowsHover('clinician', 'pool') === true, 'bringing work back to unallocated does highlight the well');
   check(C.dropTargetShowsHover('clinician', 'clinician') === true, 'field-to-field still highlights the destination');
   check(C.dropTargetShowsHover('pool', 'team') === true, 'a team field highlights as a drop from the pile');
   check(C.dropTargetShowsHover('team', 'pool') === true, 'bringing work back from a team highlights the well');
@@ -584,10 +589,7 @@ console.log('\n--- one person, two wire formats ---');
     C.clinicianColumnKey('Triska David') !== C.clinicianColumnKey('Dr David Triska'),
     'raw keys still differ — merge happens at board build'
   );
-  check(
-    C.sameClusterPerson('Triska David', 'Dr David Triska') === true,
-    'those two names are one person for chip merge'
-  );
+  check(C.sameClusterPerson('Triska David', 'Dr David Triska') === true, 'those two names are one person for chip merge');
   check(C.sameClusterPerson('AZADIAN N', 'Dr Amy Azadian') === false, 'different initials stay two people on the rail');
 
   const daveId = uuid(61);
@@ -832,6 +834,16 @@ console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
   check(!!C.bookPresenceForName(book, 'Natalie Azadian'), 'title-stripped name still matches the book');
   check(!C.bookPresenceForName(book, 'Emma Heylen'), 'a clinician not on today’s book is not present');
   check(!C.bookPresenceForName(book, 'Dr David Triska'), 'a cancelled-only diary is not In today');
+  const withId = C.parseTodayBook({
+    date: '2026-08-25',
+    staffSchedules: [
+      { id: uuid(21), name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] },
+    ],
+  });
+  check(
+    withId.present[0] && withId.present[0].staffId === uuid(21),
+    'book staff UUID is copied onto present[] when the schedule carries one'
+  );
 
   const inToday = C.presenceForName({ name: 'Dr Natalie Azadian', dateISO: '2026-08-25', book: book });
   check(inToday.state === 'present' && inToday.reason === 'in-today', 'book hit → In today');
@@ -937,7 +949,10 @@ console.log('\n--- staff directory + unique UUID resolve ---');
     staffOptions: [{ value: { id: azadianId, name: 'Natalie' }, label: 'Dr Natalie Azadian' }],
   });
   check(wrappedVal.byId[azadianId], 'Vue-wrapped staffOptions value object is harvested');
-  check(wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1, 'outer full label wins over inner first name');
+  check(
+    wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1,
+    'outer full label wins over inner first name'
+  );
   check(
     C.pickStaffFields({ id: azadianId, name: 'Natalie', label: 'Dr Natalie Azadian' }).name.indexOf('Azadian') !== -1,
     'prefers full label over short name field'
@@ -974,10 +989,7 @@ console.log('\n--- staff directory + unique UUID resolve ---');
   });
   check(wrappedData.byId[azadianId], 'staffOptions nested under data is harvested');
   check(C.pickPatientId({ patientId: uuid(5) }) === uuid(5), 'row patientId is a UUID');
-  check(
-    C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6),
-    'overview patient.id is picked'
-  );
+  check(C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6), 'overview patient.id is picked');
   const hit = C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', dir);
   check(hit.ok && hit.staff.id === azadianId, 'AZADIAN N resolves to the Azadian UUID');
   const miss = C.resolveStaffForColumn(C.clinicianColumnKey('Dr Mystery'), 'Dr Mystery', dir);
@@ -1064,7 +1076,10 @@ console.log('\n--- sitting assignedId is the write destination ---');
   );
   const clash = C.planBulkReassign([sitting, clashSit, pile], draft, 'token', emptyDir);
   check(clash.ok === false, 'two assignedIds on one field refuse');
-  check(clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id', 'reason is ambiguous-assigned-id');
+  check(
+    clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id',
+    'reason is ambiguous-assigned-id'
+  );
   check(/more than one staff id/.test(C.writeBlockReason(clash)), 'refuse copy names two ids on the field');
 
   const emptyDraft = C.addColumn(C.emptyDraft(), 'Dr Mystery');
@@ -1085,7 +1100,7 @@ async function testClient() {
   let taskListGone = false;
   const client = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async (url, opts) => {
-      calls.push({ url: url, method: opts.method, body: opts.body });
+      calls.push({ url: url, method: opts.method, body: opts.body, cache: opts.cache });
       let body = {};
       if (/bulk-reassign/.test(url)) {
         bodies.push(JSON.parse(opts.body || '{}'));
@@ -1131,10 +1146,14 @@ async function testClient() {
       };
     },
   });
-  const out = await client.fetchTaskList('review-investigation-report', '?viewContext=workflow&masterAssignee=team-1');
+  const out = await client.fetchTaskList(
+    'review-investigation-report',
+    '?viewContext=workflow&masterAssignee=team-1'
+  );
   check(out.rows.length === 1, 'client maps the task-list');
   check(out.taskList === 'envelope-token', 'client keeps the envelope taskList token');
   check(calls[0].method === 'GET', 'task-list fetch is GET');
+  check(calls[0].cache === 'no-store', 'task-list GET is not served from HTTP cache');
   check(
     /\/tasks\/data\/review-investigation-report\/task-list\?viewContext=workflow$/.test(calls[0].url),
     'task-list GET keeps viewContext and drops masterAssignee'
@@ -1252,13 +1271,69 @@ async function testClient() {
   });
   check(
     written404.ok === true && written404.written === 1,
-    '404 on the slug path still writes via the captured fallback'
+    '404 on the slug path still writes via the hyphen/underscore twin'
   );
   const posts404 = calls404.filter(function (c) {
     return c.method === 'POST';
   });
-  check(posts404.length === 2, 'slug path 404 then one fallback POST');
-  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts404[1].url), 'fallback POST is the captured literal');
+  check(posts404.length === 2, 'slug path 404 then one twin POST');
+  check(
+    /\/tasks\/review_investigation_report\/task-list\/bulk-reassign$/.test(posts404[1].url),
+    'second POST is the hyphen/underscore twin'
+  );
+
+  const calls404lit = [];
+  const client404lit = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      calls404lit.push({ url: url, method: opts.method });
+      if (/\/tasks\/review[-_]investigation[-_]report\/task-list\/bulk-reassign$/.test(url)) {
+        return {
+          ok: false,
+          status: 404,
+          text: async function () {
+            return '';
+          },
+        };
+      }
+      var bodyLit = { ok: true };
+      if (/\/tasks\/data\/.+\/task-list/.test(url)) {
+        bodyLit = {
+          taskList: 'envelope-token',
+          tasks: [
+            {
+              id: uuid(1),
+              patientName: 'A',
+              assignedTo: 'Investigation Reports',
+              requestedBy: 'AZADIAN N',
+            },
+          ],
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify(bodyLit);
+        },
+      };
+    },
+  });
+  const written404lit = await client404lit.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(
+    written404lit.ok === true && written404lit.written === 1,
+    '404 on both slug twins still writes via the captured literal'
+  );
+  const posts404lit = calls404lit.filter(function (c) {
+    return c.method === 'POST';
+  });
+  check(posts404lit.length === 3, 'slug, twin, then captured literal');
+  check(/\/tasks\/task-list\/bulk-reassign$/.test(posts404lit[2].url), 'third POST is the captured literal');
 
   taskListGone = true;
   const vanished = await client.commitAllocations({
@@ -1277,6 +1352,77 @@ async function testClient() {
       return c.method === 'POST';
     }).length === 1,
     'vanished abort does not POST'
+  );
+
+  const idA = uuid(21);
+  const idB = uuid(22);
+  const rowA = C.normaliseTaskRow(
+    { id: uuid(31), patientName: 'A', assignedTo: 'Investigation Reports' },
+    'x'
+  );
+  const rowB = C.normaliseTaskRow(
+    { id: uuid(32), patientName: 'B', assignedTo: 'Investigation Reports' },
+    'x'
+  );
+  let seqDraft = C.emptyDraft();
+  seqDraft = C.addColumn(seqDraft, 'Dr Natalie Azadian', idA);
+  seqDraft = C.addColumn(seqDraft, 'Dr David Triska', idB);
+  seqDraft = C.stageMove(seqDraft, rowA.id, C.clinicianColumnKey('Dr Natalie Azadian'));
+  seqDraft = C.stageMove(seqDraft, rowB.id, C.clinicianColumnKey('Dr David Triska'));
+  const seqPosts = [];
+  const seqClient = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      if (/bulk-reassign/.test(url)) {
+        const payload = JSON.parse(opts.body || '{}');
+        seqPosts.push(payload);
+        if (payload.assigneeId === idB) {
+          return {
+            ok: false,
+            status: 500,
+            text: async function () {
+              return '';
+            },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          text: async function () {
+            return JSON.stringify({ ok: true });
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify({
+            taskList: 'envelope-token',
+            tasks: [
+              { id: rowA.id, patientName: 'A', assignedTo: 'Investigation Reports' },
+              { id: rowB.id, patientName: 'B', assignedTo: 'Investigation Reports' },
+            ],
+          });
+        },
+      };
+    },
+  });
+  const seqWritten = await seqClient.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: seqDraft,
+    rows: [rowA, rowB],
+    taskList: 'envelope-token',
+    directory: { list: [] },
+  });
+  check(seqWritten.partial === true && seqWritten.written === 1, 'a later dest failing still keeps the dests already written');
+  check(
+    seqPosts.some(function (p) {
+      return p.assigneeId === idA;
+    }) &&
+      seqPosts.some(function (p) {
+        return p.assigneeId === idB;
+      }),
+    'Write still POSTs the remaining dest after one dest fails'
   );
 
   const staffFormCalls = [];

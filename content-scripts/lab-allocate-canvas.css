@@ -1,9 +1,10 @@
-/* Lab + workflow allocation canvases. Injected surfaces: #ms-lac-overlay
-   and #ms-wac-overlay carry their own token block (panel.css :root is not
-   available on Medicus pages) — values mirror the canon light column in
-   .claude/skills/ui-design/TOKENS.md. */
+/* Lab + workflow + non-routine Rx allocation canvases. Injected surfaces:
+   #ms-lac-overlay, #ms-wac-overlay and #ms-rxac-overlay carry their own
+   token block (panel.css :root is not available on Medicus pages) — values
+   mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
 #ms-lac-launch,
-#ms-wac-launch {
+#ms-wac-launch,
+#ms-rxac-launch {
   position: fixed;
   top: 12px;
   right: 16px;
@@ -24,7 +25,8 @@
 }
 
 #ms-lac-launch:hover,
-#ms-wac-launch:hover {
+#ms-wac-launch:hover,
+#ms-rxac-launch:hover {
   border-color: #2563eb;
   background: #eff4fd;
 }
@@ -34,13 +36,15 @@
    to nothing and invalidate the whole `outline` shorthand, leaving the
    button with no keyboard focus ring. Literal value, same colour. */
 #ms-lac-launch:focus-visible,
-#ms-wac-launch:focus-visible {
+#ms-wac-launch:focus-visible,
+#ms-rxac-launch:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
 }
 
 #ms-lac-overlay,
-#ms-wac-overlay {
+#ms-wac-overlay,
+#ms-rxac-overlay {
   --bg-deep: #f8fafc;
   --bg-mid: #f1f5f9;
   --bg-elev: #ffffff;
@@ -68,8 +72,15 @@
   --r-pill: 999px;
   --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
+  --shadow-3: 0 8px 28px rgba(15, 23, 42, 0.14);
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  --med: 200ms;
+  --text-5: #5f6f85;
+  --red-dim: rgba(220, 38, 38, 0.08);
+  --red-line: rgba(220, 38, 38, 0.3);
   position: fixed;
   inset: 0;
   z-index: 2147483000;
@@ -338,6 +349,40 @@
   font-weight: 600;
   color: var(--text-4);
   white-space: nowrap;
+}
+
+#ms-rxac-overlay .ms-lac-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+#ms-rxac-overlay .ms-lac-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#ms-rxac-overlay button.ms-lac-field-expand {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 8px 12px;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+#ms-rxac-overlay button.ms-lac-field-expand:hover,
+#ms-rxac-overlay button.ms-lac-field-expand:focus-visible {
+  background: var(--accent-dim);
+}
+
+#ms-rxac-overlay .ms-lac-chip-drawer {
+  flex: 1 1 100%;
 }
 
 .ms-lac-chip {
@@ -877,9 +922,655 @@
   background: var(--accent-dim);
 }
 
+.ms-lac-split {
+  margin: 8px 10px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+}
+
+.ms-lac-split-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.ms-lac-split-day {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.ms-lac-split-day-label {
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-3);
+}
+
+.ms-lac-split-day input[type='date'] {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+}
+
+.ms-lac-split-day-on {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.ms-lac-split-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.ms-lac-split-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.ms-lac-split-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border);
+}
+
+.ms-lac-split-list li:last-child {
+  border-bottom: 0;
+}
+
+.ms-lac-split-name {
+  color: var(--text-2);
+}
+
+.ms-lac-split-count {
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+.ms-lac-split .ms-lac-confirm-btn {
+  width: 100%;
+}
+
+#ms-rxac-overlay .ms-lac-board {
+  flex-direction: column;
+  gap: 10px;
+}
+
+#ms-rxac-overlay .ms-lac-split {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  flex: 0 0 auto;
+  margin: 0;
+  max-height: none;
+  padding: 10px 12px;
+  pointer-events: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-split-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+#ms-rxac-overlay .ms-lac-split .ms-lac-confirm-btn,
+#ms-rxac-overlay .ms-lac-split .ms-lac-ghost {
+  width: auto;
+}
+
+#ms-rxac-overlay .ms-lac-split-summary {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-3);
+  flex: 1 1 auto;
+  margin-left: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-split-go,
+#ms-rxac-overlay .ms-rxac-action {
+  margin-left: 0;
+  padding: 10px 18px;
+  min-height: 40px;
+  font-size: 13px;
+  font-weight: 650;
+  border-radius: var(--r-md);
+  width: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-split-go {
+  margin-left: auto;
+  padding: 10px 22px;
+  font-size: 14px;
+}
+
+#ms-rxac-overlay .ms-rxac-dests {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+#ms-rxac-overlay #ms-rxac-add-team {
+  min-width: 180px;
+  max-width: 240px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+}
+
+#ms-rxac-overlay .ms-rxac-split-proposing {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-proposal {
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+#ms-rxac-overlay .ms-rxac-proposal strong {
+  font-weight: 650;
+}
+
+#ms-rxac-overlay .ms-rxac-drag-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+#ms-rxac-overlay #ms-rxac-add-team:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#ms-rxac-overlay #ms-rxac-day {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+}
+
+#ms-rxac-overlay #ms-rxac-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#ms-rxac-overlay .ms-lac-primary {
+  background: var(--accent);
+  color: var(--bg-deep);
+  border-color: var(--accent);
+}
+
+#ms-rxac-overlay .ms-lac-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  filter: none;
+}
+
+#ms-rxac-overlay .ms-lac-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#ms-rxac-overlay .ms-lac-header-note {
+  white-space: normal;
+  color: var(--text-3);
+}
+
+#ms-rxac-overlay .ms-lac-pool-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-rxac-folders {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+}
+
+#ms-rxac-overlay .ms-rxac-board {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  gap: 12px;
+}
+
+#ms-rxac-overlay .ms-rxac-main {
+  flex: 1 1 64%;
+  min-width: 0;
+  display: flex;
+}
+
+#ms-rxac-overlay .ms-rxac-main .ms-rxac-folder {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-rail {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-rail .ms-rxac-folder {
+  min-height: 0;
+  max-height: 220px;
+  flex: 0 0 auto;
+}
+
+#ms-rxac-overlay .ms-rxac-rail .ms-rxac-folder-body {
+  min-height: 0;
+  max-height: 140px;
+}
+
+#ms-rxac-overlay .ms-rxac-rail .ms-lac-add-row {
+  flex: 0 0 auto;
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  padding-top: 8px;
+  background: var(--bg-deep);
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear {
+  display: grid;
+  grid-template-columns: minmax(148px, 200px) minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folder-inbox {
+  grid-row: 1;
+  grid-column: 1;
+  min-height: 0;
+  align-self: start;
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folders {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-lac-add-row {
+  grid-column: 1 / -1;
+}
+
+#ms-rxac-overlay .ms-rxac-folders .ms-rxac-folder {
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-folders .ms-rxac-folder-body {
+  min-height: 44px;
+  max-height: 140px;
+}
+
+#ms-rxac-overlay .ms-rxac-folder {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+#ms-rxac-overlay .ms-rxac-folder:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox {
+  background: var(--bg-mid);
+  border-style: dashed;
+  border-color: var(--border-hi);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+  border-style: solid;
+  box-shadow: none;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear:hover {
+  border-color: var(--green-line);
+  box-shadow: none;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-name {
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-count {
+  color: var(--green);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-meta,
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-meta-text {
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-body {
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-away {
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-away:hover {
+  border-color: var(--amber-line);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-away .ms-rxac-folder-name {
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-rxac-share {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin: 4px 0 0;
+  padding: 5px 10px;
+  min-height: 28px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+#ms-rxac-overlay .ms-rxac-share-quiet {
+  color: var(--text-3);
+  background: transparent;
+}
+
+#ms-rxac-overlay .ms-rxac-share:hover:not(:disabled),
+#ms-rxac-overlay .ms-rxac-share-quiet:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent-line);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share-away:not(:disabled) {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share-away:hover:not(:disabled),
+#ms-rxac-overlay .ms-rxac-share-away:focus-visible {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share-off,
+#ms-rxac-overlay .ms-rxac-share:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--text-4);
+  border-color: var(--border);
+  background: transparent;
+}
+
+#ms-rxac-overlay.ms-lac-lifting .ms-rxac-share {
+  pointer-events: none;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-title {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-name {
+  flex: 1 1 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-proposed {
+  border-color: var(--accent-line);
+  box-shadow:
+    inset 3px 0 0 var(--accent),
+    var(--shadow-1);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-proposed:hover {
+  border-color: var(--accent-line);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+#ms-rxac-overlay .ms-rxac-count-proposed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  line-height: 1;
+}
+
+#ms-rxac-overlay .ms-rxac-count-pop {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  line-height: 1;
+}
+
+#ms-rxac-overlay .ms-rxac-count-label {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+#ms-rxac-overlay .ms-rxac-count-sit {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+  margin-top: 2px;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-meta-text {
+  min-width: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-body {
+  flex: 1 1 auto;
+  min-height: 44px;
+  overflow: auto;
+  padding: 2px 0 6px;
+}
+
+#ms-rxac-overlay .ms-lac-confirmbar {
+  flex: 0 0 auto;
+  margin: 0 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-1);
+  padding: 10px 14px;
+}
+
+#ms-rxac-overlay .ms-rxac-review-dock,
+#ms-rxac-overlay .ms-rxac-review-open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 20px;
+  padding: 14px 16px;
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  box-shadow: var(--shadow-2);
+}
+
+#ms-rxac-overlay .ms-rxac-review-open {
+  align-items: start;
+  max-height: 36vh;
+  overflow: auto;
+  background: var(--bg-elev);
+  border-color: var(--amber-line);
+}
+
+#ms-rxac-overlay .ms-rxac-review-copy {
+  min-width: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-review-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-1);
+  margin: 0 0 4px;
+}
+
+#ms-rxac-overlay .ms-rxac-review-go {
+  font-size: 16px;
+  font-weight: 650;
+  padding: 14px 24px;
+  min-height: 52px;
+  border-radius: var(--r-md);
+  white-space: nowrap;
+}
+
+#ms-rxac-overlay .ms-rxac-review-open .ms-lac-writelist {
+  max-height: 22vh;
+}
+
+#ms-rxac-overlay .ms-rxac-review-dock .ms-lac-confirmbar-actions,
+#ms-rxac-overlay .ms-rxac-review-open .ms-lac-confirmbar-actions {
+  margin-left: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#ms-rxac-overlay .ms-lac-tile-staged {
+  background: var(--accent-dim);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+#ms-rxac-overlay .ms-lac-tile-staged .ms-lac-tile-name {
+  color: var(--text-1);
+}
+
+.ms-lac-split .ms-lac-confirm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 @media (prefers-reduced-motion: reduce) {
   #ms-lac-overlay *,
-  #ms-wac-overlay * {
+  #ms-wac-overlay *,
+  #ms-rxac-overlay * {
     transition: none !important;
   }
 }
