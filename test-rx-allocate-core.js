@@ -125,7 +125,7 @@ console.log('\n--- named GP groups the pile, never auto-places ---');
     board.pool.groups[0] && board.pool.groups[0].groupName === 'Dr David Triska' && board.pool.groups[0].count === 1,
     'pool groups unallocated work by registered GP'
   );
-  check(/Registered GP/.test(board.pool.groups[0].label), 'group label says registered GP');
+  check(/Usual GP/.test(board.pool.groups[0].label), 'group label says usual GP');
   check(!/ordered/i.test(board.pool.groups[0].label), 'group label never says ordered');
 }
 
@@ -133,7 +133,7 @@ console.log('\n--- copy list is honest ---');
 {
   const text = C.copyList(C.buildWorkspace([rxRow(4, { namedGp: 'Dr GP', summary: 'Prednisolone' })], C.emptyDraft()));
   check(/^Non-routine prescriptions \(1\)/.test(text), 'copy list leads with non-routine prescriptions');
-  check(/registered GP/.test(text), 'named GP is labelled registered GP');
+  check(/usual GP/.test(text), 'named GP is labelled usual GP');
   check(/Not written to Medicus/.test(text), 'copy list refuses to claim a write');
   check(!/\b(Done|Sent|Allocated|Submitted|Booked|Filed|Issued|Signed)\b/.test(text), 'no completion verbs');
 }
@@ -363,12 +363,12 @@ console.log('\n--- write stays on the lab client ---');
     /evenSplitHtml\(\) \+[\s\S]{0,80}?<div class="ms-lac-workspace">/.test(canvas),
     'even-split box is outside the unallocated pool drop target'
   );
-  check(/Drag a request onto another doctor/.test(canvas), 'copy says you can still move requests by hand');
+  check(/Drag to move one/.test(canvas), 'copy says you can still move requests by hand');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
   check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
-  check(/Defaults to today/.test(canvas), 'date picker copy says it defaults to today');
-  check(/queueTitle\(\)/.test(canvas) && /on canvas/.test(canvas), 'launcher names this prescription queue');
+  check(/Working day/.test(canvas) && /ms-rxac-day-today/.test(canvas), 'date picker copy says it defaults to today');
+  check(/Share out this inbox/.test(canvas), 'launcher names the inbox, not a canvas');
   check(/data-expand-key/.test(canvas), 'clinician fields have a dedicated Expand control for the patient list');
   check(/ms-rxac-overlay/.test(canvas) && /ms-rxac-launch/.test(canvas), 'overlay and launcher use rxac ids');
   check(/ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas), 'reuses the lab layout classes');

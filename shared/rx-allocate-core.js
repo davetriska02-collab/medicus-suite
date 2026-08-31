@@ -212,8 +212,8 @@
       .map(function (g) {
         var noun = g.count === 1 ? 'request' : 'requests';
         g.label = g.known
-          ? 'Registered GP ' + g.groupName + ' · ' + g.count + ' ' + noun
-          : 'No registered GP on the request · ' + g.count + ' ' + noun;
+          ? 'Usual GP ' + g.groupName + ' · ' + g.count + ' ' + noun
+          : 'No usual GP on the request · ' + g.count + ' ' + noun;
         g.dragHint = g.known
           ? 'Drag this group onto that clinician’s field'
           : 'Cannot auto-group — no registered GP on the request';
@@ -267,7 +267,7 @@
         var hint = t.requester
           ? ' · grouped as ' + t.requester
           : t.namedGp
-            ? ' · registered GP ' + t.namedGp
+            ? ' · usual GP ' + t.namedGp
             : '';
         var staged = t.staged ? ' · staged on this canvas only' : '';
         lines.push('  - ' + (t.patientName || 'Unknown') + (t.summary ? ' · ' + t.summary : '') + hint + staged);

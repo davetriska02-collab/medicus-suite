@@ -58,9 +58,32 @@
   var _teamDir = C.harvestTeamDirectory([], null);
   var _dragGhost = null;
   var _expandedChip = '';
+  var _openDests = {};
   var _collapsed = {};
   var _workDate = '';
   var _splitDefaulted = false;
+
+  function fieldIsOpen(key) {
+    return _expandedChip === key || !!_openDests[key];
+  }
+
+  function toggleFieldOpen(key) {
+    if (!key) return;
+    if (_openDests[key] || _expandedChip === key) {
+      delete _openDests[key];
+      _expandedChip = _expandedChip === key ? '' : _expandedChip;
+      return;
+    }
+    _openDests[key] = true;
+    _expandedChip = key;
+  }
+
+  function openDestsFromPlan(plan) {
+    _openDests = {};
+    (plan && plan.shares ? plan.shares : []).forEach(function (s) {
+      if (s && s.key && s.count) _openDests[s.key] = true;
+    });
+  }
 
   function calendarToday() {
     return C.todayISO();
@@ -345,10 +368,10 @@
     var whoLine = '';
     if (opts.showWho) {
       var who = tile.requester
-        ? 'Grouped as ' + C.displayClinicianName(tile.requester)
+        ? 'Usual GP ' + C.displayClinicianName(tile.requester)
         : tile.namedGp
-          ? 'Registered GP ' + tile.namedGp
-          : 'No registered GP on the task';
+          ? 'Usual GP ' + tile.namedGp
+          : 'No usual GP on the request';
       whoLine = '<span class="ms-lac-tile-who">' + esc(who) + '</span>';
     }
     return (
@@ -377,8 +400,8 @@
   function groupHtml(group) {
     var collapsed = !!_collapsed[group.key];
     var title = group.known
-      ? C.displayClinicianName(group.requester || group.groupName)
-      : 'No registered GP on the task';
+      ? 'Usual GP · ' + C.displayClinicianName(group.requester || group.groupName)
+      : 'No usual GP on the request';
     var idsAttr = esc(group.tileIds.join(','));
     var selectedInGroup = group.tiles.filter(function (t) {
       return _selected[t.id];
@@ -449,15 +472,18 @@
   }
 
   function fieldCounts(col) {
+    var proposed = 0;
+    var sitting = 0;
+    (col.tiles || []).forEach(function (t) {
+      if (!t) return;
+      if (t.staged || C.isRxUnallocated(t)) proposed += 1;
+      else sitting += 1;
+    });
     var bits = [];
-    if (col.kind === 'team') {
-      bits.push('Team');
-      if (col.stagedCount) bits.push(col.stagedCount + ' staged on this canvas');
-      return bits.join(' · ');
-    }
-    bits.push(col.count + ' sitting with them');
-    if (col.stagedCount) bits.push(col.stagedCount + ' staged on this canvas');
-    if (col.inPoolCount) bits.push(col.inPoolCount + ' still unallocated');
+    if (col.kind === 'team') bits.push('Team');
+    if (proposed) bits.push(proposed + ' proposed — not saved');
+    if (sitting) bits.push(sitting + ' already sitting');
+    if (!proposed && !sitting) bits.push(col.kind === 'team' ? 'nothing yet' : 'none yet');
     return bits.join(' · ');
   }
 
@@ -465,10 +491,10 @@
     var abs = presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
     var inToday = abs.state === 'present' && abs.reason === 'in-today';
-    var open = _expandedChip === col.key;
+    var open = fieldIsOpen(col.key);
     var body = col.tiles
       .map(function (t) {
-        return tileHtml(t, { showWho: false, showAssignee: false });
+        return tileHtml(t, { showWho: true, showAssignee: false });
       })
       .join('');
     var flag = away
@@ -548,15 +574,21 @@
       '<span class="ms-lac-chip-count">' +
       esc(fieldCounts(col)) +
       '</span>' +
-      (selCount ? '<span class="ms-lac-chip-stagehint">Stage ' + selCount + ' here</span>' : '') +
       '</button>' +
-      '<button type="button" class="ms-lac-field-expand" data-expand-key="' +
-      esc(col.key) +
-      '" aria-expanded="' +
-      (open ? 'true' : 'false') +
-      '">' +
-      esc(open ? 'Hide' : 'Expand') +
-      '</button>' +
+      (selCount
+        ? '<button type="button" class="ms-lac-chip-stagehint" data-stage-key="' +
+          esc(col.key) +
+          '">Sit ' +
+          selCount +
+          ' here (not saved)</button>' +
+          '<button type="button" class="ms-lac-field-expand" data-expand-key="' +
+          esc(col.key) +
+          '" aria-expanded="' +
+          (open ? 'true' : 'false') +
+          '">' +
+          esc(open ? 'Hide list' : 'See patients') +
+          '</button>'
+        : '') +
       (open
         ? '<div class="ms-lac-chip-drawer" role="listbox" aria-label="' +
           esc(isTeam ? 'Staged onto ' + name : 'Sitting with ' + name) +
@@ -585,19 +617,15 @@
       '</svg>' +
       '<div class="ms-lac-empty-title">' +
       (_rows.length
-        ? 'No unallocated requests on this queue'
-        : 'Medicus returned no open requests') +
+        ? 'Inbox is on the right — not saved yet'
+        : 'No open requests on this queue') +
       '</div>' +
       '<div class="ms-lac-empty-sub">' +
       (_rows.length
-        ? _splitDefaulted
-          ? 'Even split is on the right. Drag a request onto another doctor to move it. Nothing is written until you confirm.'
-          : 'All ' +
-            _rows.length +
-            ' request' +
-            (_rows.length === 1 ? '' : 's') +
-            ' already sit with a clinician — they are in the fields on the right. Drag a request onto another doctor to move it.'
-        : 'The canvas reads the same open non-routine list as Signing (no page filter). If the grid on this page still shows rows, reload the list then open the canvas again.') +
+        ? 'Doctors working ' +
+          dayPhrase() +
+          ' are on the right. Open a name to see who, or drag to move. Medicus does not change until you confirm.'
+        : 'If the grid on this page still shows rows, reload the list, then open again.') +
       '</div>' +
       '</div>'
     );
@@ -638,6 +666,8 @@
     next = C.ensureWorkingTodayColumns(next, dests);
     _draft = C.applyEvenSplit(next, plan);
     _splitDefaulted = true;
+    _selected = {};
+    openDestsFromPlan(plan);
     return plan;
   }
 
@@ -661,64 +691,33 @@
     var phrase = dayPhrase();
     var cal = calendarToday();
     var picked = workDate();
-    var shown = _splitDefaulted ? currentAllocationRows() : currentSplitPlan().shares || [];
-    var rows = shown
-      .map(function (s) {
-        return (
-          '<li><span class="ms-lac-split-name">' +
-          esc(C.displayClinicianName(s.name)) +
-          '</span><span class="ms-lac-split-count">' +
-          s.count +
-          '</span></li>'
-        );
-      })
-      .join('');
-    var dayRow =
-      '<div class="ms-lac-split-day">' +
+    var poolN = tilesForPlan().length;
+    var canResplit = !!(poolN && dests.length);
+    var summary = dests.length
+      ? poolN + ' in the inbox · ' + dests.length + ' doctor' + (dests.length === 1 ? '' : 's') + ' working ' + phrase
+      : 'No sessions on the book for ' + phrase;
+    return (
+      '<div class="ms-lac-split" id="ms-rxac-split-box">' +
       '<label class="ms-lac-split-day-label" for="ms-rxac-day">Working day</label>' +
       '<input type="date" id="ms-rxac-day" value="' +
       esc(picked) +
-      '" aria-label="Working day for the even split. Defaults to today.">' +
+      '" aria-label="Working day for the even split">' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === cal ? ' ms-lac-split-day-on' : '') +
       '" id="ms-rxac-day-today">Today</button>' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === C.addDaysISO(cal, 1) ? ' ms-lac-split-day-on' : '') +
       '" id="ms-rxac-day-tomorrow">Tomorrow</button>' +
-      '</div>' +
-      '<p class="ms-lac-split-note">Defaults to today. Change this if you are allocating the night before.</p>';
-    if (!dests.length) {
-      return (
-        '<div class="ms-lac-split" id="ms-rxac-split-box">' +
-        '<p class="ms-lac-split-title">Split among doctors working ' +
-        esc(phrase) +
-        '</p>' +
-        dayRow +
-        '<p class="ms-lac-split-note">No doctors with a session on the appointment book for ' +
-        esc(phrase) +
-        ', so there is nobody to split onto. Add a clinician field by hand, or pick another day, then drag requests onto them.</p>' +
-        '</div>'
-      );
-    }
-    var poolN = tilesForPlan().length;
-    var canResplit = !!(poolN && dests.length);
-    return (
-      '<div class="ms-lac-split" id="ms-rxac-split-box">' +
-      '<p class="ms-lac-split-title">Split among doctors working ' +
-      esc(phrase) +
-      '</p>' +
-      dayRow +
-      '<button type="button" class="ms-lac-confirm-btn" id="ms-rxac-split"' +
-      (canResplit ? '' : ' disabled') +
-      '>' +
-      (canResplit ? 'Re-split equally' : 'Nothing to split') +
-      '</button>' +
-      '<p class="ms-lac-split-note">' +
-      (_splitDefaulted
-        ? 'Even split is the starting point. Drag a request onto another doctor to move it. Nothing is written until you confirm.'
-        : 'No even split yet — drag requests onto a doctor, or re-split equally.') +
-      '</p>' +
-      (rows ? '<ul class="ms-lac-split-list">' + rows + '</ul>' : '') +
+      '<span class="ms-lac-split-summary">' +
+      esc(summary) +
+      '</span>' +
+      (dests.length
+        ? '<button type="button" class="ms-lac-ghost" id="ms-rxac-split"' +
+          (canResplit ? '' : ' disabled') +
+          '>' +
+          (canResplit ? 'Re-split equally' : 'Nothing to split') +
+          '</button>'
+        : '<span class="ms-lac-split-note">Pick another day, or add a doctor on the right.</span>') +
       '</div>'
     );
   }
@@ -729,9 +728,15 @@
     var selCount = selectedIds().length;
     var body = pool.groups && pool.groups.length ? pool.groups.map(groupHtml).join('') : '';
     if (!body && board.count > 0) {
-      body =
-        '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left unallocated</div>' +
-        '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or staged onto one on this canvas</div></div>';
+      body = _splitDefaulted
+        ? '<div class="ms-lac-empty"><div class="ms-lac-empty-title">On the right — not saved yet</div>' +
+          '<div class="ms-lac-empty-sub">' +
+          esc(String(C.draftSummary(_rows, _draft).count || board.count)) +
+          ' proposed for doctors working ' +
+          esc(dayPhrase()) +
+          '. Open a doctor to see who, or drag to move. Medicus does not change until you confirm.</div></div>'
+        : '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left in the inbox</div>' +
+          '<div class="ms-lac-empty-sub">Everything on this queue already sits with a doctor, or is proposed on the right.</div></div>';
     }
     var clinicians = sortClinicianFields(board.clinicians);
     var teams = board.teams || [];
@@ -746,14 +751,14 @@
       '<p class="ms-lac-pool-eyebrow">' +
       esc(pool.title) +
       '</p>' +
-      '<h3 class="ms-lac-pool-title">Unallocated</h3>' +
+      '<h3 class="ms-lac-pool-title">Inbox</h3>' +
       '</div>' +
       '<span class="ms-lac-pool-count">' +
       pool.count +
       ' of ' +
       board.count +
       '</span>' +
-      '<span class="ms-lac-col-meta">Click a request, or a clinician heading for the lot. Ctrl-click adds more</span>' +
+      '<span class="ms-lac-col-meta">Usual GP is a label, not who they sit with</span>' +
       '</div>' +
       (body || emptyPoolHtml()) +
       '</div>' +
@@ -763,7 +768,7 @@
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Click a field to stage the selection'
-        : 'Working ' + dayPhrase() + ' at the top. Drag onto a field — hover near the edge to scroll') +
+        : 'Doctors working ' + dayPhrase() + ' first. Open a name to see patients.') +
       '</span>' +
       '</div>' +
       (clinicians.length
@@ -880,7 +885,7 @@
         refusedNote +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
-        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-write-go">Write to Medicus</button>' +
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-write-go">Write to Medicus</button>' +
         '</div></div>'
       );
     }
@@ -894,53 +899,50 @@
     if (sum.count && !canWrite) {
       blockReason = !gate.ok ? gate.reason : C.writeBlockReason(plan);
     }
-    var writeTitle = !sum.count
-      ? 'Stage at least one task onto a clinician field first'
-      : canWrite
-        ? 'Review the patient → destination list, then confirm'
-        : blockReason;
-    var writeLabel = canWrite ? 'Review then write…' : sum.count ? 'Why this will not write' : 'Write to Medicus';
+    var writeTitle = canWrite
+      ? 'Opens the patient → destination list. Nothing is sent yet.'
+      : blockReason;
+    var writeLabel = 'Review ' + sum.count + '…';
+    var status = blockReason
+      ? '<strong>Cannot move these yet.</strong> ' + esc(blockReason)
+      : sum.count
+        ? '<strong>' +
+          sum.count +
+          ' proposed — not saved yet.</strong> Drag to move one. Confirm does not issue, sign, or file the prescription.'
+        : 'Inbox is on the right after the even split. Drag to move one, then review.';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
       '">' +
       '<span class="ms-lac-confirmbar-note">' +
-      (blockReason
-        ? '<strong>Cannot write these yet.</strong> ' + esc(blockReason)
-        : '<strong>Planning board.</strong> Staged moves live on this canvas until you review and confirm. Writing changes who the task sits with — it does not issue, sign, or file the prescription' +
-          (sum.count ? ' (' + sum.count + ' staged so far)' : '') +
-          '.') +
+      status +
       '</span>' +
       (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '<div class="ms-lac-confirmbar-actions">' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-copy">Copy working list</button>' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-clear"' +
-      (sum.count ? '' : ' disabled') +
-      '>Clear staged moves</button>' +
-      '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-finalise"' +
-      (sum.count ? '' : ' disabled') +
-      ' title="' +
-      esc(writeTitle) +
-      '">' +
-      esc(writeLabel) +
-      '</button>' +
+      (sum.count
+        ? '<button type="button" class="ms-lac-ghost" id="ms-lac-clear">Clear proposals</button>'
+        : '') +
+      (canWrite
+        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-finalise" title="' +
+          esc(writeTitle) +
+          '">' +
+          esc(writeLabel) +
+          '</button>'
+        : '') +
       '</div></div>'
     );
   }
 
   function shellHtml() {
     var board = currentWorkspace();
-    var requesterGroups = board.pool.groups.filter(function (g) {
-      return g.known;
-    }).length;
+    var stagedN = C.draftSummary(_rows, _draft).count;
+    var destN = currentDestinations().length;
     var counts = _rows.length
       ? _rows.length +
-        ' tasks · ' +
-        board.pool.count +
-        ' unallocated · ' +
-        requesterGroups +
-        ' registered-GP group' +
-        (requesterGroups === 1 ? '' : 's')
+        ' in this inbox' +
+        (stagedN ? ' · ' + stagedN + ' proposed' : '') +
+        (destN ? ' · ' + destN + ' doctors working ' + dayPhrase() : '') +
+        ' · not saved'
       : '';
     return (
       '<div class="ms-lac-panel' +
@@ -953,7 +955,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Even split is the starting board. Drag a request onto another doctor to move it, or re-split equally. Writing happens only when you confirm.</span>' +
+      '<span class="ms-lac-header-note">These are split among doctors working today. Drag to move one. Nothing changes in Medicus until you confirm.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1315,23 +1317,24 @@
       btn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        var key = btn.getAttribute('data-chip-key') || '';
-        var ids = selectedIds();
-        if (ids.length) {
-          requestStage(ids, key, btn.closest('.ms-lac-chip-wrap'));
-          return;
-        }
-        _expandedChip = _expandedChip === key ? '' : key;
+        toggleFieldOpen(btn.getAttribute('data-chip-key') || '');
         render();
+      });
+    });
+    root.querySelectorAll('[data-stage-key]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var key = btn.getAttribute('data-stage-key') || '';
+        var ids = selectedIds();
+        if (key && ids.length) requestStage(ids, key, btn.closest('.ms-lac-chip-wrap'));
       });
     });
     root.querySelectorAll('.ms-lac-field-expand').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        var key = btn.getAttribute('data-expand-key') || '';
-        if (!key) return;
-        _expandedChip = _expandedChip === key ? '' : key;
+        toggleFieldOpen(btn.getAttribute('data-expand-key') || '');
         render();
       });
     });
@@ -1374,7 +1377,10 @@
     _pendingAbsence = null;
     _dragIds = null;
     _dragOriginKind = '';
-    if (key && (key.indexOf('clinician:') === 0 || key.indexOf('team:') === 0)) _expandedChip = key;
+    if (key && (key.indexOf('clinician:') === 0 || key.indexOf('team:') === 0)) {
+      _expandedChip = key;
+      _openDests[key] = true;
+    }
     announce('Staged ' + ids.length + ' task' + (ids.length === 1 ? '' : 's') + ' on this canvas only');
     render();
   }
@@ -1528,6 +1534,7 @@
     _error = null;
     _copyNote = '';
     _expandedChip = '';
+    _openDests = {};
     _confirmClose = false;
     _confirmWrite = null;
     _writing = false;
@@ -1552,6 +1559,7 @@
     _lastSelectId = '';
     _lastGroupKey = '';
     _expandedChip = '';
+    _openDests = {};
     _confirmClose = false;
     _confirmWrite = null;
     _writing = false;
@@ -1587,7 +1595,7 @@
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Allocate ' + queueTitle().toLowerCase() + ' on canvas…';
+    var launchLabel = 'Share out this inbox…';
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
