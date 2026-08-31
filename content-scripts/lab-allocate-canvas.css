@@ -1074,6 +1074,10 @@
   border-color: var(--border-hi);
 }
 
+#ms-rxac-overlay .ms-rxac-folder-away {
+  border-color: var(--amber-line);
+}
+
 #ms-rxac-overlay .ms-rxac-folder-head {
   display: flex;
   flex-wrap: wrap;

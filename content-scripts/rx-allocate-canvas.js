@@ -756,8 +756,7 @@
     return (
       '<div class="ms-rxac-folder' +
       (inbox ? ' ms-rxac-folder-inbox' : '') +
-      (away ? ' ms-lac-chip-away' : '') +
-      (inToday ? ' ms-lac-chip-in' : '') +
+      (away ? ' ms-rxac-folder-away' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="' +
