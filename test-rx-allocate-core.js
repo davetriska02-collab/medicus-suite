@@ -238,6 +238,28 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
     'already-sitting work is not in the even-split plan'
   );
   check(plan.total === 2, 'sitting rows are not counted in the split total');
+  const sharePlan = C.planEvenSplit([sitting], dests, { anyTile: true });
+  check(sharePlan.ok === true && sharePlan.total === 1, 'a doctor folder can be shared out among those in today');
+  check((sharePlan.shares || []).every((s) => (s.tileIds || []).indexOf(sitting.id) !== -1 || s.count === 0 || s.tileIds), 'share-out uses the sitting tiles');
+  const holidayTiles = [
+    rxRow(21, { assignedTo: 'Dr Away' }),
+    rxRow(22, { assignedTo: 'Dr Away' }),
+    rxRow(23, { assignedTo: 'Dr Away' }),
+  ];
+  const holidayPlan = C.planEvenSplit(holidayTiles, dests, { anyTile: true, dayPhrase: 'today' });
+  check(holidayPlan.ok === true && holidayPlan.total === 3, 'a holiday box of three shares out among those in today');
+  check(
+    holidayPlan.shares.map((s) => s.count).sort().join(',') === '1,2',
+    'holiday share-out is even (2 and 1)'
+  );
+  const holidayDraft = C.applyEvenSplit(C.emptyDraft(), holidayPlan);
+  const holidayBoard = C.buildWorkspace(holidayTiles, holidayDraft);
+  const awayCol = holidayBoard.clinicians.find((c) => /Away/i.test(c.title));
+  check(!awayCol || awayCol.count === 0, 'share-out empties the holiday doctor’s box');
+  check(
+    dests.every((d) => holidayPlan.shares.some((s) => s.key === d.key)),
+    'share-out destinations are the in-today doctors, not the holiday source'
+  );
 
   const inbox = rxRow(3, { assignedTo: 'Non-Routine Prescription Requests' });
   const sittingGp = rxRow(4, { assignedTo: 'Dr Jane Cole' });
@@ -356,21 +378,39 @@ console.log('\n--- write stays on the lab client ---');
   check(!/\b(Done|Sent|Booked|Submitted|Allocated|Filed|Issued|Signed)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(!/Ordered by|who ordered|Who ordered/.test(canvas), 'canvas copy never claims who ordered');
   check(/mergeInboxAndSitting/.test(canvas), 'rows are decorated after the task-list GET');
-  check(/Re-split equally/.test(canvas), 're-split button resets to an even split');
-  check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied as the default board');
+  check(/Split equally/.test(canvas), 'split equally is a user-initiated proposal');
+  check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied when you ask for it');
+  check(/data-share-key/.test(canvas), 'each doctor folder can share its box among those in today');
+  check(/ms-rxac-folder-title/.test(canvas), 'share-out sits in the title row by the doctor name');
+  check(/>Share out</.test(canvas), 'the per-doc control is labelled Share out');
+  check(/ms-rxac-share-away/.test(canvas), 'an away doctor’s share-out is marked for the holiday case');
+  check(/ms-rxac-share-quiet/.test(canvas), 'in-today share-out stays a quiet name-adjacent action');
+  check(/col\.kind !== 'team'/.test(canvas), 'team folders are not shared out among doctors');
+  check(/ms-rxac-folder-clear/.test(canvas), 'empty unallocated is greened out');
+  check(/ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas), 'unallocated is the main pane, doctors sit in a rail');
+  check(/ms-rxac-board-clear/.test(canvas), 'an empty unallocated pile lays doctors out as a grid');
   check(
     /#ms-rxac-split[\s\S]{0,500}?stopPropagation/.test(canvas),
     're-split click is not swallowed by the pool drop target'
   );
   check(
-    /Re-split ' \+[\s\S]{0,400}?_copyNote/.test(canvas) || /_copyNote\s*=[\s\S]{0,400}?Re-split /.test(canvas),
-    're-split writes a visible note, not only a live-region whisper'
+    /\[data-share-key\][\s\S]{0,400}?stopPropagation/.test(canvas),
+    'share-out click is not swallowed by the folder drop target'
+  );
+  check(
+    /_copyNote[\s\S]{0,200}?'Split ' \+/.test(canvas) || /'Split ' \+[\s\S]{0,200}?_copyNote/.test(canvas),
+    'split writes a visible note, not only a live-region whisper'
+  );
+  check(
+    /_copyNote[\s\S]{0,200}?'Shared ' \+/.test(canvas) || /'Shared ' \+[\s\S]{0,200}?_copyNote/.test(canvas),
+    'share-out writes a visible note, not only a live-region whisper'
   );
   check(
     /evenSplitHtml\(\) \+[\s\S]{0,80}?ms-rxac-folders/.test(canvas),
     'even-split box is outside the unallocated pool drop target'
   );
-  check(/Each folder is a doctor/.test(canvas), 'copy says you can still move requests by hand');
+  check(/Unallocated is the pile/.test(canvas) && /drag into a doctor/.test(canvas), 'copy says you can still move requests by hand');
+  check(/Share out next to a name/.test(canvas), 'header says a name’s Share out splits that box among those in today');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
   check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
@@ -399,6 +439,14 @@ console.log('\n--- canvas + manifest + css source locks ---');
     'lab core loads before rx core'
   );
   check(/#ms-rxac-overlay/.test(css), 'rx overlay is on the token block');
+  check(
+    /folder-inbox\.ms-rxac-folder-clear/.test(css),
+    'empty unallocated keeps its green clear paint over the inbox dashed well'
+  );
+  check(
+    /#ms-rxac-overlay \.ms-rxac-share:focus-visible/.test(css),
+    'share-out has an overlay-local keyboard ring'
+  );
   check(/#ms-rxac-launch/.test(css), 'rx launcher has the same chrome as the lab launcher');
   check(/#ms-rxac-launch:focus-visible/.test(css), 'launcher focus ring is a literal (html-appended)');
   check(!/ms-rxac-overlay/.test(labCanvas), 'lab canvas does not open the rx overlay');

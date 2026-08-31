@@ -1018,11 +1018,25 @@
 }
 
 #ms-rxac-overlay .ms-lac-split-summary {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
   color: var(--text-3);
   margin-left: auto;
+}
+
+#ms-rxac-overlay #ms-rxac-day {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+}
+
+#ms-rxac-overlay #ms-rxac-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 #ms-rxac-overlay .ms-lac-primary {
@@ -1032,11 +1046,19 @@
 }
 
 #ms-rxac-overlay .ms-lac-primary:hover:not(:disabled) {
-  filter: brightness(1.05);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  filter: none;
+}
+
+#ms-rxac-overlay .ms-lac-primary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 #ms-rxac-overlay .ms-lac-header-note {
   white-space: normal;
+  color: var(--text-3);
 }
 
 #ms-rxac-overlay .ms-lac-pool-eyebrow {
@@ -1050,22 +1072,111 @@
 #ms-rxac-overlay .ms-rxac-folders {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
   min-height: 0;
   overflow: auto;
   align-content: start;
 }
 
+#ms-rxac-overlay .ms-rxac-board {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  gap: 12px;
+}
+
+#ms-rxac-overlay .ms-rxac-main {
+  flex: 1 1 64%;
+  min-width: 0;
+  display: flex;
+}
+
+#ms-rxac-overlay .ms-rxac-main .ms-rxac-folder {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-rail {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-rail .ms-rxac-folder {
+  min-height: 0;
+  max-height: 220px;
+  flex: 0 0 auto;
+}
+
+#ms-rxac-overlay .ms-rxac-rail .ms-rxac-folder-body {
+  min-height: 0;
+  max-height: 140px;
+}
+
+#ms-rxac-overlay .ms-rxac-rail .ms-lac-add-row {
+  flex: 0 0 auto;
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  padding-top: 8px;
+  background: var(--bg-deep);
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear {
+  display: grid;
+  grid-template-columns: minmax(148px, 200px) minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folder-inbox {
+  grid-row: 1;
+  grid-column: 1;
+  min-height: 0;
+  align-self: start;
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folders {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-lac-add-row {
+  grid-column: 1 / -1;
+}
+
+#ms-rxac-overlay .ms-rxac-folders .ms-rxac-folder {
+  min-height: 0;
+}
+
+#ms-rxac-overlay .ms-rxac-folders .ms-rxac-folder-body {
+  min-height: 44px;
+  max-height: 140px;
+}
+
 #ms-rxac-overlay .ms-rxac-folder {
   display: flex;
   flex-direction: column;
-  min-height: 200px;
+  min-height: 0;
   max-height: 100%;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-1);
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease),
+    background-color var(--fast) var(--ease);
+}
+
+#ms-rxac-overlay .ms-rxac-folder:hover {
+  border-color: var(--border-hi);
+  box-shadow: var(--shadow-2);
 }
 
 #ms-rxac-overlay .ms-rxac-folder-inbox {
@@ -1074,45 +1185,181 @@
   border-color: var(--border-hi);
 }
 
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+  border-style: solid;
+  box-shadow: none;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear:hover {
+  border-color: var(--green-line);
+  box-shadow: none;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-name {
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-count {
+  color: var(--green);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-meta,
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-meta-text {
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-body {
+  min-height: 0;
+}
+
 #ms-rxac-overlay .ms-rxac-folder-away {
+  background: var(--amber-dim);
   border-color: var(--amber-line);
 }
 
+#ms-rxac-overlay .ms-rxac-folder-away:hover {
+  border-color: var(--amber-line);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-away .ms-rxac-folder-name {
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-rxac-share {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 3px 8px;
+  min-height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--fast) var(--ease),
+    background-color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+#ms-rxac-overlay .ms-rxac-share-quiet {
+  color: var(--text-4);
+}
+
+#ms-rxac-overlay .ms-rxac-share:hover:not(:disabled),
+#ms-rxac-overlay .ms-rxac-share-quiet:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent-line);
+  color: var(--text-2);
+  background: var(--accent-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share-away:not(:disabled) {
+  color: var(--amber);
+  border-color: var(--amber-line);
+  background: var(--amber-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share-away:hover:not(:disabled),
+#ms-rxac-overlay .ms-rxac-share-away:focus-visible {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+#ms-rxac-overlay .ms-rxac-share-off,
+#ms-rxac-overlay .ms-rxac-share:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  color: var(--text-4);
+  border-color: transparent;
+  background: transparent;
+}
+
+#ms-rxac-overlay.ms-lac-lifting .ms-rxac-share {
+  pointer-events: none;
+}
+
 #ms-rxac-overlay .ms-rxac-folder-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px 8px;
-  padding: 10px 12px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 8px;
+  row-gap: 2px;
+  padding: 8px 10px 6px;
   border-bottom: 1px solid var(--border);
 }
 
+#ms-rxac-overlay .ms-rxac-folder-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-title {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
 #ms-rxac-overlay .ms-rxac-folder-name {
-  font-size: 13px;
+  flex: 1 1 0;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 #ms-rxac-overlay .ms-rxac-folder-count {
-  margin-left: auto;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--text-1);
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.3;
 }
 
 #ms-rxac-overlay .ms-rxac-folder-meta {
-  flex: 1 1 100%;
-  font-size: 11px;
-  color: var(--text-3);
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-4);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-meta-text {
+  min-width: 0;
 }
 
 #ms-rxac-overlay .ms-rxac-folder-body {
   flex: 1 1 auto;
-  min-height: 72px;
+  min-height: 44px;
   overflow: auto;
-  padding: 4px 0 8px;
+  padding: 2px 0 6px;
 }
 
 #ms-rxac-overlay .ms-lac-tile-staged {

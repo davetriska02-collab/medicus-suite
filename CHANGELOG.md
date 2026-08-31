@@ -55,11 +55,15 @@ Even-split is the **unallocated** inbox pile only. Requests already
 sitting with a GP stay on that field and are not in the split counts.
 The queue inbox name is a team, not a person.
 
-On open, the even split is the starting board (staged, not written).
-Drag a request onto another doctor to move it; **Re-split equally**
-puts the even split back. That button sat inside the unallocated pool
-(a drop target) and a failed split only whispered to the live region,
-so the click looked dead. It now sits above the board, always
+On open the board is **un-proposed**: Unallocated is the large pane,
+doctors working today sit in a smaller sidebar. **Split equally** is
+a user-initiated proposal, not applied on load. After the pile is
+empty, Unallocated greens out as clear and the doctors populate as a
+grid. **Share out** next to a doctor’s name (especially an AWAY
+folder with leftover work) splits that box equally among doctors in
+today — same as Unallocated, one click if they are on holiday.
+Drag still moves one. **Re-split equally** puts the unallocated even
+split back. The split control sits above the board, always
 re-renders, and writes a visible note.
 
 Sequential Write used to stop at the first doctor whose POST failed, so

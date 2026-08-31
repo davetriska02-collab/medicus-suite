@@ -254,7 +254,11 @@
       await presenceP;
       harvestStaffFromBook(_book);
       await harvestStaffFromOverviews(_rows);
-      if (!opts.skipSplit) applyDefaultEvenSplit();
+      _draft = C.ensureWorkingTodayColumns(
+        opts.skipSplit ? _draft || C.emptyDraft() : C.emptyDraft(),
+        currentDestinations()
+      );
+      if (!opts.skipSplit) _splitDefaulted = false;
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read this prescription queue.';
       _rows = [];
@@ -305,7 +309,7 @@
     try {
       await loadMedicusPresence();
       harvestStaffFromBook(_book);
-      applyDefaultEvenSplit();
+      _draft = C.ensureWorkingTodayColumns(_draft || C.emptyDraft(), currentDestinations());
     } catch (_) {
       _book = null;
     }
@@ -699,8 +703,9 @@
     var poolN = tilesForPlan().length;
     var canResplit = !!(poolN && dests.length);
     var summary = dests.length
-      ? poolN + ' in the inbox · ' + dests.length + ' doctor' + (dests.length === 1 ? '' : 's') + ' working ' + phrase
+      ? poolN + ' unallocated · ' + dests.length + ' doctor' + (dests.length === 1 ? '' : 's') + ' working ' + phrase
       : 'No sessions on the book for ' + phrase;
+    var splitLabel = _splitDefaulted ? 'Re-split equally' : 'Split equally';
     return (
       '<div class="ms-lac-split" id="ms-rxac-split-box">' +
       '<label class="ms-lac-split-day-label" for="ms-rxac-day">Working day</label>' +
@@ -717,14 +722,46 @@
       esc(summary) +
       '</span>' +
       (dests.length
-        ? '<button type="button" class="ms-lac-ghost" id="ms-rxac-split"' +
-          (canResplit ? '' : ' disabled') +
-          '>' +
-          (canResplit ? 'Re-split equally' : 'Nothing to split') +
-          '</button>'
-        : '<span class="ms-lac-split-note">Pick another day, or add a doctor on the right.</span>') +
+        ? canResplit
+          ? '<button type="button" class="ms-lac-ghost" id="ms-rxac-split">' +
+            splitLabel +
+            '</button>'
+          : '<span class="ms-lac-split-note">Inbox is clear. Share out next to a name splits that box among those in today.</span>'
+        : '<span class="ms-lac-split-note">Pick another day, or add a doctor.</span>') +
       '</div>'
     );
+  }
+
+  function inTodayShareDests(exceptKey) {
+    return currentDestinations().filter(function (d) {
+      if (!d || !d.key || d.key === exceptKey) return false;
+      var pres = C.presenceForName({
+        name: d.name,
+        dateISO: workDate(),
+        book: _book,
+        absences: _absences,
+        staffList: _rota.staff,
+        leaveList: _rota.leave,
+      });
+      if (pres.state === 'away' || pres.state === 'away-pending') return false;
+      return pres.state === 'present' && pres.reason === 'in-today';
+    });
+  }
+
+  function applyShareOut(fromKey) {
+    var board = currentWorkspace();
+    var col = null;
+    (board.clinicians || []).concat(board.teams || []).forEach(function (c) {
+      if (c && c.key === fromKey) col = c;
+    });
+    var tiles = (col && col.tiles) || [];
+    var dests = inTodayShareDests(fromKey);
+    var plan = C.planEvenSplit(tiles, dests, { anyTile: true, dayPhrase: dayPhrase() });
+    if (!plan.ok) return plan;
+    _draft = C.applyEvenSplit(_draft || C.emptyDraft(), plan);
+    _selected = {};
+    plan.fromName = C.displayClinicianName((col && col.title) || '');
+    return plan;
   }
 
   function folderHtml(col, opts) {
@@ -733,6 +770,7 @@
     var abs = inbox ? { state: 'n/a', label: '' } : presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
     var inToday = abs.state === 'present' && abs.reason === 'in-today';
+    var clear = inbox && !(col.tiles && col.tiles.length);
     var name = inbox ? 'Unallocated' : C.displayClinicianName(col.title);
     var flag = away
       ? '<span class="ms-lac-chip-flag">AWAY</span>'
@@ -741,7 +779,42 @@
         : col.kind === 'team'
           ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
           : '';
-    var meta = inbox ? col.count + ' in this box' : fieldCounts(col);
+    var meta = inbox
+      ? clear
+        ? 'Clear'
+        : col.count + ' in this box'
+      : fieldCounts(col);
+    if (!inbox && away && abs.label) meta = abs.label + (meta ? ' · ' + meta : '');
+    var shareDests = inbox ? [] : inTodayShareDests(col.key);
+    var nTiles = (col.tiles || []).length;
+    var canShare = !inbox && nTiles && shareDests.length && col.kind !== 'team';
+    var loud = !!(!inbox && away && nTiles);
+    if (!inbox && nTiles && !shareDests.length) {
+      meta = (meta ? meta + ' · ' : '') + 'No doctors in today to share onto';
+    }
+    var shareTitle = canShare
+      ? 'Split these equally among ' +
+        shareDests.length +
+        ' doctor' +
+        (shareDests.length === 1 ? '' : 's') +
+        ' in today'
+      : !inbox && nTiles
+        ? 'No doctors in today to share onto. Pick another working day.'
+        : '';
+    var shareBtn = '';
+    if (!inbox && nTiles && col.kind !== 'team') {
+      shareBtn =
+        '<button type="button" class="ms-rxac-share' +
+        (loud ? ' ms-rxac-share-away' : ' ms-rxac-share-quiet') +
+        (canShare ? '' : ' ms-rxac-share-off') +
+        '"' +
+        (canShare ? ' data-share-key="' + esc(col.key) + '"' : ' disabled') +
+        ' title="' +
+        esc(shareTitle) +
+        '" aria-label="' +
+        esc(name + '. ' + shareTitle) +
+        '">Share out</button>';
+    }
     var body = (col.tiles || [])
       .map(function (t) {
         return tileHtml(t, { showWho: true, showAssignee: false });
@@ -750,29 +823,37 @@
     if (!body) {
       body =
         '<div class="ms-lac-empty-sm">' +
-        (inbox ? 'Empty — patients are in the doctor boxes.' : 'Nothing in this box yet. Drag a patient here.') +
+        (inbox
+          ? clear
+            ? 'This box is clear.'
+            : 'Empty — patients are in the doctor boxes.'
+          : 'Nothing in this box yet. Drag a patient here.') +
         '</div>';
     }
     return (
       '<div class="ms-rxac-folder' +
       (inbox ? ' ms-rxac-folder-inbox' : '') +
+      (clear ? ' ms-rxac-folder-clear' : '') +
       (away ? ' ms-rxac-folder-away' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="' +
       esc(inbox ? 'pool' : col.kind || 'clinician') +
       '">' +
-      '<div class="ms-rxac-folder-head">' +
+      '<div class="ms-rxac-folder-head" tabindex="-1">' +
+      '<div class="ms-rxac-folder-title">' +
       '<span class="ms-rxac-folder-name">' +
       esc(name) +
       '</span>' +
-      flag +
+      shareBtn +
+      '</div>' +
       '<span class="ms-rxac-folder-count">' +
       esc(String(col.count || 0)) +
       '</span>' +
-      '<span class="ms-rxac-folder-meta">' +
-      esc(meta) +
-      '</span></div>' +
+      '<div class="ms-rxac-folder-meta">' +
+      flag +
+      (meta ? '<span class="ms-rxac-folder-meta-text">' + esc(meta) + '</span>' : '') +
+      '</div></div>' +
       '<div class="ms-rxac-folder-body" role="listbox" aria-label="' +
       esc(name) +
       '">' +
@@ -786,27 +867,43 @@
     var pool = board.pool;
     var clinicians = sortClinicianFields(board.clinicians);
     var teams = board.teams || [];
-    var folders = [folderHtml(pool, { inbox: true })]
-      .concat(
-        clinicians.map(function (col) {
-          return folderHtml(col, {});
-        })
-      )
-      .concat(
-        teams.map(function (col) {
-          return folderHtml(col, {});
-        })
-      )
+    var inboxEmpty = !(pool.tiles && pool.tiles.length);
+    var inboxFolder = folderHtml(pool, { inbox: true });
+    var docFolders = clinicians
+      .concat(teams)
+      .map(function (col) {
+        return folderHtml(col, {});
+      })
       .join('');
-    return (
-      evenSplitHtml() +
-      '<div class="ms-rxac-folders" id="ms-rxac-folders">' +
-      folders +
-      '</div>' +
+    var addRow =
       '<div class="ms-lac-add-row">' +
       '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a doctor — e.g. Dr Jane Cole" aria-label="Add a doctor">' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add doctor</button>' +
-      '</div>'
+      '</div>';
+    if (inboxEmpty) {
+      return (
+        evenSplitHtml() +
+        '<div class="ms-rxac-board ms-rxac-board-clear" id="ms-rxac-folders">' +
+        inboxFolder +
+        '<div class="ms-rxac-folders">' +
+        docFolders +
+        '</div>' +
+        addRow +
+        '</div>'
+      );
+    }
+    return (
+      evenSplitHtml() +
+      '<div class="ms-rxac-board" id="ms-rxac-folders">' +
+      '<div class="ms-rxac-main">' +
+      inboxFolder +
+      '</div>' +
+      '<aside class="ms-rxac-rail" aria-label="Doctors working ' +
+      esc(dayPhrase()) +
+      '">' +
+      docFolders +
+      addRow +
+      '</aside></div>'
     );
   }
 
@@ -968,7 +1065,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Each folder is a doctor’s box. Drag a patient to move them. Nothing changes in Medicus until you confirm.</span>' +
+      '<span class="ms-lac-header-note">Unallocated is the pile. Split equally, or drag into a doctor’s box. Share out next to a name splits that box among doctors in today.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -985,6 +1082,10 @@
 
   function focusKeyOf(el) {
     if (!el || !el.getAttribute) return '';
+    var shareKey = el.getAttribute('data-share-key');
+    if (shareKey) {
+      return '.ms-rxac-folder[data-col-key="' + shareKey + '"] .ms-rxac-folder-head';
+    }
     return (
       (el.id && '#' + el.id) ||
       (el.getAttribute('data-task-id') && '[data-task-id="' + el.getAttribute('data-task-id') + '"]') ||
@@ -1073,17 +1174,45 @@
         _confirmWrite = null;
         _copyNote =
           applied && applied.ok
-            ? 'Re-split ' +
+            ? 'Split ' +
               applied.total +
               ' equally onto ' +
               applied.doctors +
               ' doctors working ' +
               dayPhrase() +
-              '. Drag a request to move it. Review then write to save.'
-            : (applied && applied.reason) || 'Could not re-split.';
+              '. Drag to move one. Review then write to save.'
+            : (applied && applied.reason) || 'Could not split.';
         announce(_copyNote);
         render();
       });
+    root.querySelectorAll('.ms-rxac-share').forEach(function (btn) {
+      ['dragover', 'drop'].forEach(function (ev) {
+        btn.addEventListener(ev, function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      });
+    });
+    root.querySelectorAll('[data-share-key]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_writing) return;
+        var applied = applyShareOut(btn.getAttribute('data-share-key') || '');
+        _confirmWrite = null;
+        _copyNote =
+          applied && applied.ok
+            ? 'Shared ' +
+              (applied.fromName ? applied.fromName + '’s ' : '') +
+              applied.total +
+              ' equally among ' +
+              applied.doctors +
+              ' doctors in today. Review then write to save.'
+            : (applied && applied.reason) || 'Could not share that box out.';
+        announce(_copyNote);
+        render();
+      });
+    });
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
     var addName = root.querySelector('#ms-lac-add-name');

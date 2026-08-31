@@ -401,6 +401,8 @@
   function planEvenSplit(tiles, destinations, opts) {
     opts = opts || {};
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      if (!t || !t.id) return false;
+      if (opts.anyTile) return true;
       return isRxUnallocated(t);
     });
     var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
@@ -419,7 +421,7 @@
     if (!pool.length) {
       return {
         ok: false,
-        reason: 'Nothing unallocated to split.',
+        reason: opts.anyTile ? 'Nothing in that box to share out.' : 'Nothing unallocated to split.',
         total: 0,
         shares: dests.map(function (d) {
           return { key: d.key, name: d.name, count: 0, tileIds: [] };

@@ -53,11 +53,20 @@ task-list bulk-reassign. They do not share a page.
 - Nurses / pharmacists / HCAs are excluded when any GP-looking session
   exists; otherwise fall back to everyone in today (so untitled locums
   still get work).
-- Applied as the starting board on open (staged, not written).
+- Not applied on open. Unallocated is the large pane; doctors sit in
+  a sidebar. User clicks **Split equally** to propose. When the pile
+  is empty, Unallocated greens out and doctors lay out as a grid.
+- **Share out** next to a doctor name (grid and rail) even-splits
+  that folder among doctors in today (`planEvenSplit` `anyTile`).
+  Holiday/AWAY boxes with leftover work are the point — one click.
+  Destinations skip the source and anyone away. Nothing in the box,
+  or nobody in today, disables the control rather than hiding it
+  when they still have tiles.
 - Drag a request onto another doctor to move it. **Re-split equally**
-  resets to the even split. The control lives outside the unallocated
-  pool (that column is a drop target). Click always re-renders with a
-  visible note — a failed split must not look like a dead button.
+  resets the unallocated split. The control lives outside the
+  unallocated pool (that column is a drop target). Click always
+  re-renders with a visible note — a failed split must not look like
+  a dead button.
 - Review then write is unchanged.
 
 ## Write path (same class of bugs as the lab canvas)
