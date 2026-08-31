@@ -208,7 +208,7 @@
     render();
     try {
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
-      var out = await client().fetchTaskList(_route.slug, _route.search);
+      var out = await C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
       _rows = out.rows || [];
       _route.slug = out.slug || _route.slug;
       if (out.search != null) _route.search = out.search;
@@ -579,8 +579,20 @@
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
-      '<div class="ms-lac-empty-title">No unallocated requests on this queue</div>' +
-      '<div class="ms-lac-empty-sub">Inbox requests appear here. Work already sitting with a clinician is in their field on the right.</div>' +
+      '<div class="ms-lac-empty-title">' +
+      (_rows.length
+        ? 'No unallocated requests on this queue'
+        : 'Medicus returned no open requests') +
+      '</div>' +
+      '<div class="ms-lac-empty-sub">' +
+      (_rows.length
+        ? 'All ' +
+          _rows.length +
+          ' request' +
+          (_rows.length === 1 ? '' : 's') +
+          ' already sit with a clinician — they are in the fields on the right. Even-split only covers the unallocated pile.'
+        : 'The canvas reads the same open non-routine list as Signing (no page filter). If the grid on this page still shows rows, reload the list then open the canvas again.') +
+      '</div>' +
       '</div>'
     );
   }
@@ -595,9 +607,21 @@
     });
   }
 
+  function tilesForEvenSplit(board) {
+    var pool = (board && board.pool && board.pool.tiles) || [];
+    if (pool.length) return pool;
+    var all = [];
+    ((board && board.clinicians) || []).concat((board && board.teams) || []).forEach(function (col) {
+      (col.tiles || []).forEach(function (t) {
+        if (t && t.id) all.push(t);
+      });
+    });
+    return all;
+  }
+
   function currentSplitPlan() {
     var board = currentWorkspace();
-    return C.planEvenSplit((board.pool && board.pool.tiles) || [], currentDestinations(), {
+    return C.planEvenSplit(tilesForEvenSplit(board), currentDestinations(), {
       dayPhrase: dayPhrase(),
     });
   }

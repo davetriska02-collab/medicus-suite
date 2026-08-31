@@ -109,6 +109,13 @@ console.log('\n--- copy list is honest ---');
   check(!/\b(Done|Sent|Allocated|Submitted|Booked|Filed|Issued|Signed)\b/.test(text), 'no completion verbs');
 }
 
+console.log('\n--- extractTaskArray extra envelopes ---');
+{
+  check(Lab.extractTaskArray({ items: [{ id: uuid(1) }] }).length === 1, 'items envelope');
+  check(Lab.extractTaskArray({ taskList: [{ id: uuid(2) }] }).length === 1, 'taskList array envelope');
+  check(Lab.extractTaskArray({ taskList: { tasks: [{ id: uuid(3) }] } }).length === 1, 'taskList.tasks envelope');
+}
+
 console.log('\n--- working day defaults to the calendar and can look ahead ---');
 {
   check(C.coerceWorkDate('2026-09-01', '2026-08-31') === '2026-09-01', 'valid ISO is kept');
@@ -281,10 +288,51 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(!/ms-rxac-overlay/.test(wfCanvas), 'workflow canvas does not open the rx overlay');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
+  check(/fetchRxTaskList/.test(canvas), 'canvas loads the pile via fetchRxTaskList');
 }
 
-if (failed) {
-  console.error('\n' + failed + ' failed, ' + passed + ' passed');
+(async function () {
+  console.log('\n--- fetchRxTaskList prefers the open pile (no page filter) ---');
+  const idA = uuid(21);
+  const idB = uuid(22);
+  const openBody = {
+    tasks: [
+      { id: idA, patientName: 'FORD, A', assignedTo: 'Unassigned', summary: 'Acute A' },
+      { id: idB, patientName: 'FORD, B', assignedTo: 'Unassigned', summary: 'Acute B' },
+    ],
+  };
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+    let body = { tasks: [] };
+    if (path.indexOf('statuses') !== -1) body = { tasks: [] };
+    else if (path.indexOf('/tasks/data/prescription_request_task_non_routine/task-list') !== -1) body = openBody;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(body),
+    };
+  };
+  const out = await C.fetchRxTaskList(
+    'https://e38a9f.api.england.medicus.health',
+    'prescription_request_task_non_routine',
+    '?statuses[]=incomplete&viewContext=workflow',
+    { fetchImpl: fetchImpl }
+  );
+  check(out.rows && out.rows.length === 2, 'bare GET returns the open pile (got ' + ((out.rows && out.rows.length) || 0) + ')');
+  check(
+    calls.some((u) => u.indexOf('/task-list') !== -1 && u.indexOf('?') === -1),
+    'first request has no query string'
+  );
+  check(/fetchRxTaskList/.test(fs.readFileSync(path.join(__dirname, 'content-scripts/rx-allocate-canvas.js'), 'utf8')), 'canvas calls fetchRxTaskList');
+
+  if (failed) {
+    console.error('\n' + failed + ' failed, ' + passed + ' passed');
+    process.exit(1);
+  }
+  console.log('\n' + passed + ' passed');
+})().catch((err) => {
+  console.error(err);
   process.exit(1);
-}
-console.log('\n' + passed + ' passed');
+});

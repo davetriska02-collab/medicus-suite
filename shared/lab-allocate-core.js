@@ -222,9 +222,13 @@
     if (!body) return [];
     if (Array.isArray(body)) return body;
     if (Array.isArray(body.tasks)) return body.tasks;
+    if (Array.isArray(body.items)) return body.items;
     if (Array.isArray(body.results)) return body.results;
     if (Array.isArray(body.rows)) return body.rows;
+    if (Array.isArray(body.taskList)) return body.taskList;
+    if (body.taskList && Array.isArray(body.taskList.tasks)) return body.taskList.tasks;
     if (body.data && Array.isArray(body.data.tasks)) return body.data.tasks;
+    if (body.data && Array.isArray(body.data.items)) return body.data.items;
     if (Array.isArray(body.data)) return body.data;
     return [];
   }

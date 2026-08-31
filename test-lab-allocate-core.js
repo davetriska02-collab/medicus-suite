@@ -55,6 +55,8 @@ console.log('\n--- extractTaskArray / pickTaskId ---');
   check(C.extractTaskArray({ tasks: [{ id: uuid(1) }] }).length === 1, 'tasks envelope');
   check(C.extractTaskArray({ data: { tasks: [{ id: uuid(2) }] } }).length === 1, 'data.tasks envelope');
   check(C.extractTaskArray({ data: [{ id: uuid(3) }] }).length === 1, 'data array envelope');
+  check(C.extractTaskArray({ items: [{ id: uuid(8) }] }).length === 1, 'items envelope');
+  check(C.extractTaskArray({ taskList: { tasks: [{ id: uuid(9) }] } }).length === 1, 'taskList.tasks envelope');
   check(C.pickTaskId({ taskUuid: uuid(4) }) === uuid(4), 'prefers taskUuid');
   check(C.pickTaskId({ id: 'not-a-uuid' }) === '', 'rejects non-uuid id');
 }

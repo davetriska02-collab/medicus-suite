@@ -375,6 +375,22 @@
     return next;
   }
 
+  // Signing loads this pile with GET /tasks/data/{slug}/task-list and no
+  // query string — that is the outstanding open list. Replaying the page's
+  // statuses[] / viewContext can return an empty envelope while the grid
+  // still shows rows (those params are for other queue families). Try the
+  // bare GET first; fall back to the page query only if that is empty.
+  async function fetchRxTaskList(apiBase, slug, search, deps) {
+    var client = Lab.createClient(apiBase, deps);
+    var openPile = await client.fetchTaskList(slug, '');
+    if (openPile && openPile.rows && openPile.rows.length) return openPile;
+    var pageQs = Lab.queryStringForList(search);
+    if (!pageQs) return openPile;
+    var filtered = await client.fetchTaskList(slug, pageQs);
+    if (filtered && filtered.rows && filtered.rows.length) return filtered;
+    return openPile || filtered;
+  }
+
   var api = {
     isNonRoutineRxQueueSlug: isNonRoutineRxQueueSlug,
     parseRxQueueRoute: parseRxQueueRoute,
@@ -394,6 +410,7 @@
     planEvenSplit: planEvenSplit,
     applyEvenSplit: applyEvenSplit,
     ensureWorkingTodayColumns: ensureWorkingTodayColumns,
+    fetchRxTaskList: fetchRxTaskList,
     isResultsQueueSlug: Lab.isResultsQueueSlug,
     queryStringForList: Lab.queryStringForList,
     sanitizeSlug: Lab.sanitizeSlug,
