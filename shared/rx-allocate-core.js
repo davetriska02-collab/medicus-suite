@@ -658,6 +658,24 @@
     return filtered || openPile;
   }
 
+  // Write vanish-check needs every staged id, including already-sitting
+  // GP work that Distribute equally rebalances. The page-inbox GET is
+  // only the pile; the bare GET is sitting work. Same merge as loadBoard.
+  async function fetchRxMergedTaskList(apiBase, slug, search, deps) {
+    var inbox = await fetchRxTaskList(apiBase, slug, search, deps);
+    var sitting = { rows: [], slug: '', taskList: undefined, body: null };
+    try {
+      sitting = await fetchRxTaskList(apiBase, slug, '', deps);
+    } catch (_) {}
+    return {
+      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], search),
+      slug: inbox.slug || sitting.slug || slug,
+      taskList: inbox.taskList || sitting.taskList,
+      search: inbox.search || search || '',
+      body: inbox.body || sitting.body,
+    };
+  }
+
   var api = {
     isNonRoutineRxQueueSlug: isNonRoutineRxQueueSlug,
     isRoutineRxQueueSlug: isRoutineRxQueueSlug,
@@ -692,6 +710,7 @@
     ensureWorkingTodayColumns: ensureWorkingTodayColumns,
     pinDestStaffIds: pinDestStaffIds,
     fetchRxTaskList: fetchRxTaskList,
+    fetchRxMergedTaskList: fetchRxMergedTaskList,
     isResultsQueueSlug: Lab.isResultsQueueSlug,
     queryStringForList: Lab.queryStringForList,
     sanitizeSlug: Lab.sanitizeSlug,

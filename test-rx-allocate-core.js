@@ -554,6 +554,10 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/isRxUnallocated\(t\)/.test(canvas), 'split counts ignore requests already sitting with a GP');
   check(/skipSplit/.test(canvas), 'after Write the canvas does not re-stage an even split');
   check(/fetchList:/.test(canvas), 'Write re-GETs via fetchRxTaskList, not a page-filter fetchTaskList');
+  check(
+    /fetchRxMergedTaskList/.test(canvas),
+    'Write vanish-check re-GETs inbox plus already-sitting work (distribute equally)'
+  );
   check(/if \(!_open\) _route = route/.test(canvas), 'open overlay pins _route so ensureLauncher cannot clobber search');
   check(/reload Medicus if the grid still shows the old number/.test(canvas), 'after Write the canvas says the open-list count may not drop');
   check(/cache:\s*['"]no-store['"]/.test(fs.readFileSync(path.join(__dirname, 'shared/lab-allocate-core.js'), 'utf8')), 'queue re-GET is not served from HTTP cache');
@@ -618,6 +622,33 @@ console.log('\n--- canvas + manifest + css source locks ---');
     { fetchImpl: emptyThenBare }
   );
   check(fallback.rows && fallback.rows.length === 2, 'empty inbox filter falls back to the bare GET');
+
+  const mergeCalls = [];
+  const mergeFetch = async (url) => {
+    mergeCalls.push(String(url));
+    const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+    const body = path.indexOf('masterAssignee') !== -1 ? inboxBody : allocatedBody;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(body),
+    };
+  };
+  const merged = await C.fetchRxMergedTaskList(
+    'https://560b6c.api.england.medicus.health',
+    'prescription_request_task_routine',
+    qs,
+    { fetchImpl: mergeFetch }
+  );
+  check(merged.rows && merged.rows.length === 3, 'write re-GET merges inbox pile with already-sitting work (got ' + ((merged.rows && merged.rows.length) || 0) + ')');
+  check(
+    merged.rows.some((r) => r.id === uuid(99)),
+    'already-sitting GP work is on the write re-GET so Distribute equally does not vanish'
+  );
+  check(
+    merged.rows.filter((r) => C.isRxUnallocated(r)).length === 2,
+    'merged write re-GET still treats the inbox rows as the pile'
+  );
 
   if (failed) {
     console.error('\n' + failed + ' failed, ' + passed + ' passed');

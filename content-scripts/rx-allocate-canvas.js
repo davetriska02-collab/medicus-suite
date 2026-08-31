@@ -1882,7 +1882,7 @@
         directory: _staffDir,
         teamDirectory: _teamDir,
         fetchList: function () {
-          return C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
+          return C.fetchRxMergedTaskList(_route.apiBase, _route.slug, _route.search);
         },
       });
       if (!result || !result.ok) {

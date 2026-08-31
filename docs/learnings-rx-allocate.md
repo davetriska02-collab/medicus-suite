@@ -90,8 +90,11 @@ Write clicked, Medicus did not move the tasks. Four stacked no-ops:
 
 1. `ensureLauncher` (1.5s) was overwriting `_route.search` with the page
    query. Pre-write re-GET then looked empty → vanished abort, no POST.
-   Pin `_route` while the overlay is open. Re-GET via `fetchRxTaskList`
-   (bare GET first), not `fetchTaskList(slug, pageSearch)`.
+   Pin `_route` while the overlay is open. Re-GET via
+   `fetchRxMergedTaskList` (inbox GET + bare GET, same merge as
+   loadBoard). Inbox-only re-GET makes Distribute equally look like
+   vanished tasks — sitting GP work is not on the masterAssignee
+   filter. Do not `fetchTaskList(slug, pageSearch)` alone.
 2. POST 404 on `/tasks/{slug}/task-list/bulk-reassign` never tried the
    hyphen/underscore twin. `bulkReassignPaths` is slug, twin, then the
    captured literal `/tasks/task-list/bulk-reassign`.

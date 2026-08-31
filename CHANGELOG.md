@@ -82,6 +82,11 @@ destinations and join the split. After the inbox is actually
 empty, the count is the visible unallocated pile — rows already
 sitting with a GP on the inbox GET are not restamped as the 32.
 
+**Distribute equally** then Write aborted with “the queue changed”
+because the pre-write re-GET used only the inbox filter, which
+does not contain work already sitting with a GP. Write now
+re-reads inbox plus sitting (same merge as the board).
+
 Sequential Write used to stop at the first doctor whose POST failed, so
 only that share (a couple of requests) actually moved; the rest stayed
 staged until the next click. Write now continues the remaining dests.
