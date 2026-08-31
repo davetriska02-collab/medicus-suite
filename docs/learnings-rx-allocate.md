@@ -73,6 +73,12 @@ task-list bulk-reassign. They do not share a page.
   the day does not land on the first dests. **Distribute equally**
   (`planLevel`) re-deals in-today sitting + unallocated so totals
   differ by at most one. Away boxes are left unless Share this box.
+  Both name the destinations (`To: Dr A, Dr B, and Duty GP`). Hover
+  `title`s explain each control. Medicus teams from
+  `harvestTeamDirectory` can be added (`addTeamColumn`) and join
+  the dest list. The unallocated count is the visible pile;
+  `markInboxRows` must not restamp a row whose `assignedId` is
+  already a person UUID.
 - Drag a request onto another doctor to move it. The split / top-up /
   level controls live outside the unallocated pool (that column is a
   drop target). Click always re-renders with a visible note — a

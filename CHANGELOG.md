@@ -74,6 +74,14 @@ the next card is **Confirm write to Medicus**, then **Write to
 Medicus**. The review card floats inside the panel and does not
 cover the folders.
 
+Top-up and distribute name **who they go to** (To: Dr A, Dr B,
+Duty GP). Button styles match. Hover titles explain the working
+day, split/top-up/distribute, Share this box, Review, and Write.
+Medicus **teams** harvested from assignee options can be added as
+destinations and join the split. After the inbox is actually
+empty, the count is the visible unallocated pile — rows already
+sitting with a GP on the inbox GET are not restamped as the 32.
+
 Sequential Write used to stop at the first doctor whose POST failed, so
 only that share (a couple of requests) actually moved; the rest stayed
 staged until the next click. Write now continues the remaining dests.

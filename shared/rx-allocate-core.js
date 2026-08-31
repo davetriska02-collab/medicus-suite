@@ -161,15 +161,19 @@
   // Stamp them Unassigned so they stay in the unallocated list.
   function markInboxRows(rows, search) {
     var inboxId = inboxAssigneeId(search);
-    return (Array.isArray(rows) ? rows : []).map(function (row) {
-      var next = decorateRxRow(row);
-      if (!next) return next;
-      if (!inboxId) return next;
-      next.rxInboxPile = true;
-      next.rxInboxAssignedTo = next.assignedTo || '';
-      next.assignedTo = 'Unassigned';
-      return next;
-    }).filter(Boolean);
+    return (Array.isArray(rows) ? rows : [])
+      .map(function (row) {
+        var next = decorateRxRow(row);
+        if (!next) return next;
+        if (!inboxId) return next;
+        var assignedId = String(next.assignedId || '').toLowerCase();
+        if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
+        next.rxInboxPile = true;
+        next.rxInboxAssignedTo = next.assignedTo || '';
+        next.assignedTo = 'Unassigned';
+        return next;
+      })
+      .filter(Boolean);
   }
 
   function rxGroupName(tile) {
@@ -398,6 +402,24 @@
     return chosen;
   }
 
+  function isSplitDest(d) {
+    if (!d || !d.key) return false;
+    var k = String(d.key);
+    return k.indexOf('clinician:') === 0 || k.indexOf('team:') === 0;
+  }
+
+  function destNamesPhrase(dests) {
+    var names = [];
+    (Array.isArray(dests) ? dests : []).forEach(function (d) {
+      if (!d || !d.name) return;
+      names.push(Lab.displayClinicianName(d.name));
+    });
+    if (!names.length) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names[0] + ' and ' + names[1];
+    return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+  }
+
   function planEvenSplit(tiles, destinations, opts) {
     opts = opts || {};
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
@@ -405,9 +427,7 @@
       if (opts.anyTile) return true;
       return isRxUnallocated(t);
     });
-    var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
-      return d && d.key && String(d.key).indexOf('clinician:') === 0;
-    });
+    var dests = (Array.isArray(destinations) ? destinations : []).filter(isSplitDest);
     var dayPhrase = opts.dayPhrase || 'today';
     if (!dests.length) {
       return {
@@ -474,7 +494,11 @@
     if (!plan || !plan.ok) return next;
     (plan.shares || []).forEach(function (share) {
       if (!share || !share.key) return;
-      next = Lab.addColumn(next, share.name, share.staffId);
+      if (String(share.key).indexOf('team:') === 0) {
+        next = Lab.addTeamColumn(next, share.name, share.staffId);
+      } else {
+        next = Lab.addColumn(next, share.name, share.staffId);
+      }
       next = Lab.stageMoves(next, share.tileIds || [], share.key);
     });
     return next;
@@ -492,9 +516,7 @@
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
       return t && t.id;
     });
-    var dests = (Array.isArray(destinations) ? destinations : []).filter(function (d) {
-      return d && d.key && String(d.key).indexOf('clinician:') === 0;
-    });
+    var dests = (Array.isArray(destinations) ? destinations : []).filter(isSplitDest);
     var counts = boxCounts || {};
     var dayPhrase = opts.dayPhrase || 'today';
     if (!dests.length) {
@@ -661,6 +683,7 @@
     workDayPhrase: workDayPhrase,
     formatLeaveDate: Lab.formatLeaveDate,
     workingTodayDoctors: workingTodayDoctors,
+    destNamesPhrase: destNamesPhrase,
     planEvenSplit: planEvenSplit,
     planTopUp: planTopUp,
     planLevel: planLevel,
@@ -674,6 +697,7 @@
     sanitizeSlug: Lab.sanitizeSlug,
     emptyDraft: Lab.emptyDraft,
     addColumn: Lab.addColumn,
+    addTeamColumn: Lab.addTeamColumn,
     stageMove: Lab.stageMove,
     stageMoves: Lab.stageMoves,
     draftSummary: Lab.draftSummary,
@@ -691,6 +715,7 @@
     createClient: Lab.createClient,
     pickPatientIdFromPayload: Lab.pickPatientIdFromPayload,
     displayClinicianName: Lab.displayClinicianName,
+    teamColumnKey: Lab.teamColumnKey,
     isTeamAssignee: Lab.isTeamAssignee,
     todayISO: Lab.todayISO,
     presenceForName: Lab.presenceForName,

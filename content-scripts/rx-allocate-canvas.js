@@ -653,18 +653,93 @@
     );
   }
 
+  function teamIdForName(name) {
+    var list = (_teamDir && _teamDir.list) || [];
+    var want = C.teamColumnKey ? C.teamColumnKey(name) : '';
+    var hits = [];
+    list.forEach(function (t) {
+      if (!t || !t.id || !t.name) return;
+      if (want && C.teamColumnKey(t.name) === want) hits.push(t);
+    });
+    return hits.length === 1 ? hits[0].id : '';
+  }
+
+  function addableTeams() {
+    var list = (_teamDir && _teamDir.list) || [];
+    var used = {};
+    ((_draft && _draft.extraColumns) || []).forEach(function (k) {
+      used[k] = true;
+    });
+    return list.filter(function (t) {
+      if (!t || !t.id || !t.name) return false;
+      if (C.isRxInboxName(t.name)) return false;
+      var key = C.teamColumnKey(t.name);
+      if (!key || used[key]) return false;
+      return true;
+    });
+  }
+
+  function splitDestinations() {
+    var dests = currentDestinations().slice();
+    var seen = {};
+    dests.forEach(function (d) {
+      if (d && d.key) seen[d.key] = true;
+    });
+    var draft = _draft || C.emptyDraft();
+    ((draft.extraColumns) || []).forEach(function (key) {
+      if (!key || seen[key]) return;
+      var title = (draft.columnTitles && draft.columnTitles[key]) || '';
+      var id = (draft.columnStaffIds && draft.columnStaffIds[key]) || '';
+      if (String(key).indexOf('team:') === 0) {
+        dests.push({
+          key: key,
+          name: title,
+          staffId: id || teamIdForName(title),
+          kind: 'team',
+        });
+        seen[key] = true;
+        return;
+      }
+      if (String(key).indexOf('clinician:') === 0 && title) {
+        dests.push({
+          key: key,
+          name: title,
+          staffId: id,
+          kind: 'clinician',
+        });
+        seen[key] = true;
+      }
+    });
+    return dests;
+  }
+
+  function visibleUnallocatedCount() {
+    var pool = currentWorkspace().pool;
+    return (pool && pool.tiles && pool.tiles.length) || 0;
+  }
+
   function tilesForPlan() {
-    return C.unallocatedNotStaged(_rows, _draft);
+    var leftover = C.unallocatedNotStaged(_rows, _draft);
+    var onDest = {};
+    var board = currentWorkspace();
+    (board.clinicians || []).concat(board.teams || []).forEach(function (col) {
+      (col.tiles || []).forEach(function (t) {
+        if (t && t.id) onDest[t.id] = true;
+      });
+    });
+    return leftover.filter(function (r) {
+      return r && r.id && !onDest[r.id];
+    });
   }
 
   function destBoxCounts() {
-    var dests = currentDestinations();
+    var dests = splitDestinations();
     var counts = {};
     dests.forEach(function (d) {
       counts[d.key] = 0;
     });
     var board = currentWorkspace();
-    (board.clinicians || []).forEach(function (col) {
+    (board.clinicians || []).concat(board.teams || []).forEach(function (col) {
       if (!col || counts[col.key] == null) return;
       counts[col.key] = (col.tiles || []).length;
     });
@@ -679,7 +754,7 @@
   }
 
   function inTodayBoxTiles() {
-    var dests = currentDestinations();
+    var dests = splitDestinations();
     var want = {};
     dests.forEach(function (d) {
       want[d.key] = true;
@@ -699,7 +774,7 @@
   }
 
   function applyPileSplit() {
-    var dests = currentDestinations();
+    var dests = splitDestinations();
     var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
@@ -717,7 +792,7 @@
   }
 
   function applyLevel() {
-    var dests = currentDestinations();
+    var dests = splitDestinations();
     var seen = {};
     var tiles = inTodayBoxTiles().concat(tilesForPlan()).filter(function (t) {
       if (!t || !t.id || seen[t.id]) return false;
@@ -744,35 +819,61 @@
       });
       counts[col.key] = n;
     });
-    return currentDestinations().map(function (d) {
+    return splitDestinations().map(function (d) {
       return { name: d.name, key: d.key, count: counts[d.key] || 0 };
     });
   }
 
   function evenSplitHtml() {
-    var dests = currentDestinations();
+    var dests = splitDestinations();
     var phrase = dayPhrase();
     var cal = calendarToday();
     var picked = workDate();
-    var poolN = tilesForPlan().length;
+    var poolN = visibleUnallocatedCount();
     var stagedN = C.draftSummary(_rows, _draft).count;
     var haveWork = destsHaveWork();
+    var destPhrase = C.destNamesPhrase(dests);
     var summary = dests.length
-      ? poolN + ' unallocated · ' + dests.length + ' doctor' + (dests.length === 1 ? '' : 's') + ' working ' + phrase
+      ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + phrase
       : 'No sessions on the book for ' + phrase;
+    var destLine = destPhrase
+      ? '<div class="ms-rxac-dests">To: ' + esc(destPhrase) + '</div>'
+      : '';
+    var splitHint =
+      'Split the unallocated pile evenly among ' +
+      destPhrase +
+      ' (' +
+      phrase +
+      '). Proposal only — nothing is written until you confirm.';
+    var topHint =
+      'Give leftover unallocated requests to whoever of these currently has least: ' +
+      destPhrase +
+      '. Does not move work already sitting. Proposal only.';
+    var levelHint =
+      'Rebalance among ' +
+      destPhrase +
+      ' so each has the same number, or as near as it can be. Moves sitting work on this canvas. Proposal only.';
     var actions = '';
     if (!dests.length) {
-      actions = '<span class="ms-lac-split-note">Pick another day, or add a doctor.</span>';
+      actions = '<span class="ms-lac-split-note">Pick another day, or add a doctor or team.</span>';
     } else if (poolN && !haveWork) {
       actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go" id="ms-rxac-split">Split equally</button>';
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go ms-rxac-action" id="ms-rxac-split" title="' +
+        esc(splitHint) +
+        '">Split equally</button>';
     } else if (poolN && haveWork) {
       actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go" id="ms-rxac-topup">Top up empty boxes</button>' +
-        '<button type="button" class="ms-lac-ghost" id="ms-rxac-level">Distribute equally</button>';
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go ms-rxac-action" id="ms-rxac-topup" title="' +
+        esc(topHint) +
+        '">Top up empty boxes</button>' +
+        '<button type="button" class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-level" title="' +
+        esc(levelHint) +
+        '">Distribute equally</button>';
     } else if (haveWork) {
       actions =
-        '<button type="button" class="ms-lac-ghost" id="ms-rxac-level">Distribute equally</button>';
+        '<button type="button" class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-level" title="' +
+        esc(levelHint) +
+        '">Distribute equally</button>';
     } else {
       actions =
         '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among those in today.</span>';
@@ -781,7 +882,9 @@
       ? '<div class="ms-rxac-proposal" role="status">' +
         '<strong>Proposal — not written yet.</strong> ' +
         stagedN +
-        ' would move. The number on each doctor is the proposal.' +
+        ' would move among ' +
+        esc(destPhrase) +
+        '.' +
         '<span class="ms-rxac-drag-hint">Drag a patient from one doctor onto another to change who gets them.</span>' +
         '</div>'
       : '';
@@ -790,29 +893,33 @@
       (stagedN ? ' ms-rxac-split-proposing' : '') +
       '" id="ms-rxac-split-box">' +
       '<div class="ms-rxac-split-row">' +
-      '<label class="ms-lac-split-day-label" for="ms-rxac-day">Working day</label>' +
+      '<label class="ms-lac-split-day-label" for="ms-rxac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
       '<input type="date" id="ms-rxac-day" value="' +
       esc(picked) +
-      '" aria-label="Working day for the even split">' +
+      '" aria-label="Working day for the even split" title="The appointment book for this date decides who is in.">' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === cal ? ' ms-lac-split-day-on' : '') +
-      '" id="ms-rxac-day-today">Today</button>' +
+      '" id="ms-rxac-day-today" title="Use today’s appointment book.">Today</button>' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === C.addDaysISO(cal, 1) ? ' ms-lac-split-day-on' : '') +
-      '" id="ms-rxac-day-tomorrow">Tomorrow</button>' +
-      '<span class="ms-lac-split-summary">' +
+      '" id="ms-rxac-day-tomorrow" title="Use tomorrow’s appointment book — for allocating the night before.">Tomorrow</button>' +
+      '<span class="ms-lac-split-summary" title="' +
+      esc(destPhrase ? 'Destinations: ' + destPhrase : summary) +
+      '">' +
       esc(summary) +
       '</span>' +
       actions +
       '</div>' +
+      destLine +
       proposal +
       '</div>'
     );
   }
 
   function inTodayShareDests(exceptKey) {
-    return currentDestinations().filter(function (d) {
+    return splitDestinations().filter(function (d) {
       if (!d || !d.key || d.key === exceptKey) return false;
+      if (d.kind === 'team' || String(d.key).indexOf('team:') === 0) return true;
       var pres = C.presenceForName({
         name: d.name,
         dateISO: workDate(),
@@ -865,24 +972,18 @@
     if (!inbox && away && abs.label) meta = abs.label + (meta ? ' · ' + meta : '');
     var shareDests = inbox ? [] : inTodayShareDests(col.key);
     var nTiles = (col.tiles || []).length;
-    var canShare = !inbox && nTiles && shareDests.length && col.kind !== 'team';
+    var canShare = !inbox && nTiles && shareDests.length;
     var loud = !!(!inbox && away && nTiles);
     if (!inbox && nTiles && !shareDests.length) {
       meta = (meta ? meta + ' · ' : '') + 'No doctors in today to share onto';
     }
     var shareTitle = canShare
-      ? 'Share only ' +
-        name +
-        '’s box equally among ' +
-        shareDests.length +
-        ' doctor' +
-        (shareDests.length === 1 ? '' : 's') +
-        ' in today — not the unallocated pile'
+      ? 'Share only ' + name + '’s box equally among ' + C.destNamesPhrase(shareDests) + ' — not the unallocated pile'
       : !inbox && nTiles
         ? 'No doctors in today to share onto. Pick another working day.'
         : '';
     var shareBtn = '';
-    if (!inbox && nTiles && col.kind !== 'team') {
+    if (!inbox && nTiles) {
       shareBtn =
         '<button type="button" class="ms-rxac-share ms-rxac-folder-action' +
         (loud ? ' ms-rxac-share-away' : ' ms-rxac-share-quiet') +
@@ -972,10 +1073,30 @@
         return folderHtml(col, {});
       })
       .join('');
+    var teamOpts = addableTeams()
+      .map(function (t) {
+        return (
+          '<option value="' +
+          esc(t.id) +
+          '" data-name="' +
+          esc(t.name) +
+          '">' +
+          esc(t.name) +
+          '</option>'
+        );
+      })
+      .join('');
     var addRow =
       '<div class="ms-lac-add-row">' +
-      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a doctor — e.g. Dr Jane Cole" aria-label="Add a doctor">' +
-      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn">Add doctor</button>' +
+      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a doctor — e.g. Dr Jane Cole" aria-label="Add a doctor" title="Add a named doctor as a destination, even if they have no session on the book.">' +
+      '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn" title="Add that doctor as a destination for split, top-up, and distribute.">Add doctor</button>' +
+      (teamOpts
+        ? '<select id="ms-rxac-add-team" aria-label="Add a team from Medicus" title="Teams scraped from Medicus assignee options. Adding one includes them in Split equally, Top up, and Distribute equally.">' +
+          '<option value="">Add a team from Medicus…</option>' +
+          teamOpts +
+          '</select>' +
+          '<button type="button" class="ms-lac-ghost" id="ms-rxac-add-team-btn" title="Add the selected Medicus team as a destination.">Add team</button>'
+        : '') +
       '</div>';
     if (inboxEmpty) {
       return (
@@ -1095,7 +1216,7 @@
         '</div>' +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go">Write to Medicus</button>' +
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" title="Writes these reassignments to Medicus. Does not issue, sign, or file the prescription.">Write to Medicus</button>' +
         '</div></div>'
       );
     }
@@ -1133,7 +1254,7 @@
       '</div>' +
       '<div class="ms-lac-confirmbar-actions">' +
       (sum.count
-        ? '<button type="button" class="ms-lac-ghost" id="ms-lac-clear">Clear proposals</button>'
+        ? '<button type="button" class="ms-lac-ghost" id="ms-lac-clear" title="Forget this proposal. Nothing has been written to Medicus.">Clear proposals</button>'
         : '') +
       (canWrite
         ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-finalise" title="' +
@@ -1149,14 +1270,13 @@
   function shellHtml() {
     var board = currentWorkspace();
     var stagedN = C.draftSummary(_rows, _draft).count;
-    var destN = currentDestinations().length;
-    var counts = _rows.length
-      ? _rows.length +
-        ' in this inbox' +
-        (stagedN ? ' · ' + stagedN + ' proposed' : '') +
-        (destN ? ' · ' + destN + ' doctors working ' + dayPhrase() : '') +
-        ' · not saved'
-      : '';
+    var destN = splitDestinations().length;
+    var poolN = visibleUnallocatedCount();
+    var counts =
+      poolN +
+      ' unallocated' +
+      (stagedN ? ' · ' + stagedN + ' proposed' : '') +
+      (destN ? ' · to ' + destN + ' destination' + (destN === 1 ? '' : 's') : '');
     return (
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
@@ -1169,11 +1289,11 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among those in today.</span>' +
+      '<span class="ms-lac-header-note" title="Unallocated is the pile still sitting in this inbox. Split equally / Top up / Distribute equally propose moves among the named destinations. Drag a patient onto another folder to change one. Nothing is written until you confirm.">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among those in today.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
-      '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
+      '<button type="button" class="ms-lac-close" id="ms-lac-close" title="Close this canvas. Staged proposals that have not been written are forgotten.">Close</button>' +
       '</div>' +
       selectionBarHtml() +
       '<div class="ms-lac-body"><div class="ms-lac-board" id="ms-lac-board">' +
@@ -1230,8 +1350,27 @@
     var input = document.getElementById('ms-lac-add-name');
     var name = input && input.value;
     if (!name || !String(name).trim()) return;
-    _draft = C.addColumn(_draft, name);
-    announce('Added clinician field ' + String(name).trim());
+    var trimmed = String(name).trim();
+    var teamId = teamIdForName(trimmed);
+    if (teamId && C.isTeamAssignee(trimmed) && !C.isRxInboxName(trimmed)) {
+      _draft = C.addTeamColumn(_draft, trimmed, teamId);
+      announce('Added team ' + trimmed);
+    } else {
+      _draft = C.addColumn(_draft, trimmed);
+      announce('Added clinician field ' + trimmed);
+    }
+    if (input) input.value = '';
+    render();
+  }
+
+  function addTeamFromPicker() {
+    var sel = document.getElementById('ms-rxac-add-team');
+    if (!sel || !sel.value) return;
+    var opt = sel.options[sel.selectedIndex];
+    var name = (opt && opt.getAttribute('data-name')) || opt.text || '';
+    if (!name) return;
+    _draft = C.addTeamColumn(_draft, name, sel.value);
+    announce('Added team ' + name);
     render();
   }
 
@@ -1346,6 +1485,13 @@
     });
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
+    var addTeamBtn = root.querySelector('#ms-rxac-add-team-btn');
+    if (addTeamBtn) addTeamBtn.addEventListener('click', addTeamFromPicker);
+    var addTeamSel = root.querySelector('#ms-rxac-add-team');
+    if (addTeamSel)
+      addTeamSel.addEventListener('change', function () {
+        if (addTeamSel.value) addTeamFromPicker();
+      });
     var addName = root.querySelector('#ms-lac-add-name');
     if (addName) {
       addName.addEventListener('keydown', function (e) {

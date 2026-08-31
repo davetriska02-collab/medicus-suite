@@ -715,6 +715,17 @@
     return next;
   }
 
+  function addTeamColumn(draft, name, teamId) {
+    var next = cloneDraft(draft);
+    var key = teamColumnKey(name);
+    if (!key) return next;
+    if (next.extraColumns.indexOf(key) === -1) next.extraColumns.push(key);
+    next.columnTitles[key] = clip(name, 80);
+    var id = pickUuid(teamId);
+    if (id) next.columnStaffIds[key] = id;
+    return next;
+  }
+
   function stageMove(draft, taskId, toKey) {
     var next = cloneDraft(draft);
     if (!taskId || !toKey) return next;
@@ -2552,6 +2563,7 @@
     placementReason: placementReason,
     emptyDraft: emptyDraft,
     addColumn: addColumn,
+    addTeamColumn: addTeamColumn,
     stageMove: stageMove,
     stageMoves: stageMoves,
     buildBoard: buildBoard,

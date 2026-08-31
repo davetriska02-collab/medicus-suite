@@ -286,6 +286,15 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   );
   const untouched = C.markInboxRows([sittingGp], '');
   check(C.isRxUnallocated(untouched[0]) === false, 'without an inbox filter, GP-assigned work stays sitting');
+  const leaked = rxRow(30, { assignedTo: 'Dr Jane Cole', assignedId: uuid(10) });
+  const markedLeaked = C.markInboxRows(
+    [leaked],
+    '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId
+  );
+  check(
+    !markedLeaked[0].rxInboxPile && C.isRxUnallocated(markedLeaked[0]) === false,
+    'inbox GET rows already sitting with a GP are not restamped unallocated'
+  );
   const merged = C.mergeInboxAndSitting(
     [rxRow(7, { assignedTo: 'Dr Jane Cole', assignedId: boxId })],
     [rxRow(7, { assignedTo: 'Dr Jane Cole', assignedId: boxId }), rxRow(8, { assignedTo: 'Dr David Triska' })],
@@ -352,6 +361,18 @@ console.log('\n--- top-up empty boxes and distribute equally ---');
     trickle.shares.map((s) => s.count).join(',') === '1,1,0',
     'plain even-split of a 2-item trickle onto 3 dests is 1,1,0 — empty dest stays empty'
   );
+  check(
+    C.destNamesPhrase(dests) === 'Dr A, Dr B, and Dr C',
+    'dest phrase names who top-up and distribute go to (got ' + C.destNamesPhrase(dests) + ')'
+  );
+  const teamKey = Lab.teamColumnKey('Duty GP');
+  const teamDraft = C.addTeamColumn(C.emptyDraft(), 'Duty GP', uuid(40));
+  check(teamDraft.extraColumns.indexOf(teamKey) !== -1, 'addTeamColumn keeps a Medicus team as a destination');
+  const teamPlan = C.planEvenSplit([rxRow(41), rxRow(42)], [
+    { key: teamKey, name: 'Duty GP', staffId: uuid(40) },
+    dests[0],
+  ]);
+  check(teamPlan.ok && teamPlan.doctors === 2, 'even split can land on a harvested team');
 }
 
 console.log('\n--- even-split dest staff UUID is what Write uses ---');
@@ -452,7 +473,11 @@ console.log('\n--- write stays on the lab client ---');
   check(/ms-rxac-count-pop/.test(canvas), 'proposed numbers on each doctor pop');
   check(/ms-rxac-review-dock/.test(canvas) && /ms-rxac-review-go/.test(canvas), 'review is a floating dock in the panel');
   check(/ms-rxac-review-open/.test(canvas), 'confirm list opens in the review dock, not a scrim');
-  check(/col\.kind !== 'team'/.test(canvas), 'team folders are not shared out among doctors');
+  check(/ms-rxac-dests/.test(canvas) && /To:/.test(canvas), 'top-up and distribute name who they go to');
+  check(/Add a team from Medicus/.test(canvas), 'Medicus teams can be added as destinations');
+  check(/addTeamColumn/.test(canvas), 'adding a team uses addTeamColumn, not a doctor field');
+  check(/visibleUnallocatedCount/.test(canvas), 'unallocated count is the visible pile, not sitting work');
+  check(/splitDestinations/.test(canvas), 'split dests include in-today doctors plus added teams');
   check(/ms-rxac-folder-clear/.test(canvas), 'empty unallocated is greened out');
   check(/ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas), 'unallocated is the main pane, doctors sit in a rail');
   check(/ms-rxac-board-clear/.test(canvas), 'an empty unallocated pile lays doctors out as a grid');

@@ -1032,14 +1032,40 @@
   margin-left: 0;
 }
 
-#ms-rxac-overlay .ms-rxac-split-go {
-  margin-left: auto;
-  padding: 10px 22px;
+#ms-rxac-overlay .ms-rxac-split-go,
+#ms-rxac-overlay .ms-rxac-action {
+  margin-left: 0;
+  padding: 10px 18px;
   min-height: 40px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 650;
   border-radius: var(--r-md);
   width: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-split-go {
+  margin-left: auto;
+  padding: 10px 22px;
+  font-size: 14px;
+}
+
+#ms-rxac-overlay .ms-rxac-dests {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+#ms-rxac-overlay #ms-rxac-add-team {
+  min-width: 180px;
+  max-width: 240px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
 }
 
 #ms-rxac-overlay .ms-rxac-split-proposing {
@@ -1069,9 +1095,9 @@
   color: var(--text-1);
 }
 
-#ms-rxac-overlay #ms-rxac-level {
-  padding: 8px 14px;
-  min-height: 36px;
+#ms-rxac-overlay #ms-rxac-add-team:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 #ms-rxac-overlay #ms-rxac-day {
