@@ -234,6 +234,14 @@ console.log('\n--- even-split dest staff UUID is what Write uses ---');
   check(pinned[0] && pinned[0].staffId === dirId, 'empty In-today UUID is filled from a unique directory match');
   const missed = C.pinDestStaffIds(nameless, { list: [] });
   check(!missed[0].staffId, 'no directory match leaves staffId empty rather than inventing one');
+  const keyMatch = C.pinDestStaffIds(
+    [{ key: Lab.clinicianColumnKey('Dr Natalie Azadian'), name: 'Dr Natalie Azadian' }],
+    { list: [{ id: uuid(91), name: 'AZADIAN N' }] }
+  );
+  check(
+    keyMatch[0] && keyMatch[0].staffId === uuid(91),
+    'dest UUID pins from a staff-option name that shares the clinician key'
+  );
 }
 
 console.log('\n--- cancelled sessions and absences drop out of working-today ---');
@@ -320,6 +328,8 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/skipSplit/.test(canvas), 'after Write the canvas does not re-stage an even split');
   check(/fetchList:/.test(canvas), 'Write re-GETs via fetchRxTaskList, not a page-filter fetchTaskList');
   check(/if \(!_open\) _route = route/.test(canvas), 'open overlay pins _route so ensureLauncher cannot clobber search');
+  check(/reload Medicus if the grid still shows the old number/.test(canvas), 'after Write the canvas says the open-list count may not drop');
+  check(/cache:\s*['"]no-store['"]/.test(fs.readFileSync(path.join(__dirname, 'shared/lab-allocate-core.js'), 'utf8')), 'queue re-GET is not served from HTTP cache');
 }
 
 (async function () {

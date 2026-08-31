@@ -378,12 +378,24 @@
   }
 
   function pinDestStaffIds(dests, directory) {
+    var list = (directory && directory.list) || [];
     return (Array.isArray(dests) ? dests : []).map(function (d) {
       if (!d) return d;
       if (d.staffId) return d;
       var resolved = Lab.resolveStaffForColumn(d.key, d.name, directory, [], null, '');
       if (resolved && resolved.ok && resolved.staff && resolved.staff.id) {
         return Object.assign({}, d, { staffId: resolved.staff.id });
+      }
+      var keyHits = [];
+      var seen = {};
+      list.forEach(function (s) {
+        if (!s || !s.id || seen[s.id]) return;
+        if (Lab.clinicianColumnKey(s.name) !== d.key) return;
+        seen[s.id] = true;
+        keyHits.push(s);
+      });
+      if (keyHits.length === 1) {
+        return Object.assign({}, d, { staffId: keyHits[0].id });
       }
       return d;
     });

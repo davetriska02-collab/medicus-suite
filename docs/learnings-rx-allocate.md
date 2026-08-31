@@ -65,6 +65,13 @@ Write clicked, Medicus did not move the tasks. Four stacked no-ops:
 
 After Write the canvas shows Medicus, it does not re-split.
 
+Sequential dest POSTs must not abort the rest of the even-split when
+one dest fails — that is “only a couple moved each click”. Continue
+the remaining dests; retry 400/409/429/5xx once with a fresh list
+token. Task-list GET uses `cache: 'no-store'` so reload is not the
+pre-write pile. Reassign does not complete the task, so the open-list
+total can stay the same while unallocated drops.
+
 ## Copy that must not ship
 
 - No Done / Sent / Filed / Allocated / Submitted / Booked / Issued / Signed

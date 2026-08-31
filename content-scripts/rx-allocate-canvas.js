@@ -1459,12 +1459,16 @@
       var n = result.written || 0;
       _draft = C.emptyDraft();
       _confirmWrite = null;
+      var leftover = (result.refused || []).length;
       _copyNote =
         'Medicus accepted ' +
         n +
         ' reassignment' +
         (n === 1 ? '' : 's') +
-        '. Check the queue — this canvas is a working copy.';
+        (leftover
+          ? '. ' + leftover + ' destination' + (leftover === 1 ? '' : 's') + ' had no unique staff id and stayed unallocated'
+          : '') +
+        '. The open list is the same queue with new assignees — reload Medicus if the grid still shows the old number.';
       _writing = false;
       announce(_copyNote);
       await loadBoard({ skipSplit: true });

@@ -1081,7 +1081,7 @@ async function testClient() {
   let taskListGone = false;
   const client = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async (url, opts) => {
-      calls.push({ url: url, method: opts.method, body: opts.body });
+      calls.push({ url: url, method: opts.method, body: opts.body, cache: opts.cache });
       let body = {};
       if (/bulk-reassign/.test(url)) {
         bodies.push(JSON.parse(opts.body || '{}'));
@@ -1134,6 +1134,7 @@ async function testClient() {
   check(out.rows.length === 1, 'client maps the task-list');
   check(out.taskList === 'envelope-token', 'client keeps the envelope taskList token');
   check(calls[0].method === 'GET', 'task-list fetch is GET');
+  check(calls[0].cache === 'no-store', 'task-list GET is not served from HTTP cache');
   check(
     /\/tasks\/data\/review-investigation-report\/task-list\?viewContext=workflow$/.test(calls[0].url),
     'task-list GET keeps viewContext and drops masterAssignee'
@@ -1332,6 +1333,77 @@ async function testClient() {
       return c.method === 'POST';
     }).length === 1,
     'vanished abort does not POST'
+  );
+
+  const idA = uuid(21);
+  const idB = uuid(22);
+  const rowA = C.normaliseTaskRow(
+    { id: uuid(31), patientName: 'A', assignedTo: 'Investigation Reports' },
+    'x'
+  );
+  const rowB = C.normaliseTaskRow(
+    { id: uuid(32), patientName: 'B', assignedTo: 'Investigation Reports' },
+    'x'
+  );
+  let seqDraft = C.emptyDraft();
+  seqDraft = C.addColumn(seqDraft, 'Dr Natalie Azadian', idA);
+  seqDraft = C.addColumn(seqDraft, 'Dr David Triska', idB);
+  seqDraft = C.stageMove(seqDraft, rowA.id, C.clinicianColumnKey('Dr Natalie Azadian'));
+  seqDraft = C.stageMove(seqDraft, rowB.id, C.clinicianColumnKey('Dr David Triska'));
+  const seqPosts = [];
+  const seqClient = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      if (/bulk-reassign/.test(url)) {
+        const payload = JSON.parse(opts.body || '{}');
+        seqPosts.push(payload);
+        if (payload.assigneeId === idB) {
+          return {
+            ok: false,
+            status: 500,
+            text: async function () {
+              return '';
+            },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          text: async function () {
+            return JSON.stringify({ ok: true });
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify({
+            taskList: 'envelope-token',
+            tasks: [
+              { id: rowA.id, patientName: 'A', assignedTo: 'Investigation Reports' },
+              { id: rowB.id, patientName: 'B', assignedTo: 'Investigation Reports' },
+            ],
+          });
+        },
+      };
+    },
+  });
+  const seqWritten = await seqClient.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: seqDraft,
+    rows: [rowA, rowB],
+    taskList: 'envelope-token',
+    directory: { list: [] },
+  });
+  check(seqWritten.partial === true && seqWritten.written === 1, 'a later dest failing still keeps the dests already written');
+  check(
+    seqPosts.some(function (p) {
+      return p.assigneeId === idA;
+    }) &&
+      seqPosts.some(function (p) {
+        return p.assigneeId === idB;
+      }),
+    'Write still POSTs the remaining dest after one dest fails'
   );
 
   const staffFormCalls = [];

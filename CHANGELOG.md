@@ -35,6 +35,16 @@ On open, the even split is the starting board (staged, not written).
 Drag a request onto another doctor to move it; **Re-split equally**
 puts the even split back.
 
+Sequential Write used to stop at the first doctor whose POST failed, so
+only that share (a couple of requests) actually moved; the rest stayed
+staged until the next click. Write now continues the remaining dests.
+The post-write re-GET also used the browser HTTP cache of the open
+list, so Suite still showed the old queue number after a reload.
+Task-list reads now use `cache: 'no-store'` (Signing too). Reassign
+changes who the task sits with — it does not take it off the open
+non-routine list, so the open-list total may stay the same while
+unallocated drops.
+
 The canvas reads the open pile with the same bare task-list GET as
 Signing (no page `statuses[]` / `viewContext` filter). Replaying the
 page query was returning an empty list while the grid still showed rows.
