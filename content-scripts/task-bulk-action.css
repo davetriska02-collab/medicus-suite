@@ -8,8 +8,17 @@
 
 .ms-tba-widget {
   display: block;
+  position: relative;
+  z-index: 20;
+  pointer-events: auto;
   margin: 0 0 10px 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.ms-tba-widget button,
+.ms-tba-widget input {
+  pointer-events: auto;
+  position: relative;
 }
 
 button[class*='ms-tba-']:focus-visible,

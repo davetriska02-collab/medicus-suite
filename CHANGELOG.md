@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.256.1] — 2026-09-01
+
+### Send-to-routine and Privacy Officer bulk buttons were dead clicks
+
+Vue clones injected markup and drops the listeners. Both buttons looked
+real and did nothing.
+
+- **Send to routine list** on non-routine prescription overviews: the
+  pill now matches `/tasks/…prescription…/overview/` with or without
+  `/data/`, accepts the live radio/commit wording, and can skip Assign-to
+  when Medicus has already enabled send (the dest is the routine inbox —
+  we never invent an assignee). Clicks bind on document capture so a
+  cloned pill still runs the macro. Still UI-drive, no POST; commit
+  match stays exact (never “close task”).
+- **Bulk acknowledge?** (Privacy Officer): same capture-phase clicks
+  (and checkbox `change`) on the shared task-bulk widget, plus a sweep
+  of Vue lookalikes that reuse the widget id. Confirm is still the
+  two-step `{ taskId }` POST to
+  `/tasks/patient-privacy-officer/complete`.
+
 ## [v3.256.0] — 2026-08-31
 
 ### Prescription allocation canvas

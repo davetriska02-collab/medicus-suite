@@ -103,13 +103,15 @@ const EXTRACTED = [
   slice('function commitAndAudit(', '\n\n  // ---- DOM helpers'),
   // running / requestConfirm / abort / runMacro
   slice('var running = false;', '\n\n  // ---- UI: floating button'),
-  // findRoutingControl / findActionAnchor
-  slice('function findRoutingControl() {', '\n\n  // The anchor the host is currently parented to.'),
+  // isPrescriptionOverviewPath / findCommitButton / findRoutingControl / findActionAnchor
+  slice('function isPrescriptionOverviewPath(', '\n\n  // The anchor the host is currently parented to.'),
 ].join('\n\n');
 
 check(/function runMacro/.test(EXTRACTED), 'extraction: runMacro source captured');
 check(/function findActionAnchor/.test(EXTRACTED), 'extraction: findActionAnchor source captured');
 check(/function findRoutingControl/.test(EXTRACTED), 'extraction: findRoutingControl source captured');
+check(/function isPrescriptionOverviewPath/.test(EXTRACTED), 'extraction: isPrescriptionOverviewPath source captured');
+check(/function findCommitButton/.test(EXTRACTED), 'extraction: findCommitButton source captured');
 check(/function sharesPanel/.test(EXTRACTED), 'extraction: sharesPanel source captured');
 check(/function radioControl/.test(EXTRACTED), 'extraction: radioControl source captured');
 check(/function activateRadio/.test(EXTRACTED), 'extraction: activateRadio source captured');
@@ -146,6 +148,15 @@ check(
   /Issue 1 approved item/.test(SRC),
   'source lock: abort copy names Issue 1 if the routing radio did not switch'
 );
+check(
+  SRC.includes("document.addEventListener('click', onDocHostClick, true)"),
+  'source lock: host clicks bind on document capture (Vue clones drop per-node listeners)'
+);
+check(
+  SRC.includes("'Send to routine list'") && SRC.includes("'Send to routine requests'"),
+  'source lock: commit match accepts both Send to routine list and Send to routine requests'
+);
+check(/skipTeamPick/.test(SRC), 'source lock: non-routine path can skip Assign-to when commit is already enabled');
 
 // ── Tiny CSS-selector engine for the fake DOM ──────────────────────────────────
 // routine-rx-button.js's selectors go beyond lab-file-button.js's simple
@@ -569,6 +580,62 @@ function makeSandbox(rootEl, pathname) {
     const root = buildRoot([panel]);
     const sb = makeSandbox(root, '/tasks/data/appointments/overview/abc-123');
     check(sb.findActionAnchor() === null, 'gate 1: non-prescription URL → null anchor');
+  }
+
+  {
+    const more = el('button', { text: 'More actions', label: 'MoreActionsNR' });
+    const routing = el('label', { text: 'Save & send to routine requests task list', label: 'RoutingRadioNR' });
+    const panel = el('div', { classes: ['rx-form'] });
+    panel.appendChild(more);
+    panel.appendChild(routing);
+    const root = buildRoot([panel]);
+    const sbData = makeSandbox(
+      root,
+      '/e38a9f/tasks/data/prescription_request_task_non_routine/overview/abc-123'
+    );
+    check(
+      sbData.findActionAnchor() === more.parentElement,
+      'gate 1: /tasks/data/ non-routine slug is a prescription overview'
+    );
+    const sbBare = makeSandbox(root, '/e38a9f/tasks/prescription_request_task_non_routine/overview/abc-123');
+    check(
+      sbBare.findActionAnchor() === more.parentElement,
+      'gate 1: /tasks/ non-routine overview (no /data/) still places the pill'
+    );
+    const sbHyphen = makeSandbox(root, '/e38a9f/tasks/prescription-request-task-non-routine/overview/abc-123');
+    check(
+      sbHyphen.findActionAnchor() === more.parentElement,
+      'gate 1: hyphenated non-routine overview slug is claimed'
+    );
+  }
+
+  {
+    const more = el('button', { text: 'More actions', label: 'MoreActionsAnd' });
+    const routing = el('label', { text: 'Save and send to routine requests task list', label: 'RoutingAnd' });
+    const panel = el('div', { classes: ['rx-form'] });
+    panel.appendChild(more);
+    panel.appendChild(routing);
+    const root = buildRoot([panel]);
+    const sb = makeSandbox(root, '/e38a9f/tasks/prescription_request_task_non_routine/overview/abc-123');
+    check(
+      sb.findRoutingControl() === routing,
+      'routing: "Save and send…" (and, not ampersand) is accepted'
+    );
+    check(sb.findActionAnchor() === more.parentElement, 'routing: and-spelling still places the pill');
+  }
+
+  {
+    const more = el('button', { text: 'More actions', label: 'MoreActionsShort' });
+    const routing = el('label', { text: 'Send to routine requests task list', label: 'RoutingShort' });
+    const panel = el('div', { classes: ['rx-form'] });
+    panel.appendChild(more);
+    panel.appendChild(routing);
+    const root = buildRoot([panel]);
+    const sb = makeSandbox(root, '/e38a9f/tasks/data/prescription_request_task_non_routine/overview/abc-123');
+    check(
+      sb.findRoutingControl() === routing,
+      'routing: short "Send to routine requests task list" is accepted'
+    );
   }
 
   {
@@ -1049,6 +1116,51 @@ function makeSandbox(rootEl, pathname) {
       TOASTS.some((t) => t.kind === 'err'),
       'exact-only commit: the macro aborts with an error toast instead'
     );
+  }
+
+  console.log('\n--- commit button: "Send to routine requests" (non-routine wording) ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const assign = el('input', { attrs: { 'aria-label': 'Assign to' }, label: 'AssignInput' });
+    const teamName = 'Prescribing / Meds Management';
+    const option = el('li', { attrs: { id: 'select-item-1', role: 'option' }, text: teamName, label: 'TeamOption' });
+    const commit = el('button', { text: 'Send to routine requests', label: 'CommitBtn', disabled: false });
+    const root = buildRoot([radio, assign, option, commit]);
+    const sb = makeSandbox(root, '/e38a9f/tasks/prescription_request_task_non_routine/overview/abc-123');
+    await sb.runMacro(teamName, 'auto');
+    check(CLICKS.indexOf('CommitBtn') !== -1, 'alt commit label: "Send to routine requests" is clicked');
+    check(
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg)),
+      'alt commit label: still reports the click (does not claim Sent)'
+    );
+  }
+
+  console.log('\n--- skip-team-pick: no Assign-to, enabled commit (non-routine inbox dest) ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const commit = el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false });
+    const root = buildRoot([radio, commit]);
+    const sb = makeSandbox(
+      root,
+      '/e38a9f/tasks/prescription_request_task_non_routine/overview/abc-123'
+    );
+    CONFIRM_RETURN = true;
+    await sb.runMacro('Prescribing / Meds Management', 'confirm');
+    check(CLICKS.indexOf('AssignInput') === -1, 'skip-team-pick: never invents an assignee');
+    check(CLICKS[0] === 'Radio', 'skip-team-pick: routing radio is clicked first');
+    check(CLICKS.indexOf('CommitBtn') !== -1, 'skip-team-pick: the already-enabled commit is clicked');
+    check(
+      TOASTS.some(
+        (t) =>
+          t.kind === 'confirm-prompt' && t.msg === 'Send this prescription to the routine requests list?'
+      ),
+      'skip-team-pick: confirm names the routine list, not a made-up team'
+    );
+    check(
+      TOASTS.some((t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg)),
+      'skip-team-pick: commit toast reports the click'
+    );
+    CONFIRM_RETURN = true;
   }
 
   // ═══════════════════════════════════════════════════════════════════════

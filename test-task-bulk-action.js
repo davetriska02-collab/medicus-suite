@@ -282,12 +282,38 @@ console.log('\n--- Widget persistence: Vue strip must re-inject, not be treated 
 {
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
   check(
-    src.includes('_onMatchingPage && !document.getElementById(widgetId)') ||
-      src.includes("_onMatchingPage && !document.getElementById(widgetId)"),
-    'a missing widget on a matching page is not classified as an own-write'
+    src.includes('_onMatchingPage && !liveWidget()'),
+    'a missing LIVE widget on a matching page is not classified as an own-write (clones do not count)'
   );
   check(/setInterval\(function \(\) \{[\s\S]*?scheduleCheck\(\);[\s\S]*?\}, 2000\)/.test(src), 'polls to re-inject if Vue stripped the panel');
   check(src.includes('document.body.insertBefore'), 'falls back to document.body if the grid is not mounted yet');
+}
+
+console.log('\n--- Widget clicks: document capture so Vue clones are not dead buttons ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.css'), 'utf8');
+  check(
+    src.includes("document.addEventListener('click', onDocWidgetClick, true)"),
+    'clicks bind on document capture (Vue clones drop per-node listeners)'
+  );
+  check(
+    src.includes("document.addEventListener('change', onDocWidgetChange, true)"),
+    'checkbox change binds on document capture'
+  );
+  check(/function sweepCloneWidgets\(/.test(src), 'sweepCloneWidgets drops Vue lookalikes that share the widget id');
+  check(/function runWidgetAction\(/.test(src), 'actions are dispatched from the delegated handler, not per-node bindEvents');
+  check(!/function bindEvents\(/.test(src), 'per-node bindEvents is gone — it is what Vue clones leave behind');
+  check(
+    src.includes('isNativeTickTarget') && /if \(isNativeTickTarget\(t\)\) return;/.test(src),
+    'checkbox / row-label clicks are not preventDefaulted (native tick must happen)'
+  );
+  check(
+    /el\.innerHTML = buildHtml\(\);/.test(src) && !/bindEvents\(el\)/.test(src) && !/bindEvents\(w\)/.test(src),
+    'render/inject do not re-attach per-node listeners after innerHTML'
+  );
+  check(/pointer-events:\s*auto/.test(css), 'widget CSS keeps pointer-events so the grid cannot eat clicks');
+  check(/z-index:\s*20/.test(css), 'widget CSS stacks above overlapping AG-Grid chrome');
 }
 
 console.log('\n--- Open panel stays in the viewport (Review/Confirm not below the fold) ---');

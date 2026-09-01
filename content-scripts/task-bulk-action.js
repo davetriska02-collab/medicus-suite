@@ -262,6 +262,10 @@
     // navigation resurrects stale rows/_step ('done' with zero fresh rows,
     // or a task list from the previous visit) on the next page entry.
     var _generation = 0;
+    // The node we created. Vue can snapshot the parent and leave a lookalike
+    // with the same id and no listeners — getElementById then returns the
+    // clone and clicks do nothing. Always prefer this reference.
+    var _widgetEl = null;
 
     function apiBaseUrl() {
       return 'https://' + _siteId + '.api.' + location.hostname;
@@ -634,8 +638,25 @@
       return header + body;
     }
 
-    function bindEvents(el) {
-      el.querySelector('#ms-tba-toggle-' + config.id).addEventListener('click', function () {
+    // Document-level capture, not per-node listeners. Vue's reconciler
+    // clones injected markup (same ids/classes, no addEventListener).
+    // Clicks then hit the clone and the Bulk button appears dead.
+    // Capture on document still sees those clicks. Do NOT preventDefault
+    // on checkboxes — the native tick must happen; we sync on `change`.
+    function isNativeTickTarget(t) {
+      if (!t) return false;
+      var tag = (t.tagName && String(t.tagName).toLowerCase()) || '';
+      if (tag === 'input') {
+        var type = t.type || (t.getAttribute && t.getAttribute('type')) || '';
+        if (type === 'checkbox') return true;
+      }
+      if (t.classList && t.classList.contains('ms-tba-checkbox')) return true;
+      if (t.closest && t.closest('label.ms-tba-row')) return true;
+      return false;
+    }
+
+    function runWidgetAction(action) {
+      if (action === 'toggle') {
         if (_open) {
           _open = false;
           render();
@@ -647,56 +668,116 @@
         } else {
           render();
         }
-      });
-      el.querySelector('#ms-tba-retry-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'retry') {
         load();
-      });
-      el.querySelectorAll('.ms-tba-checkbox[data-task-id]').forEach(function (cb) {
-        cb.addEventListener('change', function () {
-          var id = cb.getAttribute('data-task-id');
-          var r = _rows.find(function (x) {
-            return x.id === id;
-          });
-          if (r) r.checked = cb.checked;
-          render();
-        });
-      });
-      el.querySelector('#ms-tba-select-all-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'select-all') {
         _rows.forEach(function (r) {
           if (!r.acted) r.checked = true;
         });
         render();
-      });
-      el.querySelector('#ms-tba-select-none-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'select-none') {
         _rows.forEach(function (r) {
           r.checked = false;
         });
         render();
-      });
-      el.querySelector('#ms-tba-review-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'review') {
         if (!canSubmit(selectedCount(), _acting)) return;
         _step = 'confirm';
         render();
-      });
-      el.querySelector('#ms-tba-back-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'back') {
         _step = 'select';
         render();
-      });
-      el.querySelector('#ms-tba-confirm-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'confirm') {
         runAction();
-      });
-      el.querySelector('#ms-tba-refresh-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'refresh') {
         location.reload();
-      });
-      el.querySelector('#ms-tba-close-' + config.id)?.addEventListener('click', function () {
+        return;
+      }
+      if (action === 'close') {
         _step = 'select';
         _open = false;
         render();
+      }
+    }
+
+    function actionFromButtonId(id) {
+      if (!id) return null;
+      if (id === 'ms-tba-toggle-' + config.id) return 'toggle';
+      if (id === 'ms-tba-retry-' + config.id) return 'retry';
+      if (id === 'ms-tba-select-all-' + config.id) return 'select-all';
+      if (id === 'ms-tba-select-none-' + config.id) return 'select-none';
+      if (id === 'ms-tba-review-' + config.id) return 'review';
+      if (id === 'ms-tba-back-' + config.id) return 'back';
+      if (id === 'ms-tba-confirm-' + config.id) return 'confirm';
+      if (id === 'ms-tba-refresh-' + config.id) return 'refresh';
+      if (id === 'ms-tba-close-' + config.id) return 'close';
+      return null;
+    }
+
+    function onDocWidgetClick(e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      if (!t.closest('#' + widgetId)) return;
+      if (isNativeTickTarget(t)) return;
+      var btn = t.closest('button');
+      if (!btn) return;
+      if (btn.disabled) return;
+      if (btn.getAttribute && btn.getAttribute('disabled') !== null) return;
+      var action = actionFromButtonId(btn.id);
+      if (!action) return;
+      e.preventDefault();
+      e.stopPropagation();
+      runWidgetAction(action);
+    }
+
+    function onDocWidgetChange(e) {
+      var t = e.target;
+      if (!t || !t.closest || !t.closest('#' + widgetId)) return;
+      if (!(t.classList && t.classList.contains('ms-tba-checkbox'))) return;
+      var id = t.getAttribute('data-task-id');
+      if (!id) return;
+      var r = _rows.find(function (x) {
+        return x.id === id;
       });
+      if (r) r.checked = !!t.checked;
+      render();
+    }
+
+    function liveWidget() {
+      if (_widgetEl && document.contains(_widgetEl)) return _widgetEl;
+      return null;
+    }
+
+    function sweepCloneWidgets() {
+      var nodes = document.querySelectorAll('.ms-tba-widget');
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.id === widgetId && n !== _widgetEl && n.parentElement) {
+          try {
+            n.parentElement.removeChild(n);
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      }
     }
 
     function capOpenPanel() {
-      var el = document.getElementById(widgetId);
+      var el = liveWidget() || document.getElementById(widgetId);
       if (!el) return;
       var body = el.querySelector('.ms-tba-body');
       if (!body) return;
@@ -712,10 +793,10 @@
     }
 
     function render() {
-      var el = document.getElementById(widgetId);
+      var el = liveWidget() || document.getElementById(widgetId);
       if (!el) return;
+      if (!_widgetEl) _widgetEl = el;
       el.innerHTML = buildHtml();
-      bindEvents(el);
       requestAnimationFrame(capOpenPanel);
     }
 
@@ -732,34 +813,58 @@
     }
 
     function injectTrigger() {
-      var existing = document.getElementById(widgetId);
       var anchor = findGridAnchor();
-      if (existing) {
-        if (anchor && anchor.parentElement && existing.parentElement !== anchor.parentElement) {
-          anchor.parentElement.insertBefore(existing, anchor);
+      sweepCloneWidgets();
+      var existing = document.getElementById(widgetId);
+      if (existing && existing !== _widgetEl) {
+        if (_widgetEl && document.contains(_widgetEl)) {
+          try {
+            if (existing.parentElement) existing.parentElement.removeChild(existing);
+          } catch (e) {
+            /* ignore */
+          }
+        } else {
+          // Our node was unmounted; adopt the surviving lookalike so we
+          // do not leave a hollow duplicate. Clicks are delegated.
+          _widgetEl = existing;
         }
-        return;
+      } else if (existing && !_widgetEl) {
+        _widgetEl = existing;
       }
-      var w = document.createElement('div');
-      w.id = widgetId;
-      w.className = 'ms-tba-widget';
-      w.innerHTML = buildHtml();
-      if (anchor && anchor.parentElement) {
-        anchor.parentElement.insertBefore(w, anchor);
-      } else if (document.body) {
+
+      if (!_widgetEl) {
+        var w = document.createElement('div');
+        w.id = widgetId;
+        w.className = 'ms-tba-widget';
+        w.innerHTML = buildHtml();
+        _widgetEl = w;
+      }
+
+      var parent = (anchor && anchor.parentElement) || document.body;
+      if (!parent) return;
+      if (anchor && _widgetEl.parentElement !== parent) {
+        parent.insertBefore(_widgetEl, anchor);
+      } else if (!anchor && _widgetEl.parentElement !== document.body) {
         // Same lesson as document-codes-to-problems: a Vue-managed parent
         // can unmount an inline node. Body is a backstop until the grid
         // exists; checkPage re-runs and will re-home above the grid.
-        document.body.insertBefore(w, document.body.firstChild);
-      } else {
-        return;
+        document.body.insertBefore(_widgetEl, document.body.firstChild);
       }
-      bindEvents(w);
     }
 
     function removeWidget() {
-      var el = document.getElementById(widgetId);
-      if (el) el.remove();
+      sweepCloneWidgets();
+      if (_widgetEl && _widgetEl.parentElement) {
+        try {
+          _widgetEl.parentElement.removeChild(_widgetEl);
+        } catch (e) {
+          /* ignore */
+        }
+      } else {
+        var el = document.getElementById(widgetId);
+        if (el) el.remove();
+      }
+      _widgetEl = null;
       _generation++; // invalidate any in-flight load()/runAction() completions
       _open = false;
       _step = 'select';
@@ -788,7 +893,9 @@
     function isOwnMutation(mutations) {
       // Vue stripping this widget is NOT an own-write — skip-scheduling
       // here is how "Bulk acknowledge?" vanished and never came back.
-      if (_onMatchingPage && !document.getElementById(widgetId)) return false;
+      // liveWidget() (not getElementById): a Vue clone can keep the same
+      // id while our real node is gone.
+      if (_onMatchingPage && !liveWidget()) return false;
       for (var i = 0; i < mutations.length; i++) {
         var m = mutations[i];
         if (m.target && m.target.nodeType === 1 && m.target.closest && m.target.closest('#' + widgetId)) continue;
@@ -829,6 +936,9 @@
       });
       _obs.observe(document.body, { childList: true, subtree: true });
     }
+
+    document.addEventListener('click', onDocWidgetClick, true);
+    document.addEventListener('change', onDocWidgetChange, true);
 
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) scheduleCheck();
