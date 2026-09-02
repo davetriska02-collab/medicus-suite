@@ -3401,6 +3401,14 @@
       var payload = buildEditProblemPayload(st.prefill, newCode);
       await postEditProblem(problemId, payload);
       st.saved = true;
+      // Captured BEFORE st.conceptId is overwritten below — recordPreferenceChoices'
+      // remap axis needs the concept the problem was coded as BEFORE this save.
+      // (Bug fixed 2026-08-26: this used to read st.conceptId AFTER the
+      // overwrite two lines down, so it was always identical to
+      // newCode.conceptId and the "sourceConceptId !== chosen.conceptId"
+      // check inside recordPreferenceChoices could never be true — concept
+      // remaps were silently never recorded, only the wording tally was.)
+      var sourceConceptId = st.conceptId;
       // Reflect the newly-applied code on st itself (2026-08-13) — until
       // now nothing here did this, only st.anchorEl.textContent/onApplied
       // got the new description, because nothing downstream ever needed
@@ -3415,7 +3423,7 @@
       st.currentDescriptionId = chosen.descriptionId;
       // Learn from this choice — see recordPreferenceChoices' own comment
       // for why this is fire-and-forget and never awaited/surfaced.
-      recordPreferenceChoices(st.conceptId, newCode).catch(function (e) {
+      recordPreferenceChoices(sourceConceptId, newCode).catch(function (e) {
         console.warn('[Clean up code] failed to record description preference:', e && e.message);
       });
       // Optimistic in-place update — the save is confirmed correct

@@ -179,10 +179,19 @@
   // the display sort order.
   var ONSET_MONTH_ONLY_RE = /^([A-Za-z]{3}) (\d{4})$/;
 
+  // A YEAR-ONLY onset date — no month, no day (e.g. "2012") — is a further,
+  // even less specific shape Medicus stores; same family as the month-only
+  // case above but confirmed live separately (2026-08-27, Nick: a "since
+  // 2012" prostate-cancer problem sorted as the OLDEST entry in the canvas).
+  // See problem-nesting-canvas.js's own dateSortKey for the full story —
+  // same fix, duplicated here for predatesParent's chronology check.
+  var ONSET_YEAR_ONLY_RE = /^(\d{4})$/;
+
   // Parses the confirmed "DD Mon YYYY" onset-date display shape, an
-  // already-ISO "YYYY-MM-DD" shape (recordDate), OR a partial "Mon YYYY"
-  // onset date into a zero-padded, lexically comparable key. Returns null
-  // for missing/malformed input — never guesses a day that wasn't given.
+  // already-ISO "YYYY-MM-DD" shape (recordDate), a partial "Mon YYYY" onset
+  // date, OR a bare "YYYY" onset date into a zero-padded, lexically
+  // comparable key. Returns null for missing/malformed input — never
+  // guesses a month or day that wasn't given.
   // Same regex/table as problem-nesting-canvas.js's own dateSortKey and
   // allergy-cleanup.js's normalizeOnsetDateForSubmit — duplicated, not
   // shared, the same way each content script already carries its own copy
@@ -208,6 +217,10 @@
       if (!monthOnly) return null;
       return mo[2] + '-' + monthOnly;
     }
+    // Same prefix logic one level up — see problem-nesting-canvas.js's own
+    // dateSortKey for why a bare 'YYYY' key already sorts correctly.
+    var yr = ONSET_YEAR_ONLY_RE.exec(s);
+    if (yr) return yr[1];
     return null;
   }
 

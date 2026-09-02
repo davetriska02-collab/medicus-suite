@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.256.1] — 2026-09-02
+
+### Clean up code: concept-remap preference recording fixed
+
+The practice-level preference tally recorded a code replacement's WORDING
+(`pdc.preferredDescriptions`) correctly but silently never recorded the
+CONCEPT REMAP (`pdc.conceptRemap`) — `applyCode` read the "source" concept
+after it had already been overwritten with the newly-applied one, so the
+remap axis's own change-detection could never be true. Fixed by capturing
+the pre-save concept before the overwrite. Found via a real recode
+("[D]Nocturnal seizure" → "Nocturnal epileptic seizures") that showed up
+under preferred wording but not code remapping. Applies equally to codes
+replaced from the "Organise problems" canvas, which reuses the same save
+path.
+
+### Problem nesting: year-only onset dates no longer sort as undated
+
+A bare-year onset date ("2012", no month or day — a real shape for older
+imported records) fell through every date pattern the canvas and the
+problem-nesting chronology check recognised, so it sorted as fully
+undated — landing at the very bottom of the canvas as if it were the
+oldest problem on the record, regardless of how recent it actually was.
+Same failure family as the month-only partial-date fix (v3.243, "Dec
+2008"), one level less specific and not covered by it. A bare year now
+sorts correctly within its own year via the same string-prefix technique
+already used for month-only dates.
+
+### Problem nesting overrides: seizure/epilepsy pairs
+
+Added two practice-suggested parent/child pairs to
+`rules/problem-nesting-overrides.json`: "Nocturnal epileptic seizures"
+and "Seizure" now offer to nest under "Epilepsy" in the Organise Problems
+canvas, alongside the existing cataract-family entries.
+
 ## [v3.256.0] — 2026-08-31
 
 ### Prescription allocation canvas

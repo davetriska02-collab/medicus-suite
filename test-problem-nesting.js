@@ -331,6 +331,30 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
     pairSet.has('53889007|193570009'),
     'nuclear cataract (53889007) as a child of cataract (193570009) is still in the shipped file'
   );
+  // 2026-08-26: practice-requested seizure/epilepsy pairs (Nick) — added
+  // while separately testing a problem-description-cleanup fix.
+  check(
+    pairSet.has('1366066004|84757009'),
+    'nocturnal epileptic seizures (1366066004) as a child of epilepsy (84757009) is in the shipped file'
+  );
+  check(
+    pairSet.has('91175000|84757009'),
+    'seizure (91175000) as a child of epilepsy (84757009) is in the shipped file'
+  );
+  // 2026-08-28: practice-requested diabetic-complication pairs (Nick) — all
+  // three verified live against the public NHS termbrowser API this session.
+  check(
+    pairSet.has('390834004|44054006'),
+    'background diabetic retinopathy (390834004) as a child of Type 2 diabetes mellitus (44054006) is in the shipped file'
+  );
+  check(
+    pairSet.has('127014009|44054006'),
+    'diabetic peripheral angiopathy (127014009) as a child of Type 2 diabetes mellitus (44054006) is in the shipped file'
+  );
+  check(
+    pairSet.has('230572002|44054006'),
+    'diabetic neuropathy (230572002) as a child of Type 2 diabetes mellitus (44054006) is in the shipped file'
+  );
   overrides.pairs.forEach((p) => {
     check(
       typeof p.childConceptId === 'string' && typeof p.parentConceptId === 'string',
@@ -356,10 +380,13 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
   // return null, which silently defeated predatesParent's chronology check
   // for that problem, not just its display sort order.
   check(dateSortKey('Dec 2008') === '2008-12', 'partial "Mon YYYY" onset date parses to a YYYY-MM key, not null');
-  check(
-    dateSortKey('2008') === null,
-    'a bare year with no month is NOT treated as a partial date — never seen live, not guessed at'
-  );
+  // The real bug Nick found live 2026-08-27: a YEAR-ONLY onset date (a
+  // "since 2012" prostate-cancer problem, additionalInformation confirming
+  // it, no month recorded at all) sorted as fully undated — the SAME
+  // failure mode the 2026-08-20 month-only fix addressed, one level less
+  // specific, and not covered by that fix.
+  check(dateSortKey('2012') === '2012', 'a bare year with no month parses to a YYYY key, not null');
+  check(dateSortKey('12345') === null, 'a 5-digit string is not a bare year — never guessed at');
 
   check(
     predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '1 Jan 2020' }) === true,
@@ -368,6 +395,14 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
   check(
     predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: 'Dec 2008' }) === true,
     'a partial-dated parent is also handled — the earlier full-dated child still predates it'
+  );
+  check(
+    predatesParent({ onsetDate: '2012' }, { onsetDate: '1 Jan 2020' }) === true,
+    'a year-only-dated child correctly predates a later full-dated parent'
+  );
+  check(
+    predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: '2012' }) === true,
+    'a year-only-dated parent is also handled — the earlier full-dated child still predates it'
   );
 
   check(

@@ -94,10 +94,12 @@ console.log('--- dateSortKey: "DD Mon YYYY" (onsetDate) AND ISO "YYYY-MM-DD" (re
     dateSortKey('Foo 2020') === null,
     'unrecognised month abbreviation on a partial date -> null, same as a full date'
   );
-  check(
-    dateSortKey('2008') === null,
-    'a bare year with no month is NOT treated as a partial date — never seen live, not guessed at'
-  );
+  // The real bug Nick found live 2026-08-27: a YEAR-ONLY onset date (a
+  // "since 2012" prostate-cancer problem) sorted as the OLDEST entry in the
+  // canvas — older than problems from the 1990s. Same failure mode as the
+  // month-only fix above, one level less specific, not covered by that fix.
+  check(dateSortKey('2012') === '2012', 'a bare year with no month parses to a YYYY key, not null');
+  check(dateSortKey('12345') === null, 'a 5-digit string is not a bare year — never guessed at');
 }
 
 console.log('--- compareDatesDesc: descending, undated always last ---');
@@ -132,6 +134,23 @@ console.log('--- compareDatesDesc: descending, undated always last ---');
   check(
     compareDatesDesc('Dec 2008', '15 Dec 2008') > 0,
     'a partial date sorts fractionally after a specifically-dated entry in the SAME month (least-specific-first within a tie)'
+  );
+  // The year-only fix, 2026-08-27: a bare "YYYY" entry must sort within its
+  // correct year — nowhere near the true undated position, and this is the
+  // real live case: a 2012 problem was landing below 1990s-dated ones.
+  check(compareDatesDesc('2012', null) < 0, 'a year-only date still sorts before a genuinely undated entry');
+  check(compareDatesDesc('2012', '1 Jan 1990') < 0, 'a year-only date correctly sorts before an older FULL date');
+  check(
+    compareDatesDesc('1 Jan 2020', '2012') < 0,
+    'a newer full date correctly sorts before an older year-only date'
+  );
+  check(
+    compareDatesDesc('2012', '15 Jun 2012') > 0,
+    'a year-only date sorts fractionally after a specifically-dated entry in the SAME year (least-specific-first within a tie)'
+  );
+  check(
+    compareDatesDesc('2012', 'Jun 2012') > 0,
+    'a year-only date sorts fractionally after a month-only entry in the SAME year — least specific sorts latest'
   );
 }
 
