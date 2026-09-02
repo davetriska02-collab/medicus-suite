@@ -45,6 +45,8 @@ const {
   findLegacyReadCodeOrigin,
   extractGp2gpOnsetDateCandidate,
   buildGp2gpOnsetPayload,
+  extractRecordDateOnsetCandidate,
+  isoDateToUkDisplay,
   descendantSearchTargetConceptId,
   stripGenericAdditionalInfoLines,
   literalTextsFromEntries,
@@ -1396,6 +1398,31 @@ console.log('--- buildGp2gpOnsetPayload: the live 500 fix (HAR 73-api500-setting
     buildGp2gpOnsetPayload(null, gp2gpCode, '1995-11-25').recordDate === '1995-11-25',
     'a null prefill is treated the same as recordDate == null — backfills rather than throwing'
   );
+}
+
+console.log(
+  '--- extractRecordDateOnsetCandidate / isoDateToUkDisplay: the far more common "onset blank, record present" case (2026-09-02) ---'
+);
+{
+  // The real live case that motivated this: "[D]Nocturnal seizure"-family
+  // patient, onsetDate null, recordDate a perfectly ordinary "2022-01-18" —
+  // NOT evidence of any GP2GP import, just a normal missing onset date.
+  check(
+    extractRecordDateOnsetCandidate({ onsetDate: null, recordDate: '2022-01-18' }) === '2022-01-18',
+    'a real recordDate is extracted as-is — the live case this adds coverage for'
+  );
+  check(
+    extractRecordDateOnsetCandidate({ recordDate: '2022-01-18T00:00:00' }) === null,
+    'a datetime (not date-only) shape -> null, never guessed at — unlike the GP2GP field, recordDate is confirmed date-only'
+  );
+  check(extractRecordDateOnsetCandidate({ recordDate: null }) === null, 'null recordDate -> null');
+  check(extractRecordDateOnsetCandidate({}) === null, 'no recordDate field at all -> null');
+  check(extractRecordDateOnsetCandidate(null) === null, 'null prefill -> null, never throws');
+
+  check(isoDateToUkDisplay('2022-01-18') === '18-01-2022', 'ISO date reformatted to UK DD-MM-YYYY for display');
+  check(isoDateToUkDisplay('2012-01-01') === '01-01-2012', 'single-digit-looking day/month still zero-padded correctly (already padded in the ISO source)');
+  check(isoDateToUkDisplay('garbage') === 'garbage', 'unrecognised shape is returned unchanged, not mangled');
+  check(isoDateToUkDisplay(null) === '', 'null -> empty string, never throws');
 }
 
 console.log(

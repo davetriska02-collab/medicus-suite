@@ -36,6 +36,21 @@ Added two practice-suggested parent/child pairs to
 and "Seizure" now offer to nest under "Epilepsy" in the Organise Problems
 canvas, alongside the existing cataract-family entries.
 
+### Clean up code: onset-date-gap message no longer presumes GP2GP import
+
+The "no onset date" suggestion offered the original system's creation
+date and framed every missing onset date as "This looks like a
+GP2GP-transferred record" — but the gating never actually required record
+date to be blank too, so this framing was showing on ordinary problems
+that simply have a record date and no onset date (the overwhelmingly
+common case: different systems just split "when this was first noted"
+across different fields). That common case now gets its own message,
+"This problem has a record date of DD-MM-YYYY, but no onset date. If you
+wish to add an onset date you can do so below," offering the record date
+itself with no claim about how the gap arose. The original
+GP2GP-transferred message is kept, now correctly restricted to its true
+motivating case — onset date AND record date both genuinely blank.
+
 ## [v3.256.0] — 2026-08-31
 
 ### Prescription allocation canvas

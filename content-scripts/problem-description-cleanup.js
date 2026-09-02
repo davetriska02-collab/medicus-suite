@@ -568,9 +568,15 @@
   // HH:MM:SS" shape, never guesses at an unconfirmed format. This is
   // presented to the clinician as a SUGGESTION to confirm, not applied
   // automatically — it's when the problem was first recorded in the
-  // original system, not a clinically-verified true onset date, and the
-  // caller (openPanel) only offers it at all when onsetDate is genuinely
-  // blank.
+  // original system, not a clinically-verified true onset date.
+  // GATING FIXED 2026-09-02: the caller (openPanel) only ever checked
+  // onsetDate was blank, never recordDate — so this "GP2GP-transferred"
+  // framing was firing on plenty of perfectly normal problems that simply
+  // have a recordDate but no onsetDate (the overwhelmingly common case, not
+  // evidence of any import). Now only offered for the true motivating case:
+  // BOTH onsetDate and recordDate genuinely blank on Medicus's own side —
+  // see extractRecordDateOnsetCandidate below for the (now separate) common
+  // case.
   var GP2GP_ORIGINAL_DATETIME_RE = /^(\d{4}-\d{2}-\d{2})[ T]\d{2}:\d{2}:\d{2}/;
   function extractGp2gpOnsetDateCandidate(overview) {
     var raw = overview && overview.createdInOriginalSystemDateTime;
@@ -595,6 +601,35 @@
     var payload = buildEditProblemPayload(prefill, code, undefined, isoDate);
     if (!prefill || prefill.recordDate == null) payload.recordDate = isoDate;
     return payload;
+  }
+
+  // RECORD-DATE ONSET-DATE GAP (2026-09-02 request) — the far more common
+  // case than the GP2GP one above: onsetDate is blank but recordDate is
+  // perfectly ordinary. This is NOT evidence of any particular import
+  // pathway — different systems just split "when this was first noted"
+  // across different fields (onset vs record vs created), so unlike the
+  // GP2GP suggestion this makes no claim about provenance, just states the
+  // recordDate that's already on the problem and offers it as a starting
+  // point for a clinician who wants one. Mutually exclusive with the GP2GP
+  // suggestion above by construction (that one now requires recordDate to
+  // ALSO be blank) — a problem only ever offers one of the two. Returns
+  // null for anything that doesn't match the confirmed "YYYY-MM-DD" shape
+  // recordDate comes back in, never guesses at an unconfirmed format.
+  var RECORD_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function extractRecordDateOnsetCandidate(prefill) {
+    var raw = prefill && prefill.recordDate;
+    if (typeof raw !== 'string') return null;
+    return RECORD_DATE_RE.test(raw.trim()) ? raw.trim() : null;
+  }
+
+  // Display-only reformat of the confirmed ISO 'YYYY-MM-DD' recordDate
+  // shape into UK 'DD-MM-YYYY' for the suggestion copy below — the ISO form
+  // is still what's sent back to Medicus (applyRecordDateOnsetDate uses the
+  // raw isoDate, never this). Returns the input unchanged if it isn't the
+  // expected shape, rather than showing a mangled string.
+  function isoDateToUkDisplay(iso) {
+    var m = RECORD_DATE_RE.exec(String(iso || ''));
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : String(iso || '');
   }
 
   // Which conceptId the descendant/laterality search should target (2026-07-29
@@ -946,6 +981,8 @@
       findLegacyReadCodeOrigin,
       extractGp2gpOnsetDateCandidate,
       buildGp2gpOnsetPayload,
+      extractRecordDateOnsetCandidate,
+      isoDateToUkDisplay,
       descendantSearchTargetConceptId,
       stripGenericAdditionalInfoLines,
       literalTextsFromEntries,
@@ -1424,6 +1461,8 @@
         legacyReadCode: null, // {code, description} — set by the opt-in scan when originalCodes shows a read-v2 origin
         gp2gpOnsetSuggestion: undefined, // {isoDate} | null | undefined — undefined = not yet checked this open, null = checked and nothing to offer, object = a real suggestion. See extractGp2gpOnsetDateCandidate's own header.
         gp2gpOnsetSaving: false,
+        recordDateOnsetSuggestion: undefined, // {isoDate} | null | undefined — same shape/lifecycle as gp2gpOnsetSuggestion above, mutually exclusive with it. See extractRecordDateOnsetCandidate's own header.
+        recordDateOnsetSaving: false,
         journalMatches: null, // [{entryId, encounterId, date, clinicalCodeDescription, tier}] — set by openPanel's best-effort journal duplicate check (shared/journal-problem-matching.js). null = not yet checked or the check failed; [] = checked, none found.
         journalApply: {}, // entryId -> {saving, saved, error, appliedDescription, prevCode, undoing, undone, restoredDescription} — per-journal-match write state (applyToJournal) plus its one-click revert (undoJournalCodeSync; prevCode is the pre-sync noteSNOMEDct captured from the write's own prefill). Nested by entryId, unlike every other flag on this row, because one problem can have several journal matches, each an independent write target.
         journalInfoApply: {}, // entryId -> {saving, saved, error, appliedText, prevNote, undoing, undone} — SEPARATE per-journal-match state for the "remove generic import text" sync (applyGenericAdditionalInfoToJournal) plus its revert (undoJournalTextSync; prevNote is the pre-strip note text, '' allowed), kept apart from journalApply so a code-sync and a text-sync on the same entry don't conflate their saved/error state.
@@ -1671,6 +1710,29 @@
       (st.gp2gpOnsetSaving ? ' disabled' : '') +
       '>' +
       (st.gp2gpOnsetSaving ? 'Setting…' : 'Set as onset date') +
+      '</button>' +
+      '</div>'
+    );
+  }
+
+  // RECORD-DATE ONSET-DATE GAP (2026-09-02 request) — see
+  // extractRecordDateOnsetCandidate's own header for the full story. Unlike
+  // gp2gpOnsetSuggestionHtml above, makes no claim about HOW this problem
+  // came to have no onset date — just states the recordDate that's already
+  // there and offers it as a starting point.
+  function recordDateOnsetSuggestionHtml(problemId, st) {
+    if (!st.recordDateOnsetSuggestion) return '';
+    return (
+      '<div class="ms-pdc-recorddate-onset-section">' +
+      '<span class="ms-pdc-recorddate-onset-label">This problem has a record date of ' +
+      esc(isoDateToUkDisplay(st.recordDateOnsetSuggestion.isoDate)) +
+      ', but no onset date. If you wish to add an onset date you can do so below.</span>' +
+      '<button type="button" class="ms-pdc-recorddate-onset-btn" data-problem-id="' +
+      esc(problemId) +
+      '"' +
+      (st.recordDateOnsetSaving ? ' disabled' : '') +
+      '>' +
+      (st.recordDateOnsetSaving ? 'Setting…' : 'Set as onset date') +
       '</button>' +
       '</div>'
     );
@@ -2440,6 +2502,7 @@
       linkSuggestionHtml(problemId, st) +
       genericAdditionalInfoHtml(problemId, st) +
       gp2gpOnsetSuggestionHtml(problemId, st) +
+      recordDateOnsetSuggestionHtml(problemId, st) +
       retiredInfoHtml(problemId, st) +
       legacyReadCodeHtml(st) +
       journalMatchesHtml(problemId, st);
@@ -2622,6 +2685,11 @@
         applyGp2gpOnsetDate(problemId);
       });
     });
+    root.querySelectorAll('.ms-pdc-recorddate-onset-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        applyRecordDateOnsetDate(problemId);
+      });
+    });
     root.querySelectorAll('.ms-pdc-nesting-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         armOrCommitNesting(problemId, btn.getAttribute('data-nesting-kind'), btn.getAttribute('data-target-id'));
@@ -2717,6 +2785,16 @@
       st.currentDescription = code.description;
       st.currentDescriptionId = code.descriptionId; // needed to build a correct noteSNOMEDct for applyToJournal — not used by any existing apply path, which only ever needs conceptId/description
       st.additionalInformation = prefill.additionalInformation || '';
+      // Needs only prefill (already in hand) — unlike the GP2GP suggestion
+      // below, no extra overview fetch is required, so this is computed
+      // synchronously here rather than deferred into the opt-in scan block.
+      st.recordDateOnsetSuggestion =
+        prefill.onsetDate == null
+          ? (function () {
+              var candidate = extractRecordDateOnsetCandidate(prefill);
+              return candidate ? { isoDate: candidate } : null;
+            })()
+          : null;
       // Deliberately NOT awaited: the linked/nested lookup costs a network
       // round-trip (getLinkedProblemIds) that is independent of everything
       // below — its result only feeds nestingInfoHtml. Blocking here delayed
@@ -2951,7 +3029,12 @@
           }
           if (st.gp2gpOnsetSuggestion === undefined) {
             st.gp2gpOnsetSuggestion = null;
-            if (prefill.onsetDate == null) {
+            // recordDate == null too, not just onsetDate — see this
+            // suggestion's own header (2026-09-02 gating fix): the far more
+            // common "onset blank, record present" case is now handled by
+            // recordDateOnsetSuggestion above instead, which makes no claim
+            // about provenance.
+            if (prefill.onsetDate == null && prefill.recordDate == null) {
               var gp2gpDate = extractGp2gpOnsetDateCandidate(retireOverview);
               if (gp2gpDate) st.gp2gpOnsetSuggestion = { isoDate: gp2gpDate };
             }
@@ -3963,6 +4046,38 @@
       st.error = (err && err.message) || 'Failed to set the onset date — please try again.';
     } finally {
       st.gp2gpOnsetSaving = false;
+      renderPanel(problemId);
+    }
+  }
+
+  // Confirm-and-write for the record-date-onset-date suggestion above —
+  // same narrowed-problemCode discipline as applyGp2gpOnsetDate just above,
+  // but uses buildEditProblemPayload directly rather than
+  // buildGp2gpOnsetPayload: recordDate is guaranteed non-null here (that's
+  // the trigger condition for this suggestion existing at all), so the
+  // null-recordDate 500 that function backfills against can't occur.
+  async function applyRecordDateOnsetDate(problemId) {
+    var st = rowState(problemId);
+    if (!st.recordDateOnsetSuggestion || st.recordDateOnsetSaving || !st.prefill) return;
+    var codeValue = st.prefill.problemCode && st.prefill.problemCode.value;
+    if (!codeValue) return;
+    var code = {
+      description: codeValue.description,
+      conceptId: codeValue.conceptId,
+      descriptionId: codeValue.descriptionId,
+    };
+    var isoDate = st.recordDateOnsetSuggestion.isoDate;
+    st.recordDateOnsetSaving = true;
+    renderPanel(problemId);
+    try {
+      var payload = buildEditProblemPayload(st.prefill, code, undefined, isoDate);
+      await postEditProblem(problemId, payload);
+      st.prefill = Object.assign({}, st.prefill, { onsetDate: isoDate });
+      st.recordDateOnsetSuggestion = null;
+    } catch (err) {
+      st.error = (err && err.message) || 'Failed to set the onset date — please try again.';
+    } finally {
+      st.recordDateOnsetSaving = false;
       renderPanel(problemId);
     }
   }
