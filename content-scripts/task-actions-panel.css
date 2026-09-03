@@ -672,18 +672,31 @@
 
 /* Patient-record section (triage tasks only) — future appointments + unused
    booking links. Read-only, so no button/warn styling of its own beyond the
-   shared section-body layout above. */
-#ms-tap-widget .ms-tap-rec-group + .ms-tap-rec-group {
-  margin-top: 12px;
-}
-
+   shared section-body layout above. Inter-group spacing comes from the
+   parent .ms-tap-section-body's own flex gap (10px) — no extra margin here,
+   that doubled it up to 22px and read as too spaced out. */
 #ms-tap-widget .ms-tap-rec-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   font-weight: 700;
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 6px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+}
+
+#ms-tap-widget .ms-tap-rec-heading:hover {
+  color: var(--text-2);
+}
+
+#ms-tap-widget .ms-tap-rec-heading:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 #ms-tap-widget .ms-tap-rec-list {
@@ -702,6 +715,36 @@
   border: 1px solid #e5e7eb;
   border-radius: 5px;
   background: #fafbfc;
+}
+
+/* Booking links / open tasks — single-line lozenge, same card shape as a
+   What's due item, deliberately uncoloured (no dot, no left-rail) since
+   neither list carries a real severity signal the way due items do. */
+#ms-tap-widget .ms-tap-rec-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+#ms-tap-widget .ms-tap-rec-pill-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#ms-tap-widget .ms-tap-rec-pill-reason {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--text-3);
 }
 
 #ms-tap-widget .ms-tap-rec-row-top {
@@ -752,6 +795,11 @@
   color: #92400e;
 }
 
+#ms-tap-widget .ms-tap-rec-status-overdue {
+  background: var(--red-dim);
+  color: var(--red);
+}
+
 #ms-tap-widget .ms-tap-rec-row-detail {
   margin-top: 2px;
   font-size: 12px;
@@ -763,6 +811,12 @@
   font-size: 12px;
   font-style: italic;
   color: #666;
+}
+
+#ms-tap-widget .ms-tap-rec-caption {
+  font-size: 11px;
+  color: var(--text-4);
+  margin-bottom: 6px;
 }
 
 #ms-tap-widget .ms-tap-rec-empty {

@@ -2,6 +2,34 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.257.0] — 2026-09-03
+
+### Companion: Open appts, links, tasks & investigations
+
+The Companion's appointments/booking-links section — previously triage-task
+only — now also runs on care-record pages, and gains two new lists.
+
+**Open tasks** shows the patient's other incomplete or snoozed ("scheduled
+for later") tasks, sourced from Medicus's own per-patient task list;
+completed and discarded tasks are excluded server-side. The task currently
+being viewed is excluded from its own list. Overdue tasks carry a red
+"Overdue" tag.
+
+**Outstanding investigations** (added last release, unreleased until now)
+lists investigation requests with no result back yet, sourced from the
+patient journal. The UI now says explicitly that this means "no result
+back yet", not confirmation the request reached the lab — no such
+distinguishing signal exists anywhere in Medicus's data model.
+
+Each of the four lists (future appointments, unused booking links, open
+tasks, outstanding investigations) now collapses independently via its own
+chevron, same as the top-level What's due / Desk / Slots sections. Booking
+links and open tasks were redesigned as single-line lozenges matching
+What's due's card shape (uncoloured — neither list carries a real severity
+signal); type name now shows before the date, and a Medicus data bug is
+fixed where procedure-type booking links displayed a literal "-" instead
+of falling back to a generic label.
+
 ## [v3.256.0] — 2026-08-31
 
 ### Prescription allocation canvas

@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.256.0
-**Generated:** 2026-08-31
+**Version:** v3.257.0
+**Generated:** 2026-09-03
 
 ## What it is
 
@@ -98,7 +98,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who requested them, with clinician fields to drag reports onto; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
 - **Workflow allocation canvas** — the same workbench on inbound-document queues and any task-list with a workflow view, grouped by registered GP; confirming writes the same bulk-reassign (it does not file the document)
 - **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only) and Distribute equally (rebalances sitting plus new work) among doctors working today; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
-- **Companion (inline booking, tasks, and monitoring)** — a floating role-toggled box (Clinic / Reception / Triage / Nursing) on patient and task pages carrying appointment-booking and create-task panels plus a read-only "What's due" pocket of Sentinel chips for the page's patient. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab
+- **Companion (inline booking, tasks, and monitoring)** — a floating role-toggled box (Clinic / Reception / Triage / Nursing) on patient and task pages carrying appointment-booking and create-task panels plus a read-only "What's due" pocket of Sentinel chips for the page's patient. For Clinic, an "Open appts, links, tasks & investigations" section (also on care-record pages, not just triage tasks) lists future appointments, unused booking links, the patient's other open tasks (incomplete or scheduled for later; the task currently being viewed is excluded), and outstanding investigation requests (no result back yet — not confirmation the request reached the lab); each list collapses independently. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document, and a checklist that turns a document's coded journal entries into new Problems
 - **Reception quick-actions composer** — chip rows above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit
 - **Clean up code** — flags outdated or retired SNOMED problem-list codes, suggests a cleaner code or description, and can sync it into a matching consultation-note entry, with one-click undo
@@ -140,6 +140,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.257.0 (3 Sep)** — Companion: appointments/booking-links/investigations section extended to care-record pages (not just triage tasks), plus a new open-tasks list and collapsible sub-lists
 - **v3.256.0 (31 Aug)** — Prescription-request canvas on routine and non-routine queues, with Split equally / Top up / Distribute equally among doctors working today
 - **v3.255.0 (31 Aug)** — Pruned Follow-ups, Visualiser, About, Condor, CQC Inspection Readiness and Practice Report; Settings collapsed into Queue rules and Diagnostics
 - **v3.254.0 (30 Aug)** — Note: optional YouTube playlist on a public TV (off by default; sanitised id only; fail-loud hides the player)

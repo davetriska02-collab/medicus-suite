@@ -1378,6 +1378,23 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Residual risk**               | 4 — Acceptable (ALARP) |
 | **Acceptability**               | **Proposed — pending CSO sign-off** on the release PR. Residual depends on the clinician reading the named confirm list against the Medicus queue before Write. |
 
+### H-069 — Companion outstanding-investigations / open-tasks list misread as more certain than the underlying Medicus data supports
+
+| Field                           | Value |
+| -------------------------------- | ----- |
+| **Hazard ID**                   | H-069 |
+| **Description**                 | The Companion's "Open appts, links, tasks & investigations" section (v3.257.0) surfaces outstanding investigation requests (`isAwaitingResults === true`, from the patient journal) and open tasks (incomplete or snoozed, from Medicus's own per-patient task-list endpoint) on triage-task and, newly, care-record pages. `isAwaitingResults` means "no result has come back yet" — it is not a confirmed signal that the request was ever transmitted to the lab, and no field was found anywhere in the data the extension can read that distinguishes "sent, awaiting a result" from "never sent". A clinician could misread the list either direction: as reassurance the request definitely left the practice, or as grounds to duplicate-request something that was in fact sent and is simply slow. Separately, the open-tasks list excludes the task currently being viewed by matching its real identifier out of the row's `overviewURL` (the row's own `id` field is a different value, confirmed live, and cannot be used for the comparison) — a match failure would leave the current task listed redundantly rather than silently drop a different genuinely-open task. |
+| **Potential causes**            | No "sent to lab" field exists anywhere in the investigation-request or journal data Medicus returns, so the ambiguity is inherent, not a bug; a clinician assumes list absence means "resulted normal" rather than "not currently awaiting, or not checked"; `overviewURL`'s trailing path segment format changes, breaking the current-task exclusion match. |
+| **Affected users / components** | Clinic-role Companion users on triage-task and care-record pages. `shared/outstanding-investigations.js`, `content-scripts/task-actions-panel.js` (`apiFetchPatientJournal`, `apiFetchOpenTasks`, `taskUuidFromOverviewUrl`). |
+| **Initial severity**            | 3 (Moderate — could contribute to a missed or duplicated investigation; not itself a direct clinical action) |
+| **Initial likelihood**          | 3 (Possible — the sent-vs-awaiting ambiguity is inherent to the underlying Medicus data, present on every outstanding row) |
+| **Initial risk**                | 9 |
+| **Controls / mitigations**      | (a) The sent-vs-awaiting caveat is stated in the UI itself, not only in a code comment ("Awaiting a result — not confirmation the request reached the lab"), directly under the heading whenever the group is expanded — pinned by `test-task-actions-due.js`. (b) Both lists are read-only: no write capability, no "resend" or "mark actioned" action offered. (c) Current-task exclusion compares the row's real taskUuid (parsed from `overviewURL`) against the page's own `ctx.taskUuid`, never the row's unrelated `id` field; a parse/match miss is over-inclusive (redundant row) not under-inclusive (a different genuinely-open task is never silently dropped by this logic). (d) The open-tasks fetch requests only `statuses[]=incomplete` and `statuses[]=snoozed` from Medicus itself — completed and discarded tasks are excluded server-side, not by a client-side filter that could be bypassed or forgotten. (e) Both lists inherit the existing H-001-class wrong-patient guard already covering this whole section: the sub-state object is pinned before the fetch and discarded if the page/patient changes mid-fetch. (f) Empty states are named ("No outstanding investigations.", "No open tasks.") rather than blank. Pinned by `test-outstanding-investigations.js` (15 tests, built from 3 real HAR captures) and `test-task-actions-due.js`. |
+| **Residual severity**           | 3 |
+| **Residual likelihood**         | 1 |
+| **Residual risk**               | 3 — Acceptable (ALARP) |
+| **Acceptability**               | **Proposed — pending CSO sign-off** on the release PR. Residual depends on the clinician still opening and reviewing the underlying investigation or task in Medicus rather than acting on the Companion list alone, consistent with section 8 of the CSN. |
+
 ---
 
 ## 6. Hazard summary
@@ -1452,6 +1469,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-066 | Wrong inbound-document or workflow task reassigned, or to the wrong clinician, from the workflow canvas | 4×3         | 12           | 4×1          | 4             | Proposed — pending CSO sign-off              |
 | H-067 | Patient-identifiable data shown on a public waiting-room display (Note board)                    | 4×3         | 12           | 4×1          | 4             | Proposed — pending CSO sign-off              |
 | H-068 | Wrong Rx request reassigned from the allocation canvas                                          | 4×3         | 12           | 4×1          | 4             | Proposed — pending CSO sign-off              |
+| H-069 | Companion outstanding-investigations / open-tasks list misread as more certain than the data supports | 3×3         | 9            | 3×1          | 3             | Proposed — pending CSO sign-off              |
 
 **Addendum at v3.211.0 (hazard-log v3.22):** H-058 and H-059 cover the rota surface subsumed into the suite at v3.211.0. They are recorded here on the CSO's own review of the rota port; they do **not** constitute a new full re-baseline, and the product-version pin in the header remains at v3.202.0 (the last CSO-reviewed version) until the next one.
 
