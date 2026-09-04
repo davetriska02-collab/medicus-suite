@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.256.2] — 2026-09-04
+
+### Send-to-routine and Privacy Officer bulk buttons were dead clicks
+
+Vue clones injected markup and drops the listeners. Both buttons looked
+real and did nothing.
+
+- **Send to routine list** on non-routine prescription overviews: the
+  pill now matches `/tasks/…prescription…/overview/` with or without
+  `/data/`, accepts the live radio/commit wording, and can skip Assign-to
+  when Medicus has already enabled send (the dest is the routine inbox —
+  we never invent an assignee). Clicks bind on document capture so a
+  cloned pill still runs the macro. Still UI-drive, no POST; commit
+  match stays exact (never “close task”).
+- **Bulk acknowledge?** (Privacy Officer): same capture-phase clicks
+  (and checkbox `change`) on the shared task-bulk widget, plus a sweep
+  of Vue lookalikes that reuse the widget id. Confirm is still the
+  two-step `{ taskId }` POST to
+  `/tasks/patient-privacy-officer/complete`.
+
+Pre-merge review fixes (version taken as 3.256.2 — 3.256.1 landed first
+from the problem-cleanup fix):
+
+- The no-Assign-to skip path is fail-closed again. It was inferred purely
+  from *not finding* the picker input, which is indistinguishable from a
+  broken selector — and an already-enabled commit on such a page means
+  Medicus holds a pre-filled assignee, so "send as-is" would route the
+  task to *them*, not the configured team. If an "Assign to" label is
+  still visible the macro now aborts and says so; and because no team is
+  picked on the skip path, **auto mode always shows the confirm** (same
+  rule as a non-exact team match), the confirm says no team will be
+  selected, and the toast/audit row no longer claim the configured team
+  as the destination.
+- Bulk widget: `render()` always paints our own node, attached or not,
+  and a node re-inserted after Vue stripped it repaints from current
+  state — a load or acknowledge finishing mid-churn no longer comes back
+  stuck on "Loading…"/"Acknowledging…" with the buttons disabled.
+- Bulk widget: the delegated Confirm/Back clicks (and `runAction()`
+  itself) are gated on the engine actually being on the confirm step, so
+  a stale Vue clone's "Confirm — acknowledge N" can no longer POST a
+  selection the clinician never reviewed.
+- Audit rows now capture the task UUID on `/tasks/<slug>/overview/` URLs
+  (without `/data/`), matching the widened pill placement.
 ## [v3.256.1] — 2026-09-02
 
 ### Clean up code: concept-remap preference recording fixed
