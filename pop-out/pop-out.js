@@ -39,10 +39,6 @@ const MODULES = {
     js: () => import('../side-panel/modules/referrals/referrals.js'),
     css: '../side-panel/modules/referrals/referrals.css',
   },
-  condor: {
-    js: () => import('../side-panel/modules/condor/condor.js'),
-    css: '../side-panel/modules/condor/condor.css',
-  },
   trends: {
     js: () => import('../side-panel/modules/trends/trends.js'),
     css: '../side-panel/modules/trends/trends.css',
@@ -54,10 +50,6 @@ const MODULES = {
   signing: {
     js: () => import('../side-panel/modules/signing/signing.js'),
     css: '../side-panel/modules/signing/signing.css',
-  },
-  followups: {
-    js: () => import('../side-panel/modules/followups/followups.js'),
-    css: '../side-panel/modules/followups/followups.css',
   },
   sweep: { js: () => import('../side-panel/modules/sweep/sweep.js'), css: '../side-panel/modules/sweep/sweep.css' },
   knowledge: {
@@ -83,6 +75,10 @@ const MODULES = {
   rota: {
     js: () => import('../side-panel/modules/rota/rota.js'),
     css: '../side-panel/modules/rota/rota.css',
+  },
+  board: {
+    js: () => import('../side-panel/modules/board/board.js'),
+    css: '../side-panel/modules/board/board.css',
   },
 };
 
@@ -203,7 +199,7 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
 
 // ── Drag-and-drop tab reordering ──────────────────────────────────────────────
 // Shares the global suite.tabOrder key with the panel; reconciled against the
-// pop-out's own tab set (so panel-only tabs like visualiser are simply ignored).
+// pop-out's own tab set (so panel-only tabs like rota-app are simply ignored).
 
 (async () => {
   const { reconcileTabOrder, STORAGE_KEY } = await import('../side-panel/tab-order.js');

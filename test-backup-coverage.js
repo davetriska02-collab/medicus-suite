@@ -60,6 +60,7 @@ const APP_DIRS = [
   'content-scripts',
   'sentinel-options',
   'rota',
+  'board',
 ];
 const APP_FILES = [
   // Top-level JS
@@ -114,7 +115,6 @@ const KEY_PREFIXES = [
   // blind to their modules' keys (labfiling.suppress had already escaped it).
   'labfiling',
   'patientAlerts',
-  'followups',
   'practice',
   'pdc',
   'phrases',
@@ -125,6 +125,7 @@ const KEY_PREFIXES = [
   // for labfiling/patientAlerts/followups/practice above.
   'contactsCanvas',
   'rota',
+  'board',
 ];
 
 function hasKeyPrefix(k) {
@@ -431,12 +432,6 @@ const ALLOWLIST = new Set([
   // own health warning, so it is never backed up:
   'health.stripSnooze',
 
-  // Follow-ups ledger (v3.160.0): personal safety-net reminders carrying
-  // patient-identifiable free text + patient UUIDs. Machine-local BY DESIGN
-  // (same doctrine as ledger.events): backups are configuration only, never
-  // patient-identifiable data, and restoring stale patient reminders onto
-  // another machine would surface them out of context. Never backed up:
-  'followups.entries',
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

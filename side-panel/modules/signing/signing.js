@@ -144,7 +144,10 @@ async function fetchAndRun() {
     const selected = TASK_TYPES.filter((tt) => state.types[tt.key]);
     const rows = [];
     for (const tt of selected) {
-      const r = await fetch(`${apiBase}/tasks/data/${tt.slug}/task-list`, { credentials: 'include' });
+      const r = await fetch(`${apiBase}/tasks/data/${tt.slug}/task-list`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!r.ok) throw new Error(`${tt.label} requests HTTP ${r.status}`);
       const tasks = extractTaskArray(await r.json());
       for (const t of tasks) {
@@ -291,7 +294,13 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
   const engine = window.SentinelRules;
 
   const raw = await api.fetchAll(apiBase, patientUuid, { useCache: false });
-  const failed = Object.keys(raw.errors || {});
+  // clinicalSummary (patientRegisters) and medicationHistory (true
+  // clinical start dates) are best-effort — see the matching note in
+  // side-panel/modules/sweep/sweep.js's evaluatePatient. A failure of
+  // either must not abort the whole signing read: register matching
+  // falls back to problem text, and start-date derivation falls back
+  // to the batch-scoped regimen date.
+  const failed = Object.keys(raw.errors || {}).filter((k) => k !== 'clinicalSummary' && k !== 'medicationHistory');
   if (!raw.banner) {
     throw new Error('record not read' + (failed.length ? ` (${failed.join(', ')} failed)` : ''));
   }
@@ -312,6 +321,7 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     problems: data.problems || [],
     patientContext: data.patientContext,
     observationHistory: data.observationHistory || [],
+    patientRegisters: data.patientRegisters != null ? data.patientRegisters : null,
   });
   // Renal context rides along with the verdict — same fetch, zero extra cost.
   return { chips, renal: renalContext(data.observations || [], Date.now()) };

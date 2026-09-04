@@ -85,7 +85,7 @@ function check(cond, msg) {
   // ── Sanitiser ───────────────────────────────────────────────────────────
   check(sanitiseHiddenTabs(null).length === 0, 'sanitiser tolerates non-array input');
   check(
-    sanitiseHiddenTabs(['condor', 'nope', 42, 'condor']).join(',') === 'condor',
+    sanitiseHiddenTabs(['slots', 'nope', 42, 'slots']).join(',') === 'slots',
     'sanitiser drops unknown/duplicate/non-string ids'
   );
   check(
@@ -96,16 +96,16 @@ function check(cond, msg) {
   // ── toggleTabVisibility (pure toggle for the options section + overlay) ────
   {
     // turning a visible tab OFF adds it to the hidden set
-    const r1 = toggleTabVisibility([], 'condor');
-    check(!r1.blocked && r1.hidden.join(',') === 'condor', 'toggle hides a visible tab');
+    const r1 = toggleTabVisibility([], 'slots');
+    check(!r1.blocked && r1.hidden.join(',') === 'slots', 'toggle hides a visible tab');
 
     // turning a hidden tab back ON removes it
-    const r2 = toggleTabVisibility(['condor'], 'condor');
+    const r2 = toggleTabVisibility(['slots'], 'slots');
     check(!r2.blocked && r2.hidden.length === 0, 'toggle re-shows a hidden tab');
 
     // unknown id is a no-op (not blocked, set unchanged)
-    const r3 = toggleTabVisibility(['condor'], 'nope');
-    check(!r3.blocked && r3.hidden.join(',') === 'condor', 'toggle ignores unknown ids');
+    const r3 = toggleTabVisibility(['slots'], 'nope');
+    check(!r3.blocked && r3.hidden.join(',') === 'slots', 'toggle ignores unknown ids');
 
     // hiding the last visible tab is BLOCKED and leaves the set unchanged
     const allButOne = catalogIds.filter((id) => id !== 'today');
@@ -120,9 +120,9 @@ function check(cond, msg) {
     check(!r5.blocked && !r5.hidden.includes('submissions'), 'toggle ON allowed even at one-visible');
 
     // corrupt incoming hidden array is sanitised before toggling
-    const r6 = toggleTabVisibility(['nope', 42, 'condor'], 'slots');
+    const r6 = toggleTabVisibility(['nope', 42, 'activity'], 'slots');
     check(
-      !r6.blocked && r6.hidden.includes('condor') && r6.hidden.includes('slots') && !r6.hidden.includes('nope'),
+      !r6.blocked && r6.hidden.includes('activity') && r6.hidden.includes('slots') && !r6.hidden.includes('nope'),
       'toggle sanitises a corrupt hidden array first'
     );
   }

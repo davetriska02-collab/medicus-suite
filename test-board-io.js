@@ -1,0 +1,175 @@
+// Medicus Suite — Note board backup IO tests
+// Run with: node test-board-io.js
+
+'use strict';
+
+const path = require('path');
+const { pathToFileURL } = require('url');
+
+(async () => {
+  let passed = 0;
+  let failed = 0;
+  function check(cond, msg) {
+    if (cond) {
+      passed++;
+      console.log(`  OK    ${msg}`);
+    } else {
+      failed++;
+      console.error(`  FAIL  ${msg}`);
+    }
+  }
+
+  const io = require('./shared/io/board-io.js');
+  const suiteEnv = require('./shared/io/suite-envelope.js');
+  const { sanitiseConfig } = await import(pathToFileURL(path.join(__dirname, 'board', 'board-core.js')).href);
+
+  check(
+    typeof io.boardExport === 'function' && typeof io.boardImport === 'function',
+    'exports boardExport/boardImport'
+  );
+  check(io.BOARD_KEYS.includes('board.config'), 'covers board.config');
+  check(suiteEnv.VALID_SCOPES.includes('board'), 'board is a valid envelope scope');
+
+  {
+    const env = suiteEnv.wrap('board', { board: { config: { activeProfileId: 'ops' } } }, '3.248.0');
+    const lines = suiteEnv.previewEnvelope(env);
+    check(
+      lines.some((l) => /^Note board:/.test(l)),
+      'previewEnvelope summarises Note board'
+    );
+  }
+
+  {
+    const clean = io.sanitiseImported({
+      activeProfileId: 'waiting-room',
+      profiles: [
+        {
+          id: 'waiting-room',
+          audience: 'staff',
+          widgets: ['pressure', 'flap', 'tempo'],
+          message: '<b>Hello</b>  there',
+        },
+      ],
+    });
+    const wr = clean.profiles.find((p) => p.id === 'waiting-room');
+    check(wr.audience === 'public', 'import locks waiting-room to public');
+    check(!wr.widgets.includes('pressure'), 'import strips staff widgets from public profile');
+    check(wr.message === 'Hello there', 'import strips markup from the message');
+    const cfg = sanitiseConfig(clean);
+    check(cfg.profiles.find((p) => p.id === 'waiting-room').audience === 'public', 'core agrees after import');
+  }
+
+  {
+    let threw = false;
+    try {
+      io.sanitiseImported({ activeProfileId: 'secret-tv' });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'unknown profile id is rejected');
+  }
+
+  {
+    const clean = io.sanitiseImported({
+      activeProfileId: 'c-abc1234',
+      publicCountsRequests: true,
+      copy: { tempoPublicSteady: '<b>Calm</b>' },
+      profiles: [
+        {
+          id: 'c-abc1234',
+          name: 'Pharmacy',
+          audience: 'public',
+          widgets: ['pressure', 'flap', 'tempo'],
+        },
+      ],
+    });
+    const pharm = clean.profiles.find((p) => p.id === 'c-abc1234');
+    check(Boolean(pharm), 'import keeps a custom public board');
+    check(pharm.audience === 'public', 'import locks a custom public board to public');
+    check(!pharm.widgets.includes('pressure'), 'import strips staff widgets from a custom public board');
+    check(pharm.name === 'Pharmacy', 'import keeps the custom board name');
+    check(clean.publicCountsRequests === true, 'import keeps the public-demand toggle');
+    const cfg = sanitiseConfig(clean);
+    check(cfg.copy.tempoPublicSteady === 'Calm', 'core strips markup from imported copy');
+    check(
+      cfg.profiles.find((p) => p.id === 'c-abc1234').name === 'Pharmacy',
+      'core keeps the custom board after import'
+    );
+  }
+
+  {
+    const clean = io.sanitiseImported({ styleId: 'harbour' });
+    check(
+      clean.styleId === 'standard' && clean.colourId === 'harbour',
+      'import migrates an old look to Standard + colour'
+    );
+    const styled = io.sanitiseImported({ styleId: 'clear', colourId: 'daylight' });
+    check(styled.styleId === 'clear' && styled.colourId === 'daylight', 'import keeps a known style and colour');
+    let threw = false;
+    try {
+      io.sanitiseImported({ styleId: 'neon-club' });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'unknown style is rejected on import');
+    threw = false;
+    try {
+      io.sanitiseImported({ colourId: 'neon-club' });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'unknown colour is rejected on import');
+  }
+
+  {
+    const clean = io.sanitiseImported({
+      profiles: [
+        {
+          id: 'waiting-room',
+          widgets: ['flap', 'youtube'],
+          youtubeListId: 'https://www.youtube.com/playlist?list=PLtestlistid1234567890',
+        },
+      ],
+    });
+    const wr = clean.profiles.find((p) => p.id === 'waiting-room');
+    check(wr.widgets.includes('youtube'), 'import keeps the public playlist widget');
+    check(wr.youtubeListId === 'PLtestlistid1234567890', 'import stores a sanitised playlist id');
+    const custom = io.sanitiseImported({
+      profiles: [
+        {
+          id: 'c-abc1234',
+          audience: 'public',
+          widgets: ['youtube', 'pressure'],
+          youtubeListId: 'PLtestlistid1234567890',
+        },
+      ],
+    });
+    const pharm = custom.profiles.find((p) => p.id === 'c-abc1234');
+    check(pharm.widgets.includes('youtube'), 'import lets a custom public board keep the playlist widget');
+    check(!pharm.widgets.includes('pressure'), 'import still strips staff tiles when a playlist is present');
+    let threw = false;
+    try {
+      io.sanitiseImported({
+        profiles: [{ id: 'waiting-room', youtubeListId: 'https://evil.example/?list=PLtestlistid1234567890' }],
+      });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'import rejects a playlist URL from a foreign host');
+    threw = false;
+    try {
+      io.sanitiseImported({
+        profiles: [{ id: 'waiting-room', youtubeListId: 'javascript:alert(1)' }],
+      });
+    } catch {
+      threw = true;
+    }
+    check(threw, 'import rejects a javascript: playlist value');
+  }
+
+  console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
+  process.exit(failed ? 1 : 0);
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

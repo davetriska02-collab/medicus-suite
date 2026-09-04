@@ -39,10 +39,6 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   // header is self-explanatory and tab-help carries the first-step guidance.
   // Revisit for a dedicated step when the cap is next re-balanced.
   'signing',
-  // followups (v3.160.0): same 20-step-cap decision as signing — the tab is
-  // a single add-form + list with a fixed honest-state header, and tab-help
-  // carries the first-step guidance. Revisit with the next cap re-balance.
-  'followups',
   // patient-alerts (v3.175.0): 20-step cap still reached, so no dedicated
   // step — but the feature's visible surface (the #paStrip flag strip) IS
   // taught: the 'alert-strips' step was reworked to name it and retagged to
@@ -55,7 +51,6 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'submissions',
   'activity',
   'referrals',
-  'condor',
   'reception',
   'sweep',
   'knowledge',
@@ -63,11 +58,10 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   // tab is a search + compose + copy surface with tab-help first-step guidance
   // and an in-tab empty-state explainer. Revisit at the next cap re-balance.
   'phrases',
+  'board', // Note TV board companion — 20-step cap; tab-help + in-tab privacy copy
   'rota', // compact rota status module (panel + pop-out) — overview mention only
   'rota-app', // opens the full rota app in a browser tab — overview mention only
-  'visualiser', // opens a full tab, not a panel module — overview mention only
   'duplicate-checker', // opens a full tab, not a panel module — overview mention only
-  'about',
 ]);
 
 let pass = 0;

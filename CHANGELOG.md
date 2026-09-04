@@ -2,6 +2,508 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.256.0] — 2026-08-31
+
+### Prescription allocation canvas
+
+Routine and non-routine prescription-request queues now have the same
+allocation canvas as labs and workflows. The board opens **un-proposed**:
+Unallocated is the large pane, doctors with a session on today’s book
+sit in a smaller sidebar, and usual GP is a caption on a tile — never
+auto-placement. Writing is the same W23 bulk-reassign as the lab canvas:
+it changes who the task sits with. **W23 does not issue, sign, or file
+the prescription.**
+
+**Split equally**, **Top up empty boxes**, and **Distribute equally**
+are user-initiated, not applied on load. Split proposes an even share
+of the unallocated pile only (already-sitting work stays put). Later
+in the day, Top up gives new work to whoever has least; Distribute
+rebalances sitting plus new so in-today totals differ by at most one.
+**Share this box** on a doctor folder splits only that doctor’s
+requests among those in today (holiday leftover). Cancelled sessions,
+absences, and (when any GP-looking session exists) nurses /
+pharmacists / HCAs are not destinations; Medicus teams can be. The
+working day defaults to today; Tonight you can set it to tomorrow so
+the split uses that day’s book.
+
+Staging still requires **Review then write**. Proposed rows are marked
+not saved; drag a patient between doctors, then **Confirm write to
+Medicus** and **Write to Medicus**. After write, Unallocated greens
+out and the doctors populate as a folder grid you can still drag
+between. Write now actually reassigns (and continues if one dest
+fails); it does not take work off the open list, so the list total
+may stay the same while unallocated drops. The pre-write re-GET is
+inbox plus sitting work, so Distribute equally does not abort as
+vanished. EPS and investigation-result queues stay on their own
+surfaces.
+
+## [v3.255.1] — 2026-08-31
+
+### Review fixes on the v3.255.0 prune
+
+- **Feedback / feature request / bug report is back.** The composer was deleted
+  with the About tab in v3.255.0 and had no replacement, leaving the suite with
+  no general route for a clinician to report a wrong chip, a missing rule or a
+  defect (only Monitoring's narrow "Report a possible missing brand" link
+  survived). Restored, unchanged, under **Settings → Suite → Send feedback**,
+  next to the recipient setting that drives it. Still a `mailto:` — nothing is
+  transmitted by the extension.
+- **Stale Settings copy.** The "Feedback recipient email" help text still
+  pointed at the "About-tab" button that no longer exists; it now names the
+  composer below it and the Monitoring link.
+- **Orphaned CSS removed.** ~250 lines left behind by the prune:
+  `.about-*` / `.module-card*` / `.purpose-box` / `.disclaimer-link*` /
+  `.feature-list-link*` / `.fb-*` in `side-panel/panel.css`, and
+  `.rec-foot` / `.rec-deep-btn*` / `.rec-foot-note` in `record.css` (the
+  "Open full visualiser" footer).
+- Dropped the deleted `visualiser-core.html` from the Atelier screenshot
+  harness, and closed a stray gap in `sentinel.js`'s import block.
+
+## [v3.255.0] — 2026-08-31
+
+### Prune unused and low-value surfaces
+
+Removed four side-panel tabs and two full-page tools that were either launchers, yearly, or machine-local dead-ends:
+
+- **Follow-ups** — personal this-machine-only reminder ledger, including the Monitoring "Add follow-up reminder" action and the Today line.
+- **Visualiser** — PDF-drop record analyser (`visualiser-core.*`, PDF.js / Chart.js / D3). Record remains the live snapshot.
+- **About** — static brochure tab; version and update check stay on Settings → Suite.
+- **Condor** — ops dashboard tab. Note's TV board still uses `condor-data.js` / `condor-index-core.js` for live feeds and the pressure index.
+- **CQC Inspection Readiness** — yearly evidence pack and its Settings launcher.
+- **Practice Report** — palette-only Condor snapshot PDF, unused from the menu.
+
+Dead code: old Sentinel `sidebar/` (never mounted), `companion-preview.html`.
+
+Settings collapsed: **Queue rules** (Triage Lens + Result Rules + Outstanding Requests) and **Diagnostics** (Event Ledger + Suite health + Debug). Legacy `#sect-triage` / `#sect-health` hashes still work.
+
+Duplicates and Rota manager stay.
+
+### Safety-doc pin and Tests CI
+
+`docs/CLINICAL-SAFETY-NOTICE.md` product version re-pinned to 3.255.0 so
+`check-doc-versions.js` tracks the minor. Does not move
+`last_cso_review_version` (CSN 3.237.1, hazard log 3.202.0, feature-list
+3.233.0). The Tests workflow no longer runs the Visualiser Playwright job
+(`scripts/verify-visualiser.mjs` was removed with the tab).
+
+## [v3.254.1] — 2026-08-31
+
+### CSO sign-off of PR #351 and PR #353 (documentation only)
+
+Incremental Clinical-Safety-Officer review, signed in session by Dr D. Triska on
+2026-08-31, of two already-merged PRs by Nick Grundy — and of nothing else:
+
+- **#351** — exclude topical tacrolimus (Protopic ointment, and the unlicensed
+  cream specials prescribed for the same cutaneous indication) from the vaccine
+  "immunosuppressive medication" eligibility clauses and the high-risk
+  unmatched-medication monitoring backstop (v3.251.6, follow-up v3.251.7).
+- **#353** — flag a mobile-shaped phone number filed under the wrong type when
+  the contacts canvas opens, and add a high-risk-unmatched class for specialist
+  biologics / monoclonal antibodies that carry no dedicated monitoring rule
+  (v3.253.2, including the ophthalmic-bevacizumab exclude and the post-write
+  re-fetch).
+
+Verified at review, independently of the PRs' own tests: oral, modified-release,
+oral-suspension and IV tacrolimus still fire on both the vaccine clauses and the
+monitoring backstop; ointment / cream / Protopic do not; no other stem in either
+list is suppressed by the new exclude. The mAb class fires across rheumatology,
+dermatology, respiratory, gastroenterology, neurology, bone and oncology agents
+and on systemic IV bevacizumab; intravitreal / ophthalmic bevacizumab and
+licensed bevacizumab gamma (Lytenava) do not. JAK inhibitors are not treated as
+monoclonal antibodies. The on-open "Fix type → Mobile" write is click-only, is
+built from a fresh read, re-checks patient identity immediately before the write,
+re-fetches afterwards rather than patching cached state, and joins
+`anyWriteInFlight()`; it is the existing W18 `change-telephone-number` contract,
+not a new write path.
+
+Documentation only — no product code changed. This is an incremental sign-off,
+not a re-baseline: `last_cso_review_version` does not move on any document, and
+the hazard-log product pin stays at 3.202.0.
+
+## [v3.254.0] — 2026-08-30
+
+### Note: embed a practice YouTube playlist on the TV
+
+A public Note board can now play a YouTube playlist beside the flaps and
+figures. Off by default. Paste a playlist URL in the Note tab, tick
+YouTube playlist, and open the board on the computer already plugged into
+the TV. The player starts muted so the browser will autoplay; unmute on
+the TV if you want sound.
+
+Only a sanitised playlist id is stored and embedded, and only through
+YouTube's privacy-enhanced player. The player stays put across live-figure
+refreshes so the playlist does not restart every poll. A dead public feed
+still hides the player. The playlist cannot unlock names or staff-only tiles.
+
+## [v3.253.2] — 2026-08-30
+
+### Contacts canvas: flag wrong-type phone numbers on open; flag monoclonal antibodies with no monitoring rule
+
+The contacts canvas already runs a duplicate-address check automatically whenever it opens for
+a patient; the same "fix a mobile-shaped number filed under the wrong type" logic previously
+only ran during an explicit manual-contact merge now runs the same way — on open, against the
+patient's own phone numbers — with a one-click "Fix type → Mobile" action, independent of any
+merge in progress.
+
+Added a new high-risk-unmatched-medication class for monoclonal antibodies and closely-related
+biologics (infliximab, adalimumab, secukinumab, guselkumab and ~30 others across rheumatology,
+dermatology, respiratory, gastroenterology, neurology, bone and oncology) that have no dedicated
+drug-monitoring rule — they now get the same "verify monitoring is in place" nudge tacrolimus
+already does. Denosumab stays on the class list as a backstop only: it already has
+`denosumab-calcium`. Deliberately includes hospital-administered oncology mAbs, since Medicus
+routinely codes hospital-initiated medication onto the GP record. Local/intravitreal bevacizumab
+(including licensed bevacizumab gamma / Lytenava for wet AMD) is excluded — GPs are asked to
+record those eye injections, and they do not need shared-care blood monitoring. The ointment/cream
+exclude from topical tacrolimus is not copied onto this class: none of these mAbs have a marketed
+UK topical form. JAK inhibitors (baricitinib, tofacitinib) are real immunosuppressants but not
+monoclonal antibodies, and are deliberately excluded from this class.
+
+The on-open phone-type write now re-fetches the index patient's numbers after a successful change
+(H-056 control (h) — same as the merge-panel Fix type) and joins `anyWriteInFlight()`, so it
+cannot interleave with another canvas write.
+
+## [v3.253.1] — 2026-08-30
+
+### Note — fullscreen mastheads and louder dead feeds on quiet styles
+
+Service and Notice keep their masthead on a fullscreen TV (blue bar /
+broadsheet title). Only the setup buttons hide. Other styles still hide
+the whole chrome strip.
+
+Plain, Lobby and Plaque flood the page when a public feed is dead, so a
+tasteful layout cannot look like an empty surgery.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.253.0] — 2026-08-29
+
+### Note — ten styles, and colour options on Standard
+
+The ten palettes shipped in v3.252.0 are now the **Standard** style with
+colour options (Split-flap, Daylight, Clinic, Wayfind, Transit,
+Instrument, Night watch, Ledger, Gallery, Harbour).
+
+Nine more styles change the layout and the type, not just the hue:
+
+- **Clear** — light, airy, large sans
+- **Plain** — black on white, no decoration
+- **Service** — clinical public-service notice (not the NHS logo)
+- **Notice** — broadsheet masthead
+- **Sign** — corridor wayfinding, numbers first
+- **Timetable** — amber LED departure rows
+- **Console** — dense instrument panel
+- **Lobby** — one large sentence, quiet figures
+- **Plaque** — museum caption on a large wall
+
+Styles and colours change paint only. They do not change the numbers,
+the words, or the public-TV lock. Saved boards that still store an old
+look id become Standard plus that colour.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.252.0] — 2026-08-29
+
+### Note — ten looks for the board
+
+A practice can pick the look of every Note board from ten distinct
+professional styles. Split-flap stays the default. The others are
+Daylight, Clinic, Wayfind, Transit, Instrument, Night watch, Ledger,
+Gallery and Harbour.
+
+Looks change paint only. They do not change the numbers, the words, or
+the public-TV lock. No names, no staff tiles on a public board, wait
+time still a band, a dead public feed still fails loud.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.251.7] — 2026-08-29
+
+### Review fix — also exclude tacrolimus cream specials from immunosuppression/monitoring flags
+
+PR #351 review: licensed UK topical tacrolimus is ointment-only (Protopic), but
+unlicensed cream specials are prescribed for the same cutaneous indication and
+still matched the `tacrolimus` stem. The vaccine eligibility clauses and the
+high-risk unmatched-medication backstop now also exclude `"cream"`. Oral/IV
+tacrolimus is unaffected (regression-tested).
+
+## [v3.251.6] — 2026-08-29
+
+### Exclude topical tacrolimus from immunosuppression/monitoring flags
+
+Topical tacrolimus (Protopic ointment, prescribed for eczema) was being treated the same
+as oral/IV tacrolimus by two checks that only ever look at the drug name: the vaccine
+eligibility "immunosuppressive medication" clauses (flu, shingles, RSV, and the
+under-65/severely-immunosuppressed pneumococcal risk groups) and the high-risk
+unmatched-medication backstop that prompts "verify monitoring is in place" for
+DMARD/immunosuppressant-class drugs with no matching monitoring rule.
+
+Per CKS (topical calcineurin inhibitors — <https://cks.nice.org.uk/topics/eczema-atopic/prescribing-information/topical-calcineurin-inhibitors/>),
+topical tacrolimus "has not been observed to produce systemic concentrations similar to
+those observed with systemic use" — it carries none of the systemic immunosuppression or
+monitoring need that both checks exist to catch. Both now exclude any medication name
+containing "ointment", "cream", or "protopic" (the topical-only brand); oral/IV tacrolimus
+(capsules, IV, or any other systemic form) is unaffected and still fires as before. No
+other drug in either check's list has a marketed UK topical/ointment/cream form, so the
+exclude cannot suppress a genuine systemic hit.
+
+## [v3.251.5] — 2026-08-29
+
+### Note — close a public-board widget-lock gap and correctness fixes found on review of PR #350
+
+Review of the custom-boards PR found that the "Requests today" tile
+(`demand` widget: medical/admin counts) was classified as a **public**
+widget in `WIDGET_META`/`PUBLIC_WIDGETS`, pre-dating this PR (shipped at
+v3.248.0). The companion's "What this profile shows" checklist offered it
+on any public profile — including the waiting-room TV — and ticking it
+put an exact "N medical · M admin" tile on a public screen, contradicting
+this notice's own H-067 claim that request wording never reaches a public
+board. `demand` is now staff-only in both copies of the widget allow-list
+(`board/board-core.js`, `shared/io/board-io.js`), closing the gap at all
+three enforcement points (import, config load, render).
+
+Also fixed, found on the same review pass:
+
+- `deriveTempo()`'s demand-counting switch was a deny-list
+  (`mode !== 'public'`), so an unrecognised mode fell open into counting
+  requests toward "busy" — now an explicit allow-list
+  (`mode === 'staff' || mode === 'public-demand'`).
+- Clearing a wait-band/busy-count input field clamped to the numeric
+  floor (e.g. "1 minute") instead of the shipped default, because
+  `Number('')` is `0`, not `NaN`. Empty input now falls back to default.
+- Raising "Busy at" above "Very busy at" silently resets both thresholds
+  to shipped defaults but the companion form kept showing the rejected
+  values until the next full re-render; the threshold input handler now
+  re-renders immediately so the form never lies about what is saved.
+- The six-custom-board cap sliced the incoming list before de-duplicating
+  by id, so a single duplicate id could cost a real slot (7 distinct + 1
+  duplicate kept only 5, not 6). De-dupe now runs before the cap.
+- `newCustomProfileId()` used `Date.now()` alone; two boards created in
+  the same millisecond collided and one silently vanished. Added a random
+  suffix.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays at
+3.202.0.
+
+## [v3.251.4] — 2026-08-29
+
+### Note — custom boards, names and words
+
+The practice owns the boards, not just the busy numbers.
+
+- Add up to six extra public or staff boards, rename any board
+  including the three shipped ones, and remove a custom board
+- Edit every sentence the TV prints (tempo words, wait-band
+  templates with `{n}`, tile labels, fail-loud, ticker leads)
+- Optional: public TVs can count today's requests when judging
+  busy. Off by default, so a quiet waiting room still does not
+  read Busy because of inbox backlog
+
+Still locked (H-067): no names, initials or request wording on a
+public TV; no "show names" flag; staff-only tiles stay off public
+boards including custom ones; shipped profile ids still lock
+audience; wait time stays a band, never a named wait in minutes;
+a dead public feed still fails loud (the words can change, the
+behaviour cannot).
+
+Does not move `last_cso_review_version`. Hazard-log product pin
+stays at 3.202.0.
+
+## [v3.251.3] — 2026-08-29
+
+### Note — practice-owned busy and wait settings
+
+The public tile no longer says "Not a promise for you". A wait band is
+still a band, not a named wait in minutes, and the practice decides
+whether that tile is on.
+
+The Note tab now has the numbers the board was already using:
+
+- most waits under / some waits over (minutes)
+- Busy / Very busy at N people waiting
+- staff-only Busy / Very busy at N requests today
+
+Public TVs still ignore today's request pile. They still cannot show
+names, initials, or request wording, and they still cannot grow
+staff-only tiles.
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0.
+
+## [v3.251.2] — 2026-08-29
+
+### Note — Practice leftovers (Normal, fail body, named opener)
+
+Third synthetic Practice pass closed the leftover list and left a floor
+of 7/10. This patch is the remaining polish that does not reverse a
+judgement call.
+
+- Public tempo big word is **Normal** (not Steady). Quiet / Busy /
+  Very busy stay. Staff still says Steady so the two formulas stay
+  visibly different. Public ticker: "This room is normal".
+- Fail-loud body ("Do not use this screen to judge how busy we are")
+  is the same size as "Please ask reception".
+- Companion opener names the board: "Open the waiting-room board",
+  "Open the message board", or "Open the staff board".
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0. Feature list / CSN stay on the 3.251 minor.
+
+## [v3.251.1] — 2026-08-29
+
+### Note — Practice leftovers (wait caveat, fail chrome, TV steps)
+
+Second synthetic Practice pass closed the blockers and left a floor of 6/10.
+This patch is the leftover list, aimed at the quoteable wait and the
+technophobe last step.
+
+- Public wait caveat is now the same weight as the band. The public
+  ticker no longer loops the wait-band minutes without that caveat.
+- Fail-loud chrome says "Live figures failed", not "Showing live".
+- Public Steady has a plain line: "A normal amount of people".
+- Pressure index caption: "Weighted index, not today's request count".
+- Companion: open from the computer already plugged into the TV;
+  Ops opener is a separate staff button that names the confirm;
+  staff flap warning names the staff-room board.
+- Widget label "Ticker" (it is no longer a request tape on public).
+
+Does not move `last_cso_review_version`. Hazard-log product pin stays
+at 3.202.0. Feature list / CSN stay on the 3.251 minor.
+
+## [v3.251.0] — 2026-08-29
+
+### Note — Practice pass (public ticker, fail-loud, wait wording)
+
+The first synthetic Practice pass on Note found the public board narrating
+the practice. This minor closes the adopted items.
+
+- **Public ticker** no longer announces today's medical or admin request
+  counts. Unchecking "Requests today" now actually silences that volume.
+  Public lead line is "This room is…"; zero waiting is "No one waiting".
+- **Dead feed fails loud** on a public TV: hide wait, tempo, zeroes and
+  the ticker; full-face "This board is not updating / Please ask
+  reception". Demo mode is excluded. Staff sees a banner instead.
+- **Wait copy** is a band, not a personal promise: "Most waits are under
+  N minutes" plus "Not a promise for you" on the public tile.
+- **Tempo / pressure labels:** public tile is "This room"; staff is
+  "How busy we are" with "Includes today's requests". Pressure is
+  "Pressure index" so it does not twin Requests today.
+- **One companion opener:** "Open this profile on a TV tab". Opening Ops
+  confirms. Public kiosk hides the profile select; key 2 confirms too.
+- **Get set up** collapses on the Note tab ("Setup can wait. The TV
+  board is below") so the companion is not buried.
+- Companion flap: "Do not type patient names. This text goes on a
+  public TV." Demo button now shows the current state.
+
+Clinical Safety Notice and feature list re-pinned to 3.251.0 (limitation
+49 / H-067 controls i–l). Hazard-log product pin stays at 3.202.0.
+Does not move `last_cso_review_version`.
+
+## [v3.250.0] — 2026-08-29
+
+### Drug-monitoring and QOF-indicator monitoring fixes
+
+Live testing of the ramipril/thiazide "U&E within ~2 weeks of starting" checks surfaced
+two separate causes of a wrong medication start date. `medicationIssueHistory` entries
+carry a structured `{year, month, day}` date on the real API, not the flat string the
+normaliser expected, so it was silently reading `null` for every medication with real
+issue history; and even once parsed, that field is itself capped to a rolling ~12-month
+window server-side, so "earliest visible issue" could only ever reflect the *current*
+repeat-dispensing batch, never a drug's true clinical start (one patient's 2013 ramipril
+start was reading as ~2025). Added a new best-effort fetch of the full prescribing-history
+endpoint (grouped by substance, joined via `vtmProductName`) which now supplies the real
+first-ever-issue date when available.
+
+The post-initiation WHY-text evidence had two further bugs of its own: it searched
+`data.observations` (latest-result-only) instead of the full multi-year
+`data.observationHistory` series, so an earlier qualifying result was invisible; and "U&E"
+is never a literal test name on the API — it's split into four analyte rows (Sodium/
+Potassium/Urea/Creatinine) sharing one `investigationGroup` — so matching had to check
+the group field too, with de-duplication by date so a 4-analyte panel doesn't read as
+"repeated 4x" for one real result.
+
+Also fixed two pre-existing (not new) monitoring-panel display bugs: the same drug could
+show as two separate cards when Medicus carries two live regimen records for it (a
+superseded reauthorisation row that hasn't dropped off the "current" bucket yet — real
+data, not a duplicate to clean up), and QOF indicators that apply across several disease
+registers (SMOK002, CHOL003, CHOL004, CD001, CD002) could show once per qualifying
+register even though the check/points/threshold are identical — both now merge to a
+single card, the latter listing every register that triggered it.
+
+Review fixes before merge: VTM regimen dedup now keeps the earliest parseable
+startDate alongside the longer display name (keeping the name alone was
+re-breaking post-initiation U&E); Signing and Sweep treat `medicationHistory`
+as best-effort, same as `clinicalSummary`, so a failed prescribing-history
+fetch no longer aborts the whole patient read.
+
+## [v3.249.0] — 2026-08-29
+
+### QOF monitoring rework — disease-register-driven matching, July 2026 rule refresh, fewer false positives
+
+Full update of monitoring rules against the July 2026 QOF 2026/27 guidance, rework of
+monitoring rules to work from Medicus's own disease registers where these exist, and
+cross-checking of diagnosis dates against the problem list's onset-date confidence.
+
+AST014 ("objective test for new asthma diagnosis") previously fired red for every
+asthma patient regardless of diagnosis date — it's now gated to patients actually
+coded on or after 1 April 2025, using the earliest confirmed date across their
+problem list rather than a single lookup that a stray "family history of asthma"
+entry could poison. A long-standing asthma patient (AST014) or asthma-register
+patient with no annual review ever recorded (AST015) now correctly shows overdue
+instead of neutral "no data". Chips built on an unconfirmed onset date, or on
+register membership with no corresponding problem code, now show a dashed border
+and an explicit note — status colour is never diluted, only flagged for a second
+look — and the evidence panel now shows the actual date driving the check.
+
+Register membership can now be read directly from Medicus's own computed register
+list (via a new `clinical-summary` fetch) for 8 registers with confirmed register
+IDs, falling back to problem-list text-matching elsewhere — reducing both
+false-positive and false-negative register membership.
+
+Cross-checked all 79 rules in `qof-rules.json` against the current NHS England QOF
+guidance: renumbered AST012→AST014 and AST007→AST015 (thresholds/points unchanged),
+added the previously-missing NDH register/indicator, enabled OB004/OB005 (values now
+confirmed) and completed OB005's weight-loss drug brand list, and relabelled
+CKD002/CKD003 to non-QOF safety-monitoring codes (CKD-BP/CKD-RASI) after confirming
+CKD has no QOF domain at all this year — the checks still fire, only the misleading
+QOF-code framing is gone.
+
+Tweaked the Companion app's QOF glance text so AST014/AST015 and DM006/DM020/DM036 no
+longer show identical generic text ("Asthma review" / "Diabetes review") for
+different required actions, without leaking into reception's booking wording.
+
+Review fix before merge: register-level `ageMin`/`ageMax` (NDH and obesity are
+18+) is now enforced at evaluate time. The field was previously JSON-only, so a
+16-year-old still raised those chips. Fail-open when age is unknown, same as
+every other age filter.
+
+## [v3.248.0] — 2026-08-29
+
+### Note — a software display board for TVs and monitors
+
+A Vestaboard-style board you can put on a waiting-room TV or a staff-room
+monitor, fed by the same live hooks Condor and the demand strips already
+use (waiting room, today’s requests, triage inbox, slots, activity).
+
+Three profiles:
+
+- **Waiting room** (public) — tempo (quiet / steady / busy / very busy),
+  people waiting as a count, wait time as a band (“typical wait under
+  10 minutes”), and a request ticker. Never names, initials, or request
+  wording. See **H-067**.
+- **Ops overview** (staff) — the same aggregates plus practice pressure,
+  triage inbox, slots remaining, urgent unactioned.
+- **Message** — split-flap text only, plus a clock.
+
+Configure the flap message and widgets from the new **Note** tab, then
+open the board on the TV and press F for fullscreen. `?demo=1` shows
+canned figures so you can preview without a Medicus session.
+
+Clinical Safety Notice and feature list re-pinned to 3.248.0 (limitation
+49 / H-067). Does not move `last_cso_review_version`.
+
 ## [v3.247.0] — 2026-08-27
 
 ### Routine-prescription "Send to routine list" — ghost pill and live-flow fixes

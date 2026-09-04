@@ -6,8 +6,8 @@
 // help, NOT clinical decision support. Keep copy concise and clinically careful.
 //
 // Every tab id in side-panel/tab-catalog.js's TAB_CATALOG must have an entry
-// here, including the two panel-only tabs (visualiser, about) — see CLAUDE.md
-// "Panel-only tabs (intentional exceptions)". test-tab-help-coverage.js
+// here, including the panel-only tabs (duplicate-checker, rota-app) — see
+// CLAUDE.md "Panel-only tabs (intentional exceptions)". test-tab-help-coverage.js
 // enforces this against both panel.html and pop-out.html's data-module set.
 //
 // Consumed as a plain ES module (`import { TAB_HELP } from '../shared/tab-help.js'`)
@@ -42,8 +42,7 @@ export const TAB_HELP = {
   record: {
     title: 'Record',
     what: 'A live snapshot of the patient open in Medicus: problems, current medicines, recent results and prescribing-safety prompts — no PDF needed. It is incomplete by design (no allergies or immunisations, limited history) and never replaces reading the record.',
-    firstStep:
-      'Open a patient in Medicus, then read the summary here. For the multi-year timeline and continuity, open the full visualiser from the footer.',
+    firstStep: 'Open a patient in Medicus, then read the summary here.',
   },
   activity: {
     title: 'Activity',
@@ -54,12 +53,6 @@ export const TAB_HELP = {
     title: 'Referrals',
     what: 'A summary of referrals over a date range by priority, status, clinician and specialty.',
     firstStep: 'Set a date range to see referral counts and breakdowns.',
-  },
-  condor: {
-    title: 'Condor',
-    what: 'A live dashboard of practice pressure, pulling several demand signals together.',
-    firstStep:
-      'Glance at the headline level to gauge how busy the practice is right now. The cog on the Practice Pressure card lets you tune the index weightings and band thresholds to match how your practice runs.',
   },
   trends: {
     title: 'Trends',
@@ -76,12 +69,6 @@ export const TAB_HELP = {
     what: 'Your open repeat-prescription requests, each shown with the monitoring already recorded for that patient — riskiest first.',
     firstStep:
       'Work the pile top-down; anything flagged red deserves the record open before you sign. No flag is not an all-clear.',
-  },
-  followups: {
-    title: 'Follow-ups',
-    what: 'A personal reminder list for things you are waiting on — a pending result, a call-back — resurfaced when the due date passes. Stored on this machine only; it is not the clinical record.',
-    firstStep:
-      'Add what you are chasing with a due date, or add a patient-linked reminder from the Monitoring tab. Keep documenting safety-netting in Medicus as usual.',
   },
   sweep: {
     title: 'Sweep',
@@ -120,26 +107,22 @@ export const TAB_HELP = {
     what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
     firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
   },
+  board: {
+    title: 'Note',
+    what: 'A configurable display board for a waiting-room TV or a staff-room monitor. You add boards and set the words. Public profiles show only counts, wait bands and the message you type — never patient names.',
+    firstStep:
+      'Pick a style, add or rename a board, set the words and when the room looks busy, optionally paste a practice YouTube playlist, then open it on the computer already plugged into the TV and press Fullscreen (or F).',
+  },
   'rota-app': {
     title: 'Rota manager',
     what: 'Opens the full rota application in a new browser tab: working patterns, leave (April–March, session-accounted), registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.',
     firstStep:
       'Add your staff and their contracted sessions first — everything else (leave, duty fairness, safe-staffing warnings) is calculated from them.',
   },
-  visualiser: {
-    title: 'Visualiser',
-    what: 'Opens a full browser tab to analyse an exported patient-record PDF — a multi-year timeline view, separate from the panel.',
-    firstStep: 'Export the patient record from Medicus as a PDF, then drop it into the visualiser tab that opens.',
-  },
   'duplicate-checker': {
     title: 'Duplicates',
     what: 'Practice-wide scan for GP2GP duplicate-record reimport errors — flags candidate duplicate entries per patient by confidence tier for bulk-removal or merge.',
     firstStep:
       'Run a full or incremental practice scan, then click on a flagged patient in the results list to analyse their record.',
-  },
-  about: {
-    title: 'About',
-    what: 'Module version info, an update check, and a feedback form for bugs or feature requests.',
-    firstStep: 'Use "Check for updates" to confirm you are on the latest version.',
   },
 };

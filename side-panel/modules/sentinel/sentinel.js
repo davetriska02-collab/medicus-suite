@@ -9,8 +9,6 @@ import { buildChipActions, buildPatientActions } from '../shared/action-packs.js
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
 import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
-import { addFollowup } from '../followups/followups.js';
-import { dateOnlyISO } from '../followups/followups-core.js';
 import { buildRecallDescription, isActionNeeded } from '../sweep/sweep-core.js';
 import { buildCoverageView } from './coverage-core.js';
 import { startTour } from '../../tour/tour.js';
@@ -1433,7 +1431,7 @@ function render(payload) {
 
   // Journal-augment failure indicator — shown when the content script's
   // fetchJournalObservations threw. QOF chips that rely on journal-coded
-  // evidence (AST007, COPD010, HF007, etc.) may show no_data incorrectly.
+  // evidence (AST015, COPD010, HF007, etc.) may show no_data incorrectly.
   // Deliberately unobtrusive: a small muted line near the extraction health
   // block, not a banner (the chip list is still usable; this is advisory only).
   const journalAugmentHtml = journalAugmentFailed
@@ -1867,8 +1865,20 @@ function renderChip(chip) {
         ? datePart.replace(/^ · /, '')
         : '';
     const yearTag = chip.qofYear ? `<span class="sent-qof-year">QOF ${escHtml(chip.qofYear)}</span>` : '';
+    // Reduced-confidence treatment (see chip-renderer.js's isUncertainChip /
+    // renderChipUncertaintyNotesHtml — duplicated inline here since this is a
+    // defensive fallback path used only when ChipRenderer itself isn't
+    // loaded, so its helpers aren't available either).
+    const fbUncertain = chip.registerDateIsOnset === false || !!chip.noMatchingProblemCode;
+    const fbUncertainNotes = [
+      chip.registerDateIsOnset === false ? '~ Diagnosis date unconfirmed (no confirmed onset date on record)' : null,
+      chip.noMatchingProblemCode ? '⚠ On register — no matching problem code found on this record' : null,
+    ]
+      .filter(Boolean)
+      .map((n) => `<div class="sent-chip-uncertain-note">${escHtml(n)}</div>`)
+      .join('');
     return `
-      <div class="sent-chip sent-chip-${col}">
+      <div class="sent-chip sent-chip-${col}${fbUncertain ? ' sent-chip-uncertain' : ''}">
         ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.indicatorCode || chip.ruleId)}</span>
@@ -1876,18 +1886,32 @@ function renderChip(chip) {
         </div>
         ${chip.indicatorName ? `<div class="sent-chip-cat">${escHtml(chip.indicatorName)}${yearTag}</div>` : yearTag}
         ${obs ? `<div class="sent-chip-obs">${obs}</div>` : ''}
+        ${fbUncertainNotes}
       </div>`;
   }
 
   if (chip.type === 'qof-register') {
+    // qof-register chips have no shared-renderer counterpart (chip-renderer.js
+    // has no renderQofRegisterChip) — this IS the primary implementation, not
+    // a fallback, so prefer CR's helpers when available (kept in sync with
+    // renderQofIndicatorChip's treatment) with the same inline fallback logic
+    // as above if CR somehow isn't loaded.
+    const regUncertain = CR && CR.isUncertainChip ? CR.isUncertainChip(chip) : !!chip.noMatchingProblemCode;
+    const regUncertainNotes =
+      CR && CR.renderChipUncertaintyNotesHtml
+        ? CR.renderChipUncertaintyNotesHtml(chip)
+        : chip.noMatchingProblemCode
+          ? `<div class="sent-chip-uncertain-note">${escHtml('⚠ On register — no matching problem code found on this record')}</div>`
+          : '';
     return `
-      <div class="sent-chip sent-chip-${col}">
+      <div class="sent-chip sent-chip-${col}${regUncertain ? ' sent-chip-uncertain' : ''}">
         ${resurfacedHtml}
         <div class="sent-chip-head">
           <span class="sent-chip-name">${escHtml(chip.registerName || chip.registerCode || chip.ruleId)}</span>
           <span class="sent-chip-badge sent-badge-${col}">${lbl}</span>
         </div>
         ${chip.matchedProblem ? `<div class="sent-chip-cat">${escHtml(chip.matchedProblem)}</div>` : ''}
+        ${regUncertainNotes}
       </div>`;
   }
 
@@ -2122,8 +2146,6 @@ function scaffoldHtml() {
       <div class="sent-overflow-wrap">
         <button class="sent-action-btn" id="sentOverflowBtn" title="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}<span>More</span></button>
         <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
-          <button class="sent-menu-item" id="sentAddFollowupBtn" role="menuitem" disabled title="Add a personal follow-up reminder linked to this patient — stored on this machine only, never written to the record">Add follow-up reminder</button>
-          <div class="sent-menu-sep" role="separator"></div>
           <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Open the extension's settings page">Monitoring settings</button>
           <button class="sent-menu-item" id="sentExportLogBtn" role="menuitem" disabled title="Download this patient's rule-evaluation trace as JSON. Contains patient-identifiable data — handle per your practice's IG policy">Export evaluation log</button>
           <div class="sent-menu-sep" role="separator"></div>
@@ -2245,84 +2267,6 @@ async function toggleCreateTaskForm() {
   createBtn.addEventListener('click', () => submitSentinelTask(slot, apiBase, patientId, patientName));
 }
 
-// ── Follow-up reminder (local ledger, no Medicus write) ──────────────────────
-// Same wrong-patient discipline as the task form: the patient is captured at
-// form-open, and the save re-checks the currently-followed UUID still
-// matches — auto-follow moving on mid-form invalidates the save instead of
-// pinning a reminder to the wrong patient. Unlike create-task this NEVER
-// touches Medicus: it writes to the machine-local Follow-ups ledger only
-// (followups.js addFollowup — validation, prune and event-ledger note live
-// there). Hazard log: H-040.
-function toggleFollowupForm() {
-  const slot = container?.querySelector('#sentTaskSlot');
-  if (!slot) return;
-  if (slot.dataset.open === '1') {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
-    return;
-  }
-  const patient = _renderCtx?.patient;
-  const patientId = patient && (patient.patientUuid || patient.uuid);
-  if (!patientId) return;
-  const patientName = patient.patientName || patient.displayName || 'this patient';
-
-  slot.dataset.open = '1';
-  slot.innerHTML = `
-    <div class="sent-task-form">
-      <div class="sent-task-for">Follow-up for <strong>${escHtml(patientName)}</strong> — a personal reminder on this machine only, not a record entry. Document safety-netting in Medicus as usual.</div>
-      <label class="sent-task-lbl">Waiting for
-        <input type="text" class="sent-fu-what" maxlength="200" placeholder="e.g. chase MSU result" />
-      </label>
-      <label class="sent-task-lbl">Due
-        <input type="date" class="sent-fu-due" value="${escAttr(dateOnlyISO(Date.now() + 7 * 86400000))}" />
-      </label>
-      <div class="sent-task-actions">
-        <button class="sent-fu-save" type="button" disabled>Add reminder</button>
-        <button class="sent-task-cancel" type="button">Cancel</button>
-      </div>
-      <div class="sent-task-status" role="status"></div>
-    </div>`;
-
-  const whatEl = slot.querySelector('.sent-fu-what');
-  const dueEl = slot.querySelector('.sent-fu-due');
-  const saveBtn = slot.querySelector('.sent-fu-save');
-  whatEl.addEventListener('input', () => {
-    saveBtn.disabled = !whatEl.value.trim();
-  });
-  slot.querySelector('.sent-task-cancel').addEventListener('click', () => {
-    slot.innerHTML = '';
-    slot.dataset.open = '';
-  });
-  saveBtn.addEventListener('click', async () => {
-    const statusEl = slot.querySelector('.sent-task-status');
-    const nowPatient = _renderCtx?.patient;
-    const nowId = nowPatient && (nowPatient.patientUuid || nowPatient.uuid);
-    if (nowId && nowId !== patientId) {
-      if (statusEl)
-        statusEl.innerHTML = `<span class="sent-task-error">The open patient has changed since this form was opened — cancelled. Reopen it for the current patient.</span>`;
-      saveBtn.disabled = true;
-      return;
-    }
-    saveBtn.disabled = true;
-    try {
-      await addFollowup({
-        what: whatEl.value,
-        due: dueEl.value,
-        patientUuid: patientId,
-        patientName,
-        source: 'monitoring',
-      });
-      slot.innerHTML = `<div class="sent-task-done">&#10003; Reminder added for ${escHtml(patientName)} — it will resurface in Follow-ups when due.</div>`;
-      slot.dataset.open = 'done';
-    } catch (e) {
-      if (statusEl)
-        statusEl.innerHTML = `<span class="sent-task-error">${escHtml(e.message || 'Could not add the reminder.')}</span>`;
-      saveBtn.disabled = false;
-    }
-  });
-  whatEl.focus();
-}
-
 async function submitSentinelTask(slot, apiBase, patientId, patientName) {
   const assigneeSel = slot.querySelector('.sent-task-assignee');
   const assignee = assigneeSel?.value || '';
@@ -2390,10 +2334,6 @@ function wireToolbar() {
   $('sentCreateTaskBtn')?.addEventListener('click', () => {
     toggleCreateTaskForm();
   });
-  $('sentAddFollowupBtn')?.addEventListener('click', () => {
-    closeOverflowMenu();
-    toggleFollowupForm();
-  });
   $('sentSettingsBtn')?.addEventListener('click', () => {
     closeOverflowMenu();
     // Deep-link straight to the Monitoring section (openOptionsPage always
@@ -2454,7 +2394,6 @@ function updateToolbarState() {
   set('sentCopyAllActionsBtn', !!ctx && ctx.actionCount > 0);
   set('sentPrintPassportBtn', !!ctx && !!ctx.patient);
   set('sentCreateTaskBtn', !!ctx && !!(ctx.patient && (ctx.patient.patientUuid || ctx.patient.uuid)));
-  set('sentAddFollowupBtn', !!ctx && !!(ctx.patient && (ctx.patient.patientUuid || ctx.patient.uuid)));
   set('sentExportLogBtn', !!ctx && !!ctx.trace);
 
   // Hide the whole action bar when there is nothing to act on (no data context).

@@ -1,0 +1,617 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Note display board (TV / monitor kiosk)
+ *
+ * A self-contained surface, like the visualiser: it is meant to be read
+ * across a waiting room, not at panel density. Flap-face / chassis colours
+ * are the Note theme (Vestaboard-inspired split-flap), not suite panel
+ * tokens — they would wash out at this scale. Status triads (quiet / busy)
+ * still follow the suite meaning: green calm, amber pressure, red strain.
+ */
+
+:root {
+  --note-void: #07080b;
+  --note-chassis: #101218;
+  --note-well: #050608;
+  --note-hair: #1c2230;
+  --note-mute: #8b8478;
+  --note-soft: #c8c0b2;
+  --note-ink: #f4efe4;
+  --note-flap: #e7dcc8;
+  --note-flap-ink: #1c1814;
+  --note-flap-split: rgba(28, 24, 20, 0.22);
+  --note-flap-blank: #12141a;
+  --note-quiet: #4ade80;
+  --note-steady: #fbbf24;
+  --note-busy: #fb923c;
+  --note-very: #f87171;
+  --note-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  --note-ease: cubic-bezier(0.2, 0, 0, 1);
+  --note-fast: 160ms;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--note-void);
+  color: var(--note-ink);
+  font-family: var(--note-sans);
+}
+
+.note-body {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(255, 255, 255, 0.04), transparent 60%), var(--note-void);
+}
+
+.note-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* ── Chrome (hides in fullscreen) ───────────────────────────────────────── */
+
+.note-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px 8px;
+  flex: 0 0 auto;
+}
+
+.note-chrome-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.note-chrome-name {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.note-chrome-sub {
+  font-family: var(--note-mono);
+  font-size: 11px;
+  color: var(--note-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.note-chrome-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.note-chrome-select select,
+.note-chrome-btn {
+  appearance: none;
+  background: var(--note-chassis);
+  color: var(--note-soft);
+  border: 1px solid var(--note-hair);
+  border-radius: 6px;
+  font-family: var(--note-sans);
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.note-chrome-select select:focus-visible,
+.note-chrome-btn:focus-visible {
+  outline: 2px solid var(--note-steady);
+  outline-offset: 1px;
+}
+
+.note-chrome-btn:hover,
+.note-chrome-select select:hover {
+  border-color: #2a3348;
+  color: var(--note-ink);
+}
+
+.note-body[data-audience='public'] .note-chrome-select {
+  display: none;
+}
+
+.note-body.is-fullscreen .note-chrome {
+  display: none;
+}
+
+/* Service and Notice use the chrome strip as the masthead (blue bar /
+ * broadsheet title). Hiding the whole strip on a TV loses the style.
+ * Keep the brand rail; hide only the setup buttons. */
+.note-body.is-fullscreen[data-style='service'] .note-chrome,
+.note-body.is-fullscreen[data-style='notice'] .note-chrome {
+  display: flex;
+}
+
+.note-body.is-fullscreen[data-style='service'] .note-chrome-actions,
+.note-body.is-fullscreen[data-style='notice'] .note-chrome-actions {
+  display: none;
+}
+
+.note-body.is-idle {
+  cursor: none;
+}
+
+.note-body.is-idle:not(.is-fullscreen) .note-chrome {
+  opacity: 0.35;
+}
+
+/* ── Stage ──────────────────────────────────────────────────────────────── */
+
+.note-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 2vw, 28px) clamp(16px, 3vw, 48px);
+}
+
+.note-empty {
+  color: var(--note-mute);
+  font-size: 14px;
+}
+
+.note-board {
+  width: min(1480px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.4vh, 32px);
+}
+
+.note-board[data-profile='message'] {
+  gap: clamp(28px, 6vh, 72px);
+}
+
+.note-board[data-profile='message'] .note-flap {
+  width: clamp(36px, 4.2vw, 68px);
+  height: clamp(52px, 6.2vw, 96px);
+}
+
+.note-board[data-profile='message'] .note-flap-glyph {
+  font-size: clamp(22px, 3.2vw, 46px);
+}
+
+.note-body[data-style] .note-board.note-board-has-yt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 38%);
+  grid-template-areas:
+    'flaps flaps'
+    'metrics yt'
+    'ticker yt'
+    'clock clock';
+  align-items: center;
+  width: min(1680px, 100%);
+}
+
+.note-board-has-yt .note-flaps {
+  grid-area: flaps;
+}
+
+.note-board-has-yt .note-metrics {
+  grid-area: metrics;
+}
+
+.note-board-has-yt .note-ticker {
+  grid-area: ticker;
+}
+
+.note-board-has-yt .note-clock-wrap {
+  grid-area: clock;
+}
+
+.note-yt {
+  grid-area: yt;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.note-yt-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--note-mute);
+  font-size: clamp(13px, 1.2vw, 16px);
+}
+
+.note-yt-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .note-body[data-style] .note-board.note-board-has-yt {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'flaps'
+      'metrics'
+      'ticker'
+      'yt'
+      'clock';
+  }
+}
+
+/* ── Split-flap row ─────────────────────────────────────────────────────── */
+
+.note-flaps {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(6px, 0.8vh, 12px);
+  padding: clamp(14px, 2vh, 28px) clamp(12px, 1.6vw, 24px);
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.note-flap-row {
+  display: flex;
+  justify-content: center;
+  gap: clamp(3px, 0.35vw, 6px);
+}
+
+.note-flap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(28px, 3.15vw, 54px);
+  height: clamp(40px, 4.6vw, 76px);
+  background: var(--note-flap);
+  color: var(--note-flap-ink);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(28, 24, 20, 0.12),
+    0 1px 1px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.note-flap::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--note-flap-split);
+  pointer-events: none;
+}
+
+.note-flap-glyph {
+  font-family: var(--note-sans);
+  font-size: clamp(18px, 2.4vw, 36px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  transform: translateY(1px);
+}
+
+.note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.note-flap-blank .note-flap-glyph {
+  opacity: 0;
+}
+
+.note-flap-blank::after {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.note-flap.is-flip .note-flap-glyph {
+  animation: note-flip var(--note-fast) var(--note-ease);
+}
+
+@keyframes note-flip {
+  0% {
+    transform: translateY(1px) rotateX(80deg);
+    opacity: 0.2;
+  }
+  100% {
+    transform: translateY(1px) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+/* ── Metric tiles ───────────────────────────────────────────────────────── */
+
+.note-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: clamp(10px, 1.4vw, 18px);
+}
+
+.note-board[data-profile='ops'] .note-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.note-tile {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 12px;
+  padding: clamp(14px, 2vh, 22px) clamp(14px, 1.6vw, 20px) clamp(12px, 1.6vh, 18px);
+  min-height: clamp(120px, 18vh, 200px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.note-tile-k {
+  font-size: clamp(11px, 1.1vw, 14px);
+  font-weight: 600;
+  color: var(--note-mute);
+  letter-spacing: 0.01em;
+}
+
+.note-tile-v {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(40px, 6.2vw, 84px);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  color: var(--note-ink);
+}
+
+.note-tile-v-word {
+  font-family: var(--note-sans);
+  font-size: clamp(28px, 3.6vw, 52px);
+  letter-spacing: -0.03em;
+}
+
+.note-tile-s {
+  font-size: clamp(12px, 1.15vw, 15px);
+  color: var(--note-soft);
+  line-height: 1.35;
+}
+
+.note-tile-s-strong {
+  font-size: clamp(16px, 1.7vw, 22px);
+  font-weight: 550;
+  color: var(--note-ink);
+}
+
+.note-fail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: clamp(24px, 6vw, 72px) 24px;
+  background: var(--note-chassis);
+  border: 1px solid var(--note-busy);
+  border-radius: 14px;
+}
+
+.note-fail-title {
+  font-size: clamp(32px, 4.4vw, 56px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--note-ink);
+}
+
+.note-fail-ask {
+  font-size: clamp(22px, 2.8vw, 36px);
+  font-weight: 600;
+  color: var(--note-busy);
+}
+
+.note-fail-body {
+  margin: 0;
+  max-width: 36em;
+  font-size: clamp(22px, 2.8vw, 36px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--note-ink);
+}
+
+.note-fail-banner {
+  padding: 14px 18px;
+  background: rgba(251, 146, 60, 0.16);
+  border: 1px solid var(--note-busy);
+  border-radius: 10px;
+  color: var(--note-ink);
+  font-size: clamp(16px, 1.6vw, 22px);
+  font-weight: 600;
+  text-align: center;
+}
+
+.note-tile[data-tone='quiet'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 3px 0 0 var(--note-quiet);
+}
+.note-tile[data-tone='steady'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 3px 0 0 var(--note-steady);
+}
+.note-tile[data-tone='busy'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 3px 0 0 var(--note-busy);
+}
+.note-tile[data-tone='very-busy'],
+.note-tile[data-tone='RED'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 3px 0 0 var(--note-very);
+}
+.note-tile[data-tone='AMBER'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 3px 0 0 var(--note-steady);
+}
+.note-tile[data-tone='GREEN'] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 3px 0 0 var(--note-quiet);
+}
+
+.note-dots {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.note-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2a2e38;
+}
+
+.note-dot.is-on[data-tone='quiet'] {
+  background: var(--note-quiet);
+}
+.note-dot.is-on[data-tone='steady'] {
+  background: var(--note-steady);
+}
+.note-dot.is-on[data-tone='busy'] {
+  background: var(--note-busy);
+}
+.note-dot.is-on[data-tone='very-busy'] {
+  background: var(--note-very);
+}
+
+/* ── Ticker ─────────────────────────────────────────────────────────────── */
+
+.note-ticker {
+  overflow: hidden;
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 10px;
+  padding: 10px 0;
+}
+
+.note-ticker-track {
+  display: flex;
+  width: max-content;
+  gap: 0;
+  animation: note-ticker 42s linear infinite;
+}
+
+.note-ticker-seq {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding-right: 28px;
+  font-family: var(--note-mono);
+  font-size: clamp(13px, 1.35vw, 18px);
+  color: var(--note-soft);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.note-ticker-dot {
+  color: var(--note-mute);
+}
+
+@keyframes note-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ── Clock ──────────────────────────────────────────────────────────────── */
+
+.note-clock-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.note-clock .note-flap {
+  width: clamp(22px, 2.4vw, 40px);
+  height: clamp(32px, 3.4vw, 56px);
+}
+
+.note-clock .note-flap-glyph {
+  font-size: clamp(14px, 1.8vw, 26px);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.note-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 18px 12px;
+  font-family: var(--note-mono);
+  font-size: 11px;
+  color: var(--note-mute);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.note-body.is-fullscreen .note-foot {
+  opacity: 0.55;
+}
+
+.note-demo-flag {
+  color: var(--note-steady);
+}
+
+.note-error {
+  color: var(--note-busy);
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .note-flap.is-flip .note-flap-glyph,
+  .note-ticker-track {
+    animation: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .note-flap {
+    width: clamp(16px, 3.8vw, 28px);
+    height: clamp(24px, 5.6vw, 40px);
+  }
+  .note-flap-glyph {
+    font-size: clamp(11px, 3vw, 18px);
+  }
+  .note-tile-v {
+    font-size: 36px;
+  }
+  .note-board[data-profile='ops'] .note-metrics {
+    grid-template-columns: 1fr;
+  }
+}

@@ -342,6 +342,18 @@
         cursor: not-allowed;
       }
 
+      /* Feedback type toggle (Settings › Suite › Send feedback) — a ghost
+         button that also carries a selected state. */
+      button.fb-type-btn {
+        padding: 6px 12px;
+        letter-spacing: 0.06em;
+      }
+      button.fb-type-btn.active {
+        border-color: var(--accent);
+        color: var(--text-1);
+        background: var(--accent-dim);
+      }
+
       .saved {
         color: var(--green);
         font-family: var(--mono);
@@ -1021,21 +1033,16 @@
         <button class="nav-item" data-section="sentinel">Monitoring</button>
         <button class="nav-item" data-section="txn">API Integration</button>
         <button class="nav-item" data-section="presence">Task Presence</button>
-        <button class="nav-item" data-section="triage">Triage Lens</button>
-        <button class="nav-item" data-section="result-rules">Result Rules</button>
+        <button class="nav-item" data-section="queue">Queue rules</button>
         <button class="nav-item" data-section="labfiling">Lab Filing</button>
-        <button class="nav-item" data-section="oir">Outstanding Requests</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="quickactions">Quick Actions</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
         <button class="nav-item" data-section="leaflets">Leaflets</button>
         <button class="nav-item" data-section="pdc-prefs">Cleanup code preferences</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
-        <button class="nav-item" data-section="cqc">CQC Readiness</button>
-        <button class="nav-item" data-section="ledger">Event Ledger</button>
-        <button class="nav-item" data-section="health">Suite Health</button>
+        <button class="nav-item" data-section="diagnostics">Diagnostics</button>
         <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
-        <button class="nav-item" data-section="debug">Debug</button>
       </nav>
 
       <div class="opt-content">
@@ -1136,8 +1143,51 @@
             <label class="field-label">Feedback recipient email</label>
             <input type="email" id="feedbackEmail" placeholder="davetriska02@gmail.com" maxlength="120" />
             <span class="field-help">
-              Where the About-tab <strong>Feedback / feature request / bug report</strong> button sends email. Leave
-              blank to use the default (<code style="color: var(--text-3)">davetriska02@gmail.com</code>).
+              Where the <strong>Send feedback</strong> composer below sends email. Also used by the Monitoring panel's
+              "Report a possible missing brand" link. Leave blank to use the default
+              (<code style="color: var(--text-3)">davetriska02@gmail.com</code>).
+            </span>
+          </div>
+
+          <!-- Feedback / feature request / bug report composer ─────────────────
+               Moved here from the About tab when that tab was removed in
+               v3.255.0. This is the suite's only general-purpose route for a
+               clinician to report a wrong chip, a missing rule or a defect, so
+               it follows the tab rather than being dropped with it. -->
+          <div class="field">
+            <label class="field-label">Send feedback</label>
+            <div class="fb-types" role="group" aria-label="Feedback type" style="display: flex; gap: 6px; margin-bottom: 8px">
+              <button type="button" class="ghost fb-type-btn active" data-fb-type="Feedback">Feedback</button>
+              <button type="button" class="ghost fb-type-btn" data-fb-type="Feature request">Feature request</button>
+              <button type="button" class="ghost fb-type-btn" data-fb-type="Bug report">Bug report</button>
+            </div>
+            <input type="text" id="fbSubject" placeholder="Short summary" maxlength="120" />
+            <textarea
+              id="fbDetails"
+              rows="5"
+              placeholder="What happened, what you expected, steps to reproduce…"
+              style="
+                width: 100%;
+                box-sizing: border-box;
+                margin-top: 6px;
+                background: var(--bg-mid);
+                border: 1px solid var(--border-hi);
+                color: var(--text-1);
+                font-family: inherit;
+                font-size: 12px;
+                border-radius: var(--r-md);
+                padding: 8px 10px;
+                resize: vertical;
+                line-height: 1.5;
+              "
+            ></textarea>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px">
+              <button class="ghost" id="fbSendBtn">Open email</button>
+              <span id="fbStatus" style="font-family: var(--mono); font-size: 10px"></span>
+            </div>
+            <span class="field-help">
+              ⚠ Do not include patient-identifiable information (names, NHS numbers, dates of birth). Your email client
+              opens pre-filled — review it before sending. Suite version and browser details are attached automatically.
             </span>
           </div>
 
@@ -2597,25 +2647,6 @@
           </div>
         </section>
 
-        <!-- CQC Inspection Readiness section -->
-        <section class="opt-section" id="sect-cqc">
-          <h1>CQC Inspection Readiness <span class="module-badge">Safe &amp; Well-led evidence</span></h1>
-          <p class="section-desc">
-            Turns the suite's own monitoring rule-set and its dated currency into evidence for the CQC
-            <strong>Safe</strong> and <strong>Well-led</strong> key questions &mdash; built from the rules the suite
-            ships, with no patient data. Two modes: an internal <strong>Readiness check</strong> (&ldquo;are we
-            ready?&rdquo; with what to fix), and a sign-off-stamped <strong>Evidence export</strong> for your wider
-            pack, produced only after you confirm you have reviewed the figures. It is
-            <strong>supporting evidence, not proof of compliance</strong>, and does not replace the inspection or the
-            people-experience / staff-feedback parts of a pack.
-          </p>
-          <p class="section-desc">
-            It opens in its own tab so it prints cleanly to PDF and exports to CSV. (Also reachable any time from the
-            command palette &mdash; press <strong>Ctrl+K</strong> and type &ldquo;CQC&rdquo;.)
-          </p>
-          <button class="primary" id="cqcOpenBtn" type="button">Open CQC Inspection Readiness</button>
-        </section>
-
         <!-- Event Ledger section (F2) — machine-local record of what the suite flagged -->
         <section class="opt-section" id="sect-ledger">
           <h1>Event ledger <span class="module-badge">machine-local</span></h1>
@@ -3194,14 +3225,6 @@
                 </div>
               </div>
               <div class="module-export-card">
-                <div class="mec-name">Condor</div>
-                <div class="mec-actions">
-                  <button class="ghost" data-mod-export="condor">Export</button>
-                  <button class="ghost" data-mod-import="condor">Import</button>
-                  <input type="file" class="mod-file-input" data-mod="condor" accept=".json" style="display: none" />
-                </div>
-              </div>
-              <div class="module-export-card">
                 <div class="mec-name">Reception</div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="reception">Export</button>
@@ -3299,6 +3322,14 @@
                   <input type="file" class="mod-file-input" data-mod="rota" accept=".json" style="display: none" />
                 </div>
               </div>
+              <div class="module-export-card">
+                <div class="mec-name">Note board</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="board">Export</button>
+                  <button class="ghost" data-mod-import="board">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="board" accept=".json" style="display: none" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3381,7 +3412,6 @@
     <script src="../shared/io/referrals-io.js"></script>
     <script src="../shared/io/request-monitor-io.js"></script>
     <script src="../shared/reception-pathway-utils.js"></script>
-    <script src="../shared/io/condor-io.js"></script>
     <script src="../shared/io/reception-io.js"></script>
     <script src="../shared/knowledge-utils.js"></script>
     <script src="../shared/io/knowledge-io.js"></script>
@@ -3400,6 +3430,7 @@
     <script src="../shared/io/fs-handle-store.js"></script>
     <script src="../shared/io/pdc-contribute.js"></script>
     <script src="../shared/io/rota-io.js"></script>
+    <script src="../shared/io/board-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/api-diag.js"></script>

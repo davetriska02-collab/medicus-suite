@@ -201,10 +201,37 @@
   // For custom indicators (ruleId starts with custom-): show purple Custom tag
   // in place of the QOF year tag, hide points unless explicitly set, surface
   // notes/source on hover.
+  // Reduced-confidence chip treatment: a qof-indicator or qof-register chip
+  // is "uncertain" when either (a) the eligibility date behind a
+  // requiresRegisterCodedFrom gate (e.g. AST014's "new diagnosis") is an
+  // unconfirmed fallback date rather than a genuine clinical onset date
+  // (registerDateIsOnset === false — NOT null, which means no such gate
+  // applies at all, nothing to flag), or (b) the patient is on the register
+  // per Medicus's own patientRegisters but nothing on their problem list
+  // explains why (noMatchingProblemCode). Deliberately does NOT touch the
+  // status colour — urgency (red/amber/green) is never diluted; the dashed
+  // border + explicit text note carry the "this claim is less certain"
+  // signal instead, since colour/opacity alone is too easy to miss on a busy
+  // panel and can fail contrast requirements outright.
+  function isUncertainChip(chip) {
+    return chip.registerDateIsOnset === false || !!chip.noMatchingProblemCode;
+  }
+  function renderChipUncertaintyNotesHtml(chip) {
+    const notes = [];
+    if (chip.registerDateIsOnset === false) {
+      notes.push('~ Diagnosis date unconfirmed (no confirmed onset date on record)');
+    }
+    if (chip.noMatchingProblemCode) {
+      notes.push('⚠ On register — no matching problem code found on this record');
+    }
+    return notes.map((n) => `<div class="sent-chip-uncertain-note">${escHtml(n)}</div>`).join('');
+  }
+
   function renderQofIndicatorChip(chip) {
     const col = STATUS_COLOUR[chip.status] || 'neutral';
     const lbl = STATUS_LABEL[chip.status] || String(chip.status || '').toUpperCase();
     const isCustom = chip.isCustom || (chip.ruleId && chip.ruleId.startsWith('custom-'));
+    const uncertain = isUncertainChip(chip);
 
     const isOverdue = chip.status === 'overdue' || chip.status === 'not_met';
     const datePart = chip.dateText
@@ -237,7 +264,7 @@
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
     const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
-    // Glossary tooltip (U1): the QOF code (e.g. AST007) is opaque jargon — decorate
+    // Glossary tooltip (U1): the QOF code (e.g. AST015) is opaque jargon — decorate
     // it with the human-readable indicatorName via data-tip (+ title fallback) so a
     // click/hover explains the code. Inert/harmless if tooltip.js is not loaded.
     const codeTip =
@@ -245,7 +272,7 @@
         ? ` data-tip="${escAttr(chip.indicatorName)}" title="${escAttr(chip.indicatorName)}" tabindex="0" role="button"`
         : '';
     return `
-      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
+      <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}${uncertain ? ' sent-chip-uncertain' : ''}"${titleAttr}${evAttrs}>
         ${renderDismissBtn(chip.ruleId, null, chip.status)}
         <div class="sent-chip-head">
           <span class="sent-chip-name"${codeTip}>${escHtml(chip.indicatorCode || chip.ruleId)}</span>
@@ -253,7 +280,13 @@
           ${evChevron}
         </div>
         ${chip.indicatorName ? `<div class="sent-chip-cat">${escHtml(chip.indicatorName)}${yearOrCustomTag}</div>` : yearOrCustomTag}
+        ${
+          Array.isArray(chip.mergedRegisters) && chip.mergedRegisters.length > 1
+            ? `<div class="sent-chip-merged-registers">Also applies via: ${chip.mergedRegisters.map((r) => escHtml(r.label)).join(', ')}</div>`
+            : ''
+        }
         ${obs ? `<div class="sent-chip-obs">${obs}</div>` : ''}
+        ${renderChipUncertaintyNotesHtml(chip)}
       </div>`;
   }
 
@@ -693,10 +726,27 @@
       }
 
       const parts = entry.arithmetic.map((ar) => {
+        const arStatus = STATUS_LABEL[ar.status] || ar.status || '';
+        if (ar.postInitiation) {
+          if (!ar.startDate) {
+            return `${ar.test}: start date not visible in record → ${arStatus.toLowerCase()}`;
+          }
+          const startStr = formatDate(ar.startDate);
+          if (!ar.firstSinceStartDate) {
+            const sinceBit = ar.daysSinceStart != null ? ` (${ar.daysSinceStart}d ago)` : '';
+            return `${ar.test}: start date ${startStr}; no ${ar.test.split(' (')[0]} recorded since starting${sinceBit} → ${arStatus.toLowerCase()}`;
+          }
+          const firstStr = formatDate(ar.firstSinceStartDate);
+          const windowBit = ar.metWindow
+            ? '≤2 weeks'
+            : ar.sinceStartCount >= 2
+              ? `>2 weeks but repeated ${ar.sinceStartCount} times since`
+              : '>2 weeks, not yet repeated';
+          return `${ar.test}: start date ${startStr}; next ${ar.test.split(' (')[0]} ${firstStr} (${windowBit}) → ${arStatus.toLowerCase()}`;
+        }
         const lastDateStr = ar.lastDate ? formatDate(ar.lastDate) : 'no result on record';
         const dueDateStr = ar.dueDate ? formatDate(ar.dueDate) : null;
         const daysSince = ar.daysSince != null ? `${ar.daysSince}d since last result` : '';
-        const arStatus = STATUS_LABEL[ar.status] || ar.status || '';
         if (dueDateStr) {
           return `${ar.test}: last ${lastDateStr}; interval ${ar.intervalDays}d → due ${dueDateStr}${daysSince ? ' (' + daysSince + ')' : ''} → ${arStatus.toLowerCase()}`;
         }
@@ -783,6 +833,8 @@
     buildPreviewChip,
     renderQofIndicatorChip,
     buildQofPreviewChip,
+    isUncertainChip,
+    renderChipUncertaintyNotesHtml,
     renderDrugComboChip,
     renderDrugAllergyChip,
     renderEventCountChip,
