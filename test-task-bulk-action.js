@@ -164,6 +164,31 @@ console.log('\n--- normaliseListQuery: string vs { qs, scopeWarning } resolution
   check(empty.qs === '' && empty.scopeWarning === null, 'null input degrades to an empty query, never throws');
 }
 
+console.log('\n--- Engine source lock: delegated clicks cannot POST outside the confirm step; re-inserted widget repaints ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(
+    /async function runAction\(\) \{[\s\S]{0,400}?if \(_step !== 'confirm'\) return;/.test(src),
+    'runAction() refuses to POST unless the engine is on the confirm step (a stale clone Confirm cannot write)'
+  );
+  check(
+    /if \(action === 'confirm'\) \{\s*if \(_step !== 'confirm'\) return;/.test(src),
+    "dispatcher gates 'confirm' on _step === 'confirm'"
+  );
+  check(
+    /if \(action === 'back'\) \{\s*if \(_step !== 'confirm'\) return;/.test(src),
+    "dispatcher gates 'back' on _step === 'confirm'"
+  );
+  check(
+    /function render\(\) \{[\s\S]{0,600}?var el = _widgetEl \|\| document\.getElementById\(widgetId\);/.test(src),
+    'render() paints our own node even while Vue has it detached'
+  );
+  check(
+    /var wasConnected = document\.contains\(_widgetEl\);[\s\S]{0,900}?if \(!wasConnected && document\.contains\(_widgetEl\)\) \{\s*_widgetEl\.innerHTML = buildHtml\(\);/.test(src),
+    'injectTrigger repaints a node it re-inserts after Vue stripped it'
+  );
+}
+
 console.log('\n--- Engine source lock: a widened scope must be VISIBLE, but select-all is no longer withheld ---');
 {
   // Post-merge review of #272, finding 2: the unscoped privacy-officer

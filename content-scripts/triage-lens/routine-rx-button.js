@@ -100,7 +100,7 @@
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
       var taskUuid = null;
       try {
-        var m = /\/tasks\/data\/[^/]+\/overview\/([^/?#]+)/.exec(
+        var m = /\/tasks\/(?:data\/)?[^/]+\/overview\/([^/?#]+)/.exec(
           (typeof location !== 'undefined' && location.pathname) || ''
         );
         taskUuid = m ? m[1] : null;
@@ -146,10 +146,27 @@
   // 'manual' mode calls highlightAndAudit). Kept standalone (not inlined in
   // runMacro) so they can be extracted and unit-tested without driving the
   // full async find/type/wait pipeline — see test-routine-rx-macro.js.
-  function commitAndAudit(commitEl, team, mode) {
+  function commitAndAudit(commitEl, team, mode, noTeamPicked) {
     realClick(commitEl);
     // Audit R10 doctrine (shared/write-core.js): observing our own click is
     // not a successful re-assignment — the copy must not claim completion.
+    if (noTeamPicked) {
+      // No Assign-to picker existed, so no team was selected — the toast and
+      // the audit row must not claim the configured team as the destination.
+      toast(
+        'Clicked “Send to routine list” — no team was selected (no “Assign to” picker on this task). Check where it went.',
+        'ok'
+      );
+      recordAudit(
+        null,
+        mode,
+        'committed',
+        'no Assign-to picker on this overview; sent as-is with the assignee Medicus already held — configured team “' +
+          team +
+          '” was NOT selected'
+      );
+      return;
+    }
     toast('Clicked “Send to routine list” for “' + team + '”. Check the task has left your list.', 'ok');
     recordAudit(team, mode, 'committed', null);
   }
@@ -542,6 +559,22 @@
     return candidates[0] || null;
   }
 
+  // Positive evidence that the overview DOES carry an "Assign to" control,
+  // even when findAssignInput's input-hunting missed it (e.g. Medicus renamed
+  // the aria-label / placeholder). Used to keep the no-Assign-to skip path
+  // fail-closed: "we couldn't find the input" is NOT the same as "there is no
+  // input", and only the latter may skip the team pick.
+  function assignToLabelVisible() {
+    var nodes = document.querySelectorAll('label, legend, span, div, p, .label, [class*="label"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!visible(n)) continue;
+      var t = textOf(n);
+      if (t.length <= 30 && t.indexOf('assign to') === 0) return true;
+    }
+    return false;
+  }
+
   function optionControl(el) {
     if (!el) return null;
     var n = el;
@@ -748,6 +781,19 @@
         if (!commit) {
           return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
         }
+        // Fail CLOSED when the page still shows an "Assign to" control we
+        // simply failed to locate: an already-enabled commit then means
+        // Medicus holds some pre-filled assignee, and sending "as-is" would
+        // route the task to whoever that is — not the configured team.
+        if (assignToLabelVisible()) {
+          return abort(
+            'Found an “Assign to” control but couldn’t drive it — nothing was sent. Pick “' +
+              team +
+              '” yourself and press “Send to routine list”.',
+            team,
+            mode
+          );
+        }
         skipTeamPick = true;
         optionText = 'routine requests';
       }
@@ -900,12 +946,15 @@
       // Audit R8: auto mode may only skip the confirm when the picked option
       // EXACTLY matches the configured team — a contains-match must be read by
       // a human (named with the option's REAL text) before the write.
-      // skipTeamPick has no assignee option to mis-read — confirm names the
-      // routine list itself.
-      if (mode === 'confirm' || (mode === 'auto' && !optionExact)) {
+      // skipTeamPick has no assignee option to mis-read — but it also means
+      // NO team was selected (the task goes wherever Medicus already routes
+      // it), so auto mode must still put that in front of a human: it is the
+      // same "read the destination before the write" rule as a non-exact
+      // match. Only an exact team pick may ever skip the confirm.
+      if (mode === 'confirm' || (mode === 'auto' && (!optionExact || skipTeamPick))) {
         say('Confirm to send…');
         var confirmMsg = skipTeamPick
-          ? 'Send this prescription to the routine requests list?'
+          ? 'Send this prescription to the routine requests list? No “Assign to” picker here, so no team will be selected — it keeps whatever assignee Medicus already holds.'
           : optionExact
             ? 'Send this prescription to routine requests for “' + team + '”?'
             : 'The assignee list matched “' +
@@ -945,7 +994,7 @@
           mode
         );
       }
-      commitAndAudit(commit, team, mode);
+      commitAndAudit(commit, team, mode, skipTeamPick);
     } finally {
       _macroPath = null;
       running = false;

@@ -1152,7 +1152,9 @@ function makeSandbox(rootEl, pathname) {
     check(
       TOASTS.some(
         (t) =>
-          t.kind === 'confirm-prompt' && t.msg === 'Send this prescription to the routine requests list?'
+          t.kind === 'confirm-prompt' &&
+          /^Send this prescription to the routine requests list\?/.test(t.msg) &&
+          /no team will be selected/.test(t.msg)
       ),
       'skip-team-pick: confirm names the routine list, not a made-up team'
     );
@@ -1160,6 +1162,55 @@ function makeSandbox(rootEl, pathname) {
       TOASTS.some((t) => t.kind === 'ok' && /Clicked .Send to routine list./.test(t.msg)),
       'skip-team-pick: commit toast reports the click'
     );
+    check(
+      TOASTS.some((t) => t.kind === 'ok' && /no team was selected/.test(t.msg)),
+      'skip-team-pick: commit toast says no team was selected (does not name the configured team as the dest)'
+    );
+    check(
+      !TOASTS.some((t) => t.kind === 'ok' && /for .Prescribing/.test(t.msg)),
+      'skip-team-pick: commit toast never claims the configured team was picked'
+    );
+    CONFIRM_RETURN = true;
+  }
+
+  console.log('\n--- skip-team-pick: AUTO mode still confirms (no team was picked, so a human reads the dest) ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    const commit = el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false });
+    const root = buildRoot([radio, commit]);
+    const sb = makeSandbox(root, '/e38a9f/tasks/prescription_request_task_non_routine/overview/abc-123');
+    CONFIRM_RETURN = false;
+    await sb.runMacro('Prescribing / Meds Management', 'auto');
+    check(
+      TOASTS.some((t) => t.kind === 'confirm-prompt' && /no team will be selected/.test(t.msg)),
+      'skip-team-pick auto: a confirm prompt is shown and says no team will be selected'
+    );
+    check(CLICKS.indexOf('CommitBtn') === -1, 'skip-team-pick auto: declined confirm → commit is NOT clicked');
+    CONFIRM_RETURN = true;
+  }
+
+  console.log('\n--- skip-team-pick: fail CLOSED when an "Assign to" label is visible but the input was missed ---');
+  {
+    const radio = el('label', { text: 'Save & send to routine requests task list', label: 'Radio' });
+    // Medicus renamed the input's aria-label so findAssignInput misses it,
+    // but the control's own label is still on screen — a pre-filled assignee
+    // is why the commit is already enabled. Sending as-is would route the
+    // task to that assignee, not the configured team.
+    const assignLabel = el('label', { text: 'Assign to', label: 'AssignLabel' });
+    // (the input itself is modelled as not locatable — findAssignInput's
+    // label fallback would otherwise still reach a visible sibling input)
+    const assign = el('input', { attrs: { 'aria-label': 'Choose a colleague' }, label: 'AssignInput', hidden: true });
+    const commit = el('button', { text: 'Send to routine list', label: 'CommitBtn', disabled: false });
+    const root = buildRoot([radio, assignLabel, assign, commit]);
+    const sb = makeSandbox(root, '/e38a9f/tasks/prescription_request_task_non_routine/overview/abc-123');
+    CONFIRM_RETURN = true;
+    await sb.runMacro('Prescribing / Meds Management', 'auto');
+    check(CLICKS.indexOf('CommitBtn') === -1, 'assign-label-visible: commit is NOT clicked');
+    check(
+      TOASTS.some((t) => t.kind === 'err' && /Found an .Assign to. control/.test(t.msg)),
+      'assign-label-visible: aborts with an explicit reason'
+    );
+    check(!TOASTS.some((t) => t.kind === 'confirm-prompt'), 'assign-label-visible: no confirm is offered');
     CONFIRM_RETURN = true;
   }
 

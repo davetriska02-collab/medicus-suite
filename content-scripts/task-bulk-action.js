@@ -356,6 +356,9 @@
     }
 
     async function runAction() {
+      // The POST lives behind the review step, whichever node the click came
+      // from — the guard sits with the write, not only in the dispatcher.
+      if (_step !== 'confirm') return;
       var gen = _generation;
       var parts = partitionSelection(_rows);
       if (!canSubmit(parts.acting.length, _acting)) return;
@@ -694,12 +697,18 @@
         render();
         return;
       }
+      // 'back' / 'confirm' only exist on the confirm step. With delegated
+      // clicks a Vue clone can still show a stale "Confirm — acknowledge N"
+      // after the engine has gone back to 'select' and the selection changed;
+      // that click must not POST a selection the clinician never reviewed.
       if (action === 'back') {
+        if (_step !== 'confirm') return;
         _step = 'select';
         render();
         return;
       }
       if (action === 'confirm') {
+        if (_step !== 'confirm') return;
         runAction();
         return;
       }
@@ -793,7 +802,11 @@
     }
 
     function render() {
-      var el = liveWidget() || document.getElementById(widgetId);
+      // Always paint OUR node, attached or not: it is the node injectTrigger
+      // re-inserts after Vue strips it, so a render that lands while it is
+      // detached (a load() or runAction() finishing mid-churn) must not be
+      // lost on a no-op or painted into a clone that is about to be swept.
+      var el = _widgetEl || document.getElementById(widgetId);
       if (!el) return;
       if (!_widgetEl) _widgetEl = el;
       el.innerHTML = buildHtml();
@@ -842,6 +855,7 @@
 
       var parent = (anchor && anchor.parentElement) || document.body;
       if (!parent) return;
+      var wasConnected = document.contains(_widgetEl);
       if (anchor && _widgetEl.parentElement !== parent) {
         parent.insertBefore(_widgetEl, anchor);
       } else if (!anchor && _widgetEl.parentElement !== document.body) {
@@ -849,6 +863,13 @@
         // can unmount an inline node. Body is a backstop until the grid
         // exists; checkPage re-runs and will re-home above the grid.
         document.body.insertBefore(_widgetEl, document.body.firstChild);
+      }
+      // A node that was stripped and re-inserted repaints from current state
+      // (the old per-inject buildHtml() behaviour) so it can never come back
+      // showing a step the engine has already left.
+      if (!wasConnected && document.contains(_widgetEl)) {
+        _widgetEl.innerHTML = buildHtml();
+        requestAnimationFrame(capOpenPanel);
       }
     }
 
