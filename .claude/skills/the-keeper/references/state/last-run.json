@@ -23,6 +23,16 @@
   ],
   "heldForNextRun": [
     {
+      "id": "medreview-biperiden",
+      "description": "biperiden (Akineton) possibly missing from ACB_TABLE at score 3 — needs acbcalc.com verification. UK-licensed anticholinergic antiparkinson drug, same class as procyclidine/orphenadrine/trihexyphenidyl already in table. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
+      "heldSince": "2026-08-29"
+    },
+    {
+      "id": "vax-rsv-age-2026",
+      "description": "RSV eligibility: search result suggests age threshold changed from 75+ to 80+ in April 2026 JCVI advice. CSO to verify against current UKHSA RSV HCP letter before 2026 autumn season (effective 1 Sept 2026). Current rule flags 75+ which may over-flag if threshold raised. Weakens_safety if narrowed. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
+      "heldSince": "2026-08-29"
+    },
+    {
       "id": "vax-004",
       "description": "RSV care-home ageMin: 18 (weakens_safety). UKHSA HCP v05 says under-18 care-home residents are not eligible; current rule flags all ages. Not applied.",
       "heldSince": "2026-08-17"
@@ -49,7 +59,9 @@
       "heldSince": "2026-08-28"
     }
   ],
-  "sourceGaps": [],
+  "sourceGaps": [
+    "2026-08-29 source-gap run (PR #346): all authoritative UK clinical guidance hosts were blocked by the egress proxy (bnf.nice.org.uk, gov.uk DSU/UKHSA/JCVI, sps.nhs.uk, nice.org.uk, cks.nice.org.uk, england.nhs.uk, acbcalc.com, nottingham.ac.uk/primis). No rule changes applied that run; its two new holds (medreview-biperiden, vax-rsv-age-2026) are carried here. Note the PRN02356 PDF WAS fetched and read in full on the 2026-08-28 run recorded above."
+  ],
   "changesAppliedThisRun": [
     {
       "id": "qof-ast-rename",
@@ -161,5 +173,12 @@
       "description": "headache rf-household-co 999 added",
       "appliedDate": "2026-08-18"
     }
+  ],
+  "actionableForCSO": [
+    "RSV eligibility age threshold: check current UKHSA RSV HCP letter — is eligibility now 80+ (not 75+) from April 2026? Season starts 1 Sept 2026.",
+    "digoxin-renal-monitoring: rule ready (enabled:false). CSO to decide activation.",
+    "fever-adult pathway: PENDING CSO SIGN-OFF.",
+    "biperiden (Akineton): verify on ACBcalc.com — if score 3, can be added to ACB_TABLE next run.",
+    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0."
   ]
 }
