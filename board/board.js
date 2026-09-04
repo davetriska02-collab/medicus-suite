@@ -67,14 +67,19 @@ function esc(s) {
   );
 }
 
+// Changed columns get a per-column animation delay so an update sweeps
+// across the board left-to-right, like a real split-flap clattering through.
+const FLIP_STAGGER_MS = 26;
+
 function flapRowHtml(row, flipFrom) {
   return [...row]
     .map((ch, i) => {
       const prev = flipFrom && flipFrom[i];
       const blank = ch === ' ' ? ' note-flap-blank' : '';
       const flip = prev != null && prev !== ch ? ' is-flip' : '';
+      const delay = flip ? ` style="--note-flip-delay:${i * FLIP_STAGGER_MS}ms"` : '';
       const glyph = ch === ' ' ? '' : esc(ch);
-      return `<span class="note-flap${blank}${flip}" data-ch="${esc(ch)}"><span class="note-flap-glyph">${glyph}</span></span>`;
+      return `<span class="note-flap${blank}${flip}" data-ch="${esc(ch)}"${delay}><span class="note-flap-glyph">${glyph}</span></span>`;
     })
     .join('');
 }
@@ -253,7 +258,9 @@ function render() {
   }
 
   if (widgets.has('flap')) {
-    const rows = 2;
+    // Message profile is the whole show — give it a fuller board of bits
+    // (formatFlapRows vertically centres short messages in the grid).
+    const rows = profile.id === 'message' ? 4 : 2;
     const cols = profile.id === 'message' ? 16 : 22;
     const { html, joined } = flapsHtml(profile.message, rows, cols, lastFlap);
     lastFlap = joined;
@@ -465,8 +472,10 @@ function startPolling() {
     if (!widgetSet().has('clock')) return;
     const host = document.querySelector('.note-clock');
     if (!host) return;
+    const next = formatFlapRows(clockString(new Date()), 5, 1).join('\n');
+    if (next === lastClock) return; // repaint only when a digit actually flips
     host.innerHTML = flapsHtml(clockString(new Date()), 1, 5, lastClock).html;
-    lastClock = formatFlapRows(clockString(new Date()), 5, 1).join('\n');
+    lastClock = next;
   }, 1000);
 }
 
@@ -520,6 +529,12 @@ if (hasChrome) {
     }
   });
 }
+
+// Polling pauses while the tab is hidden — catch up the moment it is shown
+// again so a TV woken from standby never sits on stale figures.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refresh();
+});
 
 window.addEventListener('hashchange', () => {
   const id = requestedProfileId();

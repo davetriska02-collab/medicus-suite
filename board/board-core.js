@@ -347,8 +347,8 @@ export const BOARD_COLOURS = [
   {
     id: 'flap',
     name: 'Split-flap',
-    blurb: 'Cream flaps on a black chassis.',
-    swatches: ['#07080b', '#e7dcc8', '#fbbf24'],
+    blurb: 'Black flaps, white characters, on a black chassis.',
+    swatches: ['#07080b', '#24262a', '#fbbf24'],
   },
   {
     id: 'daylight',
@@ -648,7 +648,11 @@ function flapChar(ch) {
 // Vestaboard-style smart layout: wrap on word boundaries, centre each row
 // in a fixed column grid. Empty rows stay blank tiles.
 export function formatFlapRows(message, cols = FLAP_COLS, rows = FLAP_ROWS) {
-  const c = clampInt(cols, 8, 32, FLAP_COLS);
+  // Floor of 5, not 8: the clock is rendered as a 5-wide single row
+  // (board.js: formatFlapRows(clockString, 5, 1)); an 8-wide floor padded it
+  // to " HH:MM  " — off-centre by half a tile, visible now blank tiles are
+  // the same black bits as the rest of the board.
+  const c = clampInt(cols, 5, 32, FLAP_COLS);
   const r = clampInt(rows, 1, 4, FLAP_ROWS);
   const text = sanitiseMessage(message).toUpperCase().split('').map(flapChar).join('').replace(/\s+/g, ' ').trim();
 
@@ -678,9 +682,12 @@ export function formatFlapRows(message, cols = FLAP_COLS, rows = FLAP_ROWS) {
   if (cur) lines.push(cur);
 
   const shown = lines.slice(0, r);
+  // Centre vertically as well as horizontally — a short message on a tall
+  // board sits mid-grid, blank flap rows above and below (Vestaboard-style).
+  const drop = Math.max(0, Math.floor((r - shown.length) / 2));
   shown.forEach((line, i) => {
     const pad = Math.max(0, Math.floor((c - line.length) / 2));
-    for (let k = 0; k < line.length && pad + k < c; k++) grid[i][pad + k] = flapChar(line[k]);
+    for (let k = 0; k < line.length && pad + k < c; k++) grid[drop + i][pad + k] = flapChar(line[k]);
   });
   return grid.map((row) => row.join(''));
 }

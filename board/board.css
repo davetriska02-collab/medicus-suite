@@ -178,12 +178,12 @@ body {
 }
 
 .note-board[data-profile='message'] .note-flap {
-  width: clamp(36px, 4.2vw, 68px);
-  height: clamp(52px, 6.2vw, 96px);
+  width: clamp(34px, 3.9vw, 62px);
+  height: clamp(48px, 5.7vw, 88px);
 }
 
 .note-board[data-profile='message'] .note-flap-glyph {
-  font-size: clamp(22px, 3.2vw, 46px);
+  font-size: clamp(20px, 3vw, 42px);
 }
 
 .note-body[data-style] .note-board.note-board-has-yt {
@@ -293,6 +293,7 @@ body {
     inset 0 -1px 0 rgba(28, 24, 20, 0.12),
     0 1px 1px rgba(0, 0, 0, 0.4);
   overflow: hidden;
+  perspective: 240px;
 }
 
 .note-flap::after {
@@ -328,14 +329,22 @@ body {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* Cascade: board.js stamps --note-flip-delay per column so a change sweeps
+ * left-to-right, the way a real board clatters through. fill-mode both holds
+ * the folded-away frame until this column's turn. Styles that redefine this
+ * animation keep their own; reduced-motion below still wins. */
 .note-flap.is-flip .note-flap-glyph {
-  animation: note-flip var(--note-fast) var(--note-ease);
+  animation: note-flip 260ms var(--note-ease) var(--note-flip-delay, 0ms) both;
 }
 
 @keyframes note-flip {
   0% {
-    transform: translateY(1px) rotateX(80deg);
-    opacity: 0.2;
+    transform: translateY(1px) rotateX(-95deg);
+    opacity: 0.1;
+  }
+  55% {
+    transform: translateY(1px) rotateX(22deg);
+    opacity: 1;
   }
   100% {
     transform: translateY(1px) rotateX(0deg);

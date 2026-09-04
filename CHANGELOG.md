@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.257.1] — 2026-09-04
+
+### Note — proper Vestaboard look and feel for the Split-flap colour
+
+Visual pass on the display board's shipped default colour (`Split-flap`,
+Standard style) so it reads like the real thing:
+
+- **Black flap bits, white characters.** The Split-flap faces were cream
+  with dark ink (a Solari departure-board look); they are now top-lit black
+  bits with warm-white glyphs and a pronounced horizontal split — the
+  Vestaboard signature. Blank tiles are the same black bits, so the board
+  always reads as a full grid of flaps. Lives in `board/styles/flap.css`,
+  scoped to Standard + Split-flap — none of the other nineteen colour/style
+  sheets change (the catalogue blurb and swatches now describe the new
+  look).
+- **Cascading flip.** Changed columns now animate with a per-column stagger,
+  sweeping left-to-right like a board clattering through, with a proper 3D
+  fold (still fully disabled under `prefers-reduced-motion`; styles that
+  define their own flip keep it).
+- **Colour-chip tempo scale.** On Split-flap the tempo dots are square
+  Vestaboard-style colour chips with the same split and top-lit shading as
+  the flaps.
+- **Fuller Message board.** The Message profile shows a 4-row board;
+  `formatFlapRows` now centres short messages vertically as well as
+  horizontally, blank flap rows above and below.
+- The clock only repaints when a digit actually flips (was re-rendering every
+  second), is centred (the 5-wide clock row was being padded to 8 tiles), and
+  the board refreshes immediately when its tab becomes visible again, so a
+  screen that was hidden never shows stale figures.
+
+Pre-merge review: the original branch (v3.248.1) rewrote the `:root` tokens
+and base `.note-flap` / `.note-flaps` / `.note-dot` rules in `board.css`,
+which main's later per-colour sheets (v3.253.1) build on — it would have
+removed `--note-flap-blank` (turning Clinic's and Daylight's blank tiles into
+solid slabs), hard-coded a black flap housing under light chassis colours,
+and bled the chip split line and glyph shadow into every style. Re-landed
+scoped to the Split-flap colour instead.
+
+No data-path or config changes — H-067 posture, snapshot shape and backup
+scope are untouched.
+
 ## [v3.257.0] — 2026-09-03
 
 ### Companion: Open appts, links, tasks & investigations
