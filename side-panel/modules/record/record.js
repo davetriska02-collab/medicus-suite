@@ -18,8 +18,8 @@
 // drug-monitoring + QOF chips Sentinel already computes.
 //
 // The DEEP, longitudinal lenses (multi-year consultation timeline, continuity
-// indices, letters, eFI/Charlson) are NOT reachable live — they remain in the
-// full PDF visualiser, reachable from the footer button "Open full visualiser".
+// indices, letters, eFI/Charlson) are NOT reachable live — read those in
+// Medicus itself.
 //
 // CLINICAL-SAFETY FRAMING (non-negotiable — see docs/appraisal + INTENDED-PURPOSE)
 // -------------------------------------------------------------------------------
@@ -164,13 +164,6 @@ function shell() {
         <div class="rec-source" id="recSource" aria-live="polite"></div>
       </div>
       <div class="rec-body" id="recBody" aria-live="polite"></div>
-      <div class="rec-foot">
-        <button type="button" class="rec-deep-btn" id="recOpenDeep" title="Opens the full Patient Record Visualiser in a browser tab">
-          Open full visualiser <span class="rec-deep-sub">deep history · timeline · continuity · PDF</span>
-        </button>
-        <p class="rec-foot-note">The multi-year timeline, continuity indices and frailty/comorbidity
-          scores live in the full visualiser, built from an exported record PDF.</p>
-      </div>
     </div>`;
 }
 
@@ -206,13 +199,6 @@ let _preflightRulesPromise = null; // cached fetch of drug-rules.json + alert-li
 
 function wireStaticControls() {
   container.querySelector('#recRefresh')?.addEventListener('click', () => load(true));
-  container.querySelector('#recOpenDeep')?.addEventListener('click', () => {
-    try {
-      chrome.tabs.create({ url: chrome.runtime.getURL('visualiser-core.html') });
-    } catch (_) {
-      /* no-op */
-    }
-  });
 
   // Copy summary — button lives in the shell (not re-rendered), so a direct
   // listener is fine.  Button is disabled until render() populates _lastModel.
@@ -371,8 +357,7 @@ async function load(force) {
     setBody(
       stateCard(
         'No patient selected',
-        'Open a patient’s record in Medicus and this summary will load automatically. ' +
-          'You can still open the full visualiser below to import a record PDF.'
+        'Open a patient’s record in Medicus and this summary will load automatically.'
       )
     );
     return;
@@ -759,7 +744,7 @@ export function buildRecordSummaryText(model, chips, stamp) {
   lines.push('NOT SHOWN IN THIS SUMMARY (verify in Medicus):');
   lines.push('  Allergies & adverse reactions — not shown — verify in Medicus before prescribing');
   lines.push('  Immunisations — not shown — verify in Medicus');
-  lines.push('  Consultation history — not shown — use full visualiser for the timeline');
+  lines.push('  Consultation history — not shown — read the record in Medicus');
   lines.push('');
 
   // ── Active problems ────────────────────────────────────────────────────────
@@ -999,7 +984,7 @@ function gapMarkers() {
       </div>
       <div class="rec-gap" role="note">
         <span class="rec-gap-label">Consultation history</span>
-        <span class="rec-gap-val">Not shown here — use “Open full visualiser” below for the timeline</span>
+        <span class="rec-gap-val">Not shown here — read the record in Medicus</span>
       </div>
     </div>`;
 }

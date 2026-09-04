@@ -22,6 +22,41 @@
       "parentConceptId": "193570009",
       "parentDescription": "Cataract",
       "note": "CORRECTED 2026-08-20 after Nick reported the first cut (1359971008, FSN 'Extraction of lens by phacoemulsification (procedure)') wasn't matching a real patient's own recorded problem -- 84149000 (FSN 'Aspiration of cataract by phacoemulsification (procedure)') is the code actually used/recorded for this in practice. Confirmed via the public NHS termbrowser API (release v20260729) that 84149000 IS-A both 112963003 'Aspiration of cataract' and 1359971008 (the original entry's own concept) -- a more specific descendant of it, on the same Procedure axis, still NOT a descendant of Cataract (193570009, Disorder/Clinical-finding axis) itself. Same relationship shape as the pseudophakia entry above: a real clinical sequela of a cataract problem (the extraction procedure), different hierarchy branch entirely, so the live descendant search would never surface it on its own. Requested 2026-08-20 alongside a request to always offer this pairing regardless of hierarchy nuance. If this specific conceptId ever stops matching a real patient again, check whether the practice's records instead use 1359971008 or another sibling under 75170007 'Extraction of lens of eye' before re-guessing -- ask Nick to confirm from a real problem entry rather than picking by text search alone, same lesson as this correction."
+    },
+    {
+      "childConceptId": "1366066004",
+      "childDescription": "Nocturnal epileptic seizures",
+      "parentConceptId": "84757009",
+      "parentDescription": "Epilepsy",
+      "note": "Practice-requested pairing (2026-08-26, Nick), added while separately testing a problem-description-cleanup fix that surfaced this exact concept (a patient was recoded from '[D]Nocturnal seizure' to this description). SNOMED IS-A relationship not independently verified here (no live termbrowser check run for this pair, unlike the phaco correction above) -- added as a practice-suggested nest regardless of hierarchy status, same discipline as the pseudophakia/phaco entries."
+    },
+    {
+      "childConceptId": "91175000",
+      "childDescription": "Seizure",
+      "parentConceptId": "84757009",
+      "parentDescription": "Epilepsy",
+      "note": "Practice-requested pairing (2026-08-26, Nick). A bare 'Seizure' problem is not necessarily epileptic (could be febrile, syncopal, or another non-epileptic cause), so this is a deliberate practice judgement call to always OFFER the nest for review, not a claim that every seizure problem belongs under epilepsy -- same as every other entry in this file, the suggestion still requires the clinician's own explicit confirm before it writes anything. SNOMED IS-A relationship not independently verified here."
+    },
+    {
+      "childConceptId": "390834004",
+      "childDescription": "Background diabetic retinopathy",
+      "parentConceptId": "44054006",
+      "parentDescription": "Type 2 diabetes mellitus",
+      "note": "Practice-requested pairing (2026-08-28, Nick). Concept verified live via the public NHS termbrowser API (release v20260729): 390834004's FSN is 'Nonproliferative retinopathy due to diabetes mellitus (disorder)', with 'Background diabetic retinopathy' / 'BDR' as active GB synonyms -- so the childDescription here is the practice's own everyday term for the same concept, not a mismatch. It is a 'due to diabetes mellitus' complication, not a subtype of diabetes on the same IS-A branch as 44054006, so the live descendant search would not be expected to surface it under Type 2 diabetes on its own -- same shape as the pseudophakia/phaco entries above. IS-A ancestry not independently confirmed here (no working ancestor-lookup query run against the public API this session)."
+    },
+    {
+      "childConceptId": "127014009",
+      "childDescription": "Diabetic peripheral angiopathy",
+      "parentConceptId": "44054006",
+      "parentDescription": "Type 2 diabetes mellitus",
+      "note": "Practice-requested pairing (2026-08-28, Nick), added alongside the retinopathy and neuropathy pairs below. Concept verified live via the public NHS termbrowser API (release v20260729): 127014009's FSN/preferred term is 'Peripheral angiopathy due to diabetes mellitus (disorder)'. Same relationship shape as the retinopathy pair above -- a 'due to diabetes mellitus' complication rather than an IS-A subtype of diabetes, so not expected to surface via the live descendant search on its own. IS-A ancestry not independently confirmed here."
+    },
+    {
+      "childConceptId": "230572002",
+      "childDescription": "Diabetic neuropathy",
+      "parentConceptId": "44054006",
+      "parentDescription": "Type 2 diabetes mellitus",
+      "note": "Practice-requested pairing (2026-08-28, Nick), added alongside the retinopathy and peripheral-angiopathy pairs above. Concept verified live via the public NHS termbrowser API (release v20260729): 230572002's FSN/preferred term is 'Neuropathy due to diabetes mellitus (disorder)'. Same relationship shape as the other two diabetic-complication pairs here -- a 'due to diabetes mellitus' complication rather than an IS-A subtype of diabetes, so not expected to surface via the live descendant search on its own. IS-A ancestry not independently confirmed here."
     }
   ]
 }

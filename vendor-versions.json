@@ -1,47 +1,7 @@
 {
-  "generated": "2026-06-15",
-  "note": "Vendored library provenance record. SHA-256 checksums computed over the files as shipped. Update this file whenever a vendor library is upgraded.",
+  "generated": "2026-08-31",
+  "note": "Vendored library provenance record. SHA-256 checksums computed over the files as shipped. Update this file whenever a vendor library is upgraded. PDF.js, Chart.js and D3.js were removed with the Visualiser in v3.255.0.",
   "libraries": [
-    {
-      "filename": "vendor/pdf.min.js",
-      "library": "PDF.js (pdfjs-dist)",
-      "version": "4.2.67",
-      "version_source": "Version string found in file content: '4.2.67' (apiVersion check in getDocument call). Upgraded from 3.11.174 to remediate CVE-2024-4367 (arbitrary JS via crafted PDF font path). pdfjs-dist 4.x ships ESM only; file is legacy/build/pdf.min.mjs renamed to .js and loaded via an inline type=module shim in visualiser-core.html that exposes window.pdfjsLib.",
-      "upstream_url": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-4.2.67.tgz (extracted: package/legacy/build/pdf.min.mjs)",
-      "canonical_package": "https://www.npmjs.com/package/pdfjs-dist",
-      "license": "Apache-2.0",
-      "sha256": "410b149eae133506e6c3f2764e95d5d444fa706bbc450d6e63060ea7605c707d"
-    },
-    {
-      "filename": "vendor/pdf.worker.min.js",
-      "library": "PDF.js worker (pdfjs-dist)",
-      "version": "4.2.67",
-      "version_source": "Version string found in file content: '4.2.67' (version check in worker initialisation). Must match pdf.min.js exactly. File is legacy/build/pdf.worker.min.mjs renamed to .js; 4.x loads workers with { type: 'module' } so ESM content is valid. Same-origin chrome-extension:// URL means no blob CDN wrapper is created.",
-      "upstream_url": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-4.2.67.tgz (extracted: package/legacy/build/pdf.worker.min.mjs)",
-      "canonical_package": "https://www.npmjs.com/package/pdfjs-dist",
-      "license": "Apache-2.0",
-      "sha256": "094d2c8f779f6bc19d81bca80711748a63b4a95ffa79a5b67f9fcc6cd8c85e3b"
-    },
-    {
-      "filename": "vendor/chart.min.js",
-      "library": "Chart.js",
-      "version": "4.4.1",
-      "version_source": "Version string '4.4.1' found in file body (minified); no banner comment present",
-      "upstream_url": "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js",
-      "canonical_package": "https://www.npmjs.com/package/chart.js",
-      "license": "MIT",
-      "sha256": "cccb3afc90235f4ce7af254316ff14bd893f35d5a0735813715a21dab8484b95"
-    },
-    {
-      "filename": "vendor/d3.min.js",
-      "library": "D3.js",
-      "version": "7.8.5",
-      "version_source": "Version string 'v7.8.5' found near start of file",
-      "upstream_url": "https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js",
-      "canonical_package": "https://www.npmjs.com/package/d3",
-      "license": "ISC",
-      "sha256": "e331a93976054b950ca42b7276f476de25bb5a5dd50c6de544ca0126a960b918"
-    },
     {
       "filename": "vendor/fonts/jetbrains-mono-latin-var.woff2",
       "library": "JetBrains Mono (font)",

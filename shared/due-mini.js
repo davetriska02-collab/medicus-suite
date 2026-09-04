@@ -137,6 +137,23 @@
     MH011: 'Lipid profile (SMI)',
   };
 
+  // Short-form disambiguators for the clinic/nursing glance ONLY (qofSignalText
+  // below) — for codes that share a QOF_GLANCE_BY_PREFIX prefix with another
+  // code needing a genuinely different action, so both no longer collide on
+  // the same generic phrase (AST014 "new-diagnosis test" and AST015 "annual
+  // review" both fell through to plain "Asthma review"; DM006/DM020/DM036 all
+  // fell through to "Diabetes review"). Deliberately NOT consulted by
+  // qofReceptionText (see qofBookingGlance) — "Book an AST014: test <3m of
+  // diag" reads as nonsense to reception staff booking an appointment slot;
+  // they still get the broader "Book an asthma review" / "Book a diabetes
+  // review" phrasing via the prefix fallback.
+  var QOF_CODE_DISAMBIGUATORS = {
+    AST014: 'AST014: test <3m of diag',
+    DM006: 'DM006: ACE-I/ARB',
+    DM020: 'DM020: HbA1c ≤58',
+    DM036: 'DM036: BP target',
+  };
+
   var QOF_GLANCE_BY_PREFIX = [
     ['HYP', 'Blood pressure check'],
     ['DM', 'Diabetes review'],
@@ -166,7 +183,11 @@
     return next >= '0' && next <= '9';
   }
 
-  function qofSignalText(chip) {
+  // The booking-appropriate glance: exact-code override, else prefix fallback,
+  // else indicatorName/code. Shared by qofSignalText (clinic/nursing) AND
+  // qofReceptionText — this is the half meant for wrapping as "Book a/an …",
+  // since it never contains a raw QOF-code prefix.
+  function qofBookingGlance(chip) {
     var code = stripBidi(String(chip.indicatorCode || chip.ruleId || '')).toUpperCase();
     if (QOF_GLANCE_BY_CODE[code]) return QOF_GLANCE_BY_CODE[code];
     var hit = QOF_GLANCE_BY_PREFIX.find(function (row) {
@@ -175,6 +196,12 @@
     if (hit) return hit[1];
     if (chip.indicatorName) return stripBidi(String(chip.indicatorName)).slice(0, 40);
     return stripBidi(chip.indicatorCode || chip.ruleId || 'Review');
+  }
+
+  function qofSignalText(chip) {
+    var code = stripBidi(String(chip.indicatorCode || chip.ruleId || '')).toUpperCase();
+    if (QOF_CODE_DISAMBIGUATORS[code]) return QOF_CODE_DISAMBIGUATORS[code];
+    return qofBookingGlance(chip);
   }
 
   // Mirrors brief-core.js genericSignalText.
@@ -214,7 +241,7 @@
   }
 
   function qofReceptionText(chip) {
-    var glance = qofSignalText(chip);
+    var glance = qofBookingGlance(chip);
     var lower = glance.charAt(0).toLowerCase() + glance.slice(1);
     return 'Book ' + articleFor(lower) + ' ' + lower;
   }

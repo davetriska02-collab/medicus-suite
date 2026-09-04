@@ -153,6 +153,15 @@ console.log('\n--- roleShows ---');
   const nurseRec = role.roleShows('nursing', 'record');
   check(nurseRec.due && nurseRec.slots && nurseRec.book, 'nursing record: due + nurse slots + book');
   check(!nurseRec.pulse && !nurseRec.desk && !nurseRec.task, 'nursing: no pulse / desk / create-task');
+  check(!nurseRec.record, 'nursing record: no Upcoming (clinic + reception only)');
+
+  // Upcoming (appointments + unused booking links), added 2026-08-26: clinic
+  // gets it on the care record itself now, not just mid-triage-task.
+  // Reception's own copy ("Already booked") stays task-only, unchanged.
+  const clinicRec = role.roleShows('clinic', 'record');
+  check(clinicRec.record, 'clinic record: Upcoming now shows on the care record itself');
+  const recRec = role.roleShows('reception', 'record');
+  check(!recRec.record, 'reception record: still task-only, unchanged by the clinic extension');
 
   const clinicElse = role.roleShows('clinic', 'elsewhere');
   check(clinicElse.due && clinicElse.book && !clinicElse.task, 'clinic elsewhere: due + book, no create-task');

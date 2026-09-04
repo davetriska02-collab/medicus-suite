@@ -71,6 +71,7 @@
       { label: 'Type 2 diabetes mellitus', codedDate: '2019-06-12', status: 'active', source: 'mock' },
       { label: 'Essential hypertension', codedDate: '2018-03-04', status: 'active', source: 'mock' },
     ],
+    patientRegisters: null,
   };
 
   function fetchMock() {
@@ -155,6 +156,9 @@
       // DOM fallback has no structured history — evaluators treat empty array as no_data
       observationHistory: [],
       problems: probResult.problems,
+      // No DOM equivalent of clinical-summary's patientRegisters — register
+      // matching falls back to text-matching problems (see patientOnRegister).
+      patientRegisters: null,
       debug: {
         foundHeadings: [],
         parseFailures: obsResult.parseFailures || [],
@@ -296,6 +300,10 @@
         observationHistory,
         problems,
         pastProblems,
+        // null = clinical-summary endpoint unavailable/failed — register
+        // matching falls back to text-matching problems (see patientOnRegister).
+        // An array (possibly empty) means it succeeded and is authoritative.
+        patientRegisters: normalised.patientRegisters,
         debug: {
           foundHeadings: [],
           parseFailures: [],
@@ -389,6 +397,7 @@
             observations: [],
             observationHistory: [],
             problems: [],
+            patientRegisters: null,
             debug: {
               foundHeadings: [],
               parseFailures: [],
@@ -487,6 +496,7 @@
         observations: [],
         observationHistory: [],
         problems: [],
+        patientRegisters: null,
         debug: { foundHeadings: [], parseFailures: [], error: String(e), dataSource: 'error' },
         error: String(e),
       });

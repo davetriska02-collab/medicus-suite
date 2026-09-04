@@ -1,4 +1,6 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
+// Live practice-stream fetchers (slots, waiting room, submissions, inbox).
+// The Condor tab was removed in v3.255.0; Note's TV board still imports this.
 'use strict';
 
 import { windowTaskList, ledgerSeriesForDay } from '../submissions/submissions-core.js';

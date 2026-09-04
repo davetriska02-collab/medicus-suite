@@ -12,12 +12,16 @@ import {
   DEFAULT_POLL_SECONDS,
   TEMPO_ORDER,
   sanitiseConfig,
+  sanitiseStyleId,
+  sanitiseColourId,
   resolveProfile,
   widgetsForProfile,
   formatFlapRows,
   buildSnapshot,
   demoStreams,
   forbiddenSnapshotKeys,
+  feedIsDegraded,
+  youtubeEmbedUrl,
 } from './board-core.js';
 
 const stage = document.getElementById('noteStage');
@@ -38,6 +42,7 @@ let pollTimer = null;
 let clockTimer = null;
 let lastFlap = '';
 let lastClock = '';
+let ytFrame = null;
 
 function requestedProfileId() {
   const q = new URLSearchParams(location.search);
@@ -98,11 +103,36 @@ function tempoDots(tempo) {
 function tile(opts) {
   const tone = opts.tone ? ` data-tone="${esc(opts.tone)}"` : '';
   const word = opts.word ? ' note-tile-v-word' : '';
+  const strong = opts.strongSub ? ' note-tile-s-strong' : '';
   return `<article class="note-tile"${tone}>
     <div class="note-tile-k">${esc(opts.k)}</div>
     <div class="note-tile-v${word}">${esc(opts.v)}</div>
-    <div class="note-tile-s">${opts.sub || ''}${opts.dots || ''}</div>
+    <div class="note-tile-s${strong}">${opts.sub || ''}${opts.dots || ''}</div>
   </article>`;
+}
+
+function boardCopy() {
+  return config.copy || {};
+}
+
+function confirmStaffProfile(id) {
+  const next = (config.profiles || []).find((p) => p.id === id);
+  if (!next || next.audience !== 'staff') return true;
+  if (profile && profile.audience === 'staff' && profile.id === id) return true;
+  return window.confirm(
+    `${next.name} is a staff display. It shows the triage inbox and pressure figures. Do not put this tab on the waiting-room TV.\n\nOpen it anyway?`
+  );
+}
+
+function syncDemoBtn() {
+  if (!hasChrome || !demoBtn) return;
+  demoBtn.hidden = false;
+  if (publicFeedFailed()) demoBtn.textContent = 'Live figures failed';
+  else demoBtn.textContent = usingDemo ? 'Showing demo' : 'Showing live';
+}
+
+function publicFeedFailed() {
+  return profile.audience === 'public' && !usingDemo && feedIsDegraded(snapshot);
 }
 
 function tickerHtml(lines) {
@@ -131,14 +161,101 @@ function clockHtml(prev) {
   return `<div class="note-clock-wrap"><div class="note-clock" aria-label="Time">${html}</div></div>`;
 }
 
+function publicTempoSub(tempo) {
+  const c = boardCopy();
+  if (tempo === 'quiet') return c.tempoSubQuiet || '';
+  if (tempo === 'steady') return c.tempoSubSteady || '';
+  if (tempo === 'busy') return c.tempoSubBusy || '';
+  if (tempo === 'very-busy') return c.tempoSubVery || '';
+  return '';
+}
+
 function widgetSet() {
   return new Set(widgetsForProfile(profile));
+}
+
+function failLoudHtml() {
+  const c = boardCopy();
+  return `<div class="note-board note-board-fail" data-profile="${esc(profile.id)}" data-audience="public">
+    <div class="note-fail" role="alert">
+      <div class="note-fail-title">${esc(c.failTitle)}</div>
+      <div class="note-fail-ask">${esc(c.failAsk)}</div>
+      <p class="note-fail-body">${esc(c.failBody)}</p>
+    </div>
+    ${clockHtml(lastClock)}
+  </div>`;
+}
+
+function wantsYoutubePane() {
+  return widgetSet().has('youtube') && Boolean(youtubeEmbedUrl(profile.youtubeListId));
+}
+
+function ensureYtPane(board) {
+  const src = youtubeEmbedUrl(profile.youtubeListId);
+  if (!src) {
+    board.querySelector('.note-yt')?.remove();
+    ytFrame = null;
+    return;
+  }
+  if (ytFrame && ytFrame.isConnected && ytFrame.src === src) return;
+  board.querySelector('.note-yt')?.remove();
+  const pane = document.createElement('aside');
+  pane.className = 'note-yt';
+  pane.setAttribute('aria-label', 'Practice playlist');
+  const fallback = document.createElement('span');
+  fallback.className = 'note-yt-fallback';
+  fallback.textContent = 'Playlist unavailable';
+  pane.appendChild(fallback);
+  ytFrame = document.createElement('iframe');
+  ytFrame.className = 'note-yt-frame';
+  ytFrame.title = 'Practice playlist';
+  ytFrame.setAttribute('allow', 'autoplay; fullscreen');
+  ytFrame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+  ytFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+  ytFrame.src = src;
+  pane.appendChild(ytFrame);
+  board.appendChild(pane);
+}
+
+function paintLiveBoard(partsHtml, showYt) {
+  const className = showYt ? 'note-board note-board-has-yt' : 'note-board';
+  let board = stage.firstElementChild;
+  const same =
+    board &&
+    board.className === className &&
+    board.getAttribute('data-profile') === profile.id &&
+    board.getAttribute('data-audience') === profile.audience;
+  if (!same) {
+    stage.innerHTML = `<div class="${className}" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}"></div>`;
+    board = stage.firstElementChild;
+    ytFrame = null;
+  }
+  for (const child of [...board.children]) {
+    if (!child.classList.contains('note-yt')) child.remove();
+  }
+  if (partsHtml) board.insertAdjacentHTML('afterbegin', partsHtml);
+  if (showYt) ensureYtPane(board);
+  else {
+    board.querySelector('.note-yt')?.remove();
+    ytFrame = null;
+  }
 }
 
 function render() {
   const widgets = widgetSet();
   const s = snapshot;
   const parts = [];
+
+  if (publicFeedFailed()) {
+    ytFrame = null;
+    stage.innerHTML = failLoudHtml();
+    paintChrome();
+    return;
+  }
+
+  if (s && profile.audience === 'staff' && !usingDemo && feedIsDegraded(s)) {
+    parts.push(`<div class="note-fail-banner" role="alert">${esc(boardCopy().failBanner)}</div>`);
+  }
 
   if (widgets.has('flap')) {
     // Message profile is the whole show — give it a fuller board of bits
@@ -154,20 +271,22 @@ function render() {
   if (s && widgets.has('waiting')) {
     metrics.push(
       tile({
-        k: 'People waiting',
+        k: boardCopy().waitingLabel || 'People waiting',
         v: String(s.waiting.count),
         sub: esc(s.waiting.band),
         tone: s.waiting.tone,
+        strongSub: true,
       })
     );
   }
   if (s && widgets.has('tempo')) {
     metrics.push(
       tile({
-        k: 'Tempo',
+        k: profile.audience === 'staff' ? boardCopy().tempoLabelStaff : boardCopy().tempoLabelPublic,
         v: s.tempoLabel,
         word: true,
         tone: s.tempo,
+        sub: profile.audience === 'staff' ? esc(boardCopy().tempoSubStaff) : esc(publicTempoSub(s.tempo)),
         dots: tempoDots(s.tempo),
       })
     );
@@ -176,7 +295,7 @@ function render() {
     const n = (s.demand.medical || 0) + (s.demand.admin || 0);
     metrics.push(
       tile({
-        k: 'Requests today',
+        k: boardCopy().demandLabel || 'Requests today',
         v: String(n),
         sub: esc(`${s.demand.medical} medical · ${s.demand.admin} admin`),
       })
@@ -185,9 +304,9 @@ function render() {
   if (s && widgets.has('pressure') && s.pressure) {
     metrics.push(
       tile({
-        k: 'Practice pressure',
+        k: boardCopy().pressureLabel || 'Pressure index',
         v: s.pressure.ppi == null ? '—' : String(s.pressure.ppi),
-        sub: esc(s.pressure.band || 'Index from Condor'),
+        sub: esc(s.pressure.band ? `${s.pressure.band} · ${boardCopy().pressureSub}` : boardCopy().pressureSub),
         tone: s.pressure.band || '',
       })
     );
@@ -195,7 +314,7 @@ function render() {
   if (s && widgets.has('triage') && s.triage) {
     metrics.push(
       tile({
-        k: 'Triage inbox',
+        k: boardCopy().triageLabel || 'Triage inbox',
         v: s.triage.configured ? String(s.triage.total) : '—',
         sub: s.triage.configured ? esc(`${s.triage.urgent} urgent`) : 'Enable the request monitor in Settings',
       })
@@ -204,7 +323,7 @@ function render() {
   if (s && widgets.has('slots') && s.slots) {
     metrics.push(
       tile({
-        k: 'Slots remaining',
+        k: boardCopy().slotsLabel || 'Slots remaining',
         v: String(s.slots.total),
         sub: esc(`${s.slots.am} this morning · ${s.slots.pm} this afternoon`),
       })
@@ -213,7 +332,7 @@ function render() {
   if (s && widgets.has('urgent') && s.triage) {
     metrics.push(
       tile({
-        k: 'Urgent unactioned',
+        k: boardCopy().urgentLabel || 'Urgent unactioned',
         v: s.triage.configured ? String(s.triage.urgent) : '—',
         tone: s.triage.urgent > 0 ? 'busy' : 'quiet',
       })
@@ -222,7 +341,7 @@ function render() {
   if (s && widgets.has('activity') && s.activity) {
     metrics.push(
       tile({
-        k: 'Consultations today',
+        k: boardCopy().activityLabel || 'Consultations today',
         v: String(s.activity.consultations),
         sub: esc(`${s.activity.all} activity items`),
       })
@@ -233,17 +352,32 @@ function render() {
   if (s && widgets.has('ticker')) parts.push(tickerHtml(s.ticker));
   if (widgets.has('clock')) parts.push(clockHtml(lastClock));
 
-  if (!parts.length) {
-    stage.innerHTML = '<div class="note-empty">Nothing to show on this profile yet.</div>';
+  const showYt = wantsYoutubePane();
+  if (!parts.length && !showYt) {
+    ytFrame = null;
+    stage.innerHTML = `<div class="note-empty">${esc(boardCopy().emptyBoard)}</div>`;
   } else {
-    stage.innerHTML = `<div class="note-board" data-profile="${esc(profile.id)}" data-audience="${esc(profile.audience)}">${parts.join('')}</div>`;
+    paintLiveBoard(parts.join(''), showYt);
   }
 
+  paintChrome();
+}
+
+function paintChrome() {
   chromeProfile.textContent = profile.name;
+  const opts = (config.profiles || []).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  if (profileSelect.innerHTML !== opts) profileSelect.innerHTML = opts;
   profileSelect.value = profile.id;
   document.title = `${profile.name} · Note — Medicus Suite`;
   document.body.dataset.audience = profile.audience;
   document.body.dataset.profile = profile.id;
+  const styleId = sanitiseStyleId(config.styleId);
+  const colourId = sanitiseColourId(config.colourId);
+  document.body.dataset.style = styleId;
+  document.body.dataset.colour = colourId;
+  document.documentElement.dataset.style = styleId;
+  document.documentElement.dataset.colour = colourId;
+  syncDemoBtn();
 
   const bits = ['Note · Medicus Suite'];
   if (usingDemo) bits.push('<span class="note-demo-flag">Demo figures</span>');
@@ -273,16 +407,8 @@ async function loadConfig() {
     config = sanitiseConfig(null);
     return;
   }
-  const stored = await chrome.storage.local.get([STORAGE_KEY, 'suite.waitingRoom.thresholds']);
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
   config = sanitiseConfig(stored[STORAGE_KEY]);
-  const wr = stored['suite.waitingRoom.thresholds'];
-  if (wr && Number.isFinite(wr.amber) && Number.isFinite(wr.red)) {
-    config.thresholds = {
-      ...config.thresholds,
-      amberWaitMin: wr.amber,
-      redWaitMin: wr.red,
-    };
-  }
 }
 
 async function loadStreams() {
@@ -315,11 +441,21 @@ async function refresh() {
     nowMs: Date.now(),
     audience: profile.audience,
     thresholds: config.thresholds,
+    copy: config.copy,
+    publicCountsRequests: config.publicCountsRequests,
     ppi,
   });
   if (forbiddenSnapshotKeys(snapshot).length) {
     console.warn('[Note] snapshot contained a forbidden key — refusing to paint it');
-    snapshot = buildSnapshot({}, { audience: profile.audience, nowMs: Date.now(), thresholds: config.thresholds });
+    snapshot = buildSnapshot(
+      {},
+      {
+        audience: profile.audience,
+        nowMs: Date.now(),
+        thresholds: config.thresholds,
+        copy: config.copy,
+      }
+    );
     snapshot.errors = ['Display refused a snapshot that was not aggregate-only'];
   }
   render();
@@ -367,7 +503,14 @@ function syncFullscreenClass() {
   fsBtn.textContent = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
 }
 
-profileSelect.addEventListener('change', () => applyProfile(profileSelect.value));
+profileSelect.addEventListener('change', () => {
+  const id = profileSelect.value;
+  if (!confirmStaffProfile(id)) {
+    profileSelect.value = profile.id;
+    return;
+  }
+  applyProfile(id);
+});
 fsBtn.addEventListener('click', toggleFullscreen);
 document.addEventListener('fullscreenchange', syncFullscreenClass);
 
@@ -375,13 +518,13 @@ if (hasChrome) {
   demoBtn.hidden = false;
   demoBtn.addEventListener('click', () => {
     usingDemo = !usingDemo;
-    demoBtn.textContent = usingDemo ? 'Live figures' : 'Demo';
+    syncDemoBtn();
     lastFlap = '';
     refresh();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area && area !== 'local') return;
-    if (changes[STORAGE_KEY] || changes['suite.waitingRoom.thresholds']) {
+    if (changes[STORAGE_KEY]) {
       loadConfig().then(refresh);
     }
   });
@@ -406,11 +549,13 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     toggleFullscreen();
   } else if (e.key === '1') applyProfile('waiting-room');
-  else if (e.key === '2') applyProfile('ops');
-  else if (e.key === '3') applyProfile('message');
+  else if (e.key === '2') {
+    if (!confirmStaffProfile('ops')) return;
+    applyProfile('ops');
+  } else if (e.key === '3') applyProfile('message');
   else if (e.key === 'd' || e.key === 'D') {
     usingDemo = !usingDemo;
-    if (hasChrome) demoBtn.textContent = usingDemo ? 'Live figures' : 'Demo';
+    syncDemoBtn();
     lastFlap = '';
     refresh();
   }
@@ -428,7 +573,7 @@ bumpIdle();
 (async function boot() {
   await loadConfig();
   profile = resolveProfile(config, requestedProfileId() || config.activeProfileId);
-  if (hasChrome) demoBtn.textContent = usingDemo ? 'Live figures' : 'Demo';
+  syncDemoBtn();
   await refresh();
   startPolling();
 })();

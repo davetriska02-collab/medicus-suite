@@ -100,7 +100,7 @@
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
       var taskUuid = null;
       try {
-        var m = /\/tasks\/data\/[^/]+\/overview\/([^/?#]+)/.exec(
+        var m = /\/tasks\/(?:data\/)?[^/]+\/overview\/([^/?#]+)/.exec(
           (typeof location !== 'undefined' && location.pathname) || ''
         );
         taskUuid = m ? m[1] : null;
@@ -146,10 +146,27 @@
   // 'manual' mode calls highlightAndAudit). Kept standalone (not inlined in
   // runMacro) so they can be extracted and unit-tested without driving the
   // full async find/type/wait pipeline — see test-routine-rx-macro.js.
-  function commitAndAudit(commitEl, team, mode) {
+  function commitAndAudit(commitEl, team, mode, noTeamPicked) {
     realClick(commitEl);
     // Audit R10 doctrine (shared/write-core.js): observing our own click is
     // not a successful re-assignment — the copy must not claim completion.
+    if (noTeamPicked) {
+      // No Assign-to picker existed, so no team was selected — the toast and
+      // the audit row must not claim the configured team as the destination.
+      toast(
+        'Clicked “Send to routine list” — no team was selected (no “Assign to” picker on this task). Check where it went.',
+        'ok'
+      );
+      recordAudit(
+        null,
+        mode,
+        'committed',
+        'no Assign-to picker on this overview; sent as-is with the assignee Medicus already held — configured team “' +
+          team +
+          '” was NOT selected'
+      );
+      return;
+    }
     toast('Clicked “Send to routine list” for “' + team + '”. Check the task has left your list.', 'ok');
     recordAudit(team, mode, 'committed', null);
   }
@@ -542,6 +559,22 @@
     return candidates[0] || null;
   }
 
+  // Positive evidence that the overview DOES carry an "Assign to" control,
+  // even when findAssignInput's input-hunting missed it (e.g. Medicus renamed
+  // the aria-label / placeholder). Used to keep the no-Assign-to skip path
+  // fail-closed: "we couldn't find the input" is NOT the same as "there is no
+  // input", and only the latter may skip the team pick.
+  function assignToLabelVisible() {
+    var nodes = document.querySelectorAll('label, legend, span, div, p, .label, [class*="label"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!visible(n)) continue;
+      var t = textOf(n);
+      if (t.length <= 30 && t.indexOf('assign to') === 0) return true;
+    }
+    return false;
+  }
+
   function optionControl(el) {
     if (!el) return null;
     var n = el;
@@ -721,11 +754,18 @@
       var radio = radioControl(radioHit) || radioHit;
       if (!isRadioOn(radio)) activateRadio(radio);
 
-      // 2. Assign-to picker (only on screen once the routine radio is on)
+      // 2. Assign-to picker (only on screen once the routine radio is on).
+      // Non-routine overviews sometimes enable "Send to routine list" without
+      // an Assign-to field — the destination is the routine inbox itself.
+      // Only then may we skip the team pick. Never invent an assignee.
       say('Opening Assign to…');
       var assign = await waitFor(function () {
         return findAssignInput(radio);
       }, 2000);
+      var skipTeamPick = false;
+      var commit = null;
+      var optionExact = true;
+      var optionText = '';
       if (!assign) {
         if (issue1StillOn()) {
           return abort(
@@ -734,17 +774,41 @@
             mode
           );
         }
-        return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
+        commit = await waitFor(function () {
+          var b = findCommitButton();
+          return b && isEnabled(b) ? b : null;
+        }, 1200);
+        if (!commit) {
+          return abort('Couldn’t find the “Assign to” picker. Is this a prescription task?', team, mode);
+        }
+        // Fail CLOSED when the page still shows an "Assign to" control we
+        // simply failed to locate: an already-enabled commit then means
+        // Medicus holds some pre-filled assignee, and sending "as-is" would
+        // route the task to whoever that is — not the configured team.
+        if (assignToLabelVisible()) {
+          return abort(
+            'Found an “Assign to” control but couldn’t drive it — nothing was sent. Pick “' +
+              team +
+              '” yourself and press “Send to routine list”.',
+            team,
+            mode
+          );
+        }
+        skipTeamPick = true;
+        optionText = 'routine requests';
       }
-      // Snapshot [role=option] already on the overview (Clinical History /
-      // Reason for exam) BEFORE opening Assign-to, so we don't treat those
-      // as the team list.
       var optionSel =
         DC && DC.get('routine-rx.assignee-option')
           ? DC.get('routine-rx.assignee-option').target.join(', ')
           : '[id^="select-item-"], [role="option"], li[role="option"]';
-      var priorVisible = snapshotVisible(optionSel);
-      openAssignPicker(assign);
+      var priorVisible = [];
+      if (!skipTeamPick) {
+        // Snapshot [role=option] already on the overview (Clinical History /
+        // Reason for exam) BEFORE opening Assign-to, so we don't treat those
+        // as the team list.
+        priorVisible = snapshotVisible(optionSel);
+        openAssignPicker(assign);
+      }
 
       // 3. Pick the team option. Prefer an already-rendered option (skip-type);
       //    only then filter the list by typing. The picker's search is
@@ -787,6 +851,9 @@
         var s = (el && el.getAttribute && el.getAttribute('aria-label')) || (el && el.textContent) || '';
         return String(s).replace(/\s+/g, ' ').trim();
       };
+      if (skipTeamPick) {
+        say('Waiting to send…');
+      } else {
       // Skip-type: after opening Assign-to, wait briefly for an already-rendered
       // option. If the configured team is already on screen, select it without
       // typing. W8 is still UI-drive — abort if the option is never found.
@@ -841,8 +908,8 @@
           mode
         );
       }
-      var optionExact = optionIsExact(option);
-      var optionText = rawTextOf(option);
+      optionExact = optionIsExact(option);
+      optionText = rawTextOf(option);
       realClick(optionControl(option) || option);
 
       // 4. commit — find the button (EXACT label only — a commit click must
@@ -850,12 +917,12 @@
       //    Medicus ENABLES it (it stays disabled until a valid assignee is
       //    registered).
       say('Waiting to send…');
-      var commit = await waitFor(function () {
-        var b = findByText(['button', '[role="button"]'], 'Send to routine list', true);
+      commit = await waitFor(function () {
+        var b = findCommitButton();
         return b && isEnabled(b) ? b : null;
       }, 2500);
       if (!commit) {
-        if (findByText(['button', '[role="button"]'], 'Send to routine list')) {
+        if (findCommitButton()) {
           return abort(
             'Selected “' +
               team +
@@ -866,6 +933,7 @@
         }
         return abort('Selected “' + team + '”, but couldn’t find the “Send to routine list” button.', team, mode);
       }
+      } // end assign-to / team-pick path
 
       cfg.lastTeam = team;
       saveCfg();
@@ -878,17 +946,24 @@
       // Audit R8: auto mode may only skip the confirm when the picked option
       // EXACTLY matches the configured team — a contains-match must be read by
       // a human (named with the option's REAL text) before the write.
-      if (mode === 'confirm' || (mode === 'auto' && !optionExact)) {
+      // skipTeamPick has no assignee option to mis-read — but it also means
+      // NO team was selected (the task goes wherever Medicus already routes
+      // it), so auto mode must still put that in front of a human: it is the
+      // same "read the destination before the write" rule as a non-exact
+      // match. Only an exact team pick may ever skip the confirm.
+      if (mode === 'confirm' || (mode === 'auto' && (!optionExact || skipTeamPick))) {
         say('Confirm to send…');
-        var confirmMsg = optionExact
-          ? 'Send this prescription to routine requests for “' + team + '”?'
-          : 'The assignee list matched “' +
-            optionText +
-            '” for your configured team “' +
-            team +
-            '” (not an exact match). Send this prescription to routine requests for “' +
-            optionText +
-            '”?';
+        var confirmMsg = skipTeamPick
+          ? 'Send this prescription to the routine requests list? No “Assign to” picker here, so no team will be selected — it keeps whatever assignee Medicus already holds.'
+          : optionExact
+            ? 'Send this prescription to routine requests for “' + team + '”?'
+            : 'The assignee list matched “' +
+              optionText +
+              '” for your configured team “' +
+              team +
+              '” (not an exact match). Send this prescription to routine requests for “' +
+              optionText +
+              '”?';
         var ok = await requestConfirm(confirmMsg);
         if (!ok) {
           toast('Cancelled — nothing was sent. Selection is pre-filled.', 'warn');
@@ -919,7 +994,7 @@
           mode
         );
       }
-      commitAndAudit(commit, team, mode);
+      commitAndAudit(commit, team, mode, skipTeamPick);
     } finally {
       _macroPath = null;
       running = false;
@@ -1206,32 +1281,14 @@
     host.className = 'chrx-host';
 
     btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'chrx-btn';
-    btn.onclick = function () {
-      // 2026-08-23 review fix: runMacro is async and was called bare, so any
-      // throw inside it became an unhandled rejection — the button just reset
-      // with no toast and no audit line. A macro that dies must SAY it died.
-      if (!busy)
-        runMacro(cfg.lastTeam, cfg.commitMode).catch((e) => {
-          abort(
-            'The routine-list macro stopped unexpectedly — nothing was committed. ' + (e && e.message ? e.message : ''),
-            cfg.lastTeam,
-            cfg.commitMode
-          );
-          setBusy(false);
-        });
-    };
 
     caret = document.createElement('button');
+    caret.type = 'button';
     caret.className = 'chrx-caret';
     caret.textContent = '▾';
     caret.title = 'Change team / commit behaviour';
-    caret.onclick = function (e) {
-      e.stopPropagation();
-      if (busy || running) return;
-      if (menu) closeMenu();
-      else openMenu();
-    };
 
     host.appendChild(btn);
     host.appendChild(caret);
@@ -1262,18 +1319,44 @@
   // realistic carriers FIRST — on Medicus this control is a label / radio — and
   // only widen to the costly div/span sweep if the narrow set yields nothing. The
   // narrow set covers the live app; the wide set is a defensive fallback.
+  // Overview URL for a prescription-request task. Routine and non-routine
+  // share this family. Live slugs include `prescription-requests` and
+  // `prescription_request_task_non_routine` (hyphen twin too). `/data/` is
+  // usual but not required — a miss here is how the pill never appears on
+  // a non-routine overview.
+  function isPrescriptionOverviewPath(pathname) {
+    return /\/tasks\/(?:data\/)?[^/]*prescription[^/]*\/overview\//i.test(String(pathname == null ? '' : pathname));
+  }
+
+  // Exact commit labels only (audit R8). A superstring such as
+  // "Send to routine list and close task" must never match.
+  var COMMIT_LABELS = ['Send to routine list', 'Send to routine requests'];
+  function findCommitButton() {
+    for (var i = 0; i < COMMIT_LABELS.length; i++) {
+      var b = findByText(['button', '[role="button"]'], COMMIT_LABELS[i], true);
+      if (b) return b;
+    }
+    return null;
+  }
+
+  var ROUTING_LABELS = [
+    'Save & send to routine requests task list',
+    'Save and send to routine requests task list',
+    'Send to routine requests task list',
+  ];
   function findRoutingControl() {
     var C = DC && DC.get('routine-rx.routing-control');
     var narrow = C ? C.target : ['label', '[role="radio"]', '.radio'];
     var wide = C && C.legacy[0] ? C.legacy[0] : ['div', 'span'];
-    return (
-      findByText(narrow, 'Save & send to routine requests task list') ||
-      findByText(wide, 'Save & send to routine requests task list')
-    );
+    for (var i = 0; i < ROUTING_LABELS.length; i++) {
+      var hit = findByText(narrow, ROUTING_LABELS[i]) || findByText(wide, ROUTING_LABELS[i]);
+      if (hit) return hit;
+    }
+    return null;
   }
 
   function findActionAnchor() {
-    if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) return null;
+    if (!isPrescriptionOverviewPath(location.pathname)) return null;
 
     var routine = findRoutingControl();
     if (!routine) return null;
@@ -1334,7 +1417,7 @@
     }
 
     // 1. Cheap path gate — no DOM scan, no reflow.
-    if (!/\/tasks\/data\/[^/]*prescription[^/]*\/overview\//i.test(location.pathname)) {
+    if (!isPrescriptionOverviewPath(location.pathname)) {
       removeHost();
       return;
     }
@@ -1367,6 +1450,25 @@
       insertHost(anchor);
     }
     placedAnchor = anchor;
+    sweepCloneHosts();
+  }
+
+  // Vue can snapshot the action row and re-render a lookalike .chrx-host
+  // with no listeners. Clicks hit the clone and do nothing. Drop extras;
+  // document-level click capture still handles a clone that reappears
+  // before the next scan.
+  function sweepCloneHosts() {
+    if (!host || typeof document === 'undefined' || !document.querySelectorAll) return;
+    var nodes = document.querySelectorAll('.chrx-host');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i] !== host && nodes[i].parentElement) {
+        try {
+          nodes[i].parentElement.removeChild(nodes[i]);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    }
   }
 
   function removeHost() {
@@ -1455,9 +1557,44 @@
     }, 200);
   }
 
+  function onHostGo() {
+    // 2026-08-23 review fix: runMacro is async and was called bare, so any
+    // throw inside it became an unhandled rejection — the button just reset
+    // with no toast and no audit line. A macro that dies must SAY it died.
+    if (!busy)
+      runMacro(cfg.lastTeam, cfg.commitMode).catch((e) => {
+        abort(
+          'The routine-list macro stopped unexpectedly — nothing was committed. ' + (e && e.message ? e.message : ''),
+          cfg.lastTeam,
+          cfg.commitMode
+        );
+        setBusy(false);
+      });
+  }
+  function onHostCaret() {
+    if (busy || running) return;
+    if (menu) closeMenu();
+    else openMenu();
+  }
+  // Capture-phase: Vue may clone .chrx-host (same markup, no onclick). A
+  // listener on our node never sees that click. Document capture does.
+  function onDocHostClick(e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var caretEl = t.closest('.chrx-caret');
+    var btnEl = t.closest('.chrx-btn');
+    if (!caretEl && !btnEl) return;
+    if (!(caretEl || btnEl).closest('.chrx-host')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (caretEl) onHostCaret();
+    else onHostGo();
+  }
+
   loadCfg().then(function () {
     buildUI();
     requestConfirm = hostConfirm;
+    document.addEventListener('click', onDocHostClick, true);
     ensureInjected();
     // Skip batches that are entirely our own host inject/remove — they'd
     // otherwise self-trigger a needless rescan.

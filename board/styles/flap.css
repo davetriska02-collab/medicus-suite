@@ -1,0 +1,132 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite / Note display board / Standard colour: flap (the shipped default)
+ *
+ * Colour option for the Standard style, and the look a board with no
+ * data-colour attribute is meant to render (board.html stamps
+ * data-colour="flap" on <body>, so these rules always apply to the default).
+ *
+ * Since v3.257.1 this is a Vestaboard: black top-lit flap bits with white
+ * characters and a pronounced horizontal split, on a black chassis. The
+ * :root tokens in board.css keep the neutral cream/slate fallbacks that the
+ * other colour sheets override per token — nothing here leaks into them.
+ * Every selector below is scoped to [data-style='standard'][data-colour='flap']
+ * because the other nineteen sheets restyle .note-flap / .note-dot / the
+ * flap housing on top of board.css's base rules, not on top of this file.
+ */
+
+.note-body[data-style='standard'][data-colour='flap'] {
+  /* Vestaboard bit: black flap, white character, lit from above — the top
+   * half of each flap catches the light, the bottom half falls into shadow. */
+  --note-flap-top: #24262a;
+  --note-flap-bot: #17181c;
+  --note-flap: linear-gradient(180deg, var(--note-flap-top) 0%, #1f2125 48%, #16171b 52%, var(--note-flap-bot) 100%);
+  --note-flap-ink: #f6f4ed;
+  --note-flap-split: rgba(0, 0, 0, 0.55);
+  /* Blank bits are the same black flaps — a Vestaboard shows a full board of
+   * tiles whether or not a character is set. */
+  --note-flap-blank: linear-gradient(
+    180deg,
+    var(--note-flap-top) 0%,
+    #1f2125 48%,
+    #16171b 52%,
+    var(--note-flap-bot) 100%
+  );
+  /* One neutral lamp over the whole unit. */
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(255, 255, 255, 0.045), transparent 60%), var(--note-void);
+}
+
+/* Flap housing: near-black, recessed. */
+.note-body[data-style='standard'][data-colour='flap'] .note-flaps {
+  gap: clamp(4px, 0.6vh, 9px);
+  padding: clamp(16px, 2.2vh, 30px) clamp(14px, 1.8vw, 28px);
+  background: #0b0c0e;
+  border: 1px solid #1a1c20;
+  border-radius: 16px;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.note-body[data-style='standard'][data-colour='flap'] .note-flap,
+.note-body[data-style='standard'][data-colour='flap'] .note-flap-blank {
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+/* The horizontal split every flap character breaks across — blank bits too. */
+.note-body[data-style='standard'][data-colour='flap'] .note-flap::after,
+.note-body[data-style='standard'][data-colour='flap'] .note-flap-blank::after {
+  height: 2px;
+  margin-top: -1px;
+  background: var(--note-flap-split);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.note-body[data-style='standard'][data-colour='flap'] .note-flap-glyph {
+  font-weight: 650;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
+
+/* Tempo scale as Vestaboard colour chips — square bits with the same split
+ * and top-lit shading as the character flaps. Geometry on every chip; the
+ * unlit background only on :not(.is-on) so board.css's lit tones still win
+ * where a chip is on (specificity would otherwise flatten them). */
+.note-body[data-style='standard'][data-colour='flap'] .note-dots {
+  gap: 5px;
+}
+
+.note-body[data-style='standard'][data-colour='flap'] .note-dot {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 1px rgba(0, 0, 0, 0.5);
+}
+
+.note-body[data-style='standard'][data-colour='flap'] .note-dot:not(.is-on) {
+  background: linear-gradient(180deg, #24262a 0 50%, #131417 50% 100%);
+}
+
+.note-body[data-style='standard'][data-colour='flap'] .note-dot::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.note-body[data-style='standard'][data-colour='flap'] .note-dot.is-on[data-tone='quiet'] {
+  background: linear-gradient(
+    180deg,
+    var(--note-quiet) 0 50%,
+    color-mix(in srgb, var(--note-quiet) 72%, black) 50% 100%
+  );
+}
+.note-body[data-style='standard'][data-colour='flap'] .note-dot.is-on[data-tone='steady'] {
+  background: linear-gradient(
+    180deg,
+    var(--note-steady) 0 50%,
+    color-mix(in srgb, var(--note-steady) 72%, black) 50% 100%
+  );
+}
+.note-body[data-style='standard'][data-colour='flap'] .note-dot.is-on[data-tone='busy'] {
+  background: linear-gradient(180deg, var(--note-busy) 0 50%, color-mix(in srgb, var(--note-busy) 72%, black) 50% 100%);
+}
+.note-body[data-style='standard'][data-colour='flap'] .note-dot.is-on[data-tone='very-busy'] {
+  background: linear-gradient(180deg, var(--note-very) 0 50%, color-mix(in srgb, var(--note-very) 72%, black) 50% 100%);
+}
+
+/* Hover border: lifted from the slate default so the hover registers on
+ * the black chassis. */
+.note-body[data-style='standard'][data-colour='flap'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='flap'] .note-chrome-select select:hover {
+  border-color: #454036;
+}

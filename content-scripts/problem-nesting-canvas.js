@@ -122,10 +122,21 @@
   // dated entry, including ones far older than it.
   var MONTH_ONLY_DATE_RE = /^([A-Za-z]{3}) (\d{4})$/;
 
+  // A YEAR-ONLY onset date — no month, no day (e.g. "2012") — is a further,
+  // even less specific shape Medicus stores; same family as the month-only
+  // case above but confirmed live separately (2026-08-27, Nick: a "since
+  // 2012" prostate-cancer problem sorted as the OLDEST entry in the canvas,
+  // older than problems from the 1990s). It fell through DATE_RE, ISO_DATE_RE,
+  // AND MONTH_ONLY_DATE_RE, so dateSortKey returned null and the problem
+  // sorted as fully undated — same failure mode the month-only fix above
+  // addressed, just one level less specific.
+  var YEAR_ONLY_DATE_RE = /^(\d{4})$/;
+
   // Parses the confirmed "DD Mon YYYY" onset-date display shape, an
-  // already-ISO "YYYY-MM-DD" shape (recordDate), OR a partial "Mon YYYY"
-  // onset date into a zero-padded, lexically sortable key. Returns null for
-  // missing/malformed input — never guesses a day that wasn't given.
+  // already-ISO "YYYY-MM-DD" shape (recordDate), a partial "Mon YYYY" onset
+  // date, OR a bare "YYYY" onset date into a zero-padded, lexically sortable
+  // key. Returns null for missing/malformed input — never guesses a month
+  // or day that wasn't given.
   function dateSortKey(value) {
     if (value == null) return null;
     var s = String(value).trim();
@@ -150,6 +161,12 @@
       if (!monthOnly) return null;
       return mo[2] + '-' + monthOnly;
     }
+    // Same prefix logic one level up: a bare 'YYYY' key is a natural string
+    // PREFIX of any 'YYYY-MM' or 'YYYY-MM-DD' key in the same year, so it
+    // sorts fractionally after every specifically-dated entry that year,
+    // before anything in the following year — never inventing a month.
+    var yr = YEAR_ONLY_DATE_RE.exec(s);
+    if (yr) return yr[1];
     return null;
   }
 

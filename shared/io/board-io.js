@@ -12,10 +12,76 @@
 
   const BOARD_KEYS = ['board.config'];
   const PROFILE_IDS = ['waiting-room', 'ops', 'message'];
-  const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'demand', 'clock'];
-  const STAFF_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity'];
+  const CUSTOM_ID = /^c-[a-z0-9]{4,16}$/;
+  const PUBLIC_WIDGETS = ['flap', 'tempo', 'waiting', 'ticker', 'clock', 'youtube'];
+  const YOUTUBE_LIST_RE = /^[A-Za-z0-9_-]{10,80}$/;
+  const YOUTUBE_HOSTS = [
+    'youtube.com',
+    'www.youtube.com',
+    'm.youtube.com',
+    'music.youtube.com',
+    'youtube-nocookie.com',
+    'www.youtube-nocookie.com',
+    'youtu.be',
+  ];
+
+  function sanitiseYoutubeList(raw) {
+    if (raw == null) return '';
+    const s = String(raw).trim();
+    if (!s) return '';
+    if (YOUTUBE_LIST_RE.test(s)) return s;
+    const lower = s.toLowerCase();
+    if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
+      return '';
+    }
+    let candidate = s;
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(s)) {
+      candidate = 'https://' + s.replace(/^\/\//, '');
+    }
+    let url;
+    try {
+      url = new URL(candidate);
+    } catch {
+      return '';
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return '';
+    if (YOUTUBE_HOSTS.indexOf(url.hostname.toLowerCase()) === -1) return '';
+    const list = url.searchParams.get('list');
+    if (!list || !YOUTUBE_LIST_RE.test(list)) return '';
+    return list;
+  }
+  const STAFF_WIDGETS = ['pressure', 'triage', 'slots', 'urgent', 'activity', 'demand'];
   const ALL_WIDGETS = PUBLIC_WIDGETS.concat(STAFF_WIDGETS);
   const MAX_MESSAGE = 80;
+  const MAX_NAME = 32;
+  const STYLE_IDS = [
+    'standard',
+    'clear',
+    'plain',
+    'service',
+    'notice',
+    'sign',
+    'timetable',
+    'console',
+    'lobby',
+    'plaque',
+  ];
+  const COLOUR_IDS = [
+    'flap',
+    'daylight',
+    'clinic',
+    'wayfind',
+    'transit',
+    'instrument',
+    'nightwatch',
+    'ledger',
+    'gallery',
+    'harbour',
+  ];
+
+  function isProfileId(id) {
+    return typeof id === 'string' && (PROFILE_IDS.includes(id) || CUSTOM_ID.test(id));
+  }
 
   function isPlainObject(v) {
     return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
@@ -36,12 +102,38 @@
 
   function sanitiseImported(raw) {
     if (!isPlainObject(raw)) throw new Error('board.config must be an object.');
-    const out = { version: 1 };
+    const out = { version: 2 };
     if (raw.activeProfileId !== undefined) {
-      if (typeof raw.activeProfileId !== 'string' || !PROFILE_IDS.includes(raw.activeProfileId)) {
+      if (!isProfileId(raw.activeProfileId)) {
         throw new Error('board.config.activeProfileId is not a known profile.');
       }
       out.activeProfileId = raw.activeProfileId;
+    }
+    if (raw.publicCountsRequests !== undefined) {
+      out.publicCountsRequests = raw.publicCountsRequests === true;
+    }
+    if (raw.styleId !== undefined) {
+      if (typeof raw.styleId !== 'string') {
+        throw new Error('board.config.styleId is not a known style.');
+      }
+      if (COLOUR_IDS.includes(raw.styleId) && !STYLE_IDS.includes(raw.styleId)) {
+        out.styleId = 'standard';
+        out.colourId = raw.styleId;
+      } else if (STYLE_IDS.includes(raw.styleId)) {
+        out.styleId = raw.styleId;
+      } else {
+        throw new Error('board.config.styleId is not a known style.');
+      }
+    }
+    if (raw.colourId !== undefined) {
+      if (typeof raw.colourId !== 'string' || !COLOUR_IDS.includes(raw.colourId)) {
+        throw new Error('board.config.colourId is not a known colour.');
+      }
+      out.colourId = raw.colourId;
+    }
+    if (raw.copy !== undefined) {
+      if (!isPlainObject(raw.copy)) throw new Error('board.config.copy must be an object.');
+      out.copy = raw.copy;
     }
     if (raw.pollSeconds !== undefined) {
       const n = Number(raw.pollSeconds);
@@ -56,18 +148,27 @@
       if (!Array.isArray(raw.profiles)) throw new Error('board.config.profiles must be an array.');
       out.profiles = raw.profiles.map((p, i) => {
         if (!isPlainObject(p)) throw new Error(`board.config.profiles[${i}] must be an object.`);
-        if (p.id !== undefined && !PROFILE_IDS.includes(p.id)) {
+        if (p.id !== undefined && !isProfileId(p.id)) {
           throw new Error(`board.config.profiles[${i}].id is not a known profile.`);
         }
+        const shipped = p.id && PROFILE_IDS.includes(p.id);
         const shippedAudience = p.id === 'ops' ? 'staff' : 'public';
+        const audience = shipped ? shippedAudience : p.audience === 'staff' ? 'staff' : 'public';
         const widgets = Array.isArray(p.widgets)
           ? p.widgets.filter((w) => typeof w === 'string' && ALL_WIDGETS.includes(w))
           : undefined;
-        const locked =
-          shippedAudience === 'public' && widgets ? widgets.filter((w) => PUBLIC_WIDGETS.includes(w)) : widgets;
-        const clean = { id: p.id, audience: shippedAudience };
+        const locked = audience === 'public' && widgets ? widgets.filter((w) => PUBLIC_WIDGETS.includes(w)) : widgets;
+        const clean = { id: p.id, audience };
         if (locked) clean.widgets = locked;
         if (p.message !== undefined) clean.message = clampMessage(p.message);
+        if (p.name !== undefined) clean.name = clampMessage(p.name).slice(0, MAX_NAME);
+        if (p.youtubeListId !== undefined) {
+          const id = sanitiseYoutubeList(p.youtubeListId);
+          if (String(p.youtubeListId).trim() && !id) {
+            throw new Error(`board.config.profiles[${i}].youtubeListId is not a YouTube playlist.`);
+          }
+          clean.youtubeListId = id;
+        }
         return clean;
       });
     }

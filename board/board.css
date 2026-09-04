@@ -16,13 +16,10 @@
   --note-mute: #8b8478;
   --note-soft: #c8c0b2;
   --note-ink: #f4efe4;
-  /* Vestaboard bit: black flap, white character, lit from above — the top
-   * half of each flap catches the light, the bottom half falls into shadow. */
-  --note-flap-top: #24262a;
-  --note-flap-bot: #17181c;
-  --note-flap: linear-gradient(180deg, var(--note-flap-top) 0%, #1f2125 48%, #16171b 52%, var(--note-flap-bot) 100%);
-  --note-flap-ink: #f6f4ed;
-  --note-flap-split: rgba(0, 0, 0, 0.55);
+  --note-flap: #e7dcc8;
+  --note-flap-ink: #1c1814;
+  --note-flap-split: rgba(28, 24, 20, 0.22);
+  --note-flap-blank: #12141a;
   --note-quiet: #4ade80;
   --note-steady: #fbbf24;
   --note-busy: #fb923c;
@@ -124,7 +121,24 @@ body {
   color: var(--note-ink);
 }
 
+.note-body[data-audience='public'] .note-chrome-select {
+  display: none;
+}
+
 .note-body.is-fullscreen .note-chrome {
+  display: none;
+}
+
+/* Service and Notice use the chrome strip as the masthead (blue bar /
+ * broadsheet title). Hiding the whole strip on a TV loses the style.
+ * Keep the brand rail; hide only the setup buttons. */
+.note-body.is-fullscreen[data-style='service'] .note-chrome,
+.note-body.is-fullscreen[data-style='notice'] .note-chrome {
+  display: flex;
+}
+
+.note-body.is-fullscreen[data-style='service'] .note-chrome-actions,
+.note-body.is-fullscreen[data-style='notice'] .note-chrome-actions {
   display: none;
 }
 
@@ -172,20 +186,89 @@ body {
   font-size: clamp(20px, 3vw, 42px);
 }
 
+.note-body[data-style] .note-board.note-board-has-yt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 38%);
+  grid-template-areas:
+    'flaps flaps'
+    'metrics yt'
+    'ticker yt'
+    'clock clock';
+  align-items: center;
+  width: min(1680px, 100%);
+}
+
+.note-board-has-yt .note-flaps {
+  grid-area: flaps;
+}
+
+.note-board-has-yt .note-metrics {
+  grid-area: metrics;
+}
+
+.note-board-has-yt .note-ticker {
+  grid-area: ticker;
+}
+
+.note-board-has-yt .note-clock-wrap {
+  grid-area: clock;
+}
+
+.note-yt {
+  grid-area: yt;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.note-yt-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--note-mute);
+  font-size: clamp(13px, 1.2vw, 16px);
+}
+
+.note-yt-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+@media (max-width: 900px) {
+  .note-body[data-style] .note-board.note-board-has-yt {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'flaps'
+      'metrics'
+      'ticker'
+      'yt'
+      'clock';
+  }
+}
+
 /* ── Split-flap row ─────────────────────────────────────────────────────── */
 
 .note-flaps {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(4px, 0.6vh, 9px);
-  padding: clamp(16px, 2.2vh, 30px) clamp(14px, 1.8vw, 28px);
-  background: #0b0c0e;
-  border: 1px solid #1a1c20;
-  border-radius: 16px;
+  gap: clamp(6px, 0.8vh, 12px);
+  padding: clamp(14px, 2vh, 28px) clamp(12px, 1.6vw, 24px);
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 14px;
   box-shadow:
-    inset 0 2px 6px rgba(0, 0, 0, 0.6),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 18px 40px rgba(0, 0, 0, 0.35);
 }
 
@@ -204,48 +287,52 @@ body {
   height: clamp(40px, 4.6vw, 76px);
   background: var(--note-flap);
   color: var(--note-flap-ink);
-  border-radius: 4px;
+  border-radius: 3px;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-    0 1px 2px rgba(0, 0, 0, 0.55);
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(28, 24, 20, 0.12),
+    0 1px 1px rgba(0, 0, 0, 0.4);
   overflow: hidden;
   perspective: 240px;
 }
 
-/* The horizontal split every flap character breaks across. */
 .note-flap::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   top: 50%;
-  height: 2px;
-  margin-top: -1px;
+  height: 1px;
   background: var(--note-flap-split);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.045);
   pointer-events: none;
 }
 
 .note-flap-glyph {
   font-family: var(--note-sans);
   font-size: clamp(18px, 2.4vw, 36px);
-  font-weight: 650;
+  font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
   transform: translateY(1px);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
-/* Blank bits are the same black flaps — a Vestaboard shows a full board of
- * tiles whether or not a character is set. */
+.note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
 .note-flap-blank .note-flap-glyph {
   opacity: 0;
 }
 
+.note-flap-blank::after {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 /* Cascade: board.js stamps --note-flip-delay per column so a change sweeps
  * left-to-right, the way a real board clatters through. fill-mode both holds
- * the folded-away frame until this column's turn. */
+ * the folded-away frame until this column's turn. Styles that redefine this
+ * animation keep their own; reduced-motion below still wins. */
 .note-flap.is-flip .note-flap-glyph {
   animation: note-flip 260ms var(--note-ease) var(--note-flip-delay, 0ms) both;
 }
@@ -318,6 +405,58 @@ body {
   line-height: 1.35;
 }
 
+.note-tile-s-strong {
+  font-size: clamp(16px, 1.7vw, 22px);
+  font-weight: 550;
+  color: var(--note-ink);
+}
+
+.note-fail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: clamp(24px, 6vw, 72px) 24px;
+  background: var(--note-chassis);
+  border: 1px solid var(--note-busy);
+  border-radius: 14px;
+}
+
+.note-fail-title {
+  font-size: clamp(32px, 4.4vw, 56px);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--note-ink);
+}
+
+.note-fail-ask {
+  font-size: clamp(22px, 2.8vw, 36px);
+  font-weight: 600;
+  color: var(--note-busy);
+}
+
+.note-fail-body {
+  margin: 0;
+  max-width: 36em;
+  font-size: clamp(22px, 2.8vw, 36px);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--note-ink);
+}
+
+.note-fail-banner {
+  padding: 14px 18px;
+  background: rgba(251, 146, 60, 0.16);
+  border: 1px solid var(--note-busy);
+  border-radius: 10px;
+  color: var(--note-ink);
+  font-size: clamp(16px, 1.6vw, 22px);
+  font-weight: 600;
+  text-align: center;
+}
+
 .note-tile[data-tone='quiet'] {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.03),
@@ -350,54 +489,30 @@ body {
     inset 3px 0 0 var(--note-quiet);
 }
 
-/* Tempo scale as Vestaboard colour chips — square bits with the same split
- * and top-lit shading as the character flaps. */
 .note-dots {
   display: flex;
-  gap: 5px;
+  gap: 6px;
   margin-top: 8px;
 }
 
 .note-dot {
-  position: relative;
-  width: 13px;
-  height: 13px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, #24262a 0 50%, #131417 50% 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 1px 1px rgba(0, 0, 0, 0.5);
-}
-
-.note-dot::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 50%;
-  height: 1px;
-  background: rgba(0, 0, 0, 0.4);
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2a2e38;
 }
 
 .note-dot.is-on[data-tone='quiet'] {
-  background: linear-gradient(
-    180deg,
-    var(--note-quiet) 0 50%,
-    color-mix(in srgb, var(--note-quiet) 72%, black) 50% 100%
-  );
+  background: var(--note-quiet);
 }
 .note-dot.is-on[data-tone='steady'] {
-  background: linear-gradient(
-    180deg,
-    var(--note-steady) 0 50%,
-    color-mix(in srgb, var(--note-steady) 72%, black) 50% 100%
-  );
+  background: var(--note-steady);
 }
 .note-dot.is-on[data-tone='busy'] {
-  background: linear-gradient(180deg, var(--note-busy) 0 50%, color-mix(in srgb, var(--note-busy) 72%, black) 50% 100%);
+  background: var(--note-busy);
 }
 .note-dot.is-on[data-tone='very-busy'] {
-  background: linear-gradient(180deg, var(--note-very) 0 50%, color-mix(in srgb, var(--note-very) 72%, black) 50% 100%);
+  background: var(--note-very);
 }
 
 /* ── Ticker ─────────────────────────────────────────────────────────────── */
