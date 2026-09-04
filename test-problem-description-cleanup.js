@@ -1420,7 +1420,10 @@ console.log(
   check(extractRecordDateOnsetCandidate(null) === null, 'null prefill -> null, never throws');
 
   check(isoDateToUkDisplay('2022-01-18') === '18-01-2022', 'ISO date reformatted to UK DD-MM-YYYY for display');
-  check(isoDateToUkDisplay('2012-01-01') === '01-01-2012', 'single-digit-looking day/month still zero-padded correctly (already padded in the ISO source)');
+  check(
+    isoDateToUkDisplay('2012-01-01') === '01-01-2012',
+    'single-digit-looking day/month still zero-padded correctly (already padded in the ISO source)'
+  );
   check(isoDateToUkDisplay('garbage') === 'garbage', 'unrecognised shape is returned unchanged, not mangled');
   check(isoDateToUkDisplay(null) === '', 'null -> empty string, never throws');
 }

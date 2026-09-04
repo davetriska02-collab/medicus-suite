@@ -241,11 +241,20 @@
   // dates never block a suggestion that would otherwise have been offered.
   // Equal dates (e.g. a stent inserted the same day the underlying disease
   // was recorded) are NOT excluded — only a strictly earlier child is.
+  //
+  // Partial dates compare at the SHARED precision: a bare 'YYYY' key is a
+  // string prefix of every 'YYYY-MM' / 'YYYY-MM-DD' key, so a raw `<` would
+  // read "2012" as earlier than "2012-03-15" — i.e. "unknown within the
+  // year" would be treated as "known to predate", silently dropping every
+  // suggestion whose parent is dated in the same year (or month, for the
+  // month-only case). Truncating both keys to the shorter one's length
+  // turns that into an equal-dates comparison, which is NOT excluded.
   function predatesParent(childInfo, parentInfo) {
     var childDate = resolveChronologyDate(childInfo);
     var parentDate = resolveChronologyDate(parentInfo);
     if (!childDate || !parentDate) return false;
-    return childDate < parentDate;
+    var n = Math.min(childDate.length, parentDate.length); // 4, 7 or 10
+    return childDate.slice(0, n) < parentDate.slice(0, n);
   }
 
   // Builds the 'childConceptId|parentConceptId' key Set from

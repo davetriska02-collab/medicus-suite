@@ -404,6 +404,37 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
     predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: '2012' }) === true,
     'a year-only-dated parent is also handled — the earlier full-dated child still predates it'
   );
+  // Shared-precision comparison: "unknown within the year/month" must never
+  // read as "known to predate" — a bare 'YYYY' key is a string prefix of
+  // every fuller key in that year, so a raw `<` would exclude these.
+  check(
+    predatesParent({ onsetDate: '2012' }, { onsetDate: '15 Mar 2012' }) === false,
+    'a year-only child does NOT predate a full-dated parent in the same year'
+  );
+  check(
+    predatesParent({ onsetDate: '2012' }, { onsetDate: '31 Dec 2012' }) === false,
+    'a year-only child does NOT predate a parent dated at the end of the same year'
+  );
+  check(
+    predatesParent({ onsetDate: '2012' }, { onsetDate: 'Jun 2012' }) === false,
+    'a year-only child does NOT predate a month-only parent in the same year'
+  );
+  check(
+    predatesParent({ onsetDate: '2012' }, { onsetDate: null, recordDate: '2012-03-15' }) === false,
+    'a year-only child does NOT predate a parent whose record-date fallback is in the same year'
+  );
+  check(
+    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '15 Dec 2008' }) === false,
+    'a month-only child does NOT predate a full-dated parent in the same month'
+  );
+  check(
+    predatesParent({ onsetDate: '15 Mar 2012' }, { onsetDate: '2012' }) === false,
+    'a full-dated child does NOT predate a year-only parent in the same year'
+  );
+  check(
+    predatesParent({ onsetDate: '2011' }, { onsetDate: '15 Mar 2012' }) === true,
+    'a year-only child in an earlier year still predates'
+  );
 
   check(
     resolveChronologyDate({ onsetDate: '1 Jan 2020', recordDate: '1 Jan 2019' }) === '2020-01-01',

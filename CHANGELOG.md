@@ -31,10 +31,23 @@ already used for month-only dates.
 
 ### Problem nesting overrides: seizure/epilepsy pairs
 
-Added two practice-suggested parent/child pairs to
+Added practice-suggested parent/child pairs to
 `rules/problem-nesting-overrides.json`: "Nocturnal epileptic seizures"
-and "Seizure" now offer to nest under "Epilepsy" in the Organise Problems
-canvas, alongside the existing cataract-family entries.
+and "Seizure" now offer to nest under "Epilepsy", and "Background diabetic
+retinopathy", "Diabetic peripheral angiopathy" and "Diabetic neuropathy"
+under "Type 2 diabetes mellitus", in the Organise Problems canvas,
+alongside the existing cataract-family entries.
+
+### Nesting chronology check compares partial dates at shared precision
+
+Pre-merge review fix: `predatesParent` compared raw sort keys with `<`,
+and a bare-year key ("2012") is a string prefix of every fuller key in
+that year — so a child dated "2012" read as *earlier than* a parent dated
+"15 Mar 2012", and the suggestion was silently dropped. "Unknown within
+the year" was being treated as "known to predate". The month-only case
+had the same quirk within a single month. Both keys are now truncated to
+the shorter one's precision before comparing, which turns those cases
+into the equal-dates comparison the check already deliberately allows.
 
 ### Clean up code: onset-date-gap message no longer presumes GP2GP import
 

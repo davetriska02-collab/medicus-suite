@@ -140,10 +140,7 @@ console.log('--- compareDatesDesc: descending, undated always last ---');
   // real live case: a 2012 problem was landing below 1990s-dated ones.
   check(compareDatesDesc('2012', null) < 0, 'a year-only date still sorts before a genuinely undated entry');
   check(compareDatesDesc('2012', '1 Jan 1990') < 0, 'a year-only date correctly sorts before an older FULL date');
-  check(
-    compareDatesDesc('1 Jan 2020', '2012') < 0,
-    'a newer full date correctly sorts before an older year-only date'
-  );
+  check(compareDatesDesc('1 Jan 2020', '2012') < 0, 'a newer full date correctly sorts before an older year-only date');
   check(
     compareDatesDesc('2012', '15 Jun 2012') > 0,
     'a year-only date sorts fractionally after a specifically-dated entry in the SAME year (least-specific-first within a tie)'
@@ -922,7 +919,10 @@ console.log(
   check(src.includes('data-sig-lane') && src.includes('data-end-bin'), 'lanes and the End bin are drop targets');
   check(src.includes("kind === 'finalise'"), 'the confirm path finalises the staged canvas draft');
   check(src.includes('orderEndsForCommit'), 'finalise commits ends children-first');
-  check(src.includes('ms-pnc-tile-checkbox') && src.includes('proposeLinkMany'), 'multi-select checkboxes and multi-nest confirm exist');
+  check(
+    src.includes('ms-pnc-tile-checkbox') && src.includes('proposeLinkMany'),
+    'multi-select checkboxes and multi-nest confirm exist'
+  );
   check(
     (src.match(/readDropPayload\(e\) \|\| _dragPayload/g) || []).length >= 3,
     'drop handlers fall back to the in-memory payload when dataTransfer is empty'
@@ -932,7 +932,10 @@ console.log(
 console.log('--- multi-select helpers ---');
 {
   check(uniqueIds(['a', 'a', '', 'b']).join(',') === 'a,b', 'uniqueIds drops blanks and dupes');
-  check(payloadIds({ problemId: 'a', ids: ['b', 'a'] }, 'problemId').join(',') === 'a,b', 'payloadIds keeps the dragged id first');
+  check(
+    payloadIds({ problemId: 'a', ids: ['b', 'a'] }, 'problemId').join(',') === 'a,b',
+    'payloadIds keeps the dragged id first'
+  );
   check(payloadIds({ problemId: 'a' }, 'problemId').join(',') === 'a', 'payloadIds works without ids[]');
   check(toggleSelectedIds(['a'], 'b', true).join(',') === 'a,b', 'additive click adds');
   check(toggleSelectedIds(['a', 'b'], 'a', true).join(',') === 'b', 'additive click removes');
