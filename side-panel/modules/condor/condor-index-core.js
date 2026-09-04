@@ -3,10 +3,8 @@
 //
 // Single source of truth for the composite Practice Pressure Index (PPI), its
 // AMBER/RED band, and the demand-vs-capacity "over limit" reconciliation.
-// Extracted from condor.js's computeIndex() (unchanged formula/behaviour) so:
-//   - condor.js (live headline strip + hero gauge + copy/CSV), ppi.js (the
-//     gauge card) and practice-report.js (the report's current-snapshot block)
-//     all read ONE implementation and can never quietly diverge.
+// The Condor tab was removed in v3.255.0. This file remains as the single
+// Practice Pressure Index implementation used by the Note display board.
 //   - the component weightings (WR/queue/urgent/capacity) and the AMBER/RED
 //     band thresholds are now a `config` parameter (item 8 — tunable index),
 //     defaulting to exactly the historical hard-coded values when omitted.

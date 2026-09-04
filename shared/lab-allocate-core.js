@@ -41,7 +41,7 @@
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var RESULT_SLUG_RE = /investigation|result/i;
   var TEAM_ASSIGNEE_RE =
-    /\b(team|inbox|results?|reports?|investigation|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing)\b/i;
+    /\b(team|inbox|results?|reports?|investigation|admin|reception|duty|triage|unassigned|unallocated|secretar|clerk|workflow|filing|prescription|requests?)\b/i;
   var TITLE_RE = /\b(dr|doctor|prof|professor|mr|mrs|ms|miss)\b\.?/g;
   var ROLE_TOKENS = {
     gp: true,
@@ -148,7 +148,7 @@
   // Page query string only — the filters the results queue is already showing
   // (masterAssignee, statuses[], …). Reject anything that looks like a path
   // or host so it cannot be smuggled into the GET.
-  function queryStringForList(search) {
+  function queryStringForList(search, opts) {
     var raw = String(search == null ? '' : search).trim();
     if (!raw) return '';
     if (raw.charAt(0) === '?') raw = raw.slice(1);
@@ -158,12 +158,14 @@
     // The allocation board must see work already sitting with people, not
     // only the current inbox filter. masterAssignee on the page URL is that
     // filter — keep statuses/viewContext, drop the assignee scope.
+    var keepAssignee = opts && opts.keepMasterAssignee;
     var kept = raw.split('&').filter(function (part) {
       if (!part) return false;
       var k = part.split('=')[0];
       try {
         k = decodeURIComponent(k);
       } catch (_) {}
+      if (keepAssignee) return true;
       return !/^masterAssignee/i.test(k);
     });
     return kept.length ? '?' + kept.join('&') : '';
@@ -188,8 +190,16 @@
   function bulkReassignPaths(slug) {
     var s = sanitizeSlug(slug);
     var paths = [];
-    if (s) paths.push('/tasks/' + s + '/task-list/bulk-reassign');
-    paths.push(BULK_REASSIGN_PATH);
+    var seen = {};
+    function add(p) {
+      if (!p || seen[p]) return;
+      seen[p] = true;
+      paths.push(p);
+    }
+    if (s) add('/tasks/' + s + '/task-list/bulk-reassign');
+    var alt = sanitizeSlug(altSlug(s));
+    if (alt) add('/tasks/' + alt + '/task-list/bulk-reassign');
+    add(BULK_REASSIGN_PATH);
     return paths;
   }
 
@@ -222,9 +232,13 @@
     if (!body) return [];
     if (Array.isArray(body)) return body;
     if (Array.isArray(body.tasks)) return body.tasks;
+    if (Array.isArray(body.items)) return body.items;
     if (Array.isArray(body.results)) return body.results;
     if (Array.isArray(body.rows)) return body.rows;
+    if (Array.isArray(body.taskList)) return body.taskList;
+    if (body.taskList && Array.isArray(body.taskList.tasks)) return body.taskList.tasks;
     if (body.data && Array.isArray(body.data.tasks)) return body.data.tasks;
+    if (body.data && Array.isArray(body.data.items)) return body.data.items;
     if (Array.isArray(body.data)) return body.data;
     return [];
   }
@@ -638,7 +652,7 @@
   }
 
   function emptyDraft() {
-    return { moves: {}, extraColumns: [], columnTitles: {} };
+    return { moves: {}, extraColumns: [], columnTitles: {}, columnStaffIds: {} };
   }
 
   function cloneDraft(draft) {
@@ -646,6 +660,7 @@
       moves: Object.assign({}, (draft && draft.moves) || {}),
       extraColumns: ((draft && draft.extraColumns) || []).slice(),
       columnTitles: Object.assign({}, (draft && draft.columnTitles) || {}),
+      columnStaffIds: Object.assign({}, (draft && draft.columnStaffIds) || {}),
     };
   }
 
@@ -688,13 +703,26 @@
     return key;
   }
 
-  function addColumn(draft, name) {
+  function addColumn(draft, name, staffId) {
     var next = cloneDraft(draft);
     if (isTeamAssignee(name)) return next;
     var key = clinicianColumnKey(name);
     if (key === UNALLOCATED) return next;
     if (next.extraColumns.indexOf(key) === -1) next.extraColumns.push(key);
     next.columnTitles[key] = clip(name, 80);
+    var id = pickUuid(staffId);
+    if (id) next.columnStaffIds[key] = id;
+    return next;
+  }
+
+  function addTeamColumn(draft, name, teamId) {
+    var next = cloneDraft(draft);
+    var key = teamColumnKey(name);
+    if (!key) return next;
+    if (next.extraColumns.indexOf(key) === -1) next.extraColumns.push(key);
+    next.columnTitles[key] = clip(name, 80);
+    var id = pickUuid(teamId);
+    if (id) next.columnStaffIds[key] = id;
     return next;
   }
 
@@ -1391,7 +1419,7 @@
     return { ok: false, reason: 'ambiguous-team', hits: hits, assigneeType: ASSIGNEE_TYPE_TEAM };
   }
 
-  function resolveStaffForColumn(key, title, directory, rows, aliases) {
+  function resolveStaffForColumn(key, title, directory, rows, aliases, knownId) {
     var sitting = assignedIdsOnColumn(rows, key, aliases);
     if (sitting.ids.length === 1) {
       var fromField = {
@@ -1409,6 +1437,11 @@
           return { id: id, name: sitting.name || title || '' };
         }),
       };
+    }
+    var pinned = pickUuid(knownId);
+    if (pinned) {
+      var fromBook = { id: pinned, name: sitting.name || title || '', source: 'today-book' };
+      return { ok: true, staff: fromBook, hits: [fromBook], source: 'today-book' };
     }
     var list = (directory && directory.list) || [];
     var chipKeys = personNameKeys(title);
@@ -1511,9 +1544,10 @@
     var refusedKeys = {};
     var writableItems = [];
     sum.items.forEach(function (item) {
+      var knownId = draft && draft.columnStaffIds && draft.columnStaffIds[item.toKey];
       var resolved = isTeamKey(item.toKey)
         ? resolveTeamForColumn(item.toKey, item.toTitle, teamDir)
-        : resolveStaffForColumn(item.toKey, item.toTitle, directory, rows, aliases);
+        : resolveStaffForColumn(item.toKey, item.toTitle, directory, rows, aliases, knownId);
       if (!resolved.ok) {
         if (!refusedKeys[item.toKey]) {
           refusedKeys[item.toKey] = true;
@@ -2008,7 +2042,20 @@
       if (!sessions) continue;
       var key = clinicianColumnKey(name);
       if (key === UNALLOCATED) continue;
-      var rec = { name: name, key: key, sessions: sessions, site: site, service: service };
+      var staff = pickStaffFields(sched);
+      var rec = {
+        name: name,
+        key: key,
+        sessions: sessions,
+        site: site,
+        service: service,
+        staffId:
+          (staff && staff.id) ||
+          pickUuid(sched.staff) ||
+          pickUuid(sched.staffId) ||
+          pickUuid(sched.id) ||
+          '',
+      };
       present.push(rec);
       if (!presentByKey[key]) presentByKey[key] = rec;
     }
@@ -2179,7 +2226,11 @@
       var resp = await fn(url(path), {
         method: 'GET',
         credentials: 'include',
-        headers: { Accept: 'application/json, text/plain, */*' },
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'Cache-Control': 'no-cache',
+        },
       });
       if (!resp.ok) {
         var err = new Error('HTTP ' + resp.status);
@@ -2220,11 +2271,11 @@
       }
     }
 
-    async function fetchTaskList(slug, search) {
+    async function fetchTaskList(slug, search, opts) {
       var tried = [slug];
       var alt = altSlug(slug);
       if (alt) tried.push(alt);
-      var qs = queryStringForList(search);
+      var qs = queryStringForList(search, opts);
       var lastErr = null;
       for (var i = 0; i < tried.length; i++) {
         var safe = sanitizeSlug(tried[i]);
@@ -2319,7 +2370,7 @@
       }
       var fresh;
       try {
-        fresh = await fetchTaskList(slug, opts.search);
+        fresh = opts.fetchList ? await opts.fetchList() : await fetchTaskList(slug, opts.search);
       } catch (e) {
         return {
           ok: false,
@@ -2355,6 +2406,32 @@
       );
       var written = 0;
       var writtenBatches = [];
+      var failedBatches = [];
+      var lastStatus = '';
+
+      function failStatus(e) {
+        var status = e && e.status ? 'HTTP ' + e.status : e && e.message ? e.message : 'HTTP error';
+        if (e && e.status === 404) status = 'HTTP 404 — Medicus has no reassign URL at that path';
+        return status;
+      }
+
+      async function refreshList() {
+        var next = opts.fetchList ? await opts.fetchList() : await fetchTaskList(slug, opts.search);
+        if (next) {
+          fresh = next;
+          liveToken = coerceTaskListToken(
+            hasTaskListToken(fresh.taskList) ? fresh.taskList : taskList,
+            fresh.slug || slug
+          );
+        }
+        return liveToken;
+      }
+
+      function retryable(e) {
+        if (!e || e.status == null) return true;
+        return e.status === 400 || e.status === 409 || e.status === 429 || e.status >= 500;
+      }
+
       for (var i = 0; i < plan.batches.length; i++) {
         var batch = plan.batches[i];
         var body = buildBulkReassignBody(
@@ -2365,50 +2442,68 @@
           batch.assigneeType
         );
         if (!body) {
-          return {
-            ok: false,
-            partial: written > 0,
-            written: written,
-            writtenBatches: writtenBatches,
-            refused: plan.refused || [],
-            reason:
-              written > 0
-                ? 'Medicus accepted the first ' +
-                  written +
-                  ' reassignment' +
-                  (written === 1 ? '' : 's') +
-                  '. A later group could not be built. Check the queue.'
-                : 'Could not build a reassignment body. Nothing was written.',
-          };
+          failedBatches.push(batch);
+          lastStatus = 'could not build a reassignment body';
+          continue;
         }
-        try {
-          await postBulkReassign(fresh.slug || slug, body);
-          written += batch.taskIds.length;
-          writtenBatches.push(batch);
-        } catch (e) {
-          var status = e && e.status ? 'HTTP ' + e.status : e && e.message ? e.message : 'HTTP error';
-          if (e && e.status === 404) {
-            status = 'HTTP 404 — Medicus has no reassign URL at that path';
+        var posted = false;
+        var attempts = 2;
+        for (var attempt = 0; attempt < attempts && !posted; attempt++) {
+          try {
+            if (attempt > 0) {
+              try {
+                await refreshList();
+                body = buildBulkReassignBody(
+                  batch.assigneeId,
+                  liveToken,
+                  batch.taskIds,
+                  fresh.slug || slug,
+                  batch.assigneeType
+                );
+                if (!body) break;
+              } catch (_) {
+                /* keep the previous token */
+              }
+            }
+            await postBulkReassign(fresh.slug || slug, body);
+            posted = true;
+            written += batch.taskIds.length;
+            writtenBatches.push(batch);
+          } catch (e) {
+            lastStatus = failStatus(e);
+            if (e && e.status === 404) break;
+            if (!retryable(e)) break;
           }
-          return {
-            ok: false,
-            partial: written > 0,
-            written: written,
-            writtenBatches: writtenBatches,
-            failedBatch: batch,
-            refused: plan.refused || [],
-            reason:
-              written > 0
-                ? 'Medicus accepted the first ' +
-                  written +
-                  ' reassignment' +
-                  (written === 1 ? '' : 's') +
-                  '. The rest were not written: ' +
-                  status +
-                  '. Check the queue.'
-                : 'Medicus refused the reassignment (' + status + '). Nothing was written.',
-          };
         }
+        if (!posted) failedBatches.push(batch);
+      }
+      if (!written && failedBatches.length) {
+        return {
+          ok: false,
+          written: 0,
+          writtenBatches: [],
+          failedBatch: failedBatches[0],
+          refused: plan.refused || [],
+          reason: 'Medicus refused the reassignment (' + lastStatus + '). Nothing was written.',
+        };
+      }
+      if (failedBatches.length) {
+        return {
+          ok: false,
+          partial: true,
+          written: written,
+          writtenBatches: writtenBatches,
+          failedBatch: failedBatches[0],
+          refused: plan.refused || [],
+          reason:
+            'Medicus accepted ' +
+            written +
+            ' reassignment' +
+            (written === 1 ? '' : 's') +
+            '. The rest were not written: ' +
+            lastStatus +
+            '. Check the queue.',
+        };
       }
       return {
         ok: true,
@@ -2468,6 +2563,7 @@
     placementReason: placementReason,
     emptyDraft: emptyDraft,
     addColumn: addColumn,
+    addTeamColumn: addTeamColumn,
     stageMove: stageMove,
     stageMoves: stageMoves,
     buildBoard: buildBoard,

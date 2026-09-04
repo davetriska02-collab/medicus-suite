@@ -11,8 +11,10 @@
 *.zip
 !medicus-suite-baseline.zip
 
-# Local dev scratch
+# Local dev scratch (both forms: the directory AND a symlink to one — the
+# trailing-slash pattern alone lets a symlinked node_modules get committed)
 node_modules/
+node_modules
 *.log
 
 # Patient / sensitive data — NEVER commit

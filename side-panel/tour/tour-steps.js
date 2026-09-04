@@ -50,10 +50,12 @@
 //       itself stays overview-only (recorded in test-tour-steps.js
 //       NAV_COVERED_BY_OVERVIEW); addedIn retagged 2 → 11 so returning
 //       users get shown the reworked strip step.
+//  12 — Record step copy no longer points at the removed Visualiser. Follow-ups,
+//       Condor, About and Visualiser tabs pruned (v3.255.0).
 
 'use strict';
 
-export const TOUR_VERSION = 11;
+export const TOUR_VERSION = 12;
 
 export const TOUR_STEPS = [
   {
@@ -193,11 +195,11 @@ export const TOUR_STEPS = [
   },
   {
     id: 'record',
-    addedIn: 5,
+    addedIn: 12,
     module: 'record',
     target: ['.rec-root'],
     title: 'Record — the open patient, live',
-    body: 'A live snapshot of the patient open in Medicus — problems, medicines, results and safety prompts, no PDF needed. Incomplete by design (no allergies); read the gap-markers and verify the record. The full visualiser opens from the footer.',
+    body: 'A live snapshot of the patient open in Medicus — problems, medicines, results and safety prompts. Incomplete by design (no allergies); read the gap-markers and verify the record.',
   },
   {
     id: 'preflight',

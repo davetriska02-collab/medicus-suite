@@ -60,10 +60,18 @@ check(
   'path-change clear runs even when a throttle is already armed'
 );
 check(
-  /st\.loadedForTask = info\.taskUuid/.test(panel) &&
-    !/due\.loadedForTask = info\.taskUuid/.test(
-      panel.split('async function loadWhatsDue')[1].split('function retryWhatsDue')[0]
-    ),
+  (() => {
+    // Scoped to loadPatientRecord's own body (both the 'record'-kind branch
+    // and the 'task'-kind classify-then-fetch branch use the same
+    // st.loadedForTask = ctx.pageKey idiom loadWhatsDue also uses elsewhere
+    // in this file, so the check has to be scoped by function body, not by
+    // a literal unique to this one function — 2026-08-26, when
+    // loadPatientRecord was extended to also run on care-record pages).
+    const recBody = (panel.split('async function loadPatientRecord')[1] || '').split('async function doOpenBooking')[0];
+    const setIdx = recBody.indexOf('st.loadedForTask = ctx.pageKey');
+    const firstAwaitIdx = recBody.indexOf('await ');
+    return setIdx > -1 && firstAwaitIdx > -1 && setIdx > firstAwaitIdx;
+  })(),
   'loadedForTask is set only after a successful patient resolve (one-shot fail is retryable)'
 );
 check(/function retryWhatsDue/.test(panel) && /ms-tap-due-retry/.test(panel), 'error state offers Try again');
@@ -149,6 +157,116 @@ console.log('\n--- no completion / all-clear claim ---');
   check(/moreRed/.test(dueChunk), 'hidden reds are named in the "+N more" line');
   check(/No recent/.test(dueChunk), 'no_data drug-monitoring gets a No recent tag, not Overdue');
 }
+
+console.log('\n--- Upcoming: outstanding investigations wiring ---');
+check(
+  manifest.indexOf('shared/outstanding-investigations.js') > -1 &&
+    manifest.indexOf('shared/outstanding-investigations.js') < manifest.indexOf('content-scripts/task-actions-panel.js'),
+  'outstanding-investigations.js is injected before task-actions-panel.js'
+);
+check(/apiFetchPatientJournal/.test(panel), 'panel fetches the patient journal for outstanding investigations');
+check(
+  /MsOutstandingInvestigations/.test(panel),
+  'parsing is delegated to the shared module, not duplicated inline'
+);
+check(/Outstanding investigations/.test(panel), 'clinic Upcoming section has the Outstanding investigations heading');
+check(/No outstanding investigations\./.test(panel), 'empty state is named, not blank');
+check(
+  /Awaiting a result — not confirmation the request reached the lab\./.test(panel),
+  'the sent-vs-awaiting caveat is said in the UI itself (H-069), not only in a code comment'
+);
+check(
+  (() => {
+    const recBody = (panel.split('function renderRecordBody')[1] || '').split('function recordSectionHtml')[0];
+    // Reception's early-return branch (before the Unused-booking-links group)
+    // must not mention investigations at all — the section stays clinic-only
+    // for that group, same scoping as the existing booking-links heading.
+    const receptionBranch = recBody.split(`currentRole() === 'reception') {`)[1].split('}')[0];
+    return !/Outstanding investigations/.test(receptionBranch);
+  })(),
+  "reception's Already-booked view stays appointments-only (no investigations)"
+);
+check(
+  /Open appts, links, tasks & investigations/.test(panel),
+  'clinic section heading names all four lists it now holds'
+);
+check(
+  /function renderRecGroup/.test(panel) && /groupsOpen\[key\] !== false/.test(panel),
+  'each sub-list (appts / links / tasks / investigations) collapses independently via renderRecGroup'
+);
+check(
+  /groupsOpen: \{ appts: true, links: true, tasks: true, investigations: true \}/.test(panel),
+  'sub-lists default to expanded so existing users see no change until they collapse one'
+);
+check(
+  /ms-tap-rec-grp-.*addEventListener\('click'/.test(panel) || /grpToggle\.addEventListener\('click'/.test(panel),
+  'sub-list headings are wired to toggle + rerender, same pattern as the top-level section chevrons'
+);
+
+console.log('\n--- Booking-link rows: lozenge, no colour, type first ---');
+check(
+  /function dateOnlyFromCreated/.test(panel) && /str\.indexOf\(','\)/.test(panel),
+  'booking-link date is truncated at the comma, not parsed as a real date'
+);
+check(
+  /function bookingLinkTypeName/.test(panel) && /v !== '-'/.test(panel),
+  "Medicus's \"-\" not-set placeholder is treated as unset, not displayed literally (the procedure-link bug)"
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function renderLinkRow'), panel.indexOf('function renderInvestigationRow'));
+    return (
+      !/Sent /.test(fn) &&
+      /ms-tap-rec-pill"/.test(fn) &&
+      /ms-tap-rec-pill-text/.test(fn) &&
+      /ms-tap-rec-status/.test(fn) &&
+      !/ms-tap-rec-status ms-tap-rec-status-/.test(fn) &&
+      fn.indexOf('ms-tap-rec-pill-text') < fn.indexOf('ms-tap-rec-status')
+    );
+  })(),
+  'link row is a single-line pill: type (+ reason inline) first, then a plain (unmodified-class, so uncoloured) date pill, no "Sent" prefix'
+);
+check(/ms-tap-rec-pill\b/.test(css) && /ms-tap-rec-pill-text/.test(css), 'the pill row style is defined in CSS');
+
+console.log('\n--- Open tasks (part of the same section) ---');
+check(
+  /clinical\/data\/patient-record\/task-list\//.test(panel),
+  'open-tasks fetch uses the confirmed per-patient task-list endpoint (HAR 110-tasklist.har)'
+);
+check(
+  /statuses\[\]', 'incomplete'/.test(panel) && /statuses\[\]', 'snoozed'/.test(panel),
+  'requests only incomplete + snoozed (scheduled for later) — completed/discarded excluded server-side'
+);
+check(!/statuses\[\]', 'completed'/.test(panel) && !/statuses\[\]', 'cancelled'/.test(panel), 'never requests completed or discarded tasks');
+check(
+  /function taskUuidFromOverviewUrl/.test(panel) && /excludeTaskUuid/.test(panel),
+  'the task the clinician is already viewing is excluded from its own open-tasks list'
+);
+check(
+  /fetchAppointmentsAndLinks\(st, classification\.patientId, ctx\.taskUuid\)/.test(panel),
+  'the task-page call site passes its own taskUuid to exclude'
+);
+check(
+  /fetchAppointmentsAndLinks\(st, ctx\.patientId\);/.test(panel),
+  'the record-page call site has no current task to exclude'
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function renderTaskRow'), panel.indexOf('function renderRecordBody'));
+    return /ms-tap-rec-pill"/.test(fn) && /ms-tap-rec-pill-text/.test(fn);
+  })(),
+  'open tasks render as the same single-line pill as booking links, for consistency'
+);
+check(/ms-tap-rec-status-overdue/.test(panel) && /ms-tap-rec-status-overdue/.test(css), 'overdue tasks get a named pill, styled in CSS');
+check(/No open tasks\./.test(panel), 'empty state is named, not blank');
+check(
+  (() => {
+    const recBody = (panel.split('function renderRecordBody')[1] || '').split('function recordSectionHtml')[0];
+    const receptionBranch = recBody.split(`currentRole() === 'reception') {`)[1].split('}')[0];
+    return !/Open tasks/.test(receptionBranch);
+  })(),
+  "reception's Already-booked view stays appointments-only (no open tasks)"
+);
 
 console.log('\n--- CSS: hue is never the only signal ---');
 check(/ms-tap-due-red \.ms-tap-due-dot/.test(css) && /background: var\(--red\)/.test(css), 'red due-dot is filled');

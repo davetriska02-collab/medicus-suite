@@ -189,6 +189,30 @@
   function fetchInvestigationDashboard(apiBase, uuid) {
     return safeFetch(`${apiBase}/care-record/data/investigation/dashboard/${uuid}`);
   }
+  // Carries patientRegisters — Medicus's OWN computed register membership
+  // ({ id, registerType, registerLabel, dashboardIdentifier }[]), used as the
+  // authoritative source for register matching in place of text-matching the
+  // problem list (see engine/rules-engine.js patientOnRegister). Optional/
+  // best-effort: a failure here just leaves patientRegisters empty and every
+  // register falls back to text-matching, same as before this endpoint existed.
+  function fetchClinicalSummary(apiBase, uuid) {
+    return safeFetch(`${apiBase}/clinical/data/clinical-summary/summary/${uuid}`);
+  }
+
+  // Full prescribing history, grouped by substance (items.<substance>.prescriptionIssues[]),
+  // going back to the patient's very first ever issue of a drug. Confirmed against a real
+  // HAR (2026-08-29): medicationRegimen's own medicationIssueHistory is capped to a rolling
+  // ~12-month window (its own response carries a `range: {startDate, endDate}` proving this),
+  // so it can only ever give a drug's CURRENT-BATCH start, not its true clinical start —
+  // this endpoint is the only source that has the real one (e.g. a repeat authorised for 13
+  // years showed medicationRegimen.startDate landing ~1yr ago vs the true 2013 start here).
+  // Each substance key matches a regimen item's own vtmProductName field, giving a clean join.
+  // Best-effort like clinicalSummary: a failure just leaves the richer start date unavailable
+  // and normaliseMedications falls back to the regimen-derived (batch-scoped) date, same as
+  // before this endpoint existed — never a hard failure.
+  function fetchMedicationHistory(apiBase, uuid) {
+    return safeFetch(`${apiBase}/clinical/data/medication/medication-history/${uuid}`);
+  }
 
   // Fetch the overview payload for a single investigation-report task.
   // overviewURL is provided by the caller (from the task's overviewURL field) and
@@ -302,9 +326,12 @@
   function clearCache() { CACHE.clear(); }
 
   // ---- Combined fetch ----
-  // Fetches all four endpoints in parallel. Returns:
-  //   { banner, medicationRegimen, problemListing, investigationDashboard, errors }
+  // Fetches all six endpoints in parallel. Returns:
+  //   { banner, medicationRegimen, problemListing, investigationDashboard, clinicalSummary, medicationHistory, errors }
   // Each may be null if that endpoint failed; errors carries the messages.
+  // clinicalSummary and medicationHistory are best-effort only — nothing downstream
+  // treats their absence as a fetch failure the way banner/medicationRegimen/
+  // problemListing/investigationDashboard are (see data-fetcher.js's failedFields handling).
   async function fetchAll(apiBase, uuid, opts) {
     opts = opts || {};
     const useCache = opts.useCache !== false;
@@ -312,9 +339,19 @@
       ['banner', fetchBanner],
       ['medicationRegimen', fetchMedicationRegimen],
       ['problemListing', fetchProblemListing],
-      ['investigationDashboard', fetchInvestigationDashboard]
+      ['investigationDashboard', fetchInvestigationDashboard],
+      ['clinicalSummary', fetchClinicalSummary],
+      ['medicationHistory', fetchMedicationHistory]
     ];
-    const results = { banner: null, medicationRegimen: null, problemListing: null, investigationDashboard: null, errors: {} };
+    const results = {
+      banner: null,
+      medicationRegimen: null,
+      problemListing: null,
+      investigationDashboard: null,
+      clinicalSummary: null,
+      medicationHistory: null,
+      errors: {},
+    };
     const promises = endpoints.map(async ([key, fn]) => {
       if (useCache) {
         const cached = getCached(apiBase, uuid, key);
@@ -351,6 +388,8 @@
     fetchProblemListing,
     fetchInvestigationDashboard,
     fetchInvestigationReport,
+    fetchClinicalSummary,
+    fetchMedicationHistory,
     fetchAll,
     clearCache,
     CACHE_TTL_MS

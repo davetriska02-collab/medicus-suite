@@ -22,6 +22,7 @@ import {
   lookAheadSentence,
   horizonDateList,
   STATUS_TEXT,
+  lookaheadCacheKey,
 } from './capacity-core.js';
 
 const DIVISION_OPTIONS = [
@@ -78,6 +79,7 @@ let state = {
 
 export async function init(el) {
   container = el;
+  loadEpoch++;
 
   const stored = await chrome.storage.local.get([
     'suite.practiceCode',
@@ -127,6 +129,12 @@ export async function init(el) {
   return () => {
     document.removeEventListener('suite:slots:refresh', onSlotsRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
+    // Stop a pending frame from running computeScan()/publishScanCache()
+    // (a storage write) after the tab is gone, and orphan any in-flight
+    // 28–84 day fetch so its progress callbacks stop repainting a dead tab.
+    if (renderFrame != null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(renderFrame);
+    renderFrame = null;
+    loadEpoch++;
     container = null;
   };
 }
@@ -224,6 +232,9 @@ function publishScanCache() {
     chrome.storage.local.set({
       'capacity.scanCache': {
         at: Date.now(),
+        // Today reads back only a scan run today, under the same settings.
+        fromISO: todayISO(),
+        lookaheadKey: lookaheadCacheKey(state.lookahead),
         presetId: preset?.id || null,
         presetName: preset?.name || null,
         horizonDays: summary.horizonDays,
@@ -236,7 +247,12 @@ function publishScanCache() {
   }
 }
 
+// Bumped on every init/cleanup; a fetch loop started under an older epoch
+// belongs to a tab instance that no longer exists.
+let loadEpoch = 0;
+
 async function loadVisibleDates() {
+  const epoch = loadEpoch;
   rollCalendarDateIfNeeded();
   // Re-resolve practice code (auto-detect from tab if available)
   if (window.PracticeCode) {
@@ -263,6 +279,7 @@ async function loadVisibleDates() {
   await fetchManyDates(SITE_ID, toFetch, {
     concurrency: 5,
     onProgress: (done, total, date, raw) => {
+      if (epoch !== loadEpoch) return;
       state.loading.delete(date);
       if (raw && !raw.error) {
         state.error = null;
@@ -278,6 +295,7 @@ async function loadVisibleDates() {
       scheduleRender();
     },
   });
+  if (epoch !== loadEpoch) return;
   computeScan();
   render();
 }
@@ -291,7 +309,14 @@ function reconcileActivePreset() {
   const resolved = resolveActivePreset(state.presets, state.activePresetId);
   if (resolved && resolved.id !== state.activePresetId) {
     state.activePresetId = resolved.id;
-    chrome.storage.local.set({ 'capacity.activePresetId': resolved.id });
+    // Same self-write guard as saveLookaheadSettings: this runs inside the
+    // onStorageChange handler too, and its own write must not re-enter it.
+    selfWriteInProgress = true;
+    Promise.resolve(chrome.storage.local.set({ 'capacity.activePresetId': resolved.id }))
+      .catch(() => {})
+      .then(() => {
+        selfWriteInProgress = false;
+      });
   } else if (!resolved) {
     state.activePresetId = null;
   }
@@ -590,7 +615,7 @@ function renderDayView(preset) {
     </div>
     <div class="cap-date-presets">
       <button class="preset-btn${date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
-      <button class="preset-btn${date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
+      <button class="preset-btn${date === nextWorkingDayISO(state.lookahead.division) ? ' active' : ''}" data-date="${nextWorkingDayISO(state.lookahead.division)}">Next working day</button>
     </div>
     ${hero}
     ${breakdown}

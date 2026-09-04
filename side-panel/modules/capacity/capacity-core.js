@@ -19,6 +19,8 @@ import {
   holidayBlockContaining,
   DEFAULT_DIVISION,
   DIVISIONS,
+  calendarCoversISO,
+  calendarHorizonISO,
 } from '../../../shared/uk-calendar.js';
 
 // Date#getDay() is Sunday-indexed (0=Sun … 6=Sat); map to the preset keys.
@@ -319,9 +321,21 @@ export function effectiveMinimumForDate(preset, dateISO, lookahead = DEFAULT_LOO
     // enhanced-access clinics, which are not "working days" by the BH calendar
     // but absolutely can be at risk.
     countsForRisk: !bankHoliday && effective > 0,
+    // False past the bundled GOV.UK calendar's year-end: from there on
+    // `isBankHoliday` is a guess, so no day may be reported as checked.
+    calendarKnown: calendarCoversISO(dateISO, division),
     block,
     division,
   };
+}
+
+/**
+ * Identity of the look-ahead settings a scan was run under, for cache
+ * matching between Forecast and Today. normaliseLookahead builds its object
+ * in a fixed key order, so the JSON is stable.
+ */
+export function lookaheadCacheKey(lookahead) {
+  return JSON.stringify(normaliseLookahead(lookahead));
 }
 
 /**
@@ -341,6 +355,21 @@ export function evaluateDay({
   const minInfo = effectiveMinimumForDate(preset, dateISO, lookahead);
   const past = dateISO < todayISO;
   const isToday = dateISO === todayISO;
+
+  // Beyond the bundled bank-holiday calendar the day cannot be judged — a
+  // New Year's Day the calendar has never heard of would otherwise be scored
+  // as an ordinary working day and could carry a false all-clear.
+  if (!minInfo.calendarKnown && !past) {
+    return dayResult({
+      dateISO,
+      status: 'empty',
+      total: agg ? agg.total : null,
+      minInfo,
+      sessionsCount: agg ? agg.sessionsCount : null,
+      reason: `Bank-holiday calendar ends ${calendarHorizonISO(minInfo.division)} — update Medicus Suite to check this day`,
+      isToday,
+    });
+  }
 
   if (loading) {
     return dayResult({
@@ -374,19 +403,30 @@ export function evaluateDay({
       reason: 'Past day',
     });
   }
-  if (minInfo.isBankHoliday || agg.sessionsCount === 0 || minInfo.effective === 0) {
-    const closedWhy = minInfo.isBankHoliday
-      ? 'Bank holiday'
-      : agg.sessionsCount === 0
-        ? 'No sessions in the book'
-        : 'No minimum set';
+  if (minInfo.isBankHoliday || minInfo.effective === 0) {
     return dayResult({
       dateISO,
       status: 'closed',
       total: agg.total,
       minInfo,
       sessionsCount: agg.sessionsCount,
-      reason: closedWhy,
+      reason: minInfo.isBankHoliday ? 'Bank holiday' : 'No minimum set',
+      isToday,
+    });
+  }
+  // A day the practice asked for cover on but has NO sessions in the book is
+  // not "closed" and not safe — it is the rota not yet built, which for a
+  // manager three weeks out is exactly the day at risk. It must never count
+  // as a checked day behind a green all-clear; report it as unchecked with
+  // its own reason.
+  if (agg.sessionsCount === 0) {
+    return dayResult({
+      dateISO,
+      status: 'empty',
+      total: 0,
+      minInfo,
+      sessionsCount: 0,
+      reason: 'No sessions in the book yet',
       isToday,
     });
   }

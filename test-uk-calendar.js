@@ -34,6 +34,7 @@ const { spawnSync } = require('child_process');
     holidayBlockContaining,
     closedBlockBefore,
     calendarHorizonISO,
+    calendarCoversISO,
     monthsUntilHorizon,
     defaultBankHolidays,
     bankHolidayDates,
@@ -112,6 +113,21 @@ const { spawnSync } = require('child_process');
     cwd: __dirname,
     encoding: 'utf8',
   });
+  console.log('\n--- calendarCoversISO ---');
+  const covHorizonYear = calendarHorizonISO().slice(0, 4);
+  check(calendarCoversISO(`${covHorizonYear}-06-15`) === true, 'a date inside the last bundled year is covered');
+  check(calendarCoversISO(`${covHorizonYear}-12-31`) === true, 'the last bundled year-end is covered');
+  check(
+    calendarCoversISO(`${Number(covHorizonYear) + 1}-01-01`) === false,
+    'the day after the last bundled year is NOT covered'
+  );
+  check(calendarCoversISO('2020-01-01') === true, 'an early bundled year is covered');
+  check(calendarCoversISO('not-a-date') === false, 'junk is not covered');
+  check(
+    isBankHoliday(`${Number(covHorizonYear) + 1}-01-01`) === false,
+    'isBankHoliday alone still answers "no" past the horizon — which is why callers must check coverage'
+  );
+
   check(checkRun.status === 0, `regen-bank-holidays.js --check exits 0 (status ${checkRun.status})`);
   if (checkRun.status !== 0) {
     console.error(checkRun.stdout || '');

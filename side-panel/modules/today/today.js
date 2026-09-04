@@ -21,7 +21,6 @@ import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
 import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
 import { recordTaskLists } from '../submissions/submissions-ledger.js';
-import { followupCounts } from '../followups/followups-core.js';
 import {
   normaliseLookahead,
   normalisePresets,
@@ -29,6 +28,7 @@ import {
   scanHorizon,
   scanTone,
   lookAheadSentence,
+  lookaheadCacheKey,
   horizonDateList,
   STATUS_TEXT,
 } from '../capacity/capacity-core.js';
@@ -361,6 +361,11 @@ async function fetchCapacity() {
       cache &&
       cache.presetId === preset.id &&
       cache.horizonDays === lookahead.horizonDays &&
+      // A scan published at 23:50 must not paint yesterday's "today" at 00:05,
+      // and a scan run under different look-ahead settings (nation, include
+      // tight, uplifts) is not the same scan.
+      cache.fromISO === medicusTodayISO() &&
+      cache.lookaheadKey === lookaheadCacheKey(lookahead) &&
       typeof cache.at === 'number' &&
       Date.now() - cache.at < CAPACITY_CACHE_TTL_MS
     ) {
@@ -943,36 +948,6 @@ function wireCardInteractions() {
       if (mod) navTo(mod);
     });
   });
-
-  container.querySelector('#todayFollowups')?.addEventListener('click', () => navTo('followups'));
-}
-
-// ── Follow-ups line ───────────────────────────────────────────────────────────
-// One compact line under the headline: the personal safety-net ledger's due
-// state. Hidden entirely when the ledger has no open entries (no noise for
-// non-users); red when anything has lapsed, amber when something is due
-// today. Reads storage directly — the ledger is machine-local by design.
-
-function renderFollowupsLine() {
-  const el = container?.querySelector('#todayFollowups');
-  if (!el) return;
-  chrome.storage.local.get(['followups.entries'], (res) => {
-    if (!container) return;
-    const c = followupCounts(res['followups.entries'], Date.now());
-    if (!c.open) {
-      el.classList.add('hidden');
-      return;
-    }
-    const bits = [];
-    if (c.lapsed) bits.push(`<strong>${c.lapsed} overdue</strong>`);
-    if (c.dueToday) bits.push(`${c.dueToday} due today`);
-    const rest = c.open - c.lapsed - c.dueToday;
-    if (rest) bits.push(`${rest} waiting`);
-    el.classList.remove('hidden');
-    el.classList.toggle('today-followups--red', c.lapsed > 0);
-    el.classList.toggle('today-followups--amber', c.lapsed === 0 && c.dueToday > 0);
-    el.innerHTML = `Follow-ups: ${bits.join(' &middot; ')} &rarr;`;
-  });
 }
 
 // ── Full render (scaffold) ────────────────────────────────────────────────────
@@ -1027,7 +1002,6 @@ function renderScaffold() {
   container.innerHTML = `
     <div class="module-wrap today-module">
       <div class="today-headline today-headline--quiet" aria-live="polite">Working out what needs you…</div>
-      <button class="today-followups hidden" id="todayFollowups" data-nav="followups" aria-label="Open Follow-ups"></button>
       <div class="today-cards">
         ${cards
           .map(
@@ -1066,7 +1040,6 @@ function onStorageChange(changes) {
   if (changes['submissions.thresholds']) fetchDemand();
   if (changes['sweep.lastRun']) fetchSweep();
   if (changes['suite.alertLog']) fetchAlerts();
-  if (changes['followups.entries']) renderFollowupsLine();
   // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
   // reflect on the Slots Today card / headline without waiting for the next poll.
   if (changes['slots.alertRules']) fetchSlots();
@@ -1098,7 +1071,6 @@ export async function init(el) {
   fetchCapacity();
   fetchSweep();
   fetchAlerts();
-  renderFollowupsLine();
 
   // Pollers
   addTimer(fetchWr, WR_POLL_MS);
@@ -1122,7 +1094,6 @@ export async function init(el) {
       fetchCapacity();
       fetchSweep();
       fetchAlerts();
-      renderFollowupsLine();
     }
   };
   document.addEventListener('visibilitychange', onVisible);

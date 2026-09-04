@@ -23,18 +23,12 @@ export const TAB_CATALOG = [
   { id: 'submissions', name: 'Submissions', blurb: 'Incoming task volumes by type, with demand thresholds.' },
   { id: 'activity', name: 'Activity', blurb: 'Staff activity report over a date range.' },
   { id: 'referrals', name: 'Referrals', blurb: 'Referral audit — counts, priorities, specialties, clinicians.' },
-  { id: 'condor', name: 'Condor', blurb: 'Live operations dashboard — pressure, demand gap, task age.' },
   { id: 'reception', name: 'Reception', blurb: 'Front-desk tools: guided call capture and patient status.' },
   { id: 'sweep', name: 'Sweep', blurb: 'Pre-clinic check of today’s booked patients for overdue monitoring.' },
   {
     id: 'signing',
     name: 'Signing',
     blurb: 'Open repeat requests with each patient’s recorded monitoring alongside — riskiest first.',
-  },
-  {
-    id: 'followups',
-    name: 'Follow-ups',
-    blurb: 'Personal reminders for things you’re waiting on, resurfaced when due. This machine only.',
   },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
   { id: 'leaflets', name: 'Leaflets', blurb: 'Find and share the right NHS patient information leaflet, fast.' },
@@ -47,6 +41,11 @@ export const TAB_CATALOG = [
     id: 'rota',
     name: 'Rota',
     blurb: 'Today’s duty cover, leave, uncovered sessions and staffing warnings.',
+  },
+  {
+    id: 'board',
+    name: 'Note',
+    blurb: 'TV and monitor display — waiting-room tempo, request ticker, ops overview.',
   },
   {
     id: 'rota-app',
@@ -63,13 +62,11 @@ export const TAB_CATALOG = [
     name: 'Phrases',
     blurb: 'Reusable message blocks you compose, copy and paste into Medicus yourself.',
   },
-  { id: 'visualiser', name: 'Visualiser', blurb: 'Analyse an exported record PDF in a full browser tab.' },
   {
     id: 'duplicate-checker',
     name: 'Duplicates',
     blurb: 'Practice-wide scan for GP2GP duplicate-record import errors, with per-patient drill-down.',
   },
-  { id: 'about', name: 'About', blurb: 'Module info, version checks and feedback.' },
 ];
 
 // One-tap starting points; users fine-tune afterwards. Every preset keeps
@@ -86,19 +83,16 @@ export const ROLE_PRESETS = [
       'trends',
       'sweep',
       'signing',
-      'followups',
       'slots',
       'knowledge',
       'leaflets',
       'phrases',
-      'visualiser',
-      'about',
     ],
   },
   {
     id: 'reception',
     label: 'Reception',
-    show: ['today', 'reception', 'patient-alerts', 'slots', 'submissions', 'knowledge', 'leaflets', 'about'],
+    show: ['today', 'reception', 'patient-alerts', 'slots', 'submissions', 'knowledge', 'leaflets', 'board'],
   },
   {
     id: 'manager',
@@ -110,11 +104,10 @@ export const ROLE_PRESETS = [
       'submissions',
       'activity',
       'referrals',
-      'condor',
       'rota',
       'rota-app',
+      'board',
       'knowledge',
-      'about',
     ],
   },
   {

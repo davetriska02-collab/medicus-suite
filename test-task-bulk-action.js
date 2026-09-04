@@ -164,6 +164,31 @@ console.log('\n--- normaliseListQuery: string vs { qs, scopeWarning } resolution
   check(empty.qs === '' && empty.scopeWarning === null, 'null input degrades to an empty query, never throws');
 }
 
+console.log('\n--- Engine source lock: delegated clicks cannot POST outside the confirm step; re-inserted widget repaints ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  check(
+    /async function runAction\(\) \{[\s\S]{0,400}?if \(_step !== 'confirm'\) return;/.test(src),
+    'runAction() refuses to POST unless the engine is on the confirm step (a stale clone Confirm cannot write)'
+  );
+  check(
+    /if \(action === 'confirm'\) \{\s*if \(_step !== 'confirm'\) return;/.test(src),
+    "dispatcher gates 'confirm' on _step === 'confirm'"
+  );
+  check(
+    /if \(action === 'back'\) \{\s*if \(_step !== 'confirm'\) return;/.test(src),
+    "dispatcher gates 'back' on _step === 'confirm'"
+  );
+  check(
+    /function render\(\) \{[\s\S]{0,600}?var el = _widgetEl \|\| document\.getElementById\(widgetId\);/.test(src),
+    'render() paints our own node even while Vue has it detached'
+  );
+  check(
+    /var wasConnected = document\.contains\(_widgetEl\);[\s\S]{0,900}?if \(!wasConnected && document\.contains\(_widgetEl\)\) \{\s*_widgetEl\.innerHTML = buildHtml\(\);/.test(src),
+    'injectTrigger repaints a node it re-inserts after Vue stripped it'
+  );
+}
+
 console.log('\n--- Engine source lock: a widened scope must be VISIBLE, but select-all is no longer withheld ---');
 {
   // Post-merge review of #272, finding 2: the unscoped privacy-officer
@@ -282,12 +307,38 @@ console.log('\n--- Widget persistence: Vue strip must re-inject, not be treated 
 {
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
   check(
-    src.includes('_onMatchingPage && !document.getElementById(widgetId)') ||
-      src.includes("_onMatchingPage && !document.getElementById(widgetId)"),
-    'a missing widget on a matching page is not classified as an own-write'
+    src.includes('_onMatchingPage && !liveWidget()'),
+    'a missing LIVE widget on a matching page is not classified as an own-write (clones do not count)'
   );
   check(/setInterval\(function \(\) \{[\s\S]*?scheduleCheck\(\);[\s\S]*?\}, 2000\)/.test(src), 'polls to re-inject if Vue stripped the panel');
   check(src.includes('document.body.insertBefore'), 'falls back to document.body if the grid is not mounted yet');
+}
+
+console.log('\n--- Widget clicks: document capture so Vue clones are not dead buttons ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.css'), 'utf8');
+  check(
+    src.includes("document.addEventListener('click', onDocWidgetClick, true)"),
+    'clicks bind on document capture (Vue clones drop per-node listeners)'
+  );
+  check(
+    src.includes("document.addEventListener('change', onDocWidgetChange, true)"),
+    'checkbox change binds on document capture'
+  );
+  check(/function sweepCloneWidgets\(/.test(src), 'sweepCloneWidgets drops Vue lookalikes that share the widget id');
+  check(/function runWidgetAction\(/.test(src), 'actions are dispatched from the delegated handler, not per-node bindEvents');
+  check(!/function bindEvents\(/.test(src), 'per-node bindEvents is gone — it is what Vue clones leave behind');
+  check(
+    src.includes('isNativeTickTarget') && /if \(isNativeTickTarget\(t\)\) return;/.test(src),
+    'checkbox / row-label clicks are not preventDefaulted (native tick must happen)'
+  );
+  check(
+    /el\.innerHTML = buildHtml\(\);/.test(src) && !/bindEvents\(el\)/.test(src) && !/bindEvents\(w\)/.test(src),
+    'render/inject do not re-attach per-node listeners after innerHTML'
+  );
+  check(/pointer-events:\s*auto/.test(css), 'widget CSS keeps pointer-events so the grid cannot eat clicks');
+  check(/z-index:\s*20/.test(css), 'widget CSS stacks above overlapping AG-Grid chrome');
 }
 
 console.log('\n--- Open panel stays in the viewport (Review/Confirm not below the fold) ---');

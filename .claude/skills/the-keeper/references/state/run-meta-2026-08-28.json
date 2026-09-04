@@ -1,0 +1,28 @@
+{
+  "practice_name": "Witley and Milford Surgery",
+  "baseline": {
+    "qof-rules.json": "QOF 2026/27 (2026-07-25)"
+  },
+  "generated_at": "2026-08-28",
+  "manifest_version_before": "3.243.9",
+  "manifest_version_after": "3.243.9 (NOT bumped this run — held pending the user's decision to commit; substantial other uncommitted session work is batched alongside this)",
+  "sources_checked": [
+    "NHS England QOF 2026/27 guidance (PRN02356), fetched and read in full (82 pages) — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf",
+    "PCIT QOF KPI index (secondary/tertiary corroboration only, not relied on as sole source) — https://support.primarycareit.co.uk/portal/en-gb/kb/articles/quality-outcomes-framework-qof-kpi-index"
+  ],
+  "rule_files_touched": ["rules/qof-rules.json"],
+  "tests_run": [
+    "test-qof-indicator-filters.js",
+    "test-qof-year.js",
+    "test-chip-contract.js",
+    "test-custom-rules.js",
+    "test-custom-indicators.js",
+    "test-applicability-filters.js",
+    "test-rule-schema.js",
+    "full suite (node --test test-*.js, 398 files)"
+  ],
+  "tests_passed": true,
+  "excluded_low_relevance": 0,
+  "source_gaps": [],
+  "scope_note": "QOF domain only this run, per explicit user instruction — drugs/vaccines/alerts/medreview/pathways not scanned."
+}

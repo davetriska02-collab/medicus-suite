@@ -1,49 +1,36 @@
 {
-  "runDate": "2026-08-18",
-  "previousRunDate": "2026-08-01",
-  "manifestVersion": "3.233.0",
+  "runDate": "2026-08-28",
+  "previousRunDate": "2026-08-18",
+  "manifestVersion": "3.243.9",
   "csoSignedOff": {
-    "date": "2026-08-18",
-    "by": "Dr D. Triska",
-    "scope": "Applied additive set only (12 changes). Held items remain unsigned."
+    "date": null,
+    "by": null,
+    "scope": "2026-08-28 QOF audit not yet reviewed by the CSO — held in the working tree pending the user's commit decision (substantial other uncommitted session work is batched alongside it)."
   },
   "ruleFileLastUpdated": {
     "rules/drug-rules.json": "2026-08-18",
-    "rules/qof-rules.json": "2026-07-25",
+    "rules/qof-rules.json": "2026-08-28",
     "rules/vaccine-rules.json": "2026-08-18",
     "rules/alert-library.json": "2026-08-18",
     "rules/reception-pathways.json": "2026-08-18",
     "engine/acb-scores.js": "2026-07-25",
     "engine/stopp-start.js": "2026-07-25",
-    "engine/rules-engine.js": "2026-08-01"
+    "engine/rules-engine.js": "2026-08-28"
   },
   "sourcesChecked": [
-    "https://bnf.nice.org.uk/drugs/warfarin-sodium/",
-    "https://bnf.nice.org.uk/drugs/eprosartan/medicinal-forms/",
-    "https://bnf.nice.org.uk/drugs/quetiapine/medicinal-forms/",
-    "https://bnf.nice.org.uk/drugs/carbamazepine/medicinal-forms/",
-    "https://www.sps.nhs.uk/monitorings/mycophenolate-mofetil-and-mycophenolic-acid-monitoring/",
-    "https://www.gov.uk/drug-safety-update/fezolinetant-veoza-risk-of-liver-injury-new-recommendations-to-minimise-risk",
-    "https://www.gov.uk/drug-safety-update/topiramate-topamax-introduction-of-new-safety-measures-including-a-pregnancy-prevention-programme",
-    "https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals",
-    "https://cks.nice.org.uk/topics/sore-throat-acute/",
-    "https://cks.nice.org.uk/topics/headache-assessment/"
+    "https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf (2026-08-28 — fetched and read in full, 82 pages; this IS the current base guidance, updated in place 13 July 2026, not a separate delta document)",
+    "https://support.primarycareit.co.uk/portal/en-gb/kb/articles/quality-outcomes-framework-qof-kpi-index (2026-08-28 — secondary corroboration only)"
   ],
   "heldForNextRun": [
     {
-      "id": "qof-ckd002-003-disable",
-      "description": "CKD002/CKD003 disable (weakens_safety). Scanners say they are not in official 26/27 tables. Held for CSO sign-off.",
-      "heldSince": "2026-08-17"
+      "id": "medreview-biperiden",
+      "description": "biperiden (Akineton) possibly missing from ACB_TABLE at score 3 — needs acbcalc.com verification. UK-licensed anticholinergic antiparkinson drug, same class as procyclidine/orphenadrine/trihexyphenidyl already in table. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
+      "heldSince": "2026-08-29"
     },
     {
-      "id": "qof-ast-id-rename",
-      "description": "AST012→AST014, AST007→AST015 ID rename. Keep old IDs until CSO confirms July PRN02356 mapping.",
-      "heldSince": "2026-08-17"
-    },
-    {
-      "id": "qof-ndh",
-      "description": "NDH register + NDH003 held pending CSO review of July QOF PDF.",
-      "heldSince": "2026-08-17"
+      "id": "vax-rsv-age-2026",
+      "description": "RSV eligibility: search result suggests age threshold changed from 75+ to 80+ in April 2026 JCVI advice. CSO to verify against current UKHSA RSV HCP letter before 2026 autumn season (effective 1 Sept 2026). Current rule flags 75+ which may over-flag if threshold raised. Weakens_safety if narrowed. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
+      "heldSince": "2026-08-29"
     },
     {
       "id": "vax-004",
@@ -67,18 +54,53 @@
       "effectiveDate": "2026-09-01"
     },
     {
-      "id": "ob004-qof",
-      "description": "OB004/OB005 stay disabled (90-day / TA1026 SDM not expressible). Values confirmable from July PDF.",
-      "heldSince": "2026-07-25"
+      "id": "qof-bp002-cs005-cs006-smok004",
+      "description": "BP002 (15pts/50-90%), CS005/CS006 (7/4pts, 45-80%) and SMOK004 (12pts/40-90%, values already confirmed) all need a register-less cohort (pure ageRange/sex gate, no requiresRegister) — open engine-support question, not yet resolved either way. CS005/CS006 additionally have a data-path dependency (smear/HPV results may be journal-filed as documents, not coded observations). VI001-004 (childhood imms + shingles, 64pts) need age-at-event dose-counting logic, not expressible in the current schema at all — see docs/keeper/gap-scan-2026-08-22/qof.md for the detailed scoping. Sourced and ready to encode once a register-less-cohort decision is made.",
+      "heldSince": "2026-08-28"
     }
   ],
   "sourceGaps": [
-    "BSR 2025 full-text PDF (Cloudflare)",
-    "NHS Digital QOF v51 extract files (landing page only)",
-    "MEDREVIEW domain not scanned (scanner hung)",
-    "CHC brand-completeness sweep not re-fetched this apply pass"
+    "2026-08-29 source-gap run (PR #346): all authoritative UK clinical guidance hosts were blocked by the egress proxy (bnf.nice.org.uk, gov.uk DSU/UKHSA/JCVI, sps.nhs.uk, nice.org.uk, cks.nice.org.uk, england.nhs.uk, acbcalc.com, nottingham.ac.uk/primis). No rule changes applied that run; its two new holds (medreview-biperiden, vax-rsv-age-2026) are carried here. Note the PRN02356 PDF WAS fetched and read in full on the 2026-08-28 run recorded above."
   ],
   "changesAppliedThisRun": [
+    {
+      "id": "qof-ast-rename",
+      "rag": "Amber",
+      "description": "AST012->AST014, AST007->AST015 ID rename (thresholds/points unchanged) — resolves the qof-ast-id-rename hold from 2026-08-17",
+      "appliedDate": "2026-08-28"
+    },
+    {
+      "id": "qof-ast015-never-recorded",
+      "rag": "Red",
+      "description": "AST015 treatNeverRecordedAsOverdue — never-recorded review now shows overdue, not no_data, for a long-standing register member",
+      "appliedDate": "2026-08-28"
+    },
+    {
+      "id": "qof-ndh",
+      "rag": "Amber",
+      "description": "Added NDH register + NDH003 indicator (non-diabetic hyperglycaemia / prior GDM), 20pts — resolves the qof-ndh hold from 2026-08-17",
+      "appliedDate": "2026-08-28"
+    },
+    {
+      "id": "qof-ob004-005-enable",
+      "rag": "Amber",
+      "description": "Enabled OB004/OB005 (values confirmed byte-exact against primary source), completed OB005 brand list (ozempic/rybelsus/xenical/victoza) — resolves the ob004-qof hold from 2026-07-25",
+      "appliedDate": "2026-08-28"
+    },
+    {
+      "id": "qof-ckd002-003-relabel",
+      "rag": "Red",
+      "description": "CKD002/CKD003 confirmed NOT real QOF 26/27 codes (absent from the full primary guidance) — relabelled to CKD-BP/CKD-RASI, category:safety-monitoring, points/thresholds removed. Underlying checks kept firing unchanged. Resolves the qof-ckd002-003-disable hold from 2026-08-17",
+      "appliedDate": "2026-08-28"
+    },
+    {
+      "id": "qof-full-audit-confirmed",
+      "rag": "Green",
+      "description": "Every other enabled QOF indicator's points/thresholds cross-checked against the full primary guidance — no further drift found",
+      "appliedDate": "2026-08-28"
+    }
+  ],
+  "changesAppliedPreviousRuns": [
     {
       "id": "drug-001",
       "rag": "Red",
@@ -151,5 +173,12 @@
       "description": "headache rf-household-co 999 added",
       "appliedDate": "2026-08-18"
     }
+  ],
+  "actionableForCSO": [
+    "RSV eligibility age threshold: check current UKHSA RSV HCP letter — is eligibility now 80+ (not 75+) from April 2026? Season starts 1 Sept 2026.",
+    "digoxin-renal-monitoring: rule ready (enabled:false). CSO to decide activation.",
+    "fever-adult pathway: PENDING CSO SIGN-OFF.",
+    "biperiden (Akineton): verify on ACBcalc.com — if score 3, can be added to ACB_TABLE next run.",
+    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0."
   ]
 }

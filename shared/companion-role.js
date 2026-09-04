@@ -244,6 +244,15 @@
    * Which Companion sections this role + page kind should show.
    * Writes (book / create-task) stay available only where we can pin a
    * patient identity (task overview or care-record URL).
+   *
+   * `record` (upcoming appointments + unused booking links) was task-only
+   * for every role until 2026-08-26: it only ever fired on a triage
+   * communication-thread task, so a clinic user looking at the patient's own
+   * care record (not currently mid-triage) never saw it. Extended for
+   * clinic to also show on the care-record URL itself — reception's copy
+   * (labelled "Already booked" in the widget, appointments only, no links)
+   * stays task-only, unchanged, since reception's workflow is specifically
+   * about the request thread in front of them, not general record browsing.
    */
   function roleShows(role, kind) {
     role = normalizeRole(role);
@@ -256,7 +265,7 @@
       pulse: role === 'triage',
       book: (role === 'clinic' || role === 'reception' || role === 'nursing') && hasPatient,
       task: (role === 'clinic' || role === 'triage') && kind === 'task',
-      record: (role === 'clinic' || role === 'reception') && kind === 'task',
+      record: (role === 'clinic' && (kind === 'task' || kind === 'record')) || (role === 'reception' && kind === 'task'),
     };
   }
 

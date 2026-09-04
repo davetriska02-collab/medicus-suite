@@ -88,6 +88,19 @@ export function calendarHorizonISO(division = DEFAULT_DIVISION) {
   return dates.length ? dates[dates.length - 1] : null;
 }
 
+/**
+ * True when `iso` falls inside a calendar year the bundled data covers.
+ * GOV.UK publishes whole calendar years, so the year-end of the last bundled
+ * event is the honest coverage edge. Beyond it, isBankHoliday() would
+ * silently answer "no" for a New Year's Day it has never heard of — callers
+ * that make a claim from that answer must check this first.
+ */
+export function calendarCoversISO(iso, division = DEFAULT_DIVISION) {
+  if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const horizon = calendarHorizonISO(division);
+  return !!horizon && iso <= horizon.slice(0, 4) + '-12-31';
+}
+
 export function monthsUntilHorizon(division = DEFAULT_DIVISION, asOfISO = null) {
   const horizon = calendarHorizonISO(division);
   if (!horizon) return 0;

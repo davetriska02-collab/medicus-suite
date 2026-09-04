@@ -162,8 +162,10 @@ export function todayISO() {
 }
 
 /** Tomorrow, or the next weekday that is not an England & Wales bank holiday. */
-export function nextWorkingDayISO() {
-  return calendarNextWorkingDayISO();
+export function nextWorkingDayISO(division) {
+  // `division` is the practice's chosen bank-holiday nation (capacity.lookahead);
+  // undefined falls back to England & Wales inside the calendar.
+  return calendarNextWorkingDayISO(division || undefined);
 }
 
 export function pad(n) {

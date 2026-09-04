@@ -227,6 +227,67 @@ const path = require('path');
   check(scanTone(full.summary) === 'green', 'complete + clear → green');
   check(/No days at risk/.test(lookAheadSentence(full.summary, 'GP')), 'complete + clear → all-clear sentence');
 
+  console.log('\n--- coverage honesty: past the bundled bank-holiday calendar ---');
+  // The bundled GOV.UK data ends at a calendar year-end; beyond it isBankHoliday
+  // is a guess. Full data across 2028-12-27 → 2029-01-09 must NOT come back as
+  // a green all-clear with New Year's Day 2029 scored as a normal working day.
+  const beyondData = {};
+  for (let i = 1; i < 14; i++) {
+    beyondData[addDaysISO('2028-12-27', i)] = { total: 99, sessionsCount: 5, byType: {}, byStaff: [] };
+  }
+  const beyond = scanHorizon({
+    preset,
+    dataByDate: beyondData,
+    fromISO: '2028-12-27',
+    today: '2028-12-27',
+    lookahead: { ...la, horizonDays: 14 },
+  });
+  check(beyond.summary.complete === false, 'horizon past the calendar → scan is not complete');
+  check(scanTone(beyond.summary) === 'unknown', 'horizon past the calendar → tone unknown, NOT green');
+  const nyd = beyond.days.find((d) => d.dateISO === '2029-01-01');
+  check(
+    nyd && nyd.status === 'empty' && /calendar ends/.test(nyd.reason),
+    '2029-01-01 is reported as unjudgeable, not "sufficient"'
+  );
+  check(
+    beyond.days
+      .filter((d) => d.dateISO > '2028-12-27' && d.dateISO <= '2028-12-31' && d.minInfo.countsForRisk)
+      .every((d) => d.status === 'sufficient'),
+    'days still inside the calendar are judged normally'
+  );
+
+  console.log('\n--- coverage honesty: no sessions in the book is not a safe day ---');
+  const unbuilt = {};
+  for (let i = 1; i < 8; i++) {
+    unbuilt[addDaysISO('2026-09-01', i)] = { total: 0, sessionsCount: 0, byType: {}, byStaff: [] };
+  }
+  const unbuiltScan = scanHorizon({
+    preset,
+    dataByDate: unbuilt,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 8 },
+  });
+  check(unbuiltScan.summary.complete === false, 'weekdays with no sessions → not a complete (checked) scan');
+  check(scanTone(unbuiltScan.summary) !== 'green', 'weekdays with no sessions → never green');
+  check(
+    !/No days at risk/.test(lookAheadSentence(unbuiltScan.summary, 'GP')),
+    'weekdays with no sessions → sentence does not claim "no days at risk"'
+  );
+  const unbuiltDay = unbuiltScan.days.find((d) => d.dateISO === '2026-09-02');
+  check(
+    unbuiltDay && unbuiltDay.status === 'empty' && /No sessions in the book/.test(unbuiltDay.reason),
+    'the day says the rota is not built yet'
+  );
+  const bhZero = scanHorizon({
+    preset,
+    dataByDate: { '2026-05-25': { total: 0, sessionsCount: 0, byType: {}, byStaff: [] } },
+    fromISO: '2026-05-25',
+    today: '2026-05-24',
+    lookahead: { ...la, horizonDays: 1 },
+  });
+  check(bhZero.days[0].status === 'closed', 'a bank holiday with no sessions is still simply closed');
+
   const mixedData = { '2026-09-02': { total: 1, sessionsCount: 4, byType: {}, byStaff: [] } };
   const mixed = scanHorizon({
     preset,

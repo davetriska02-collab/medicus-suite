@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.249.2",
+  "version": "3.258.0",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -16,7 +16,7 @@
     "service_worker": "service-worker.js"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; frame-src 'self' https://www.youtube-nocookie.com"
   },
   "side_panel": {
     "default_path": "side-panel/panel.html"
@@ -95,6 +95,7 @@
       "js": [
         "shared/due-mini.js",
         "shared/companion-role.js",
+        "shared/outstanding-investigations.js",
         "content-scripts/task-actions-panel.js",
         "shared/quick-actions-core.js",
         "content-scripts/reception-quick-actions.js",
@@ -116,6 +117,8 @@
         "content-scripts/lab-allocate-canvas.js",
         "shared/workflow-allocate-core.js",
         "content-scripts/workflow-allocate-canvas.js",
+        "shared/rx-allocate-core.js",
+        "content-scripts/rx-allocate-canvas.js",
         "content-scripts/allergy-cleanup.js",
         "shared/write-core.js",
         "content-scripts/allergy-cleanup-canvas.js",
@@ -164,8 +167,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "sidebar/sidebar.css",
-        "sidebar/sidebar.html",
         "rules/drug-rules.json",
         "rules/qof-rules.json",
         "rules/vaccine-rules.json",

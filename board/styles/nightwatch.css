@@ -1,0 +1,404 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite - Note display board - style: NIGHTWATCH
+ *
+ * Voice: the duty room after the lights go down. A watch officer's board,
+ * lit only by its own readout: near-black chassis, phosphor green for
+ * resting data, warm amber as pressure climbs. Comfortable to sit beside
+ * for a nine hour shift, and readable from the far door.
+ *
+ * Not a hacker film. No scanlines, no glyph rain, no ASCII rules. The
+ * phosphor is a single ink colour with a whisper of bloom, and the reading
+ * layer stays a soft near-white so words are read as words. Where
+ * INSTRUMENT is cool slate product UI, this is a darkened ops room: black
+ * where that one is blue, square where that one is rounded, glowing from
+ * below where that one is lit from above.
+ *
+ * Status meaning is fixed suite-wide and unchanged: quiet = calm,
+ * steady = normal, steady traffic, busy = pressure, very-busy = strain.
+ * The scale is a warmth ramp, phosphor green to gold to amber to amber-red,
+ * so it climbs in one direction and survives being read at a glance. Tone
+ * shows as a bar down the leading edge and, from busy upward, on the number
+ * itself. The tempo dots carry the same step by count as well as by hue.
+ *
+ * Self-contained by design (see DOCTRINE.md "Injected surfaces"): the kiosk
+ * never loads panel.css, so this scope carries its own values.
+ *
+ * Every rule is scoped to .note-body[data-style='standard'][data-colour='nightwatch'].
+ */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] {
+  --note-void: #05080a;
+  --note-chassis: #0c1214;
+  --note-well: #030506;
+  --note-hair: #3a5856;
+  --note-mute: #93a8a1;
+  --note-soft: #c2d3cd;
+  --note-ink: #e6efec;
+  --note-flap: #0a1011;
+  --note-flap-ink: #9fe9bd;
+  --note-flap-split: rgba(159, 233, 189, 0.1);
+  --note-flap-blank: #070b0c;
+  --note-quiet: #5fe39b;
+  --note-steady: #d9c86b;
+  --note-busy: #f5a33c;
+  --note-very: #ff7250;
+  --note-sans: ui-sans-serif, system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --note-mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Private to this style, not part of the shared Note contract. */
+  --note-phosphor: #7fe8ac;
+  --note-bloom: rgba(95, 227, 155, 0.28);
+  --note-edge: rgba(159, 233, 189, 0.06);
+  --note-alarm-wash: rgba(245, 163, 60, 0.12);
+  --note-ease: cubic-bezier(0.2, 0, 0, 1);
+  --note-fast: 200ms;
+}
+
+/* --- Field: the room glows from the desks, not the ceiling ------------- */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] {
+  background: radial-gradient(1200px 640px at 50% 112%, rgba(95, 227, 155, 0.05), transparent 62%), var(--note-void);
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-empty {
+  font-family: var(--note-sans);
+  font-weight: 500;
+  color: var(--note-mute);
+}
+
+/* --- Chrome ------------------------------------------------------------ */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-name {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-sub {
+  font-family: var(--note-mono);
+  letter-spacing: 0.1em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-select select,
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-btn {
+  background: var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 2px;
+  color: var(--note-soft);
+  font-weight: 500;
+  transition:
+    border-color var(--note-fast) var(--note-ease),
+    color var(--note-fast) var(--note-ease),
+    background var(--note-fast) var(--note-ease);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-btn:hover,
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-select select:hover {
+  background: #121b1c;
+  border-color: var(--note-quiet);
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-btn:active {
+  background: #0a1011;
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-select select:focus-visible,
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-chrome-btn:focus-visible {
+  outline: 2px solid var(--note-quiet);
+  outline-offset: 2px;
+}
+
+/* --- Flap deck: squared cells, phosphor lettering ---------------------- */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-flaps {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 var(--note-edge),
+    inset 0 0 70px rgba(95, 227, 155, 0.035),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-flap {
+  background: var(--note-flap);
+  color: var(--note-flap-ink);
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(159, 233, 189, 0.05);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-flap::after {
+  height: 1px;
+  background: var(--note-flap-split);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-flap-glyph {
+  font-family: var(--note-sans);
+  font-weight: 620;
+  letter-spacing: 0.01em;
+  text-shadow: 0 0 12px var(--note-bloom);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-flap-blank {
+  background: var(--note-flap-blank);
+  box-shadow: inset 0 0 0 1px rgba(159, 233, 189, 0.03);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-flap-blank::after {
+  background: rgba(159, 233, 189, 0.04);
+}
+
+/* --- Metric tiles ------------------------------------------------------ */
+
+/* Every tile carries the bar down its leading edge, coloured when the tile
+ * has a tone and neutral when it has none, so a tone arriving or clearing
+ * never changes the tile's geometry. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile {
+  background: linear-gradient(180deg, rgba(159, 233, 189, 0.03), transparent 60%), var(--note-chassis);
+  border: 1px solid var(--note-hair);
+  border-radius: 2px;
+  box-shadow: inset 4px 0 0 rgba(159, 233, 189, 0.1);
+}
+
+/* Card label: sans, sentence case. The words stay words. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile-k {
+  font-family: var(--note-sans);
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: var(--note-mute);
+}
+
+/* Data: mono, tabular, phosphor with a whisper of bloom. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile-v {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: var(--note-phosphor);
+  text-shadow: 0 0 18px rgba(95, 227, 155, 0.22);
+}
+
+/* A tempo word is a word: sans, and the reading ink, not the phosphor. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile-v-word {
+  font-family: var(--note-sans);
+  font-weight: 620;
+  letter-spacing: -0.02em;
+  color: var(--note-ink);
+  text-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile-s {
+  font-family: var(--note-sans);
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile-s-strong {
+  font-weight: 560;
+  color: var(--note-ink);
+}
+
+/* Tone rides that bar. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='quiet'],
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='GREEN'] {
+  box-shadow: inset 4px 0 0 var(--note-quiet);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='steady'] {
+  box-shadow: inset 4px 0 0 var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='busy'],
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='AMBER'] {
+  border-color: rgba(245, 163, 60, 0.42);
+  box-shadow: inset 4px 0 0 var(--note-busy);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='very-busy'],
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='RED'] {
+  border-color: rgba(255, 114, 80, 0.58);
+  box-shadow:
+    inset 4px 0 0 var(--note-very),
+    0 0 0 1px rgba(255, 114, 80, 0.18);
+}
+
+/* Pressure warms the number: at busy the phosphor gives way to amber, at
+ * strain the label warms too, so the step is never hue alone. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='busy'] .note-tile-v,
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='AMBER'] .note-tile-v {
+  color: var(--note-busy);
+  text-shadow: 0 0 18px rgba(245, 163, 60, 0.22);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='very-busy'] .note-tile-v,
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='RED'] .note-tile-v {
+  color: var(--note-very);
+  text-shadow: 0 0 20px rgba(255, 114, 80, 0.26);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='very-busy'] .note-tile-k,
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-tile[data-tone='RED'] .note-tile-k {
+  color: var(--note-very);
+}
+
+/* --- Tempo dots: lamps on a watch panel -------------------------------- */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-dots {
+  gap: 8px;
+}
+
+/* Read from a doorway, not from 400mm: the house 8px dot is a full stop at
+ * this distance, so the lamps grow and the lit ones bloom. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-dot {
+  width: 12px;
+  height: 12px;
+  background: #1b2a29;
+  box-shadow: inset 0 0 0 1px rgba(159, 233, 189, 0.09);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-dot.is-on[data-tone='quiet'] {
+  background: var(--note-quiet);
+  box-shadow: 0 0 8px rgba(95, 227, 155, 0.45);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-dot.is-on[data-tone='steady'] {
+  background: var(--note-steady);
+  box-shadow: 0 0 8px rgba(217, 200, 107, 0.45);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-dot.is-on[data-tone='busy'] {
+  background: var(--note-busy);
+  box-shadow: 0 0 8px rgba(245, 163, 60, 0.5);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-dot.is-on[data-tone='very-busy'] {
+  background: var(--note-very);
+  box-shadow: 0 0 9px rgba(255, 114, 80, 0.55);
+}
+
+/* --- Ticker: the watch log, so the mono voice keeps it ----------------- */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-ticker {
+  background: var(--note-well);
+  border: 1px solid var(--note-hair);
+  border-radius: 2px;
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-ticker-seq {
+  font-family: var(--note-mono);
+  letter-spacing: 0.05em;
+  color: var(--note-soft);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-ticker-dot {
+  color: var(--note-quiet);
+}
+
+/* --- Clock: phosphor readout ------------------------------------------- */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-clock .note-flap {
+  background: var(--note-well);
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1px rgba(159, 233, 189, 0.07);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-clock .note-flap::after {
+  display: none;
+}
+
+/* The pad cells either side of the time are not part of the readout, so
+ * they stop being drawn as empty boxes flanking it. */
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-clock .note-flap-blank {
+  background: transparent;
+  box-shadow: none;
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-clock .note-flap-glyph {
+  font-family: var(--note-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--note-phosphor);
+  text-shadow: 0 0 14px rgba(95, 227, 155, 0.24);
+}
+
+/* --- Fail loud: the one warm, bright, moving thing in the room --------- */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-fail {
+  background: linear-gradient(var(--note-alarm-wash), var(--note-alarm-wash)), var(--note-chassis);
+  border: 2px solid var(--note-busy);
+  border-radius: 3px;
+  box-shadow:
+    0 0 0 1px rgba(245, 163, 60, 0.3),
+    0 0 60px rgba(245, 163, 60, 0.2);
+  animation: note-nw-alarm 2.6s var(--note-ease) infinite;
+}
+
+@keyframes note-nw-alarm {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(245, 163, 60, 0.3),
+      0 0 60px rgba(245, 163, 60, 0.16);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(245, 163, 60, 0.45),
+      0 0 84px rgba(245, 163, 60, 0.3);
+  }
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-fail-title {
+  font-weight: 640;
+  letter-spacing: -0.02em;
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-fail-ask {
+  font-weight: 650;
+  color: var(--note-busy);
+  text-shadow: 0 0 20px rgba(245, 163, 60, 0.24);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-fail-body {
+  color: var(--note-ink);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-fail-banner {
+  background: linear-gradient(var(--note-alarm-wash), var(--note-alarm-wash)), var(--note-chassis);
+  border: 2px solid var(--note-busy);
+  border-radius: 2px;
+  color: var(--note-ink);
+  box-shadow:
+    0 0 0 1px rgba(245, 163, 60, 0.28),
+    0 0 34px rgba(245, 163, 60, 0.16);
+}
+
+/* --- Footer ------------------------------------------------------------ */
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-foot {
+  font-family: var(--note-mono);
+  letter-spacing: 0.06em;
+  color: var(--note-mute);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-demo-flag {
+  color: var(--note-steady);
+}
+
+.note-body[data-style='standard'][data-colour='nightwatch'] .note-error {
+  color: var(--note-busy);
+}
+
+/* --- Reduced motion --------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .note-body[data-style='standard'][data-colour='nightwatch'] .note-fail {
+    animation: none;
+    box-shadow:
+      0 0 0 2px rgba(245, 163, 60, 0.45),
+      0 0 84px rgba(245, 163, 60, 0.28);
+  }
+}

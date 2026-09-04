@@ -248,6 +248,10 @@
       open: true,
       appointments: [], // future only, soonest first
       bookingLinks: [], // unused (appointmentBooked === 'No') only
+      investigations: [], // outstanding (isAwaitingResults === true) only, oldest-requested first
+      tasks: [], // incomplete + snoozed, current task (if any) excluded, overdue first
+      groupsOpen: { appts: true, links: true, tasks: true, investigations: true }, // per-list collapse, independent of the section-level rec.open
+      listErrors: { appts: null, links: null, tasks: null, investigations: null }, // per-list fetch failure; section-level error only when all four fail
     };
   }
 
@@ -495,6 +499,47 @@
       `/patient/data/scheduling/patient-booking-link/list-patient-booking-link/${encodeURIComponent(patientId)}`
     );
     return Array.isArray(data.patientBookingLinks) ? data.patientBookingLinks : [];
+  }
+
+  async function apiFetchPatientJournal(patientId) {
+    return apiFetch(`/clinical/data/patient-journal/overview/${encodeURIComponent(patientId)}`);
+  }
+
+  // Open tasks for this patient — "incomplete" and "snoozed" (Medicus's own
+  // "Scheduled for later" filter) only, matching the same two statuses Nick
+  // filters to on the patient's own Tasks tab; "completed"/"cancelled"
+  // (discarded) are deliberately excluded server-side via the query params,
+  // not filtered client-side, so there is no risk of a stale local filter
+  // silently including them. Confirmed live via HAR 110-tasklist.har.
+  async function apiFetchOpenTasks(patientId) {
+    const qs = new URLSearchParams();
+    qs.append('statuses[]', 'incomplete');
+    qs.append('statuses[]', 'snoozed');
+    const data = await apiFetch(`/clinical/data/patient-record/task-list/${encodeURIComponent(patientId)}?${qs}`);
+    return Array.isArray(data.tasks) ? data.tasks : [];
+  }
+
+  // A task-list row's own `id` is NOT the taskUuid used elsewhere in this
+  // file (`/tasks/data/{typeSlug}/overview/{taskUuid}`) — confirmed live,
+  // the two differ on the same row. The real taskUuid is only the last path
+  // segment of `overviewURL`, which is what we need to compare against
+  // ctx.taskUuid to exclude the task the clinician is already on.
+  function taskUuidFromOverviewUrl(url) {
+    if (typeof url !== 'string' || !url) return null;
+    const parts = url.split('/');
+    return parts[parts.length - 1] || null;
+  }
+
+  // Outstanding investigation requests — pure parsing lives in
+  // shared/outstanding-investigations.js (see its header comment for the
+  // full HAR-capture research trail: no list endpoint exists, `isAwaiting
+  // Results` means "no result yet" not "confirmed unsent", journal entries
+  // can be flat or nested). Extracted to a shared module rather than kept
+  // inline, same as shared/repeat-authorisation.js, so the parsing has real
+  // fixture-based tests instead of only source-pattern ones.
+  function outstandingInvestigationRequests(journal) {
+    const api = window.MsOutstandingInvestigations;
+    return api ? api.outstandingInvestigationRequests(journal) : [];
   }
 
   // "YYYY-MM-DD HH:mm:ss", local time — same shape as the API's own
@@ -1428,55 +1473,169 @@
     );
   }
 
+  // l.created is Medicus's own pre-formatted "18 Mar 2026, 17:43" string
+  // (confirmed live, Nick's own screenshot) — never parsed as a date, just
+  // truncated at the comma to drop the time, same "echo, don't parse"
+  // discipline as renderTaskRow's dueDate/createdAt. Falls back to the full
+  // string if a row is ever missing the comma, so nothing goes blank.
+  function dateOnlyFromCreated(str) {
+    if (typeof str !== 'string') return '';
+    const idx = str.indexOf(',');
+    return idx === -1 ? str : str.slice(0, idx);
+  }
+
+  // "-" is Medicus's own placeholder for "not set" (same convention as
+  // predefinedReasonForAppointment, handled the same way below) — a naive
+  // `||` chain treats it as a real value and renders the dash itself, which
+  // is what procedure-type links were doing (confirmed live, Nick's own
+  // screenshot showed literal "-" titles). `procedures` is included as a
+  // candidate field per HAR 111-procedure-bookinglink.har (the overview
+  // endpoint for a real procedure link), but that capture's own procedures
+  // value was empty, so it's unconfirmed whether the list endpoint we
+  // actually call carries a populated value under this same name — still
+  // needs a HAR of the list endpoint itself for a procedure link with a
+  // procedure actually chosen.
+  function bookingLinkTypeName(l) {
+    const candidates = [l.appointmentType, l.appointmentService, l.procedures];
+    for (let i = 0; i < candidates.length; i++) {
+      const v = candidates[i];
+      if (v && v !== '-') return v;
+    }
+    return 'Booking link';
+  }
+
   function renderLinkRow(l) {
     const reason =
       l.predefinedReasonForAppointment && l.predefinedReasonForAppointment !== '-'
         ? l.predefinedReasonForAppointment
         : '';
-    const typeName = l.appointmentType || l.appointmentService || 'Appointment';
+    const typeName = bookingLinkTypeName(l);
     return (
-      '<li class="ms-tap-rec-row">' +
-      '<div class="ms-tap-rec-row-top">' +
-      '<span class="ms-tap-rec-when">Sent ' +
-      esc(l.created || '') +
-      '</span>' +
-      '</div>' +
-      '<div class="ms-tap-rec-row-detail">' +
+      '<li class="ms-tap-rec-pill">' +
+      '<span class="ms-tap-rec-pill-text">' +
       esc(typeName) +
-      '</div>' +
-      (reason ? '<div class="ms-tap-rec-row-reason">“' + esc(reason) + '”</div>' : '') +
+      (reason ? '<span class="ms-tap-rec-pill-reason"> — “' + esc(reason) + '”</span>' : '') +
+      '</span>' +
+      '<span class="ms-tap-rec-status">' +
+      esc(dateOnlyFromCreated(l.created || '')) +
+      '</span>' +
       '</li>'
     );
   }
 
+  // No due date exists on an investigation request — "requested DATE by
+  // WHO" is the only useful context, same idea as a booking link's "Sent
+  // DATE". Item names are Medicus's own free-text description strings, not
+  // a coded value — see outstandingInvestigationRequests()'s header comment.
+  function renderInvestigationRow(inv) {
+    const itemsText = inv.items.length ? inv.items.join(', ') : 'Investigation';
+    const by = inv.requestedBy ? ' by ' + esc(inv.requestedBy) : '';
+    return (
+      '<li class="ms-tap-rec-row">' +
+      '<div class="ms-tap-rec-row-top">' +
+      '<span class="ms-tap-rec-when">' +
+      esc(inv.requestedDate || '') +
+      by +
+      '</span>' +
+      '</div>' +
+      '<div class="ms-tap-rec-row-detail">' +
+      esc(itemsText) +
+      '</div>' +
+      '</li>'
+    );
+  }
+
+  // Each sub-list collapses independently of the section itself (rec.open),
+  // same idea as the top-level What's due / Desk / Slots headers.
+  function renderRecGroup(key, heading, bodyHtml) {
+    const open = s.rec.groupsOpen[key] !== false;
+    return (
+      '<div class="ms-tap-rec-group">' +
+      '<div class="ms-tap-rec-heading" id="ms-tap-rec-grp-' +
+      key +
+      '" role="button" tabindex="0" aria-expanded="' +
+      open +
+      '">' +
+      '<span class="ms-tap-chevron" aria-hidden="true">' +
+      (open ? '▾' : '▸') +
+      '</span>' +
+      '<span>' +
+      esc(heading) +
+      '</span>' +
+      '</div>' +
+      (open ? bodyHtml : '') +
+      '</div>'
+    );
+  }
+
+  // dueDate is Medicus's own pre-formatted display string (e.g.
+  // "23 May 2025"), not ISO — never sort or parse it as a date, only echo
+  // it. isOverdue is the one boolean Medicus itself supplies for urgency,
+  // so that's the only case that keeps a coloured tag; a real (non-"-") due
+  // date otherwise shows plain, same uncoloured treatment as a booking
+  // link's date.
+  function renderTaskRow(t) {
+    const label = t.taskType || 'Task';
+    const assignee = t.assignedTo ? ' — ' + esc(t.assignedTo) : '';
+    const hasDueDate = t.dueDate && t.dueDate !== '-';
+    const tag = t.isOverdue
+      ? '<span class="ms-tap-rec-status ms-tap-rec-status-overdue">Overdue</span>'
+      : hasDueDate
+        ? '<span class="ms-tap-rec-status">' + esc(t.dueDate) + '</span>'
+        : '';
+    return (
+      '<li class="ms-tap-rec-pill">' +
+      '<span class="ms-tap-rec-pill-text">' +
+      esc(label) +
+      assignee +
+      '</span>' +
+      tag +
+      '</li>'
+    );
+  }
+
+  function recListError(key) {
+    const err = s.rec.listErrors && s.rec.listErrors[key];
+    return err ? '<div class="ms-tap-error">' + esc(err) + '</div>' : null;
+  }
+
   function renderRecordBody() {
     const rec = s.rec;
-    const apptsHtml = rec.appointments.length
-      ? '<ul class="ms-tap-rec-list">' + rec.appointments.map(renderApptRow).join('') + '</ul>'
-      : '<div class="ms-tap-rec-empty">No future appointments.</div>';
+    const apptsHtml =
+      recListError('appts') ||
+      (rec.appointments.length
+        ? '<ul class="ms-tap-rec-list">' + rec.appointments.map(renderApptRow).join('') + '</ul>'
+        : '<div class="ms-tap-rec-empty">No future appointments.</div>');
     if (currentRole() === 'reception') {
-      return (
-        '<div class="ms-tap-section-body">' +
-        '<div class="ms-tap-rec-group">' +
-        '<div class="ms-tap-rec-heading">Future appointments</div>' +
-        apptsHtml +
-        '</div>' +
-        '</div>'
-      );
+      return '<div class="ms-tap-section-body">' + renderRecGroup('appts', 'Future appointments', apptsHtml) + '</div>';
     }
-    const linksHtml = rec.bookingLinks.length
-      ? '<ul class="ms-tap-rec-list">' + rec.bookingLinks.map(renderLinkRow).join('') + '</ul>'
-      : '<div class="ms-tap-rec-empty">No unused booking links.</div>';
+    const linksHtml =
+      recListError('links') ||
+      (rec.bookingLinks.length
+        ? '<ul class="ms-tap-rec-list">' + rec.bookingLinks.map(renderLinkRow).join('') + '</ul>'
+        : '<div class="ms-tap-rec-empty">No unused booking links.</div>');
+    // isAwaitingResults means "no result back yet", never a confirmed "sent
+    // to the lab" — no such field exists in Medicus's data model (see
+    // outstandingInvestigationRequests()'s header comment for the HAR
+    // trail). Said explicitly in the UI, not just in a code comment, so the
+    // list is never misread as sent-confirmation either way — H-069.
+    const investigationsHtml =
+      '<div class="ms-tap-rec-caption">Awaiting a result — not confirmation the request reached the lab.</div>' +
+      (recListError('investigations') ||
+        (rec.investigations.length
+          ? '<ul class="ms-tap-rec-list">' + rec.investigations.map(renderInvestigationRow).join('') + '</ul>'
+          : '<div class="ms-tap-rec-empty">No outstanding investigations.</div>'));
+    const tasksHtml =
+      recListError('tasks') ||
+      (rec.tasks.length
+        ? '<ul class="ms-tap-rec-list">' + rec.tasks.map(renderTaskRow).join('') + '</ul>'
+        : '<div class="ms-tap-rec-empty">No open tasks.</div>');
     return (
       '<div class="ms-tap-section-body">' +
-      '<div class="ms-tap-rec-group">' +
-      '<div class="ms-tap-rec-heading">Future appointments</div>' +
-      apptsHtml +
-      '</div>' +
-      '<div class="ms-tap-rec-group">' +
-      '<div class="ms-tap-rec-heading">Unused booking links</div>' +
-      linksHtml +
-      '</div>' +
+      renderRecGroup('appts', 'Future appointments', apptsHtml) +
+      renderRecGroup('links', 'Unused booking links', linksHtml) +
+      renderRecGroup('tasks', 'Open tasks', tasksHtml) +
+      renderRecGroup('investigations', 'Outstanding investigations', investigationsHtml) +
       '</div>'
     );
   }
@@ -1502,7 +1661,7 @@
       (rec.open ? '▾' : '▸') +
       '</span>' +
       '<span>' +
-      (currentRole() === 'reception' ? 'Already booked' : 'Patient record') +
+      (currentRole() === 'reception' ? 'Already booked' : 'Open appts, links, tasks & investigations') +
       '</span>' +
       '</div>' +
       body +
@@ -2029,22 +2188,95 @@
 
   // ── Actions: patient record ───────────────────────────────────────────────────
   // Read-only — no wrong-patient WRITE guard needed (nothing is written), but
-  // still pins the sub-state and re-checks the task hasn't changed mid-fetch,
-  // so a slow response for a task the clinician already left can't paint a
+  // still pins the sub-state and re-checks the page hasn't changed mid-fetch,
+  // so a slow response for a page the clinician already left can't paint a
   // stranger's appointments under the current one.
+  //
+  // Two entry shapes, one shared fetch:
+  //   - kind 'record': the care-record URL itself already carries a trusted
+  //     patient UUID (RECORD_RE in shared/companion-role.js) — same trust
+  //     level doOpenBooking()/doFindSlots() already give ctx.patientId for
+  //     record/elsewhere pages elsewhere in this file. No task to classify,
+  //     so the section is always applicable here — go straight to fetching.
+  //   - kind 'task': unchanged — must classify first (Stage 1), since the
+  //     generic communication-thread slug is shared with non-triage threads
+  //     (repeat-Rx requests, questionnaire responses, plain conversations)
+  //     and a classification failure must fail CLOSED, not guess.
 
-  async function loadPatientRecord(info) {
+  async function fetchAppointmentsAndLinks(st, patientId, excludeTaskUuid) {
+    st.patientId = patientId;
+    st.loading = true;
+    rerender();
+    try {
+      if (!st.patientId) throw new Error('Could not determine the patient.');
+      // allSettled, not all: the journal overview is a large, slow payload and
+      // the task-list endpoint is role-gated, so one failure must not blank the
+      // appointments/links lists that loaded fine (they were independent before
+      // the journal/tasks lists were added). Each list carries its own error;
+      // the section-level error only fires when every list failed.
+      const results = await Promise.allSettled([
+        apiFetchAppointments(st.patientId),
+        apiFetchBookingLinks(st.patientId),
+        apiFetchPatientJournal(st.patientId),
+        apiFetchOpenTasks(st.patientId),
+      ]);
+      if (st !== s.rec) return;
+      if (results.every((r) => r.status === 'rejected')) {
+        const first = results[0].reason;
+        throw new Error((first && first.message) || 'Could not load the patient record.');
+      }
+      const val = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+      st.listErrors = {
+        appts: results[0].status === 'rejected' ? "Couldn't load appointments." : null,
+        links: results[1].status === 'rejected' ? "Couldn't load booking links." : null,
+        investigations: results[2].status === 'rejected' ? "Couldn't load the journal \u2014 treat as unknown." : null,
+        tasks: results[3].status === 'rejected' ? "Couldn't load open tasks." : null,
+      };
+      const appointments = val(0, []);
+      const bookingLinks = val(1, []);
+      const journal = val(2, null);
+      const openTasks = val(3, []);
+      const now = nowDateTimeString();
+      st.appointments = appointments
+        .filter((a) => a && typeof a.startDateTime === 'string' && a.startDateTime > now)
+        .sort((a, b) => (a.startDateTime < b.startDateTime ? -1 : a.startDateTime > b.startDateTime ? 1 : 0));
+      st.bookingLinks = bookingLinks.filter((l) => l && l.appointmentBooked === 'No');
+      st.investigations = outstandingInvestigationRequests(journal);
+      st.tasks = openTasks
+        .filter((t) => t && taskUuidFromOverviewUrl(t.overviewURL) !== excludeTaskUuid)
+        .sort((a, b) => (a.isOverdue === b.isOverdue ? 0 : a.isOverdue ? -1 : 1));
+    } catch (err) {
+      if (st === s.rec) st.error = (err && err.message) || 'Could not load the patient record.';
+    } finally {
+      if (st === s.rec) st.loading = false;
+    }
+  }
+
+  async function loadPatientRecord(ctx) {
     const rec = s.rec;
+    const st = rec;
+
+    if (ctx.kind === 'record') {
+      st.checking = false;
+      st.error = null;
+      st.applicable = true;
+      await fetchAppointmentsAndLinks(st, ctx.patientId);
+      if (st === s.rec) {
+        st.loadedForTask = ctx.pageKey;
+        rerender();
+      }
+      return;
+    }
+
     rec.checking = true;
     rec.error = null;
     rerender();
-    const st = rec;
 
     // Stage 1 — classify. A failure here means we cannot tell what kind of
     // thread this is at all; stay hidden rather than guess (fail closed).
     let overview;
     try {
-      overview = await apiFetchTaskOverview(info.typeSlug, info.taskUuid);
+      overview = await apiFetchTaskOverview(ctx.typeSlug, ctx.taskUuid);
     } catch (_) {
       if (st === s.rec) {
         st.checking = false;
@@ -2057,7 +2289,7 @@
     st.checking = false;
     if (!classification.isTriage) {
       st.applicable = false;
-      st.loadedForTask = info.taskUuid;
+      st.loadedForTask = ctx.pageKey;
       rerender();
       return;
     }
@@ -2066,27 +2298,10 @@
     // belong here, so a failure from here on shows an error rather than
     // silently nothing.
     st.applicable = true;
-    st.patientId = classification.patientId;
-    st.loading = true;
-    rerender();
-    try {
-      if (!st.patientId) throw new Error('Could not determine the patient for this task.');
-      const [appointments, bookingLinks] = await Promise.all([
-        apiFetchAppointments(st.patientId),
-        apiFetchBookingLinks(st.patientId),
-      ]);
-      if (st !== s.rec) return;
-      const now = nowDateTimeString();
-      st.appointments = appointments
-        .filter((a) => a && typeof a.startDateTime === 'string' && a.startDateTime > now)
-        .sort((a, b) => (a.startDateTime < b.startDateTime ? -1 : a.startDateTime > b.startDateTime ? 1 : 0));
-      st.bookingLinks = bookingLinks.filter((l) => l && l.appointmentBooked === 'No');
-    } catch (err) {
-      st.error = (err && err.message) || 'Could not load the patient record.';
-    } finally {
-      st.loading = false;
-      st.loadedForTask = info.taskUuid;
-      if (st === s.rec) rerender();
+    await fetchAppointmentsAndLinks(st, classification.patientId, ctx.taskUuid);
+    if (st === s.rec) {
+      st.loadedForTask = ctx.pageKey;
+      rerender();
     }
   }
 
@@ -2547,6 +2762,23 @@
       });
     }
 
+    // Patient-record sub-lists — Future appointments / Unused booking links /
+    // Outstanding investigations each collapse independently of rec.open.
+    Object.keys(s.rec.groupsOpen).forEach((key) => {
+      const grpToggle = el.querySelector('#ms-tap-rec-grp-' + key);
+      if (!grpToggle) return;
+      grpToggle.addEventListener('click', () => {
+        s.rec.groupsOpen[key] = !s.rec.groupsOpen[key];
+        rerender();
+      });
+      grpToggle.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          grpToggle.click();
+        }
+      });
+    });
+
     // Booking section
     const bkToggle = el.querySelector('#ms-tap-bk-toggle');
     if (bkToggle) {
@@ -2779,11 +3011,24 @@
     if (
       ctx.kind === 'task' &&
       isCommunicationThreadSlug(ctx.typeSlug) &&
-      s.rec.loadedForTask !== ctx.taskUuid &&
+      s.rec.loadedForTask !== ctx.pageKey &&
       !s.rec.checking &&
       !s.rec.loading
     ) {
-      loadPatientRecord({ siteId: ctx.siteId, typeSlug: ctx.typeSlug, taskUuid: ctx.taskUuid });
+      loadPatientRecord(ctx);
+    }
+    // Clinic-only (currentShows().record already encodes that): the care
+    // record itself, not just a triage task, now shows Upcoming — see
+    // shared/companion-role.js's roleShows() comment for why reception stays
+    // task-only.
+    if (
+      ctx.kind === 'record' &&
+      currentShows().record &&
+      s.rec.loadedForTask !== ctx.pageKey &&
+      !s.rec.checking &&
+      !s.rec.loading
+    ) {
+      loadPatientRecord(ctx);
     }
     maybeLoadGlances();
     const existing = document.getElementById(WIDGET_ID);
