@@ -38,6 +38,110 @@ lists now load independently (`Promise.allSettled`), so a slow or
 forbidden journal/task-list fetch no longer blanks the appointments and
 booking links that used to load on their own; unparseable request dates
 sort last instead of destabilising the sort.
+## [v3.256.2] — 2026-09-04
+
+### Send-to-routine and Privacy Officer bulk buttons were dead clicks
+
+Vue clones injected markup and drops the listeners. Both buttons looked
+real and did nothing.
+
+- **Send to routine list** on non-routine prescription overviews: the
+  pill now matches `/tasks/…prescription…/overview/` with or without
+  `/data/`, accepts the live radio/commit wording, and can skip Assign-to
+  when Medicus has already enabled send (the dest is the routine inbox —
+  we never invent an assignee). Clicks bind on document capture so a
+  cloned pill still runs the macro. Still UI-drive, no POST; commit
+  match stays exact (never “close task”).
+- **Bulk acknowledge?** (Privacy Officer): same capture-phase clicks
+  (and checkbox `change`) on the shared task-bulk widget, plus a sweep
+  of Vue lookalikes that reuse the widget id. Confirm is still the
+  two-step `{ taskId }` POST to
+  `/tasks/patient-privacy-officer/complete`.
+
+Pre-merge review fixes (version taken as 3.256.2 — 3.256.1 landed first
+from the problem-cleanup fix):
+
+- The no-Assign-to skip path is fail-closed again. It was inferred purely
+  from *not finding* the picker input, which is indistinguishable from a
+  broken selector — and an already-enabled commit on such a page means
+  Medicus holds a pre-filled assignee, so "send as-is" would route the
+  task to *them*, not the configured team. If an "Assign to" label is
+  still visible the macro now aborts and says so; and because no team is
+  picked on the skip path, **auto mode always shows the confirm** (same
+  rule as a non-exact team match), the confirm says no team will be
+  selected, and the toast/audit row no longer claim the configured team
+  as the destination.
+- Bulk widget: `render()` always paints our own node, attached or not,
+  and a node re-inserted after Vue stripped it repaints from current
+  state — a load or acknowledge finishing mid-churn no longer comes back
+  stuck on "Loading…"/"Acknowledging…" with the buttons disabled.
+- Bulk widget: the delegated Confirm/Back clicks (and `runAction()`
+  itself) are gated on the engine actually being on the confirm step, so
+  a stale Vue clone's "Confirm — acknowledge N" can no longer POST a
+  selection the clinician never reviewed.
+- Audit rows now capture the task UUID on `/tasks/<slug>/overview/` URLs
+  (without `/data/`), matching the widened pill placement.
+## [v3.256.1] — 2026-09-02
+
+### Clean up code: concept-remap preference recording fixed
+
+The practice-level preference tally recorded a code replacement's WORDING
+(`pdc.preferredDescriptions`) correctly but silently never recorded the
+CONCEPT REMAP (`pdc.conceptRemap`) — `applyCode` read the "source" concept
+after it had already been overwritten with the newly-applied one, so the
+remap axis's own change-detection could never be true. Fixed by capturing
+the pre-save concept before the overwrite. Found via a real recode
+("[D]Nocturnal seizure" → "Nocturnal epileptic seizures") that showed up
+under preferred wording but not code remapping. Applies equally to codes
+replaced from the "Organise problems" canvas, which reuses the same save
+path.
+
+### Problem nesting: year-only onset dates no longer sort as undated
+
+A bare-year onset date ("2012", no month or day — a real shape for older
+imported records) fell through every date pattern the canvas and the
+problem-nesting chronology check recognised, so it sorted as fully
+undated — landing at the very bottom of the canvas as if it were the
+oldest problem on the record, regardless of how recent it actually was.
+Same failure family as the month-only partial-date fix (v3.243, "Dec
+2008"), one level less specific and not covered by it. A bare year now
+sorts correctly within its own year via the same string-prefix technique
+already used for month-only dates.
+
+### Problem nesting overrides: seizure/epilepsy pairs
+
+Added practice-suggested parent/child pairs to
+`rules/problem-nesting-overrides.json`: "Nocturnal epileptic seizures"
+and "Seizure" now offer to nest under "Epilepsy", and "Background diabetic
+retinopathy", "Diabetic peripheral angiopathy" and "Diabetic neuropathy"
+under "Type 2 diabetes mellitus", in the Organise Problems canvas,
+alongside the existing cataract-family entries.
+
+### Nesting chronology check compares partial dates at shared precision
+
+Pre-merge review fix: `predatesParent` compared raw sort keys with `<`,
+and a bare-year key ("2012") is a string prefix of every fuller key in
+that year — so a child dated "2012" read as *earlier than* a parent dated
+"15 Mar 2012", and the suggestion was silently dropped. "Unknown within
+the year" was being treated as "known to predate". The month-only case
+had the same quirk within a single month. Both keys are now truncated to
+the shorter one's precision before comparing, which turns those cases
+into the equal-dates comparison the check already deliberately allows.
+
+### Clean up code: onset-date-gap message no longer presumes GP2GP import
+
+The "no onset date" suggestion offered the original system's creation
+date and framed every missing onset date as "This looks like a
+GP2GP-transferred record" — but the gating never actually required record
+date to be blank too, so this framing was showing on ordinary problems
+that simply have a record date and no onset date (the overwhelmingly
+common case: different systems just split "when this was first noted"
+across different fields). That common case now gets its own message,
+"This problem has a record date of DD-MM-YYYY, but no onset date. If you
+wish to add an onset date you can do so below," offering the record date
+itself with no claim about how the gap arose. The original
+GP2GP-transferred message is kept, now correctly restricted to its true
+motivating case — onset date AND record date both genuinely blank.
 
 ## [v3.256.0] — 2026-08-31
 

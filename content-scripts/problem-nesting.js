@@ -179,10 +179,19 @@
   // the display sort order.
   var ONSET_MONTH_ONLY_RE = /^([A-Za-z]{3}) (\d{4})$/;
 
+  // A YEAR-ONLY onset date — no month, no day (e.g. "2012") — is a further,
+  // even less specific shape Medicus stores; same family as the month-only
+  // case above but confirmed live separately (2026-08-27, Nick: a "since
+  // 2012" prostate-cancer problem sorted as the OLDEST entry in the canvas).
+  // See problem-nesting-canvas.js's own dateSortKey for the full story —
+  // same fix, duplicated here for predatesParent's chronology check.
+  var ONSET_YEAR_ONLY_RE = /^(\d{4})$/;
+
   // Parses the confirmed "DD Mon YYYY" onset-date display shape, an
-  // already-ISO "YYYY-MM-DD" shape (recordDate), OR a partial "Mon YYYY"
-  // onset date into a zero-padded, lexically comparable key. Returns null
-  // for missing/malformed input — never guesses a day that wasn't given.
+  // already-ISO "YYYY-MM-DD" shape (recordDate), a partial "Mon YYYY" onset
+  // date, OR a bare "YYYY" onset date into a zero-padded, lexically
+  // comparable key. Returns null for missing/malformed input — never
+  // guesses a month or day that wasn't given.
   // Same regex/table as problem-nesting-canvas.js's own dateSortKey and
   // allergy-cleanup.js's normalizeOnsetDateForSubmit — duplicated, not
   // shared, the same way each content script already carries its own copy
@@ -208,6 +217,10 @@
       if (!monthOnly) return null;
       return mo[2] + '-' + monthOnly;
     }
+    // Same prefix logic one level up — see problem-nesting-canvas.js's own
+    // dateSortKey for why a bare 'YYYY' key already sorts correctly.
+    var yr = ONSET_YEAR_ONLY_RE.exec(s);
+    if (yr) return yr[1];
     return null;
   }
 
@@ -228,11 +241,20 @@
   // dates never block a suggestion that would otherwise have been offered.
   // Equal dates (e.g. a stent inserted the same day the underlying disease
   // was recorded) are NOT excluded — only a strictly earlier child is.
+  //
+  // Partial dates compare at the SHARED precision: a bare 'YYYY' key is a
+  // string prefix of every 'YYYY-MM' / 'YYYY-MM-DD' key, so a raw `<` would
+  // read "2012" as earlier than "2012-03-15" — i.e. "unknown within the
+  // year" would be treated as "known to predate", silently dropping every
+  // suggestion whose parent is dated in the same year (or month, for the
+  // month-only case). Truncating both keys to the shorter one's length
+  // turns that into an equal-dates comparison, which is NOT excluded.
   function predatesParent(childInfo, parentInfo) {
     var childDate = resolveChronologyDate(childInfo);
     var parentDate = resolveChronologyDate(parentInfo);
     if (!childDate || !parentDate) return false;
-    return childDate < parentDate;
+    var n = Math.min(childDate.length, parentDate.length); // 4, 7 or 10
+    return childDate.slice(0, n) < parentDate.slice(0, n);
   }
 
   // Builds the 'childConceptId|parentConceptId' key Set from
