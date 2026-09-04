@@ -88,7 +88,12 @@ function journalWith(nestedEntries, flatEntries) {
       },
     });
   }
-  (flatEntries || []).forEach((e) => dayItems.push({ type: 'investigation-request', ...e }));
+  // Flat items use the real journal wrapper shape: type-specific fields live
+  // under `data`, the wrapper carries id + isMarkedIncorrect
+  // (docs/learnings-patient-journal-api.md, "Item shape").
+  (flatEntries || []).forEach((e) =>
+    dayItems.push({ type: 'investigation-request', id: e.id, isMarkedIncorrect: !!e.isMarkedIncorrect, data: e })
+  );
   return { patientJournalRecords: [{ title: 'Mon 24 Aug 2026', items: dayItems }] };
 }
 
@@ -117,6 +122,30 @@ console.log('\n--- shape robustness ---');
   const flatJournal = journalWith([], [SCAPHOID_XRAY]);
   const out = outstandingInvestigationRequests(flatJournal);
   assert(out.length === 1 && out[0].id === SCAPHOID_XRAY.id, 'flat (non-nested) entries are also walked');
+  assert(out[0].items[0] === 'SCAPHOID  LT X-ray', "flat entry fields are read from the wrapper's data");
+}
+{
+  // Wrapper-level isMarkedIncorrect must win even when data lacks the flag.
+  const wrapperMarked = {
+    patientJournalRecords: [
+      {
+        title: 'Mon 24 Aug 2026',
+        items: [{ type: 'investigation-request', id: SCAPHOID_XRAY.id, isMarkedIncorrect: true, data: SCAPHOID_XRAY }],
+      },
+    ],
+  };
+  const out = outstandingInvestigationRequests(wrapperMarked);
+  assert(out.length === 0, 'flat entry marked incorrect on the wrapper is excluded');
+}
+{
+  // Sort: a request with an unparseable date sinks below dated ones.
+  const undated = { ...SCAPHOID_XRAY, id: 'undated-1', requestedDate: null };
+  const later = { ...SCAPHOID_XRAY, id: 'later-1', requestedDate: '25 Aug 2026' };
+  const out = outstandingInvestigationRequests(journalWith([undated, later, SCAPHOID_XRAY]));
+  assert(
+    out.map((r) => r.id).join(',') === [SCAPHOID_XRAY.id, 'later-1', 'undated-1'].join(','),
+    'oldest-requested first, undated last'
+  );
 }
 {
   const marked = { ...SCAPHOID_XRAY, isMarkedIncorrect: true };

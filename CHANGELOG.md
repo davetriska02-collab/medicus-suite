@@ -30,6 +30,15 @@ signal); type name now shows before the date, and a Medicus data bug is
 fixed where procedure-type booking links displayed a literal "-" instead
 of falling back to a generic label.
 
+Pre-merge review fixes: flat (top-level) investigation-request journal
+items are now read from the wrapper's `data` — as the duplicate-record
+parser already does — instead of the wrapper itself, which silently
+dropped any outstanding request not nested under an encounter; the four
+lists now load independently (`Promise.allSettled`), so a slow or
+forbidden journal/task-list fetch no longer blanks the appointments and
+booking links that used to load on their own; unparseable request dates
+sort last instead of destabilising the sort.
+
 ## [v3.256.0] — 2026-08-31
 
 ### Prescription allocation canvas

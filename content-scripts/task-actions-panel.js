@@ -251,6 +251,7 @@
       investigations: [], // outstanding (isAwaitingResults === true) only, oldest-requested first
       tasks: [], // incomplete + snoozed, current task (if any) excluded, overdue first
       groupsOpen: { appts: true, links: true, tasks: true, investigations: true }, // per-list collapse, independent of the section-level rec.open
+      listErrors: { appts: null, links: null, tasks: null, investigations: null }, // per-list fetch failure; section-level error only when all four fail
     };
   }
 
@@ -1593,17 +1594,26 @@
     );
   }
 
+  function recListError(key) {
+    const err = s.rec.listErrors && s.rec.listErrors[key];
+    return err ? '<div class="ms-tap-error">' + esc(err) + '</div>' : null;
+  }
+
   function renderRecordBody() {
     const rec = s.rec;
-    const apptsHtml = rec.appointments.length
-      ? '<ul class="ms-tap-rec-list">' + rec.appointments.map(renderApptRow).join('') + '</ul>'
-      : '<div class="ms-tap-rec-empty">No future appointments.</div>';
+    const apptsHtml =
+      recListError('appts') ||
+      (rec.appointments.length
+        ? '<ul class="ms-tap-rec-list">' + rec.appointments.map(renderApptRow).join('') + '</ul>'
+        : '<div class="ms-tap-rec-empty">No future appointments.</div>');
     if (currentRole() === 'reception') {
       return '<div class="ms-tap-section-body">' + renderRecGroup('appts', 'Future appointments', apptsHtml) + '</div>';
     }
-    const linksHtml = rec.bookingLinks.length
-      ? '<ul class="ms-tap-rec-list">' + rec.bookingLinks.map(renderLinkRow).join('') + '</ul>'
-      : '<div class="ms-tap-rec-empty">No unused booking links.</div>';
+    const linksHtml =
+      recListError('links') ||
+      (rec.bookingLinks.length
+        ? '<ul class="ms-tap-rec-list">' + rec.bookingLinks.map(renderLinkRow).join('') + '</ul>'
+        : '<div class="ms-tap-rec-empty">No unused booking links.</div>');
     // isAwaitingResults means "no result back yet", never a confirmed "sent
     // to the lab" — no such field exists in Medicus's data model (see
     // outstandingInvestigationRequests()'s header comment for the HAR
@@ -1611,12 +1621,15 @@
     // list is never misread as sent-confirmation either way — H-069.
     const investigationsHtml =
       '<div class="ms-tap-rec-caption">Awaiting a result — not confirmation the request reached the lab.</div>' +
-      (rec.investigations.length
-        ? '<ul class="ms-tap-rec-list">' + rec.investigations.map(renderInvestigationRow).join('') + '</ul>'
-        : '<div class="ms-tap-rec-empty">No outstanding investigations.</div>');
-    const tasksHtml = rec.tasks.length
-      ? '<ul class="ms-tap-rec-list">' + rec.tasks.map(renderTaskRow).join('') + '</ul>'
-      : '<div class="ms-tap-rec-empty">No open tasks.</div>';
+      (recListError('investigations') ||
+        (rec.investigations.length
+          ? '<ul class="ms-tap-rec-list">' + rec.investigations.map(renderInvestigationRow).join('') + '</ul>'
+          : '<div class="ms-tap-rec-empty">No outstanding investigations.</div>'));
+    const tasksHtml =
+      recListError('tasks') ||
+      (rec.tasks.length
+        ? '<ul class="ms-tap-rec-list">' + rec.tasks.map(renderTaskRow).join('') + '</ul>'
+        : '<div class="ms-tap-rec-empty">No open tasks.</div>');
     return (
       '<div class="ms-tap-section-body">' +
       renderRecGroup('appts', 'Future appointments', apptsHtml) +
@@ -2196,13 +2209,33 @@
     rerender();
     try {
       if (!st.patientId) throw new Error('Could not determine the patient.');
-      const [appointments, bookingLinks, journal, openTasks] = await Promise.all([
+      // allSettled, not all: the journal overview is a large, slow payload and
+      // the task-list endpoint is role-gated, so one failure must not blank the
+      // appointments/links lists that loaded fine (they were independent before
+      // the journal/tasks lists were added). Each list carries its own error;
+      // the section-level error only fires when every list failed.
+      const results = await Promise.allSettled([
         apiFetchAppointments(st.patientId),
         apiFetchBookingLinks(st.patientId),
         apiFetchPatientJournal(st.patientId),
         apiFetchOpenTasks(st.patientId),
       ]);
       if (st !== s.rec) return;
+      if (results.every((r) => r.status === 'rejected')) {
+        const first = results[0].reason;
+        throw new Error((first && first.message) || 'Could not load the patient record.');
+      }
+      const val = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+      st.listErrors = {
+        appts: results[0].status === 'rejected' ? "Couldn't load appointments." : null,
+        links: results[1].status === 'rejected' ? "Couldn't load booking links." : null,
+        investigations: results[2].status === 'rejected' ? "Couldn't load the journal \u2014 treat as unknown." : null,
+        tasks: results[3].status === 'rejected' ? "Couldn't load open tasks." : null,
+      };
+      const appointments = val(0, []);
+      const bookingLinks = val(1, []);
+      const journal = val(2, null);
+      const openTasks = val(3, []);
       const now = nowDateTimeString();
       st.appointments = appointments
         .filter((a) => a && typeof a.startDateTime === 'string' && a.startDateTime > now)

@@ -57,7 +57,20 @@
 
     for (const day of days) {
       for (const item of day.items || []) {
-        if (item.type === 'investigation-request') consider(item);
+        if (item.type === 'investigation-request') {
+          // Flat (top-level) journal items are a wrapper — the type-specific
+          // fields (isAwaitingResults, investigationRequestItems, requestedBy,
+          // requestedDate) live under item.data, exactly as
+          // engine/record-duplicate-parser.js reads them. Only the wrapper
+          // carries isMarkedIncorrect reliably, so honour it from either level.
+          const d = item.data || {};
+          consider(
+            Object.assign({}, d, {
+              id: d.id || item.id,
+              isMarkedIncorrect: !!(item.isMarkedIncorrect || d.isMarkedIncorrect),
+            })
+          );
+        }
         if (item.type === 'encounter') {
           for (const topic of (item.data && item.data.consultationTopics) || []) {
             for (const heading of topic.headings || []) {
@@ -73,7 +86,11 @@
     out.sort((a, b) => {
       const da = a.requestedDate ? Date.parse(a.requestedDate) : NaN;
       const db = b.requestedDate ? Date.parse(b.requestedDate) : NaN;
-      if (Number.isNaN(da) || Number.isNaN(db)) return 0;
+      // Unparseable/missing dates sink to the end so the comparator stays
+      // consistent (a bare `return 0` on NaN makes the ordering non-transitive).
+      if (Number.isNaN(da) && Number.isNaN(db)) return 0;
+      if (Number.isNaN(da)) return 1;
+      if (Number.isNaN(db)) return -1;
       return da - db;
     });
     return out;
