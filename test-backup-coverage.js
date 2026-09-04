@@ -206,6 +206,20 @@ const ALLOWLIST = new Set([
   // side-panel/modules/sweep/sweep.js):
   'sweep.handout',
 
+  // Transient Forecast print-pack payload — written on "Print pack", read once by
+  // at-risk-pack.html, then removed (60s TTL backstop). Same pattern as
+  // sweep.handout; see side-panel/modules/capacity/capacity.js:
+  'capacity.riskPack',
+
+  // Transient look-ahead scan shared from the Forecast tab to the Today card so
+  // the multi-day appointment-book fetch is not repeated. TTL-checked on read
+  // and recomputed from live data — derived, never user config:
+  'capacity.scanCache',
+
+  // Transient Today→Forecast handoff: the at-risk chip writes the ISO date,
+  // Forecast consumes it on init and removes it. Not user config:
+  'capacity.jumpToDate',
+
   // Transient batch-output payload — written on "Generate batch", read once by
   // batch-handout.html, overwritten on every generate. Not user config (mirrors
   // sweep.handout; see side-panel/modules/sweep/sweep.js):

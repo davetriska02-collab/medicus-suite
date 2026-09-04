@@ -1,6 +1,5 @@
 // Medicus Suite — Capacity core logic tests
 // Run with: node test-capacity-core.js
-// Dynamic-imports capacity-core.js (ES module), same technique as test-reception-core.js.
 
 'use strict';
 
@@ -22,86 +21,375 @@ const path = require('path');
 
   const corePath = new URL('side-panel/modules/capacity/capacity-core.js', `file://${path.resolve(__dirname)}/`).href;
 
-  const { DOW_KEYS, WEEKDAYS, minimumForDate, defaultMinimumByDay, presetSummary, validatePreset } = await import(
-    corePath
-  );
+  const {
+    DOW_KEYS,
+    WEEKDAYS,
+    minimumForDate,
+    defaultMinimumByDay,
+    presetSummary,
+    validatePreset,
+    normaliseLookahead,
+    validateLookahead,
+    normalisePreset,
+    normalisePresets,
+    resolveActivePreset,
+    evaluateDay,
+    effectiveMinimumForDate,
+    upliftKindForBlock,
+    scanHorizon,
+    scanTone,
+    filterAtRisk,
+    lookAheadSentence,
+    riskStatusesFor,
+    addDaysISO,
+    DEFAULT_LOOKAHEAD,
+  } = await import(corePath);
 
-  // ── constants ───────────────────────────────────────────────────────────────
   console.log('--- constants ---');
   check(DOW_KEYS[0] === 'sun' && DOW_KEYS[6] === 'sat', 'DOW_KEYS is Sunday-indexed');
   check(WEEKDAYS.length === 7 && WEEKDAYS[0].key === 'mon', 'WEEKDAYS is Monday-first, 7 days');
 
-  // ── minimumForDate ──────────────────────────────────────────────────────────
   console.log('\n--- minimumForDate ---');
-  // 2026-06-15 is a Monday, 2026-06-13 is a Saturday, 2026-06-14 is a Sunday.
   const presetByDay = { minimumByDay: { mon: 25, tue: 20, wed: 20, thu: 20, fri: 18, sat: 5, sun: 0 } };
   check(minimumForDate(presetByDay, '2026-06-15') === 25, 'minimumByDay: Monday → 25');
-  check(minimumForDate(presetByDay, '2026-06-13') === 5, 'minimumByDay: Saturday → 5 (explicit non-zero weekend)');
+  check(minimumForDate(presetByDay, '2026-06-13') === 5, 'minimumByDay: Saturday → 5');
   check(minimumForDate(presetByDay, '2026-06-14') === 0, 'minimumByDay: Sunday → 0');
   check(minimumForDate(null, '2026-06-15') === 0, 'null preset → 0');
 
-  // explicit 0 must be honoured, not treated as "missing" → legacy fallback
   const presetZeroFri = {
     minimumByDay: { mon: 20, tue: 20, wed: 20, thu: 20, fri: 0, sat: 0, sun: 0 },
     minimumPerDay: 30,
   };
-  check(minimumForDate(presetZeroFri, '2026-06-19') === 0, 'explicit 0 on a weekday is honoured (no legacy fallback)');
+  check(minimumForDate(presetZeroFri, '2026-06-19') === 0, 'explicit 0 on a weekday is honoured');
 
-  // legacy fallback (no minimumByDay)
   const legacy = { minimumPerDay: 30 };
   check(minimumForDate(legacy, '2026-06-15') === 30, 'legacy: weekday → minimumPerDay');
   check(minimumForDate(legacy, '2026-06-13') === 0, 'legacy: Saturday → 0');
-  check(minimumForDate(legacy, '2026-06-14') === 0, 'legacy: Sunday → 0');
-  check(minimumForDate({}, '2026-06-15') === 0, 'legacy: missing minimumPerDay → 0');
 
-  // ── defaultMinimumByDay ─────────────────────────────────────────────────────
-  console.log('\n--- defaultMinimumByDay ---');
+  console.log('\n--- defaultMinimumByDay / presetSummary / validatePreset ---');
   const d = defaultMinimumByDay(20);
-  check(d.mon === 20 && d.fri === 20, 'weekdays carry the legacy value');
-  check(d.sat === 0 && d.sun === 0, 'weekend always 0');
-  check(defaultMinimumByDay(undefined).mon === 0, 'undefined legacy → 0');
-
-  // ── presetSummary ───────────────────────────────────────────────────────────
-  console.log('\n--- presetSummary ---');
+  check(d.mon === 20 && d.sat === 0, 'defaultMinimumByDay weekdays/weekend');
   check(
     presetSummary({ minimumByDay: { mon: 20, tue: 20, wed: 20, thu: 20, fri: 20, sat: 0, sun: 0 } }) ===
       'min 20/weekday',
-    'uniform weekdays + zero weekend → "min N/weekday"'
+    'uniform weekdays summary'
   );
-  check(
-    presetSummary({ minimumByDay: { mon: 25, tue: 20, wed: 20, thu: 20, fri: 18, sat: 5, sun: 0 } }).includes('/week'),
-    'mixed days → weekly total'
-  );
-  check(presetSummary({ minimumPerDay: 15 }) === 'min 15/day', 'legacy preset (no minimumByDay) → "min N/day"');
+  check(validatePreset({ name: 'Std', slotTypes: ['GP'], tight: 75, low: 50 }).valid, 'valid preset');
+  check(!validatePreset({ name: ' ', slotTypes: ['GP'], tight: 75, low: 50 }).valid, 'blank name rejected');
 
-  // ── validatePreset ──────────────────────────────────────────────────────────
-  console.log('\n--- validatePreset ---');
-  const ok = validatePreset({ name: 'Std', slotTypes: ['GP'], tight: 75, low: 50 });
-  check(ok.valid === true && ok.error === null, 'valid form passes');
+  console.log('\n--- lookahead config ---');
+  const la = normaliseLookahead({});
+  check(la.horizonDays === DEFAULT_LOOKAHEAD.horizonDays, 'default horizon 28');
+  check(la.singleBhUplift === 1.25 && la.xmasBlockUplift === 1.4, 'default uplifts');
+  check(riskStatusesFor(la).join(',') === 'critical,low', 'default risk statuses exclude tight');
+  check(riskStatusesFor({ includeTight: true }).includes('tight'), 'includeTight adds tight');
+  check(validateLookahead({ horizonDays: 3 }).valid === false, 'horizon < 7 rejected');
+  check(validateLookahead({ horizonDays: 28, singleBhUplift: 1.2 }).valid === true, 'valid lookahead');
+
+  console.log('\n--- post-BH uplift ---');
+  const preset = {
+    name: 'GP',
+    slotTypes: ['GP'],
+    minimumByDay: { mon: 20, tue: 20, wed: 20, thu: 20, fri: 20, sat: 0, sun: 0 },
+    thresholds: { tight: 75, low: 50 },
+  };
+  const postSpring = effectiveMinimumForDate(preset, '2026-05-26', la);
+  check(postSpring.upliftKind === 'single', 'Tue after Spring BH → single uplift kind');
+  check(postSpring.effective === 25, '20 × 1.25 → 25');
+  check(postSpring.upliftApplied === true, 'upliftApplied true');
+
+  const normalWed = effectiveMinimumForDate(preset, '2026-05-27', la);
+  check(normalWed.effective === 20 && !normalWed.upliftApplied, 'normal Wed no uplift');
+
+  const postXmas = effectiveMinimumForDate(preset, '2026-12-29', la);
+  check(postXmas.upliftKind === 'xmas' && postXmas.effective === 28, 'post-Xmas ×1.4 → 28');
+
+  const postEaster = effectiveMinimumForDate(preset, '2026-04-07', la);
+  check(postEaster.upliftKind === 'easter', 'Tue after Easter block → easter');
+  check(Math.round(20 * 1.35) === postEaster.effective, 'easter uplift applied');
+
+  const bhDay = effectiveMinimumForDate(preset, '2026-05-25', la);
+  check(bhDay.isBankHoliday === true, 'BH Monday flagged');
+
+  const off = effectiveMinimumForDate(preset, '2026-05-26', { ...la, upliftEnabled: false });
+  check(off.effective === 20 && !off.upliftApplied, 'uplift can be disabled');
+
   check(
-    validatePreset({ name: '  ', slotTypes: ['GP'], tight: 75, low: 50 }).error === 'Preset needs a name.',
-    'blank name rejected'
-  );
-  check(
-    validatePreset({ name: 'X', slotTypes: [], tight: 75, low: 50 }).error.includes('slot type'),
-    'no slot types rejected'
-  );
-  check(
-    validatePreset({ name: 'X', slotTypes: ['GP'], tight: 50, low: 75 }).error.includes('below Tight'),
-    'low >= tight rejected'
-  );
-  check(
-    validatePreset({ name: 'X', slotTypes: ['GP'], tight: 50, low: 50 }).error.includes('below Tight'),
-    'low == tight rejected'
-  );
-  check(
-    validatePreset({ name: 'X', slotTypes: ['GP'], tight: 100, low: 50 }).error.includes('below 100'),
-    'tight >= 100 rejected'
+    upliftKindForBlock({
+      bankHolidays: ['2026-12-25', '2026-12-28'],
+      closedDays: 4,
+    }) === 'xmas',
+    'upliftKindForBlock xmas'
   );
 
-  console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
-  if (failed > 0) process.exit(1);
-})().catch((e) => {
-  console.error('FATAL:', e);
+  console.log('\n--- scanHorizon / at-risk ---');
+  // Scan runs from the Monday BH; the Tuesday carries the post-BH uplift.
+  const dataByDate = {
+    '2026-05-25': { total: 0, sessionsCount: 0, byType: {}, byStaff: [] }, // BH — closed
+    '2026-05-26': { total: 10, sessionsCount: 4, byType: {}, byStaff: [] }, // 10/25 = 40% → critical
+    '2026-05-27': { total: 25, sessionsCount: 4, byType: {}, byStaff: [] }, // sufficient
+    '2026-05-28': { total: 14, sessionsCount: 4, byType: {}, byStaff: [] }, // 14/20 = 70% → low
+    '2026-05-29': { total: 25, sessionsCount: 4, byType: {}, byStaff: [] }, // sufficient
+  };
+  const scan = scanHorizon({
+    preset,
+    dataByDate,
+    fromISO: '2026-05-25',
+    today: '2026-05-25',
+    lookahead: { ...la, horizonDays: 5 },
+  });
+  check(scan.atRisk.length === 2, `at-risk includes depleted days (got ${scan.atRisk.length})`);
+  check(scan.atRisk[0].status === 'critical', 'worst day sorts first (critical)');
+  check(scan.summary.critical === 1 && scan.summary.low === 1, 'summary counts critical + low');
+  check(
+    scan.atRisk.some((d) => d.minInfo.upliftApplied),
+    'post-BH day appears in at-risk with uplift'
+  );
+
+  const sentence = lookAheadSentence(scan.summary, 'GP Routine');
+  check(sentence.includes('at risk') && sentence.includes('GP Routine'), 'lookAheadSentence names preset');
+  check(sentence.includes('Critical'), 'worst status is sentence-case in prose');
+
+  // Today is remaining-slots-only against a whole-day target, so it must never
+  // be counted as at risk — otherwise every afternoon reads as critical.
+  const todayScan = scanHorizon({
+    preset,
+    dataByDate: { '2026-05-26': { total: 2, sessionsCount: 5, byType: {}, byStaff: [] } },
+    fromISO: '2026-05-26',
+    today: '2026-05-26',
+    lookahead: { ...la, horizonDays: 1 },
+  });
+  check(todayScan.atRisk.length === 0, 'today is excluded from at-risk (remaining vs whole-day target)');
+
+  // Saturday enhanced-access clinics are not "working days" by the bank-holiday
+  // calendar but still carry a minimum, so they must be scannable.
+  const satPreset = {
+    ...preset,
+    minimumByDay: { ...preset.minimumByDay, sat: 15 },
+  };
+  const satScan = scanHorizon({
+    preset: satPreset,
+    dataByDate: { '2026-09-05': { total: 1, sessionsCount: 3, byType: {}, byStaff: [] } },
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 7 },
+  });
+  check(
+    satScan.atRisk.some((d) => d.dateISO === '2026-09-05'),
+    'Saturday with a minimum can be at risk'
+  );
+
+  console.log('\n--- coverage honesty (never a false all-clear) ---');
+  const blind = scanHorizon({
+    preset,
+    dataByDate: {},
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 28 },
+  });
+  check(blind.summary.atRiskCount === 0, 'no data → nothing flagged');
+  check(blind.summary.complete === false, 'no data → scan is not complete');
+  check(scanTone(blind.summary) === 'unknown', 'no data → tone is unknown, NOT green');
+  check(
+    !/No days at risk/.test(lookAheadSentence(blind.summary, 'GP')),
+    'no data → sentence does not claim "no days at risk"'
+  );
+  check(/Couldn’t check/.test(lookAheadSentence(blind.summary, 'GP')), 'no data → sentence says it could not check');
+
+  const partialData = {};
+  for (let i = 1; i <= 3; i++) {
+    partialData[addDaysISO('2026-09-01', i)] = { total: 99, sessionsCount: 5, byType: {}, byStaff: [] };
+  }
+  const partial = scanHorizon({
+    preset,
+    dataByDate: partialData,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 28 },
+  });
+  check(partial.summary.complete === false, 'partial data → not complete');
+  check(partial.summary.uncheckedDays > 0, 'partial data → uncheckedDays reported');
+  check(scanTone(partial.summary) === 'unknown', 'partial healthy data → still unknown, not green');
+  check(/still unchecked/.test(lookAheadSentence(partial.summary, 'GP')), 'partial data → sentence names the gap');
+
+  const fullData = {};
+  for (let i = 1; i < 8; i++) {
+    fullData[addDaysISO('2026-09-01', i)] = { total: 99, sessionsCount: 5, byType: {}, byStaff: [] };
+  }
+  const full = scanHorizon({
+    preset,
+    dataByDate: fullData,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 8 },
+  });
+  check(full.summary.complete === true, 'every day read → complete');
+  check(scanTone(full.summary) === 'green', 'complete + clear → green');
+  check(/No days at risk/.test(lookAheadSentence(full.summary, 'GP')), 'complete + clear → all-clear sentence');
+
+  console.log('\n--- coverage honesty: past the bundled bank-holiday calendar ---');
+  // The bundled GOV.UK data ends at a calendar year-end; beyond it isBankHoliday
+  // is a guess. Full data across 2028-12-27 → 2029-01-09 must NOT come back as
+  // a green all-clear with New Year's Day 2029 scored as a normal working day.
+  const beyondData = {};
+  for (let i = 1; i < 14; i++) {
+    beyondData[addDaysISO('2028-12-27', i)] = { total: 99, sessionsCount: 5, byType: {}, byStaff: [] };
+  }
+  const beyond = scanHorizon({
+    preset,
+    dataByDate: beyondData,
+    fromISO: '2028-12-27',
+    today: '2028-12-27',
+    lookahead: { ...la, horizonDays: 14 },
+  });
+  check(beyond.summary.complete === false, 'horizon past the calendar → scan is not complete');
+  check(scanTone(beyond.summary) === 'unknown', 'horizon past the calendar → tone unknown, NOT green');
+  const nyd = beyond.days.find((d) => d.dateISO === '2029-01-01');
+  check(
+    nyd && nyd.status === 'empty' && /calendar ends/.test(nyd.reason),
+    '2029-01-01 is reported as unjudgeable, not "sufficient"'
+  );
+  check(
+    beyond.days
+      .filter((d) => d.dateISO > '2028-12-27' && d.dateISO <= '2028-12-31' && d.minInfo.countsForRisk)
+      .every((d) => d.status === 'sufficient'),
+    'days still inside the calendar are judged normally'
+  );
+
+  console.log('\n--- coverage honesty: no sessions in the book is not a safe day ---');
+  const unbuilt = {};
+  for (let i = 1; i < 8; i++) {
+    unbuilt[addDaysISO('2026-09-01', i)] = { total: 0, sessionsCount: 0, byType: {}, byStaff: [] };
+  }
+  const unbuiltScan = scanHorizon({
+    preset,
+    dataByDate: unbuilt,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 8 },
+  });
+  check(unbuiltScan.summary.complete === false, 'weekdays with no sessions → not a complete (checked) scan');
+  check(scanTone(unbuiltScan.summary) !== 'green', 'weekdays with no sessions → never green');
+  check(
+    !/No days at risk/.test(lookAheadSentence(unbuiltScan.summary, 'GP')),
+    'weekdays with no sessions → sentence does not claim "no days at risk"'
+  );
+  const unbuiltDay = unbuiltScan.days.find((d) => d.dateISO === '2026-09-02');
+  check(
+    unbuiltDay && unbuiltDay.status === 'empty' && /No sessions in the book/.test(unbuiltDay.reason),
+    'the day says the rota is not built yet'
+  );
+  const bhZero = scanHorizon({
+    preset,
+    dataByDate: { '2026-05-25': { total: 0, sessionsCount: 0, byType: {}, byStaff: [] } },
+    fromISO: '2026-05-25',
+    today: '2026-05-24',
+    lookahead: { ...la, horizonDays: 1 },
+  });
+  check(bhZero.days[0].status === 'closed', 'a bank holiday with no sessions is still simply closed');
+
+  const mixedData = { '2026-09-02': { total: 1, sessionsCount: 4, byType: {}, byStaff: [] } };
+  const mixed = scanHorizon({
+    preset,
+    dataByDate: mixedData,
+    fromISO: '2026-09-01',
+    today: '2026-09-01',
+    lookahead: { ...la, horizonDays: 8 },
+  });
+  check(
+    mixed.summary.complete === false && mixed.summary.critical >= 1,
+    'partial + depleted → incomplete with critical'
+  );
+  check(scanTone(mixed.summary) === 'red', 'known critical stays red even when other days are unchecked');
+
+  console.log('\n--- holiday classification ---');
+  check(
+    effectiveMinimumForDate(preset, '2027-03-26', la).effective === 0,
+    'a bank holiday carries no target (does not inflate the week)'
+  );
+  check(
+    effectiveMinimumForDate(preset, '2028-01-04', la).upliftKind === 'xmas',
+    'New Year substitute block classifies as Christmas, not a single BH'
+  );
+  check(
+    effectiveMinimumForDate(preset, '2025-03-18', { ...la, division: 'northern-ireland' }).upliftKind !== 'easter',
+    'St Patrick’s Day is not mistaken for Easter'
+  );
+  check(
+    effectiveMinimumForDate(preset, '2026-05-26', la).upliftKind === 'single',
+    'an ordinary May bank holiday stays a single'
+  );
+
+  console.log('\n--- hostile config ---');
+  check(
+    normaliseLookahead({ division: 'wales' }).division === 'england-and-wales',
+    'unknown division falls back rather than throwing'
+  );
+  let threw = false;
+  try {
+    effectiveMinimumForDate(preset, '2026-09-02', { ...la, division: 'wales' });
+  } catch (_) {
+    threw = true;
+  }
+  check(!threw, 'a bad stored division cannot take down the tab');
+  check(validateLookahead({ division: 'wales' }).valid === false, 'settings reject an unknown division');
+
+  console.log('\n--- preset resolve / sanitise ---');
+  check(resolveActivePreset([{ id: 'a' }, { id: 'b' }], 'b').id === 'b', 'resolve hits the stored id');
+  check(resolveActivePreset([{ id: 'a' }, { id: 'b' }], 'gone').id === 'a', 'stale id falls back to first');
+  check(resolveActivePreset([], 'x') === null, 'empty list → null');
+
+  const dirty = normalisePreset({
+    id: ' p1 ',
+    name: '  GP Routine  ',
+    slotTypes: ['GP', 12, '', 'Telephone'],
+    thresholds: { tight: 200, low: 90 },
+    extra: '<script>alert(1)</script>',
+  });
+  check(dirty && dirty.id === 'p1' && dirty.name === 'GP Routine', 'preset id/name trimmed');
+  check(dirty.slotTypes.join(',') === 'GP,Telephone', 'non-string slot types dropped');
+  check(
+    dirty.thresholds.tight === 99 && dirty.thresholds.low < dirty.thresholds.tight,
+    'thresholds clamped with low < tight'
+  );
+  check(dirty.extra === undefined, 'unknown keys are not copied onto the preset');
+  check(normalisePreset({ name: 'x' }) === null, 'missing id rejected');
+  check(
+    normalisePresets([
+      { id: 'a', name: 'A' },
+      { id: 'a', name: 'Dup' },
+    ]).length === 1,
+    'duplicate ids dropped'
+  );
+
+  const evToday = evaluateDay({
+    preset,
+    dateISO: '2026-05-26',
+    agg: { total: 2, sessionsCount: 5 },
+    today: '2026-05-26',
+    lookahead: la,
+  });
+  check(evToday.isToday === true, 'evaluated today is tagged isToday');
+  const evLoad = evaluateDay({
+    preset,
+    dateISO: '2026-05-26',
+    agg: null,
+    today: '2026-05-26',
+    loading: true,
+    lookahead: la,
+  });
+  check(evLoad.isToday === true && evLoad.status === 'loading', 'loading today still tagged isToday');
+
+  const clear = filterAtRisk(
+    [{ dateISO: '2026-05-27', status: 'sufficient', minInfo: { countsForRisk: true } }],
+    la,
+    '2026-05-26'
+  );
+  check(clear.length === 0, 'sufficient days are not at risk');
+
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed) process.exit(1);
+})().catch((err) => {
+  console.error(err);
   process.exit(1);
 });

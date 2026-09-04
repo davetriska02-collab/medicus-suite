@@ -374,6 +374,33 @@ async function runTests() {
   }
 
   // ── Results ───────────────────────────────────────────────────────────────
+
+  // ── capacity look-ahead clause ─────────────────────────────────────────────
+  console.log('\n--- capacity look-ahead clause ---');
+  {
+    const h = buildHeadline({
+      capacityData: {
+        summary: { atRiskCount: 3, critical: 1, low: 2, tight: 0, horizonDays: 28 },
+      },
+    });
+    check(h.severity === 'red', `capacity critical → red (got ${h.severity})`);
+    check(/3 days at risk/.test(h.text), `capacity clause text (got: ${JSON.stringify(h.text)})`);
+  }
+  {
+    const h = buildHeadline({
+      capacityData: {
+        summary: { atRiskCount: 2, critical: 0, low: 2, tight: 0, horizonDays: 14 },
+      },
+    });
+    check(h.severity === 'amber', `capacity low-only → amber (got ${h.severity})`);
+  }
+  {
+    const h = buildHeadline({
+      capacityData: { summary: { atRiskCount: 0, critical: 0, low: 0, horizonDays: 28 } },
+    });
+    check(h.severity === null && /Nothing needs you/.test(h.text), 'capacity clear → quiet');
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   if (failed > 0) process.exitCode = 1;
 }

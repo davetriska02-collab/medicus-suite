@@ -21,11 +21,32 @@ import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
 import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
 import { recordTaskLists } from '../submissions/submissions-ledger.js';
+import {
+  normaliseLookahead,
+  normalisePresets,
+  resolveActivePreset,
+  scanHorizon,
+  scanTone,
+  lookAheadSentence,
+  lookaheadCacheKey,
+  horizonDateList,
+  STATUS_TEXT,
+} from '../capacity/capacity-core.js';
+import {
+  fetchManyDates,
+  aggregateSlots,
+  computeStatus,
+  todayISO as medicusTodayISO,
+} from '../../../shared/medicus-api.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const WR_POLL_MS = 30 * 1000;
 const DEMAND_POLL_MS = 60 * 1000;
+// The look-ahead scans up to 84 appointment-book days, so it is polled far
+// more slowly than the same-day cards and prefers the Forecast tab's cache.
+const CAPACITY_POLL_MS = 30 * 60 * 1000;
+const CAPACITY_CACHE_TTL_MS = 20 * 60 * 1000;
 const SWEEP_LAST_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 
 const DEFAULT_SUB_THRESHOLDS = {
@@ -43,6 +64,7 @@ let _wrData = null; // { patients: [], error: null }
 let _rmData = null; // { buckets: {}, configured: bool, error: null }
 let _demandData = null; // { medical: n, admin: n, thresholds: {}, error: null }
 let _slotsData = null; // { count: n, error: null, breaches: [{ typeName, threshold, count, level }] }
+let _capacityData = null; // { summary, atRisk, sentence, presetName, error, noCode, noPreset }
 let _sweepData = null; // { lastRun: obj|null }
 let _alertsData = null; // [{ ts, channel, level, label }, ...]
 
@@ -309,6 +331,104 @@ async function fetchSlots() {
   renderHeadline();
 }
 
+// ── Fetch: Capacity look-ahead (Forecast presets + multi-day scan) ─────────────
+// Read-only consumer of capacity.* keys. Same embedded-overview path as Forecast.
+
+async function fetchCapacity() {
+  if (document.visibilityState !== 'visible') return;
+  try {
+    const stored = await chrome.storage.local.get([
+      'capacity.presets',
+      'capacity.activePresetId',
+      'capacity.lookahead',
+      'capacity.scanCache',
+    ]);
+    const presets = normalisePresets(stored['capacity.presets']);
+    const preset = resolveActivePreset(presets, stored['capacity.activePresetId']);
+    if (!preset) {
+      _capacityData = { noPreset: true, summary: null, atRisk: [], sentence: null };
+      renderCard('capacity');
+      renderHeadline();
+      return;
+    }
+
+    const lookahead = normaliseLookahead(stored['capacity.lookahead']);
+
+    // Prefer a fresh scan published by the Forecast tab — it covers the same
+    // dates, so repeating the fetch here would double the load on Medicus.
+    const cache = stored['capacity.scanCache'];
+    if (
+      cache &&
+      cache.presetId === preset.id &&
+      cache.horizonDays === lookahead.horizonDays &&
+      // A scan published at 23:50 must not paint yesterday's "today" at 00:05,
+      // and a scan run under different look-ahead settings (nation, include
+      // tight, uplifts) is not the same scan.
+      cache.fromISO === medicusTodayISO() &&
+      cache.lookaheadKey === lookaheadCacheKey(lookahead) &&
+      typeof cache.at === 'number' &&
+      Date.now() - cache.at < CAPACITY_CACHE_TTL_MS
+    ) {
+      _capacityData = {
+        summary: cache.summary,
+        atRisk: cache.atRisk || [],
+        sentence: lookAheadSentence(cache.summary, cache.presetName || preset.name),
+        presetName: cache.presetName || preset.name,
+        error: null,
+      };
+      renderCard('capacity');
+      renderHeadline();
+      return;
+    }
+
+    const { code } = await window.PracticeCode.resolve();
+    if (!code) {
+      _capacityData = { noCode: true, summary: null, atRisk: [], sentence: null };
+      renderCard('capacity');
+      renderHeadline();
+      return;
+    }
+
+    const today = medicusTodayISO();
+    const dates = horizonDateList(today, lookahead.horizonDays);
+    const results = await fetchManyDates(code, dates, { concurrency: 4 });
+    const dataByDate = {};
+    for (const date of dates) {
+      const raw = results[date];
+      if (raw && !raw.error) {
+        dataByDate[date] = aggregateSlots(raw, {
+          allowedTypes: preset.slotTypes || null,
+          filterPastTimes: date === today,
+        });
+      }
+    }
+    const scan = scanHorizon({
+      preset,
+      dataByDate,
+      fromISO: today,
+      today,
+      lookahead,
+      computeStatus,
+    });
+    _capacityData = {
+      summary: scan.summary,
+      atRisk: scan.atRisk.slice(0, 5),
+      sentence: lookAheadSentence(scan.summary, preset.name),
+      presetName: preset.name,
+      error: null,
+    };
+  } catch (e) {
+    _capacityData = {
+      summary: null,
+      atRisk: [],
+      sentence: null,
+      error: e.message || 'Fetch failed',
+    };
+  }
+  renderCard('capacity');
+  renderHeadline();
+}
+
 // ── Fetch: Sweep last run ─────────────────────────────────────────────────────
 
 async function fetchSweep() {
@@ -369,6 +489,7 @@ function renderHeadline() {
     rmData: _rmData,
     demandData: _demandData,
     slotsData: _slotsData,
+    capacityData: _capacityData,
     sweepData: _sweepData,
     oldestUnansweredMs,
     formatProvenance: window.Provenance?.formatProvenance,
@@ -400,6 +521,9 @@ function renderCard(which) {
       break;
     case 'slots':
       body.innerHTML = buildSlotsBody();
+      break;
+    case 'capacity':
+      body.innerHTML = buildCapacityBody();
       break;
     case 'sweep':
       // Decision B: removed wireSwepButtons call — delegated handler is sufficient
@@ -599,7 +723,7 @@ function buildSlotsBody() {
 
   return `
     <div class="today-hero-row">
-      <span class="today-hero-count${countCls}">${count}</span>
+      <span class="today-hero-count${countCls}" aria-label="${count} open slots today">${count}</span>
       <span class="today-hero-label">open today</span>
     </div>
     ${breachLines}
@@ -607,21 +731,57 @@ function buildSlotsBody() {
   `;
 }
 
-// Derive the single provenance summary from sweep.lastRun, or null when no
-// sweep has run this session. Shared by the Sweep card and the Recent Alerts
-// empty state so "ran, all clear" can never be confused with "never ran".
-function sweepProvenance() {
-  const lastRun = _sweepData?.lastRun;
-  if (!lastRun) return null;
-  const runAtDate = new Date(lastRun.runAt);
-  const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const results = Array.isArray(lastRun.results) ? lastRun.results : [];
-  const actionNeeded = results.filter(
-    (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
-  ).length;
-  // Patients actually checked this run (fall back to total when offset absent).
-  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
-  return { timeStr, actionNeeded, checked, lastRun };
+function buildCapacityBody() {
+  if (!_capacityData) return '<span class="today-loading">Loading…</span>';
+  if (_capacityData.noCode) return buildNoCodeMsg();
+  if (_capacityData.noPreset) {
+    return '<span class="today-empty">Set up a Forecast preset to see days at risk</span>';
+  }
+  if (_capacityData.error && !_capacityData.summary) return errMsg(_capacityData.error);
+
+  const summary = _capacityData.summary;
+  const horizon = summary?.horizonDays ?? 28;
+  // scanTone withholds green when days could not be read — an unreachable
+  // Medicus must never render as "clear for the next 28 days".
+  const tone = scanTone(summary);
+  const atRisk = summary?.atRiskCount ?? 0;
+  const shown = tone === 'unknown' ? '—' : atRisk;
+  const heroCls = tone === 'unknown' ? '' : ` today-hero-count--${tone}`;
+  const aria =
+    tone === 'unknown'
+      ? 'Capacity not fully checked'
+      : `${atRisk} day${atRisk === 1 ? '' : 's'} at risk in the next ${horizon} days`;
+  const countEl = `<span class="today-hero-count${heroCls}" aria-label="${esc(aria)}">${shown}</span>`;
+  const label = tone === 'unknown' ? 'not fully checked' : atRisk === 1 ? 'day at risk' : 'days at risk';
+
+  const chips = (_capacityData.atRisk || [])
+    .slice(0, 3)
+    .map((d) => {
+      const cls = d.status === 'critical' ? 'today-name-chip--red' : d.status === 'low' ? 'today-name-chip--amber' : '';
+      const when = new Date(d.dateISO + 'T12:00:00').toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      });
+      return `<button type="button" class="today-name-chip ${cls}" data-action="open-capacity-day" data-date="${esc(d.dateISO)}" aria-label="Open ${esc(when)} in Forecast">${esc(when)} · ${esc(STATUS_TEXT[d.status] || d.status)}</button>`;
+    })
+    .join('');
+
+  let tail = '';
+  if (chips) {
+    tail = `<div class="today-name-chips">${chips}</div>`;
+  } else if (tone === 'green') {
+    tail = `<span class="today-empty today-empty--green">Clear for the next ${horizon} days ✓</span>`;
+  } else if (tone === 'unknown') {
+    const unchecked = summary?.uncheckedDays;
+    tail = `<span class="today-empty">${unchecked ? `${unchecked} day${unchecked === 1 ? '' : 's'} couldn’t be checked` : 'Waiting for capacity data'}</span>`;
+  }
+
+  return `
+    <div class="today-hero-row">${countEl}<span class="today-hero-label">${label}</span></div>
+    <div class="today-hero-sub">Next ${horizon} days${_capacityData.presetName ? ` · ${esc(_capacityData.presetName)}` : ''}</div>
+    ${tail}
+  `;
 }
 
 function buildSweepBody() {
@@ -670,6 +830,23 @@ function buildSweepBody() {
       <button class="today-ghost-btn" data-action="open-sweep">Open Sweep →</button>
     </div>
   `;
+}
+
+// Derive the single provenance summary from sweep.lastRun, or null when no
+// sweep has run this session. Shared by the Sweep card and the Recent Alerts
+// empty state so "ran, all clear" can never be confused with "never ran".
+function sweepProvenance() {
+  const lastRun = _sweepData?.lastRun;
+  if (!lastRun) return null;
+  const runAtDate = new Date(lastRun.runAt);
+  const timeStr = runAtDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const results = Array.isArray(lastRun.results) ? lastRun.results : [];
+  const actionNeeded = results.filter(
+    (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
+  ).length;
+  // Patients actually checked this run (fall back to total when offset absent).
+  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
+  return { timeStr, actionNeeded, checked, lastRun };
 }
 
 function buildNoCodeMsg() {
@@ -754,6 +931,11 @@ function wireCardInteractions() {
 
     if (action === 'open-setup') openSetup();
     if (action === 'open-sweep') navTo('sweep');
+    if (action === 'open-capacity-day') {
+      const date = actionEl.dataset.date;
+      if (date) chrome.storage.local.set({ 'capacity.jumpToDate': date });
+      navTo('capacity');
+    }
   };
   container.addEventListener('click', _cardActionHandler);
 
@@ -766,7 +948,6 @@ function wireCardInteractions() {
       if (mod) navTo(mod);
     });
   });
-
 }
 
 // ── Full render (scaffold) ────────────────────────────────────────────────────
@@ -797,6 +978,14 @@ function renderScaffold() {
       id: 'slots',
       label: 'Slots Remaining',
       navModule: 'slots',
+    },
+    {
+      id: 'capacity',
+      label: 'Days at Risk',
+      navModule: 'capacity',
+      tipKey: 'capacity-lookahead',
+      tipText:
+        'Forward look at Forecast days below your minimum (including post–bank-holiday uplift). Open Forecast to print a pack.',
     },
     {
       id: 'sweep',
@@ -854,6 +1043,9 @@ function onStorageChange(changes) {
   // Item 9: a rule edited in the Slots tab or options.html#sect-slots should
   // reflect on the Slots Today card / headline without waiting for the next poll.
   if (changes['slots.alertRules']) fetchSlots();
+  if (changes['capacity.presets'] || changes['capacity.activePresetId'] || changes['capacity.lookahead']) {
+    fetchCapacity();
+  }
 }
 
 // ── Init / Cleanup ────────────────────────────────────────────────────────────
@@ -864,6 +1056,7 @@ export async function init(el) {
   _rmData = null;
   _demandData = null;
   _slotsData = null;
+  _capacityData = null;
   _sweepData = null;
   _alertsData = null;
   _timers = [];
@@ -875,6 +1068,7 @@ export async function init(el) {
   fetchRm();
   fetchDemand();
   fetchSlots();
+  fetchCapacity();
   fetchSweep();
   fetchAlerts();
 
@@ -883,6 +1077,7 @@ export async function init(el) {
   addTimer(fetchRm, DEMAND_POLL_MS);
   addTimer(fetchDemand, DEMAND_POLL_MS);
   addTimer(fetchSlots, DEMAND_POLL_MS);
+  addTimer(fetchCapacity, CAPACITY_POLL_MS);
   addTimer(fetchAlerts, 30 * 1000);
   // Sweep is not polled on interval — re-reads on storage change only
 
@@ -896,6 +1091,7 @@ export async function init(el) {
       fetchRm();
       fetchDemand();
       fetchSlots();
+      fetchCapacity();
       fetchSweep();
       fetchAlerts();
     }

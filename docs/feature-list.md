@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.257.0
-**Generated:** 2026-09-03
+**Version:** v3.258.0
+**Generated:** 2026-09-04
 
 ## What it is
 
@@ -25,6 +25,7 @@ Available appointment slots by type for any date, read live from Medicus's sched
 - Slot counts by type with configurable alert thresholds; CSV export
 - "First available appointment" lookup with one-click booking handoff
 - Typable appointment-type filter on the booking picker
+- "Next working day" skips weekends and bank holidays for the practice's chosen nation (bundled GOV.UK calendar, England & Wales / Scotland / Northern Ireland)
 
 ### Monitoring (Sentinel) — v0.5.1
 The clinical context sidebar for whichever patient record is open. Checks active medications, problems and recent results against drug-monitoring intervals and this year's QOF indicators, showing a plain green/amber/red chip for each. Passive display only — never writes to the record, never orders anything, never tells the clinician what to do.
@@ -36,7 +37,11 @@ The clinical context sidebar for whichever patient record is open. Checks active
 Charts a patient's blood pressure, renal function, DOAC creatinine clearance, HbA1c, cholesterol and weight over time, from the same live data Monitoring uses. Includes a DOAC-only view (Cockcroft-Gault CrCl, not eGFR) and CSV export.
 
 ### Capacity Forecast
-A calendar comparing available appointment capacity against the practice's own configured daily minimums, with day/week/month views, per-day red/amber/green status and per-weekday minimum presets.
+A calendar comparing available appointment capacity against the practice's own configured daily minimums, with day/week/month views, per-day red/amber/green status and per-weekday minimum presets — plus a practice-manager look-ahead for days at risk.
+- Bank holidays (bundled GOV.UK calendar, nation selectable) carry no target; the day after a bank-holiday closure gets an editable post-holiday uplift estimate, labelled as an estimate
+- Configurable look-ahead (7–84 days, default 28): banner of days at risk with chips that jump to the day; Print pack (A4, greyscale-safe) and CSV for the ops meeting
+- Today tab "Days at Risk" card rolls up the same scan; chips open that day in Forecast
+- Incomplete scans never claim "no days at risk": unreachable Medicus, a date past the bundled calendar, or a weekday with no sessions in the book yet all show as unchecked
 
 ### Submissions Tracker — v1.0
 Counts inbound requests (medical, admin, investigation, prescription) arriving each day against a rolling baseline, with a RAG-threshold alert strip and CSV export.
@@ -140,6 +145,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.258.0 (4 Sep)** — Forecast days-at-risk look-ahead: bundled UK bank-holiday calendar behind Forecast and Slots "Next working day", post-holiday uplift estimates, printable/CSV at-risk pack, Today "Days at Risk" card; incomplete scans never claim all clear
 - **v3.257.0 (3 Sep)** — Companion: appointments/booking-links/investigations section extended to care-record pages (not just triage tasks), plus a new open-tasks list and collapsible sub-lists
 - **v3.256.0 (31 Aug)** — Prescription-request canvas on routine and non-routine queues, with Split equally / Top up / Distribute equally among doctors working today
 - **v3.255.0 (31 Aug)** — Pruned Follow-ups, Visualiser, About, Condor, CQC Inspection Readiness and Practice Report; Settings collapsed into Queue rules and Diagnostics

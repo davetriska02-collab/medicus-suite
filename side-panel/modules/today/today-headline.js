@@ -18,9 +18,10 @@
 //   3. Demand red (medical or admin over its red threshold)
 //   4. Demand amber (medical or admin over its amber threshold)
 //   5. Slots alert-rule breach — red (a type at zero) or amber (at/below threshold)
-//   6. Oldest unanswered triage request, if any is tracked
-//   7. Sweep not run today
-//   8. Quiet — "Nothing needs you right now — last checked HH:MM"
+//   6. Capacity look-ahead — red if any critical day in horizon, amber if low/tight at risk
+//   7. Oldest unanswered triage request, if any is tracked
+//   8. Sweep not run today
+//   9. Quiet — "Nothing needs you right now — last checked HH:MM"
 // Within a severity tier, clauses are pushed in the order above (stable sort),
 // so e.g. a red waiting-room clause always leads a red slots-breach clause.
 // Each clause after the lead clause is appended (", " joined) up to a max of
@@ -116,6 +117,21 @@ function slotsClause(slotsData) {
   return { severity, text };
 }
 
+// Capacity look-ahead: forward-looking PM signal from Forecast (read-only).
+// Red when any day in the horizon is critical; amber when low/tight at risk.
+function capacityClause(capacityData) {
+  if (!capacityData || capacityData.error || capacityData.noCode || capacityData.noPreset) return null;
+  const summary = capacityData.summary;
+  if (!summary || !summary.atRiskCount) return null;
+  const severity = summary.critical > 0 ? 'red' : 'amber';
+  const n = summary.atRiskCount;
+  const text =
+    n === 1
+      ? `1 day at risk in the next ${summary.horizonDays} days`
+      : `${n} days at risk in the next ${summary.horizonDays} days`;
+  return { severity, text };
+}
+
 // Build the oldest-unanswered-triage clause, or null if RM isn't configured,
 // errored, or nothing is tracked as unanswered. Mirrors today.js's own
 // oldestUnanswered() logic but takes the already-computed oldest timestamp
@@ -168,6 +184,7 @@ export function buildHeadline({
   rmData = null,
   demandData = null,
   slotsData = null,
+  capacityData = null,
   sweepData = null,
   oldestUnansweredMs = null,
   now = Date.now(),
@@ -177,12 +194,13 @@ export function buildHeadline({
     waitingClause(wrData),
     demandClause(demandData),
     slotsClause(slotsData),
+    capacityClause(capacityData),
     triageClause(rmData, oldestUnansweredMs, now),
     sweepClause(sweepData),
   ].filter(Boolean);
 
   // Red leads, then amber, then neutral — stable within each tier (the order
-  // clauses were pushed above: waiting, demand, slots, triage, sweep).
+  // clauses were pushed above: waiting, demand, slots, capacity, triage, sweep).
   const rank = { red: 0, amber: 1, null: 2 };
   candidates.sort((a, b) => rank[a.severity] - rank[b.severity]);
 
@@ -202,4 +220,4 @@ function capitalise(s) {
 }
 
 // Exported for tests / reuse — not called internally beyond buildHeadline.
-export { waitingClause, demandClause, slotsClause, triageClause, sweepClause, pluralPatients, pluralRequests };
+export { waitingClause, demandClause, slotsClause, capacityClause, triageClause, sweepClause, pluralPatients, pluralRequests };

@@ -27,6 +27,8 @@ import {
 } from './slots-alert-core.js';
 import { createFirstAvailablePanel } from '../shared/first-available.js';
 import { filterAppointmentTypes } from '../shared/booking-panel-core.js';
+import { nextWorkingDayISO } from '../../../shared/medicus-api.js';
+import { normaliseLookahead } from '../capacity/capacity-core.js';
 
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
 // No hardcoded default — null means the user has not configured a code yet.
@@ -34,6 +36,9 @@ let SITE_ID = null;
 let API_BASE = null;
 
 // ── State ─────────────────────────────────────────────────────────────────────
+
+// Bank-holiday nation for nextWorkingDayISO (from capacity.lookahead); undefined = England & Wales.
+let bhDivision;
 
 let state = {
   date: todayISO(),
@@ -152,7 +157,11 @@ export async function init(el) {
     'slots.pillPrefs',
     'slots.pendingBooking',
     'suite.practiceCode',
+    'capacity.lookahead',
   ]);
+  // "Next working day" must use the same bank-holiday nation Forecast does —
+  // a Scottish practice's 2 January is not a working day.
+  bhDivision = normaliseLookahead(stored['capacity.lookahead']).division;
   if (stored['slots.hiddenTypes']) state.hiddenTypes = new Set(stored['slots.hiddenTypes']);
   if (stored['slots.alertRules']) state.alertRules = withRuleIds(stored['slots.alertRules']);
   state.pillPrefs = sanitisePillPrefs(stored['slots.pillPrefs']);
@@ -372,13 +381,6 @@ function todayISO() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function nextWorkingDayISO() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 function pad(n) {
   return String(n).padStart(2, '0');
 }
@@ -391,7 +393,7 @@ function formatDate(iso) {
   const d = new Date(iso + 'T12:00:00');
   const today = todayISO();
   if (iso === today) return 'Today';
-  if (iso === nextWorkingDayISO()) return 'Next working day';
+  if (iso === nextWorkingDayISO(bhDivision)) return 'Next working day';
   return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
@@ -484,7 +486,7 @@ function renderHeader() {
     </div>
     <div class="date-presets">
       <button class="preset-btn${state.date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
-      <button class="preset-btn${state.date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
+      <button class="preset-btn${state.date === nextWorkingDayISO(bhDivision) ? ' active' : ''}" data-date="${nextWorkingDayISO(bhDivision)}">Next working day</button>
       <input type="date" id="slotsDate" value="${state.date}" max="2099-12-31" class="date-input" />
       <button class="ghost-btn date-refresh-btn" id="refreshSlots" title="Refresh">${SVG_REFRESH}</button>
       ${state.data && Object.keys(state.data.byType).length > 0 ? `<button class="ghost-btn" id="slotsCsvBtn">&#x2193; CSV</button>` : ''}

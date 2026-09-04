@@ -26,6 +26,11 @@
 .cap-status-closed {
   --c: var(--text-5);
 }
+/* Today: a part-day count that cannot be compared with a whole-day target.
+   Deliberately outside the RAG ladder so it never contradicts the look-ahead. */
+.cap-status-partial {
+  --c: var(--accent);
+}
 .cap-status-historic {
   --c: var(--text-5);
 }
@@ -106,6 +111,16 @@ html[data-theme='dark'] .cap-status-tight {
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
+  /* A label, a select and four icon buttons overflow the 400px panel: the last
+     button used to be clipped off-screen and the preset name truncated. Let the
+     select own the first row and the buttons wrap beneath it. */
+  flex-wrap: wrap;
+}
+.cap-preset-row .cap-preset-select {
+  min-width: 0;
+  /* Own row: the preset name is the thing being read, and this keeps the four
+     icon buttons together beneath rather than one orphaning onto a third row. */
+  flex: 1 1 100%;
 }
 .cap-preset-label {
   font-family: var(--sans);
@@ -173,6 +188,263 @@ html[data-theme='dark'] .cap-status-tight {
 .cap-mode-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Look-ahead banner */
+.cap-lookahead {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+.cap-lookahead-ok {
+  background: var(--green-dim);
+  border-color: var(--green-line);
+}
+.cap-lookahead-warn {
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+}
+.cap-lookahead-critical {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+.cap-lookahead-unknown {
+  background: var(--bg-mid);
+  border-color: var(--border);
+}
+.cap-lookahead-unknown .cap-lookahead-text {
+  color: var(--text-3);
+}
+.cap-lookahead-unknown .cap-lookahead-pill {
+  background: var(--bg-mid);
+  border-color: var(--border);
+  color: var(--text-3);
+}
+.cap-lookahead-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cap-lookahead-text {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.45;
+  margin: 0;
+}
+.cap-lookahead-checking {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--text-4);
+  font-style: italic;
+}
+.cap-lookahead-pill {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--bg-mid);
+  border: 1px solid var(--border-hi);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.cap-lookahead-critical .cap-lookahead-pill {
+  background: color-mix(in srgb, var(--red) 15%, transparent);
+  border-color: var(--red-line);
+  color: var(--red);
+}
+.cap-lookahead-warn .cap-lookahead-pill {
+  background: color-mix(in srgb, var(--amber) 15%, transparent);
+  border-color: var(--amber-line);
+  color: var(--amber);
+}
+.cap-lookahead-ok .cap-lookahead-pill {
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  border-color: var(--green-line);
+  color: var(--green);
+}
+/* All-clear: one calm line, not an alert block about zero. */
+.cap-lookahead-quiet {
+  padding: 8px 10px;
+}
+.cap-lookahead-quiet .cap-lookahead-row {
+  align-items: center;
+  gap: 8px;
+}
+.cap-lookahead-quiet .cap-lookahead-text {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.cap-lookahead-tick {
+  color: var(--green);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.cap-lookahead-links {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.cap-lookahead-link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--text-4);
+  font-family: var(--sans);
+  font-size: 10px;
+  cursor: pointer;
+  text-decoration: underline;
+  flex-shrink: 0;
+}
+.cap-lookahead-link:hover,
+.cap-lookahead-link:focus-visible {
+  color: var(--text-2);
+}
+
+.cap-lookahead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.cap-lookahead-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.cap-risk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+}
+.cap-risk-chip::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c);
+}
+.cap-status-tight.cap-risk-chip::before {
+  background: transparent;
+  border: 1.5px solid var(--c);
+}
+.cap-risk-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--c);
+}
+
+/* Bank-holiday / post-BH badges */
+.cap-bh-badge,
+.cap-postbh-badge {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  vertical-align: middle;
+}
+.cap-bh-badge {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--amber);
+}
+.cap-postbh-badge {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  color: var(--text-3);
+}
+.cap-day-pill-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: center;
+  margin: 2px 0;
+}
+.cap-month-badges {
+  display: flex;
+  justify-content: center;
+  margin: 1px 0;
+  min-height: 8px;
+}
+.cap-month-marker {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.cap-month-marker-bh {
+  background: var(--amber);
+}
+.cap-month-marker-postbh {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+}
+.cap-legend-marker {
+  width: 8px;
+  height: 8px;
+}
+
+/* Look-ahead settings */
+.cap-lookahead-form .cap-lookahead-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.cap-lookahead-check input {
+  accent-color: var(--accent);
+}
+.cap-lookahead-note {
+  font-style: italic;
+}
+.cap-uplift-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+/* A 4-character decimal plus the number spinner does not fit the 56px used by
+   the whole-number minimum fields — "1.25" was rendering clipped as "1.2". */
+.cap-uplift-row .cap-input-tiny {
+  max-width: 78px;
+  text-align: right;
+  padding-right: 4px;
+}
+.cap-uplift-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* Empty state */
@@ -639,6 +911,10 @@ html[data-theme='dark'] .cap-status-tight {
     animation: none;
     opacity: 0.7;
   }
+  .cap-day-pill:hover,
+  .cap-month-cell:hover {
+    transform: none;
+  }
 }
 
 /* Scrollbar */
@@ -647,7 +923,7 @@ html[data-theme='dark'] .cap-status-tight {
 }
 .cap-module ::-webkit-scrollbar-thumb {
   background: var(--border-hi);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
 }
 
 /* ── Inline preset editor ─────────────────────────────────────────────────── */
@@ -720,6 +996,10 @@ html[data-theme='dark'] .cap-status-tight {
   line-height: 1.5;
 }
 
+select.cap-select {
+  font-family: var(--sans);
+  cursor: pointer;
+}
 .cap-input {
   background: var(--bg-mid);
   border: 1px solid var(--border-hi);

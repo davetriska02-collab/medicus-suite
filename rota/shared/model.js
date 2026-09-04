@@ -163,6 +163,7 @@ export const DEFAULT_SETTINGS = {
   notifications: false, // browser notifications for sync/approval events (opt-in)
   demand: { weeksWindow: 8, halfLifeWeeks: 4, bufferPct: 10, includeTasks: true, tasksDutyThreshold: 60 },
   // England & Wales bank holidays (editable in Settings).
+  // Seeded from rules/uk-bank-holidays.json by scripts/regen-bank-holidays.js.
   bankHolidays: [
     '2026-01-01',
     '2026-04-03',
@@ -180,6 +181,14 @@ export const DEFAULT_SETTINGS = {
     '2027-08-30',
     '2027-12-27',
     '2027-12-28',
+    '2028-01-03',
+    '2028-04-14',
+    '2028-04-17',
+    '2028-05-01',
+    '2028-05-29',
+    '2028-08-28',
+    '2028-12-25',
+    '2028-12-26',
   ],
   // Seasonal leave caps (local policy): max counted-leave sessions per
   // person within each named period.

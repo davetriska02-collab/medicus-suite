@@ -425,6 +425,15 @@
   border-radius: var(--r-pill);
   padding: 2px 8px;
 }
+button.today-name-chip {
+  cursor: pointer;
+  appearance: none;
+}
+button.today-name-chip:hover,
+button.today-name-chip:focus-visible {
+  border-color: var(--border-hi);
+  color: var(--text-1);
+}
 
 .today-name-chip--amber {
   background: var(--amber-dim);
@@ -827,4 +836,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* Capacity look-ahead card — secondary line under the hero count */
+.today-hero-sub {
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 2px;
+  line-height: 1.35;
 }

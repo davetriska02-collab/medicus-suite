@@ -5,10 +5,35 @@
 'use strict';
 
 import { loadUiState, saveUiState } from '../shared/ui-state.js';
-import { WEEKDAYS, minimumForDate, defaultMinimumByDay, presetSummary, validatePreset } from './capacity-core.js';
+import { downloadCsv } from '../shared/export-util.js';
+import {
+  WEEKDAYS,
+  defaultMinimumByDay,
+  presetSummary,
+  validatePreset,
+  normaliseLookahead,
+  validateLookahead,
+  normalisePresets,
+  resolveActivePreset,
+  effectiveMinimumForDate,
+  evaluateDay,
+  scanHorizon,
+  scanTone,
+  lookAheadSentence,
+  horizonDateList,
+  STATUS_TEXT,
+  lookaheadCacheKey,
+} from './capacity-core.js';
+
+const DIVISION_OPTIONS = [
+  { id: 'england-and-wales', label: 'England & Wales' },
+  { id: 'scotland', label: 'Scotland' },
+  { id: 'northern-ireland', label: 'Northern Ireland' },
+];
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 import {
-  fetchSchedulingOverview,
   fetchManyDates,
   fetchAppointmentTypes,
   aggregateSlots,
@@ -23,20 +48,8 @@ import {
   formatDateShort,
   formatDateLong,
   isWeekend,
-  isPast,
   pad,
 } from '../../../shared/medicus-api.js';
-
-const STATUS_LABEL = {
-  sufficient: 'Sufficient',
-  tight: 'Tight',
-  low: 'Low',
-  critical: 'Critical',
-  closed: 'Closed',
-  historic: 'Past',
-  loading: 'Loading',
-  empty: 'No data',
-};
 
 let container = null;
 // Practice code resolved from chrome.storage.local['suite.practiceCode'].
@@ -56,7 +69,9 @@ let state = {
   data: {},
   loading: new Set(),
   error: null,
-  uiMode: 'view', // 'view' | 'edit' | 'new'
+  lookahead: normaliseLookahead(null),
+  scan: null,
+  uiMode: 'view', // 'view' | 'edit' | 'new' | 'lookahead'
   editingPresetId: null,
 };
 
@@ -64,6 +79,7 @@ let state = {
 
 export async function init(el) {
   container = el;
+  loadEpoch++;
 
   const stored = await chrome.storage.local.get([
     'suite.practiceCode',
@@ -71,20 +87,33 @@ export async function init(el) {
     'capacity.activePresetId',
     'capacity.viewMode',
     'capacity.showWeekends',
+    'capacity.lookahead',
+    'capacity.jumpToDate',
   ]);
   if (stored['suite.practiceCode']) SITE_ID = stored['suite.practiceCode'];
-  state.presets = stored['capacity.presets'] || [];
+  state.presets = normalisePresets(stored['capacity.presets']);
   state.activePresetId = stored['capacity.activePresetId'] || state.presets[0]?.id || null;
+  reconcileActivePreset();
   state.viewMode = stored['capacity.viewMode'] || 'week';
   state.showWeekends = !!stored['capacity.showWeekends'];
+  state.lookahead = normaliseLookahead(stored['capacity.lookahead']);
 
   // Restore persisted focusDate / monthAnchor (per-machine view position)
   const savedUi = await loadUiState('capacity');
   if (savedUi) {
-    const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
-    if (typeof savedUi.focusDate === 'string' && ISO_RE.test(savedUi.focusDate)) state.focusDate = savedUi.focusDate;
-    if (typeof savedUi.monthAnchor === 'string' && ISO_RE.test(savedUi.monthAnchor))
+    if (typeof savedUi.focusDate === 'string' && ISO_DATE_RE.test(savedUi.focusDate))
+      state.focusDate = savedUi.focusDate;
+    if (typeof savedUi.monthAnchor === 'string' && ISO_DATE_RE.test(savedUi.monthAnchor))
       state.monthAnchor = savedUi.monthAnchor;
+  }
+
+  // Today-card chip handoff: open that day, then drop the transient key.
+  const jump = stored['capacity.jumpToDate'];
+  if (typeof jump === 'string' && ISO_DATE_RE.test(jump)) {
+    state.focusDate = jump;
+    state.viewMode = 'day';
+    chrome.storage.local.remove('capacity.jumpToDate');
+    chrome.storage.local.set({ 'capacity.viewMode': 'day' });
   }
 
   // First-load: if no presets, prompt onboarding
@@ -100,6 +129,12 @@ export async function init(el) {
   return () => {
     document.removeEventListener('suite:slots:refresh', onSlotsRefresh);
     chrome.storage.onChanged.removeListener(onStorageChange);
+    // Stop a pending frame from running computeScan()/publishScanCache()
+    // (a storage write) after the tab is gone, and orphan any in-flight
+    // 28–84 day fetch so its progress callbacks stop repainting a dead tab.
+    if (renderFrame != null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(renderFrame);
+    renderFrame = null;
+    loadEpoch++;
     container = null;
   };
 }
@@ -115,11 +150,15 @@ function onStorageChange(changes) {
   if (selfWriteInProgress) return;
   let changed = false;
   if (changes['capacity.presets']) {
-    state.presets = changes['capacity.presets'].newValue || [];
+    state.presets = normalisePresets(changes['capacity.presets'].newValue);
     changed = true;
   }
   if (changes['capacity.activePresetId']) {
     state.activePresetId = changes['capacity.activePresetId'].newValue;
+    changed = true;
+  }
+  if (changes['capacity.lookahead']) {
+    state.lookahead = normaliseLookahead(changes['capacity.lookahead'].newValue);
     changed = true;
   }
   if (changes['suite.practiceCode']) {
@@ -133,6 +172,7 @@ function onStorageChange(changes) {
     changed = true;
   }
   if (changed) {
+    reconcileActivePreset();
     render();
     loadVisibleDates();
   }
@@ -152,7 +192,68 @@ function visibleDates() {
   return Array.from({ length: n }, (_, i) => addDays(start, i));
 }
 
+/** Visible calendar range plus look-ahead horizon (deduped). */
+function datesToFetch() {
+  const visible = visibleDates();
+  if (!activePreset() || state.presets.length === 0) return visible;
+  const horizon = horizonDateList(todayISO(), state.lookahead.horizonDays);
+  return [...new Set([...visible, ...horizon])];
+}
+
+function computeScan() {
+  const preset = activePreset();
+  if (!preset || state.presets.length === 0) {
+    state.scan = null;
+    return;
+  }
+  try {
+    state.scan = scanHorizon({
+      preset,
+      dataByDate: state.data,
+      loadingDates: state.loading,
+      fromISO: todayISO(),
+      lookahead: state.lookahead,
+      computeStatus,
+    });
+  } catch (err) {
+    console.error('[Capacity] scan failed', err);
+    state.scan = { summary: null, atRisk: [], error: true };
+  }
+  publishScanCache();
+}
+
+// Share a completed scan with the Today card so it never has to repeat this
+// module's 28-day fetch. Transient (TTL-checked on read), never backed up.
+function publishScanCache() {
+  const summary = state.scan?.summary;
+  if (!summary || !summary.complete) return;
+  const preset = activePreset();
+  try {
+    chrome.storage.local.set({
+      'capacity.scanCache': {
+        at: Date.now(),
+        // Today reads back only a scan run today, under the same settings.
+        fromISO: todayISO(),
+        lookaheadKey: lookaheadCacheKey(state.lookahead),
+        presetId: preset?.id || null,
+        presetName: preset?.name || null,
+        horizonDays: summary.horizonDays,
+        summary,
+        atRisk: (state.scan.atRisk || []).slice(0, 5),
+      },
+    });
+  } catch (_) {
+    /* cache is an optimisation — never block the render on it */
+  }
+}
+
+// Bumped on every init/cleanup; a fetch loop started under an older epoch
+// belongs to a tab instance that no longer exists.
+let loadEpoch = 0;
+
 async function loadVisibleDates() {
+  const epoch = loadEpoch;
+  rollCalendarDateIfNeeded();
   // Re-resolve practice code (auto-detect from tab if available)
   if (window.PracticeCode) {
     const { code } = await window.PracticeCode.resolve();
@@ -163,21 +264,25 @@ async function loadVisibleDates() {
     render();
     return;
   }
-  const dates = visibleDates();
-  const toFetch = dates.filter((d) => !state.data[d]);
+  const dates = datesToFetch();
+  const toFetch = dates.filter((d) => !state.data[d] && !state.loading.has(d));
   if (toFetch.length === 0) {
+    computeScan();
     render();
     return;
   }
 
   toFetch.forEach((d) => state.loading.add(d));
+  computeScan();
   render();
 
   await fetchManyDates(SITE_ID, toFetch, {
     concurrency: 5,
     onProgress: (done, total, date, raw) => {
+      if (epoch !== loadEpoch) return;
       state.loading.delete(date);
       if (raw && !raw.error) {
+        state.error = null;
         const preset = activePreset();
         state.data[date] = aggregateSlots(raw, {
           allowedTypes: preset?.slotTypes || null,
@@ -186,27 +291,136 @@ async function loadVisibleDates() {
       } else {
         state.error = raw?.error || null;
       }
-      // Re-render progressively
-      render();
+      // Coalesce: a 28–84 day scan used to rebuild the whole tab per date.
+      scheduleRender();
     },
   });
+  if (epoch !== loadEpoch) return;
+  computeScan();
+  render();
 }
 
 function activePreset() {
-  return state.presets.find((p) => p.id === state.activePresetId) || null;
+  return resolveActivePreset(state.presets, state.activePresetId);
 }
 
-function dayStatus(date) {
-  if (state.loading.has(date)) return 'loading';
-  const agg = state.data[date];
-  if (!agg) return 'empty';
-  if (isPast(date) && date !== todayISO()) return 'historic';
-  if (agg.sessionsCount === 0) return 'closed';
+/** Stale activePresetId (deleted preset, restored backup) falls back to the first. */
+function reconcileActivePreset() {
+  const resolved = resolveActivePreset(state.presets, state.activePresetId);
+  if (resolved && resolved.id !== state.activePresetId) {
+    state.activePresetId = resolved.id;
+    // Same self-write guard as saveLookaheadSettings: this runs inside the
+    // onStorageChange handler too, and its own write must not re-enter it.
+    selfWriteInProgress = true;
+    Promise.resolve(chrome.storage.local.set({ 'capacity.activePresetId': resolved.id }))
+      .catch(() => {})
+      .then(() => {
+        selfWriteInProgress = false;
+      });
+  } else if (!resolved) {
+    state.activePresetId = null;
+  }
+  return resolved;
+}
+
+let seenTodayISO = todayISO();
+
+/** After midnight, yesterday's remaining-slot filter must not keep painting as today. */
+function rollCalendarDateIfNeeded() {
+  const now = todayISO();
+  if (now === seenTodayISO) return false;
+  delete state.data[seenTodayISO];
+  delete state.data[now];
+  if (state.focusDate === seenTodayISO) state.focusDate = now;
+  seenTodayISO = now;
+  return true;
+}
+
+let renderFrame = null;
+function scheduleRender() {
+  if (renderFrame != null) return;
+  const kick = () => {
+    renderFrame = null;
+    computeScan();
+    render();
+  };
+  if (typeof requestAnimationFrame === 'function') {
+    renderFrame = requestAnimationFrame(kick);
+  } else {
+    kick();
+  }
+}
+
+/**
+ * Status to PAINT a calendar cell with — not the same as the scan status.
+ *
+ * Today's count is remaining slots while the target covers the whole day, so
+ * colouring it critical every afternoon would contradict the look-ahead banner
+ * (which correctly excludes today). Today gets a neutral treatment instead.
+ */
+function displayStatus(ev) {
+  if (!ev) return 'empty';
+  if (ev.isToday && ev.status !== 'closed' && ev.status !== 'loading' && ev.status !== 'empty') {
+    return 'partial';
+  }
+  return ev.status;
+}
+
+function dayEval(date) {
   const preset = activePreset();
-  if (!preset) return 'empty';
-  const minimum = minimumForDate(preset, date);
-  if (minimum === 0) return 'closed'; // user explicitly says no minimum needed
-  return computeStatus(agg.total, minimum, preset.thresholds || { tight: 75, low: 50 });
+  if (!preset) {
+    const status = state.loading.has(date) ? 'loading' : 'empty';
+    return {
+      dateISO: date,
+      status,
+      total: state.data[date]?.total ?? null,
+      minInfo: { effective: 0, base: 0, uplift: 1, upliftApplied: false, isBankHoliday: false },
+      reason: '',
+      weekday: '',
+    };
+  }
+  return evaluateDay({
+    preset,
+    dateISO: date,
+    agg: state.data[date],
+    lookahead: state.lookahead,
+    loading: state.loading.has(date),
+    computeStatus,
+  });
+}
+
+function minimumVsLabel(ev) {
+  const minInfo = ev.minInfo || {};
+  if (!minInfo.effective) return 'No minimum set';
+  let label = `vs ${minInfo.effective} min`;
+  if (minInfo.upliftApplied) label += ` · ×${minInfo.uplift.toFixed(2)} post-BH`;
+  return label;
+}
+
+function bhBadgesHtml(minInfo) {
+  if (!minInfo) return '';
+  const parts = [];
+  if (minInfo.isBankHoliday) {
+    parts.push('<span class="cap-bh-badge" aria-label="Bank holiday" title="Bank holiday">BH</span>');
+  }
+  if (minInfo.upliftApplied) {
+    parts.push(
+      '<span class="cap-postbh-badge" aria-label="Day after a bank holiday" title="Day after a bank holiday">post-BH</span>'
+    );
+  }
+  return parts.join('');
+}
+
+/** Compact month-cell marker (dot + tooltip) — avoids stacking tiny badges. */
+function bhMonthMarkerHtml(minInfo) {
+  if (!minInfo) return '';
+  const labels = [];
+  if (minInfo.isBankHoliday) labels.push('Bank holiday');
+  if (minInfo.upliftApplied) labels.push('Day after a bank holiday');
+  if (labels.length === 0) return '';
+  const title = labels.join(' · ');
+  const kind = minInfo.isBankHoliday ? 'bh' : 'postbh';
+  return `<span class="cap-month-marker cap-month-marker-${kind}" aria-label="${escAttr(title)}" title="${escAttr(title)}"></span>`;
 }
 
 // minimumForDate / defaultMinimumByDay / presetSummary / WEEKDAYS live in capacity-core.js
@@ -215,12 +429,21 @@ function dayStatus(date) {
 
 function render() {
   if (!container) return;
+  if (rollCalendarDateIfNeeded()) {
+    loadVisibleDates();
+    return;
+  }
   const preset = activePreset();
 
-  // Editor takes over the whole view when active
+  // Editor / look-ahead settings take over the whole view when active
   if (state.uiMode === 'edit' || state.uiMode === 'new') {
     container.innerHTML = renderEditor();
     bindEditor();
+    return;
+  }
+  if (state.uiMode === 'lookahead') {
+    container.innerHTML = renderLookaheadSettings();
+    bindLookaheadSettings();
     return;
   }
 
@@ -233,10 +456,12 @@ function render() {
   container.innerHTML = `
     <div class="module-wrap cap-module">
       ${renderControls(preset)}
+      ${renderLookaheadBanner(preset)}
       ${renderView(preset)}
     </div>
   `;
   bindControls();
+  bindLookaheadBanner();
   if (state.viewMode === 'day') bindDayView();
   if (state.viewMode === 'week') bindWeekView();
   if (state.viewMode === 'month') bindMonthView();
@@ -309,9 +534,12 @@ function renderView(preset) {
 function renderDayView(preset) {
   const date = state.focusDate;
   const agg = state.data[date];
-  const status = dayStatus(date);
+  const ev = dayEval(date);
+  const status = ev.status;
+  const paint = displayStatus(ev);
   const isToday = date === todayISO();
-  const minimum = minimumForDate(preset, date);
+  const minInfo = ev.minInfo || effectiveMinimumForDate(preset, date, state.lookahead);
+  const statusLabel = isToday && paint === 'partial' ? 'Left today' : STATUS_TEXT[status] || status;
 
   let hero = '';
   if (state.loading.has(date)) {
@@ -320,13 +548,14 @@ function renderDayView(preset) {
     hero = `<div class="cap-day-hero"><div class="cap-day-count">—</div></div>`;
   } else {
     const remaining = isToday ? 'remaining today' : 'available';
-    const vsLabel = minimum === 0 ? 'No minimum set' : `vs ${minimum} minimum`;
+    const vsLabel = minimumVsLabel(ev);
     hero = `
       <div class="cap-day-hero">
-        <div class="cap-day-count cap-status-${status}">${agg.total}</div>
+        <div class="cap-day-count cap-status-${paint}">${agg.total}</div>
         <div class="cap-day-meta">
-          <span class="cap-day-vs">${vsLabel}</span>
-          <span class="cap-status-pill cap-status-${status}">${STATUS_LABEL[status]}</span>
+          <span class="cap-day-vs">${escHtml(vsLabel)}</span>
+          ${bhBadgesHtml(minInfo)}
+          <span class="cap-status-pill cap-status-${paint}">${escHtml(statusLabel)}</span>
         </div>
         <div class="cap-day-sub">${remaining} · ${agg.sessionsCount} session${agg.sessionsCount !== 1 ? 's' : ''}</div>
       </div>
@@ -386,7 +615,7 @@ function renderDayView(preset) {
     </div>
     <div class="cap-date-presets">
       <button class="preset-btn${date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
-      <button class="preset-btn${date === nextWorkingDayISO() ? ' active' : ''}" data-date="${nextWorkingDayISO()}">Next working day</button>
+      <button class="preset-btn${date === nextWorkingDayISO(state.lookahead.division) ? ' active' : ''}" data-date="${nextWorkingDayISO(state.lookahead.division)}">Next working day</button>
     </div>
     ${hero}
     ${breakdown}
@@ -422,24 +651,33 @@ function renderWeekView(preset) {
     (d) => state.showWeekends || !isWeekend(d)
   );
 
-  const weekTotal = dates.reduce((sum, d) => sum + (state.data[d]?.total || 0), 0);
-  const weekMin = dates.reduce((sum, d) => sum + minimumForDate(preset, d), 0);
+  // Today counts only the slots still to come, so comparing it with a whole-day
+  // target would drag the week red every afternoon. Judge the week on the days
+  // that can still be compared like for like, and say so when today is in it.
+  const comparable = dates.filter((d) => d !== todayISO());
+  const weekTotal = comparable.reduce((sum, d) => sum + (state.data[d]?.total || 0), 0);
+  const weekMin = comparable.reduce((sum, d) => sum + dayEval(d).minInfo.effective, 0);
   const weekStatus =
     weekMin > 0 ? computeStatus(weekTotal, weekMin, preset.thresholds || { tight: 75, low: 50 }) : 'sufficient';
+  const excludesToday = comparable.length !== dates.length;
 
   const pills = dates
     .map((date) => {
       const agg = state.data[date];
-      const status = dayStatus(date);
-      const minimum = minimumForDate(preset, date);
+      const ev = dayEval(date);
+      const isCurr = date === todayISO();
+      const status = displayStatus(ev);
+      const minimum = ev.minInfo.effective;
       const closed = minimum === 0 || (agg && agg.sessionsCount === 0);
       const count = agg ? agg.total : '…';
       const label = formatDateShort(date);
+      const foot = closed ? STATUS_TEXT[ev.status] || ev.status : isCurr ? 'left today' : `/ ${minimum}`;
       return `
-      <div class="cap-day-pill cap-status-${status}${date === todayISO() ? ' cap-today' : ''}" data-date="${date}">
+      <div class="cap-day-pill cap-status-${status}${isCurr ? ' cap-today' : ''}" data-date="${date}">
         <div class="cap-day-pill-label">${escHtml(label)}</div>
+        <div class="cap-day-pill-badges">${bhBadgesHtml(ev.minInfo)}</div>
         <div class="cap-day-pill-count">${closed && !agg ? '—' : count}</div>
-        <div class="cap-day-pill-min">${closed ? STATUS_LABEL[status] : `/ ${minimum}`}</div>
+        <div class="cap-day-pill-min">${escHtml(foot)}</div>
       </div>
     `;
     })
@@ -462,11 +700,11 @@ function renderWeekView(preset) {
     <div class="cap-week-summary cap-status-${weekStatus}">
       <span class="cap-summary-label">Week total</span>
       <span class="cap-summary-num">${weekTotal}</span>
-      <span class="cap-summary-vs">/ ${weekMin} target</span>
+      <span class="cap-summary-vs">/ ${weekMin} target${excludesToday ? ' · today not counted' : ''}</span>
     </div>
 
     <div class="cap-week-grid">${pills}</div>
-    <div class="section-hint">Click a day for detail.</div>
+    <div class="section-hint">Click a day for detail.${excludesToday ? ' Today shows what is left, so it is not compared with a whole-day target.' : ''}</div>
   `;
 }
 
@@ -520,13 +758,15 @@ function renderMonthView(preset) {
   for (let i = 0; i < n; i++) {
     const date = addDays(start, i);
     const dayNum = i + 1;
-    const status = dayStatus(date);
+    const ev = dayEval(date);
+    const status = displayStatus(ev);
     const agg = state.data[date];
     const isCurr = date === todayISO();
 
     cells.push(`
-      <div class="cap-month-cell cap-status-${status}${isCurr ? ' cap-today' : ''}${isWeekend(date) ? ' cap-weekend' : ''}" data-date="${date}">
+      <div class="cap-month-cell cap-status-${status}${isCurr ? ' cap-today' : ''}${isWeekend(date) ? ' cap-weekend' : ''}" data-date="${date}"${isCurr ? ' title="Today — shows slots still left, not compared with a whole-day target"' : ''}>
         <div class="cap-month-dow">${dayNum}</div>
+        <div class="cap-month-badges">${bhMonthMarkerHtml(ev.minInfo)}</div>
         <div class="cap-month-count">${agg ? agg.total : state.loading.has(date) ? '·' : ''}</div>
       </div>
     `);
@@ -550,6 +790,8 @@ function renderMonthView(preset) {
       <span class="cap-legend-item"><span class="cap-legend-dot cap-status-tight"></span>Tight</span>
       <span class="cap-legend-item"><span class="cap-legend-dot cap-status-low"></span>Low</span>
       <span class="cap-legend-item"><span class="cap-legend-dot cap-status-critical"></span>Critical</span>
+      <span class="cap-legend-item"><span class="cap-month-marker cap-month-marker-bh cap-legend-marker" aria-hidden="true"></span>Bank holiday</span>
+      <span class="cap-legend-item"><span class="cap-month-marker cap-month-marker-postbh cap-legend-marker" aria-hidden="true"></span>After bank holiday</span>
     </div>
     <div class="section-hint">Click a day for detail.</div>
   `;
@@ -616,7 +858,7 @@ function bindControls() {
     });
   });
   container.querySelector('#capRefresh')?.addEventListener('click', () => {
-    visibleDates().forEach((d) => {
+    datesToFetch().forEach((d) => {
       invalidateCache(d);
       delete state.data[d];
     });
@@ -672,9 +914,9 @@ function bindControls() {
         alert('Not a Medicus Suite backup file.');
         return;
       }
-      const incoming = raw.modules?.capacity?.presets || [];
+      const incoming = normalisePresets(raw.modules?.capacity?.presets || []);
       if (!Array.isArray(incoming) || incoming.length === 0) {
-        alert('No presets found in this file.');
+        alert('No usable presets found in this file.');
         return;
       }
       const mode = await showImportModeDialog(incoming.length);
@@ -699,7 +941,7 @@ function bindControls() {
       const noConflict = incoming.filter((p) => !existingMap.has(p.id));
 
       if (conflicts.length === 0) {
-        const merged = [...existingPresets, ...noConflict];
+        const merged = normalisePresets([...existingPresets, ...noConflict]);
         await chrome.storage.local.set({ 'capacity.presets': merged });
         state.presets = merged;
         render();
@@ -722,14 +964,311 @@ function bindControls() {
           resolvedPresets.push({ ...incoming_p, id: copyId, name: incoming_p.name + ' (imported)' });
         }
       }
-      await chrome.storage.local.set({ 'capacity.presets': resolvedPresets });
-      state.presets = resolvedPresets;
+      const cleaned = normalisePresets(resolvedPresets);
+      await chrome.storage.local.set({ 'capacity.presets': cleaned });
+      state.presets = cleaned;
       render();
       loadVisibleDates();
     } catch (err) {
       alert('Import failed: ' + err.message);
     }
   });
+}
+
+// ── Look-ahead banner & settings ─────────────────────────────────────────────
+
+function renderLookaheadBanner(preset) {
+  if (!preset) return '';
+  const scan = state.scan;
+  if (!scan) return '';
+
+  const summary = scan.summary;
+  if (!summary || scan.error) {
+    return `
+    <section class="cap-lookahead cap-lookahead-unknown" aria-label="Capacity look-ahead">
+      <div class="cap-lookahead-row">
+        <p class="cap-lookahead-text">Capacity look-ahead unavailable.</p>
+        <span class="cap-lookahead-pill" aria-label="Capacity not fully checked">—</span>
+      </div>
+      <div class="cap-lookahead-actions">
+        <button type="button" class="ghost-btn" id="capLookaheadSettings">Settings</button>
+      </div>
+    </section>
+  `;
+  }
+
+  const sentence = lookAheadSentence(summary, preset.name);
+  const atRisk = summary.atRiskCount || 0;
+  const isChecking = state.loading.size > 0 || summary.uncheckedDays > 0;
+  let toneKey = scanTone(summary);
+  // Known risk stays visible while the rest of the horizon is still loading.
+  // Only withhold a green all-clear — never hide a red or amber we already have.
+  if (isChecking && toneKey === 'green') toneKey = 'unknown';
+
+  const toneClass = {
+    red: 'cap-lookahead-critical',
+    amber: 'cap-lookahead-warn',
+    green: 'cap-lookahead-ok',
+    unknown: 'cap-lookahead-unknown',
+  }[toneKey];
+
+  const pillContent = toneKey === 'unknown' ? '—' : atRisk;
+  const pillAria =
+    toneKey === 'unknown'
+      ? 'Capacity not fully checked'
+      : `${atRisk} day${atRisk === 1 ? '' : 's'} at risk in the next ${summary.horizonDays} days`;
+
+  const checkingHtml = isChecking
+    ? `<span class="cap-lookahead-checking">Checking ${summary.loadedDays} of ${summary.workingDays}…</span>`
+    : '';
+
+  const chips = (scan.atRisk || [])
+    .slice(0, 5)
+    .map((d) => {
+      const statusLabel = STATUS_TEXT[d.status] || d.status;
+      const chipAria = `${formatDateLong(d.dateISO)}: ${statusLabel}. ${d.reason}`;
+      return `
+      <button type="button" class="cap-risk-chip cap-status-${d.status}" data-date="${d.dateISO}" title="${escAttr(d.reason)}" aria-label="${escAttr(chipAria)}">
+        ${escHtml(formatDateShort(d.dateISO))} · ${escHtml(statusLabel)}
+      </button>`;
+    })
+    .join('');
+
+  // Nothing to act on: a calm one-line strip. A full alert block with three
+  // buttons for "all clear" reads as an alarm about zero and crowds out the
+  // calendar it sits above.
+  if (toneKey === 'green') {
+    return `
+    <section class="cap-lookahead cap-lookahead-ok cap-lookahead-quiet" aria-label="Capacity look-ahead">
+      <div class="cap-lookahead-row">
+        <span class="cap-lookahead-tick" aria-hidden="true">✓</span>
+        <p class="cap-lookahead-text">${escHtml(sentence)}</p>
+        <div class="cap-lookahead-links">
+          <button type="button" class="cap-lookahead-link" id="capPrintPack">Print pack</button>
+          <button type="button" class="cap-lookahead-link" id="capLookaheadSettings">Settings</button>
+        </div>
+      </div>
+    </section>
+  `;
+  }
+
+  return `
+    <section class="cap-lookahead ${toneClass}" aria-label="Capacity look-ahead">
+      <div class="cap-lookahead-row">
+        <p class="cap-lookahead-text">${escHtml(sentence)}${checkingHtml}</p>
+        <span class="cap-lookahead-pill" aria-label="${escAttr(pillAria)}">${pillContent}</span>
+      </div>
+      <div class="cap-lookahead-actions">
+        <button type="button" class="ghost-btn" id="capPrintPack">Print pack</button>
+        <button type="button" class="ghost-btn" id="capExportCsv">CSV</button>
+        <button type="button" class="ghost-btn" id="capLookaheadSettings">Settings</button>
+      </div>
+      ${chips ? `<div class="cap-lookahead-chips">${chips}</div>` : ''}
+    </section>
+  `;
+}
+
+function bindLookaheadBanner() {
+  container.querySelector('#capPrintPack')?.addEventListener('click', () => onPrintRiskPack());
+  container.querySelector('#capExportCsv')?.addEventListener('click', () => onExportRiskCsv());
+  container.querySelector('#capLookaheadSettings')?.addEventListener('click', () => openLookaheadSettings());
+
+  container.querySelectorAll('.cap-risk-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      state.focusDate = chip.dataset.date;
+      saveUiState('capacity', { focusDate: state.focusDate, monthAnchor: state.monthAnchor });
+      state.viewMode = 'day';
+      chrome.storage.local.set({ 'capacity.viewMode': 'day' });
+      render();
+      loadVisibleDates();
+    });
+  });
+}
+
+function openLookaheadSettings() {
+  state.uiMode = 'lookahead';
+  render();
+}
+
+function closeLookaheadSettings() {
+  state.uiMode = 'view';
+  render();
+  loadVisibleDates();
+}
+
+function renderLookaheadSettings() {
+  const la = state.lookahead;
+  return `
+    <div class="module-wrap cap-module cap-editor-page">
+      <div class="cap-editor-header">
+        <button class="cap-nav-btn" id="capLookaheadBack" title="Back">◀</button>
+        <div class="cap-editor-title">Look-ahead settings</div>
+        <span style="width:30px"></span>
+      </div>
+
+      <div class="cap-form cap-lookahead-form">
+        <div class="cap-field">
+          <label class="cap-field-label" for="capLHHorizon">How many days ahead to check</label>
+          <input type="number" class="cap-input cap-input-num" id="capLHHorizon" value="${la.horizonDays}" min="7" max="84" />
+          <div class="cap-field-hint">Scan the next 7–84 calendar days from today.</div>
+        </div>
+
+        <div class="cap-field">
+          <label class="cap-field-label" for="capLHDivision">Bank holiday calendar</label>
+          <select class="cap-input cap-select" id="capLHDivision">
+            ${DIVISION_OPTIONS.map(
+              (o) =>
+                `<option value="${escAttr(o.id)}"${o.id === la.division ? ' selected' : ''}>${escHtml(o.label)}</option>`
+            ).join('')}
+          </select>
+          <div class="cap-field-hint">Which nation’s bank holidays close your practice.</div>
+        </div>
+
+        <div class="cap-field">
+          <label class="cap-lookahead-check">
+            <input type="checkbox" id="capLHIncludeTight" ${la.includeTight ? 'checked' : ''} />
+            Include &ldquo;Tight&rdquo; days as at-risk
+          </label>
+        </div>
+
+        <div class="cap-field">
+          <label class="cap-lookahead-check">
+            <input type="checkbox" id="capLHUpliftEnabled" ${la.upliftEnabled ? 'checked' : ''} />
+            Raise the target after bank holidays
+          </label>
+        </div>
+
+        <div class="cap-field" id="capLHUpliftFields">
+          <label class="cap-field-label">Extra demand after bank holidays (estimates)</label>
+          <div class="cap-uplift-grid">
+            <label class="cap-uplift-row">
+              <span>Single bank holiday</span>
+              <input type="number" class="cap-input cap-input-tiny" id="capLHSingle" value="${la.singleBhUplift}" min="1" max="2.5" step="0.05" ${la.upliftEnabled ? '' : 'disabled'} />
+            </label>
+            <label class="cap-uplift-row">
+              <span>Easter / long weekend</span>
+              <input type="number" class="cap-input cap-input-tiny" id="capLHEaster" value="${la.easterBlockUplift}" min="1" max="2.5" step="0.05" ${la.upliftEnabled ? '' : 'disabled'} />
+            </label>
+            <label class="cap-uplift-row">
+              <span>Christmas / New Year</span>
+              <input type="number" class="cap-input cap-input-tiny" id="capLHXmas" value="${la.xmasBlockUplift}" min="1" max="2.5" step="0.05" ${la.upliftEnabled ? '' : 'disabled'} />
+            </label>
+          </div>
+          <div class="cap-field-hint cap-lookahead-note">
+            These are your own estimates of how much busier the first day back is. They are not
+            published NHS figures &mdash; start from the defaults and adjust once you have watched a
+            few bank holidays.
+          </div>
+        </div>
+
+        <div class="cap-editor-actions">
+          <button class="primary-btn" id="capLHSave">Save</button>
+          <button class="ghost-btn" id="capLHCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function bindLookaheadSettings() {
+  const upliftEnabled = container.querySelector('#capLHUpliftEnabled');
+  const upliftFields = container.querySelector('#capLHUpliftFields');
+  const multiplierInputs = () =>
+    ['#capLHSingle', '#capLHEaster', '#capLHXmas'].map((sel) => container.querySelector(sel));
+  const syncUpliftFields = () => {
+    const enabled = !!upliftEnabled?.checked;
+    if (upliftFields) upliftFields.style.opacity = enabled ? '1' : '0.45';
+    multiplierInputs().forEach((el) => {
+      if (el) el.disabled = !enabled;
+    });
+  };
+  syncUpliftFields();
+  upliftEnabled?.addEventListener('change', syncUpliftFields);
+
+  container.querySelector('#capLookaheadBack')?.addEventListener('click', closeLookaheadSettings);
+  container.querySelector('#capLHCancel')?.addEventListener('click', closeLookaheadSettings);
+  container.querySelector('#capLHSave')?.addEventListener('click', saveLookaheadSettings);
+}
+
+async function saveLookaheadSettings() {
+  const form = {
+    division: container.querySelector('#capLHDivision')?.value,
+    horizonDays: parseInt(container.querySelector('#capLHHorizon')?.value, 10),
+    includeTight: container.querySelector('#capLHIncludeTight')?.checked,
+    upliftEnabled: container.querySelector('#capLHUpliftEnabled')?.checked,
+    singleBhUplift: parseFloat(container.querySelector('#capLHSingle')?.value),
+    easterBlockUplift: parseFloat(container.querySelector('#capLHEaster')?.value),
+    xmasBlockUplift: parseFloat(container.querySelector('#capLHXmas')?.value),
+  };
+  const check = validateLookahead(form);
+  if (!check.valid) {
+    alert(check.error);
+    return;
+  }
+  state.lookahead = check.value;
+  selfWriteInProgress = true;
+  try {
+    await chrome.storage.local.set({ 'capacity.lookahead': state.lookahead });
+  } finally {
+    selfWriteInProgress = false;
+  }
+  Object.keys(state.data).forEach((d) => delete state.data[d]);
+  closeLookaheadSettings();
+}
+
+async function onPrintRiskPack() {
+  const preset = activePreset();
+  if (!preset || !state.scan) return;
+
+  const stored = await chrome.storage.local.get(['suite.letterhead']);
+  const lh = stored['suite.letterhead'] || {};
+  const practiceLabel = (typeof lh.practiceName === 'string' && lh.practiceName.trim()) || SITE_ID || 'Practice';
+
+  const model = {
+    generatedAt: new Date().toISOString(),
+    practiceLabel,
+    preset: {
+      id: preset.id,
+      name: preset.name,
+      thresholds: preset.thresholds || { tight: 75, low: 50 },
+    },
+    lookahead: state.lookahead,
+    scan: state.scan,
+  };
+
+  await chrome.storage.local.set({ 'capacity.riskPack': model });
+  setTimeout(() => {
+    chrome.storage.local.remove('capacity.riskPack');
+  }, 60000);
+  chrome.tabs.create({ url: chrome.runtime.getURL('side-panel/modules/capacity/at-risk-pack.html') });
+}
+
+function onExportRiskCsv() {
+  const scan = state.scan;
+  if (!scan) return;
+
+  const header = ['Date', 'Weekday', 'Free', 'Your target', 'Adjusted target', 'Uplift', 'Status', 'Reason'];
+  const atRisk = scan.atRisk || [];
+  let rows;
+  if (atRisk.length === 0) {
+    const note = scan.summary?.complete
+      ? 'No days at risk in this horizon'
+      : `Checked ${scan.summary?.loadedDays ?? 0} of ${scan.summary?.workingDays ?? 0} days — scan incomplete, do not treat as all-clear`;
+    rows = [['—', '—', '—', '—', '—', '—', '—', note]];
+  } else {
+    rows = atRisk.map((d) => [
+      d.dateISO,
+      d.weekday,
+      d.total ?? '',
+      d.minInfo.base,
+      d.minInfo.effective,
+      d.minInfo.upliftApplied ? d.minInfo.uplift : '',
+      STATUS_TEXT[d.status] || d.status,
+      d.reason,
+    ]);
+  }
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadCsv(`capacity-at-risk-${stamp}.csv`, header, rows);
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

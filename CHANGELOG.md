@@ -2,6 +2,80 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.258.0] — 2026-09-04
+
+### Forecast — days at risk (practice-manager look-ahead) + UK bank-holiday calendar
+
+Landed from the v3.248.0–v3.249.2 branch (PR #344), rebased onto v3.257.1 and
+renumbered; the hazard it records is **H-070** (the branch's H-067 number was
+taken by the Note board in the meantime).
+
+**UK bank-holiday calendar foundation.** Shared England & Wales / Scotland /
+Northern Ireland bank-holiday calendar from GOV.UK (`shared/uk-calendar.js`),
+bundled for offline use. Capacity Forecast and Slots "Next working day" skip
+bank holidays as well as weekends (a Friday before a Monday BH lands on the
+Tuesday), using the nation picked in Forecast settings. Forecast help copy no
+longer claims "expected demand" — it compares free slots to your weekday
+minimums. Rota Manager's default bank-holiday seed is regenerated from the
+same JSON. Refresh with `node scripts/regen-bank-holidays.js`; CI
+(`test-uk-calendar.js` / `--check`) fails if the horizon drops under 9 months.
+
+**Look-ahead.** Capacity Forecast becomes a practice-manager look-ahead, not
+only a calendar:
+
+- **Look-ahead banner** on Forecast: how many days in the next N (default 28,
+  7–84) are critical/low vs your minimums, with chips that jump to the day.
+  Known red/amber stays visible while the rest of the horizon is loading.
+- **Post–bank-holiday uplift** on effective minimums (editable estimates:
+  single BH ×1.25, Easter ×1.35, Christmas ×1.40) — labelled as estimates.
+  Holiday classification reads GOV.UK titles (the 3 January substitute counts
+  as Christmas; St Patrick's Day is not Easter; long closures are not given
+  the single-BH figure).
+- **Print pack** (A4, greyscale-safe, repeating headers) and **CSV** of days
+  at risk for the weekly ops meeting.
+- **Today → Days at Risk** card + headline clause, reusing the Forecast tab's
+  scan (20-minute cache) and polling every 30 minutes; at-risk chips open that
+  day in Forecast.
+- Settings on Forecast: horizon, include "tight", uplift on/off and
+  multipliers, bank-holiday nation. Backed up via `capacity.lookahead`.
+- Today renders as "left today" in week, month and day views and is excluded
+  from at-risk (its remaining-slot count vs a whole-day target would read as
+  critical every afternoon); Saturday/Sunday clinics with a minimum can be
+  flagged; bank holidays carry no target, so a short week is not reddened.
+- Forecast and Today share one preset-resolution rule (a stale active id
+  falls back to the first preset); imported presets are rebuilt before use;
+  after midnight yesterday's remaining-slot snapshot is dropped; the 28–84
+  day fetch coalesces repaints to a frame.
+
+**Coverage-honest all-clear (H-070).** An unreachable Medicus used to render
+as a green "no days at risk". Scan coverage is now measured, and the banner,
+Today card, CSV and printed pack withhold the all-clear and show a neutral
+"not fully checked" state when days could not be read.
+
+**Pre-merge review fixes (this landing):**
+
+- A horizon running past the bundled calendar's year-end silently scored the
+  next New Year's Day as an ordinary working day (the calendar answers "not a
+  bank holiday" for a date it has never heard of). Such days are now reported
+  as unchecked — "Bank-holiday calendar ends YYYY-MM-DD — update Medicus
+  Suite" — so the all-clear is withheld (`calendarCoversISO`).
+- A future weekday with a minimum but **no sessions in the book** was treated
+  as a checked, safe "closed" day, so an unbuilt rota three weeks out came
+  back as a green all-clear. It is now reported as unchecked with its own
+  reason ("No sessions in the book yet"); bank holidays and zero-minimum
+  days are still simply closed.
+- The Today card could reuse yesterday's scan after midnight (painting
+  yesterday's "today" as an at-risk chip) or a scan run under different
+  look-ahead settings; the cache now carries the day it was run and a
+  settings key, and Today only reuses a same-day, same-settings scan.
+- Slots "Next working day" ignored the chosen nation (a Scottish practice's
+  2 January and August Monday were "working days"); Slots, Forecast and the
+  shared helper now pass the practice's division through.
+- Leaving the Forecast tab no longer leaves a pending frame to write the scan
+  cache into storage, and an in-flight 28–84 day fetch is orphaned instead of
+  repainting a tab that no longer exists; the stale-preset reconcile write is
+  guarded against re-entering its own storage listener.
+
 ## [v3.257.1] — 2026-09-04
 
 ### Note — proper Vestaboard look and feel for the Split-flap colour
