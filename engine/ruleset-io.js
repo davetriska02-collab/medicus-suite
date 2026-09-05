@@ -52,6 +52,7 @@
     'observation-trend',
     'medication-present',
     'medication-all-of',
+    'pathway-bundle',
   ];
   const VALID_CHECK_OPERATORS = ['<=', '<', '>=', '>'];
   const VALID_CHECK_COMPARATORS = ['above', 'below'];
@@ -70,7 +71,7 @@
     'withinMonths',
   ];
   // Array fields in a check object — must be arrays if present.
-  const CHECK_ARRAY_FIELDS = ['observation', 'observations', 'medicationMatch', 'medicationExclude'];
+  const CHECK_ARRAY_FIELDS = ['observation', 'observations', 'medicationMatch', 'medicationExclude', 'groups'];
 
   function validateCheckObject(check, path, errors, warnings) {
     if (check.kind != null) {

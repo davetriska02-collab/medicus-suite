@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.259.0] — 2026-09-05
+
+### QOF OB005 matches PCIT TA1026 / OBES2_REG (pathway codes, not drugs)
+
+Rewrote `qof-ob005` so the chip tracks Primary Care IT OB005
+(https://support.primarycareit.co.uk/portal/en-gb/kb/articles/ob005#What_makes_a_patient_eligible)
+instead of the general obesity register plus a list of GLP-1 / orlistat brand names.
+
+- **Denominator** is a new `qof-reg-obes2` register (`OBES2` / `OBES2_REG`): age ≥18, raised BMI in the QOF year (≥35, or ≥32.5 with a coded South Asian / Chinese / other Asian / Middle Eastern / Black African / African-Caribbean family background), and at least four of five comorbidities (ASCVD; unresolved hypertension; dyslipidaemia via statin or LDL/TG/HDL thresholds; OSA; unresolved T2DM). The general `OB` register is unchanged and still gates OB004.
+- **Numerator** is three *coded* pathway events in the contract year (`WTMGPHARM_COD` / `WTMGBSPREF_COD` / `SHARDECMAK_COD`), or the 6+6 month carry-over if last year was not already achieved. Listed drug brand names (Ozempic, Mounjaro, orlistat, …) are no longer achievement. GLP-1 monitoring rules are untouched.
+- **PCAs** the engine can apply: ever bariatric surgery; tirzepatide/Mounjaro without the obesity-pharmacotherapy *code*; listed unavailable / unsuitable / declined / contraindication codes; invited twice ≥7 days apart; raised BMI first appearing in the last 90 days of the year; new registration in the last 3 months when `registeredDate` is known. Achievement later in the year overrides exclusions.
+- Residual limits (unknown ethnicity uses BMI ≥35; comorbidity clusters are substring approximations; several PCA clusters are named placeholders) are on the rule notes. Memory aid, not a QOF claim tool. Locked by `test-qof-ob005.js`.
+
 ## [v3.258.0] — 2026-09-04
 
 ### Forecast — days at risk (practice-manager look-ahead) + UK bank-holiday calendar
