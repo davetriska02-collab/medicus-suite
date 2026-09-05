@@ -265,17 +265,25 @@
 
   async function doOpen() {
     s.open = true;
-    const ctx = window.ContactsApi.resolveContext();
+    s.loading = true;
+    s.error = null;
+    rerender();
+    // Async resolver: this is a cold first-open, potentially from a
+    // task-overview page (e.g. a document-filing task) with no patient
+    // UUID in the URL — see contacts-api.js's resolveContextAsync() header
+    // comment. Every subsequent resolveContext() call in this file/the
+    // canvas (pre-write guards) stays synchronous; the fetch this makes
+    // warms the cache they read from. Show Loading… before the await so
+    // the import form cannot flash empty during the task→patient fetch.
+    const ctx = await window.ContactsApi.resolveContextAsync();
     if (!ctx) {
       s.error = 'Could not identify the current patient — try reloading the page.';
+      s.loading = false;
       rerender();
       return;
     }
     s.apiBase = ctx.apiBase;
     s.patientId = ctx.patientId;
-    s.loading = true;
-    s.error = null;
-    rerender();
     const st = s; // WRONG-PATIENT GUARD pin — see doImportConfirm() for the hard re-verify before writes
     try {
       // Safety net for contacts-api.js's fire-and-forget fetch of rules/contact-relationships.json

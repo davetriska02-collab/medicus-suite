@@ -14,6 +14,7 @@ instead of the general obesity register plus a list of GLP-1 / orlistat brand na
 - **Numerator** is three *coded* pathway events in the contract year (`WTMGPHARM_COD` / `WTMGBSPREF_COD` / `SHARDECMAK_COD`), or the 6+6 month carry-over if last year was not already achieved. Listed drug brand names (Ozempic, Mounjaro, orlistat, …) are no longer achievement. GLP-1 monitoring rules are untouched.
 - **PCAs** the engine can apply: ever bariatric surgery; tirzepatide/Mounjaro without the obesity-pharmacotherapy *code*; listed unavailable / unsuitable / declined / contraindication codes; invited twice ≥7 days apart; raised BMI first appearing in the last 90 days of the year; new registration in the last 3 months when `registeredDate` is known. Achievement later in the year overrides exclusions.
 - Residual limits (unknown ethnicity uses BMI ≥35; comorbidity clusters are substring approximations; several PCA clusters are named placeholders) are on the rule notes. Memory aid, not a QOF claim tool. Locked by `test-qof-ob005.js`.
+
 ## [v3.258.1] — 2026-09-05
 
 ### Fix: Contacts canvas on document-filing tasks
@@ -29,7 +30,6 @@ and untouched. Follow-up: family cycling from a task-overview page now
 navigates to the canonical care-record URL instead of a no-op reload
 (those pages have no patient UUID to swap); the async resolver refuses
 a stale id if the SPA moves during the fetch. Confirmed live.
-
 
 ## [v3.258.0] — 2026-09-04
 

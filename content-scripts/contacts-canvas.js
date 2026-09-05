@@ -442,7 +442,13 @@
   }
 
   async function loadCanvas() {
-    const ctx = window.ContactsApi.resolveContext();
+    // Async resolver: this is the canvas's cold first-open, potentially
+    // from a task-overview page (e.g. a document-filing task) with no
+    // patient UUID in the URL or DOM — see contacts-api.js's
+    // resolveContextAsync() header comment. Every other resolveContext()
+    // call in this file (pre-write guards) stays synchronous; the fetch
+    // this makes warms the cache they read from.
+    const ctx = await window.ContactsApi.resolveContextAsync();
     if (!ctx) {
       cs.error = 'Could not identify the current patient — try reloading the page.';
       cs.loading = false;
@@ -4559,13 +4565,22 @@
     await chrome.storage.local.remove(FAMILY_SESSION_STORAGE_KEY);
   }
 
-  // buildNavigationUrl — the current URL definitely contains `fromPatientId` verbatim (that's
-  // literally how resolveContext derived it, via detectMedicusContext's UUID match against
-  // location.href), so swapping that substring for the target id is precise and pattern-agnostic —
-  // no need to separately re-derive or assume which of care-record/patient/query-param form this
-  // site happens to use.
+  // buildNavigationUrl — on a care-record / patient page the current URL contains
+  // `fromPatientId` verbatim (that's how resolveContext derived it), so swapping
+  // that substring for the target id is precise and pattern-agnostic.
+  // Task-overview pages (document-filing etc.) do NOT contain the patient UUID —
+  // a split/join there is a no-op and would confirm "open B's record" while
+  // staying on A's document. Fall back to the canonical care-record path used
+  // elsewhere in the suite. Returns null if we cannot build a real destination
+  // (caller must refuse to persist/navigate rather than reload the same page).
   function buildNavigationUrl(fromPatientId, toPatientId) {
-    return location.href.split(fromPatientId).join(toPatientId);
+    if (fromPatientId && location.href.includes(fromPatientId)) {
+      return location.href.split(fromPatientId).join(toPatientId);
+    }
+    const API = window.SentinelApiClient;
+    const ctx = API && API.detectMedicusContext(location.href);
+    if (!ctx || !ctx.siteId || !toPatientId) return null;
+    return `${location.origin}/${ctx.siteId}/patient/patient/care-record/${toPatientId}`;
   }
 
   // advanceToNextFamilyMember — the skip loop for an inactive candidate runs HERE, on the current
@@ -4663,11 +4678,22 @@
         render();
         return;
       }
+      const dest = buildNavigationUrl(fromPatientId, candidateId);
+      // Refuse before commit/persist: a same-URL dest (or a failed build) would
+      // consume the member and leave a persisted session.current for someone
+      // whose page we never opened.
+      if (!dest || dest === location.href) {
+        st.familySession = session;
+        st.workingError =
+          "Could not open the next family member from this page — open their record from the patient record instead.";
+        render();
+        return;
+      }
       session = window.ContactTree.commitAdvance(session, candidateId).session;
       st.familySession = session;
       await persistFamilySession(session, targetName);
       if (st !== cs) return;
-      location.href = buildNavigationUrl(fromPatientId, candidateId);
+      location.href = dest;
       return;
     }
   }
@@ -4753,7 +4779,11 @@
   async function checkResumableFamilySession() {
     const persisted = await loadPersistedFamilySession();
     if (!persisted) return;
-    const ctx = window.ContactsApi.resolveContext();
+    // Async resolver: document-filing / task-overview pages have no patient
+    // UUID in the URL, so the sync guard would miss a valid resume for the
+    // same patient. Write-path guards stay synchronous; this is a cold
+    // page-load check and warms the cache they read from.
+    const ctx = await window.ContactsApi.resolveContextAsync();
     if (!ctx || persisted.session.current !== ctx.patientId) return;
     renderResumeBanner(persisted.session, persisted.targetName);
   }
