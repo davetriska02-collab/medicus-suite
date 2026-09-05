@@ -106,15 +106,17 @@
   // Async sibling of resolveContext(), for the small number of call sites
   // that run from cold on a page load rather than as a pre-write guard
   // (currently: contacts-link-button.js's doOpen(), contacts-canvas.js's
-  // loadCanvas() — both first-open entry points, never re-verify-before-
-  // write checks). Falls through to the same URL/DOM resolution first;
-  // only reaches for the task->patient fetch when both of those come back
-  // empty AND the URL is a recognised task-overview page.
+  // loadCanvas(), and checkResumableFamilySession() — cold-open / resume
+  // entry points, never re-verify-before-write checks). Falls through to
+  // the same URL/DOM resolution first; only reaches for the task->patient
+  // fetch when both of those come back empty AND the URL is a recognised
+  // task-overview page.
   async function resolveContextAsync() {
     const API = window.SentinelApiClient;
-    _dbg('resolveContextAsync: location.href =', location.href, 'hasSentinelApiClient =', !!API);
+    const hrefAtStart = location.href;
+    _dbg('resolveContextAsync: location.href =', hrefAtStart, 'hasSentinelApiClient =', !!API);
     if (!API) return null;
-    const ctx = API.detectMedicusContext(location.href);
+    const ctx = API.detectMedicusContext(hrefAtStart);
     _dbg('resolveContextAsync: detectMedicusContext ->', JSON.stringify(ctx));
     if (!ctx || !ctx.apiBase) {
       _dbg('resolveContextAsync: no ctx / no apiBase — giving up before any fetch');
@@ -144,6 +146,23 @@
       );
     }
     if (!patientId) return null;
+    // After any await the SPA may have moved. Never hand back a patient that
+    // no longer matches the live URL — write guards would then pin the stale
+    // id and refuse (fail-closed), but the canvas would already be showing
+    // the wrong record.
+    if (location.href !== hrefAtStart) {
+      const live = resolveContext();
+      _dbg('resolveContextAsync: href changed during resolve — live sync ->', live && live.patientId);
+      if (live) return live;
+      const liveCtx = API.detectMedicusContext(location.href);
+      if (liveCtx && liveCtx.taskUuid && liveCtx.taskUuid !== ctx.taskUuid) {
+        _dbg('resolveContextAsync: URL moved to a different task during fetch — refusing stale id');
+        return null;
+      }
+      if (liveCtx && liveCtx.patientUuid && liveCtx.patientUuid !== patientId) {
+        return { apiBase: liveCtx.apiBase, patientId: liveCtx.patientUuid };
+      }
+    }
     return { apiBase: ctx.apiBase, patientId };
   }
 

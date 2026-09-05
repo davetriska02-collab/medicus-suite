@@ -3,7 +3,7 @@
 //
 // resolveContext() is a wrong-patient guard called immediately before nearly
 // every write in contacts-canvas.js — it MUST stay synchronous everywhere
-// except the two cold "first open" entry points, which need an async
+// except the cold "first open" / resume entry points, which need an async
 // task->patient fetch to work from a task-overview page (e.g. a
 // document-filing task, which has no patient UUID in the URL or DOM). These
 // are source-level pins because the two functions differ only by an `await`
@@ -58,24 +58,56 @@ check(
   'the cache is both written (async) and read (sync) — not just declared'
 );
 
-console.log('\n--- exactly two call sites use the async resolver (the cold-open ones) ---');
+console.log('\n--- only cold-open / resume call sites use the async resolver ---');
 check(
   /await window\.ContactsApi\.resolveContextAsync\(\)/.test(linkButton),
   'contacts-link-button.js doOpen() awaits resolveContextAsync()'
 );
 check(
   /await window\.ContactsApi\.resolveContextAsync\(\)/.test(canvas),
-  'contacts-canvas.js loadCanvas() awaits resolveContextAsync()'
+  'contacts-canvas.js awaits resolveContextAsync()'
 );
 {
   const canvasAsyncCalls = (canvas.match(/ContactsApi\.resolveContextAsync\(\)/g) || []).length;
   const linkButtonAsyncCalls = (linkButton.match(/ContactsApi\.resolveContextAsync\(\)/g) || []).length;
-  check(canvasAsyncCalls === 1, `contacts-canvas.js calls resolveContextAsync() exactly once, got ${canvasAsyncCalls}`);
+  check(
+    canvasAsyncCalls === 2,
+    `contacts-canvas.js calls resolveContextAsync() twice (loadCanvas + resume), got ${canvasAsyncCalls}`
+  );
   check(
     linkButtonAsyncCalls === 1,
     `contacts-link-button.js calls resolveContextAsync() exactly once, got ${linkButtonAsyncCalls}`
   );
+  check(
+    /checkResumableFamilySession[\s\S]*resolveContextAsync\(\)/.test(canvas),
+    'checkResumableFamilySession uses the async resolver so resume works on document tasks'
+  );
 }
+
+console.log('\n--- async resolver refuses a stale id if the SPA moves during the fetch ---');
+{
+  const asyncFn = api.slice(api.indexOf('async function resolveContextAsync()'));
+  check(/hrefAtStart/.test(asyncFn), 'resolveContextAsync snapshots location.href before any await');
+  check(
+    /location\.href !== hrefAtStart/.test(asyncFn),
+    'resolveContextAsync re-reads location.href after the task→patient fetch'
+  );
+}
+
+console.log('\n--- family cycling from a task-overview page does not no-op-reload ---');
+check(
+  /patient\/patient\/care-record\//.test(canvas),
+  'buildNavigationUrl falls back to the canonical care-record path when the URL has no patient UUID'
+);
+check(
+  /if \(!dest \|\| dest === location\.href\)/.test(canvas),
+  'advanceToNextFamilyMember refuses before persist when dest is missing or unchanged'
+);
+check(
+  canvas.indexOf('const dest = buildNavigationUrl') <
+    canvas.indexOf('await persistFamilySession(session, targetName)'),
+  'dest is computed before persistFamilySession so a failed build cannot poison the session'
+);
 
 console.log('\n--- every other call site (the pre-write guards) stays synchronous ---');
 {
