@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.258.1] — 2026-09-05
+
+### Fix: Contacts canvas on document-filing tasks
+
+"Manage this patient's contacts" opened from a document-filing task
+overview always failed with "Could not identify the current patient" —
+these pages carry no patient UUID in the URL or a reliably DOM-scrapeable
+one. The identity resolver now falls back to the same task→patient API
+lookup other Companion features already use from the same kind of page,
+only from the canvas's cold "first open" / resume entry points; every
+pre-write wrong-patient guard elsewhere in the canvas stays synchronous
+and untouched. Follow-up: family cycling from a task-overview page now
+navigates to the canonical care-record URL instead of a no-op reload
+(those pages have no patient UUID to swap); the async resolver refuses
+a stale id if the SPA moves during the fetch. Confirmed live.
+
 ## [v3.258.0] — 2026-09-04
 
 ### Forecast — days at risk (practice-manager look-ahead) + UK bank-holiday calendar
