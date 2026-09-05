@@ -44,6 +44,25 @@
     return _relationshipsDataPromise;
   }
 
+  // Same ch-debug convention as content-scripts/repeat-prescribing-pills.js
+  // and triage-lens/content.js: localStorage.setItem('ch-debug','1') +
+  // reload turns this on.
+  function _dbgOn() {
+    try {
+      return localStorage.getItem('ch-debug') === '1';
+    } catch (_) {
+      return false;
+    }
+  }
+  function _dbg() {
+    if (!_dbgOn()) return;
+    try {
+      console.log.apply(console, ['[Contacts]'].concat(Array.prototype.slice.call(arguments)));
+    } catch (_) {
+      /* logging must never break the widget */
+    }
+  }
+
   // ── Identity / API base resolution ───────────────────────────────────────────────────────────
 
   // Task-overview pages (e.g. a document-filing task, /tasks/data/document/
@@ -93,17 +112,36 @@
   // empty AND the URL is a recognised task-overview page.
   async function resolveContextAsync() {
     const API = window.SentinelApiClient;
+    _dbg('resolveContextAsync: location.href =', location.href, 'hasSentinelApiClient =', !!API);
     if (!API) return null;
     const ctx = API.detectMedicusContext(location.href);
-    if (!ctx || !ctx.apiBase) return null;
+    _dbg('resolveContextAsync: detectMedicusContext ->', JSON.stringify(ctx));
+    if (!ctx || !ctx.apiBase) {
+      _dbg('resolveContextAsync: no ctx / no apiBase — giving up before any fetch');
+      return null;
+    }
     let patientId = ctx.patientUuid || API.findPatientUuidFromDom(document);
+    _dbg('resolveContextAsync: patientId from URL/DOM ->', patientId);
     if (!patientId && ctx.taskTypeSlug && ctx.taskUuid && typeof API.resolveTaskToPatient === 'function') {
       if (_taskPatientCache.has(ctx.taskUuid)) {
         patientId = _taskPatientCache.get(ctx.taskUuid);
+        _dbg('resolveContextAsync: patientId from cache ->', patientId);
       } else {
+        _dbg('resolveContextAsync: calling resolveTaskToPatient', ctx.apiBase, ctx.taskTypeSlug, ctx.taskUuid);
         patientId = await API.resolveTaskToPatient(ctx.apiBase, ctx.taskTypeSlug, ctx.taskUuid);
+        _dbg('resolveContextAsync: resolveTaskToPatient ->', patientId);
         if (patientId) _taskPatientCache.set(ctx.taskUuid, patientId);
       }
+    } else if (!patientId) {
+      _dbg(
+        'resolveContextAsync: no patientId and no usable taskTypeSlug/taskUuid to fall back on',
+        'taskTypeSlug =',
+        ctx.taskTypeSlug,
+        'taskUuid =',
+        ctx.taskUuid,
+        'hasResolveTaskToPatient =',
+        typeof API.resolveTaskToPatient === 'function'
+      );
     }
     if (!patientId) return null;
     return { apiBase: ctx.apiBase, patientId };
