@@ -442,7 +442,13 @@
   }
 
   async function loadCanvas() {
-    const ctx = window.ContactsApi.resolveContext();
+    // Async resolver: this is the canvas's cold first-open, potentially
+    // from a task-overview page (e.g. a document-filing task) with no
+    // patient UUID in the URL or DOM — see contacts-api.js's
+    // resolveContextAsync() header comment. Every other resolveContext()
+    // call in this file (pre-write guards) stays synchronous; the fetch
+    // this makes warms the cache they read from.
+    const ctx = await window.ContactsApi.resolveContextAsync();
     if (!ctx) {
       cs.error = 'Could not identify the current patient — try reloading the page.';
       cs.loading = false;
