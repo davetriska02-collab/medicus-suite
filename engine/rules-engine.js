@@ -926,6 +926,16 @@
       }
       const useFloor = rule.useQofYearFloor !== false;
       facts.push({ label: 'Window', value: useFloor ? 'QOF year floor (1 Apr)' : `last ${check.withinDays || 365}d` });
+    } else if (check.kind === 'pathway-bundle') {
+      const pb = ctx.pathwayBundle;
+      (pb && pb.groups ? pb.groups : check.groups || []).forEach((g) => {
+        facts.push({
+          label: g.label || g.id || 'Pathway code',
+          value: g.met ? 'recorded' : 'not recorded',
+        });
+      });
+      if (pb && pb.path) facts.push({ label: 'Achievement path', value: pb.path });
+      facts.push({ label: 'Window', value: 'QOF year (coded pathway, not drug names)' });
     } else if (check.kind === 'medication-present') {
       facts.push({
         label: 'Medication',
@@ -1358,7 +1368,7 @@
   }
 
   // QOF register rule evaluator -> chip if patient is on register
-  function evaluateQofRegisterRule(rule, data) {
+  function evaluateQofRegisterRule(rule, data, now) {
     const traceEntry = _traceBase(data, rule);
     if (!passesAgeFilter(registerAgeRange(rule), data.patientContext)) {
       if (traceEntry) traceEntry.skipReason = 'age-filter';
@@ -1368,7 +1378,7 @@
       if (traceEntry) traceEntry.skipReason = 'sex-filter';
       return [];
     }
-    const result = patientOnRegister(data.problems, rule, data.patientRegisters);
+    const result = patientMeetsRegister(data, rule, now || (data.patientContext && data.patientContext.now) || new Date().toISOString());
     if (!result || !result.matched) {
       if (traceEntry) traceEntry.skipReason = 'not-on-register';
       return [];
@@ -1547,6 +1557,366 @@
     }
     if (excludesProblems.some((exc) => probs.some((p) => problemLabelMatchesTerm(p.label, exc)))) return false;
     return true;
+  }
+
+  // === OBES2 / TA1026 COHORT (QOF OB005) ===
+  // PCIT OB005 denominator is OBES2_REG, not the general obesity register:
+  // age ≥18 + raised BMI in the contract year (35, or 32.5 if ethnicity-adjusted)
+  // + at least 4 of 5 comorbidities. Numerator is three pathway *codes*
+  // (not drug brand names). PCAs remove eligibility unless already achieved.
+  //
+  // These helpers are data-driven from registerRule.cohort / rule.check.groups
+  // / rule.pca so SNOMED lists can be extended without engine edits.
+
+  function isoDay(value) {
+    if (!value) return '';
+    if (typeof value === 'string') return value.slice(0, 10);
+    if (value instanceof Date && !isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+    return '';
+  }
+
+  function dayInRange(dateVal, start, end) {
+    const day = isoDay(dateVal);
+    if (!day) return false;
+    return day >= isoDay(start) && day <= isoDay(end);
+  }
+
+  function qofYearWindow(nowIso) {
+    const start = qofYearStart(nowIso);
+    const y = start.getUTCFullYear();
+    const end = new Date(Date.UTC(y + 1, 2, 31));
+    const prevStart = new Date(Date.UTC(y - 1, 3, 1));
+    const prevEnd = new Date(Date.UTC(y, 2, 31));
+    const carryFrom = new Date(Date.UTC(y - 1, 9, 1));
+    const carryTo = new Date(Date.UTC(y, 8, 30));
+    const last90Start = new Date(Date.UTC(y + 1, 2, 31) - 90 * 24 * 60 * 60 * 1000);
+    const last3MonthsStart = new Date(Date.UTC(y + 1, 0, 1));
+    return { start, end, prevStart, prevEnd, carryFrom, carryTo, last90Start, last3MonthsStart };
+  }
+
+  function cohortTermHitsLabel(label, term) {
+    if (!term) return false;
+    const l = String(label || '').toLowerCase();
+    if (!registerTermInLabel(l, term) && !l.includes(String(term).toLowerCase())) return false;
+    return problemLabelMatchesTerm(label, term);
+  }
+
+  function itemCodeHits(item, snomed) {
+    if (!Array.isArray(snomed) || !snomed.length || !item) return false;
+    const codes = [item.code, item.conceptId, item.snomed, item.problemCode && item.problemCode.conceptId]
+      .filter(Boolean)
+      .map((c) => String(c));
+    return snomed.some((s) => codes.includes(String(s)));
+  }
+
+  function latestItemDate(items, pickDate) {
+    let latest = null;
+    (items || []).forEach((item) => {
+      const raw = pickDate(item);
+      const day = isoDay(raw);
+      if (!day) return;
+      if (!latest || day > latest) latest = day;
+    });
+    return latest;
+  }
+
+  function collectNamedEvents(data, spec) {
+    const match = spec.match || [];
+    const snomed = spec.snomed || [];
+    const fromObs = filterMatchingObservations(data.observations || [], { match, snomed });
+    const fromHist = filterMatchingObservationHistoryPoints(data.observationHistory || [], { match, snomed });
+    const fromProblems = [];
+    const allProblems = [...(data.problems || []), ...(data.pastProblems || [])];
+    allProblems.forEach((p) => {
+      const textHit = match.some((t) => cohortTermHitsLabel(p.label, t) || String(p.label || '').toLowerCase().includes(String(t).toLowerCase()));
+      if (textHit || itemCodeHits(p, snomed)) fromProblems.push(p);
+    });
+    return { observations: fromObs, history: fromHist, problems: fromProblems };
+  }
+
+  function eventsInWindow(data, spec, start, end) {
+    const ev = collectNamedEvents(data, spec);
+    const hits = [];
+    ev.observations.forEach((o) => {
+      if (dayInRange(o.date, start, end)) hits.push({ source: 'observation', date: o.date, name: o.name });
+    });
+    ev.history.forEach((o) => {
+      if (dayInRange(o.date, start, end)) hits.push({ source: 'history', date: o.date, name: o.name });
+    });
+    ev.problems.forEach((p) => {
+      const d = p.codedDate || p.date;
+      if (dayInRange(d, start, end)) hits.push({ source: 'problem', date: d, name: p.label });
+    });
+    return hits;
+  }
+
+  function hasEventInWindow(data, spec, start, end) {
+    return eventsInWindow(data, spec, start, end).length > 0;
+  }
+
+  function hasEventEver(data, spec) {
+    const ev = collectNamedEvents(data, spec);
+    return ev.observations.length + ev.history.length + ev.problems.length > 0;
+  }
+
+  function hasMatchingMedication(medications, matchTerms, excludeTerms) {
+    const match = matchTerms || [];
+    const exclude = excludeTerms || [];
+    return (medications || []).some((m) => {
+      const norm = normaliseDrugString(m.name);
+      if (exclude.some((t) => norm.includes(normaliseDrugString(t)))) return false;
+      return match.some((t) => norm.includes(normaliseDrugString(t)));
+    });
+  }
+
+  function hasAdjustedEthnicity(patientContext, problems, ethnicityTerms) {
+    const terms = (ethnicityTerms || []).map((t) => String(t).toLowerCase());
+    if (!terms.length) return false;
+    const blobs = [
+      patientContext && patientContext.ethnicity,
+      patientContext && patientContext.familyBackground,
+      patientContext && patientContext.ethnicGroup,
+    ]
+      .filter(Boolean)
+      .map((s) => String(s).toLowerCase());
+    (problems || []).forEach((p) => {
+      const l = String(p.label || '').toLowerCase();
+      if (l.includes('ethnic') || l.includes('family background')) blobs.push(l);
+    });
+    return blobs.some((blob) => terms.some((t) => blob.includes(t)));
+  }
+
+  function collectBmiReadings(data, matchTerms) {
+    const match = matchTerms && matchTerms.length ? matchTerms : ['bmi', 'body mass index'];
+    const fromObs = filterMatchingObservations(data.observations || [], { match });
+    const fromHist = filterMatchingObservationHistoryPoints(data.observationHistory || [], { match });
+    const byDate = new Map();
+    fromObs.concat(fromHist).forEach((o) => {
+      if (!o || !o.date) return;
+      const key = isoDay(o.date);
+      if (!key) return;
+      const existing = byDate.get(key);
+      if (!existing || parseNumeric(o.value) > parseNumeric(existing.value)) byDate.set(key, o);
+    });
+    return Array.from(byDate.values());
+  }
+
+  function findRaisedBmi(data, cohort, window) {
+    const ctx = data.patientContext || {};
+    const adjusted = hasAdjustedEthnicity(ctx, data.problems, cohort.ethnicityTerms);
+    const threshold = adjusted ? cohort.bmiEthnicityAdjusted || 32.5 : cohort.bmiStandard || 35;
+    const readings = collectBmiReadings(data, cohort.bmiObservation);
+    const inYear = readings.filter((o) => dayInRange(o.date, window.start, window.end));
+    const qualifying = inYear
+      .filter((o) => {
+        const v = parseNumeric(o.value);
+        return v != null && v >= threshold;
+      })
+      .sort((a, b) => isoDay(b.date).localeCompare(isoDay(a.date)));
+    return {
+      threshold,
+      adjusted,
+      obs: qualifying[0] || null,
+      earliest: qualifying.length ? qualifying[qualifying.length - 1] : null,
+      inYearCount: inYear.length,
+    };
+  }
+
+  function problemActiveNotSuperseded(data, matchTerms, resolvedTerms, snomed) {
+    const all = [...(data.problems || []), ...(data.pastProblems || [])];
+    const active = all.filter((p) => (matchTerms || []).some((t) => cohortTermHitsLabel(p.label, t)) || itemCodeHits(p, snomed));
+    if (!active.length) return { met: false, superseded: false };
+    const resolved = all.filter((p) =>
+      (resolvedTerms || []).some((t) => String(p.label || '').toLowerCase().includes(String(t).toLowerCase()) || cohortTermHitsLabel(p.label, t))
+    );
+    const latestActive = latestItemDate(active, (p) => p.codedDate || p.date);
+    const latestResolved = latestItemDate(resolved, (p) => p.codedDate || p.date);
+    if (resolved.length && (!latestActive || (latestResolved && latestResolved >= latestActive))) {
+      return { met: false, superseded: true };
+    }
+    return { met: true, superseded: false };
+  }
+
+  function hasDyslipidaemia(data, spec) {
+    if (hasMatchingMedication(data.medications, spec.statinMatch, spec.statinExclude)) return true;
+    const ldl = findLatestObservation(data.observations, { match: (spec.ldl && spec.ldl.observation) || ['ldl'] });
+    const ldlV = ldl ? parseNumeric(ldl.value) : null;
+    if (ldlV != null && ldlV >= ((spec.ldl && spec.ldl.value) || 4.1)) return true;
+    const tg = findLatestObservation(data.observations, {
+      match: (spec.triglycerides && spec.triglycerides.observation) || ['triglyceride'],
+    });
+    const tgV = tg ? parseNumeric(tg.value) : null;
+    if (tgV != null && tgV >= ((spec.triglycerides && spec.triglycerides.value) || 1.7)) return true;
+    const hdl = findLatestObservation(data.observations, { match: (spec.hdl && spec.hdl.observation) || ['hdl'] });
+    const hdlV = hdl ? parseNumeric(hdl.value) : null;
+    if (hdlV != null) {
+      const sex = String((data.patientContext || {}).sex || (data.patientContext || {}).gender || '').toLowerCase();
+      const maleMax = (spec.hdl && spec.hdl.maleMax) != null ? spec.hdl.maleMax : 1;
+      const femaleMax = (spec.hdl && spec.hdl.femaleMax) != null ? spec.hdl.femaleMax : 1.3;
+      if (sex.startsWith('m') && hdlV < maleMax) return true;
+      if (sex.startsWith('f') && hdlV < femaleMax) return true;
+      if (!sex && hdlV < femaleMax) return true;
+    }
+    return false;
+  }
+
+  function evaluateObes2Comorbidities(data, cohort) {
+    const items = [];
+    (cohort.comorbidities || []).forEach((c) => {
+      let met = false;
+      let detail = null;
+      if (c.kind === 'problem') {
+        const all = [...(data.problems || []), ...(data.pastProblems || [])];
+        const hit = all.find((p) => (c.match || []).some((t) => cohortTermHitsLabel(p.label, t)) || itemCodeHits(p, c.snomed));
+        met = !!hit;
+        detail = hit ? hit.label : null;
+      } else if (c.kind === 'problem-unresolved') {
+        const r = problemActiveNotSuperseded(data, c.match, c.resolvedMatch, c.snomed);
+        met = r.met;
+        detail = r.superseded ? 'superseded by resolved code' : r.met ? 'active' : null;
+      } else if (c.kind === 'dyslipidaemia') {
+        met = hasDyslipidaemia(data, c);
+        detail = met ? 'statin or lipid thresholds' : null;
+      }
+      items.push({ id: c.id, met, detail });
+    });
+    const metCount = items.filter((i) => i.met).length;
+    return { items, metCount, required: cohort.minComorbidities || 4 };
+  }
+
+  function evaluateObes2Membership(registerRule, data, now) {
+    const cohort = registerRule.cohort || {};
+    const window = qofYearWindow(now);
+    if (!passesAgeFilter(registerAgeRange(registerRule), data.patientContext)) {
+      return { matched: false, reason: 'age', window };
+    }
+    const bmi = findRaisedBmi(data, cohort, window);
+    if (!bmi.obs) return { matched: false, reason: 'no-raised-bmi', bmi, window };
+    const comorbid = evaluateObes2Comorbidities(data, cohort);
+    if (comorbid.metCount < comorbid.required) {
+      return { matched: false, reason: 'comorbidities', bmi, comorbid, window };
+    }
+    return {
+      matched: true,
+      source: 'obes2-cohort',
+      bmi,
+      comorbid,
+      window,
+      problem: {
+        label: `BMI ${bmi.obs.value} (≥${bmi.threshold}${bmi.adjusted ? ', ethnicity-adjusted' : ''}); ${comorbid.metCount}/${comorbid.items.length} comorbidities`,
+        codedDate: bmi.obs.date,
+      },
+    };
+  }
+
+  function patientMeetsRegister(data, registerRule, now) {
+    if (!registerRule) return null;
+    if (registerRule.membershipKind === 'bmi-comorbidity-cohort') {
+      return evaluateObes2Membership(registerRule, data, now);
+    }
+    return patientOnRegister(data.problems, registerRule, data.patientRegisters);
+  }
+
+  function pathwayGroupsMet(data, groups, start, end) {
+    return (groups || []).map((g) => ({
+      id: g.id,
+      label: g.label || g.id,
+      met: hasEventInWindow(data, g, start, end),
+    }));
+  }
+
+  function allPathwayGroupsMet(results) {
+    return results.length > 0 && results.every((r) => r.met);
+  }
+
+  function evaluatePathwayBundle(rule, data, now) {
+    const check = rule.check || {};
+    const groups = check.groups || [];
+    const window = qofYearWindow(now);
+    const inYear = pathwayGroupsMet(data, groups, window.start, window.end);
+    if (allPathwayGroupsMet(inYear)) {
+      return { status: 'achieved', path: 'in-year', groups: inYear, window };
+    }
+    const carry = check.carryOver;
+    if (carry) {
+      const carryResults = pathwayGroupsMet(data, groups, window.carryFrom, window.carryTo);
+      const prevYear = pathwayGroupsMet(data, groups, window.prevStart, window.prevEnd);
+      const prevBmi = findRaisedBmi(data, (data._registerLookup && data._registerLookup[rule.requiresRegister] && data._registerLookup[rule.requiresRegister].cohort) || {}, {
+        start: window.prevStart,
+        end: window.prevEnd,
+      });
+      const achievedPrevYear = !!prevBmi.obs && allPathwayGroupsMet(prevYear);
+      if (allPathwayGroupsMet(carryResults) && !achievedPrevYear) {
+        return { status: 'achieved', path: 'carry-over', groups: carryResults, window };
+      }
+    }
+    const metCount = inYear.filter((r) => r.met).length;
+    return {
+      status: metCount === 0 ? 'not_met' : 'not_met',
+      path: 'in-year-incomplete',
+      groups: inYear,
+      window,
+    };
+  }
+
+  function evaluateObes2Pcas(rule, data, now, pathwayResult) {
+    const pca = rule.pca;
+    if (!pca) return null;
+    const window = (pathwayResult && pathwayResult.window) || qofYearWindow(now);
+    const everProblem = pca.everProblem || {};
+    for (const [cluster, terms] of Object.entries(everProblem)) {
+      const spec = Array.isArray(terms) ? { match: terms } : terms;
+      if (hasEventEver(data, spec)) return cluster;
+    }
+    if (pca.drugWithoutCode) {
+      const dw = pca.drugWithoutCode;
+      const hasDrug = hasMatchingMedication(data.medications, dw.medicationMatch, dw.medicationExclude);
+      const codeGroup = ((rule.check && rule.check.groups) || []).find((g) => g.id === dw.codeGroupId);
+      const hasCode = codeGroup ? hasEventInWindow(data, codeGroup, window.start, window.end) : false;
+      if (hasDrug && !hasCode) return 'drug-without-code';
+    }
+    for (const spec of pca.observationsInYear || []) {
+      if (hasEventInWindow(data, spec, window.start, window.end)) return spec.id || 'pca-observation';
+    }
+    if (pca.invitedTwice) {
+      const inv = pca.invitedTwice;
+      const hits = eventsInWindow(data, inv, window.start, window.end)
+        .map((h) => isoDay(h.date))
+        .filter(Boolean)
+        .sort();
+      const uniq = [...new Set(hits)];
+      const minDays = inv.minDaysApart != null ? inv.minDaysApart : 7;
+      const minCount = inv.minCount != null ? inv.minCount : 2;
+      if (uniq.length >= minCount) {
+        for (let i = 0; i < uniq.length; i++) {
+          for (let j = i + 1; j < uniq.length; j++) {
+            const a = new Date(uniq[i] + 'T00:00:00Z');
+            const b = new Date(uniq[j] + 'T00:00:00Z');
+            if ((b - a) / 86400000 >= minDays) return 'invited-twice';
+          }
+        }
+      }
+    }
+    if (pca.lateBmiDays != null && pathwayResult && pathwayResult.status !== 'achieved') {
+      const registerRule = data._registerLookup && rule.requiresRegister ? data._registerLookup[rule.requiresRegister] : null;
+      const cohort = (registerRule && registerRule.cohort) || {};
+      const bmi = findRaisedBmi(data, cohort, window);
+      // PCIT: newly eligible only when the first qualifying raised BMI of the
+      // year falls in the last 90 days. An earlier in-year raised BMI means
+      // they were already on the denominator.
+      if (bmi.earliest && dayInRange(bmi.earliest.date, window.last90Start, window.end)) {
+        const priorPca = (pca.observationsInYear || []).some((spec) =>
+          hasEventInWindow(data, spec, window.prevStart, window.prevEnd)
+        );
+        if (!priorPca) return 'late-bmi';
+      }
+    }
+    if (pca.newRegistrationMonths != null) {
+      const ctx = data.patientContext || {};
+      const regDate = ctx.registeredDate || ctx.dateRegistered || ctx.registeredOn;
+      if (regDate && dayInRange(regDate, window.last3MonthsStart, window.end)) return 'new-registration';
+    }
+    return null;
   }
 
   // === DRUG-COMBO EVALUATOR ===
@@ -1981,7 +2351,7 @@
         if (traceEntry) traceEntry.skipReason = 'register-precondition';
         return []; // register rule not configured/disabled
       }
-      const reg = patientOnRegister(data.problems, registerRule, data.patientRegisters);
+      const reg = patientMeetsRegister(data, registerRule, now);
       if (!reg || !reg.matched) {
         if (traceEntry) traceEntry.skipReason = 'register-precondition';
         return [];
@@ -2364,6 +2734,18 @@
       dateText = latestBundleDate;
       if (latestBundleDate) days = daysBetween(latestBundleDate, now);
       evidenceCtx.bundleResults = bundleResults;
+    } else if (check.kind === 'pathway-bundle') {
+      // pathway-bundle: all listed coded groups in the QOF year, or the
+      // 6+6 month carry-over window if not achieved last year. Used by OB005.
+      const pathway = evaluatePathwayBundle(rule, data, now);
+      status = pathway.status;
+      evidenceCtx.pathwayBundle = pathway;
+      const metCount = (pathway.groups || []).filter((g) => g.met).length;
+      const totalCount = (pathway.groups || []).length;
+      valueText =
+        pathway.path === 'carry-over'
+          ? `${metCount}/${totalCount} pathway codes (6+6 carry-over)`
+          : `${metCount}/${totalCount} pathway codes`;
     } else if (check.kind === 'medication-all-of') {
       // medication-all-of: each group in check.groups must be satisfied by at
       // least one current medication. Used by HF009 four-pillar therapy check.
@@ -2502,6 +2884,16 @@
         }
       }
       // status remains 'no_data' when no history entry found or history array is empty
+    }
+
+    // PCIT: achievement later in the year overrides exclusions. Only apply
+    // PCA removals when the numerator is not already achieved.
+    if (status !== 'achieved' && rule.pca) {
+      const pcaHit = evaluateObes2Pcas(rule, data, now, evidenceCtx.pathwayBundle || { status, window: qofYearWindow(now) });
+      if (pcaHit) {
+        if (traceEntry) traceEntry.skipReason = 'pca:' + pcaHit;
+        return [];
+      }
     }
 
     if (traceEntry) {
@@ -2683,7 +3075,7 @@
       if (type === 'composite') return;
       let out = [];
       if (type === 'drug-monitoring') out = evaluateDrugRule(rule, data, now);
-      else if (type === 'qof-register') out = evaluateQofRegisterRule(rule, data);
+      else if (type === 'qof-register') out = evaluateQofRegisterRule(rule, data, now);
       else if (type === 'qof-indicator') out = evaluateQofIndicatorRule(rule, data, now);
       else if (type === 'drug-combo') out = evaluateDrugComboRule(rule, data);
       else if (type === 'drug-allergy') out = evaluateDrugAllergyRule(rule, data);
@@ -3119,6 +3511,12 @@
     daysBetween,
     qofYearStart,
     qofYearLabel,
+    qofYearWindow,
+    patientMeetsRegister,
+    evaluateObes2Membership,
+    evaluateObes2Comorbidities,
+    evaluatePathwayBundle,
+    evaluateObes2Pcas,
     parseBp,
     parseNumeric,
     resolveEffectiveInterval,

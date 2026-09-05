@@ -67,6 +67,11 @@ const QOF_PATIENT_ACTION = [
     'A rheumatoid arthritis review is due.',
     'This check helps make sure your arthritis treatment is working well.',
   ],
+  [
+    'OBES2',
+    'An obesity pharmacotherapy and wraparound-support review is due.',
+    'This check is here to help you with a funded weight-management pathway.',
+  ],
   ['OB', 'A weight management review is due.', 'This check is here to help you with your weight and health goals.'],
   ['SMOK', 'A stop-smoking review is due.', 'This check can help you get support to stop smoking.'],
   ['LD', 'An annual health check is due.', 'This yearly check is to help keep you as healthy as possible.'],

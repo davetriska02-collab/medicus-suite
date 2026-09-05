@@ -39,6 +39,7 @@ const IMPLEMENTED_KINDS = new Set([
   'observation-trend',
   'medication-present',
   'medication-all-of',
+  'pathway-bundle',
 ]);
 
 // ── QOF-indicator rules ───────────────────────────────────────────────────────
@@ -55,6 +56,15 @@ qofIndicators.forEach((rule) => {
     return;
   }
   check(IMPLEMENTED_KINDS.has(rule.check.kind), `${rule.id}: check.kind "${rule.check.kind}" is in IMPLEMENTED_KINDS`);
+  if (rule.check.kind === 'pathway-bundle') {
+    check(Array.isArray(rule.check.groups) && rule.check.groups.length > 0, `${rule.id}: pathway-bundle has non-empty groups`);
+    (rule.check.groups || []).forEach((g) => {
+      check(!!g.id, `${rule.id}: pathway group has id`);
+      const hasMatch = Array.isArray(g.match) && g.match.length > 0;
+      const hasSnomed = Array.isArray(g.snomed) && g.snomed.length > 0;
+      check(hasMatch || hasSnomed, `${rule.id}: group ${g.id || '?'} has match or snomed`);
+    });
+  }
 });
 
 // ── Vaccine rules ─────────────────────────────────────────────────────────────

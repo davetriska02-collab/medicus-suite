@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "lastUpdated": "2026-08-22",
+  "lastUpdated": "2026-09-05",
   "specVersion": "QOF 2026/27",
   "source": "NHS England PRN02356 - Quality and Outcomes Framework guidance for 2026/27 (effective 1 April 2026). Underpinned by NICE indicator menu IDs where shown in indicator notes. NOTE (qof-007, 2026-07-25): a July 2026 amendment document exists (PRN02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf); content not readable this run (403) — next Keeper run should check all indicators against the amendment. DEM004 is the only indicator confirmed to have been wrong (now corrected in this run).",
-  "notes": "Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159. 2026-08-27: added medicusRegisterTypes to DM/DEM/HYP/AF/CHD/COPD/OB — Medicus's own clinical-summary endpoint returns a `patientRegisters` array with its own computed register membership (verified via a real HAR capture, test patient 01923625-8042-7071-a04d-1c610de03944), which the engine now prefers over problem-text-matching for these 7 registers when available (see patientOnRegister in rules-engine.js) — it is not subject to the stray 'family history of X' false-positive that text-matching can hit. Only these 7 registerType strings have been confirmed against real data; ASTHMA (and the remaining STIA/CKD/PAD/SMI/LD/HF registers) still use text-matching only until a HAR from a patient genuinely on each of those registers confirms the real registerType string — do not guess unconfirmed strings (same silent-failure caution as drug-rules.json match lists). 2026-08-27 follow-up: HAR from a genuine asthma-register patient (test patient 019235dd-c0e3-7234-85c9-931844b47691) confirmed registerType 'medicus-health/register-asthma' (note the register-X prefix, matching AF's pattern, not the -register suffix most others use) — added to ASTHMA. STIA/CKD/PAD/SMI/LD/HF remain unconfirmed.",
+  "notes": "2026-09-05: qof-reg-obes2 added (OBES2_REG / TA1026 cohort) and qof-ob005 rewritten to PCIT pathway codes — see those rules' notes. Register membership uses substring matching on problem labels (approximation of QOF SNOMED refsets). Indicator checks use the most recent matching observation within the indicator window. Frailty exclusion is implemented via excludeIfProblem on each affected indicator. Retired 25/26 indicators are kept disabled to make the year-on-year diff visible. This is a memory aid only; not for QOF claim purposes. 2026-06-04 (The Keeper): added the NEW 26/27 Obesity clinical area — OB register (enabled, BMI-driven so substring-approximated) plus indicators OB004/OB005 shipped DISABLED as drafts pending CSO confirmation of points/thresholds against PRN02356. 2026-06-10: enabled HF009 (medication-all-of engine support added) and DM037 (observation-bundle already supported). 2026-07-11 (The Keeper): added LD register; DEM004 (dementia care plan review); CKD002 (BP target) and CKD003 (ACEi/ARB in CKD+HYP+proteinuria); CHOL003 extended to PAD, STIA, CKD registers (3 new clones); CHOL004 extended to PAD and STIA registers (2 new clones; CKD explicitly NOT covered by CHOL004 per PRN02356). Primary PDF 403 that run — all corroborated via PRN02356 search. 2026-07-25 (The Keeper): CORRECTED DEM004 (30pts/60-90% → 14pts/35-70% — was wrong due to 403 on primary PDF); ENABLED OB register with ageMin:18 corrected (was 16, wrong for QOF 2026/27 definition); LD notes updated to clarify DES/enhanced-service status of annual health check; AF006 upper:95 CONFIRMED correct for 26/27 (proposed revert to 90% killed by VERIFIER-B). PRN02356 July 2026 amendment noted above. 2026-08-22 (The Keeper): added the rest of the SMI physical-health suite alongside MH011 — MH002 (care plan, 5pts 40-90%), MH003 (BP, 3pts), MH006 (BMI, 3pts), MH007 (alcohol, 3pts), MH012 (glucose/HbA1c, 7pts; diabetes excluded via excludeIfProblem, never bare 'diabetes') — all observation-recent on the SMI register, flat 12-month windows, verified against PRN02356 July 2026 update + NICE IND143/IND84/IND83/IND82/IND159. 2026-08-27: added medicusRegisterTypes to DM/DEM/HYP/AF/CHD/COPD/OB — Medicus's own clinical-summary endpoint returns a `patientRegisters` array with its own computed register membership (verified via a real HAR capture, test patient 01923625-8042-7071-a04d-1c610de03944), which the engine now prefers over problem-text-matching for these 7 registers when available (see patientOnRegister in rules-engine.js) — it is not subject to the stray 'family history of X' false-positive that text-matching can hit. Only these 7 registerType strings have been confirmed against real data; ASTHMA (and the remaining STIA/CKD/PAD/SMI/LD/HF registers) still use text-matching only until a HAR from a patient genuinely on each of those registers confirms the real registerType string — do not guess unconfirmed strings (same silent-failure caution as drug-rules.json match lists). 2026-08-27 follow-up: HAR from a genuine asthma-register patient (test patient 019235dd-c0e3-7234-85c9-931844b47691) confirmed registerType 'medicus-health/register-asthma' (note the register-X prefix, matching AF's pattern, not the -register suffix most others use) — added to ASTHMA. STIA/CKD/PAD/SMI/LD/HF remain unconfirmed.",
   "rules": [
     {
       "id": "qof-reg-dm",
@@ -256,7 +256,101 @@
         "history of obesity in family"
       ],
       "source": "QOF 26/27 OB register (NHS England PRN02356). ENABLED 2026-07-25 (The Keeper, qof-003 AMBER): register is active in QOF 2026/27. ageMin corrected from 16 to 18 simultaneously — the QOF register definition specifies adults aged 18+ (BMI ≥30, or ≥27.5 for South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean patients). VERIFIER-B confirmed at HIGH confidence from multiple NHS England QOF 2026/27 sources. CSO should review before first QOF claim.",
-      "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults aged 18+ with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching (ageMin:18 enforced to match QOF definition — 16-17 year olds are correctly excluded), which will MISS obese patients who have a recorded BMI but no 'obesity' problem label. Proper membership needs a BMI-observation-based register (engine extension) before this can be fully relied on. OB004/OB005 enabled 2026-08-28 once PRN02356 confirmed points/thresholds."
+      "notes": "NEW for 26/27. The true QOF Obesity register is BMI-driven (adults aged 18+ with a BMI ≥30, or ≥27.5 for people of South Asian, Chinese, other Asian, Middle Eastern, Black African or African-Caribbean family background, recorded in the preceding 12 months) — it is NOT a problem-coded register. Sentinel approximates it here with substring problem-matching (ageMin:18 enforced to match QOF definition — 16-17 year olds are correctly excluded), which will MISS obese patients who have a recorded BMI but no 'obesity' problem label. Proper membership needs a BMI-observation-based register (engine extension) before this can be fully relied on. OB004 still uses this general register. OB005 does NOT — it uses qof-reg-obes2 (OBES2_REG / TA1026 cohort)."
+    },
+    {
+      "id": "qof-reg-obes2",
+      "type": "qof-register",
+      "enabled": true,
+      "registerCode": "OBES2",
+      "registerName": "Obesity — TA1026 / OB005 cohort (OBES2_REG)",
+      "ageMin": 18,
+      "membershipKind": "bmi-comorbidity-cohort",
+      "cohort": {
+        "cluster": "OBES2_REG",
+        "bmiObservation": ["bmi", "body mass index"],
+        "bmiStandard": 35,
+        "bmiEthnicityAdjusted": 32.5,
+        "ethnicityTerms": [
+          "south asian",
+          "indian",
+          "pakistani",
+          "bangladeshi",
+          "sri lankan",
+          "chinese",
+          "other asian",
+          "asian",
+          "middle eastern",
+          "arab",
+          "black african",
+          "african-caribbean",
+          "african caribbean",
+          "black caribbean",
+          "caribbean"
+        ],
+        "minComorbidities": 4,
+        "comorbidities": [
+          {
+            "id": "ASCVD_COD",
+            "kind": "problem",
+            "match": [
+              "atherosclerotic",
+              "ischaemic heart",
+              "ischemic heart",
+              "myocardial infarction",
+              "myocardial ischaemia",
+              "coronary artery",
+              "angina",
+              "cerebrovascular accident",
+              "stroke",
+              "tia",
+              "transient ischaemic",
+              "transient ischemic",
+              "peripheral arterial",
+              "peripheral vascular",
+              "ihd"
+            ]
+          },
+          {
+            "id": "HYP_COD",
+            "kind": "problem-unresolved",
+            "match": ["hypertension", "hypertensive"],
+            "resolvedMatch": ["hypertension resolved"]
+          },
+          {
+            "id": "DYSLIP_COD",
+            "kind": "dyslipidaemia",
+            "statinMatch": [
+              "statin",
+              "atorvastatin",
+              "simvastatin",
+              "rosuvastatin",
+              "pravastatin",
+              "fluvastatin",
+              "pitavastatin",
+              "lipitor",
+              "crestor",
+              "zocor"
+            ],
+            "ldl": { "observation": ["ldl"], "value": 4.1 },
+            "triglycerides": { "observation": ["triglyceride"], "value": 1.7 },
+            "hdl": { "observation": ["hdl"], "maleMax": 1, "femaleMax": 1.3 }
+          },
+          {
+            "id": "OBSLPAPNOEA_COD",
+            "kind": "problem",
+            "match": ["obstructive sleep apn", "sleep apnea", "sleep apnoea"]
+          },
+          {
+            "id": "DMTYPE2_COD",
+            "kind": "problem-unresolved",
+            "match": ["type 2 diabetes", "type ii diabetes", "t2dm", "niddm"],
+            "resolvedMatch": ["diabetes resolved"]
+          }
+        ]
+      },
+      "source": "PCIT OB005 / QOF 26/27 OBES2_REG (NICE TA1026 funding-variation cohort). Distinct from the general QOF obesity register (BMI ≥30 / ≥27.5).",
+      "notes": "Engine-evaluated BMI + 4-of-5 comorbidity cohort. Ethnicity unknown uses the 35 kg/m² threshold (cannot apply the 32.5 adjustment without evidence). Dyslipidaemia is statin OR latest LDL/TG/HDL thresholds, not a problem label. Hypertension and T2DM are dropped when a resolved code is present and not followed by a later active code. This is a memory aid, not a QOF claim tool — SNOMED refset membership remains an approximation via substring / listed codes."
     },
     {
       "id": "qof-reg-ld",
@@ -1896,30 +1990,145 @@
       "enabled": true,
       "indicatorCode": "OB005",
       "indicatorName": "Weight-management pharmacotherapy / shared decision-making in obesity",
-      "requiresRegister": "OB",
+      "requiresRegister": "OBES2",
       "check": {
-        "kind": "medication-present",
-        "medicationMatch": [
-          "orlistat",
-          "xenical",
-          "liraglutide",
-          "victoza",
-          "saxenda",
-          "semaglutide",
-          "ozempic",
-          "wegovy",
-          "rybelsus",
-          "tirzepatide",
-          "mounjaro"
-        ]
+        "kind": "pathway-bundle",
+        "requireAll": true,
+        "groups": [
+          {
+            "id": "WTMGPHARM_COD",
+            "label": "Obesity pharmacotherapy pathway (coded, not drugs)",
+            "match": [
+              "nhs obesity medication pathway started",
+              "obesity medication pathway started"
+            ],
+            "snomed": ["2386231000000101"]
+          },
+          {
+            "id": "WTMGBSPREF_COD",
+            "label": "Wraparound behavioural support referral",
+            "match": [
+              "referral to nhs obesity medication wraparound",
+              "obesity medication wraparound support",
+              "weight management behavioural support"
+            ],
+            "snomed": ["2386201000000107"]
+          },
+          {
+            "id": "SHARDECMAK_COD",
+            "label": "Shared decision making",
+            "match": ["shared decision making"],
+            "snomed": [
+              "815691000000107",
+              "815791000000100",
+              "815751000000108",
+              "815731000000101",
+              "815711000000109"
+            ]
+          }
+        ],
+        "carryOver": {
+          "prevYearLastMonths": 6,
+          "currentYearFirstMonths": 6
+        }
+      },
+      "pca": {
+        "everProblem": {
+          "BARISURG_COD": {
+            "match": [
+              "bariatric",
+              "gastric band",
+              "sleeve gastrectomy",
+              "gastric bypass",
+              "roux-en-y",
+              "gastric sleeve"
+            ]
+          }
+        },
+        "drugWithoutCode": {
+          "medicationMatch": ["tirzepatide", "mounjaro"],
+          "codeGroupId": "WTMGPHARM_COD"
+        },
+        "observationsInYear": [
+          {
+            "id": "WTMGBSPSU_COD",
+            "match": [
+              "weight management behavioural support service unavailable",
+              "obesity wraparound support unavailable"
+            ]
+          },
+          {
+            "id": "WTMGPHARMPU_COD",
+            "match": ["unsuitable for nhs obesity medication pathway"],
+            "snomed": ["2386221000000103"]
+          },
+          {
+            "id": "XTIRZ_COD",
+            "match": ["adverse reaction to tirzepatide"],
+            "snomed": ["2385981000000100"]
+          },
+          {
+            "id": "SHARDECMAKPU_COD",
+            "match": ["shared decision making unsuitable"]
+          },
+          {
+            "id": "WTMGBSPPU_COD",
+            "match": [
+              "weight management support service unsuitable",
+              "weight management behavioural support unsuitable"
+            ]
+          },
+          {
+            "id": "OBPCAPU_COD",
+            "match": ["excepted from obesity quality indicators - patient unsuitable"],
+            "snomed": ["753751000000103"]
+          },
+          {
+            "id": "WTMGPHARMDEC_COD",
+            "match": ["nhs obesity medication pathway declined"],
+            "snomed": ["2386241000000105"]
+          },
+          {
+            "id": "SHARDECMAKDEC_COD",
+            "match": [
+              "shared decision making declined",
+              "chose not to have a shared decision"
+            ]
+          },
+          {
+            "id": "WTMGBSPREFDEC_COD",
+            "match": [
+              "obesity medication wraparound support declined",
+              "chose not to be referred to a weight management behavioural"
+            ]
+          },
+          {
+            "id": "OBPCADEC_COD",
+            "match": ["excepted from obesity quality indicators - informed dissent"],
+            "snomed": ["753771000000107"]
+          }
+        ],
+        "invitedTwice": {
+          "minCount": 2,
+          "minDaysApart": 7,
+          "match": [
+            "obesity monitoring invitation",
+            "obesity monitoring verbal invite",
+            "obesity monitoring telephone invite",
+            "quality indicator-related care invitation"
+          ],
+          "snomed": ["310428009", "185747003", "1109921000000106", "185748008"]
+        },
+        "lateBmiDays": 90,
+        "newRegistrationMonths": 3
       },
       "thresholds": {
         "lower": 50,
         "upper": 80
       },
       "points": 13,
-      "source": "QOF 26/27 OB005 (NHS England PRN02356): \"Percentage of eligible patients... who have a recorded shared decision-making discussion... and are offered NICE approved medicines management (pharmacotherapy)...\" 13pts, 50-80%; tirzepatide eligibility per NICE TA1026. CONFIRMED 2026-08-28 (The Keeper) by fetching the primary guidance in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf p.70-73 (indicator wording + rationale) and p.12 (Table of indicator changes: \"New indicator – 50-80%\" / \"New – 13 pts\") — both match the previously-corroborated values exactly.",
-      "notes": "ENABLED 2026-08-28 (The Keeper) — was shipped disabled pending CSO confirmation of points/thresholds; that confirmation is now done (see source) so the stated blocker is resolved. Brand list completed at the same time (per CLAUDE.md's brand-completeness expectation for substring-matched medications): added xenical (orlistat), victoza (liraglutide, diabetes-branded but still a genuine weight-management prescription when used off-label), ozempic and rybelsus (semaglutide — Ozempic especially is commonly prescribed off-label for weight loss and was a real gap, since the bare generic \"semaglutide\" substring never matches a purely brand-named script). The full QOF definition also requires a shared-decision-making conversation and behavioural-support referral, which Sentinel cannot verify — this rule approximates by checking for weight-management pharmacotherapy only, so it will under-count patients managed by shared decision-making without a drug. Tirzepatide (Mounjaro) eligibility is BMI/comorbidity-gated per NICE TA1026 and cannot be verified here. Relevant to this dispensing practice's GLP-1 weight-loss prescribing."
+      "source": "PCIT OB005 (https://support.primarycareit.co.uk/portal/en-gb/kb/articles/ob005#What_makes_a_patient_eligible) + QOF 26/27 PRN02356 13pts/50-80%. Denominator is OBES2_REG (TA1026 funding-variation cohort). Numerator is three pathway codes in the contract year (WTMGPHARM_COD / WTMGBSPREF_COD / SHARDECMAK_COD), not drug brand names. Rewritten 2026-09-05 to match PCIT eligibility/achievement/removals.",
+      "notes": "MATCHES PCIT OB005 as of 2026-09-05: denominator is qof-reg-obes2 (age ≥18, BMI ≥35 or ≥32.5 with coded adjusted ethnicity, ≥4 of 5 comorbidities) — not the general OB register. Achievement is the three NHS obesity-pathway codes (plus 6+6 carry-over if not achieved last year). Drug brand names (orlistat / GLP-1s) no longer count as achievement; a tirzepatide/Mounjaro script without WTMGPHARM_COD removes eligibility (T2DM use). PCAs implemented: ever bariatric surgery; listed unsuitable/declined/unavailable/contraindication codes; invited twice ≥7 days apart; late BMI in last 90 days of year without prior-year PCA; new registration in last 3 months of year when registeredDate is known. Achievement overrides PCAs. Residual limits: ethnicity unknown uses BMI ≥35; dyslipidaemia lipids use latest result not an in-year diagnosis code; ASCVD/OSA/HTN/T2DM are substring approximations of TRUD clusters; several PCA clusters have no published SNOMED members yet (placeholders wired by text); not a QOF claim tool."
     },
     {
       "id": "qof-dem004",

@@ -65,6 +65,7 @@ const QOF_ACTION_BY_PREFIX = [
   ['PAD', 'Book a peripheral arterial disease review'],
   ['STIA', 'Book a stroke/TIA review'],
   ['RA', 'Book a rheumatoid arthritis review'],
+  ['OBES2', 'Book an obesity pharmacotherapy / wraparound review'],
   ['OB', 'Book an obesity review'],
   ['SMOK', 'Book a smoking cessation review'],
   ['LD', 'Book an annual health check'],

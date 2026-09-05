@@ -1142,10 +1142,10 @@ check(!!ob004 && ob004.enabled === true, 'OB004 is now enabled');
 check(!/DRAFT/.test(ob004.indicatorName), 'OB004 indicatorName no longer carries the [DRAFT ... PENDING CONFIRMATION] marker');
 check(!!ob005 && ob005.enabled === true, 'OB005 is now enabled');
 check(!/DRAFT/.test(ob005.indicatorName), 'OB005 indicatorName no longer carries the [DRAFT ... PENDING CONFIRMATION] marker');
-check(
-  ['ozempic', 'rybelsus', 'xenical', 'victoza'].every((b) => ob005.check.medicationMatch.includes(b)),
-  'OB005 brand list completed (ozempic/rybelsus/xenical/victoza added — bare generics never match brand-only scripts)'
-);
+check(ob005.requiresRegister === 'OBES2', 'OB005 denominator is OBES2 (TA1026 / OBES2_REG), not the general OB register');
+check(ob005.check.kind === 'pathway-bundle', 'OB005 achievement is pathway-bundle (coded, not drug brand names)');
+check(ob005.points === 13 && ob005.thresholds.lower === 50 && ob005.thresholds.upper === 80, 'OB005 still 13pts / 50–80%');
+check(!ob005.check.medicationMatch, 'OB005 no longer treats listed drug brand names as achievement');
 {
   const obReg = qof.rules.find((r) => r.registerCode === 'OB');
   check(!!obReg && obReg.ageMin === 18, 'OB register still declares ageMin:18');
