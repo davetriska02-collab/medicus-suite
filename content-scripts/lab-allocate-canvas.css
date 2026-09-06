@@ -955,6 +955,40 @@
   background: var(--accent-dim);
 }
 
+#ms-lac-overlay .ms-lac-daybar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+#ms-lac-overlay .ms-lac-daybar .ms-lac-split-day {
+  margin: 0;
+}
+
+#ms-lac-overlay .ms-lac-daybar-summary {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+#ms-lac-overlay #ms-lac-day {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-1);
+  background: var(--bg-deep);
+}
+
+#ms-lac-overlay #ms-lac-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .ms-lac-split-note {
   margin: 0 0 8px;
   font-size: 11px;

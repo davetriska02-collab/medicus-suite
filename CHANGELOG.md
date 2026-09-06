@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.0] — 2026-09-06
+
+### Lab allocation canvas — who’s in tomorrow
+
+Night-before lab allocation could only flag **In today**. The prescribing
+canvas already lets you pick tomorrow’s appointment book; labs now have
+the same working-day control.
+
+- **Working day** (date, Today, Tomorrow) sits at the top of the clinician
+  rail. The appointment book for that date decides who is in. Default is
+  today.
+- Chip flags read **In today** or **In 8 Sep 2026**. In-day people sort to
+  the top. Absence warnings use the picked day, so staging onto someone
+  who is off tomorrow warns when you are allocating the night before.
+- People with a session on the picked day’s book appear as empty drop
+  fields even if they have no labs sitting yet — that is the view of who
+  is in. Switching back to today drops those empty fields. Cancelled
+  diaries and Away stay out. Nurses and other session-holders are included
+  (labs are not GP-only). Named GP is still a caption, never auto-placement.
+- No new write. Same captured appointment-book GET with `date=`, same W23
+  bulk-reassign confirm.
+
 ## [v3.260.0] — 2026-09-06
 
 ### Knowledge is practice-shared, not one-computer-only
