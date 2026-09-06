@@ -128,5 +128,19 @@ if (sm) {
   check(!!ex && new Set(KU.KB_DEFAULT_CATEGORIES.map(c => c.id)).has(ex.category), 'single example uses a default category id');
 }
 
+// ── extractKnowledgeFromParsed / wrapLiveKnowledge ────────────────────────────
+console.log('\n--- extractKnowledgeFromParsed ---');
+const wrapped = KU.wrapLiveKnowledge(
+  [{ id: 'a', title: 'DN SPA', category: 'contacts' }],
+  [{ id: 'contacts', name: 'Contacts' }],
+  '2026-09-06T12:00:00Z'
+);
+check(wrapped.format === KU.KB_LIVE_FORMAT && wrapped.items[0].id === 'a', 'wrapLiveKnowledge stamps the live-set format');
+const fromWrap = KU.extractKnowledgeFromParsed(wrapped);
+check(fromWrap.mode === 'replace' && fromWrap.items[0].id === 'a', 'live-set backup extracts as replace');
+check(KU.extractKnowledgeFromParsed({ entries: [{ title: 'X', category: 'referrals' }] }).mode === 'merge',
+  'LLM pack extracts as merge');
+check(!!KU.extractKnowledgeFromParsed({ nope: true }).error, 'unknown shape is an error');
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.260.0] — 2026-09-06
+
+### Knowledge is practice-shared, not one-computer-only
+
+Pete's report: uploading a Knowledge JSON populated beautifully on one PC and was empty everywhere else (home login, other Suite users in the same org). There was also no obvious way to save the live set after edits.
+
+**Root cause:** the live set was written only to `chrome.storage.local` (`knowledge.items` / `knowledge.categories`) — per browser profile. The practice-profile shared-folder channel already knew how to *apply* Knowledge, but import and edit never wrote that file.
+
+**What changed:**
+- Import, add, edit and delete write the live set through to `practice-profile.json` (the same shared store as published practice rules) whenever this computer can write the shared extension folder. Apply mode is `replace`, so one person's edit is the set everyone else receives.
+- The Knowledge tab and Options → Knowledge show whether the set is shared, read-only from the practice file, or local-only — and a **Share with practice** control to connect the folder (save as `practice-profile.json` next to `manifest.json`).
+- **Save backup** / **Save live set** downloads the current whole set as JSON; **Import** accepts that file, a suite Knowledge backup, or an LLM pack. After import the set is pushed to the shared store, not only local.
+- Other PCs already loading the extension from the shared folder pick the new set up within about 15 minutes (existing profile check) or on the next Knowledge-tab open.
+
+**Residual limits (no org cloud exists):**
+- Sync needs the shared-folder deployment (unpacked extension on a practice drive, or a remembered write handle to that `practice-profile.json`). A home PC that is not pointed at the folder stays local-only until it is, or until someone imports the backup JSON.
+- Concurrent edits to different entries are last-writer-wins for the whole set — there is no per-entry lock on a network file.
+- `knowledge.config.noticeAcknowledgedAt` stays per-install and is never pushed.
+
+**Tests:** `test-knowledge-sync.js` (import → shared profile → second `applyProfile` context sees the same entries; edit replace; local-only fallback).
+
 ## [v3.259.0] — 2026-09-05
 
 ### QOF OB005 matches PCIT TA1026 / OBES2_REG (pathway codes, not drugs)

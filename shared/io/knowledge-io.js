@@ -1,6 +1,7 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — Practice Knowledge IO helpers
-// Exports and imports the Knowledge module storage keys.
+// Exports and imports the Knowledge module storage keys (on-device cache).
+// The practice-shared live set is practice-profile.json via knowledge-sync.js.
 //
 // Import safety: entries are rendered to all practice staff, so every entry in
 // a backup is validated and whitelist-sanitised via KnowledgeUtils before it is

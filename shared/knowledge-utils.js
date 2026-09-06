@@ -292,10 +292,69 @@ After this line, the practice pastes the material to turn into the entry:
 `;
 }
 
+// ── Incoming JSON shapes ──────────────────────────────────────────────────────
+// The Knowledge tab and Options accept several JSON shapes as one import:
+//   1. Live set / knowledgeImport: { items: [...], categories?: [...] }
+//   2. Named live-set backup: { format: 'medicus-suite-knowledge', items, categories }
+//   3. Suite backup envelope: { format: 'medicus-suite-backup', modules: { knowledge } }
+//   4. LLM starter pack: { entries: [...] }, a bare array, or a single entry object
+//
+// mode 'replace' = the file is the whole live set (restore).
+// mode 'merge'   = append a pack (existing anti-bloat import).
+
+const KB_LIVE_FORMAT = 'medicus-suite-knowledge';
+const KB_BACKUP_FORMAT = 'medicus-suite-backup';
+
+function extractKnowledgeFromParsed(parsed) {
+  if (parsed == null) return { error: 'Nothing to import.' };
+  if (Array.isArray(parsed)) {
+    return { items: parsed, categories: undefined, mode: 'merge' };
+  }
+  if (typeof parsed !== 'object') return { error: 'Expected a JSON object or array of entries.' };
+
+  if (parsed.format === KB_BACKUP_FORMAT) {
+    const km = parsed.modules && parsed.modules.knowledge;
+    if (!km || typeof km !== 'object') {
+      return { error: 'This suite backup does not contain a Knowledge set.' };
+    }
+    return { items: km.items, categories: km.categories, mode: 'replace' };
+  }
+
+  if (parsed.format === KB_LIVE_FORMAT) {
+    if (!Array.isArray(parsed.items)) return { error: 'Knowledge set is missing an items array.' };
+    return { items: parsed.items, categories: parsed.categories, mode: 'replace' };
+  }
+
+  if (Array.isArray(parsed.items)) {
+    return { items: parsed.items, categories: parsed.categories, mode: 'replace' };
+  }
+
+  if (Array.isArray(parsed.entries)) {
+    return { items: parsed.entries, categories: undefined, mode: 'merge' };
+  }
+
+  if (typeof parsed.title === 'string' && typeof parsed.category === 'string') {
+    return { items: [parsed], categories: undefined, mode: 'merge' };
+  }
+
+  return { error: 'Expected a Knowledge backup, { "entries": [ ... ] }, or an array of entries.' };
+}
+
+function wrapLiveKnowledge(items, categories, exportedAt) {
+  return {
+    format: KB_LIVE_FORMAT,
+    formatVersion: 1,
+    exportedAt: exportedAt || new Date().toISOString(),
+    items: Array.isArray(items) ? items : [],
+    categories: Array.isArray(categories) ? categories : [],
+  };
+}
+
 const KnowledgeUtilsApi = {
-  KB_ID_RE, KB_DEFAULT_CATEGORIES, KB_SOURCES, KB_LIMITS,
+  KB_ID_RE, KB_DEFAULT_CATEGORIES, KB_SOURCES, KB_LIMITS, KB_LIVE_FORMAT, KB_BACKUP_FORMAT,
   validateEntry, sanitiseEntry, sanitiseCategories, generateEntryId,
   normaliseTitle, findSimilar, phiWarnings, kbSchemaPrompt, kbSingleEntryPrompt,
+  extractKnowledgeFromParsed, wrapLiveKnowledge,
 };
 
 if (typeof module !== 'undefined' && module.exports) {

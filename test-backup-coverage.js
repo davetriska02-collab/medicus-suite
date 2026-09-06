@@ -254,6 +254,7 @@ const ALLOWLIST = new Set([
   'suite.practiceProfile.notifiedVersions', // which profile versions have been notified
   'suite.practiceProfile.publisher', // Publisher-PC UI state for the practice-profile publish flow — not user config
   'suite.pdcContribute', // this machine's Cleanup Code Preferences contributor state (enabled flag + timing bookkeeping) — see shared/io/pdc-contribute.js, not user config
+  'suite.knowledgeSync', // this machine's Knowledge shared-folder push/pull bookkeeping — see shared/io/knowledge-sync.js, not the live set itself
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',

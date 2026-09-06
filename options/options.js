@@ -1051,6 +1051,13 @@ async function applyEnvelope(envelope) {
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
+  if (mods.knowledge && window.KnowledgeSync) {
+    try {
+      await window.KnowledgeSync.pushLiveKnowledge({ requestPermission: true });
+    } catch (_) {
+      /* local restore still succeeded; share is best-effort */
+    }
+  }
   return { notes };
 }
 
@@ -4431,7 +4438,161 @@ initPdcTallySection({
     el.textContent =
       `${items.length} entr${items.length === 1 ? 'y' : 'ies'} in the knowledge base` +
       (unreviewed ? ` — ${unreviewed} AI-generated and awaiting review (badge shown on the tab).` : '.');
+    await refreshSync();
   }
+
+  async function refreshSync() {
+    const el = $k('kboSync');
+    const KS = window.KnowledgeSync;
+    if (!el) return;
+    if (!KS) {
+      el.textContent =
+        'Only on this computer. Knowledge is stored in this browser profile until you share it via the practice folder.';
+      return;
+    }
+    const state = (await chrome.storage.local.get(KS.KNOWLEDGE_SYNC_STATE_KEY))[KS.KNOWLEDGE_SYNC_STATE_KEY] || {};
+    let hasHandle = false;
+    if (window.FsHandleStore) {
+      const h =
+        (await window.FsHandleStore.loadFileHandle('profileFile')) ||
+        (await window.FsHandleStore.loadFileHandle('pdcContribFile'));
+      hasHandle = !!h;
+    }
+    const ui = KS.describeSyncStatus(Object.assign({}, state, { hasHandle }));
+    el.textContent = ui.text;
+  }
+
+  async function pushKnowledge() {
+    const KS = window.KnowledgeSync;
+    if (!KS) return { reason: 'no-sync' };
+    return KS.pushLiveKnowledge({ requestPermission: true });
+  }
+
+  function setIoStatus(msg, isError) {
+    const el = $k('kboIoStatus');
+    if (!el) return;
+    el.style.color = isError ? 'var(--red, #b91c1c)' : 'var(--green, #16a34a)';
+    el.textContent = msg;
+  }
+
+  $k('kboExportLive')?.addEventListener('click', async () => {
+    try {
+      const data = await knowledgeExport();
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJson(KU.wrapLiveKnowledge(data.items, data.categories), `medicus-knowledge-${stamp}.json`);
+      setIoStatus('Live set downloaded.');
+    } catch (e) {
+      setIoStatus('Export failed: ' + e.message, true);
+    }
+  });
+
+  $k('kboImportFile')?.addEventListener('click', () => $k('kboFileInput')?.click());
+
+  $k('kboFileInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch (err) {
+      setIoStatus('Could not parse JSON: ' + err.message, true);
+      return;
+    }
+    const extracted = KU.extractKnowledgeFromParsed(parsed);
+    if (extracted.error) {
+      setIoStatus(extracted.error, true);
+      return;
+    }
+    try {
+      if (extracted.mode === 'replace') {
+        await knowledgeImport({ items: extracted.items, categories: extracted.categories });
+      } else {
+        const r = await chrome.storage.local.get(['knowledge.items', 'knowledge.categories']);
+        const items = r['knowledge.items'] || [];
+        const categories = KU.sanitiseCategories(r['knowledge.categories']);
+        const catIds = new Set(categories.map((c) => c.id));
+        const taken = new Set(items.map((x) => x.id));
+        const toAdd = [];
+        for (const c of extracted.items || []) {
+          const errs = KU.validateEntry(c);
+          if (errs.length > 0) throw new Error(errs[0]);
+          if (KU.findSimilar(c.title, [...items, ...toAdd]).length > 0) continue;
+          const clean = KU.sanitiseEntry(c);
+          clean.source = 'import';
+          clean.id = KU.generateEntryId(clean.title, taken);
+          taken.add(clean.id);
+          if (!catIds.has(clean.category)) {
+            const name = clean.category.replace(/-/g, ' ').replace(/^./, (ch) => ch.toUpperCase());
+            categories.push({ id: clean.category, name });
+            catIds.add(clean.category);
+          }
+          toAdd.push(clean);
+        }
+        if (toAdd.length === 0) throw new Error('Nothing imported — every entry matched an existing title.');
+        await chrome.storage.local.set({
+          'knowledge.items': [...items, ...toAdd],
+          'knowledge.categories': categories,
+        });
+      }
+      const pushed = await pushKnowledge();
+      setIoStatus(
+        pushed && pushed.wrote
+          ? 'Imported and written to the practice shared folder.'
+          : pushed && pushed.reason === 'no-handle'
+            ? 'Imported on this computer only — click Share with practice to push it to everyone.'
+            : 'Imported. Review the set on the Knowledge tab.'
+      );
+      await refreshStats();
+    } catch (err) {
+      setIoStatus('Import failed: ' + err.message, true);
+    }
+  });
+
+  $k('kboShare')?.addEventListener('click', async () => {
+    const KS = window.KnowledgeSync;
+    if (!KS) return setIoStatus('Knowledge sync is not loaded.', true);
+    try {
+      let result = await KS.pushLiveKnowledge({ allowCreate: true, requestPermission: true });
+      if (result.reason === 'no-handle' || result.reason === 'permission-not-granted' || result.reason === 'no-shared-profile') {
+        if (typeof showSaveFilePicker === 'function') {
+          let handle;
+          try {
+            handle = await showSaveFilePicker({
+              suggestedName: 'practice-profile.json',
+              types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+            });
+          } catch (err) {
+            if (err && err.name === 'AbortError') return;
+            throw err;
+          }
+          if (window.FsHandleStore) await window.FsHandleStore.saveFileHandle(handle, 'profileFile');
+          result = await KS.pushLiveKnowledge({
+            allowCreate: true,
+            requestPermission: true,
+            loadHandle: async () => handle,
+          });
+        } else {
+          const data = await knowledgeExport();
+          const built = KS.buildKnowledgeContribution(null, data, { allowCreate: true, KU, now: new Date() });
+          if (built.json) {
+            downloadJson(built.json, 'practice-profile.json');
+            setIoStatus('Downloaded practice-profile.json. Put it next to manifest.json in the shared extension folder.');
+            await refreshSync();
+            return;
+          }
+        }
+      }
+      if (result.wrote || result.reason === 'no-change') {
+        setIoStatus('Shared with the practice. Other PCs pick this up within about 15 minutes.');
+      } else {
+        setIoStatus('Could not share (' + (result.reason || 'unknown') + '). This computer still has your set.', true);
+      }
+      await refreshSync();
+    } catch (err) {
+      setIoStatus('Share failed: ' + err.message, true);
+    }
+  });
 
   $k('kboLlmCopyPrompt')?.addEventListener('click', async () => {
     const prompt = KU.kbSchemaPrompt();
@@ -4533,11 +4694,16 @@ initPdcTallySection({
       'knowledge.categories': categories,
     });
     jsonEl.value = '';
+    const pushed = await pushKnowledge();
     statusEl.style.color = 'var(--green, #16a34a)';
     statusEl.textContent =
       `Imported ${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'}` +
       (skipped ? ` (${skipped} skipped as near-duplicates)` : '') +
-      ' — review them on the Knowledge tab.';
+      (pushed && pushed.wrote
+        ? ' and written to the practice shared folder.'
+        : pushed && pushed.reason === 'no-handle'
+          ? ' on this computer only — click Share with practice so everyone else sees them.'
+          : ' — review them on the Knowledge tab.');
     refreshStats();
   });
 
