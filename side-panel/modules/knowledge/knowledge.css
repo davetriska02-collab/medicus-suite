@@ -36,10 +36,55 @@
 }
 
 /* ── Toolbar ── */
+.kb-sync {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.kb-sync-text {
+  flex: 1;
+  min-width: 0;
+}
+.kb-sync-actions {
+  flex-shrink: 0;
+}
+.kb-sync-shared {
+  background: var(--green-dim);
+  border: 1px solid var(--green-line);
+}
+.kb-sync-shared-ro {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+.kb-sync-local,
+.kb-sync-warn,
+.kb-sync-pending {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+}
+.kb-sync-err {
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+}
+
 .kb-toolbar {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.kb-toolbar-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .kb-search {
   flex: 1;

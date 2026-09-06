@@ -721,8 +721,12 @@ const PracticeProfile = (() => {
             applied.push('knowledge');
           }
         } else {
-          // Replace: push items and categories wholesale via knowledgeImport
-          if (Object.keys(payload).length > 0) {
+          // Replace: push items and categories wholesale via knowledgeImport.
+          // Categories omitted → [] (sanitiseCategories supplies defaults).
+          // Never leave a peer with a stale category list after a replace.
+          if (Object.keys(payload).length > 0 || payload.items !== undefined) {
+            if (payload.categories === undefined) payload.categories = [];
+            if (payload.items === undefined) payload.items = [];
             await knowledgeImport(payload);
             applied.push('knowledge');
           }

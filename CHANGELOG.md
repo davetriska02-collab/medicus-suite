@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.260.0] — 2026-09-06
+
+### Knowledge is practice-shared, not one-computer-only
+
+Pete's report: uploading a Knowledge JSON populated beautifully on one PC and was empty everywhere else (home login, other Suite users in the same org). There was also no obvious way to save the live set after edits.
+
+**Root cause:** the live set was written only to `chrome.storage.local` (`knowledge.items` / `knowledge.categories`) — per browser profile. The practice-profile shared-folder channel already knew how to *apply* Knowledge, but import and edit never wrote that file.
+
+**What changed:**
+- Import, add, edit and delete write the live set through to `practice-profile.json` (the same shared store as published practice rules) whenever this computer can write the shared extension folder. Apply mode is `replace`, so one person's edit is the set everyone else receives.
+- The Knowledge tab and Options → Knowledge show whether the set is shared, read-only from the practice file, or local-only — and a **Share with practice** control to connect the folder (save as `practice-profile.json` next to `manifest.json`).
+- **Save backup** (tab and Options) downloads the current whole set as JSON; **Import** accepts that file, a suite Knowledge backup, or an LLM pack. After import the set is pushed to the shared store only after a successful same-handle version check — never on tab open.
+- Other PCs already loading the extension from the shared folder pick the new set up within about 15 minutes (existing profile check) or on the next Knowledge-tab open.
+
+**Red-team must-fixes (same release):**
+- Push is refused when the on-disk `profileVersion` is not the version this computer last pulled; pull/apply refuses an older incoming profile (never rolls the live set back).
+- `allowCreate` bootstraps only an empty/missing file. Corrupt non-empty JSON always aborts `verify-failed` — it must not be replaced with a knowledge-only profile that would strip other modules.
+- Pull and push use the remembered `profileFile` handle only (not the Cleanup Code Preferences contributor handle).
+- An open edit skips apply/reload; a newer practice set while idle shows “reload before editing”; a stale form cannot save.
+- Shared-file write is full-buffer-then-close, with temp+replace when the directory handle exists, read-back before advancing sync state, and one retry on `stale-read`.
+- Empty peer with a practice profile pending says wait/reopen — do not re-import. Replace-import confirms. Share names `practice-profile.json` next to `manifest.json`. Share errors (`stale-read`, `conflict`, …) are plain English. PHI warnings confirm before a push.
+
+**Residual limits (no org cloud exists — documented, not fixed):**
+- Whole-set last-writer-wins across concurrent Knowledge editors — there is no per-entry lock.
+- Cross-module TOCTOU on the shared file without a true lock: a Knowledge write carries other modules forward from the file it just read.
+- A home PC without the shared folder stays local-only until Share, or until someone Imports a Save backup from surgery.
+- `knowledge.config.noticeAcknowledgedAt` stays per-install and is never pushed.
+
+**Tests:** `test-knowledge-sync.js` (stale push must not clobber; older incoming must not apply; write → second context sees the same ids; empty `items: []` clears the peer; verify-failed on corrupt; allowCreate only empty; edit-dirty skips reload; `noticeAcknowledgedAt` preserved; LLM `{entries}` merge keeps priors).
+
 ## [v3.259.0] — 2026-09-05
 
 ### QOF OB005 matches PCIT TA1026 / OBES2_REG (pathway codes, not drugs)
