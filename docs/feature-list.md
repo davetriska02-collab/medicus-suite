@@ -145,7 +145,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.260.0 (6 Sep)** — Knowledge live set is practice-shared via `practice-profile.json` (import/edit no longer stay on one computer); Save backup / Import JSON on the tab and in Options
+- **v3.260.0 (6 Sep)** — Knowledge live set is practice-shared via `practice-profile.json` (import/edit no longer stay on one computer); Save backup / Import JSON on the tab and in Options. Push is version-gated (never clobber a newer shared file; never roll back to an older one); Share writes `practice-profile.json` next to `manifest.json` only.
 - **v3.259.0 (5 Sep)** — QOF OB005 rewritten to the PCIT TA1026 / OBES2_REG cohort (ethnicity-adjusted BMI + 4-of-5 comorbidities) with three pathway codes as achievement; drug brand names no longer count
 - **v3.258.0 (4 Sep)** — Forecast days-at-risk look-ahead: bundled UK bank-holiday calendar behind Forecast and Slots "Next working day", post-holiday uplift estimates, printable/CSV at-risk pack, Today "Days at Risk" card; incomplete scans never claim all clear
 - **v3.257.0 (3 Sep)** — Companion: appointments/booking-links/investigations section extended to care-record pages (not just triage tasks), plus a new open-tasks list and collapsible sub-lists

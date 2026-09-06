@@ -4453,12 +4453,21 @@ initPdcTallySection({
     const state = (await chrome.storage.local.get(KS.KNOWLEDGE_SYNC_STATE_KEY))[KS.KNOWLEDGE_SYNC_STATE_KEY] || {};
     let hasHandle = false;
     if (window.FsHandleStore) {
-      const h =
-        (await window.FsHandleStore.loadFileHandle('profileFile')) ||
-        (await window.FsHandleStore.loadFileHandle('pdcContribFile'));
+      const h = await window.FsHandleStore.loadFileHandle(KS.PROFILE_FILE_KEY || 'profileFile');
       hasHandle = !!h;
     }
-    const ui = KS.describeSyncStatus(Object.assign({}, state, { hasHandle }));
+    let hasSharedProfile = hasHandle;
+    if (!hasSharedProfile) {
+      try {
+        const meta = await chrome.storage.local.get('suite.practiceProfile');
+        hasSharedProfile = !!(meta['suite.practiceProfile'] && meta['suite.practiceProfile'].lastAppliedVersion);
+      } catch (_) {
+        hasSharedProfile = false;
+      }
+    }
+    const rItems = await chrome.storage.local.get(['knowledge.items']);
+    const localCount = Array.isArray(rItems['knowledge.items']) ? rItems['knowledge.items'].length : 0;
+    const ui = KS.describeSyncStatus(Object.assign({}, state, { hasHandle, hasSharedProfile, localCount }));
     el.textContent = ui.text;
   }
 
@@ -4480,7 +4489,7 @@ initPdcTallySection({
       const data = await knowledgeExport();
       const stamp = new Date().toISOString().slice(0, 10);
       downloadJson(KU.wrapLiveKnowledge(data.items, data.categories), `medicus-knowledge-${stamp}.json`);
-      setIoStatus('Live set downloaded.');
+      setIoStatus('Backup downloaded.');
     } catch (e) {
       setIoStatus('Export failed: ' + e.message, true);
     }
@@ -4506,7 +4515,20 @@ initPdcTallySection({
     }
     try {
       if (extracted.mode === 'replace') {
-        await knowledgeImport({ items: extracted.items, categories: extracted.categories });
+        const n = (extracted.items || []).length;
+        if (!window.confirm('Replace ' + n + ' ' + (n === 1 ? 'entry' : 'entries') + '?')) return;
+      }
+      const phi = KU.phiWarnings(extracted.items || []);
+      let shareOk = true;
+      if (phi.length > 0) {
+        if (!window.confirm(phi.join('\n') + '\n\nImport anyway? You can keep it on this computer only.')) return;
+        shareOk = window.confirm('This file may contain patient-identifiable text. Share it to the practice folder?');
+      }
+      if (extracted.mode === 'replace') {
+        await knowledgeImport({
+          items: extracted.items,
+          categories: extracted.categories !== undefined ? extracted.categories : [],
+        });
       } else {
         const r = await chrome.storage.local.get(['knowledge.items', 'knowledge.categories']);
         const items = r['knowledge.items'] || [];
@@ -4535,13 +4557,21 @@ initPdcTallySection({
           'knowledge.categories': categories,
         });
       }
-      const pushed = await pushKnowledge();
+      let pushed = { wrote: false, reason: 'skipped' };
+      if (shareOk) pushed = await pushKnowledge();
+      const KS = window.KnowledgeSync;
       setIoStatus(
-        pushed && pushed.wrote
-          ? 'Imported and written to the practice shared folder.'
-          : pushed && pushed.reason === 'no-handle'
-            ? 'Imported on this computer only — click Share with practice to push it to everyone.'
-            : 'Imported. Review the set on the Knowledge tab.'
+        !shareOk
+          ? 'Imported on this computer only — not shared, because of the identifier warning.'
+          : pushed && pushed.wrote
+            ? 'Imported and written to the practice shared folder.'
+            : pushed && pushed.reason === 'no-handle'
+              ? 'Imported on this computer only — click Share with practice to push it to everyone.'
+              : pushed && pushed.reason && pushed.reason !== 'no-change' && pushed.reason !== 'skipped'
+                ? (KS && KS.shareErrorText(pushed.reason, pushed.detail || (pushed.dropped && pushed.dropped.length))) ||
+                  'Imported. Review the set on the Knowledge tab.'
+                : 'Imported. Review the set on the Knowledge tab.',
+        !!(pushed && pushed.reason && !pushed.wrote && pushed.reason !== 'no-handle' && pushed.reason !== 'no-change' && pushed.reason !== 'skipped' && shareOk)
       );
       await refreshStats();
     } catch (err) {
@@ -4552,6 +4582,13 @@ initPdcTallySection({
   $k('kboShare')?.addEventListener('click', async () => {
     const KS = window.KnowledgeSync;
     if (!KS) return setIoStatus('Knowledge sync is not loaded.', true);
+    if (
+      !window.confirm(
+        'The file must be practice-profile.json in the shared extension folder, next to manifest.json. The live Knowledge set will be written into that file so every computer using this folder sees it.'
+      )
+    ) {
+      return;
+    }
     try {
       let result = await KS.pushLiveKnowledge({ allowCreate: true, requestPermission: true });
       if (result.reason === 'no-handle' || result.reason === 'permission-not-granted' || result.reason === 'no-shared-profile') {
@@ -4565,6 +4602,17 @@ initPdcTallySection({
           } catch (err) {
             if (err && err.name === 'AbortError') return;
             throw err;
+          }
+          if (handle && handle.name && handle.name !== 'practice-profile.json') {
+            if (
+              !window.confirm(
+                'That file is named "' +
+                  handle.name +
+                  '", not practice-profile.json. Other computers only load practice-profile.json next to manifest.json. Use it anyway?'
+              )
+            ) {
+              return;
+            }
           }
           if (window.FsHandleStore) await window.FsHandleStore.saveFileHandle(handle, 'profileFile');
           result = await KS.pushLiveKnowledge({
@@ -4584,9 +4632,13 @@ initPdcTallySection({
         }
       }
       if (result.wrote || result.reason === 'no-change') {
-        setIoStatus('Shared with the practice. Other PCs pick this up within about 15 minutes.');
+        setIoStatus('Written to the shared folder as practice-profile.json. Other computers using that folder will pick it up on next open or within about 15 minutes.');
       } else {
-        setIoStatus('Could not share (' + (result.reason || 'unknown') + '). This computer still has your set.', true);
+        setIoStatus(
+          KS.shareErrorText(result.reason, result.detail || (result.dropped && result.dropped.length)) ||
+            'Could not share. This computer still has your set.',
+          true
+        );
       }
       await refreshSync();
     } catch (err) {
@@ -4688,22 +4740,35 @@ initPdcTallySection({
         '<strong>Check before relying on these entries:</strong><br>' +
         phi.map((w) => '&bull; ' + w.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>');
     }
+    let shareOk = true;
+    if (phi.length > 0) {
+      if (!window.confirm(phi.join('\n') + '\n\nImport anyway? You can keep them on this computer only.')) {
+        return fail('Import cancelled — identifier warning.');
+      }
+      shareOk = window.confirm('These entries may contain patient-identifiable text. Share them to the practice folder?');
+    }
 
     await chrome.storage.local.set({
       'knowledge.items': [...items, ...toAdd],
       'knowledge.categories': categories,
     });
     jsonEl.value = '';
-    const pushed = await pushKnowledge();
+    const pushed = shareOk ? await pushKnowledge() : { wrote: false, reason: 'skipped' };
     statusEl.style.color = 'var(--green, #16a34a)';
     statusEl.textContent =
       `Imported ${toAdd.length} entr${toAdd.length === 1 ? 'y' : 'ies'}` +
       (skipped ? ` (${skipped} skipped as near-duplicates)` : '') +
-      (pushed && pushed.wrote
-        ? ' and written to the practice shared folder.'
-        : pushed && pushed.reason === 'no-handle'
-          ? ' on this computer only — click Share with practice so everyone else sees them.'
-          : ' — review them on the Knowledge tab.');
+      (!shareOk
+        ? ' on this computer only — not shared, because of the identifier warning.'
+        : pushed && pushed.wrote
+          ? ' and written to the practice shared folder.'
+          : pushed && pushed.reason === 'no-handle'
+            ? ' on this computer only — click Share with practice so everyone else sees them.'
+            : pushed && pushed.reason && pushed.reason !== 'no-change' && pushed.reason !== 'skipped'
+              ? '. ' +
+                ((window.KnowledgeSync && window.KnowledgeSync.shareErrorText(pushed.reason, pushed.detail)) ||
+                  'Review them on the Knowledge tab.')
+              : ' — review them on the Knowledge tab.');
     refreshStats();
   });
 

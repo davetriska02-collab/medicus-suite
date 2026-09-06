@@ -17,11 +17,21 @@
 //     edits and deletions, is what other PCs apply;
 //   - carries every other module, apply settings and practiceAttestation
 //     forward VERBATIM;
-//   - never writes suite.practiceProfile.publisher.
+//   - never writes suite.practiceProfile.publisher;
+//   - reads and writes the remembered `profileFile` handle only (never the
+//     Cleanup Code Preferences contributor handle).
 //
-// Last-writer-wins for the whole set: two people editing different entries
-// at the same moment can lose one side. Documented residual — there is no
-// per-entry lock on a shared network file.
+// Version gates: a push is refused unless the on-disk profileVersion equals
+// lastPulledVersion (this machine is based on that file). A pull/apply is
+// refused if the incoming version is older than lastPulled/lastPushed.
+// allowCreate is only for an empty/missing file — a corrupt non-empty file
+// always aborts verify-failed rather than being replaced with a knowledge-only
+// profile that would strip other modules.
+//
+// Residuals (documented, not fixed here): whole-set last-writer-wins across
+// concurrent Knowledge editors; cross-module TOCTOU on the shared file
+// without a true lock; a home PC without the shared folder stays local until
+// Share or Import of a Save backup.
 //
 // Runs from a page context that already holds (or can grant) a
 // FileSystemFileHandle — Knowledge tab, pop-out, Options. Never the service
@@ -34,6 +44,7 @@
 
 (function () {
   const KNOWLEDGE_SYNC_STATE_KEY = 'suite.knowledgeSync';
+  const PROFILE_FILE_KEY = 'profileFile';
 
   // Same v1 default module list as practice-profile.js — used only when we
   // materialise an absent apply.modules into a v2 object so adding knowledge
@@ -48,6 +59,22 @@
     const m = /^(\d{4}-\d{2}-\d{2})\.(\d+)$/.exec(String(v || ''));
     if (!m) return null;
     return { date: m[1], seq: parseInt(m[2], 10) };
+  }
+
+  function isOlderProfileVersion(incoming, baseline) {
+    const a = _parseVersion(incoming);
+    const b = _parseVersion(baseline);
+    if (!a || !b) return false;
+    if (a.date !== b.date) return a.date < b.date;
+    return a.seq < b.seq;
+  }
+
+  function isNewerProfileVersion(incoming, baseline) {
+    const a = _parseVersion(incoming);
+    const b = _parseVersion(baseline);
+    if (!a || !b) return false;
+    if (a.date !== b.date) return a.date > b.date;
+    return a.seq > b.seq;
   }
 
   function nextProfileVersion(sharedProfile, todayISO) {
@@ -65,6 +92,10 @@
         .join(',')}}`;
     }
     return JSON.stringify(value);
+  }
+
+  function isEmptyProfileText(text) {
+    return !text || !String(text).trim();
   }
 
   function verifyProfileFile(text, fetchedProfile) {
@@ -110,16 +141,20 @@
     if (!utils) throw new Error('Knowledge utilities not loaded — cannot sanitise a shared set.');
     const taken = new Set();
     const items = [];
+    const dropped = [];
     for (const e of (localExport && localExport.items) || []) {
       const errs = utils.validateEntry(e);
-      if (errs.length > 0) continue;
+      if (errs.length > 0) {
+        dropped.push({ title: (e && e.title) || '?', errors: errs });
+        continue;
+      }
       const clean = utils.sanitiseEntry(e);
       if (!clean.id || taken.has(clean.id)) clean.id = utils.generateEntryId(clean.title, taken);
       taken.add(clean.id);
       items.push(clean);
     }
     const categories = utils.sanitiseCategories(localExport && localExport.categories);
-    return { items, categories };
+    return { items, categories, dropped };
   }
 
   // Promote apply.modules to a v2 object and force knowledge: 'replace'.
@@ -144,10 +179,59 @@
     return apply;
   }
 
+  function sharedHasKnowledge(sharedProfile) {
+    const km = sharedProfile && sharedProfile.envelope && sharedProfile.envelope.modules && sharedProfile.envelope.modules.knowledge;
+    return !!(km && typeof km === 'object');
+  }
+
+  // Never push a live set that is not based on the on-disk profileVersion.
+  function canPushAgainstShared(sharedProfile, state) {
+    if (!sharedProfile) return { ok: true };
+    const sharedVer = sharedProfile.profileVersion;
+    const lastPulled = state && state.lastPulledVersion;
+    const lastPushed = state && state.lastPushedVersion;
+    if (lastPulled && sharedVer !== lastPulled) {
+      return { ok: false, reason: 'conflict', detail: sharedVer };
+    }
+    if (!lastPulled && lastPushed && sharedVer !== lastPushed) {
+      return { ok: false, reason: 'conflict', detail: sharedVer };
+    }
+    if (!lastPulled && !lastPushed && sharedHasKnowledge(sharedProfile)) {
+      return { ok: false, reason: 'conflict', detail: sharedVer };
+    }
+    return { ok: true };
+  }
+
+  function shouldApplyIncomingVersion(incomingVersion, state) {
+    if (!incomingVersion) return { apply: false, reason: 'no-version' };
+    const lastPulled = state && state.lastPulledVersion;
+    const lastPushed = state && state.lastPushedVersion;
+    if (lastPulled && incomingVersion === lastPulled) return { apply: false, reason: 'already-applied' };
+    if (lastPulled && isOlderProfileVersion(incomingVersion, lastPulled)) {
+      return { apply: false, reason: 'older-version' };
+    }
+    if (lastPushed && isOlderProfileVersion(incomingVersion, lastPushed)) {
+      return { apply: false, reason: 'older-version' };
+    }
+    if (lastPulled && !isNewerProfileVersion(incomingVersion, lastPulled) && incomingVersion !== lastPulled) {
+      // Unorderable vs lastPulled — do not roll back.
+      return { apply: false, reason: 'older-version' };
+    }
+    return { apply: true };
+  }
+
+  function shouldSkipKnowledgeReload(editingId) {
+    return editingId != null;
+  }
+
   function buildKnowledgeContribution(sharedProfile, localKnowledgeExport, opts) {
     const options = opts || {};
     const KU = _resolveKU(options.KU);
-    const payload = sanitiseSharedKnowledge(localKnowledgeExport || {}, KU);
+    const sanitised = sanitiseSharedKnowledge(localKnowledgeExport || {}, KU);
+    if (sanitised.dropped.length > 0 && !options.allowDropped) {
+      return { skipReason: 'invalid-entries', dropped: sanitised.dropped };
+    }
+    const payload = { items: sanitised.items, categories: sanitised.categories };
     const now = options.now || new Date();
     const version = options.version || nextProfileVersion(sharedProfile, _todayStr(now));
 
@@ -212,24 +296,76 @@
       mode = applyCfg.mode === 'forceOverride' ? 'replace' : 'merge';
     }
     if (!mode) return null;
+    const KU = _resolveKU(null);
+    const categories =
+      km.categories !== undefined
+        ? km.categories
+        : KU
+          ? KU.sanitiseCategories([])
+          : [];
     return {
       mode,
-      items: km.items,
-      categories: km.categories,
+      items: Array.isArray(km.items) ? km.items : [],
+      categories,
       profileVersion: profile.profileVersion || null,
       publishedAt: profile.publishedAt || null,
     };
+  }
+
+  function shareErrorText(reason, detail) {
+    switch (reason) {
+      case 'stale-read':
+        return 'Someone else updated the shared file just now. Reopen Knowledge, then try again.';
+      case 'conflict':
+        return 'The practice set has changed since this computer last loaded it. Reopen Knowledge before sharing, or you will overwrite their work.';
+      case 'verify-failed':
+        return (
+          'The shared file is not a valid practice profile. Check you picked practice-profile.json next to manifest.json' +
+          (detail ? ` (${detail})` : '') +
+          '.'
+        );
+      case 'invalid-entries':
+        return `${typeof detail === 'number' ? detail : 'Some'} entries could not be shared because they are invalid. Fix them and try again.`;
+      case 'older-version':
+        return 'The shared file is older than what this computer already has. Not replacing your set.';
+      case 'read-back-failed':
+        return 'Wrote the file but could not confirm it landed. Check the shared folder and try again.';
+      case 'permission-not-granted':
+        return 'Shared folder needs reconnecting before edits reach everyone.';
+      case 'no-handle':
+        return 'Only on this computer. Share with the practice so colleagues see the same set. At home, Import a Save backup from the surgery computer.';
+      case 'no-shared-profile':
+        return 'No practice profile file yet. Share with the practice and save it as practice-profile.json next to manifest.json.';
+      case 'edit-dirty':
+        return 'Finish or cancel the open entry before reloading the practice set.';
+      case 'write-failed':
+      case 'read-failed':
+        return `Couldn't update the shared set${detail ? ` (${detail})` : ''}. This computer still has your edits.`;
+      default:
+        return detail ? String(detail) : null;
+    }
   }
 
   function describeSyncStatus(state) {
     const s = state || {};
     const hasHandle = s.hasHandle === true;
     const result = s.lastResult || null;
+    const mapped = shareErrorText(result, s.lastError || s.droppedCount);
 
+    if (
+      !s.lastPulledVersion &&
+      (s.profilePending || (s.hasSharedProfile && !hasHandle && s.localCount === 0))
+    ) {
+      return {
+        kind: 'pending',
+        text: 'The practice set is not loaded yet. Wait a moment or reopen Knowledge — do not re-import.',
+        action: null,
+      };
+    }
     if (hasHandle && (result === 'pushed' || result === 'no-change')) {
       return {
         kind: 'shared',
-        text: 'Shared with the practice. Colleagues pick this up within about 15 minutes, or on their next browser start.',
+        text: 'Shared with the practice. Written to the shared folder as practice-profile.json. Colleagues pick this up within about 15 minutes, or on their next browser start.',
         action: null,
       };
     }
@@ -241,35 +377,33 @@
       };
     }
     if (result === 'permission-not-granted') {
-      return {
-        kind: 'warn',
-        text: 'Shared folder needs reconnecting before edits reach everyone.',
-        action: 'reconnect',
-      };
+      return { kind: 'warn', text: mapped, action: 'reconnect' };
     }
-    if (result === 'write-failed' || result === 'read-failed' || result === 'verify-failed') {
-      const detail = s.lastError ? ` (${s.lastError})` : '';
-      return {
-        kind: 'err',
-        text: `Couldn't update the shared set${detail}. This computer still has your edits.`,
-        action: 'retry',
-      };
+    if (
+      result === 'write-failed' ||
+      result === 'read-failed' ||
+      result === 'verify-failed' ||
+      result === 'stale-read' ||
+      result === 'conflict' ||
+      result === 'invalid-entries' ||
+      result === 'read-back-failed'
+    ) {
+      return { kind: 'err', text: mapped, action: 'retry' };
     }
     if (result === 'no-shared-profile') {
-      return {
-        kind: 'local',
-        text: 'No practice profile file yet. Share with the practice and save it as practice-profile.json next to the extension (same folder as manifest.json).',
-        action: 'share',
-      };
+      return { kind: 'local', text: mapped, action: 'share' };
     }
     return {
       kind: 'local',
-      text: 'Only on this computer. Share with the practice so colleagues and your other machines see the same set.',
+      text: 'Only on this computer. Share with the practice so colleagues see the same set. At home, Import a Save backup from the surgery computer.',
       action: 'share',
     };
   }
 
   async function applyKnowledgeFromProfile(profile, deps) {
+    if (deps && deps.isEditing && deps.isEditing()) {
+      return { applied: false, reason: 'edit-dirty' };
+    }
     const spec = knowledgeApplySpec(profile);
     if (!spec) return { applied: false, reason: 'not-in-profile' };
     if (spec.mode !== 'replace') return { applied: false, reason: 'merge-deferred' };
@@ -277,16 +411,17 @@
     if (!importFn) return { applied: false, reason: 'no-import' };
 
     const state = deps.getState ? await deps.getState() : null;
-    if (state && spec.profileVersion && state.lastPulledVersion === spec.profileVersion) {
-      return { applied: false, reason: 'already-applied' };
-    }
+    const gate = shouldApplyIncomingVersion(spec.profileVersion, state);
+    if (!gate.apply) return { applied: false, reason: gate.reason };
 
-    const payload = {};
-    if (spec.items !== undefined) payload.items = spec.items;
-    if (spec.categories !== undefined) payload.categories = spec.categories;
-    if (!Object.keys(payload).length) return { applied: false, reason: 'empty' };
-
-    await importFn(payload);
+    const KU = _resolveKU(deps && deps.KU);
+    const categories =
+      spec.categories !== undefined
+        ? spec.categories
+        : KU
+          ? KU.sanitiseCategories([])
+          : [];
+    await importFn({ items: spec.items, categories });
     if (deps.setState) {
       await deps.setState({
         lastPulledVersion: spec.profileVersion,
@@ -296,7 +431,41 @@
     return { applied: true, version: spec.profileVersion };
   }
 
-  async function runKnowledgeSync(deps) {
+  async function writeHandleVerified(handle, text, deps) {
+    if (deps.writeHandleAtomic) {
+      await deps.writeHandleAtomic(handle, text);
+    } else if (typeof handle.getParent === 'function') {
+      try {
+        const dir = await handle.getParent();
+        const tmpName = (handle.name || 'practice-profile.json') + '.tmp';
+        const tmp = await dir.getFileHandle(tmpName, { create: true });
+        const w = await tmp.createWritable();
+        await w.write(text);
+        await w.close();
+        const w2 = await handle.createWritable();
+        await w2.write(text);
+        await w2.close();
+        try {
+          await dir.removeEntry(tmpName);
+        } catch (_) {
+          /* leftover tmp is harmless */
+        }
+      } catch (_) {
+        await deps.writeHandleText(handle, text);
+      }
+    } else {
+      await deps.writeHandleText(handle, text);
+    }
+    const readBack = await deps.readHandleText(handle);
+    if (readBack !== text) {
+      const err = new Error('read-back mismatch');
+      err.code = 'read-back-failed';
+      throw err;
+    }
+  }
+
+  async function runKnowledgeSync(deps, _loop) {
+    const loop = _loop || { staleRetries: 0 };
     const now = deps.now ? deps.now() : new Date();
     const handle = await deps.loadHandle();
     if (!handle) return { ran: false, reason: 'no-handle' };
@@ -324,13 +493,13 @@
     }
 
     let sharedProfile = null;
-    if (fileText && String(fileText).trim()) {
+    if (!isEmptyProfileText(fileText)) {
       const verify = verifyProfileFile(fileText, deps.fetchedProfile || null);
-      if (verify.ok) {
-        sharedProfile = verify.profile;
-      } else if (!deps.allowCreate) {
+      if (!verify.ok) {
+        if (deps.setState) await deps.setState({ lastResult: 'verify-failed', lastError: verify.reason });
         return { ran: false, reason: 'verify-failed', detail: verify.reason };
       }
+      sharedProfile = verify.profile;
     } else if (!deps.allowCreate) {
       return { ran: false, reason: 'no-shared-profile' };
     }
@@ -338,8 +507,19 @@
     if (sharedProfile && deps.fetchProfile) {
       const fetched = await deps.fetchProfile();
       if (fetched && fetched.profileVersion && fetched.profileVersion !== sharedProfile.profileVersion) {
+        if (loop.staleRetries < 1) {
+          return runKnowledgeSync(deps, { staleRetries: loop.staleRetries + 1 });
+        }
+        if (deps.setState) await deps.setState({ lastResult: 'stale-read', lastError: null });
         return { ran: false, reason: 'stale-read' };
       }
+    }
+
+    const state = deps.getState ? await deps.getState() : null;
+    const gate = canPushAgainstShared(sharedProfile, state);
+    if (!gate.ok) {
+      if (deps.setState) await deps.setState({ lastResult: gate.reason, lastError: gate.detail || null });
+      return { ran: false, reason: gate.reason, detail: gate.detail };
     }
 
     const local = await deps.getLocalKnowledge();
@@ -348,8 +528,15 @@
       version,
       now,
       KU: deps.KU,
-      allowCreate: !!deps.allowCreate,
+      allowCreate: !!deps.allowCreate && !sharedProfile,
     });
+
+    if (result.skipReason === 'invalid-entries') {
+      if (deps.setState) {
+        await deps.setState({ lastResult: 'invalid-entries', lastError: null, droppedCount: result.dropped.length });
+      }
+      return { ran: true, wrote: false, reason: 'invalid-entries', dropped: result.dropped };
+    }
 
     if (result.skipReason) {
       if (deps.setState) {
@@ -358,13 +545,15 @@
       return { ran: true, wrote: false, reason: result.skipReason };
     }
 
+    const jsonStr = JSON.stringify(result.json, null, 2);
     try {
-      await deps.writeHandleText(handle, JSON.stringify(result.json, null, 2));
+      await writeHandleVerified(handle, jsonStr, deps);
     } catch (e) {
+      const reason = e && e.code === 'read-back-failed' ? 'read-back-failed' : 'write-failed';
       if (deps.setState) {
-        await deps.setState({ lastResult: 'write-failed', lastError: e && e.message });
+        await deps.setState({ lastResult: reason, lastError: e && e.message });
       }
-      return { ran: true, wrote: false, reason: 'write-failed', error: e && e.message };
+      return { ran: true, wrote: false, reason, error: e && e.message };
     }
 
     if (deps.setState) {
@@ -374,6 +563,7 @@
         lastPushedAt: now.toISOString(),
         lastPushedVersion: version,
         lastPulledVersion: version,
+        droppedCount: 0,
       });
     }
     return { ran: true, wrote: true, version, json: result.json };
@@ -396,7 +586,7 @@
   async function _defaultLoadHandle() {
     const store = typeof self !== 'undefined' ? self.FsHandleStore : null;
     if (!store || !store.loadFileHandle) return null;
-    return (await store.loadFileHandle('profileFile')) || (await store.loadFileHandle('pdcContribFile'));
+    return store.loadFileHandle(PROFILE_FILE_KEY);
   }
 
   async function _defaultGetState() {
@@ -442,28 +632,66 @@
     );
   }
 
+  async function readProfilePreferringHandle(deps) {
+    const handle = await deps.loadHandle();
+    if (handle) {
+      try {
+        let perm = 'granted';
+        if (handle.queryPermission) {
+          perm = await handle.queryPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') perm = await handle.queryPermission({ mode: 'read' });
+        }
+        if (perm === 'granted') {
+          const text = await deps.readHandleText(handle);
+          if (!isEmptyProfileText(text)) {
+            const verify = verifyProfileFile(text);
+            if (verify.ok) return { profile: verify.profile, from: 'handle' };
+            return { profile: null, from: 'handle', verifyFailed: verify.reason };
+          }
+          return { profile: null, from: 'handle', empty: true };
+        }
+      } catch (_) {
+        /* fall through to getURL */
+      }
+    }
+    const fetched = deps.fetchProfile ? await deps.fetchProfile() : null;
+    return { profile: fetched || null, from: fetched ? 'url' : 'none' };
+  }
+
   async function pushLiveKnowledge(overrides) {
     return runKnowledgeSync(browserDeps(overrides));
   }
 
   async function pullSharedKnowledge(overrides) {
     const deps = browserDeps(overrides);
-    const profile = deps.fetchProfile ? await deps.fetchProfile() : null;
-    if (!profile) return { applied: false, reason: 'no-profile' };
-    return applyKnowledgeFromProfile(profile, deps);
+    if (deps.isEditing && deps.isEditing()) return { applied: false, reason: 'edit-dirty' };
+    const read = await readProfilePreferringHandle(deps);
+    if (read.verifyFailed) return { applied: false, reason: 'verify-failed', detail: read.verifyFailed };
+    if (!read.profile) return { applied: false, reason: 'no-profile' };
+    return applyKnowledgeFromProfile(read.profile, deps);
   }
 
   const api = {
     KNOWLEDGE_SYNC_STATE_KEY,
+    PROFILE_FILE_KEY,
     nextProfileVersion,
+    isOlderProfileVersion,
+    isNewerProfileVersion,
+    isEmptyProfileText,
     verifyProfileFile,
     sanitiseSharedKnowledge,
     withKnowledgeReplace,
+    canPushAgainstShared,
+    shouldApplyIncomingVersion,
+    shouldSkipKnowledgeReload,
     buildKnowledgeContribution,
     knowledgeApplySpec,
+    shareErrorText,
     describeSyncStatus,
     applyKnowledgeFromProfile,
+    writeHandleVerified,
     runKnowledgeSync,
+    readProfilePreferringHandle,
     browserDeps,
     pushLiveKnowledge,
     pullSharedKnowledge,

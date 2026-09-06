@@ -362,6 +362,330 @@ const SAMPLE_ENTRY = {
   });
   check(denied.reason === 'permission-not-granted', 'lapsed grant without requestPermission → permission-not-granted');
 
+  console.log('\n--- version gates ---');
+  check(KnowledgeSync.PROFILE_FILE_KEY === 'profileFile', 'Knowledge reads/writes profileFile only');
+  check(KnowledgeSync.canPushAgainstShared(makeSharedProfile(), null).ok === true, 'first push onto profile without knowledge is allowed');
+  const sharedNewer = makeSharedProfile({
+    profileVersion: '2026-09-06.5',
+    apply: { modules: { sentinel: 'merge', knowledge: 'replace' } },
+    envelope: {
+      modules: {
+        sentinel: { rules: {}, config: {} },
+        knowledge: { items: [SAMPLE_ENTRY], categories: [{ id: 'contacts', name: 'Contacts' }] },
+      },
+    },
+  });
+  check(
+    KnowledgeSync.canPushAgainstShared(sharedNewer, { lastPulledVersion: '2026-09-06.1' }).reason === 'conflict',
+    'stale lastPulled vs newer shared → conflict'
+  );
+  check(
+    KnowledgeSync.canPushAgainstShared(sharedNewer, null).reason === 'conflict',
+    'never-pulled must not overwrite a profile that already has knowledge'
+  );
+  check(
+    KnowledgeSync.shouldApplyIncomingVersion('2026-09-06.1', { lastPulledVersion: '2026-09-06.5' }).reason ===
+      'older-version',
+    'older incoming vs lastPulled → older-version'
+  );
+  check(
+    KnowledgeSync.shouldApplyIncomingVersion('2026-09-06.5', { lastPulledVersion: '2026-09-06.5' }).reason ===
+      'already-applied',
+    'same version → already-applied'
+  );
+  check(
+    KnowledgeSync.shouldApplyIncomingVersion('2026-09-06.6', { lastPulledVersion: '2026-09-06.5' }).apply === true,
+    'newer incoming applies'
+  );
+  check(KnowledgeSync.shouldSkipKnowledgeReload('abc') === true, 'editingId set → skip reload');
+  check(KnowledgeSync.shouldSkipKnowledgeReload(null) === false, 'not editing → allow reload');
+
+  reset();
+  store['knowledge.items'] = [Object.assign({}, SAMPLE_ENTRY, { title: 'LOCAL STALE' })];
+  store['knowledge.categories'] = [{ id: 'contacts', name: 'Contacts' }];
+  const conflictHandle = makeFakeHandle({ text: JSON.stringify(sharedNewer) });
+  const clobbered = await KnowledgeSync.runKnowledgeSync({
+    loadHandle: async () => conflictHandle,
+    readHandleText: async (h) => (await h.getFile()).text(),
+    writeHandleText: async (h, text) => {
+      const w = await h.createWritable();
+      await w.write(text);
+      await w.close();
+    },
+    getLocalKnowledge: knowledgeExport,
+    KU: KnowledgeUtils,
+    now: () => new Date('2026-09-06T17:00:00Z'),
+    getState: async () => ({ lastPulledVersion: '2026-09-06.1' }),
+    setState: async () => {},
+  });
+  check(clobbered.reason === 'conflict', 'stale local push must not clobber newer shared');
+  check(
+    JSON.parse(conflictHandle._getText()).profileVersion === '2026-09-06.5',
+    'conflict leaves the newer shared file untouched'
+  );
+  check(
+    JSON.parse(conflictHandle._getText()).envelope.modules.knowledge.items[0].title === 'District nursing — SPA',
+    'conflict does not write the stale local title'
+  );
+
+  reset();
+  store['knowledge.items'] = [SAMPLE_ENTRY];
+  store['knowledge.categories'] = [{ id: 'contacts', name: 'Contacts' }];
+  const olderIncoming = makeSharedProfile({
+    profileVersion: '2026-09-06.1',
+    apply: { modules: { knowledge: 'replace' } },
+    envelope: {
+      modules: {
+        knowledge: {
+          items: [Object.assign({}, SAMPLE_ENTRY, { id: 'old-peer', title: 'Should not apply' })],
+          categories: [],
+        },
+      },
+    },
+  });
+  const skipOld = await KnowledgeSync.applyKnowledgeFromProfile(olderIncoming, {
+    knowledgeImport,
+    getState: async () => ({ lastPulledVersion: '2026-09-06.5' }),
+    setState: async () => {},
+  });
+  check(skipOld.reason === 'older-version', 'older incoming must not apply');
+  check(store['knowledge.items'][0].id === 'dn-spa', 'older incoming leaves local items in place');
+
+  console.log('\n--- runKnowledgeSync write → second context ---');
+  reset();
+  store['knowledge.items'] = [SAMPLE_ENTRY];
+  store['knowledge.categories'] = [{ id: 'contacts', name: 'Contacts & numbers' }];
+  const syncHandle = makeFakeHandle({ text: JSON.stringify(makeSharedProfile()) });
+  const syncState = {};
+  const wroteSync = await KnowledgeSync.runKnowledgeSync({
+    loadHandle: async () => syncHandle,
+    readHandleText: async (h) => (await h.getFile()).text(),
+    writeHandleText: async (h, text) => {
+      const w = await h.createWritable();
+      await w.write(text);
+      await w.close();
+    },
+    getLocalKnowledge: knowledgeExport,
+    KU: KnowledgeUtils,
+    now: () => new Date('2026-09-06T18:00:00Z'),
+    getState: async () => syncState,
+    setState: async (patch) => Object.assign(syncState, patch),
+  });
+  check(wroteSync.wrote === true, 'context A: runKnowledgeSync writes the live set');
+  const writtenSync = JSON.parse(syncHandle._getText());
+  reset();
+  check(!store['knowledge.items'], 'context B starts empty');
+  const peerPull = await KnowledgeSync.applyKnowledgeFromProfile(writtenSync, {
+    knowledgeImport,
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(peerPull.applied === true, 'context B: pull applies the written profile');
+  check(
+    Array.isArray(store['knowledge.items']) && store['knowledge.items'].some((e) => e.id === 'dn-spa'),
+    'context B sees the same ids written by runKnowledgeSync'
+  );
+
+  console.log('\n--- empty items: [] clears peer ---');
+  reset();
+  store['knowledge.items'] = [SAMPLE_ENTRY];
+  store['knowledge.categories'] = [{ id: 'contacts', name: 'Contacts' }];
+  const emptyProf = makeSharedProfile({
+    profileVersion: '2026-09-06.9',
+    apply: { modules: { knowledge: 'replace' } },
+    envelope: { modules: { knowledge: { items: [] } } },
+  });
+  const cleared = await KnowledgeSync.applyKnowledgeFromProfile(emptyProf, {
+    knowledgeImport,
+    getState: async () => ({ lastPulledVersion: '2026-09-06.1' }),
+    setState: async () => {},
+  });
+  check(cleared.applied === true, 'replace with items: [] applies');
+  check(Array.isArray(store['knowledge.items']) && store['knowledge.items'].length === 0, 'empty items clears the peer');
+  check(Array.isArray(store['knowledge.categories']), 'replace with omitted categories still sets categories');
+
+  console.log('\n--- verify-failed / allowCreate only empty ---');
+  check(KnowledgeSync.isEmptyProfileText('') === true, 'empty string is empty');
+  check(KnowledgeSync.isEmptyProfileText('  \n') === true, 'whitespace-only is empty');
+  check(KnowledgeSync.isEmptyProfileText('{') === false, 'corrupt JSON is not empty');
+  const corruptHandle = makeFakeHandle({ text: '{not-json' });
+  const verifyFail = await KnowledgeSync.runKnowledgeSync({
+    loadHandle: async () => corruptHandle,
+    readHandleText: async (h) => (await h.getFile()).text(),
+    writeHandleText: async (h, text) => {
+      const w = await h.createWritable();
+      await w.write(text);
+      await w.close();
+    },
+    getLocalKnowledge: async () => ({ items: [SAMPLE_ENTRY], categories: [] }),
+    KU: KnowledgeUtils,
+    allowCreate: true,
+    now: () => new Date('2026-09-06T19:00:00Z'),
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(verifyFail.reason === 'verify-failed', 'corrupt non-empty file → verify-failed even with allowCreate');
+  check(corruptHandle._getText() === '{not-json', 'verify-failed must not overwrite the corrupt file');
+
+  const emptyHandle = makeFakeHandle({ text: '' });
+  const createdEmpty = await KnowledgeSync.runKnowledgeSync({
+    loadHandle: async () => emptyHandle,
+    readHandleText: async (h) => (await h.getFile()).text(),
+    writeHandleText: async (h, text) => {
+      const w = await h.createWritable();
+      await w.write(text);
+      await w.close();
+    },
+    getLocalKnowledge: async () => ({
+      items: [SAMPLE_ENTRY],
+      categories: [{ id: 'contacts', name: 'Contacts' }],
+    }),
+    KU: KnowledgeUtils,
+    allowCreate: true,
+    now: () => new Date('2026-09-06T19:30:00Z'),
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(createdEmpty.wrote === true, 'allowCreate writes only when the file is empty/missing');
+  check(JSON.parse(emptyHandle._getText()).envelope.modules.knowledge.items[0].id === 'dn-spa', 'bootstrapped empty file carries knowledge');
+
+  console.log('\n--- edit-dirty skips reload ---');
+  reset();
+  store['knowledge.items'] = [SAMPLE_ENTRY];
+  const whileEditing = await KnowledgeSync.applyKnowledgeFromProfile(sharedNewer, {
+    isEditing: () => true,
+    knowledgeImport,
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(whileEditing.reason === 'edit-dirty', 'apply while editing → edit-dirty');
+  check(store['knowledge.items'][0].id === 'dn-spa', 'edit-dirty leaves local items untouched');
+  const dirtyPull = await KnowledgeSync.pullSharedKnowledge({
+    isEditing: () => true,
+    loadHandle: async () => null,
+    fetchProfile: async () => sharedNewer,
+    knowledgeImport,
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(dirtyPull.reason === 'edit-dirty', 'pullSharedKnowledge short-circuits while editing');
+
+  console.log('\n--- noticeAcknowledgedAt preserved on peer ---');
+  reset();
+  store['knowledge.config'] = { noticeAcknowledgedAt: '2026-02-02T00:00:00Z' };
+  store['knowledge.items'] = [];
+  store['knowledge.categories'] = [];
+  const ackPull = await KnowledgeSync.applyKnowledgeFromProfile(sharedNewer, {
+    knowledgeImport,
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(ackPull.applied === true, 'peer apply succeeds');
+  check(
+    store['knowledge.config'].noticeAcknowledgedAt === '2026-02-02T00:00:00Z',
+    'noticeAcknowledgedAt is preserved on the peer'
+  );
+
+  console.log('\n--- LLM {entries} merge keeps priors ---');
+  reset();
+  store['knowledge.items'] = [SAMPLE_ENTRY];
+  store['knowledge.categories'] = [{ id: 'contacts', name: 'Contacts' }];
+  store['knowledge.config'] = { noticeAcknowledgedAt: '2026-03-03T00:00:00Z' };
+  const llmPack = KnowledgeUtils.extractKnowledgeFromParsed({
+    entries: [
+      {
+        title: 'New clinic hours',
+        category: 'referrals',
+        body: 'Monday late clinic 18:00–20:00.',
+      },
+    ],
+  });
+  check(llmPack.mode === 'merge', 'LLM {entries} is merge, not replace');
+  const taken = new Set(store['knowledge.items'].map((e) => e.id));
+  const catIds = new Set(store['knowledge.categories'].map((c) => c.id));
+  const categories = store['knowledge.categories'].slice();
+  const toAdd = [];
+  for (const c of llmPack.items) {
+    if (KnowledgeUtils.findSimilar(c.title, [...store['knowledge.items'], ...toAdd]).length > 0) continue;
+    const clean = KnowledgeUtils.sanitiseEntry(c);
+    clean.source = 'llm';
+    clean.reviewed = false;
+    clean.id = KnowledgeUtils.generateEntryId(clean.title, taken);
+    taken.add(clean.id);
+    if (!catIds.has(clean.category)) {
+      categories.push({ id: clean.category, name: 'Referrals' });
+      catIds.add(clean.category);
+    }
+    toAdd.push(clean);
+  }
+  await chrome.storage.local.set({
+    'knowledge.items': [...store['knowledge.items'], ...toAdd],
+    'knowledge.categories': categories,
+  });
+  check(
+    store['knowledge.items'].some((e) => e.id === 'dn-spa') && store['knowledge.items'].some((e) => e.title === 'New clinic hours'),
+    'LLM merge keeps prior entries and adds the new one'
+  );
+  check(
+    store['knowledge.config'].noticeAcknowledgedAt === '2026-03-03T00:00:00Z',
+    'LLM merge does not wipe noticeAcknowledgedAt'
+  );
+
+  console.log('\n--- invalid entries fail push; share errors in English ---');
+  const invalidBuilt = KnowledgeSync.buildKnowledgeContribution(
+    makeSharedProfile(),
+    { items: [{ title: '', category: 'referrals' }] },
+    { KU: KnowledgeUtils, version: '2026-09-06.8' }
+  );
+  check(invalidBuilt.skipReason === 'invalid-entries', 'dropped invalid entries fail the push rather than silent success');
+  check(invalidBuilt.dropped.length === 1, 'dropped count is surfaced');
+  check(
+    /Someone else updated/.test(KnowledgeSync.shareErrorText('stale-read')),
+    'stale-read maps to plain English'
+  );
+  check(/changed since this computer/.test(KnowledgeSync.shareErrorText('conflict')), 'conflict maps to plain English');
+  check(
+    KnowledgeSync.describeSyncStatus({
+      hasSharedProfile: true,
+      hasHandle: false,
+      localCount: 0,
+      lastPulledVersion: null,
+    }).kind === 'pending',
+    'empty peer with a practice profile → do-not-reimport copy'
+  );
+  check(
+    /do not re-import/i.test(KnowledgeSync.describeSyncStatus({ profilePending: true }).text),
+    'pending copy tells Pete not to re-import'
+  );
+
+  console.log('\n--- stale-read retries once ---');
+  reset();
+  store['knowledge.items'] = [SAMPLE_ENTRY];
+  const staleFile = makeSharedProfile({ profileVersion: '2026-09-06.1' });
+  const staleHandle = makeFakeHandle({ text: JSON.stringify(staleFile) });
+  let fetches = 0;
+  const stale = await KnowledgeSync.runKnowledgeSync({
+    loadHandle: async () => staleHandle,
+    readHandleText: async (h) => (await h.getFile()).text(),
+    writeHandleText: async (h, text) => {
+      const w = await h.createWritable();
+      await w.write(text);
+      await w.close();
+    },
+    fetchProfile: async () => {
+      fetches += 1;
+      return makeSharedProfile({ profileVersion: '2026-09-06.99' });
+    },
+    getLocalKnowledge: knowledgeExport,
+    KU: KnowledgeUtils,
+    now: () => new Date('2026-09-06T20:00:00Z'),
+    getState: async () => null,
+    setState: async () => {},
+  });
+  check(stale.reason === 'stale-read', 'mismatched fetched vs handle version → stale-read after retry');
+  check(fetches === 2, 'stale-read retries exactly once');
+  check(JSON.parse(staleHandle._getText()).profileVersion === '2026-09-06.1', 'stale-read does not write');
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
 })();

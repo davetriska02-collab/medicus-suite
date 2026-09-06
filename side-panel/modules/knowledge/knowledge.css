@@ -64,7 +64,8 @@
   border: 1px solid var(--accent-line);
 }
 .kb-sync-local,
-.kb-sync-warn {
+.kb-sync-warn,
+.kb-sync-pending {
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
 }

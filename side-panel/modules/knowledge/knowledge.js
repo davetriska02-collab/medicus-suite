@@ -38,6 +38,8 @@ let _syncUi = null; // describeSyncStatus() result
 let _syncBusy = false;
 let _syncPoll = null;
 let _fileInput = null;
+let _formStale = false; // newer practice set arrived while form is/was open
+let _practiceUpdated = false; // show "reload before editing" when not editing
 
 const KU = typeof window !== 'undefined' ? window.KnowledgeUtils : null;
 const KS = typeof window !== 'undefined' ? window.KnowledgeSync : null;
@@ -86,13 +88,18 @@ export async function init(el) {
   if (_fileInput) _fileInput.addEventListener('change', onFilePicked);
 
   await loadState();
-  await pullShared();
-  await pushShared({ requestPermission: false });
+  // Pull only — never auto-push a possibly-stale local set onto the shared file.
+  await pullShared({ announce: false });
   await refreshSyncUi();
   render();
 
   _syncPoll = setInterval(() => {
-    pullShared().then((applied) => {
+    pullShared({ announce: true }).then((applied) => {
+      if (applied === 'edit-dirty') {
+        _formStale = true;
+        if (container) render();
+        return;
+      }
       if (applied && container) render();
     });
   }, 30000);
@@ -112,6 +119,11 @@ export async function init(el) {
       return;
     if (_ignoreNextChange) {
       _ignoreNextChange = false;
+      return;
+    }
+    if (_editingId != null) {
+      _formStale = true;
+      if (container) render();
       return;
     }
     loadState()
@@ -197,6 +209,7 @@ function render() {
   if (!_config.noticeAcknowledgedAt && !_practiceAccepted) parts.push(renderNotice());
   else if (_noticeCentral || _practiceAccepted) parts.push(renderCentralHint());
   parts.push(renderSyncStrip());
+  parts.push(renderPracticeBanner());
   parts.push(renderToolbar());
   if (_editingId !== null) parts.push(renderForm());
   parts.push(renderList());
@@ -246,6 +259,23 @@ function renderSyncStrip() {
     </div>`;
 }
 
+function renderPracticeBanner() {
+  if (_formStale && _editingId != null) {
+    return `
+    <div class="kb-sync kb-sync-warn" role="status">
+      <div class="kb-sync-text">The practice set updated while you were editing. Cancel to load it — saving this form would overwrite the newer practice set.</div>
+    </div>`;
+  }
+  if (_practiceUpdated && _editingId == null) {
+    return `
+    <div class="kb-sync kb-sync-warn" role="status">
+      <div class="kb-sync-text">Practice set updated — reload before editing.</div>
+      <div class="kb-sync-actions"><button class="kb-btn kb-btn-sm" data-act="reload-practice">Reload</button></div>
+    </div>`;
+  }
+  return '';
+}
+
 function renderToolbar() {
   const pills = [
     `<button class="kb-pill ${_activeCat === 'all' ? 'kb-pill-on' : ''}" data-act="cat" data-cat="all">All</button>`,
@@ -291,9 +321,12 @@ function renderList() {
     return `<div class="kb-empty">${esc(LOCUM_BRIEF_EMPTY_HINT)}</div>`;
   }
   if (_items.length === 0 && _editingId === null) {
+    if (_syncUi && _syncUi.kind === 'pending') {
+      return `<div class="kb-empty">The practice set is not loaded yet. Wait a moment or reopen Knowledge — do not re-import.</div>`;
+    }
     return `<div class="kb-empty">No entries yet. Use <strong>+ Add</strong> or <strong>Import</strong> a JSON file,
       or generate a starter pack in <a href="#" data-act="open-options">Options → Knowledge</a>.
-      <strong>Save backup</strong> downloads the live set after you have edited it.</div>`;
+      <strong>Save backup</strong> downloads the live set after you have edited it. At home, Import a Save backup from the surgery computer.</div>`;
   }
   if (items.length === 0) return `<div class="kb-empty">No entries match.</div>`;
   return `<div class="kb-list">${items.map(renderCard).join('')}</div>`;
@@ -501,6 +534,10 @@ function onClick(ev) {
 
   switch (act) {
     case 'add':
+      if (_practiceUpdated) {
+        window.alert('The practice set updated. Reload before editing.');
+        break;
+      }
       _editingId = 'new';
       _formSource = null;
       render();
@@ -512,6 +549,10 @@ function onClick(ev) {
       render();
       break;
     case 'edit':
+      if (_practiceUpdated) {
+        window.alert('The practice set updated. Reload before editing.');
+        break;
+      }
       _editingId = actEl.dataset.id;
       _expandedId = null;
       _formSource = null;
@@ -520,7 +561,21 @@ function onClick(ev) {
     case 'cancel':
       _editingId = null;
       _formSource = null;
+      if (_formStale) {
+        _formStale = false;
+        pullShared().then(() => {
+          if (container) render();
+        });
+        break;
+      }
       render();
+      break;
+    case 'reload-practice':
+      _practiceUpdated = false;
+      _formStale = false;
+      pullShared().then(() => {
+        if (container) render();
+      });
       break;
     case 'copy-llm-prompt':
       copyText(KU.kbSingleEntryPrompt(), actEl);
@@ -655,6 +710,11 @@ function selectedCategory() {
 async function saveForm() {
   const errEl = container.querySelector('#kbFmError');
   const get = (id) => container.querySelector('#' + id)?.value ?? '';
+
+  if (_formStale) {
+    if (errEl) errEl.textContent = 'The practice set updated while you were editing. Cancel to reload — this save is blocked.';
+    return;
+  }
 
   let cat = selectedCategory();
   let newCat = null;
@@ -793,7 +853,7 @@ async function refreshSyncUi() {
   if (!KS) {
     _syncUi = {
       kind: 'local',
-      text: 'Only on this computer. Share with the practice so colleagues and your other machines see the same set.',
+      text: 'Only on this computer. Share with the practice so colleagues see the same set. At home, Import a Save backup from the surgery computer.',
       action: 'share',
     };
     return;
@@ -801,22 +861,44 @@ async function refreshSyncUi() {
   const state = (await chrome.storage.local.get(KS.KNOWLEDGE_SYNC_STATE_KEY))[KS.KNOWLEDGE_SYNC_STATE_KEY] || {};
   let hasHandle = false;
   if (window.FsHandleStore) {
-    const h =
-      (await window.FsHandleStore.loadFileHandle('profileFile')) ||
-      (await window.FsHandleStore.loadFileHandle('pdcContribFile'));
+    const h = await window.FsHandleStore.loadFileHandle(KS.PROFILE_FILE_KEY || 'profileFile');
     hasHandle = !!h;
   }
-  _syncUi = KS.describeSyncStatus(Object.assign({}, state, { hasHandle }));
+  const localCount = Array.isArray(_items) ? _items.length : 0;
+  let lastApplied = null;
+  try {
+    const meta = await chrome.storage.local.get('suite.practiceProfile');
+    lastApplied = meta['suite.practiceProfile'] && meta['suite.practiceProfile'].lastAppliedVersion;
+  } catch (_) {
+    lastApplied = null;
+  }
+  const hasSharedProfile = !!(hasHandle || lastApplied);
+  _syncUi = KS.describeSyncStatus(
+    Object.assign({}, state, {
+      hasHandle,
+      hasSharedProfile,
+      localCount,
+      profilePending: !state.lastPulledVersion && localCount === 0 && !!lastApplied,
+    })
+  );
 }
 
-async function pullShared() {
+async function pullShared({ announce = false } = {}) {
   if (!KS || !KS.pullSharedKnowledge) return false;
   try {
-    const result = await KS.pullSharedKnowledge();
+    const result = await KS.pullSharedKnowledge({
+      isEditing: () => _editingId != null,
+    });
     if (result && result.applied) {
+      _formStale = false;
+      if (announce) _practiceUpdated = true;
       await loadState();
       await refreshSyncUi();
       return true;
+    }
+    if (result && result.reason === 'edit-dirty') {
+      _formStale = true;
+      return 'edit-dirty';
     }
   } catch (_) {
     /* offline / no profile — local cache stands */
@@ -836,7 +918,7 @@ async function pushShared({ allowCreate = false, requestPermission = false } = {
   } catch (e) {
     _syncUi = {
       kind: 'err',
-      text: `Couldn't update the shared set${e && e.message ? ` (${e.message})` : ''}. This computer still has your edits.`,
+      text: KS.shareErrorText('write-failed', e && e.message),
       action: 'retry',
     };
     return { ran: false, reason: 'write-failed', error: e && e.message };
@@ -846,6 +928,13 @@ async function pushShared({ allowCreate = false, requestPermission = false } = {
 async function connectAndShare() {
   if (!KS) {
     chrome.runtime.openOptionsPage();
+    return;
+  }
+  if (
+    !window.confirm(
+      'The file must be practice-profile.json in the shared extension folder, next to manifest.json. The live Knowledge set will be written into that file so every computer using this folder sees it.'
+    )
+  ) {
     return;
   }
   _syncBusy = true;
@@ -863,6 +952,17 @@ async function connectAndShare() {
         } catch (err) {
           if (err && err.name === 'AbortError') return;
           throw err;
+        }
+        if (handle && handle.name && handle.name !== 'practice-profile.json') {
+          if (
+            !window.confirm(
+              'That file is named "' +
+                handle.name +
+                '", not practice-profile.json. Other computers only load practice-profile.json next to manifest.json. Use it anyway?'
+            )
+          ) {
+            return;
+          }
         }
         if (window.FsHandleStore) await window.FsHandleStore.saveFileHandle(handle, 'profileFile');
         result = await KS.pushLiveKnowledge({
@@ -890,14 +990,22 @@ async function connectAndShare() {
         }
       }
     }
+    if (result && (result.wrote || result.reason === 'no-change')) {
+      window.alert(
+        'Written to the shared folder as practice-profile.json. Other computers using that folder will pick it up on next open or within about 15 minutes.'
+      );
+    } else if (result && !result.wrote && result.reason !== 'no-shared-profile' && result.reason !== 'no-handle') {
+      window.alert(KS.shareErrorText(result.reason, result.detail || result.dropped && result.dropped.length) || result.reason);
+    }
   } catch (e) {
     _syncUi = {
       kind: 'err',
-      text: `Couldn't share${e && e.message ? ` (${e.message})` : ''}. Save a backup and try again.`,
+      text: KS.shareErrorText('write-failed', e && e.message) || `Couldn't share. Save a backup and try again.`,
       action: 'retry',
     };
   } finally {
     _syncBusy = false;
+    await refreshSyncUi();
     if (container) render();
   }
 }
@@ -911,8 +1019,36 @@ async function importExtracted(extracted) {
     if (errs.length > 0) throw new Error(`Entry ${i + 1}: ${errs[0]}`);
   }
 
+  if (extracted.mode === 'replace') {
+    if (
+      !window.confirm(
+        'Replace ' +
+          _items.length +
+          ' ' +
+          (_items.length === 1 ? 'entry' : 'entries') +
+          ' with ' +
+          incoming.length +
+          ' from this file?'
+      )
+    ) {
+      return { cancelled: true };
+    }
+  }
+
+  const phi = KU.phiWarnings(incoming);
+  let shareOk = true;
+  if (phi.length > 0) {
+    if (!window.confirm(phi.join('\n') + '\n\nImport anyway? You can keep it on this computer only.')) {
+      return { cancelled: true };
+    }
+    shareOk = window.confirm('This file may contain patient-identifiable text. Share it to the practice folder?');
+  }
+
   if (extracted.mode === 'replace' && window.knowledgeImport) {
-    await window.knowledgeImport({ items: incoming, categories: extracted.categories });
+    await window.knowledgeImport({
+      items: incoming,
+      categories: extracted.categories !== undefined ? extracted.categories : [],
+    });
   } else {
     const taken = new Set(_items.map((e) => e.id));
     const catIds = new Set(_categories.map((c) => c.id));
@@ -943,7 +1079,23 @@ async function importExtracted(extracted) {
   }
 
   await loadState();
-  await pushShared({ requestPermission: true });
+  if (shareOk) {
+    const pushed = await pushShared({ requestPermission: true });
+    await refreshSyncUi();
+    if (pushed && pushed.wrote) {
+      window.alert('Imported and written to the practice shared folder.');
+    } else if (pushed && pushed.reason === 'no-handle') {
+      window.alert('Imported on this computer only — click Share with practice to push it to everyone.');
+    } else if (pushed && !pushed.wrote && pushed.reason && pushed.reason !== 'no-change') {
+      window.alert(
+        (KS && KS.shareErrorText(pushed.reason, pushed.detail || (pushed.dropped && pushed.dropped.length))) ||
+          'Imported. Review the set on the Knowledge tab.'
+      );
+    }
+  } else {
+    await refreshSyncUi();
+    window.alert('Imported on this computer only — not shared, because of the identifier warning.');
+  }
   _expandedId = null;
   _editingId = null;
 }
