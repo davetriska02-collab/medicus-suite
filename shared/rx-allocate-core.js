@@ -323,38 +323,6 @@
     return false;
   }
 
-  function coerceWorkDate(iso, fallback) {
-    var day = String(iso || '');
-    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-      var check = new Date(day + 'T12:00:00');
-      if (!isNaN(check.getTime())) return day;
-    }
-    var fb = String(fallback || '');
-    if (/^\d{4}-\d{2}-\d{2}$/.test(fb)) return fb;
-    return Lab.todayISO();
-  }
-
-  function addDaysISO(iso, days) {
-    var day = coerceWorkDate(iso, Lab.todayISO());
-    var d = new Date(day + 'T12:00:00');
-    if (isNaN(d.getTime())) return day;
-    d.setDate(d.getDate() + (Number(days) || 0));
-    return (
-      d.getFullYear() +
-      '-' +
-      String(d.getMonth() + 1).padStart(2, '0') +
-      '-' +
-      String(d.getDate()).padStart(2, '0')
-    );
-  }
-
-  function workDayPhrase(iso, calendarToday) {
-    var day = coerceWorkDate(iso, calendarToday);
-    var cal = coerceWorkDate(calendarToday, Lab.todayISO());
-    if (day === cal) return 'today';
-    return Lab.formatLeaveDate(day);
-  }
-
   function workingTodayDoctors(opts) {
     opts = opts || {};
     var book = opts.book || null;
@@ -696,9 +664,9 @@
     poolTitle: poolTitle,
     columnTitle: columnTitle,
     isLikelyDoctor: isLikelyDoctor,
-    coerceWorkDate: coerceWorkDate,
-    addDaysISO: addDaysISO,
-    workDayPhrase: workDayPhrase,
+    coerceWorkDate: Lab.coerceWorkDate,
+    addDaysISO: Lab.addDaysISO,
+    workDayPhrase: Lab.workDayPhrase,
     formatLeaveDate: Lab.formatLeaveDate,
     workingTodayDoctors: workingTodayDoctors,
     destNamesPhrase: destNamesPhrase,

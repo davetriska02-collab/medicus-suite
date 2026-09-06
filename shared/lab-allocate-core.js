@@ -1646,6 +1646,38 @@
     return m[3].replace(/^0/, '') + ' ' + (months[+m[2] - 1] || '?') + ' ' + m[1];
   }
 
+  function coerceWorkDate(iso, fallback) {
+    var day = String(iso || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      var check = new Date(day + 'T12:00:00');
+      if (!isNaN(check.getTime())) return day;
+    }
+    var fb = String(fallback || '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(fb)) return fb;
+    return todayISO();
+  }
+
+  function addDaysISO(iso, days) {
+    var day = coerceWorkDate(iso, todayISO());
+    var d = new Date(day + 'T12:00:00');
+    if (isNaN(d.getTime())) return day;
+    d.setDate(d.getDate() + (Number(days) || 0));
+    return (
+      d.getFullYear() +
+      '-' +
+      String(d.getMonth() + 1).padStart(2, '0') +
+      '-' +
+      String(d.getDate()).padStart(2, '0')
+    );
+  }
+
+  function workDayPhrase(iso, calendarToday) {
+    var day = coerceWorkDate(iso, calendarToday);
+    var cal = coerceWorkDate(calendarToday, todayISO());
+    if (day === cal) return 'today';
+    return formatLeaveDate(day);
+  }
+
   function requesterGroupKey(tile) {
     if (tile && tile.requester) return clinicianColumnKey(tile.requester);
     return UNKNOWN_GROUP;
@@ -2156,13 +2188,15 @@
     }
     var inToday = bookPresenceForName(opts.book, who);
     if (inToday) {
+      var bookLabel =
+        when === todayISO() ? 'today’s appointment book' : 'the ' + formatLeaveDate(when) + ' appointment book';
       return {
         state: 'present',
         reason: 'in-today',
         source: 'medicus',
         sessions: inToday.sessions,
         site: inToday.site || '',
-        label: who + ' has a session on today’s appointment book.',
+        label: who + ' has a session on ' + bookLabel + '.',
         staff: rota.staff || null,
         leave: null,
       };
@@ -2175,6 +2209,73 @@
       staff: rota.staff || null,
       leave: null,
     };
+  }
+
+  function inDayClinicians(opts) {
+    opts = opts || {};
+    var book = opts.book || null;
+    var list = book && Array.isArray(book.present) ? book.present : [];
+    var when = coerceWorkDate(opts.dateISO, todayISO());
+    var seen = {};
+    var people = [];
+    list.forEach(function (rec) {
+      if (!rec || !rec.name) return;
+      if (isTeamAssignee(rec.name)) return;
+      var key = rec.key || clinicianColumnKey(rec.name);
+      if (!key || key === UNALLOCATED || key === POOL) return;
+      if (seen[key]) return;
+      var presence = presenceForName({
+        name: rec.name,
+        dateISO: when,
+        book: book,
+        absences: opts.absences,
+        staffList: opts.staffList,
+        leaveList: opts.leaveList,
+      });
+      if (presence.state === 'away' || presence.state === 'away-pending') return;
+      if (!(presence.state === 'present' && presence.reason === 'in-today')) return;
+      seen[key] = true;
+      people.push({
+        key: key,
+        name: rec.name,
+        staffId: rec.staffId || '',
+        sessions: rec.sessions || presence.sessions || 0,
+        site: rec.site || presence.site || '',
+      });
+    });
+    people.sort(function (a, b) {
+      var na = displayClinicianName(a.name).toLowerCase();
+      var nb = displayClinicianName(b.name).toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
+    });
+    return people;
+  }
+
+  function mergeInDayClinicians(clinicians, inDay) {
+    var seen = {};
+    var out = [];
+    (Array.isArray(clinicians) ? clinicians : []).forEach(function (c) {
+      if (!c || !c.key) return;
+      seen[c.key] = true;
+      out.push(c);
+    });
+    (Array.isArray(inDay) ? inDay : []).forEach(function (p) {
+      if (!p || !p.key || seen[p.key]) return;
+      seen[p.key] = true;
+      out.push({
+        key: p.key,
+        kind: 'clinician',
+        title: p.name,
+        count: 0,
+        stagedCount: 0,
+        inPoolCount: 0,
+        tiles: [],
+        groups: [],
+      });
+    });
+    return out;
   }
 
   function absenceWarningCopy(absence, count, clinicianName) {
@@ -2589,6 +2690,11 @@
     planBulkReassign: planBulkReassign,
     todayISO: todayISO,
     formatLeaveDate: formatLeaveDate,
+    coerceWorkDate: coerceWorkDate,
+    addDaysISO: addDaysISO,
+    workDayPhrase: workDayPhrase,
+    inDayClinicians: inDayClinicians,
+    mergeInDayClinicians: mergeInDayClinicians,
     requesterGroupKey: requesterGroupKey,
     groupTiles: groupTiles,
     dragPreview: dragPreview,

@@ -62,6 +62,19 @@
   var _dragGhost = null;
   var _expandedChip = '';
   var _collapsed = {};
+  var _workDate = '';
+
+  function calendarToday() {
+    return C.todayISO();
+  }
+
+  function workDate() {
+    return C.coerceWorkDate(_workDate, calendarToday());
+  }
+
+  function dayPhrase() {
+    return C.workDayPhrase(workDate(), calendarToday());
+  }
 
   function announce(text) {
     setTimeout(function () {
@@ -265,17 +278,19 @@
     }
   }
 
-  async function loadMedicusPresence() {
+  async function loadMedicusPresence(opts) {
+    opts = opts || {};
     _book = null;
-    _absences = [];
     if (!_route) return;
     var cli = client();
-    var date = C.todayISO();
+    var date = workDate();
     try {
       _book = await cli.fetchTodayBook(date);
     } catch (_) {
       _book = null;
     }
+    if (opts.skipAbsences) return;
+    _absences = [];
     try {
       _absences = await cli.fetchStaffScheduleAbsences();
     } catch (_) {
@@ -283,17 +298,54 @@
     }
   }
 
-  function presenceForClinician(col) {
-    if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
-    // Display casing — matching is case-insensitive, labels are user-facing.
-    return C.presenceForName({
-      name: C.displayClinicianName(col.title),
-      dateISO: C.todayISO(),
+  async function reloadWorkingDay() {
+    if (!_open || !_route) return;
+    _overviewProgress = 'Reading the appointment book for ' + dayPhrase() + '…';
+    render();
+    try {
+      await loadMedicusPresence({ skipAbsences: true });
+      harvestStaffFromBook(_book);
+    } catch (_) {
+      _book = null;
+    }
+    _overviewProgress = '';
+    announce('In-day flags are for people working ' + dayPhrase() + '.');
+    render();
+  }
+
+  function setWorkDate(iso) {
+    if (_writing) return;
+    var next = C.coerceWorkDate(iso, calendarToday());
+    if (next === workDate()) return;
+    _workDate = next;
+    reloadWorkingDay();
+  }
+
+  function presenceOpts(name) {
+    return {
+      name: name,
+      dateISO: workDate(),
       book: _book,
       absences: _absences,
       staffList: _rota.staff,
       leaveList: _rota.leave,
+    };
+  }
+
+  function inDayPeople() {
+    return C.inDayClinicians({
+      book: _book,
+      dateISO: workDate(),
+      absences: _absences,
+      staffList: _rota.staff,
+      leaveList: _rota.leave,
     });
+  }
+
+  function presenceForClinician(col) {
+    if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
+    // Display casing — matching is case-insensitive, labels are user-facing.
+    return C.presenceForName(presenceOpts(C.displayClinicianName(col.title)));
   }
 
   function presenceRank(col) {
@@ -457,7 +509,7 @@
     var flag = away
       ? '<span class="ms-lac-chip-flag">AWAY</span>'
       : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In today</span>'
+        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In ' + esc(dayPhrase()) + '</span>'
         : col.kind === 'team'
           ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
           : '';
@@ -551,6 +603,38 @@
     );
   }
 
+  function workingDayHtml() {
+    var phrase = dayPhrase();
+    var cal = calendarToday();
+    var picked = workDate();
+    var people = inDayPeople();
+    var bookWord = phrase === 'today' ? 'today’s book' : 'the ' + phrase + ' book';
+    var summary = people.length
+      ? people.length +
+        (people.length === 1 ? ' person has a session on ' : ' people have a session on ') +
+        bookWord
+      : 'No sessions on the book for ' + phrase;
+    return (
+      '<div class="ms-lac-daybar">' +
+      '<div class="ms-lac-split-day">' +
+      '<label class="ms-lac-split-day-label" for="ms-lac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
+      '<input type="date" id="ms-lac-day" value="' +
+      esc(picked) +
+      '" aria-label="Working day for who is in" title="The appointment book for this date decides who is in.">' +
+      '<button type="button" class="ms-lac-ghost' +
+      (picked === cal ? ' ms-lac-split-day-on' : '') +
+      '" id="ms-lac-day-today" title="Use today’s appointment book.">Today</button>' +
+      '<button type="button" class="ms-lac-ghost' +
+      (picked === C.addDaysISO(cal, 1) ? ' ms-lac-split-day-on' : '') +
+      '" id="ms-lac-day-tomorrow" title="Use tomorrow’s appointment book — for allocating the night before.">Tomorrow</button>' +
+      '</div>' +
+      '<span class="ms-lac-daybar-summary">' +
+      esc(summary) +
+      '</span>' +
+      '</div>'
+    );
+  }
+
   function emptyPoolHtml() {
     return (
       '<div class="ms-lac-empty">' +
@@ -573,7 +657,7 @@
         '<div class="ms-lac-empty"><div class="ms-lac-empty-title">Nothing left unallocated</div>' +
         '<div class="ms-lac-empty-sub">Everything on this queue is sitting with a clinician, or staged onto one on this canvas</div></div>';
     }
-    var clinicians = sortClinicianFields(board.clinicians);
+    var clinicians = sortClinicianFields(C.mergeInDayClinicians(board.clinicians, inDayPeople()));
     var teams = board.teams || [];
     return (
       '<div class="ms-lac-workspace">' +
@@ -597,12 +681,15 @@
       (body || emptyPoolHtml()) +
       '</div>' +
       '<aside class="ms-lac-rail" aria-label="Clinician and team fields">' +
+      workingDayHtml() +
       '<div class="ms-lac-rail-head">' +
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Click a field to stage the selection'
-        : 'In today at the top. Drag onto a field — hover near the edge to scroll') +
+        : 'In ' +
+          dayPhrase() +
+          ' at the top. Drag onto a field — hover near the edge to scroll') +
       '</span>' +
       '</div>' +
       (clinicians.length
@@ -869,6 +956,21 @@
       });
     var discardBtn = root.querySelector('#ms-lac-close-discard');
     if (discardBtn) discardBtn.addEventListener('click', closeOverlay);
+    var dayInput = root.querySelector('#ms-lac-day');
+    if (dayInput)
+      dayInput.addEventListener('change', function () {
+        setWorkDate(dayInput.value);
+      });
+    var dayToday = root.querySelector('#ms-lac-day-today');
+    if (dayToday)
+      dayToday.addEventListener('click', function () {
+        setWorkDate(calendarToday());
+      });
+    var dayTomorrow = root.querySelector('#ms-lac-day-tomorrow');
+    if (dayTomorrow)
+      dayTomorrow.addEventListener('click', function () {
+        setWorkDate(C.addDaysISO(calendarToday(), 1));
+      });
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
     var addName = root.querySelector('#ms-lac-add-name');
@@ -1130,14 +1232,7 @@
       (colEl && colEl.querySelector('.ms-lac-chip-name')) || (colEl && colEl.querySelector('.ms-lac-col-heading'));
     var title = C.displayClinicianName((titleEl && titleEl.textContent) || '');
     if (kind === 'clinician') {
-      var abs = C.presenceForName({
-        name: title,
-        dateISO: C.todayISO(),
-        book: _book,
-        absences: _absences,
-        staffList: _rota.staff,
-        leaveList: _rota.leave,
-      });
+      var abs = C.presenceForName(presenceOpts(title));
       if (C.shouldWarnAbsence(abs)) {
         _pendingAbsence = {
           ids: ids,
@@ -1153,6 +1248,12 @@
   }
 
   function commitStage(ids, key) {
+    if (key && String(key).indexOf('clinician:') === 0) {
+      var hit = inDayPeople().filter(function (p) {
+        return p && p.key === key;
+      })[0];
+      if (hit) _draft = C.addColumn(_draft, hit.name, hit.staffId);
+    }
     _draft = C.stageMoves(_draft, ids, key);
     _selected = {};
     _lastSelectId = '';
@@ -1309,6 +1410,7 @@
     _staffDir = C.harvestStaffDirectory([], null);
     _teamDir = C.harvestTeamDirectory([], null);
     _collapsed = {};
+    _workDate = '';
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1333,6 +1435,7 @@
     _copyNote = '';
     _error = null;
     _collapsed = {};
+    _workDate = calendarToday();
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');

@@ -352,7 +352,13 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/fetchStaffScheduleAbsences/.test(canvas), 'canvas may parse GET staff-schedule for absences');
   check(!/change-absence/.test(canvas), 'canvas never calls change-absence');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
-  check(/In today/.test(canvas), 'chips can show In today from the appointment book');
+  check(
+    /In ' \+ esc\(dayPhrase\(\)\)/.test(canvas),
+    'chips can show In today / In <picked day> from the appointment book'
+  );
+  check(/ms-lac-day/.test(canvas) && /ms-lac-day-tomorrow/.test(canvas), 'working-day date input and Tomorrow shortcut are on the canvas');
+  check(/mergeInDayClinicians/.test(canvas), 'people on the picked day’s book appear as drop fields');
+  check(/setWorkDate/.test(canvas) && /reloadWorkingDay/.test(canvas), 'changing working day re-reads that day’s appointment book');
   check(
     /ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas) && /ms-lac-chip/.test(canvas),
     'canvas is an unallocated pool plus clinician fields'
@@ -402,6 +408,7 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/ms-lac-lifting/.test(canvasCss), 'lifting a group dims the rest of the pile, not the well');
   check(/ms-lac-drag-source/.test(canvasCss), 'the dragged reports are marked, not the whole list');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
+  check(/#ms-lac-overlay \.ms-lac-daybar/.test(canvasCss), 'working-day bar is scoped to the lab overlay');
   check(!/Add clinician column/.test(canvas), 'clinicians are fields, not full-page columns');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');
   check(/staff-scheduling SCOPING capture/.test(capture), 'staff-scheduling capture script is present');
@@ -887,6 +894,101 @@ console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
     }),
     'today-book unwraps data.staffSchedules'
   );
+
+  const onToday = C.presenceForName({ name: 'Dr Natalie Azadian', dateISO: C.todayISO(), book: book });
+  check(/today’s appointment book/.test(onToday.label), 'calendar-day present label says today');
+  const ahead = C.presenceForName({ name: 'Dr Natalie Azadian', dateISO: '2026-08-25', book: book });
+  if (C.todayISO() === '2026-08-25') {
+    check(/today’s appointment book/.test(ahead.label), 'picked day that is today still says today');
+  } else {
+    check(/25 Aug 2026/.test(ahead.label), 'picked-day present label names that date');
+    check(!/today’s appointment book/.test(ahead.label), 'ahead day is not called today');
+  }
+}
+
+console.log('\n--- working day defaults to the calendar and can look ahead ---');
+{
+  check(C.coerceWorkDate('2026-09-01', '2026-08-31') === '2026-09-01', 'valid ISO is kept');
+  check(C.coerceWorkDate('', '2026-08-31') === '2026-08-31', 'empty falls back to calendar day');
+  check(C.coerceWorkDate('nights', '2026-08-31') === '2026-08-31', 'garbage falls back to calendar day');
+  check(C.addDaysISO('2026-08-31', 1) === '2026-09-01', 'tomorrow is calendar day + 1');
+  check(C.workDayPhrase('2026-08-31', '2026-08-31') === 'today', 'same day reads as today');
+  check(/1 Sep 2026/.test(C.workDayPhrase('2026-09-01', '2026-08-31')), 'ahead day is named, not called today');
+}
+
+console.log('\n--- in-day clinicians from the picked day’s book ---');
+{
+  const azadianId = uuid(21);
+  const tomorrowBook = C.parseTodayBook({
+    date: '2026-09-07',
+    staffSchedules: [
+      { id: azadianId, name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] },
+      {
+        name: 'Dr David Triska',
+        schedule: [{ scheduleType: 'diary', summary: { status: { isCancelled: true } } }],
+      },
+      { name: 'Kate Downs', schedule: [{ scheduleType: 'diary' }] },
+      { name: 'Practice Nurse Smith', schedule: [{ scheduleType: 'diary' }] },
+    ],
+  });
+  const absences = C.parseAbsenceRecords({
+    items: [
+      {
+        absenceId: '019e8211-f3cf-715f-9996-ccbe4d0b2366',
+        staff: { name: 'Kate Downs' },
+        startDate: '2026-09-07',
+        endDate: '2026-09-07',
+        absenceType: { label: 'Annual leave' },
+      },
+    ],
+  });
+  const people = C.inDayClinicians({ book: tomorrowBook, dateISO: '2026-09-07', absences: absences });
+  check(
+    people.some((p) => p.name === 'Dr Natalie Azadian') && people.some((p) => p.name === 'Practice Nurse Smith'),
+    'everyone with a live session is in-day, not doctors only'
+  );
+  check(
+    !people.some((p) => /Triska/i.test(p.name)),
+    'cancelled-only diary is not in-day'
+  );
+  check(
+    !people.some((p) => /Downs/i.test(p.name)),
+    'Medicus absence on the picked day is not in-day'
+  );
+  const az = people.find((p) => p.name === 'Dr Natalie Azadian');
+  check(az && az.staffId === azadianId, 'book staff UUID is copied onto the in-day person');
+  check(az && az.key === C.clinicianColumnKey('AZADIAN N'), 'caps requester form shares the in-day key');
+
+  const coleId = uuid(22);
+  const sitting = C.normaliseTaskRow(
+    {
+      id: uuid(1),
+      patientName: 'A',
+      assignedTo: 'Dr Jane Cole',
+      assignedId: coleId,
+    },
+    'review-investigation-report'
+  );
+  const board = C.buildBoard([sitting], C.emptyDraft());
+  const merged = C.mergeInDayClinicians(board.clinicians, people);
+  check(
+    merged.some((c) => /Cole/i.test(c.title) && c.count === 1),
+    'queue clinicians stay when in-day people are merged'
+  );
+  const emptyAz = merged.find((c) => /Azadian/i.test(c.title));
+  check(emptyAz && emptyAz.count === 0 && emptyAz.kind === 'clinician', 'in-day person not on the queue is an empty field');
+  const requesterRow = C.normaliseTaskRow(
+    {
+      id: uuid(2),
+      patientName: 'B',
+      requestedBy: 'AZADIAN N',
+    },
+    'review-investigation-report'
+  );
+  const withRequester = C.buildBoard([requesterRow], C.emptyDraft());
+  const deduped = C.mergeInDayClinicians(withRequester.clinicians, people);
+  const azFields = deduped.filter((c) => /Azadian|AZADIAN/i.test(c.title) || c.key === C.clinicianColumnKey('AZADIAN N'));
+  check(azFields.length === 1, 'AZADIAN N on the queue and Dr Natalie Azadian on the book share one field');
 }
 
 function staffForPresence() {
