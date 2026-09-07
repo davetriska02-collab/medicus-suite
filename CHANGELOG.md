@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.2] — 2026-09-07
+
+Occupied strip: do not restyle the whole Medicus page (tokens/font stayed on
+`html.ms-tp-occupied`). Rail stays; host chrome is untouched. Avatars are
+`aria-hidden` so the live region only speaks the name line.
+
 ## [v3.261.1] — 2026-09-07
 
 ### Occupied request — native presence strip

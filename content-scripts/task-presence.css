@@ -7,8 +7,7 @@
    .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) — when the
    canon changes, update this block in the same commit. */
 .ms-tp-chips,
-#ms-tp-banner,
-html.ms-tp-occupied {
+#ms-tp-banner {
   --bg-deep: #f8fafc;
   --bg-elev: #ffffff;
   --border: #cbd5e1;
@@ -97,8 +96,10 @@ html.ms-tp-occupied {
    native Pusher presence channel (or the suite store, as fallback).
    Amber triad: caution / duplicate-work, never clinical red. Advisory —
    it warns, it never blocks. Rail is a 4px inset on <main>. */
+/* Rail only — do not hang tokens or font-family on `html` (that restyles
+   the whole Medicus document while occupied). */
 html.ms-tp-occupied main {
-  box-shadow: inset 4px 0 0 var(--amber);
+  box-shadow: inset 4px 0 0 #b45309;
 }
 
 #ms-tp-banner {
