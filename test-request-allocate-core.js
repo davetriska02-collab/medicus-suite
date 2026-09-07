@@ -197,6 +197,8 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/indexOf\('people:'\) === 0/.test(canvas), 'people: payload is not staged as a task id');
   check(/ms-rxac-folder-head/.test(canvas), 'marquee hit-tests folder heads, not patient tiles');
   check(/id="ms-lac-finalise"/.test(canvas), 'Review then write stays on the canvas while Write is blocked');
+  check(/ms-ags-all-panel/.test(canvas) && /data-ags-always/.test(canvas), 'request All groups panel can edit schedule');
+  check(/refusedPatientsPhrase/.test(canvas), 'request confirm names refused patients');
   check(/REQUEST_WRITE_CAPTURE_COPY/.test(canvas), 'capture-gap copy is clinician English');
   check(
     /createClient[\s\S]{0,400}canWriteRequestAllocations/.test(

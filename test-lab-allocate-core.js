@@ -1656,6 +1656,7 @@ console.log('\n--- dest-set strip + even-split canvas source locks ---');
     /kind === 'custom'[\s\S]{0,200}destsFromSet|destsFromSet\([\s\S]{0,80}kind: 'custom'/.test(canvas),
     'lab custom dests go through destsFromSet'
   );
+  check(/ms-ags-all-panel/.test(canvas) && /data-ags-always/.test(canvas), 'lab All groups panel can edit schedule');
 }
 
 console.log('\n--- asSplitDests identity ---');
@@ -1701,6 +1702,8 @@ console.log('\n--- dest UUID vs sitting UUID mismatch ---');
     }),
     'reason is dest-mismatch'
   );
+  const phrase = C.refusedPatientsPhrase(plan, [sitting, pile]);
+  check(/Not included/.test(phrase) && /B/.test(phrase), 'refused phrase names the patient left behind');
 }
 
 testClient()

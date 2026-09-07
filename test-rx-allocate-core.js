@@ -524,6 +524,7 @@ console.log('\n--- write stays on the lab client ---');
   check(/setData\('text\/plain', 'people:'/.test(canvas), 'people-drag uses a people: payload');
   check(/indexOf\('people:'\) === 0/.test(canvas), 'people: payload is not staged as a task id');
   check(/these prescriptions/.test(canvas), 'Rx confirm names prescriptions, not requests');
+  check(/refusedPatientsPhrase/.test(canvas), 'Rx confirm names refused patients');
   check(/addTeamColumn/.test(canvas), 'adding a team uses addTeamColumn, not a doctor field');
   check(/visibleUnallocatedCount/.test(canvas), 'unallocated count is the visible pile, not sitting work');
   check(/splitDestinations/.test(canvas), 'split dests include in-today doctors plus added teams');

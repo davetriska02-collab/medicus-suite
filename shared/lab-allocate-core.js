@@ -1516,6 +1516,34 @@
     return plan.reason || 'Cannot write these staged moves.';
   }
 
+  function refusedPatientsPhrase(plan, rows) {
+    if (!plan || !plan.refused || !plan.refused.length) return '';
+    var byId = {};
+    (Array.isArray(rows) ? rows : []).forEach(function (r) {
+      if (r && r.id) byId[r.id] = r;
+    });
+    var names = [];
+    var dests = [];
+    plan.refused.forEach(function (r) {
+      if (r && r.toTitle) dests.push(displayClinicianName(r.toTitle));
+      (r.taskIds || []).forEach(function (id) {
+        var row = byId[id];
+        if (row && row.patientName && names.indexOf(row.patientName) === -1) names.push(row.patientName);
+      });
+    });
+    var destPhrase = dests.join(', ');
+    if (names.length) {
+      return (
+        'Not included: ' +
+        names.join(', ') +
+        ' (no unique staff match' +
+        (destPhrase ? ' for ' + destPhrase : '') +
+        '). They stay on this canvas.'
+      );
+    }
+    return 'Not included — no unique staff or team match: ' + destPhrase + '. Those stay on this canvas.';
+  }
+
   function buildBulkReassignBody(assigneeId, taskList, taskIds, slug, assigneeType) {
     if (!UUID_RE.test(String(assigneeId || ''))) return null;
     var token = coerceTaskListToken(taskList, slug);
@@ -3008,6 +3036,7 @@
     resolveStaffForColumn: resolveStaffForColumn,
     resolveTeamForColumn: resolveTeamForColumn,
     writeBlockReason: writeBlockReason,
+    refusedPatientsPhrase: refusedPatientsPhrase,
     pickStaffFields: pickStaffFields,
     pickPatientId: pickPatientId,
     pickPatientIdFromPayload: pickPatientIdFromPayload,

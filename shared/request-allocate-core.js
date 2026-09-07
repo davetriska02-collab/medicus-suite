@@ -454,6 +454,7 @@
     canWriteAllocations: canWriteRequestAllocations,
     planBulkReassign: Lab.planBulkReassign,
     writeBlockReason: Lab.writeBlockReason,
+    refusedPatientsPhrase: Lab.refusedPatientsPhrase,
     createClient: createClient,
     collisionPhrase: Lab.collisionPhrase,
     displayClinicianName: Lab.displayClinicianName,

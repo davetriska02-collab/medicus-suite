@@ -485,6 +485,7 @@
     ensureWorkingTodayColumns: ensureWorkingTodayColumns,
     replaceDestColumns: replaceDestColumns,
     pinDestStaffIds: pinDestStaffIds,
+    refusedPatientsPhrase: Lab.refusedPatientsPhrase,
     asSplitDests: Lab.asSplitDests,
     collisionPhrase: Lab.collisionPhrase,
     fetchRxTaskList: fetchRxTaskList,

@@ -1046,26 +1046,166 @@
     if (!_agsAllOpen) return '';
     var G = groupsCore();
     var list = G ? G.normalisePresets(_agsPresets) : [];
-    if (!list.length) {
-      return '<div class="ms-ags-all" id="ms-ags-all-list">No saved groups yet. Encircle people and Save as group.</div>';
-    }
+    var days = G ? G.DAY_IDS : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    var cards = list
+      .map(function (p) {
+        if (!p || !p.id) return '';
+        var sched = p.schedule;
+        var dayChecks = days
+          .map(function (d) {
+            var on = sched && sched.days && sched.days.indexOf(d) !== -1;
+            return (
+              '<label style="margin-right:8px;font-size:12px"><input type="checkbox" data-ags-day="' +
+              esc(d) +
+              '" data-ags-id="' +
+              esc(p.id) +
+              '"' +
+              (on ? ' checked' : '') +
+              '> ' +
+              esc(d) +
+              '</label>'
+            );
+          })
+          .join('');
+        var names = (p.memberIds || [])
+          .map(function (id) {
+            return (p.memberNames && p.memberNames[id]) || id.slice(0, 8);
+          })
+          .join(', ');
+        return (
+          '<div class="ms-ags-all-card" data-ags-card="' +
+          esc(p.id) +
+          '" style="padding:8px 0;border-top:1px solid var(--border,#e2e8f0)">' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<button type="button" class="ms-lac-ghost" data-ags-pick="' +
+          esc(p.id) +
+          '">Pick</button>' +
+          '<input type="text" data-ags-rename="' +
+          esc(p.id) +
+          '" value="' +
+          esc(p.name) +
+          '" maxlength="48" aria-label="Group name" style="font-weight:600;width:min(220px,100%)">' +
+          '<button type="button" class="ms-lac-ghost" data-ags-always="' +
+          esc(p.id) +
+          '" title="Show this chip every day, all hours.">Always</button>' +
+          '<button type="button" class="ms-lac-ghost" data-ags-delete="' +
+          esc(p.id) +
+          '">Delete</button>' +
+          '</div>' +
+          '<div style="margin-top:4px;font-size:12px;color:var(--text-3,#64748b)">' +
+          esc(names || 'No people yet') +
+          '</div>' +
+          '<div style="margin-top:6px">' +
+          dayChecks +
+          '</div>' +
+          '<div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<label>From <input type="time" data-ags-start="' +
+          esc(p.id) +
+          '" value="' +
+          esc((sched && sched.start) || '') +
+          '"></label>' +
+          '<label>to <input type="time" data-ags-end="' +
+          esc(p.id) +
+          '" value="' +
+          esc((sched && sched.end) || '') +
+          '"></label>' +
+          '<span style="font-size:12px;color:var(--text-3,#64748b)">Leave blank for always.</span>' +
+          '</div></div>'
+        );
+      })
+      .join('');
     return (
-      '<div class="ms-ags-all" id="ms-ags-all-list">' +
-      list
-        .map(function (p) {
-          return (
-            '<button type="button" class="ms-ags-chip' +
-            (_destKind === 'group' && p.id === _destGroupId ? ' ms-ags-chip-on' : '') +
-            '" data-ags-all="' +
-            esc(p.id) +
-            '">' +
-            esc(p.name) +
-            '</button>'
-          );
-        })
-        .join('') +
+      '<div class="ms-ags-all" id="ms-ags-all-panel" style="margin:8px 0;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:8px;background:var(--bg-elev,#fff);max-height:280px;overflow:auto">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<strong>All groups</strong>' +
+      '<button type="button" class="ms-lac-ghost" id="ms-ags-all-close">Close</button>' +
+      '</div>' +
+      '<p style="margin:6px 0 8px;font-size:12px;color:var(--text-3,#64748b)">Every saved group, including those outside their days and times.</p>' +
+      (cards || '<p style="font-size:12px">No groups yet. Encircle people and Save as group.</p>') +
       '</div>'
     );
+  }
+
+  function scheduleFromAllCard(card) {
+    var G = groupsCore();
+    if (!G || !card) return null;
+    var days = [];
+    card.querySelectorAll('[data-ags-day]').forEach(function (box) {
+      if (box.checked) days.push(box.getAttribute('data-ags-day'));
+    });
+    var startEl = card.querySelector('[data-ags-start]');
+    var endEl = card.querySelector('[data-ags-end]');
+    var start = (startEl && startEl.value) || '';
+    var end = (endEl && endEl.value) || '';
+    var raw = { days: days, start: start, end: end };
+    var preset = card.getAttribute('data-ags-card') ? G.findPreset(_agsPresets, card.getAttribute('data-ags-card')) : null;
+    if (!days.length && !start && !end) return null;
+    if (!days.length || !start || !end) return (preset && preset.schedule) || null;
+    if (G.scheduleErrors(raw).length) return (preset && preset.schedule) || null;
+    return G.normaliseSchedule(raw);
+  }
+
+  function upsertPresetFromCard(id, patch) {
+    var G = groupsCore();
+    if (!G) return;
+    var preset = G.findPreset(_agsPresets, id);
+    if (!preset) return;
+    var res = G.upsertPreset(_agsPresets, Object.assign({}, preset, patch || {}));
+    if (!res.ok) {
+      announce((res.errors && res.errors[0]) || 'Could not update that group.');
+      return;
+    }
+    _agsPresets = res.presets;
+    persistPresets();
+    render();
+  }
+
+  function bindAllGroupsPanel(root) {
+    var panel = root.querySelector('#ms-ags-all-panel');
+    if (!panel) return;
+    var close = panel.querySelector('#ms-ags-all-close');
+    if (close)
+      close.addEventListener('click', function () {
+        _agsAllOpen = false;
+        render();
+      });
+    panel.addEventListener('click', function (e) {
+      var pick = e.target.closest && e.target.closest('[data-ags-pick]');
+      if (pick) {
+        e.preventDefault();
+        setDestKind('group', pick.getAttribute('data-ags-pick') || '');
+        return;
+      }
+      var always = e.target.closest && e.target.closest('[data-ags-always]');
+      if (always) {
+        e.preventDefault();
+        upsertPresetFromCard(always.getAttribute('data-ags-always') || '', { schedule: null });
+        return;
+      }
+      var del = e.target.closest && e.target.closest('[data-ags-delete]');
+      if (del) {
+        e.preventDefault();
+        var G = groupsCore();
+        var id = del.getAttribute('data-ags-delete') || '';
+        var preset = G && G.findPreset(_agsPresets, id);
+        if (!window.confirm('Delete group' + (preset && preset.name ? ' ' + preset.name : '') + '?')) return;
+        if (!G) return;
+        _agsPresets = G.removePreset(_agsPresets, id).presets;
+        if (_destKind === 'group' && _destGroupId === id) setDestKind('in-today', '');
+        persistPresets();
+        render();
+      }
+    });
+    panel.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t) return;
+      var id = t.getAttribute('data-ags-rename') || t.getAttribute('data-ags-id') || '';
+      if (!id) return;
+      var card = t.closest('[data-ags-card]');
+      var patch = { schedule: scheduleFromAllCard(card) };
+      if (t.hasAttribute('data-ags-rename')) patch.name = t.value;
+      upsertPresetFromCard(id, patch);
+    });
   }
 
   function evenSplitHtml() {
@@ -1365,17 +1505,9 @@
         })
         .join('');
       var refusedNote = '';
-      if (_confirmWrite.refused && _confirmWrite.refused.length) {
-        refusedNote =
-          '<p class="ms-lac-confirmbar-note">Not included — no unique staff or team match: ' +
-          esc(
-            _confirmWrite.refused
-              .map(function (r) {
-                return C.displayClinicianName(r.toTitle);
-              })
-              .join(', ')
-          ) +
-          '. Those stay on this canvas.</p>';
+      var refusedPhrase = C.refusedPatientsPhrase ? C.refusedPatientsPhrase(_confirmWrite, _rows) : '';
+      if (refusedPhrase) {
+        refusedNote = '<p class="ms-lac-confirmbar-note">' + esc(refusedPhrase) + '</p>';
       }
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
@@ -1572,6 +1704,7 @@
         _agsAllOpen = !_agsAllOpen;
         render();
       });
+    bindAllGroupsPanel(root);
     var saveBtn = root.querySelector('#ms-ags-save');
     if (saveBtn)
       saveBtn.addEventListener('click', function () {
