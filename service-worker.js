@@ -91,6 +91,16 @@ try {
   console.warn('[Suite] importScripts shared/io/request-monitor-io.js failed:', e && e.message);
 }
 try {
+  importScripts('shared/allocation-groups-core.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/allocation-groups-core.js failed:', e && e.message);
+}
+try {
+  importScripts('shared/io/allocation-groups-io.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/io/allocation-groups-io.js failed:', e && e.message);
+}
+try {
   importScripts('shared/io/suite-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);

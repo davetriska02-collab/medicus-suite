@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.2
-**Generated:** 2026-09-06
+**Version:** v3.262.0
+**Generated:** 2026-09-07
 
 ## What it is
 
@@ -100,9 +100,10 @@ Companion tab for the full-tab **Note** display board (waiting-room TV or staff-
 These run directly on live Medicus pages, on top of Medicus's own UI:
 
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue
-- **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who requested them, with clinician fields to drag reports onto; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
+- **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who requested them, with clinician fields to drag reports onto; Split equally / Top up / Distribute equally among In today (nurses included) or a saved allocation group; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
 - **Workflow allocation canvas** — the same workbench on inbound-document queues and any task-list with a workflow view, grouped by registered GP; confirming writes the same bulk-reassign (it does not file the document)
-- **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only) and Distribute equally (rebalances sitting plus new work) among doctors working today; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
+- **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only) and Distribute equally (rebalances sitting plus new work) among In today, a saved allocation group, or people encircled on the canvas; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
+- **Patient-request canvas** — the same workbench on homepage medical and admin patient-request inboxes. Staging and even-split work; Write stays blocked until a dummy-patient capture of bulk-reassign on those slugs. Does not complete, file, or reply.
 - **Companion (inline booking, tasks, and monitoring)** — a floating role-toggled box (Clinic / Reception / Triage / Nursing) on patient and task pages carrying appointment-booking and create-task panels plus a read-only "What's due" pocket of Sentinel chips for the page's patient. For Clinic, an "Open appts, links, tasks & investigations" section (also on care-record pages, not just triage tasks) lists future appointments, unused booking links, the patient's other open tasks (incomplete or scheduled for later; the task currently being viewed is excluded), and outstanding investigation requests (no result back yet — not confirmation the request reached the lab); each list collapses independently. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document, and a checklist that turns a document's coded journal entries into new Problems
 - **Reception quick-actions composer** — chip rows above a task's comment box that insert plain-English text only; the clinician still presses Medicus's own Submit
@@ -145,6 +146,8 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.262.0 (7 Sep)** — Allocation groups: named sets of people to even-split onto (encircle/drag on the canvas, optional days/times); same dest-set on labs and Rx; new homepage medical/admin request canvas (Write blocked until capture)
+- **v3.261.2 (7 Sep)** — Occupied strip: do not restyle the host Medicus page
 - **v3.261.1 (7 Sep)** — Occupied request strip: Live heartbeat from Medicus Pusher presence when a colleague is on the same request (advisory, never a lock; fail-closed against self/stale/wrong-task)
 - **v3.261.0 (6 Sep)** — Lab allocation canvas: Working day (Today / Tomorrow) so night-before allocation uses tomorrow’s appointment book; in-day people sort to the top and appear as drop fields even with no labs sitting yet
 - **v3.260.0 (6 Sep)** — Knowledge live set is practice-shared via `practice-profile.json` (import/edit no longer stay on one computer); Save backup / Import JSON on the tab and in Options. Push is version-gated (never clobber a newer shared file; never roll back to an older one); Share writes `practice-profile.json` next to `manifest.json` only.

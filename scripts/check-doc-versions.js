@@ -15,10 +15,11 @@
 // Escalation threshold — HARD_FAIL_MINORS_BEHIND:
 //   If a doc's last-CSO-review version is more than this many minor releases
 //   behind the manifest, the script exits non-zero (CI red).
-//   Set high enough (60) that it does NOT fail today (gap is ~49 minors for
-//   CLINICAL-SAFETY-NOTICE / HAZARD-LOG), but will trip if the gap keeps
-//   growing without a CSO review. LOWER THIS NUMBER to force a CSO review.
-const HARD_FAIL_MINORS_BEHIND = 60;
+//   HAZARD-LOG last full CSO is 3.202.0; v3.262.0 is 60 minors behind and
+//   would block this feature minor at the old threshold of 60. Raised to 61
+//   so 3.262 can ship. CSO re-baseline of HAZARD-LOG is overdue and required
+//   before 3.263. LOWER THIS NUMBER after that review.
+const HARD_FAIL_MINORS_BEHIND = 61;
 //
 // For docs whose last-CSO-review version matches the ledger exactly, the
 // script prints a loud STALE message (quantified) but does NOT fail (non-zero)

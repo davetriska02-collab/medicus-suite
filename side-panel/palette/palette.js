@@ -105,6 +105,7 @@ const OPTIONS_SECTIONS = [
   ['queue', 'Queue rules', 'triage lens red flags keywords hud result rules outstanding requests oir'],
   ['reception', 'Reception', 'pathways'],
   ['knowledge', 'Knowledge', 'reference'],
+  ['allocation-groups', 'Allocation groups', 'duty teams share out split equally morning afternoon triage'],
   ['safety', 'Clinical Safety', 'hazard disclaimer'],
   ['diagnostics', 'Diagnostics', 'event ledger suite health debug api log'],
   ['backup', 'Backup & Restore', 'export import suite backup'],

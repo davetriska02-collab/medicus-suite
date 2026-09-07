@@ -1421,7 +1421,18 @@
 
   function resolveStaffForColumn(key, title, directory, rows, aliases, knownId) {
     var sitting = assignedIdsOnColumn(rows, key, aliases);
+    var pinned = pickUuid(knownId);
     if (sitting.ids.length === 1) {
+      if (pinned && sitting.ids[0] !== pinned) {
+        return {
+          ok: false,
+          reason: 'dest-mismatch',
+          hits: [
+            { id: pinned, name: title || '' },
+            { id: sitting.ids[0], name: sitting.name || title || '' },
+          ],
+        };
+      }
       var fromField = {
         id: sitting.ids[0],
         name: sitting.name || title || '',
@@ -1438,7 +1449,6 @@
         }),
       };
     }
-    var pinned = pickUuid(knownId);
     if (pinned) {
       var fromBook = { id: pinned, name: sitting.name || title || '', source: 'today-book' };
       return { ok: true, staff: fromBook, hits: [fromBook], source: 'today-book' };
@@ -1472,6 +1482,9 @@
         var who = displayClinicianName(r.toTitle);
         if (r.reason === 'ambiguous-assigned-id') {
           return who + ' has more than one staff id sitting on that field';
+        }
+        if (r.reason === 'dest-mismatch') {
+          return who + ' already has a different staff id sitting on that field';
         }
         if (r.reason === 'ambiguous-staff' && r.candidates && r.candidates.length) {
           return (
@@ -2624,6 +2637,318 @@
     };
   }
 
+  function isSplitDest(d) {
+    if (!d || !d.key) return false;
+    var k = String(d.key);
+    return k.indexOf('clinician:') === 0 || k.indexOf('team:') === 0;
+  }
+
+  function destNamesPhrase(dests) {
+    var names = [];
+    (Array.isArray(dests) ? dests : []).forEach(function (d) {
+      if (!d || !d.name) return;
+      names.push(displayClinicianName(d.name));
+    });
+    if (!names.length) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names[0] + ' and ' + names[1];
+    return names.slice(0, -1).join(', ') + ', and ' + names[names.length - 1];
+  }
+
+  function tileInSplitPool(tile, opts) {
+    if (!tile || !tile.id) return false;
+    if (opts && opts.anyTile) return true;
+    if (opts && typeof opts.isUnallocated === 'function') return opts.isUnallocated(tile);
+    return homeColumnKey(tile) === POOL;
+  }
+
+  function emptySplitDestReason(opts) {
+    if (opts && opts.emptyDestReason) return opts.emptyDestReason;
+    var dayPhrase = (opts && opts.dayPhrase) || 'today';
+    return 'No doctors with a session on the appointment book for ' + dayPhrase + ' to split onto.';
+  }
+
+  function planEvenSplit(tiles, destinations, opts) {
+    opts = opts || {};
+    var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      return tileInSplitPool(t, opts);
+    });
+    var dests = (Array.isArray(destinations) ? destinations : []).filter(isSplitDest);
+    var dayPhrase = opts.dayPhrase || 'today';
+    if (!dests.length) {
+      return {
+        ok: false,
+        reason: emptySplitDestReason(opts),
+        total: pool.length,
+        shares: [],
+        leftover: pool.length,
+      };
+    }
+    if (!pool.length) {
+      return {
+        ok: false,
+        reason: opts.anyTile ? 'Nothing in that box to share out.' : 'Nothing unallocated to split.',
+        total: 0,
+        shares: dests.map(function (d) {
+          return { key: d.key, name: d.name, count: 0, tileIds: [] };
+        }),
+        leftover: 0,
+      };
+    }
+    var n = pool.length;
+    var k = dests.length;
+    var base = Math.floor(n / k);
+    var rem = n % k;
+    var shares = dests.map(function (d, i) {
+      return {
+        key: d.key,
+        name: d.name,
+        staffId: d.staffId || '',
+        count: base + (i < rem ? 1 : 0),
+        tileIds: [],
+      };
+    });
+    var cursor = 0;
+    pool.forEach(function (tile) {
+      var guard = 0;
+      while (shares[cursor].tileIds.length >= shares[cursor].count && guard < k) {
+        cursor = (cursor + 1) % k;
+        guard += 1;
+      }
+      shares[cursor].tileIds.push(tile.id);
+      cursor = (cursor + 1) % k;
+    });
+    return {
+      ok: true,
+      total: n,
+      doctors: k,
+      shares: shares,
+      leftover: 0,
+      summary:
+        n +
+        ' unallocated · split across ' +
+        k +
+        ' doctor' +
+        (k === 1 ? '' : 's') +
+        ' working ' +
+        dayPhrase,
+    };
+  }
+
+  function applyEvenSplit(draft, plan) {
+    var next = draft || emptyDraft();
+    if (!plan || !plan.ok) return next;
+    (plan.shares || []).forEach(function (share) {
+      if (!share || !share.key) return;
+      if (String(share.key).indexOf('team:') === 0) {
+        next = addTeamColumn(next, share.name, share.staffId);
+      } else {
+        next = addColumn(next, share.name, share.staffId);
+      }
+      next = stageMoves(next, share.tileIds || [], share.key);
+    });
+    return next;
+  }
+
+  function planTopUp(tiles, destinations, boxCounts, opts) {
+    opts = opts || {};
+    var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      return t && t.id;
+    });
+    var dests = (Array.isArray(destinations) ? destinations : []).filter(isSplitDest);
+    var counts = boxCounts || {};
+    var dayPhrase = opts.dayPhrase || 'today';
+    if (!dests.length) {
+      return {
+        ok: false,
+        reason: emptySplitDestReason(opts),
+        total: pool.length,
+        shares: [],
+        leftover: pool.length,
+        mode: 'top-up',
+      };
+    }
+    if (!pool.length) {
+      return {
+        ok: false,
+        reason: 'Nothing unallocated to top up with.',
+        total: 0,
+        shares: dests.map(function (d) {
+          return { key: d.key, name: d.name, staffId: d.staffId || '', count: 0, tileIds: [] };
+        }),
+        leftover: 0,
+        mode: 'top-up',
+      };
+    }
+    var bags = dests.map(function (d) {
+      return {
+        key: d.key,
+        name: d.name,
+        staffId: d.staffId || '',
+        start: counts[d.key] || 0,
+        tileIds: [],
+      };
+    });
+    pool.forEach(function (tile) {
+      var best = 0;
+      var bestLoad = bags[0].start + bags[0].tileIds.length;
+      for (var i = 1; i < bags.length; i++) {
+        var load = bags[i].start + bags[i].tileIds.length;
+        if (load < bestLoad) {
+          best = i;
+          bestLoad = load;
+        }
+      }
+      bags[best].tileIds.push(tile.id);
+    });
+    var shares = bags.map(function (b) {
+      return {
+        key: b.key,
+        name: b.name,
+        staffId: b.staffId,
+        count: b.tileIds.length,
+        tileIds: b.tileIds,
+      };
+    });
+    return {
+      ok: true,
+      mode: 'top-up',
+      total: pool.length,
+      doctors: dests.length,
+      shares: shares,
+      leftover: 0,
+      summary:
+        pool.length +
+        ' unallocated · top up empty boxes among ' +
+        dests.length +
+        ' doctor' +
+        (dests.length === 1 ? '' : 's') +
+        ' working ' +
+        dayPhrase,
+    };
+  }
+
+  function planLevel(tiles, destinations, opts) {
+    var plan = planEvenSplit(tiles, destinations, Object.assign({}, opts || {}, { anyTile: true }));
+    if (plan && plan.ok) {
+      plan.mode = 'level';
+      var dayPhrase = (opts && opts.dayPhrase) || 'today';
+      plan.summary =
+        plan.total +
+        ' · even across ' +
+        plan.doctors +
+        ' doctor' +
+        (plan.doctors === 1 ? '' : 's') +
+        ' working ' +
+        dayPhrase;
+    } else if (plan && !plan.ok && plan.reason === 'Nothing in that box to share out.') {
+      plan.reason = 'Nothing to distribute equally.';
+    }
+    return plan;
+  }
+
+  function ensureDestColumns(draft, destinations) {
+    var next = draft || emptyDraft();
+    (Array.isArray(destinations) ? destinations : []).forEach(function (d) {
+      if (!d || !d.name) return;
+      if (isSplitDest(d) && String(d.key).indexOf('team:') === 0) {
+        next = addTeamColumn(next, d.name, d.staffId);
+        return;
+      }
+      next = addColumn(next, d.name, d.staffId);
+    });
+    return next;
+  }
+
+  function replaceDestColumns(draft, destinations) {
+    var next = emptyDraft();
+    next.moves = Object.assign({}, (draft && draft.moves) || {});
+    next = ensureDestColumns(next, destinations);
+    var keep = {};
+    (next.extraColumns || []).forEach(function (k) {
+      keep[k] = true;
+    });
+    Object.keys(next.moves).forEach(function (id) {
+      var to = next.moves[id];
+      if (to && !keep[to] && to !== POOL && to !== UNALLOCATED) delete next.moves[id];
+    });
+    return next;
+  }
+
+  function collisionPhrase(names) {
+    var uniq = [];
+    (Array.isArray(names) ? names : []).forEach(function (n) {
+      var t = String(n || '').trim();
+      if (t && uniq.indexOf(t) === -1) uniq.push(t);
+    });
+    if (!uniq.length) return 'Two people share a name on this dest set — split refused.';
+    if (uniq.length === 1) return uniq[0] + ' matches more than one person — split refused.';
+    if (uniq.length === 2) return uniq[0] + ' and ' + uniq[1] + ' share a name — split refused.';
+    return uniq.slice(0, -1).join(', ') + ', and ' + uniq[uniq.length - 1] + ' share a name — split refused.';
+  }
+
+  function asSplitDests(people) {
+    var out = [];
+    var seen = {};
+    var collisions = [];
+    (Array.isArray(people) ? people : []).forEach(function (p) {
+      if (!p || !p.name) return;
+      var key = p.key || clinicianColumnKey(p.name);
+      if (String(key).indexOf('team:') === 0) return;
+      if (!isSplitDest({ key: key })) return;
+      var id = pickUuid(p.staffId) || '';
+      if (seen[key]) {
+        if (id && seen[key].id && seen[key].id !== id) {
+          if (collisions.indexOf(seen[key].name) === -1) collisions.push(seen[key].name);
+          if (collisions.indexOf(p.name) === -1) collisions.push(p.name);
+        }
+        return;
+      }
+      seen[key] = { id: id, name: p.name };
+      out.push({
+        key: key,
+        name: p.name,
+        staffId: id,
+      });
+    });
+    if (collisions.length) {
+      var refused = [];
+      refused.collisions = collisions;
+      return refused;
+    }
+    out.collisions = collisions;
+    return out;
+  }
+
+  function pinDestStaffIds(dests, directory) {
+    var list = (directory && directory.list) || [];
+    var collisions = dests && dests.collisions ? dests.collisions.slice() : [];
+    var mapped = (Array.isArray(dests) ? dests : []).map(function (d) {
+      if (!d) return d;
+      var inbound = pickUuid(d.staffId);
+      if (inbound) return Object.assign({}, d, { staffId: inbound });
+      if (d.staffId) return Object.assign({}, d, { staffId: '' });
+      var resolved = resolveStaffForColumn(d.key, d.name, directory, [], null, '');
+      if (resolved && resolved.ok && resolved.staff && pickUuid(resolved.staff.id)) {
+        return Object.assign({}, d, { staffId: pickUuid(resolved.staff.id) });
+      }
+      var keyHits = [];
+      var seen = {};
+      list.forEach(function (s) {
+        if (!s || !pickUuid(s.id) || seen[s.id]) return;
+        if (clinicianColumnKey(s.name) !== d.key) return;
+        seen[s.id] = true;
+        keyHits.push(s);
+      });
+      if (keyHits.length === 1) {
+        return Object.assign({}, d, { staffId: pickUuid(keyHits[0].id) });
+      }
+      return Object.assign({}, d, { staffId: '' });
+    });
+    mapped.collisions = collisions;
+    return mapped;
+  }
+
   var api = {
     UNALLOCATED: UNALLOCATED,
     POOL: POOL,
@@ -2719,6 +3044,18 @@
     absenceOnDate: absenceOnDate,
     presenceForName: presenceForName,
     createClient: createClient,
+    isSplitDest: isSplitDest,
+    destNamesPhrase: destNamesPhrase,
+    planEvenSplit: planEvenSplit,
+    applyEvenSplit: applyEvenSplit,
+    planTopUp: planTopUp,
+    planLevel: planLevel,
+    ensureDestColumns: ensureDestColumns,
+    replaceDestColumns: replaceDestColumns,
+    pinDestStaffIds: pinDestStaffIds,
+    asSplitDests: asSplitDests,
+    collisionPhrase: collisionPhrase,
+    tileInSplitPool: tileInSplitPool,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

@@ -1570,6 +1570,139 @@ console.log('--- board keeps every row visible ---');
   check(after.pool.count === 2, 'staged row leaves the unallocated pool');
 }
 
+console.log('\n--- even split onto dests including nurses ---');
+{
+  const dests = C.asSplitDests([
+    { name: 'Dr Jane Cole', staffId: uuid(1) },
+    { name: 'Sister X', staffId: uuid(2) },
+  ]);
+  check(dests.length === 2, 'Sister X is a valid dest — nurses are allowed');
+  check(
+    dests.some(function (d) {
+      return d && /Sister X/.test(d.name);
+    }),
+    'nurse dest keeps its name'
+  );
+  check(
+    dests.every(function (d) {
+      return d && d.key && d.key.indexOf('clinician:') === 0;
+    }),
+    'nurse dests are clinician fields, not filtered by isLikelyDoctor'
+  );
+  const pile = [
+    C.normaliseTaskRow({ id: uuid(11), patientName: 'A', assignedTo: 'Investigation Reports' }, 'x'),
+    C.normaliseTaskRow({ id: uuid(12), patientName: 'B', assignedTo: 'Investigation Reports' }, 'x'),
+    C.normaliseTaskRow({ id: uuid(13), patientName: 'C', assignedTo: 'Investigation Reports' }, 'x'),
+  ];
+  check(
+    pile.every(function (r) {
+      return C.homeColumnKey(r) === C.POOL;
+    }),
+    'inbox reports are unallocated for the split'
+  );
+  const plan = C.planEvenSplit(pile, dests);
+  check(plan.ok && plan.total === 3, 'unallocated pile splits onto two dests');
+  check(plan.shares.length === 2, 'two dest shares');
+  check(
+    plan.shares
+      .map(function (s) {
+        return s.count;
+      })
+      .sort()
+      .join(',') === '1,2',
+    'counts differ by at most one'
+  );
+  check(
+    plan.shares.reduce(function (n, s) {
+      return n + (s.tileIds || []).length;
+    }, 0) === 3,
+    'every unallocated row is assigned'
+  );
+  const sitting = C.normaliseTaskRow(
+    { id: uuid(14), patientName: 'D', assignedTo: 'Dr Jane Cole', assignedId: uuid(1) },
+    'x'
+  );
+  const mixed = C.planEvenSplit([pile[0], sitting], dests);
+  check(mixed.total === 1, 'sitting work is not in Split equally');
+}
+
+console.log('\n--- dest-set strip + even-split canvas source locks ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const canvas = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.js'), 'utf8');
+  check(
+    /ms-ags-in-today/.test(canvas) || /destSetStripHtml/.test(canvas),
+    'lab canvas source contains ms-ags-in-today or destSetStripHtml'
+  );
+  check(/destSetStripHtml/.test(canvas), 'lab canvas inserts destSetStripHtml');
+  check(!/method:\s*['"]POST['"]/.test(canvas), 'lab canvas has no method POST');
+  check(/Split equally/.test(canvas), 'Split equally string exists');
+  check(/Top up empty boxes/.test(canvas) && /Distribute equally/.test(canvas), 'top-up and distribute verbs match Rx');
+  check(/ms-ags-marquee/.test(canvas), 'people marquee uses #ms-ags-marquee');
+  check(/ms-ags-new-group/.test(canvas), 'New group well is on the lab canvas');
+  check(/ms-ags-field-on/.test(canvas), 'dest people are clinician fields, not patient tiles');
+  check(/id="ms-lac-split"/.test(canvas) && /id="ms-lac-topup"/.test(canvas) && /id="ms-lac-level"/.test(canvas), 'split actions use lab ids');
+  check(/inDayClinicians/.test(canvas) && /mergeInDayClinicians/.test(canvas), 'In today for labs includes nurses');
+  check(!/workingTodayDoctors/.test(canvas) && !/isLikelyDoctor/.test(canvas), 'lab dests are not Rx doctors-only');
+  check(/upsertPreset/.test(canvas), 'Save as group uses upsertPreset');
+  check(/lastUsedBySurface\.lab/.test(canvas) && /rememberLastUsed/.test(canvas), 'last-used dest set is remembered for surface lab');
+  check(/allocationGroups\.staffCache/.test(canvas), 'staff directory is harvested into allocationGroups.staffCache');
+  check(/planEvenSplit/.test(canvas) && /planTopUp/.test(canvas) && /planLevel/.test(canvas), 'split / top-up / level go through LabAllocateCore');
+  check(/applyEvenSplit/.test(canvas), 'even split stages locally');
+  check(!/\b(Done|Sent|Allocated|Submitted|Filed)\b/.test(canvas), 'propose copy has no completion verbs');
+  check(/replaceDestColumns/.test(canvas), 'lab dest-set change replaces leftover columns');
+  check(
+    /kind === 'custom'[\s\S]{0,200}destsFromSet|destsFromSet\([\s\S]{0,80}kind: 'custom'/.test(canvas),
+    'lab custom dests go through destsFromSet'
+  );
+}
+
+console.log('\n--- asSplitDests identity ---');
+{
+  const team = C.asSplitDests([{ name: 'Duty GP', key: C.teamColumnKey('Duty GP'), staffId: uuid(1) }]);
+  check(team.length === 0, 'asSplitDests skips team: keys');
+  const jane = uuid(21);
+  const john = uuid(22);
+  const clash = C.asSplitDests([
+    { name: 'Dr Jane Smith', staffId: jane },
+    { name: 'Dr John Smith', staffId: john },
+  ]);
+  check(clash.length === 0, 'surname+initial collision refuses dests');
+  check(clash.collisions && clash.collisions.length >= 2, 'collisions names both people');
+  check(/share a name/.test(C.collisionPhrase(clash.collisions)), 'collision phrase names the clash');
+  const pinnedJunk = C.pinDestStaffIds(
+    [{ key: C.clinicianColumnKey('Dr Jane Cole'), name: 'Dr Jane Cole', staffId: 'not-a-uuid' }],
+    { list: [{ id: uuid(88), name: 'Dr Jane Cole' }] }
+  );
+  check(!pinnedJunk[0].staffId, 'non-UUID inbound staffId is not name-resolved');
+}
+
+console.log('\n--- dest UUID vs sitting UUID mismatch ---');
+{
+  const jane = uuid(71);
+  const john = uuid(72);
+  const sitting = C.normaliseTaskRow(
+    { id: uuid(73), patientName: 'A', assignedTo: 'Dr Jane Smith', assignedId: john, summary: 'FBC' },
+    'x'
+  );
+  const pile = C.normaliseTaskRow(
+    { id: uuid(74), patientName: 'B', assignedTo: 'Investigation Reports', summary: 'TSH' },
+    'x'
+  );
+  const key = C.clinicianColumnKey('Dr Jane Smith');
+  let draft = C.addColumn(C.emptyDraft(), 'Dr Jane Smith', jane);
+  draft = C.stageMove(draft, pile.id, key);
+  const plan = C.planBulkReassign([sitting, pile], draft, 'token', C.harvestStaffDirectory([], null));
+  check(plan.ok === false, 'pinned dest UUID that differs from sitting id is refused');
+  check(
+    (plan.refused || []).some(function (r) {
+      return r.reason === 'dest-mismatch';
+    }),
+    'reason is dest-mismatch'
+  );
+}
+
 testClient()
   .then(function () {
     console.log('\n' + passed + ' passed, ' + failed + ' failed');
