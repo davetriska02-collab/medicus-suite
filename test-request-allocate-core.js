@@ -90,10 +90,7 @@ console.log('--- parseRequestQueueRoute ---');
     'hyphen twin and /tasks/data/ medical request lists are claimed'
   );
   check(
-    C.parseRequestQueueRoute(
-      '/e38a9f/tasks/admin_patient_request_task/task-list',
-      '?viewContext=workflow'
-    ) === null,
+    C.parseRequestQueueRoute('/e38a9f/tasks/admin_patient_request_task/task-list', '?viewContext=workflow') === null,
     'admin workflow view stays on the workflow canvas'
   );
 }
@@ -127,7 +124,10 @@ console.log('\n--- even split ---');
   const plan = C.planEvenSplit(pile, dests);
   check(plan.ok && plan.total === 3, 'split of 3 unallocated is ok');
   check(
-    plan.shares.map((s) => s.count).sort().join(',') === '1,2',
+    plan.shares
+      .map((s) => s.count)
+      .sort()
+      .join(',') === '1,2',
     'counts differ by at most one'
   );
   const sitting = row(4, { assignedTo: 'Dr A' });
@@ -138,8 +138,23 @@ console.log('\n--- even split ---');
 console.log('\n--- write is fail-closed ---');
 {
   check(C.REQUEST_WRITE_CAPTURED === false, 'capture flag is off');
-  const gate = C.canWriteRequestAllocations({ taskList: 'medical_patient_request_task', slug: 'medical_patient_request_task' });
+  const gate = C.canWriteRequestAllocations({
+    taskList: 'medical_patient_request_task',
+    slug: 'medical_patient_request_task',
+  });
   check(gate.ok === false && /not captured/i.test(gate.reason), 'Write is blocked until a dummy capture exists');
+  const gated = C.requestGatedWriteCopy({ count: 47 });
+  check(gated.reviewButton === 'Review plan (47)', 'gated primary button is Review plan (N)');
+  check(
+    gated.reviewHeadline === 'This is a plan on this canvas only. Medicus has not changed.',
+    'review headline says Medicus has not changed'
+  );
+  check(/checked on a test patient/.test(gated.reviewBody), 'review body names the capture gap');
+  check(
+    gated.writeButton === 'Write to Medicus (not yet available for this queue)',
+    'disabled write button names the queue gap'
+  );
+  check(gate.reviewHeadline === gated.reviewHeadline, 'canWriteRequestAllocations carries the headline');
   const src = fs.readFileSync(path.join(__dirname, 'shared/request-allocate-core.js'), 'utf8');
   check(!/\bmethod:\s*['"]POST['"]/.test(src), 'request core has no POST');
 }
@@ -184,12 +199,30 @@ console.log('\n--- canvas + manifest source locks ---');
     ),
     'commitWrite returns before commitAllocations when the gate fails'
   );
-  check(/destSetStripHtml/.test(canvas) && /ms-ags-in-today/.test(canvas), 'dest-set strip / In today is on the canvas');
+  check(
+    /destSetStripHtml/.test(canvas) && /ms-ags-in-today/.test(canvas),
+    'dest-set strip / Working today is on the canvas'
+  );
+  check(/id="ms-lac-finalise"/.test(canvas), 'Review plan stays on the canvas while Write is blocked');
+  check(/Review plan/.test(canvas), 'gated write primary control is Review plan');
+  check(/requestGatedWriteCopy/.test(canvas), 'canvas uses the gated-write copy helper');
+  check(/function applyPileSplit[\s\S]{0,500}planEvenSplit/.test(canvas), 'request Split equally binds planEvenSplit');
+  check(/function applyTopUp[\s\S]{0,500}planTopUp/.test(canvas), 'request Top up binds planTopUp');
+  check(
+    /OVERVIEW_CAP/.test(canvas) && /OVERVIEW_CONCURRENCY/.test(canvas),
+    'staff harvest uses the bounded overview pool'
+  );
   check(/ms-ags-marquee/.test(canvas), 'people can be encircled into a group');
   check(/lastUsedBySurface\.request/.test(canvas), 'last-used dest set is the request surface');
   check(/allocationGroups\.staffCache/.test(canvas), 'harvested staff is saved for Options');
-  check(/does not complete, file, or reply to the request/.test(canvas), 'confirm says the write does not complete the request');
-  check(/Keep planning/.test(canvas) && /Write to Medicus/.test(canvas), 'confirm is Keep planning vs Write to Medicus');
+  check(
+    /does not complete, file, or reply to the request/.test(canvas),
+    'confirm says the write does not complete the request'
+  );
+  check(
+    /Keep planning/.test(canvas) && /Write to Medicus/.test(canvas),
+    'confirm is Keep planning vs Write to Medicus'
+  );
   check(/fetchRequestMergedTaskList/.test(canvas), 'Write vanish-check re-GETs inbox plus sitting work');
   check(/requireSitting:\s*true/.test(canvas), 'Write vanish-check fails closed if sitting GET throws');
   check(/replaceDestColumns/.test(canvas), 'request dest-set change replaces leftover columns');
@@ -197,7 +230,12 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/indexOf\('people:'\) === 0/.test(canvas), 'people: payload is not staged as a task id');
   check(/ms-rxac-folder-head/.test(canvas), 'marquee hit-tests folder heads, not patient tiles');
   check(/id="ms-lac-finalise"/.test(canvas), 'Review then write stays on the canvas while Write is blocked');
-  check(/ms-ags-all-panel/.test(canvas) && /data-ags-always/.test(canvas), 'request All groups panel can edit schedule');
+  check(/'Review plan \('/.test(canvas), 'canvas source includes Review plan (N) fallback');
+  check(/saveGroupRowHtml/.test(canvas), 'request Save as group uses the on-canvas name field');
+  check(
+    /ms-ags-all-panel/.test(canvas) && /data-ags-always/.test(canvas),
+    'request All groups panel can edit schedule'
+  );
   check(/refusedPatientsPhrase/.test(canvas), 'request confirm names refused patients');
   check(/REQUEST_WRITE_CAPTURE_COPY/.test(canvas), 'capture-gap copy is clinician English');
   check(
@@ -207,7 +245,10 @@ console.log('\n--- canvas + manifest source locks ---');
     'request createClient wraps commitAllocations with the capture gate'
   );
   check(/parseRequestQueueRoute/.test(canvas), 'canvas owns the request route');
-  check(/if \(!_open\) _route = route/.test(canvas), 'open overlay pins _route so ensureLauncher cannot clobber search');
+  check(
+    /if \(!_open\) _route = route/.test(canvas),
+    'open overlay pins _route so ensureLauncher cannot clobber search'
+  );
   check(!/\b(Done|Sent|Allocated|Submitted|Filed|Replied)\b/.test(canvas), 'canvas copy has no completion verbs');
 }
 

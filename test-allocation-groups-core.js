@@ -44,10 +44,7 @@ console.log('--- schema ---');
     name: 'Huge',
     memberIds: Array.from({ length: 13 }, (_, i) => uuid(i + 1)),
   };
-  check(
-    C.presetErrors(tooMany)[0] === 'a group can have at most ' + C.MAX_MEMBERS + ' people',
-    'cap 12 people'
-  );
+  check(C.presetErrors(tooMany)[0] === 'a group can have at most ' + C.MAX_MEMBERS + ' people', 'cap 12 people');
   const ok = C.normalisePreset({
     name: '  Morning   triage ',
     memberIds: [uuid(1), uuid(1), uuid(2)],
@@ -63,8 +60,11 @@ console.log('--- schema ---');
 
 console.log('\n--- schedule ---');
 {
-  check(C.scheduleErrors({ days: ['mon'], start: '08:00', end: '08:00' }).length > 0, 'end === start refused');
-  check(C.scheduleErrors({ days: ['mon'], start: '13:00', end: '08:00' }).length > 0, 'overnight wrap refused');
+  check(
+    C.scheduleErrors({ days: ['mon'], start: '08:00', end: '08:00' }).length === 0,
+    'end === start is a 24-hour wrap'
+  );
+  check(C.scheduleErrors({ days: ['mon'], start: '18:00', end: '08:00' }).length === 0, 'overnight wrap is allowed');
   check(C.scheduleErrors({ days: [], start: '08:00', end: '13:00' }).length > 0, 'no days refused');
   check(C.scheduleErrors({ days: ['mon'], start: '25:00', end: '13:00' }).length > 0, 'bad start refused');
   const sched = C.normaliseSchedule({ days: ['fri', 'mon', 'mon', 'xyz'], start: '8:00', end: '13:00' });
@@ -73,6 +73,28 @@ console.log('\n--- schedule ---');
   const clock = C.londonClock(MON_0930_LONDON);
   check(clock.day === 'mon', '2026-09-07 09:30 London is Monday (got ' + clock.day + ')');
   check(clock.minutes === 9 * 60 + 30, 'minutes since midnight 09:30 (got ' + clock.minutes + ')');
+  const overnight = C.normalisePreset({
+    name: 'Nights',
+    memberIds: [uuid(1)],
+    schedule: { days: ['mon'], start: '18:00', end: '08:00' },
+  });
+  check(C.groupIsVisible(overnight, '2026-09-07T22:00:00Z') === true, '18:00-08:00 is in at 23:00 London Monday');
+  check(
+    C.groupIsVisible(overnight, '2026-09-08T06:00:00Z') === true,
+    '18:00-08:00 is in at 07:00 London Tuesday (wrap)'
+  );
+  check(C.groupIsVisible(overnight, '2026-09-08T11:00:00Z') === false, '18:00-08:00 is out at 12:00 London Tuesday');
+  check(C.groupIsVisible(overnight, '2026-09-07T11:00:00Z') === false, '18:00-08:00 is out at 12:00 London Monday');
+  const bstOvernight = C.normalisePreset({
+    name: 'Nights',
+    memberIds: [uuid(1)],
+    schedule: { days: ['sat'], start: '18:00', end: '08:00' },
+  });
+  check(C.groupIsVisible(bstOvernight, '2026-07-11T22:00:00Z') === true, 'DST: Saturday 23:00 BST is in');
+  check(
+    C.groupIsVisible(bstOvernight, '2026-07-12T06:00:00Z') === true,
+    'DST: Sunday 07:00 BST still in from Saturday wrap'
+  );
 }
 
 console.log('\n--- visibility ---');
@@ -117,13 +139,19 @@ console.log('\n--- default dest set ---');
   });
   const presets = [morning, afternoon, always];
   const atMorning = C.defaultDestSet(presets, MON_0930_LONDON, null);
-  check(atMorning.kind === 'group' && atMorning.id === morning.id, 'exactly one in-window scheduled group is the default');
+  check(
+    atMorning.kind === 'group' && atMorning.id === morning.id,
+    'exactly one in-window scheduled group is the default'
+  );
   const atAfternoon = C.defaultDestSet(presets, MON_1400_LONDON, null);
   check(atAfternoon.kind === 'group' && atAfternoon.id === afternoon.id, 'afternoon window picks afternoon group');
   const weekend = C.defaultDestSet(presets, SAT_0930_LONDON, { kind: 'group', id: morning.id });
   check(weekend.kind === 'in-today', 'out-of-window last-used is not the default');
   const weekendAlways = C.defaultDestSet(presets, SAT_0930_LONDON, { kind: 'group', id: always.id });
-  check(weekendAlways.kind === 'group' && weekendAlways.id === always.id, 'unscheduled last-used still visible is kept');
+  check(
+    weekendAlways.kind === 'group' && weekendAlways.id === always.id,
+    'unscheduled last-used still visible is kept'
+  );
   const bothDay = [
     C.normalisePreset({
       id: uuid(20),
@@ -163,10 +191,7 @@ console.log('\n--- members for split / away skip ---');
   check(away.dests.length === 2, 'away member is not a dest');
   check(away.dests.map((d) => d.name).join(',') === 'Dr Dave Triska,Dr Tom Hale', 'remaining dests keep order');
   check(away.skipped.length === 1 && away.skipped[0].reason === 'away', 'away is listed as skipped');
-  check(
-    C.skippedPhrase(away.skipped) === 'Dr Sarah Chen is away — skipped.',
-    'skipped phrase names the away person'
-  );
+  check(C.skippedPhrase(away.skipped) === 'Dr Sarah Chen is away — skipped.', 'skipped phrase names the away person');
   const allAway = C.membersForSplit(group, {
     presenceFor: function () {
       return { state: 'away-pending' };
@@ -229,6 +254,81 @@ console.log('\n--- upsert / last-used ---');
   check(cfg.lastUsedBySurface.lab.kind === 'in-today', 'in-today last-used is stored');
   const dirty = C.normaliseConfig({ lastUsedBySurface: { rx: { kind: 'group', id: 'nope' }, hack: {} } });
   check(!dirty.lastUsedBySurface.rx, 'invalid last-used id is dropped');
+}
+
+console.log('\n--- empty shell / merge by id / auto-pick phrase ---');
+{
+  const empty = C.upsertPreset([], { name: 'New group', memberIds: [] }, { allowEmpty: true });
+  check(empty.ok && empty.preset.memberIds.length === 0, 'Options can create an empty group shell');
+  check(C.presetErrors({ name: 'New group', memberIds: [] }).length > 0, 'canvas save still needs at least one person');
+  const older = C.normalisePreset({
+    id: uuid(40),
+    name: 'Local',
+    memberIds: [uuid(1)],
+    updatedAt: '2026-09-01T10:00:00.000Z',
+  });
+  const newer = C.normalisePreset({
+    id: uuid(40),
+    name: 'Practice',
+    memberIds: [uuid(2)],
+    updatedAt: '2026-09-07T10:00:00.000Z',
+  });
+  const onlyLocal = C.normalisePreset({
+    id: uuid(41),
+    name: 'Mine',
+    memberIds: [uuid(3)],
+    updatedAt: '2026-09-01T10:00:00.000Z',
+  });
+  const onlyIncoming = C.normalisePreset({
+    id: uuid(42),
+    name: 'Theirs',
+    memberIds: [uuid(4)],
+    updatedAt: '2026-09-07T10:00:00.000Z',
+  });
+  const merged = C.mergePresetsById([older, onlyLocal], [newer, onlyIncoming]);
+  const byId = {};
+  merged.forEach((p) => {
+    byId[p.id] = p;
+  });
+  check(byId[uuid(40)].name === 'Practice', 'same id: newer updatedAt wins');
+  check(byId[uuid(41)].name === 'Mine', 'local-only ids are kept');
+  check(byId[uuid(42)].name === 'Theirs', 'incoming-only ids are added');
+  const keepLocal = C.mergePresetsById([newer], [older]);
+  check(keepLocal[0].name === 'Practice', 'same id: older incoming does not replace newer local');
+  const morning = C.normalisePreset({
+    id: uuid(10),
+    name: 'Morning triage',
+    memberIds: [uuid(1), uuid(2), uuid(3)],
+    schedule: weekdayMorning(),
+  });
+  const phrase = C.scheduleAutoPickPhrase(morning, MON_0930_LONDON, 'Working today (12)');
+  check(
+    phrase === 'Using Morning triage (3) because it is 09:30 on a Monday. Or pick Working today (12).',
+    'auto-pick phrase is one reversible sentence'
+  );
+}
+
+console.log('\n--- Options editor + practice-profile merge source locks ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const options = fs.readFileSync(path.join(__dirname, 'options/options.js'), 'utf8');
+  const optionsHtml = fs.readFileSync(path.join(__dirname, 'options/options.html'), 'utf8');
+  const profile = fs.readFileSync(path.join(__dirname, 'shared/io/practice-profile.js'), 'utf8');
+  check(/allowEmpty:\s*true/.test(options), 'Options New group can create an empty shell');
+  check(
+    /No names yet on this computer\. Open Share out this inbox once on Medicus/.test(options),
+    'empty staff picker shows how to harvest names'
+  );
+  check(!/agAdd[\s\S]{0,900}alert\(/.test(options), 'New group does not alert()');
+  check(/namedStaff/.test(options) && /rota\.staff/.test(options), 'Add a person falls back to rota.staff');
+  check(/mergePresetsById/.test(profile), 'practice-profile merge unions by preset id');
+  check(
+    /Replace: every group on this computer is replaced by the practice set/.test(options),
+    'Options picker names Replace vs Merge'
+  );
+  check(/They are not Medicus team inboxes/.test(optionsHtml), 'Options intro says groups are not team inboxes');
+  check(/Overnight windows wrap past midnight/.test(options), 'Options names overnight wrap');
 }
 
 console.log('\n--- ' + passed + ' passed, ' + failed + ' failed ---');

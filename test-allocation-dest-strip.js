@@ -25,7 +25,13 @@ const html = S.destSetStripHtml({
   canSave: true,
 });
 
-check(/ms-ags-in-today/.test(html), 'In today chip');
+check(/ms-ags-in-today/.test(html), 'Working today chip keeps #ms-ags-in-today');
+check(/Working today \(4\)/.test(html), 'Working today chip shows the book count');
+check(/Everyone with a session on the appointment book for that day/.test(html), 'Working today title names the book');
+check(/<button type="button"[^>]*id="ms-ags-new-group"/.test(html), 'New group is a button');
+check(/aria-pressed="true"/.test(html), 'selected chips carry aria-pressed');
+check(/✓ Morning triage/.test(html), 'selected chip has a check glyph');
+check(/Every saved group, including ones outside their hours/.test(html), 'All groups title lists hours rename delete');
 check(/Morning triage/.test(html), 'visible group chip');
 check(/ms-ags-new-group/.test(html), 'New group well');
 check(/All groups/.test(html), 'All groups overflow');
@@ -80,6 +86,50 @@ const clash = S.splitActionsHtml({
 });
 check(/share a name/.test(clash), 'collision phrase replaces Split equally');
 check(!/Split equally/.test(clash), 'colliding dests do not offer Split equally');
+
+const dated = S.destSetStripHtml({
+  destKind: 'in-today',
+  inTodayCount: 12,
+  workDateISO: '2026-09-08',
+  calendarTodayISO: '2026-09-07',
+});
+check(/Working 8 Sep \(12\)/.test(dated), 'working day that is not today uses d MMM');
+check(/aria-pressed="true"/.test(dated), 'Working today selected is pressed');
+
+const custom = S.destSetStripHtml({ destKind: 'custom', inTodayCount: 12 });
+check(/Drag a person's name onto New group/.test(custom), 'selected New group shows the save hint');
+
+check(
+  S.evenSplitDistributionPhrase(47, 12, 'requests') === '47 requests would sit with 12 people: 11 with 4, 1 with 3.',
+  '47/12 even-split phrase'
+);
+check(
+  S.evenSplitDistributionPhrase(10, 3, 'items') === '10 items would sit with 3 people: 1 with 4, 2 with 3.',
+  '10/3 even-split phrase'
+);
+check(
+  S.evenSplitDistributionPhrase(5, 5, 'items') === '5 items would sit with 5 people: 1 each.',
+  '5/5 even-split phrase'
+);
+check(
+  S.evenSplitDistributionPhrase(3, 4, 'items') === '3 items would sit with 4 people: 3 with 1, 1 with none.',
+  '3/4 more people than items'
+);
+
+const proposed = S.splitActionsHtml({
+  destCount: 12,
+  poolN: 0,
+  haveWork: true,
+  stagedN: 47,
+  surfaceNoun: 'requests',
+  destPhrase: 'twelve people',
+});
+check(/Proposal, not written yet/.test(proposed), 'proposal line uses a comma, not a completion verb');
+check(
+  /47 requests would sit with 12 people: 11 with 4, 1 with 3/.test(proposed),
+  'proposal names the even-split numbers'
+);
+check(/Drag a patient from one person onto another/.test(proposed), 'proposal keeps the drag hint');
 
 console.log('\n--- ' + passed + ' passed, ' + failed + ' failed ---');
 if (failed) process.exit(1);
