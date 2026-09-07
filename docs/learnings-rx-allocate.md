@@ -48,30 +48,35 @@ task-list bulk-reassign. They do not share a page.
 
 ## Even split
 
-- Destinations = people with a session on **today’s appointment book**.
+- Destinations = people with a session on the **working day's appointment book**
+  (chip: Working today / Working 8 Sep). Overnight group hours wrap past
+  midnight. Practice-profile merge is a union by group `id` (incoming wins
+  on the same id only when newer). Split equally binds `planEvenSplit`;
+  Top up binds `planTopUp`.
 - Cancelled sessions skipped; Medicus/rota absences drop out.
 - Nurses / pharmacists / HCAs are excluded when any GP-looking session
-  exists; otherwise fall back to everyone in today (so untitled locums
+  exists; otherwise fall back to everyone working that day (so untitled locums
   still get work).
 - Not applied on open. Unallocated is the large pane; doctors sit in
-  a sidebar. User clicks **Split equally** to propose. When the pile
+  a sidebar. User clicks **Split equally** to propose (`planEvenSplit`).
+  When dests already have sitting work, **Top up empty boxes**
+  (`planTopUp`) is the leftover control. When the pile
   is empty, Unallocated greens out and doctors lay out as a grid.
-- **Share this box** on a doctor folder even-splits *that folder
-  only* among doctors in today (`planEvenSplit` `anyTile`). It is
+- **Share this box** on a doctor folder even-splits _that folder
+  only_ among people working that day (`planEvenSplit` `anyTile`). It is
   not the unallocated pile. Holiday/AWAY leftover is the point.
   Destinations skip the source and anyone away. Nothing in the box,
-  or nobody in today, disables the control rather than hiding it
+  or nobody on the book, disables the control rather than hiding it
   when they still have tiles.
-- After Split equally the board is explicitly a **proposal**: banner
-  plus popping dest counts. **Re-split equally** is not offered —
-  staged tiles have left the pile. Prompt: drag a patient from one
-  doctor onto another. Review is a docked card in the panel, not a
+- After Split equally the proposal line names the even-split numbers
+  ("47 prescriptions would sit with 12 people: 11 with 4, 1 with 3")
+  then: drag a patient from one person onto another. Review is a docked card in the panel, not a
   scrim over the folders. The prominent control is **Review then
   write N…**; confirm is **Write to Medicus**.
 - **Top up empty boxes** (`planTopUp`) gives remaining unallocated
   work to dests with the fewest current tiles, so a trickle later in
   the day does not land on the first dests. **Distribute equally**
-  (`planLevel`) re-deals in-today sitting + unallocated so totals
+  (`planLevel`) re-deals sitting + unallocated so totals
   differ by at most one. Away boxes are left unless Share this box.
   Both name the destinations (`To: Dr A, Dr B, and Duty GP`). Hover
   `title`s explain each control. Medicus teams from
@@ -98,7 +103,7 @@ Write clicked, Medicus did not move the tasks. Four stacked no-ops:
 2. POST 404 on `/tasks/{slug}/task-list/bulk-reassign` never tried the
    hyphen/underscore twin. `bulkReassignPaths` is slug, twin, then the
    captured literal `/tasks/task-list/bulk-reassign`.
-3. Even-split dests were names without a staff UUID. Empty In-today
+3. Even-split dests were names without a staff UUID. Empty Working-today
    fields have no sitting `assignedId`, so name-match against an empty
    directory failed. Pin `columnStaffIds` from the appointment book
    (or a unique directory match) and pass that into `resolveStaffForColumn`.

@@ -71,6 +71,8 @@
   var _agsPicking = false;
   var _agsAllOpen = false;
   var _agsDestReady = false;
+  var _namingGroup = false;
+  var _scheduleAutoPick = false;
   var _dragFieldKey = '';
   var _marquee = null;
 
@@ -84,6 +86,36 @@
 
   function dayPhrase() {
     return C.workDayPhrase(workDate(), calendarToday());
+  }
+
+  function workingFlag() {
+    var Strip = destStrip();
+    if (Strip && typeof Strip.workingFlagLabel === 'function') {
+      return Strip.workingFlagLabel({ workDateISO: workDate(), calendarTodayISO: calendarToday() });
+    }
+    return 'Working today';
+  }
+
+  function workingTodayChipState() {
+    return {
+      inTodayCount: inDayPeople().length,
+      workDateISO: workDate(),
+      calendarTodayISO: calendarToday(),
+    };
+  }
+
+  function scheduleHintText() {
+    if (!_scheduleAutoPick || _destKind !== 'group') return '';
+    var G = groupsCore();
+    if (!G || typeof G.scheduleAutoPickPhrase !== 'function') return '';
+    var preset = G.findPreset(_agsPresets, _destGroupId);
+    if (!preset) return '';
+    var Strip = destStrip();
+    var todayLabel =
+      Strip && typeof Strip.workingTodayChipLabel === 'function'
+        ? Strip.workingTodayChipLabel(workingTodayChipState())
+        : 'Working today';
+    return G.scheduleAutoPickPhrase(preset, new Date(), todayLabel);
   }
 
   function announce(text) {
@@ -216,26 +248,57 @@
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
-    var cap = Math.min(withUrl.length, 12);
+    if (withUrl.length > OVERVIEW_CAP) withUrl = withUrl.slice(0, OVERVIEW_CAP);
     var patientId = '';
     (rows || []).forEach(function (r) {
       if (!patientId && r && r.patientId) patientId = r.patientId;
     });
-    for (var i = 0; i < cap; i++) {
-      try {
-        var payload = await client().fetchOverview(withUrl[i].overviewURL);
-        absorbDirectories(null, payload);
-        if (!patientId) patientId = C.pickPatientIdFromPayload(payload);
-      } catch (_) {
-        /* try the next overview */
+    var cli = client();
+    var i = 0;
+    async function worker() {
+      while (i < withUrl.length) {
+        var idx = i++;
+        try {
+          var payload = await cli.fetchOverview(withUrl[idx].overviewURL);
+          absorbDirectories(null, payload);
+          if (!patientId) patientId = C.pickPatientIdFromPayload(payload);
+        } catch (_) {
+          /* try the next overview */
+        }
       }
     }
+    if (withUrl.length) {
+      var workers = [];
+      var n = Math.min(OVERVIEW_CONCURRENCY, withUrl.length);
+      for (var w = 0; w < n; w++) workers.push(worker());
+      await Promise.all(workers);
+    }
+    if (!patientId) return;
+    try {
+      var form = await cli.fetchAssigneeStaff(patientId);
+      absorbDirectories(null, form);
+    } catch (_) {
+      /* create-task form is a bonus directory, not required to stage */
+    }
+  }
+
+  async function ensureDestStaffResolved() {
+    var dests = splitDestinations();
+    if (dests.collisions && dests.collisions.length) return;
+    var missing = dests.some(function (d) {
+      return d && !d.staffId;
+    });
+    if (!missing) return;
+    var patientId = '';
+    (_rows || []).forEach(function (r) {
+      if (!patientId && r && r.patientId) patientId = r.patientId;
+    });
     if (!patientId) return;
     try {
       var form = await client().fetchAssigneeStaff(patientId);
       absorbDirectories(null, form);
     } catch (_) {
-      /* create-task form is a bonus directory, not required to stage */
+      /* dest UUIDs stay blank and Write will refuse */
     }
   }
 
@@ -524,7 +587,7 @@
     var flag = away
       ? '<span class="ms-lac-chip-flag">AWAY</span>'
       : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In ' + esc(dayPhrase()) + '</span>'
+        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>'
         : col.kind === 'team'
           ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
           : '';
@@ -559,7 +622,13 @@
           '" aria-pressed="' +
           (sittingAllOn ? 'true' : 'false') +
           '">' +
-          (sittingAllOn ? (isTeam ? 'All selected' : 'All sitting selected') : isTeam ? 'Select these' : 'Select all sitting') +
+          (sittingAllOn
+            ? isTeam
+              ? 'All selected'
+              : 'All sitting selected'
+            : isTeam
+              ? 'Select these'
+              : 'Select all sitting') +
           '</button>'
         : '';
     return (
@@ -585,11 +654,7 @@
       '" aria-controls="ms-lac-drawer-' +
       esc(col.key).replace(/[^a-z0-9]/gi, '_') +
       '" aria-label="' +
-      esc(
-        selCount
-          ? 'Stage ' + selCount + ' selected results onto ' + name
-          : name + '. ' + expandHint
-      ) +
+      esc(selCount ? 'Stage ' + selCount + ' selected results onto ' + name : name + '. ' + expandHint) +
       '">' +
       '<span class="ms-lac-chip-name">' +
       esc(name) +
@@ -612,10 +677,10 @@
           selectSitting +
           (body ||
             '<div class="ms-lac-empty-sm">' +
-            (isTeam
-              ? 'Nothing staged onto this team yet. Drag from the unallocated box, or select there and click this field.'
-              : 'Nothing sitting with them yet. Drag from the unallocated box, or select there and click this field.') +
-            '</div>') +
+              (isTeam
+                ? 'Nothing staged onto this team yet. Drag from the unallocated box, or select there and click this field.'
+                : 'Nothing sitting with them yet. Drag from the unallocated box, or select there and click this field.') +
+              '</div>') +
           '</div>'
         : '') +
       '</div>'
@@ -629,9 +694,7 @@
     var people = inDayPeople();
     var bookWord = phrase === 'today' ? 'today’s book' : 'the ' + phrase + ' book';
     var summary = people.length
-      ? people.length +
-        (people.length === 1 ? ' person has a session on ' : ' people have a session on ') +
-        bookWord
+      ? people.length + (people.length === 1 ? ' person has a session on ' : ' people have a session on ') + bookWord
       : 'No sessions on the book for ' + phrase;
     return (
       '<div class="ms-lac-daybar">' +
@@ -694,6 +757,7 @@
     _destKind = (dest && dest.kind) || 'in-today';
     _destGroupId = (dest && dest.id) || '';
     _customMembers = [];
+    _scheduleAutoPick = !!(dest && dest.kind === 'group');
     _agsDestReady = true;
   }
 
@@ -769,9 +833,7 @@
       return { dests: fallback, skipped: [], collisions: fallback.collisions || [] };
     }
     var raw = G.destsFromSet(
-      _destKind === 'custom'
-        ? { kind: 'custom', members: _customMembers }
-        : { kind: _destKind, id: _destGroupId },
+      _destKind === 'custom' ? { kind: 'custom', members: _customMembers } : { kind: _destKind, id: _destGroupId },
       {
         presets: _agsPresets,
         inToday: inDayPeople(),
@@ -861,7 +923,7 @@
   function splitOpts() {
     return {
       dayPhrase: dayPhrase(),
-      emptyDestReason: 'Pick In today, a group, or encircle people.',
+      emptyDestReason: 'Pick Working today, a group, or encircle people.',
     };
   }
 
@@ -879,6 +941,9 @@
 
   function applyTopUp() {
     var dests = splitDestinations();
+    if (dests.collisions && dests.collisions.length) {
+      return { ok: false, reason: C.collisionPhrase(dests.collisions) };
+    }
     var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), splitOpts());
     if (!plan.ok) return plan;
     _draft = C.applyEvenSplit(C.ensureDestColumns(_draft || C.emptyDraft(), dests), plan);
@@ -888,6 +953,9 @@
 
   function applyLevel() {
     var dests = splitDestinations();
+    if (dests.collisions && dests.collisions.length) {
+      return { ok: false, reason: C.collisionPhrase(dests.collisions) };
+    }
     var seen = {};
     var tiles = destBoxTiles()
       .concat(tilesForPlan())
@@ -934,6 +1002,8 @@
     _destGroupId = groupId || '';
     _agsPicking = kind === 'custom';
     _agsAllOpen = false;
+    _scheduleAutoPick = false;
+    _namingGroup = false;
     if (kind !== 'custom') _customMembers = [];
     rememberDest();
     pinDestColumns();
@@ -1004,7 +1074,7 @@
     });
   }
 
-  async function saveAsGroup() {
+  function startSaveAsGroup() {
     var G = groupsCore();
     if (!G) return;
     var members = (_customMembers || []).filter(function (m) {
@@ -1016,8 +1086,26 @@
       render();
       return;
     }
-    var name = window.prompt('Name this group', 'New group');
-    if (!name) return;
+    _namingGroup = true;
+    render();
+    var input = document.getElementById('ms-ags-save-name');
+    if (input) input.focus();
+  }
+
+  function commitSaveAsGroup() {
+    var G = groupsCore();
+    if (!G) return;
+    var input = document.getElementById('ms-ags-save-name');
+    var name = input && input.value ? String(input.value).trim() : '';
+    var members = (_customMembers || []).filter(function (m) {
+      return m && G.isUuid(m.staffId);
+    });
+    if (!members.length) {
+      _copyNote = 'Need at least one person with a staff id to save a group.';
+      announce(_copyNote);
+      render();
+      return;
+    }
     var res = G.upsertPreset(_agsPresets, {
       name: name,
       members: members.map(function (m) {
@@ -1034,12 +1122,14 @@
     _destKind = 'group';
     _destGroupId = res.preset.id;
     _agsPicking = false;
-    await persistPresets();
-    rememberDest();
-    _copyNote = 'Saved group ' + res.preset.name + '. Split still stages on this canvas only.';
-    announce(_copyNote);
-    pinDestColumns();
-    render();
+    _namingGroup = false;
+    persistPresets().then(function () {
+      rememberDest();
+      _copyNote = 'Saved group ' + res.preset.name + '. Split still stages on this canvas only.';
+      announce(_copyNote);
+      pinDestColumns();
+      render();
+    });
   }
 
   function allGroupsHtml() {
@@ -1138,7 +1228,9 @@
     var start = (startEl && startEl.value) || '';
     var end = (endEl && endEl.value) || '';
     var raw = { days: days, start: start, end: end };
-    var preset = card.getAttribute('data-ags-card') ? G.findPreset(_agsPresets, card.getAttribute('data-ags-card')) : null;
+    var preset = card.getAttribute('data-ags-card')
+      ? G.findPreset(_agsPresets, card.getAttribute('data-ags-card'))
+      : null;
     if (!days.length && !start && !end) return null;
     if (!days.length || !start || !end) return (preset && preset.schedule) || null;
     if (G.scheduleErrors(raw).length) return (preset && preset.schedule) || null;
@@ -1221,18 +1313,25 @@
           destKind: _destKind,
           destGroupId: _destGroupId,
           inTodayCount: inDayPeople().length,
+          workDateISO: workDate(),
+          calendarTodayISO: calendarToday(),
           visibleGroups: visible,
           destPhrase: destPhrase,
           skippedPhrase: skippedPhrase,
           canSave: canSaveCustomGroup(),
+          scheduleHint: scheduleHintText(),
         })
       : '';
+    var naming = _namingGroup && Strip && typeof Strip.saveGroupRowHtml === 'function' ? Strip.saveGroupRowHtml() : '';
     var poolN = visibleUnallocatedCount();
     var haveWork = destsHaveWork();
     var stagedN = C.draftSummary(_rows, _draft).count;
+    var collisionPhrase = dests.collisions && dests.collisions.length ? C.collisionPhrase(dests.collisions) : '';
     var actions = '';
-    if (!dests.length) {
-      actions = '<span class="ms-lac-split-note">Pick In today, a group, or encircle people.</span>';
+    if (collisionPhrase) {
+      actions = '<span class="ms-lac-split-note">' + esc(collisionPhrase) + '</span>';
+    } else if (!dests.length) {
+      actions = '<span class="ms-lac-split-note">Pick Working today, a group, or encircle people.</span>';
     } else if (poolN && !haveWork) {
       actions =
         '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-split" title="Split the unallocated pile evenly. Proposal only, nothing is written until you confirm.">Split equally</button>';
@@ -1247,21 +1346,16 @@
       actions =
         '<span class="ms-lac-split-note">Inbox is clear. Share this box on a person splits only that folder among the current destinations.</span>';
     }
+    var dist =
+      stagedN && dests.length && Strip && typeof Strip.evenSplitDistributionPhrase === 'function'
+        ? Strip.evenSplitDistributionPhrase(stagedN, dests.length, 'reports')
+        : '';
     var proposal = stagedN
-      ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal. Not written yet.</strong> ' +
-        stagedN +
-        ' reports would move among ' +
-        esc(destPhrase) +
-        '. Drag a patient from one person onto another to change who gets them.</div>'
+      ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal, not written yet.</strong> ' +
+        esc(dist || stagedN + ' reports would sit with ' + dests.length + ' people.') +
+        ' <span class="ms-rxac-drag-hint">Drag a patient from one person onto another to change who gets them.</span></div>'
       : '';
-    return (
-      strip +
-      allGroupsHtml() +
-      '<div class="ms-ags-actions">' +
-      actions +
-      '</div>' +
-      proposal
-    );
+    return strip + naming + allGroupsHtml() + '<div class="ms-ags-actions">' + actions + '</div>' + proposal;
   }
 
   function clinicianFieldsInRect(rect) {
@@ -1271,10 +1365,7 @@
     overlay.querySelectorAll('.ms-lac-chip-wrap[data-col-kind="clinician"]').forEach(function (el) {
       var box = el.getBoundingClientRect();
       var hit =
-        box.right >= rect.x &&
-        box.left <= rect.x + rect.w &&
-        box.bottom >= rect.y &&
-        box.top <= rect.y + rect.h;
+        box.right >= rect.x && box.left <= rect.x + rect.w && box.bottom >= rect.y && box.top <= rect.y + rect.h;
       if (!hit) return;
       var key = el.getAttribute('data-col-key') || '';
       if (key) keys.push(key);
@@ -1407,9 +1498,7 @@
       '<span class="ms-lac-col-meta">' +
       (selCount
         ? 'Click a field to stage the selection'
-        : 'In ' +
-          dayPhrase() +
-          ' at the top. Drag onto a field — hover near the edge to scroll') +
+        : workingFlag() + ' at the top. Drag onto a field - hover near the edge to scroll') +
       '</span>' +
       '</div>' +
       (clinicians.length
@@ -1708,7 +1797,28 @@
     var saveBtn = root.querySelector('#ms-ags-save');
     if (saveBtn)
       saveBtn.addEventListener('click', function () {
-        saveAsGroup();
+        startSaveAsGroup();
+      });
+    var saveGo = root.querySelector('#ms-ags-save-go');
+    if (saveGo)
+      saveGo.addEventListener('click', function (e) {
+        e.preventDefault();
+        commitSaveAsGroup();
+      });
+    var saveCancel = root.querySelector('#ms-ags-save-cancel');
+    if (saveCancel)
+      saveCancel.addEventListener('click', function (e) {
+        e.preventDefault();
+        _namingGroup = false;
+        render();
+      });
+    var saveName = root.querySelector('#ms-ags-save-name');
+    if (saveName)
+      saveName.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitSaveAsGroup();
+        }
       });
     var well = root.querySelector('#ms-ags-new-group');
     if (well) {
@@ -1744,13 +1854,14 @@
         e.preventDefault();
         e.stopPropagation();
         if (_writing) return;
-        var applied = applyFn();
-        _selected = {};
-        _confirmWrite = null;
-        _copyNote =
-          applied && applied.ok ? okNote(applied) : (applied && applied.reason) || 'Could not split.';
-        announce(_copyNote);
-        render();
+        Promise.resolve(ensureDestStaffResolved()).then(function () {
+          var applied = applyFn();
+          _selected = {};
+          _confirmWrite = null;
+          _copyNote = applied && applied.ok ? okNote(applied) : (applied && applied.reason) || 'Could not split.';
+          announce(_copyNote);
+          render();
+        });
       });
     }
     bindPileAction('#ms-lac-split', applyPileSplit, function (applied) {
@@ -1868,9 +1979,11 @@
       var overlay = document.getElementById(OVERLAY_ID);
       if (!overlay) return;
       overlay.classList.remove('ms-lac-lifting');
-      overlay.querySelectorAll('.ms-lac-drag-source, .ms-lac-group-lift, .ms-lac-group-lift-partial').forEach(function (node) {
-        node.classList.remove('ms-lac-drag-source', 'ms-lac-group-lift', 'ms-lac-group-lift-partial');
-      });
+      overlay
+        .querySelectorAll('.ms-lac-drag-source, .ms-lac-group-lift, .ms-lac-group-lift-partial')
+        .forEach(function (node) {
+          node.classList.remove('ms-lac-drag-source', 'ms-lac-group-lift', 'ms-lac-group-lift-partial');
+        });
     }
     function beginDrag(e, startIds) {
       var ids = C.dragIdsFor(_selected, startIds);
@@ -1939,7 +2052,11 @@
     root.querySelectorAll('.ms-lac-group-head').forEach(function (head) {
       head.addEventListener('click', function (e) {
         if (_ignoreClickAfterDrag) return;
-        if (e.target && e.target.closest && (e.target.closest('.ms-lac-group-toggle') || e.target.closest('.ms-lac-group-pick'))) {
+        if (
+          e.target &&
+          e.target.closest &&
+          (e.target.closest('.ms-lac-group-toggle') || e.target.closest('.ms-lac-group-pick'))
+        ) {
           return;
         }
         e.stopPropagation();
@@ -2279,6 +2396,8 @@
     _agsPicking = false;
     _agsAllOpen = false;
     _agsDestReady = false;
+    _namingGroup = false;
+    _scheduleAutoPick = false;
     _dragFieldKey = '';
     clearMarquee();
     var el = document.getElementById(OVERLAY_ID);
@@ -2312,6 +2431,8 @@
     _agsPicking = false;
     _agsAllOpen = false;
     _agsDestReady = false;
+    _namingGroup = false;
+    _scheduleAutoPick = false;
     _dragFieldKey = '';
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
