@@ -2926,7 +2926,8 @@
       if (!isSplitDest({ key: key })) return;
       var id = pickUuid(p.staffId) || '';
       if (seen[key]) {
-        if (id && seen[key].id && seen[key].id !== id) {
+        var samePerson = id && seen[key].id && seen[key].id === id;
+        if (!samePerson) {
           if (collisions.indexOf(seen[key].name) === -1) collisions.push(seen[key].name);
           if (collisions.indexOf(p.name) === -1) collisions.push(p.name);
         }
