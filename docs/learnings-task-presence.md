@@ -1,5 +1,17 @@
 # Learnings — is a task tagged as "being worked on"?
 
+**Updated:** 2026-09-07 — Medicus has since shipped native Pusher **presence**
+channels. Live on a medical patient-request overview:
+
+| Channel | Meaning |
+| --- | --- |
+| `presence-{site}-task-{taskUuid}` | Who is **in this request**. Stock events: `pusher:subscription_succeeded`, `pusher:member_added`, `pusher:member_removed`, `pusher:subscription_error`. Member `id` is the staff UUID. |
+| `presence-{site}-task-list-{slug}` | Who is **on that queue** (not which row). |
+
+The overview REST payload still has no viewers field. The Suite occupied
+strip (v3.261.1) reads the per-task presence channel via page-world.js.
+The August finding below is kept as history of the gap that existed then.
+
 **Captured:** 2026-08-04, live Medicus, `communication-thread` task opened from a
 `medical_patient_request_task` queue, via `scripts/task-presence-capture.js`.
 28 timeline entries, 20 network calls, the request opened **twice**.

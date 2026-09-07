@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.0
+**Version:** v3.261.1
 **Generated:** 2026-09-06
 
 ## What it is
@@ -112,7 +112,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Clean up alerts** — pill on the patient banner; batch-clears Flag on patient banner only (W24)
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
-- **Task presence** — shows a colleague's name on a queue row they already have open, backed by the practice's own shared folder; advisory only, never a lock
+- **Task presence** — when a colleague is on the same request, a one-line amber strip (initials + name + Live + not a lock) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
@@ -145,6 +145,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.1 (7 Sep)** — Occupied request strip: Live heartbeat from Medicus Pusher presence when a colleague is on the same request (advisory, never a lock; fail-closed against self/stale/wrong-task)
 - **v3.261.0 (6 Sep)** — Lab allocation canvas: Working day (Today / Tomorrow) so night-before allocation uses tomorrow’s appointment book; in-day people sort to the top and appear as drop fields even with no labs sitting yet
 - **v3.260.0 (6 Sep)** — Knowledge live set is practice-shared via `practice-profile.json` (import/edit no longer stay on one computer); Save backup / Import JSON on the tab and in Options. Push is version-gated (never clobber a newer shared file; never roll back to an older one); Share writes `practice-profile.json` next to `manifest.json` only.
 - **v3.259.0 (5 Sep)** — QOF OB005 rewritten to the PCIT TA1026 / OBES2_REG cohort (ethnicity-adjusted BMI + 4-of-5 comorbidities) with three pathway codes as achievement; drug brand names no longer count

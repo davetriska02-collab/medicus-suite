@@ -1,13 +1,14 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — task presence: "is someone already on this request?"
 //
-// PURPOSE (user request 2026-08-04): two clinicians can open the same triage
-// request without either knowing the other is in it. The live capture
-// (docs/learnings-task-presence.md) proved Medicus offers nothing to build on:
-// opening a request writes NOTHING (20 calls, all GETs), the status enum has
-// no 'in-progress', and all 17 Pusher channels are public (so no presence
-// channel exists and client events are impossible). Whatever signal exists has
-// to be ours. This script provides two layers:
+// PURPOSE (user request 2026-08-04; native hook found 2026-09-07): two
+// clinicians can open the same triage request without either knowing the
+// other is in it. August 2026 capture found no Medicus signal. September
+// 2026: Medicus now subscribes to presence-{site}-task-{taskUuid} (member
+// id = staff UUID; stock pusher:member_added / member_removed). Layer 0
+// reads that channel via page-world.js and paints an occupied masthead on
+// the open request — no shared store required. Layers 1–2 below remain for
+// queue chips / practices still on the folder/Supabase transport.
 //
 //   LAYER 1 — "last actioned" queue chip (zero infrastructure). The queue
 //   task-list payload already carries actionedBy / actionedDateTime on every
@@ -273,6 +274,160 @@
     return 'in.(' + keep.join(',') + ')';
   }
 
+  // Native Pusher member.info → a display label. Staff-shaped keys only;
+  // empty if nothing usable (caller falls back to 'A colleague').
+  function labelFromPresenceInfo(info) {
+    if (!info || typeof info !== 'object') return '';
+    var keys = [
+      'displayName',
+      'display_name',
+      'name',
+      'fullName',
+      'full_name',
+      'staffName',
+      'staff_name',
+      'shortName',
+      'short_name',
+    ];
+    for (var i = 0; i < keys.length; i++) {
+      var v = info[keys[i]];
+      if (typeof v === 'string' && v.trim()) return v.trim().slice(0, 60);
+    }
+    var first =
+      typeof info.firstName === 'string'
+        ? info.firstName.trim()
+        : typeof info.first_name === 'string'
+          ? info.first_name.trim()
+          : '';
+    var last =
+      typeof info.lastName === 'string'
+        ? info.lastName.trim()
+        : typeof info.last_name === 'string'
+          ? info.last_name.trim()
+          : '';
+    if (first && last) return (first + ' ' + last).slice(0, 60);
+    if (first) return first.slice(0, 60);
+    var email = typeof info.email === 'string' ? info.email.trim() : '';
+    if (email) {
+      var at = email.indexOf('@');
+      return (at > 0 ? email.slice(0, at) : email).slice(0, 60);
+    }
+    if (typeof info.initials === 'string' && info.initials.trim()) return info.initials.trim().slice(0, 3);
+    return '';
+  }
+
+  // "Dr Aisha Malik" → AM; "david.triska" → DT; already-initials kept.
+  function initialsFromLabel(label) {
+    var s = typeof label === 'string' ? label.trim() : '';
+    if (!s) return '?';
+    s = s.replace(/^(dr|prof|professor|mr|mrs|ms|miss)\.?\s+/i, '');
+    if (s.indexOf('@') >= 0) s = s.split('@')[0];
+    if (/^[A-Za-z]{1,3}$/.test(s)) return s.toUpperCase();
+    var parts = s.split(/[\s._-]+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    return s.slice(0, 2).toUpperCase();
+  }
+
+  // Identity colour for an avatar — categorical, never status red/amber.
+  var AVATAR_HUES = ['#0d9488', '#7c3aed', '#2563eb', '#0891b2', '#a21caf', '#4f46e5', '#0f766e', '#1d4ed8'];
+  function avatarHue(staffId) {
+    var id = typeof staffId === 'string' ? staffId : '';
+    var h = 0;
+    for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return AVATAR_HUES[h % AVATAR_HUES.length];
+  }
+
+  // presence-{site}-task-{uuid} only. Rejects the queue channel
+  // presence-{site}-task-list-{slug} (that is "who has the list open", not
+  // who is in a request — treating it as per-task would false-positive).
+  function parsePresenceTaskChannel(name) {
+    if (typeof name !== 'string') return null;
+    var m = name.match(
+      /^presence-([0-9a-z]{2,})-task-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
+    );
+    if (!m) return null;
+    return { site: m[1].toLowerCase(), taskUuid: m[2].toLowerCase() };
+  }
+
+  // Untrusted ch-native-task-presence detail → other clinicians on THIS task.
+  // Fail closed: without a known self id we cannot tell "me" from a colleague,
+  // so showing anyone would paint YOU as occupying your own request.
+  function sanitizeNativePresence(detail, myStaffId, expectedTaskUuid) {
+    if (!detail || typeof detail !== 'object') return [];
+    if (typeof myStaffId !== 'string' || !UUID_RE.test(myStaffId)) return [];
+    if (typeof expectedTaskUuid !== 'string' || !UUID_RE.test(expectedTaskUuid)) return [];
+    if (typeof detail.taskUuid !== 'string' || !UUID_RE.test(detail.taskUuid)) return [];
+    var taskUuid = detail.taskUuid.toLowerCase();
+    if (taskUuid !== expectedTaskUuid.toLowerCase()) return [];
+    var me = myStaffId.toLowerCase();
+    var raw = Array.isArray(detail.members) ? detail.members.slice(0, 20) : [];
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var m = raw[i];
+      if (!m || typeof m !== 'object') continue;
+      if (typeof m.id !== 'string' || !UUID_RE.test(m.id)) continue;
+      var sid = m.id.toLowerCase();
+      if (sid === me || seen[sid]) continue;
+      seen[sid] = 1;
+      var info = m.info && typeof m.info === 'object' ? m.info : {};
+      var label = labelFromPresenceInfo(info);
+      var unknown = !label;
+      if (!label) label = 'Someone else';
+      var initials = unknown
+        ? '?'
+        : typeof info.initials === 'string' && /^[A-Za-z]{1,3}$/.test(info.initials.trim())
+          ? info.initials.trim().toUpperCase()
+          : initialsFromLabel(label);
+      out.push({
+        staffId: sid,
+        label: label,
+        initials: initials,
+        hue: avatarHue(sid),
+        taskUuid: taskUuid,
+        native: true,
+      });
+    }
+    return out;
+  }
+
+  // Drop leftovers from a previous request if paint runs before nav cleanup.
+  function othersOnTask(others, taskUuid) {
+    if (!Array.isArray(others) || typeof taskUuid !== 'string' || !UUID_RE.test(taskUuid)) return [];
+    var want = taskUuid.toLowerCase();
+    var out = [];
+    for (var i = 0; i < others.length; i++) {
+      var o = others[i];
+      if (!o || o.staffId === undefined) continue;
+      if (typeof o.taskUuid === 'string' && o.taskUuid && o.taskUuid.toLowerCase() !== want) continue;
+      out.push(o);
+    }
+    return out;
+  }
+
+  function occupiedHeadline(others) {
+    if (!Array.isArray(others) || !others.length) return '';
+    var a = others[0].label || 'Someone else';
+    if (others.length === 1) return a + ' is on this request';
+    if (others.length === 2) return a + ' and ' + (others[1].label || 'someone else') + ' are on this request';
+    return a + ' and ' + (others.length - 1) + ' others are on this request';
+  }
+
+  // Native Pusher membership is live NOW. Do not print "Opened N min ago"
+  // from when this tab first noticed them — that overclaims a session age
+  // we do not have and trains people to ignore the bar.
+  function occupiedNote(others, nowMs) {
+    if (!Array.isArray(others) || !others.length) return '';
+    var native = false;
+    for (var i = 0; i < others.length; i++) {
+      if (others[i] && others[i].native) native = true;
+    }
+    if (native) return 'Live';
+    var opened = others[0].openedAtMs;
+    var ago = minutesAgoText(typeof opened === 'number' ? opened : nowMs, nowMs);
+    return ago === 'just now' ? 'Live' : 'Seen ' + ago;
+  }
+
   // ── test hook (node) ──────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -288,6 +443,14 @@
       actionedChipText: actionedChipText,
       resolvePresenceConfig: resolvePresenceConfig,
       buildPresenceInFilter: buildPresenceInFilter,
+      labelFromPresenceInfo: labelFromPresenceInfo,
+      initialsFromLabel: initialsFromLabel,
+      avatarHue: avatarHue,
+      sanitizeNativePresence: sanitizeNativePresence,
+      parsePresenceTaskChannel: parsePresenceTaskChannel,
+      othersOnTask: othersOnTask,
+      occupiedHeadline: occupiedHeadline,
+      occupiedNote: occupiedNote,
     };
     return; // node context: helpers only, no DOM/chrome wiring
   }
@@ -583,8 +746,14 @@
     // designed release for "left it open and walked away"
   });
 
-  // ── LAYER 2b: advisory banner on the open task ────────────────────────────
+  // ── LAYER 0 + 2b: occupied masthead on the open task ───────────────────────
+  // Layer 0 (native Pusher presence) is the primary signal and needs no store.
+  // Layer 2 (folder/Supabase) still paints if native is empty.
   var BANNER_ID = 'ms-tp-banner';
+  var _nativeOthers = [];
+  var _nativeTaskUuid = '';
+  var _storeOthers = [];
+  var _firstSeen = {}; // staffId → first-seen ms on this overview (for "N min ago")
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -594,47 +763,146 @@
       .replace(/"/g, '&quot;');
   }
 
+  function stampFirstSeen(others) {
+    var live = {};
+    var now = Date.now();
+    for (var i = 0; i < others.length; i++) {
+      var id = others[i].staffId;
+      live[id] = 1;
+      if (!_firstSeen[id]) _firstSeen[id] = now;
+      if (typeof others[i].openedAtMs !== 'number') others[i].openedAtMs = _firstSeen[id];
+    }
+    for (var k in _firstSeen) {
+      if (!Object.prototype.hasOwnProperty.call(_firstSeen, k)) continue;
+      if (!live[k]) delete _firstSeen[k];
+    }
+    return others;
+  }
+
+  function mergedOthers() {
+    var by = {};
+    var i;
+    for (i = 0; i < _nativeOthers.length; i++) by[_nativeOthers[i].staffId] = _nativeOthers[i];
+    for (i = 0; i < _storeOthers.length; i++) {
+      var s = _storeOthers[i];
+      if (!by[s.staffId]) {
+        by[s.staffId] = {
+          staffId: s.staffId,
+          label: s.label,
+          initials: initialsFromLabel(s.label),
+          hue: avatarHue(s.staffId),
+          openedAtMs: s.openedAtMs,
+          native: false,
+        };
+      }
+    }
+    var out = [];
+    for (var k in by) if (Object.prototype.hasOwnProperty.call(by, k)) out.push(by[k]);
+    out.sort(function (a, b) {
+      return (a.openedAtMs || 0) - (b.openedAtMs || 0);
+    });
+    return stampFirstSeen(out);
+  }
+
   function removeBanner() {
     var el = document.getElementById(BANNER_ID);
     if (el) el.remove();
+    try {
+      document.documentElement.classList.remove('ms-tp-occupied');
+    } catch (_) {}
   }
 
-  function renderBanner(others) {
-    if (!others.length || !_beat) {
+  function occupiedInnerHtml(others, nowMs) {
+    var many = others.length > 1 ? ' ms-tp-avs-many' : '';
+    var avatars = others
+      .slice(0, 3)
+      .map(function (o, i) {
+        var extra = o.initials === '?' ? ' ms-tp-av-unknown' : '';
+        return (
+          '<span class="ms-tp-av' +
+          extra +
+          '" title="' +
+          esc(o.label) +
+          '" style="z-index:' +
+          (i + 1) +
+          '">' +
+          esc(o.initials) +
+          '</span>'
+        );
+      })
+      .join('');
+    var recency = occupiedNote(others, nowMs);
+    var live = recency === 'Live';
+    return (
+      '<span class="ms-tp-avs' +
+      many +
+      '">' +
+      avatars +
+      '</span>' +
+      '<span class="ms-tp-who">' +
+      esc(occupiedHeadline(others)) +
+      '</span>' +
+      '<span class="ms-tp-recency' +
+      (live ? ' ms-tp-recency-live' : '') +
+      '">' +
+      (live ? '<span class="ms-tp-live" aria-hidden="true"></span>' : '') +
+      esc(recency) +
+      '</span>' +
+      '<span class="ms-tp-lock">Not a lock</span>'
+    );
+  }
+
+  function paintOccupied() {
+    var ctx = parseTaskOverviewPath(location.pathname);
+    var others = ctx ? othersOnTask(mergedOthers(), ctx.taskUuid) : [];
+    if (!ctx || !others.length) {
       removeBanner();
       return;
     }
-    var now = Date.now();
-    var parts = others.map(function (o) {
-      return '<strong>' + esc(o.label) + '</strong> opened this ' + esc(minutesAgoText(o.openedAtMs, now));
-    });
-    var html =
-      '<span class="ms-tp-banner-eye" aria-hidden="true">👁</span>' +
-      '<span class="ms-tp-banner-text">' +
-      parts.join('; ') +
-      ' — they may be working on it. Check before duplicating the work.' +
-      '<span class="ms-tp-banner-note">Suite advisory from colleagues’ open tabs — not a lock, and no banner does not mean no one.</span></span>';
+    var html = occupiedInnerHtml(others, Date.now());
+    var sig =
+      others
+        .map(function (o) {
+          return o.staffId;
+        })
+        .join(',') +
+      '|' +
+      occupiedHeadline(others);
+    try {
+      document.documentElement.classList.add('ms-tp-occupied');
+    } catch (_) {}
     var el = document.getElementById(BANNER_ID);
+    var host = document.querySelector('main') || document.body;
     if (el) {
-      if (el.getAttribute('data-sig') !== html.length + ':' + others.length) {
+      if (el.getAttribute('data-sig') !== sig) {
         el.innerHTML = html;
-        el.setAttribute('data-sig', html.length + ':' + others.length);
+        el.setAttribute('data-sig', sig);
       }
+      el.setAttribute('aria-live', 'polite');
+      if (host && el.parentNode !== host) host.insertBefore(el, host.firstChild);
       return;
     }
     el = document.createElement('div');
     el.id = BANNER_ID;
     el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.setAttribute('title', 'A colleague has this request open. It is not assigned to them. You can still work it.');
+    el.setAttribute('data-sig', sig);
     el.innerHTML = html;
-    el.setAttribute('data-sig', html.length + ':' + others.length);
-    // PREPEND into <main> (or body fallback) — trailing foreign nodes get
-    // reconciled away by Vue; leading ones survive (CLAUDE.md queue-chip rule 1).
-    var host = document.querySelector('main') || document.body;
+    // PREPEND into <main> — trailing foreign nodes get reconciled away by Vue
+    // (CLAUDE.md queue-chip rule 1).
     if (host) host.insertBefore(el, host.firstChild);
+  }
+
+  // Keep the old name: store-layer refresh still calls this.
+  function renderBanner(others) {
+    _storeOthers = Array.isArray(others) ? others : [];
+    paintOccupied();
   }
 
   var _bannerBusy = false;
   function refreshBanner() {
+    paintOccupied();
     if (!_beat || !presenceReady() || document.hidden || _bannerBusy) return;
     var me = myIdentity();
     if (!me) return;
@@ -643,8 +911,9 @@
     readTaskRows(_beat.site, forTask)
       .then(function (rows) {
         _bannerBusy = false;
-        if (!_beat || _beat.taskUuid !== forTask) return; // navigated away mid-flight
-        renderBanner(activeOthers(rows, me.staffId, Date.now(), PRESENCE_TTL_MS));
+        if (!_beat || _beat.taskUuid !== forTask) return;
+        _storeOthers = activeOthers(rows, me.staffId, Date.now(), PRESENCE_TTL_MS);
+        paintOccupied();
       })
       .catch(function (e) {
         _bannerBusy = false;
@@ -652,6 +921,43 @@
       });
   }
   setInterval(refreshBanner, HEARTBEAT_MS);
+
+  // No rate-limit: dropping a member_removed is a false occupied bar (worse
+  // than duplicate work — it delays care). Latest event always wins.
+  // Cache the last detail: identity stamp can lag the first presence event
+  // by a couple of seconds; without a replay we'd miss a colleague forever
+  // (page-world will not re-emit an unchanged member list).
+  var _lastNativeDetail = null;
+  function applyNativePresence() {
+    var ctx = parseTaskOverviewPath(location.pathname);
+    var me = myIdentity();
+    var expected = ctx ? ctx.taskUuid : '';
+    if (!expected) {
+      _nativeOthers = [];
+      _nativeTaskUuid = '';
+      _lastNativeDetail = null;
+      _firstSeen = {};
+      paintOccupied();
+      return;
+    }
+    _nativeTaskUuid = expected;
+    if (!me) {
+      _nativeOthers = [];
+      paintOccupied();
+      return;
+    }
+    _nativeOthers = sanitizeNativePresence(_lastNativeDetail, me.staffId, expected);
+    paintOccupied();
+  }
+  window.addEventListener('ch-native-task-presence', function (e) {
+    _lastNativeDetail = e && e.detail && typeof e.detail === 'object' ? e.detail : null;
+    applyNativePresence();
+  });
+  try {
+    new MutationObserver(function () {
+      applyNativePresence();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-ch-staff'] });
+  } catch (_) {}
 
   // ── LAYER 1 + 2c: queue chips ─────────────────────────────────────────────
   // Bridge rows arrive per task-list response; each event's rows replace the
@@ -800,10 +1106,18 @@
   function onMaybeNavigated() {
     if (location.href !== _lastHref) {
       _lastHref = location.href;
+      var ctx = parseTaskOverviewPath(location.pathname);
+      if (!ctx || ctx.taskUuid !== _nativeTaskUuid) {
+        _nativeOthers = [];
+        _nativeTaskUuid = ctx ? ctx.taskUuid : '';
+        _firstSeen = {};
+        _storeOthers = [];
+        _lastNativeDetail = null;
+      }
       syncBeacon();
-      removeBanner();
       if (_beat) refreshBanner();
     }
+    applyNativePresence();
     scheduleInject();
   }
 

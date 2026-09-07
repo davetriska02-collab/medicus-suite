@@ -27,6 +27,14 @@ const {
   actionedChipText,
   resolvePresenceConfig,
   buildPresenceInFilter,
+  labelFromPresenceInfo,
+  initialsFromLabel,
+  avatarHue,
+  sanitizeNativePresence,
+  parsePresenceTaskChannel,
+  othersOnTask,
+  occupiedHeadline,
+  occupiedNote,
 } = require('./content-scripts/task-presence.js');
 
 let passed = 0,
@@ -326,6 +334,118 @@ console.log('--- buildPresenceInFilter: PostgREST in.() for queue reads ---');
   check(capped.split(',').length === 100, 'capped at 100 uuids');
   const custom = buildPresenceInFilter(many, 5);
   check(custom.split(',').length === 5, 'explicit cap honoured');
+}
+
+console.log('--- native Pusher presence: label / initials / sanitise ---');
+{
+  check(labelFromPresenceInfo({ displayName: 'Aisha Malik' }) === 'Aisha Malik', 'displayName wins');
+  check(labelFromPresenceInfo({ firstName: 'Aisha', lastName: 'Malik' }) === 'Aisha Malik', 'first+last joined');
+  check(labelFromPresenceInfo({ email: 'aisha.malik@nhs.net' }) === 'aisha.malik', 'email local part');
+  check(labelFromPresenceInfo({ initials: 'AM' }) === 'AM', 'initials fallback when no name');
+  check(labelFromPresenceInfo(null) === '', 'null info -> empty');
+  check(labelFromPresenceInfo({ patientName: 'Jordan Hale' }) === '', 'patient-shaped key is not a label source');
+
+  check(initialsFromLabel('Dr Aisha Malik') === 'AM', 'skips Dr');
+  check(initialsFromLabel('david.triska') === 'DT', 'dotted local-part');
+  check(initialsFromLabel('AM') === 'AM', 'already-initials');
+  check(initialsFromLabel('') === '?', 'empty -> placeholder');
+  check(initialsFromLabel('Jo') === 'JO', 'short single token');
+
+  check(avatarHue(UUID_A) === avatarHue(UUID_A), 'hue is deterministic');
+  check(/^#[0-9a-f]{6}$/i.test(avatarHue(UUID_A)), 'hue is a hex');
+  check(
+    !/#dc2626|#b45309/i.test([avatarHue(UUID_A), avatarHue(UUID_B), avatarHue(UUID_ME)].join()),
+    'identity hues are not status red/amber'
+  );
+
+  const native = sanitizeNativePresence(
+    {
+      taskUuid: UUID_A,
+      members: [
+        { id: UUID_ME, info: { displayName: 'Me' } },
+        { id: UUID_B, info: { displayName: 'Aisha Malik', initials: 'AM' } },
+        { id: 'not-a-uuid', info: { displayName: 'Nope' } },
+        { id: UUID_B, info: { displayName: 'dup' } },
+      ],
+    },
+    UUID_ME,
+    UUID_A
+  );
+  check(native.length === 1 && native[0].staffId === UUID_B, 'self / junk / dup dropped');
+  check(native[0].label === 'Aisha Malik' && native[0].initials === 'AM', 'label + initials from info');
+  check(native[0].native === true, 'flagged as native');
+  check(
+    sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_B).length === 0,
+    'wrong task uuid -> empty'
+  );
+  check(sanitizeNativePresence(null, UUID_ME, UUID_A).length === 0, 'null detail -> empty');
+  check(
+    sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_A)[0].label ===
+      'Someone else',
+    'empty info -> Someone else'
+  );
+  check(
+    sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_A)[0].initials ===
+      '?',
+    'unknown identity uses ? not invented initials'
+  );
+
+  check(occupiedHeadline([{ label: 'Aisha Malik' }]) === 'Aisha Malik is on this request', 'single headline');
+  check(
+    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }]) ===
+      'Aisha Malik and Miles Scholar are on this request',
+    'two names'
+  );
+  check(
+    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'b' }, { label: 'c' }]) ===
+      'Aisha Malik and 2 others are on this request',
+    'three+ counted'
+  );
+  check(occupiedHeadline([]) === '', 'no others -> empty headline');
+
+  const NOW = Date.parse('2026-09-07T12:00:00Z');
+  check(
+    occupiedNote([{ native: true, openedAtMs: NOW - 120000 }], NOW) === 'Live',
+    'native presence is live, not a fake opened-ago'
+  );
+  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'Live', 'store just-now -> Live');
+  check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen, not Opened');
+
+  check(
+    sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, null, UUID_A).length === 0,
+    'no self id -> empty (would otherwise paint YOU as occupying)'
+  );
+  check(
+    sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, '').length === 0,
+    'not on an overview -> empty'
+  );
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_ME, info: { displayName: 'Me' } }] },
+      UUID_ME,
+      UUID_A
+    ).length === 0,
+    'only-self membership -> no bar'
+  );
+
+  check(
+    parsePresenceTaskChannel('presence-560b6c-task-' + UUID_A).taskUuid === UUID_A,
+    'per-task presence channel parses'
+  );
+  check(
+    parsePresenceTaskChannel('presence-560b6c-task-list-medical_patient_request_task') === null,
+    'queue presence channel is NOT a per-task occupant'
+  );
+  check(parsePresenceTaskChannel('560b6c-task-' + UUID_A) === null, 'public task channel is not presence');
+
+  const leftover = othersOnTask(
+    [
+      { staffId: UUID_B, taskUuid: UUID_A, label: 'Aisha' },
+      { staffId: UUID_ME, taskUuid: UUID_B, label: 'stale' },
+    ],
+    UUID_A
+  );
+  check(leftover.length === 1 && leftover[0].staffId === UUID_B, 'stale occupant from another request dropped');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

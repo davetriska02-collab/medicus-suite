@@ -7,10 +7,13 @@
    .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) — when the
    canon changes, update this block in the same commit. */
 .ms-tp-chips,
-#ms-tp-banner {
+#ms-tp-banner,
+html.ms-tp-occupied {
+  --bg-deep: #f8fafc;
   --bg-elev: #ffffff;
   --border: #cbd5e1;
   --text-1: #0f172a;
+  --text-2: #1e3a5f;
   --text-3: #475569;
   --text-4: #556377;
   --accent: #2563eb;
@@ -21,7 +24,11 @@
   --amber-line: rgba(180, 83, 9, 0.32);
   --r-sm: 4px;
   --r-pill: 999px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'JetBrains Mono', Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 120ms;
+  font-family: var(--sans);
 }
 
 /* ── queue chips ─────────────────────────────────────────────────────────────
@@ -85,42 +92,122 @@
   border: 1px solid var(--accent-line);
 }
 
-/* ── open-task advisory banner ──────────────────────────────────────────────
-   Prepended into <main> on a task overview when a colleague's presence row is
-   fresh. Status triad: amber ink / amber wash / amber line. Advisory tone —
-   it warns, it never blocks. */
+/* ── occupied masthead + rail (treatment B, 2026-09-07) ─────────────────────
+   Prepended into <main> on a task overview when someone else is in the
+   native Pusher presence channel (or the suite store, as fallback).
+   Amber triad: caution / duplicate-work, never clinical red. Advisory —
+   it warns, it never blocks. Rail is a 4px inset on <main>. */
+html.ms-tp-occupied main {
+  box-shadow: inset 4px 0 0 var(--amber);
+}
+
 #ms-tp-banner {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
-  margin: 8px 12px 4px;
-  padding: 8px 12px;
+  margin: 0;
+  padding: 8px 22px;
   background: var(--amber-dim);
-  border: 1px solid var(--amber-line);
-  border-radius: var(--r-sm);
-  color: var(--amber);
-  font-size: 12.5px;
-  line-height: 1.45;
+  border: 0;
+  border-bottom: 1px solid var(--amber-line);
+  border-radius: 0;
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.25;
 }
 
-.ms-tp-banner-eye {
+.ms-tp-avs {
+  display: inline-flex;
   flex: 0 0 auto;
-  font-size: 14px;
-  line-height: 1.3;
+  align-items: center;
 }
 
-.ms-tp-banner-text {
-  min-width: 0;
-}
-
-.ms-tp-banner-text strong {
+.ms-tp-av {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-pill);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--bg-elev);
+  background: var(--text-2);
 }
 
-.ms-tp-banner-note {
-  display: block;
-  margin-top: 2px;
-  font-size: 10.5px;
-  font-weight: 400;
-  color: var(--text-4);
+.ms-tp-av-unknown {
+  background: var(--text-3);
+}
+
+.ms-tp-avs-many .ms-tp-av {
+  box-shadow: 0 0 0 2px var(--amber-dim);
+}
+
+.ms-tp-avs-many .ms-tp-av + .ms-tp-av {
+  margin-left: -4px;
+}
+
+.ms-tp-who {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-tp-recency {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.ms-tp-recency-live {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.ms-tp-lock {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.ms-tp-live {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--amber);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ms-tp-recency-live .ms-tp-live {
+    animation: ms-tp-live-pulse 1.8s var(--ease) infinite;
+  }
+  @keyframes ms-tp-live-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 var(--amber-line);
+    }
+    50% {
+      box-shadow: 0 0 0 4px var(--amber-line);
+    }
+  }
 }
