@@ -34,8 +34,17 @@ const {
   parsePresenceTaskChannel,
   othersOnTask,
   occupiedHeadline,
+  occupiedAction,
   occupiedNote,
+  preferKnownLabel,
+  occupancyDismissKey,
+  occupancyDismissValue,
+  occupancyIsDismissed,
+  occupancyWriteDismiss,
+  AVATAR_HUES,
+  safeAvatarHue,
 } = require('./content-scripts/task-presence.js');
+const { presenceEmitDecision } = require('./content-scripts/triage-lens/page-world.js');
 
 let passed = 0,
   failed = 0;
@@ -397,16 +406,50 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     'two names'
   );
   check(
-    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'b' }, { label: 'c' }]) ===
-      'Aisha Malik and 2 others are on this request',
-    'three+ counted'
+    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }, { label: 'c' }]) ===
+      'Aisha Malik, Miles Scholar and 1 other are on this request',
+    'three: two names then 1 other'
+  );
+  check(
+    occupiedHeadline([
+      { label: 'Dr Priya Nair' },
+      { label: 'Dr Sam Okonkwo' },
+      { label: 'c' },
+      { label: 'd' },
+      { label: 'e' },
+      { label: 'f' },
+    ]) === 'Dr Priya Nair, Dr Sam Okonkwo and 4 others are on this request',
+    'six: two names then 4 others'
+  );
+  check(
+    occupiedHeadline([{ label: 'Someone else' }, { label: 'Someone else' }]) ===
+      'Someone else and someone else are on this request',
+    'two unknowns: second someone else is lowercase'
+  );
+  check(
+    occupiedHeadline([{ label: 'Someone else' }, { label: 'Someone else' }, { label: 'Someone else' }]) ===
+      'Someone else and 2 other people are on this request',
+    'three unknowns use person/people wording'
   );
   check(occupiedHeadline([]) === '', 'no others -> empty headline');
+  check(
+    occupiedAction() === 'Check with them before you reply, or carry on. You are not locked out.',
+    'action clause is plain English, no lock claim, no gendered pronoun'
+  );
+  check(!/opened/i.test(occupiedAction()), 'action never says opened');
 
   const NOW = Date.parse('2026-09-07T12:00:00Z');
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 120000 }], NOW) === 'Live',
-    'native presence is live, not a fake opened-ago'
+    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === 'Live',
+    'native <1 min is Live only (no seen-here yet)'
+  );
+  check(
+    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === 'Live · seen here 3 min',
+    'native dwell is counted from when this tab noticed them'
+  );
+  check(
+    !/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
+    'native note never says Opened'
   );
   check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'Live', 'store just-now -> Live');
   check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen, not Opened');
@@ -446,6 +489,128 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     UUID_A
   );
   check(leftover.length === 1 && leftover[0].staffId === UUID_B, 'stale occupant from another request dropped');
+  check(
+    othersOnTask([{ staffId: UUID_B, label: 'no uuid' }], UUID_A).length === 0,
+    'missing taskUuid is dropped when an expected uuid is set'
+  );
+}
+
+console.log('--- live:false hides; missing live still shows ---');
+{
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Aisha' } }], live: false },
+      UUID_ME,
+      UUID_A
+    ).length === 0,
+    'live === false -> empty (strip hides; do not claim Live on a dead socket)'
+  );
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Aisha' } }] },
+      UUID_ME,
+      UUID_A
+    ).length === 1,
+    'omitted live is treated as live (rig fixtures omit it)'
+  );
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Aisha' } }], live: true },
+      UUID_ME,
+      UUID_A
+    ).length === 1,
+    'live === true keeps the member'
+  );
+}
+
+console.log('--- preferKnownLabel: native empty info uses store/cache name ---');
+{
+  const cache = {};
+  check(preferKnownLabel('Someone else', UUID_B, cache) === 'Someone else', 'nothing known -> Someone else');
+  check(preferKnownLabel('Aisha Malik', UUID_B, { [UUID_B]: 'Other' }) === 'Aisha Malik', 'a real native name wins');
+  check(
+    preferKnownLabel('Someone else', UUID_B, { [UUID_B]: 'Dr Priya Nair' }) === 'Dr Priya Nair',
+    'empty native info + known cache -> known label'
+  );
+  check(
+    preferKnownLabel('', UUID_B, { [UUID_B]: 'A colleague' }) === 'Someone else',
+    'generic A colleague is not a known name'
+  );
+}
+
+console.log('--- occupancy dismiss key: this request + this tab ---');
+{
+  const mem = {
+    store: {},
+    getItem: function (k) {
+      return Object.prototype.hasOwnProperty.call(this.store, k) ? this.store[k] : null;
+    },
+    setItem: function (k, v) {
+      this.store[k] = String(v);
+    },
+  };
+  check(occupancyDismissKey(UUID_A) === 'ms-tp-dismiss:' + UUID_A, 'sessionStorage key is ms-tp-dismiss:{taskUuid}');
+  check(
+    occupancyDismissValue([UUID_B, UUID_ME]) === occupancyDismissValue([UUID_ME, UUID_B]),
+    'dismiss value is sorted, order-independent'
+  );
+  occupancyWriteDismiss(UUID_A, [UUID_B, UUID_ME], mem);
+  check(occupancyIsDismissed(UUID_A, [UUID_ME, UUID_B], mem) === true, 'same member set stays hidden');
+  check(occupancyIsDismissed(UUID_A, [UUID_B], mem) === false, 'a new joiner (set change) is not dismissed');
+  check(occupancyIsDismissed(UUID_B, [UUID_B, UUID_ME], mem) === false, 'a different request is not dismissed');
+  check(
+    occupancyIsDismissed(UUID_A, [UUID_B, UUID_ME], {
+      getItem: function () {
+        return null;
+      },
+    }) === false,
+    'empty storage -> not dismissed'
+  );
+}
+
+console.log('--- presenceEmitDecision: wipe fires; idle emits once ---');
+{
+  const first = presenceEmitDecision('', UUID_A, [{ id: UUID_B }], true);
+  check(first.emit === true, 'first occupy emits');
+  check(first.sig.indexOf(UUID_A + ':' + UUID_B) === 0, 'sig starts with task:member');
+
+  const same = presenceEmitDecision(first.sig, UUID_A, [{ id: UUID_B }], true);
+  check(same.emit === false, 'unchanged members are de-duped');
+
+  const wipe = presenceEmitDecision(first.sig, UUID_B, [], true);
+  check(wipe.emit === true, 'task change emits empty members (the wipe that used to be de-duped)');
+  check(wipe.sig.indexOf(UUID_B + ':') === 0, 'wipe sig is the new task with empty members');
+
+  const idle1 = presenceEmitDecision(wipe.sig, '', []);
+  check(idle1.emit === true && idle1.sig === 'idle', 'leaving an overview emits idle once');
+  const idle2 = presenceEmitDecision('idle', '', []);
+  check(idle2.emit === false && idle2.sig === 'idle', 'idle does not flap an empty event forever');
+  const idle0 = presenceEmitDecision('', '', []);
+  check(idle0.emit === false, 'a page that never had presence does not emit idle');
+
+  const dead = presenceEmitDecision(first.sig, UUID_A, [], false);
+  check(dead.emit === true, 'socket-down (live:false, members:[]) emits so the strip can hide');
+  check(/:0$/.test(dead.sig), 'dead-socket sig carries the live:false bit');
+}
+
+console.log('--- avatar hues: applied hex, contrast, not status colours ---');
+{
+  AVATAR_HUES.forEach(function (h) {
+    check(safeAvatarHue(h) === h, 'whitelist accepts ' + h);
+    const r = parseInt(h.slice(1, 3), 16) / 255;
+    const g = parseInt(h.slice(3, 5), 16) / 255;
+    const b = parseInt(h.slice(5, 7), 16) / 255;
+    const f = function (c) {
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const L = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    const contrast = 1.05 / (L + 0.05);
+    check(contrast >= 4.5, h + ' contrast vs white is AA (' + contrast.toFixed(2) + ')');
+    check(!/^#dc2626$/i.test(h) && !/^#b45309$/i.test(h), h + ' is not status red/amber');
+  });
+  check(safeAvatarHue('red') === '', 'non-hex rejected');
+  check(safeAvatarHue('#fff') === '', 'short hex rejected');
+  check(safeAvatarHue('javascript:alert(1)') === '', 'non-colour rejected');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

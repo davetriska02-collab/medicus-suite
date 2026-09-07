@@ -22,10 +22,10 @@
 //   presence row (site, taskUuid, staffId, display label, timestamps) to a
 //   practice-configured Supabase table. Consumers:
 //     • queue rows get a "👁 <name>" chip while a colleague's presence is fresh
-//     • opening a task someone else has open injects an advisory banner
-//       ("<name> opened this N min ago — they may be working on it")
-//   Presence is DORMANT until the practice configures a store URL + key in
-//   Options → Task presence. Identity comes from the page's own Pusher
+//     • opening a task someone else has open can still paint the occupied
+//       strip from store rows when native Pusher membership is empty
+//   Presence store is DORMANT until the practice configures a store URL + key
+//   in Options → Task presence. Identity comes from the page's own Pusher
 //   channel names (staff UUID + login email, stamped by page-world.js as
 //   'data-ch-staff') — never guessed, never typed per-machine.
 //
@@ -36,10 +36,10 @@
 // anywhere.
 //
 // SAFETY POSTURE — advisory, never a lock:
-//   - The banner says "may be working on it". It never claims exclusivity,
-//     never blocks Medicus's own UI, and never asks the second clinician to
-//     leave — the two-GPs-collide failure is wasted duplicate work, and the
-//     fix is awareness, not enforcement.
+//   - The strip says to check with them or carry on. It never claims
+//     exclusivity, never blocks Medicus's own UI, and never asks the second
+//     clinician to leave — the two-GPs-collide failure is wasted duplicate
+//     work, and the fix is awareness, not enforcement.
 //   - ABSENCE of a chip/banner is NEVER evidence nobody is on the request
 //     (store unconfigured, offline, colleague without the Suite). The Options
 //     card and setup doc both say so. Nothing here suppresses or reorders any
@@ -329,12 +329,40 @@
   }
 
   // Identity colour for an avatar — categorical, never status red/amber.
-  var AVATAR_HUES = ['#0d9488', '#7c3aed', '#2563eb', '#0891b2', '#a21caf', '#4f46e5', '#0f766e', '#1d4ed8'];
+  // Each value is dark enough for white initials (WCAG AA contrast vs #fff).
+  var AVATAR_HUES = ['#047857', '#7c3aed', '#2563eb', '#0369a1', '#a21caf', '#4f46e5', '#0f766e', '#1d4ed8'];
+  var HUE_HEX_RE = /^#[0-9a-fA-F]{6}$/;
   function avatarHue(staffId) {
     var id = typeof staffId === 'string' ? staffId : '';
     var h = 0;
     for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
     return AVATAR_HUES[h % AVATAR_HUES.length];
+  }
+  function safeAvatarHue(hue) {
+    return typeof hue === 'string' && HUE_HEX_RE.test(hue) ? hue : '';
+  }
+
+  // Prefer a previously-known staff label over the "Someone else" fallback
+  // when native member.info is empty. knownMap is staffId → display label
+  // (store heartbeats + prior native names). Never invent a name.
+  function preferKnownLabel(label, staffId, knownMap) {
+    var current = typeof label === 'string' ? label.trim() : '';
+    if (current && current !== 'Someone else') return current.slice(0, 60);
+    var known = '';
+    if (knownMap && typeof staffId === 'string') {
+      var k = knownMap[staffId] || knownMap[String(staffId).toLowerCase()];
+      if (typeof k === 'string') known = k.trim();
+    }
+    if (known && known !== 'Someone else' && known !== 'A colleague') return known.slice(0, 60);
+    return current || 'Someone else';
+  }
+
+  function rememberKnownLabel(staffId, label, knownMap) {
+    if (!knownMap || typeof staffId !== 'string' || !staffId) return knownMap;
+    var s = typeof label === 'string' ? label.trim() : '';
+    if (!s || s === 'Someone else' || s === 'A colleague') return knownMap;
+    knownMap[staffId] = s.slice(0, 60);
+    return knownMap;
   }
 
   // presence-{site}-task-{uuid} only. Rejects the queue channel
@@ -354,6 +382,9 @@
   // so showing anyone would paint YOU as occupying your own request.
   function sanitizeNativePresence(detail, myStaffId, expectedTaskUuid) {
     if (!detail || typeof detail !== 'object') return [];
+    // Missing `live` is treated as live (rig fixtures omit it). live === false
+    // means the socket is down or the subscription errored — fail closed, hide.
+    if (detail.live === false) return [];
     if (typeof myStaffId !== 'string' || !UUID_RE.test(myStaffId)) return [];
     if (typeof expectedTaskUuid !== 'string' || !UUID_RE.test(expectedTaskUuid)) return [];
     if (typeof detail.taskUuid !== 'string' || !UUID_RE.test(detail.taskUuid)) return [];
@@ -399,7 +430,9 @@
     for (var i = 0; i < others.length; i++) {
       var o = others[i];
       if (!o || o.staffId === undefined) continue;
-      if (typeof o.taskUuid === 'string' && o.taskUuid && o.taskUuid.toLowerCase() !== want) continue;
+      // Expected UUID is set: missing UUID is a stale leftover — drop it.
+      if (typeof o.taskUuid !== 'string' || !o.taskUuid || !UUID_RE.test(o.taskUuid)) continue;
+      if (o.taskUuid.toLowerCase() !== want) continue;
       out.push(o);
     }
     return out;
@@ -407,25 +440,88 @@
 
   function occupiedHeadline(others) {
     if (!Array.isArray(others) || !others.length) return '';
-    var a = others[0].label || 'Someone else';
-    if (others.length === 1) return a + ' is on this request';
-    if (others.length === 2) return a + ' and ' + (others[1].label || 'someone else') + ' are on this request';
-    return a + ' and ' + (others.length - 1) + ' others are on this request';
+    var n = others.length;
+    function lab(i) {
+      var s = others[i] && others[i].label;
+      return typeof s === 'string' && s.trim() ? s.trim() : 'Someone else';
+    }
+    function second(s) {
+      return s === 'Someone else' ? 'someone else' : s;
+    }
+    var a = lab(0);
+    if (n === 1) return a + ' is on this request';
+    if (n === 2) return a + ' and ' + second(lab(1)) + ' are on this request';
+    if (a === 'Someone else') {
+      var rest = n - 1;
+      if (rest === 1) return 'Someone else and one other person are on this request';
+      return 'Someone else and ' + rest + ' other people are on this request';
+    }
+    var b = second(lab(1));
+    var more = n - 2;
+    if (more === 1) return a + ', ' + b + ' and 1 other are on this request';
+    return a + ', ' + b + ' and ' + more + ' others are on this request';
   }
 
-  // Native Pusher membership is live NOW. Do not print "Opened N min ago"
-  // from when this tab first noticed them — that overclaims a session age
-  // we do not have and trains people to ignore the bar.
+  function occupiedAction() {
+    return 'Check with them before you reply, or carry on. You are not locked out.';
+  }
+
+  // Native Pusher membership is live NOW. "seen here N min" is counted from
+  // when THIS tab first noticed the member (_firstSeen) — never "Opened".
   function occupiedNote(others, nowMs) {
     if (!Array.isArray(others) || !others.length) return '';
     var native = false;
     for (var i = 0; i < others.length; i++) {
       if (others[i] && others[i].native) native = true;
     }
-    if (native) return 'Live';
+    if (native) {
+      var seenAt = others[0].openedAtMs;
+      var mins = Math.floor((nowMs - seenAt) / 60000);
+      if (!isFinite(mins) || mins < 1) return 'Live';
+      return 'Live · seen here ' + mins + ' min';
+    }
     var opened = others[0].openedAtMs;
     var ago = minutesAgoText(typeof opened === 'number' ? opened : nowMs, nowMs);
     return ago === 'just now' ? 'Live' : 'Seen ' + ago;
+  }
+
+  function occupancyDismissKey(taskUuid) {
+    return 'ms-tp-dismiss:' + String(taskUuid || '').toLowerCase();
+  }
+
+  function occupancyDismissValue(staffIds) {
+    if (!Array.isArray(staffIds)) return '';
+    return staffIds
+      .map(function (id) {
+        return typeof id === 'string' ? id.toLowerCase() : '';
+      })
+      .filter(Boolean)
+      .sort()
+      .join(',');
+  }
+
+  function occupancyIsDismissed(taskUuid, staffIds, storage) {
+    if (!storage || typeof storage.getItem !== 'function') return false;
+    if (typeof taskUuid !== 'string' || !UUID_RE.test(taskUuid)) return false;
+    var got = '';
+    try {
+      got = storage.getItem(occupancyDismissKey(taskUuid));
+    } catch (_) {
+      return false;
+    }
+    if (got == null || got === '') return false;
+    return got === occupancyDismissValue(staffIds);
+  }
+
+  function occupancyWriteDismiss(taskUuid, staffIds, storage) {
+    if (!storage || typeof storage.setItem !== 'function') return false;
+    if (typeof taskUuid !== 'string' || !UUID_RE.test(taskUuid)) return false;
+    try {
+      storage.setItem(occupancyDismissKey(taskUuid), occupancyDismissValue(staffIds));
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   // ── test hook (node) ──────────────────────────────────────────────────────
@@ -450,7 +546,16 @@
       parsePresenceTaskChannel: parsePresenceTaskChannel,
       othersOnTask: othersOnTask,
       occupiedHeadline: occupiedHeadline,
+      occupiedAction: occupiedAction,
       occupiedNote: occupiedNote,
+      preferKnownLabel: preferKnownLabel,
+      rememberKnownLabel: rememberKnownLabel,
+      occupancyDismissKey: occupancyDismissKey,
+      occupancyDismissValue: occupancyDismissValue,
+      occupancyIsDismissed: occupancyIsDismissed,
+      occupancyWriteDismiss: occupancyWriteDismiss,
+      AVATAR_HUES: AVATAR_HUES,
+      safeAvatarHue: safeAvatarHue,
     };
     return; // node context: helpers only, no DOM/chrome wiring
   }
@@ -753,7 +858,10 @@
   var _nativeOthers = [];
   var _nativeTaskUuid = '';
   var _storeOthers = [];
-  var _firstSeen = {}; // staffId → first-seen ms on this overview (for "N min ago")
+  var _firstSeen = {}; // staffId → first-seen ms on this overview (this-tab dwell)
+  var _knownLabels = {}; // staffId → last known display label (store + native)
+  var _paintCache = { path: '', sig: '', parent: null };
+  var _liveIds = '';
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -782,7 +890,29 @@
   function mergedOthers() {
     var by = {};
     var i;
-    for (i = 0; i < _nativeOthers.length; i++) by[_nativeOthers[i].staffId] = _nativeOthers[i];
+    for (i = 0; i < _storeOthers.length; i++) {
+      rememberKnownLabel(_storeOthers[i].staffId, _storeOthers[i].label, _knownLabels);
+    }
+    for (i = 0; i < _nativeOthers.length; i++) {
+      rememberKnownLabel(_nativeOthers[i].staffId, _nativeOthers[i].label, _knownLabels);
+    }
+    for (i = 0; i < _nativeOthers.length; i++) {
+      var n = _nativeOthers[i];
+      var label = preferKnownLabel(n.label, n.staffId, _knownLabels);
+      var initials = n.initials;
+      if (label !== n.label) {
+        initials = label === 'Someone else' ? '?' : initialsFromLabel(label);
+      }
+      by[n.staffId] = {
+        staffId: n.staffId,
+        label: label,
+        initials: initials,
+        hue: n.hue || avatarHue(n.staffId),
+        openedAtMs: n.openedAtMs,
+        taskUuid: n.taskUuid,
+        native: true,
+      };
+    }
     for (i = 0; i < _storeOthers.length; i++) {
       var s = _storeOthers[i];
       if (!by[s.staffId]) {
@@ -792,6 +922,7 @@
           initials: initialsFromLabel(s.label),
           hue: avatarHue(s.staffId),
           openedAtMs: s.openedAtMs,
+          taskUuid: s.taskUuid,
           native: false,
         };
       }
@@ -810,14 +941,25 @@
     try {
       document.documentElement.classList.remove('ms-tp-occupied');
     } catch (_) {}
+    _paintCache = { path: '', sig: '', parent: null };
+    _liveIds = '';
+  }
+
+  function staffIdList(others) {
+    return others.map(function (o) {
+      return o.staffId;
+    });
   }
 
   function occupiedInnerHtml(others, nowMs) {
     var many = others.length > 1 ? ' ms-tp-avs-many' : '';
+    var extraCount = others.length > 3 ? others.length - 3 : 0;
     var avatars = others
       .slice(0, 3)
       .map(function (o, i) {
         var extra = o.initials === '?' ? ' ms-tp-av-unknown' : '';
+        var hue = o.initials === '?' ? '' : safeAvatarHue(o.hue);
+        var bg = hue ? 'background:' + hue + ';' : '';
         return (
           '<span class="ms-tp-av' +
           extra +
@@ -825,15 +967,44 @@
           esc(o.label) +
           '" aria-hidden="true" style="z-index:' +
           (i + 1) +
+          ';' +
+          bg +
           '">' +
           esc(o.initials) +
           '</span>'
         );
       })
       .join('');
+    if (extraCount > 0) {
+      avatars +=
+        '<span class="ms-tp-av ms-tp-av-more" aria-hidden="true" style="z-index:4" title="' +
+        esc('+' + extraCount + ' more') +
+        '">+' +
+        extraCount +
+        '</span>';
+    }
     var recency = occupiedNote(others, nowMs);
-    var live = recency === 'Live';
+    var nativeLive = false;
+    for (var ni = 0; ni < others.length; ni++) {
+      if (others[ni] && others[ni].native) nativeLive = true;
+    }
+    var seenExtra = '';
+    if (nativeLive && /^Live\s*·\s*/i.test(recency)) {
+      seenExtra = recency.replace(/^Live\s*·\s*/i, '');
+    }
+    var recencyHtml;
+    if (nativeLive) {
+      recencyHtml =
+        '<span class="ms-tp-recency">' +
+        '<span class="ms-tp-live" aria-hidden="true"></span>' +
+        '<span class="ms-tp-recency-live">Live</span>' +
+        (seenExtra ? '<span class="ms-tp-seen"> · ' + esc(seenExtra) + '</span>' : '') +
+        '</span>';
+    } else {
+      recencyHtml = '<span class="ms-tp-recency">' + esc(recency) + '</span>';
+    }
     return (
+      '<span class="ms-tp-inner">' +
       '<span class="ms-tp-avs' +
       many +
       '">' +
@@ -842,56 +1013,106 @@
       '<span class="ms-tp-who">' +
       esc(occupiedHeadline(others)) +
       '</span>' +
-      '<span class="ms-tp-recency' +
-      (live ? ' ms-tp-recency-live' : '') +
-      '">' +
-      (live ? '<span class="ms-tp-live" aria-hidden="true"></span>' : '') +
-      esc(recency) +
+      recencyHtml +
+      '<span class="ms-tp-action">' +
+      esc(occupiedAction()) +
       '</span>' +
-      '<span class="ms-tp-lock">Not a lock</span>'
+      '<button type="button" class="ms-tp-hide">Hide</button>' +
+      '</span>'
     );
   }
 
-  function paintOccupied() {
-    var ctx = parseTaskOverviewPath(location.pathname);
-    var others = ctx ? othersOnTask(mergedOthers(), ctx.taskUuid) : [];
-    if (!ctx || !others.length) {
+  function bindBannerClicks(el) {
+    if (el.getAttribute('data-hide-bound') === '1') return;
+    el.setAttribute('data-hide-bound', '1');
+    el.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('ms-tp-hide')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var ctx = parseTaskOverviewPath(location.pathname);
+      if (!ctx) return;
+      var others = othersOnTask(mergedOthers(), ctx.taskUuid);
+      occupancyWriteDismiss(ctx.taskUuid, staffIdList(others), sessionStorage);
       removeBanner();
+    });
+  }
+
+  function paintOccupied() {
+    var path = location.pathname;
+    var ctx = parseTaskOverviewPath(path);
+    var others = ctx ? othersOnTask(mergedOthers(), ctx.taskUuid) : [];
+    var nowMs = Date.now();
+    if (ctx && others.length && occupancyIsDismissed(ctx.taskUuid, staffIdList(others), sessionStorage)) {
+      others = [];
+    }
+    var headline = others.length ? occupiedHeadline(others) : '';
+    var note = others.length ? occupiedNote(others, nowMs) : '';
+    var sig = (ctx ? ctx.taskUuid : '') + '|' + staffIdList(others).join(',') + '|' + headline + '|' + note;
+    var el = document.getElementById(BANNER_ID);
+    if (!ctx || !others.length) {
+      if (!el && _paintCache.sig === sig && _paintCache.path === path) return;
+      removeBanner();
+      _paintCache = { path: path, sig: sig, parent: null };
       return;
     }
-    var html = occupiedInnerHtml(others, Date.now());
-    var sig =
-      others
-        .map(function (o) {
-          return o.staffId;
-        })
-        .join(',') +
-      '|' +
-      occupiedHeadline(others);
+    if (
+      el &&
+      _paintCache.path === path &&
+      _paintCache.sig === sig &&
+      el.parentNode &&
+      el.parentNode === _paintCache.parent
+    ) {
+      return;
+    }
+    var html = occupiedInnerHtml(others, nowMs);
+    var title = headline + (note ? ' · ' + note : '') + '. ' + occupiedAction();
+    var idSet = staffIdList(others).slice().sort().join(',');
     try {
       document.documentElement.classList.add('ms-tp-occupied');
     } catch (_) {}
-    var el = document.getElementById(BANNER_ID);
-    var host = document.querySelector('main') || document.body;
+    var host =
+      (el && el.parentNode && el.parentNode.tagName === 'MAIN' && el.parentNode) ||
+      document.querySelector('main') ||
+      document.body;
     if (el) {
-      if (el.getAttribute('data-sig') !== sig) {
-        el.innerHTML = html;
-        el.setAttribute('data-sig', sig);
+      var inner = el.querySelector('.ms-tp-inner');
+      if (inner) inner.outerHTML = html;
+      else el.insertAdjacentHTML('afterbegin', html);
+      el.setAttribute('data-sig', sig);
+      el.setAttribute('title', title);
+      el.setAttribute('aria-live', 'off');
+      var sr = el.querySelector('.ms-tp-sr');
+      if (!sr) {
+        sr = document.createElement('span');
+        sr.className = 'ms-tp-sr';
+        sr.setAttribute('role', 'status');
+        sr.setAttribute('aria-live', 'polite');
+        el.appendChild(sr);
       }
-      el.setAttribute('aria-live', 'polite');
+      if (idSet !== _liveIds) {
+        sr.textContent = headline;
+        _liveIds = idSet;
+      }
+      bindBannerClicks(el);
       if (host && el.parentNode !== host) host.insertBefore(el, host.firstChild);
+      _paintCache = { path: path, sig: sig, parent: el.parentNode };
       return;
     }
     el = document.createElement('div');
     el.id = BANNER_ID;
-    el.setAttribute('role', 'status');
-    el.setAttribute('aria-live', 'polite');
-    el.setAttribute('title', 'A colleague has this request open. It is not assigned to them. You can still work it.');
+    el.setAttribute('aria-live', 'off');
+    el.setAttribute('title', title);
     el.setAttribute('data-sig', sig);
-    el.innerHTML = html;
+    el.innerHTML = html + '<span class="ms-tp-sr" role="status" aria-live="polite"></span>';
+    var srNew = el.querySelector('.ms-tp-sr');
+    if (srNew) srNew.textContent = headline;
+    _liveIds = idSet;
+    bindBannerClicks(el);
     // PREPEND into <main> — trailing foreign nodes get reconciled away by Vue
     // (CLAUDE.md queue-chip rule 1).
     if (host) host.insertBefore(el, host.firstChild);
+    _paintCache = { path: path, sig: sig, parent: el.parentNode };
   }
 
   // Keep the old name: store-layer refresh still calls this.

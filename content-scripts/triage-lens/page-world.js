@@ -32,8 +32,39 @@
 
 (function () {
   'use strict';
+
+  // Pure emit/de-dupe helper. Never pre-assign lastPresenceSig to the would-be
+  // next sig before calling this — that was how the empty wipe event vanished
+  // (sig compared equal to itself and the previous request's names stuck).
+  // Idle sentinel: after leaving an overview, sig becomes 'idle' so the 2s
+  // poll emits exactly one empty event, not an empty event forever.
+  function presenceEmitDecision(prevSig, taskUuid, members, live) {
+    var prev = typeof prevSig === 'string' ? prevSig : '';
+    var list = Array.isArray(members) ? members : [];
+    var ids = [];
+    for (var i = 0; i < list.length; i++) {
+      var id = list[i] && typeof list[i].id === 'string' ? list[i].id.toLowerCase() : '';
+      if (id) ids.push(id);
+    }
+    ids.sort();
+    var liveBit = live === false ? '0' : '1';
+    if (!taskUuid) {
+      return { sig: 'idle', emit: prev !== '' && prev !== 'idle' };
+    }
+    var sig = String(taskUuid).toLowerCase() + ':' + ids.join(',') + ':' + liveBit;
+    return { sig: sig, emit: sig !== prev };
+  }
+
+  // Node tests require this file for the helper only. MAIN-world behaviour is
+  // unchanged: chrome content scripts have no `module`, so we fall through.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { presenceEmitDecision: presenceEmitDecision };
+    return;
+  }
+
   if (window.__chPageWorld) return;
   window.__chPageWorld = true;
+  if (window.__chPresenceTestHook) window.__chPresenceDecision = presenceEmitDecision;
 
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var TL_RE = new RegExp('/tasks/data/([^/?]+)/task-list');
@@ -171,39 +202,46 @@
   // Stamp both onto a documentElement attribute ('data-ch-staff', value
   // 'staffUuid|email') the same way the summary-patient note works, so
   // task-presence.js can attribute its advisory presence beacons. This reads
-  // channel NAMES only — no messages, no patient data — and stops polling as
-  // soon as the stamp lands (or after ~60s if Pusher never appears).
+  // channel NAMES only — no messages, no patient data. Re-checked on the
+  // same 2s poll as native presence so a user-switch mid-page re-stamps.
   var STAFF_CH_RE =
     /^[0-9a-z]{2,}-staff-task-counters-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
   var TENANT_CH_RE = /^update-tenants-(.+)$/;
-  var staffPollCount = 0;
-  function pollStaffIdentity() {
-    staffPollCount++;
-    var found = false;
+
+  function readPusher() {
     try {
       var app = document.querySelector('#app') || document.querySelector('[data-v-app]');
       var gp = app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties;
-      var pusher = gp && gp.$pusher;
+      return (gp && gp.$pusher) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function stampStaffIdentity(pusher) {
+    try {
       var map = pusher && pusher.channels && pusher.channels.channels;
-      if (map) {
-        var staffId = '';
-        var email = '';
-        for (var name in map) {
-          if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
-          var sm = name.match(STAFF_CH_RE);
-          if (sm) staffId = sm[1].toLowerCase();
-          var tm = name.match(TENANT_CH_RE);
-          if (tm) email = tm[1].slice(0, 120);
-        }
-        if (staffId) {
-          document.documentElement.setAttribute('data-ch-staff', staffId + '|' + email);
-          found = true;
-        }
+      if (!map) return;
+      var staffId = '';
+      var email = '';
+      for (var name in map) {
+        if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
+        var sm = name.match(STAFF_CH_RE);
+        if (sm) staffId = sm[1].toLowerCase();
+        var tm = name.match(TENANT_CH_RE);
+        if (tm) email = tm[1].slice(0, 120);
+      }
+      if (!staffId) return;
+      var value = staffId + '|' + email;
+      if (document.documentElement.getAttribute('data-ch-staff') !== value) {
+        document.documentElement.setAttribute('data-ch-staff', value);
       }
     } catch (_) {}
-    if (!found && staffPollCount < 30) setTimeout(pollStaffIdentity, 2000);
   }
-  setTimeout(pollStaffIdentity, 2000);
+
+  setTimeout(function () {
+    stampStaffIdentity(readPusher());
+  }, 2000);
 
   // ---- Native Pusher task presence (2026-09-07) ----
   // Medicus now subscribes to presence-{site}-task-{taskUuid} while a request
@@ -217,6 +255,9 @@
     /^presence-([0-9a-z]{2,})-task-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
   var lastPresenceSig = '';
   var boundPresenceCh = '';
+  var boundPresenceRef = null; // { ch, onChange, onSucceeded, onError }
+  var boundPresenceNames = new Set();
+  var presenceSubErrored = false;
 
   function currentOverviewTaskUuid() {
     var m = String(location.pathname || '').match(
@@ -242,22 +283,15 @@
     return out;
   }
 
-  function emitNativePresence(taskUuid, members) {
-    var sig =
-      String(taskUuid || '') +
-      ':' +
-      members
-        .map(function (m) {
-          return m.id;
-        })
-        .sort()
-        .join(',');
-    if (sig === lastPresenceSig) return;
-    lastPresenceSig = sig;
+  function emitNativePresence(taskUuid, members, live) {
+    var list = Array.isArray(members) ? members : [];
+    var d = presenceEmitDecision(lastPresenceSig, taskUuid, list, live);
+    if (!d.emit) return;
+    lastPresenceSig = d.sig;
+    var detail = { taskUuid: taskUuid || '', members: list };
+    if (live === false) detail.live = false;
     try {
-      window.dispatchEvent(
-        new CustomEvent('ch-native-task-presence', { detail: { taskUuid: taskUuid || '', members: members } })
-      );
+      window.dispatchEvent(new CustomEvent('ch-native-task-presence', { detail: detail }));
     } catch (_) {}
   }
 
@@ -292,31 +326,95 @@
     return members;
   }
 
-  function readPresenceChannel(ch, taskUuid) {
-    emitNativePresence(taskUuid, collectPresenceMembers(ch));
+  function unbindPresenceChannel() {
+    if (boundPresenceRef) {
+      var ch = boundPresenceRef.ch;
+      try {
+        if (ch && typeof ch.unbind === 'function') {
+          ch.unbind('pusher:member_added', boundPresenceRef.onChange);
+          ch.unbind('pusher:member_removed', boundPresenceRef.onChange);
+          ch.unbind('pusher:subscription_succeeded', boundPresenceRef.onSucceeded);
+          ch.unbind('pusher:subscription_error', boundPresenceRef.onError);
+        }
+      } catch (_) {}
+      boundPresenceRef = null;
+    }
+    if (boundPresenceCh) {
+      try {
+        boundPresenceNames.delete(boundPresenceCh);
+      } catch (_) {}
+    }
+    boundPresenceCh = '';
+    presenceSubErrored = false;
+  }
+
+  function bindPresenceChannel(name, ch) {
+    if (boundPresenceCh === name && boundPresenceRef) return;
+    unbindPresenceChannel();
+    boundPresenceCh = name;
+    boundPresenceNames.add(name);
+    presenceSubErrored = false;
+    try {
+      var boundName = name;
+      var onChange = function () {
+        var liveUuid = currentOverviewTaskUuid();
+        var liveMatch = boundName.match(PRESENCE_TASK_CH_RE);
+        if (!liveUuid || !liveMatch || liveMatch[2].toLowerCase() !== liveUuid) return;
+        var pusherNow = readPusher();
+        var connected = pusherNow && pusherNow.connection && pusherNow.connection.state === 'connected';
+        if (!connected || presenceSubErrored) {
+          emitNativePresence(liveUuid, [], false);
+          return;
+        }
+        emitNativePresence(liveUuid, collectPresenceMembers(ch), true);
+      };
+      var onSucceeded = function () {
+        presenceSubErrored = false;
+        onChange();
+      };
+      var onError = function () {
+        presenceSubErrored = true;
+        var liveUuid = currentOverviewTaskUuid();
+        if (liveUuid) emitNativePresence(liveUuid, [], false);
+      };
+      ch.bind('pusher:member_added', onChange);
+      ch.bind('pusher:member_removed', onChange);
+      ch.bind('pusher:subscription_succeeded', onSucceeded);
+      ch.bind('pusher:subscription_error', onError);
+      boundPresenceRef = { ch: ch, onChange: onChange, onSucceeded: onSucceeded, onError: onError };
+    } catch (_) {}
+  }
+
+  function socketIsLive(pusher) {
+    return !!(pusher && pusher.connection && pusher.connection.state === 'connected' && !presenceSubErrored);
   }
 
   function pollNativePresence() {
     var taskUuid = currentOverviewTaskUuid();
+    var pusher = readPusher();
+    stampStaffIdentity(pusher);
+
     if (!taskUuid) {
-      if (lastPresenceSig) {
-        lastPresenceSig = '';
-        boundPresenceCh = '';
-        emitNativePresence('', []);
-      }
+      unbindPresenceChannel();
+      emitNativePresence('', []);
       setTimeout(pollNativePresence, 2000);
       return;
     }
+
     // Switching request: wipe immediately so the previous occupant cannot
     // paint on this overview while the new channel is still attaching.
-    if (lastPresenceSig && lastPresenceSig.indexOf(taskUuid + ':') !== 0) {
-      lastPresenceSig = taskUuid + ':';
+    // Do NOT pre-assign lastPresenceSig — emitNativePresence / presenceEmitDecision
+    // own the compare.
+    if (lastPresenceSig && lastPresenceSig !== 'idle' && lastPresenceSig.indexOf(taskUuid + ':') !== 0) {
       emitNativePresence(taskUuid, []);
     }
+
     try {
-      var app = document.querySelector('#app') || document.querySelector('[data-v-app]');
-      var gp = app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties;
-      var pusher = gp && gp.$pusher;
+      if (!socketIsLive(pusher)) {
+        emitNativePresence(taskUuid, [], false);
+        setTimeout(pollNativePresence, 2000);
+        return;
+      }
       var map = pusher && pusher.channels && pusher.channels.channels;
       if (map) {
         var found = false;
@@ -326,27 +424,13 @@
           if (!pm) continue;
           if (pm[2].toLowerCase() !== taskUuid) continue;
           found = true;
-          var ch = map[name];
-          if (boundPresenceCh !== name) {
-            boundPresenceCh = name;
-            try {
-              var boundName = name;
-              var onChange = function () {
-                var live = currentOverviewTaskUuid();
-                var liveMatch = boundName.match(PRESENCE_TASK_CH_RE);
-                if (!live || !liveMatch || liveMatch[2].toLowerCase() !== live) return;
-                readPresenceChannel(ch, live);
-              };
-              ch.bind('pusher:member_added', onChange);
-              ch.bind('pusher:member_removed', onChange);
-              ch.bind('pusher:subscription_succeeded', onChange);
-            } catch (_) {}
-          }
-          readPresenceChannel(ch, taskUuid);
+          bindPresenceChannel(name, map[name]);
+          if (presenceSubErrored) emitNativePresence(taskUuid, [], false);
+          else emitNativePresence(taskUuid, collectPresenceMembers(map[name]), true);
           break;
         }
-        if (!found && lastPresenceSig !== taskUuid + ':') {
-          lastPresenceSig = taskUuid + ':';
+        if (!found) {
+          unbindPresenceChannel();
           emitNativePresence(taskUuid, []);
         }
       }
