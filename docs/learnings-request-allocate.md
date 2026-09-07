@@ -36,18 +36,28 @@ Reject:
   auto-placement. It is a grouping caption only (`Usual GP …`).
 - Pool groups by requester if present, else registered GP.
 - Dest-set groups are **people**, not Medicus team inboxes. Split /
-  top-up / level stage onto the current dest set (In today, a named
+  top-up / level stage onto the current dest set (Working today, a named
   group, or a custom encircle). Away members are skipped.
 
 ## Even split
 
-- Default dest set is In today (people with a session on the
+- Default dest set is Working today (people with a session on the
   appointment book for the working day), unless a scheduled group is
   in window. Last-used dest set is stored per surface
-  (`lastUsedBySurface.request`).
+  (`lastUsedBySurface.request`). A scheduled auto-pick is named in one
+  reversible sentence under the strip ("Using Morning triage (3)
+  because it is 09:30 on a Monday. Or pick Working today (12).").
+- Overnight group hours wrap past midnight (end at or before start;
+  in-window is minutes >= start or minutes < end, carrying into the
+  next morning).
+- Practice-profile merge is a union by group `id`. Incoming wins on
+  the same id only when its `updatedAt` is newer; local-only ids are
+  never dropped. Replace still swaps the whole set.
 - Split equally / Top up / Distribute equally are local staging.
-  They do not write.
-- Share this box on a person folder even-splits *that folder only*
+  They do not write. After Split equally the proposal line names the
+  even-split numbers a manager can check ("47 requests would sit with
+  12 people: 11 with 4, 1 with 3.") then the drag hint.
+- Share this box on a person folder even-splits _that folder only_
   among the current dest set.
 
 ## Write path
@@ -59,7 +69,13 @@ here. `REQUEST_WRITE_CAPTURED=false`. The canvas calls
 `canWriteRequestAllocations` before `requestWrite` and does not call
 `commitAllocations` while that gate fails. Staging and split still
 work. Confirm lists named patient → person. Keep planning vs Write to
-Medicus (Write is blocked while uncaptured).
+Medicus (Write is blocked while uncaptured). While Write is gated the
+primary control is **Review plan (N)**, not Review then write. The
+review headline is "This is a plan on this canvas only. Medicus has
+not changed." then "To move these today, assign them in Medicus.
+Writing from this canvas is switched off for this queue until it has
+been checked on a test patient." The disabled button is "Write to
+Medicus (not yet available for this queue)".
 
 Re-GET the vanish-check via `fetchRequestMergedTaskList` (inbox GET +
 bare GET). Pin `_route` while the overlay is open.
@@ -67,6 +83,9 @@ bare GET). Pin `_route` while the overlay is open.
 ## Copy that must not ship
 
 - No Done / Sent / Filed / Allocated / Submitted / Replied
+- Dest chip: **Working today (N)**; when the working day is not
+  calendar today, **Working 8 Sep (N)** (`d MMM`). Element id stays
+  `#ms-ags-in-today`.
 - Confirm: "changes who the task sits with - it does not complete,
   file, or reply to the request"
 - Pool titles are "Medical requests" / "Admin requests"
