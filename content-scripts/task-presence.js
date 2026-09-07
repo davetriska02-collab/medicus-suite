@@ -823,7 +823,7 @@
           extra +
           '" title="' +
           esc(o.label) +
-          '" style="z-index:' +
+          '" aria-hidden="true" style="z-index:' +
           (i + 1) +
           '">' +
           esc(o.initials) +
