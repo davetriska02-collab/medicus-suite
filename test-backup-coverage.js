@@ -126,6 +126,7 @@ const KEY_PREFIXES = [
   'contactsCanvas',
   'rota',
   'board',
+  'allocationGroups',
 ];
 
 function hasKeyPrefix(k) {
@@ -255,6 +256,8 @@ const ALLOWLIST = new Set([
   'suite.practiceProfile.publisher', // Publisher-PC UI state for the practice-profile publish flow — not user config
   'suite.pdcContribute', // this machine's Cleanup Code Preferences contributor state (enabled flag + timing bookkeeping) — see shared/io/pdc-contribute.js, not user config
   'suite.knowledgeSync', // this machine's Knowledge shared-folder push/pull bookkeeping — see shared/io/knowledge-sync.js, not the live set itself
+  'allocationGroups.config', // last-used dest set is this computer only — not practice-shared
+  'allocationGroups.staffCache', // last harvested staff directory for Options picker — machine-local names/UUIDs, not a backup module
 
   // Transient release metadata (update-checker — expires after 24h, not user config):
   'suite.update.latestVersion',

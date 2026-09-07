@@ -989,6 +989,26 @@ const PracticeProfile = (() => {
       // handled above). mods.suite is new in v2; accept it if present.
       null;
 
+    if (modMap.has('allocationGroups') && mods.allocationGroups && typeof mods.allocationGroups === 'object') {
+      try {
+        const merge = modMap.get('allocationGroups') === 'merge';
+        const allocationGroupsImport = _io('allocationGroupsImport');
+        if (!allocationGroupsImport) throw new Error('allocationGroupsImport not available in this context.');
+        if (merge) {
+          const ex = await chrome.storage.local.get('allocationGroups.presets');
+          if (!Array.isArray(ex['allocationGroups.presets']) || ex['allocationGroups.presets'].length === 0) {
+            await allocationGroupsImport(mods.allocationGroups);
+            applied.push('allocationGroups');
+          }
+        } else {
+          await allocationGroupsImport(mods.allocationGroups);
+          applied.push('allocationGroups');
+        }
+      } catch (e) {
+        errors.push(`allocationGroups: ${e.message}`);
+      }
+    }
+
     if (modMap.has('suite') && suiteModData && typeof suiteModData === 'object') {
       try {
         const merge = modMap.get('suite') === 'merge';

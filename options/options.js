@@ -936,6 +936,7 @@ async function doFullExport() {
     phrases,
     rota,
     board,
+    allocationGroups,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -956,6 +957,7 @@ async function doFullExport() {
     phrasesExport(),
     rotaExport(),
     boardExport(),
+    allocationGroupsExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -980,6 +982,7 @@ async function doFullExport() {
       phrases,
       rota,
       board,
+      allocationGroups,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -1007,6 +1010,7 @@ async function doModuleExport(scope) {
     phrases: () => phrasesExport(),
     rota: () => rotaExport(),
     board: () => boardExport(),
+    allocationGroups: () => allocationGroupsExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -1048,6 +1052,7 @@ async function applyEnvelope(envelope) {
     mods.phrases && (() => phrasesImport(mods.phrases)),
     mods.rota && (() => rotaImport(mods.rota)),
     mods.board && (() => boardImport(mods.board)),
+    mods.allocationGroups && (() => allocationGroupsImport(mods.allocationGroups)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1359,6 +1364,13 @@ async function isPracticeAccepted() {
         defaultChecked: false,
         defaultMode: 'merge',
         desc: 'Request monitor config and assignee',
+      },
+      {
+        id: 'allocationGroups',
+        label: 'Allocation groups',
+        defaultChecked: true,
+        defaultMode: 'replace',
+        desc: 'Named groups of people the canvases split work onto (not Medicus team inboxes)',
       },
       {
         id: 'suite',
@@ -5179,5 +5191,250 @@ initPdcTallySection({
     });
   } catch (e) {
     console.warn('[Quick Actions init]', e.message);
+  }
+})();
+
+(function initAllocationGroupsOptions() {
+  const Core = window.AllocationGroupsCore;
+  if (!Core || typeof loadAllocationGroupsState !== 'function') return;
+
+  const DAYS = Core.DAY_IDS;
+  let presets = [];
+  let staffCache = [];
+
+  function flash() {
+    const el = document.getElementById('agSaved');
+    if (!el) return;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1200);
+  }
+
+  async function persist() {
+    await saveAllocationGroupsPresets(presets);
+    flash();
+    render();
+  }
+
+  function memberLabel(p, id) {
+    return (p.memberNames && p.memberNames[id]) || id.slice(0, 8);
+  }
+
+  function render() {
+    const host = document.getElementById('agList');
+    if (!host) return;
+    if (!presets.length) {
+      host.innerHTML =
+        '<p class="section-desc">No groups yet. Encircle people on a canvas and Save as group, or start one here and add people from the canvas.</p>';
+      return;
+    }
+    host.innerHTML = presets
+      .map((p) => {
+        const sched = p.schedule;
+        const dayChecks = DAYS.map((d) => {
+          const on = sched && sched.days && sched.days.indexOf(d) !== -1;
+          return (
+            '<label style="margin-right:8px;font-size:12px"><input type="checkbox" data-ag-day="' +
+            d +
+            '" data-ag-id="' +
+            escAttr(p.id) +
+            '"' +
+            (on ? ' checked' : '') +
+            '> ' +
+            d +
+            '</label>'
+          );
+        }).join('');
+        const members = (p.memberIds || [])
+          .map(
+            (id) =>
+              '<span class="chip" style="display:inline-flex;gap:6px;align-items:center;margin:0 6px 6px 0">' +
+              escHtml(memberLabel(p, id)) +
+              ' <button type="button" class="ghost" data-ag-drop-member="' +
+              escAttr(id) +
+              '" data-ag-id="' +
+              escAttr(p.id) +
+              '" aria-label="Remove">×</button></span>'
+          )
+          .join('');
+        const staffOpts = staffCache
+          .filter((s) => s && s.id && (p.memberIds || []).indexOf(String(s.id).toLowerCase()) === -1)
+          .map(
+            (s) =>
+              '<option value="' +
+              escAttr(String(s.id).toLowerCase()) +
+              '">' +
+              escHtml(s.name) +
+              '</option>'
+          )
+          .join('');
+        return (
+          '<div class="card" data-ag-card="' +
+          escAttr(p.id) +
+          '" style="padding:12px;border:1px solid var(--border);border-radius:8px">' +
+          '<input type="text" data-ag-name data-ag-id="' +
+          escAttr(p.id) +
+          '" value="' +
+          escAttr(p.name) +
+          '" maxlength="' +
+          Core.MAX_NAME +
+          '" aria-label="Group name" style="font-weight:600;width:min(280px,100%)">' +
+          '<div style="margin-top:8px">' +
+          (members || '<span class="section-desc">No people yet — add them on a canvas or from the list below.</span>') +
+          '</div>' +
+          (staffOpts
+            ? '<label class="field-label" style="margin-top:8px">Add a person' +
+              '<select data-ag-add-staff data-ag-id="' +
+              escAttr(p.id) +
+              '"><option value="">Choose…</option>' +
+              staffOpts +
+              '</select></label>'
+            : '') +
+          '<div style="margin-top:10px;font-size:12px;color:var(--text-3)">When this chip appears (optional)</div>' +
+          '<div style="margin-top:4px">' +
+          dayChecks +
+          '</div>' +
+          '<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<label>From <input type="time" data-ag-start data-ag-id="' +
+          escAttr(p.id) +
+          '" value="' +
+          escAttr((sched && sched.start) || '') +
+          '"></label>' +
+          '<label>to <input type="time" data-ag-end data-ag-id="' +
+          escAttr(p.id) +
+          '" value="' +
+          escAttr((sched && sched.end) || '') +
+          '"></label>' +
+          '<span class="section-desc">Leave blank for always.</span>' +
+          '</div>' +
+          '<button type="button" class="ghost" data-ag-delete data-ag-id="' +
+          escAttr(p.id) +
+          '" style="margin-top:10px">Delete group</button>' +
+          '</div>'
+        );
+      })
+      .join('');
+  }
+
+  function findPreset(id) {
+    return presets.filter((p) => p.id === id)[0];
+  }
+
+  function scheduleFromCard(p, card) {
+    const days = [];
+    card.querySelectorAll('[data-ag-day]').forEach((box) => {
+      if (box.checked) days.push(box.getAttribute('data-ag-day'));
+    });
+    const start = card.querySelector('[data-ag-start]')?.value || '';
+    const end = card.querySelector('[data-ag-end]')?.value || '';
+    if (!days.length && !start && !end) return null;
+    if (!days.length || !start || !end) return p.schedule || null;
+    const raw = { days: days, start: start, end: end };
+    if (Core.scheduleErrors(raw).length) return p.schedule || null;
+    return Core.normaliseSchedule(raw);
+  }
+
+  async function load() {
+    const state = await loadAllocationGroupsState();
+    presets = state.presets || [];
+    const cache = await chrome.storage.local.get('allocationGroups.staffCache');
+    staffCache = Array.isArray(cache['allocationGroups.staffCache']) ? cache['allocationGroups.staffCache'] : [];
+    render();
+  }
+
+  document.getElementById('agAdd')?.addEventListener('click', async () => {
+    const res = Core.upsertPreset(presets, {
+      name: 'New group',
+      members: staffCache[0] ? [{ id: staffCache[0].id, name: staffCache[0].name }] : [],
+      memberIds: staffCache[0] ? [staffCache[0].id] : [],
+      memberNames: staffCache[0] ? { [String(staffCache[0].id).toLowerCase()]: staffCache[0].name } : {},
+    });
+    if (!res.ok) {
+      // A group needs at least one person. Seed a placeholder the canvas will replace.
+      window.alert('Open an allocation canvas and save a group from the people on the board. Options can then rename it and set days and times.');
+      return;
+    }
+    presets = res.presets;
+    await persist();
+  });
+
+  document.getElementById('agList')?.addEventListener('change', async (ev) => {
+    const id = ev.target && ev.target.getAttribute('data-ag-id');
+    if (!id) return;
+    const p = findPreset(id);
+    const card = ev.target.closest('[data-ag-card]');
+    if (!p || !card) return;
+    if (ev.target.hasAttribute('data-ag-name')) p.name = ev.target.value;
+    if (ev.target.hasAttribute('data-ag-add-staff')) {
+      const sid = ev.target.value;
+      const staff = staffCache.filter((s) => String(s.id).toLowerCase() === sid)[0];
+      if (staff && Core.isUuid(sid)) {
+        p.memberIds = (p.memberIds || []).concat([sid]);
+        p.memberNames = Object.assign({}, p.memberNames || {}, { [sid]: staff.name });
+      }
+      ev.target.value = '';
+    }
+    const schedEl =
+      ev.target.hasAttribute('data-ag-day') ||
+      ev.target.hasAttribute('data-ag-start') ||
+      ev.target.hasAttribute('data-ag-end');
+    if (schedEl) {
+      const days = [];
+      card.querySelectorAll('[data-ag-day]').forEach((box) => {
+        if (box.checked) days.push(box.getAttribute('data-ag-day'));
+      });
+      const start = card.querySelector('[data-ag-start]')?.value || '';
+      const end = card.querySelector('[data-ag-end]')?.value || '';
+      if (!days.length && !start && !end) {
+        p.schedule = null;
+      } else if (!days.length || !start || !end) {
+        return;
+      } else {
+        const raw = { days, start, end };
+        const errs = Core.scheduleErrors(raw);
+        if (errs.length) {
+          window.alert(errs[0]);
+          return;
+        }
+        p.schedule = Core.normaliseSchedule(raw);
+      }
+    } else {
+      p.schedule = scheduleFromCard(p, card);
+    }
+    const res = Core.upsertPreset(presets, p);
+    if (res.ok) {
+      presets = res.presets;
+      await persist();
+    }
+  });
+
+  document.getElementById('agList')?.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-ag-delete], [data-ag-drop-member]');
+    if (!btn) return;
+    const id = btn.getAttribute('data-ag-id');
+    if (btn.hasAttribute('data-ag-delete')) {
+      if (!window.confirm('Delete this group?')) return;
+      presets = Core.removePreset(presets, id).presets;
+      await persist();
+      return;
+    }
+    const p = findPreset(id);
+    if (!p) return;
+    const drop = btn.getAttribute('data-ag-drop-member');
+    p.memberIds = (p.memberIds || []).filter((m) => m !== drop);
+    if (p.memberNames) delete p.memberNames[drop];
+    if (!p.memberIds.length) {
+      if (!window.confirm('That was the last person — delete this group?')) return;
+      presets = Core.removePreset(presets, id).presets;
+    } else {
+      const res = Core.upsertPreset(presets, p);
+      if (res.ok) presets = res.presets;
+    }
+    await persist();
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', load);
+  } else {
+    load();
   }
 })();

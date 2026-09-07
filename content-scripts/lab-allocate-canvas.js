@@ -63,6 +63,16 @@
   var _expandedChip = '';
   var _collapsed = {};
   var _workDate = '';
+  var _destKind = 'in-today';
+  var _destGroupId = '';
+  var _customMembers = [];
+  var _agsPresets = [];
+  var _agsConfig = {};
+  var _agsPicking = false;
+  var _agsAllOpen = false;
+  var _agsDestReady = false;
+  var _dragFieldKey = '';
+  var _marquee = null;
 
   function calendarToday() {
     return C.todayISO();
@@ -239,6 +249,7 @@
     _error = null;
     render();
     try {
+      await loadGroupsState();
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
       var out = await client().fetchTaskList(_route.slug, _route.search);
       _rows = out.rows || [];
@@ -253,6 +264,8 @@
       render();
       await harvestStaffFromOverviews(_rows);
       await enrichRequesters(_rows);
+      persistStaffCache();
+      pinDestColumns();
     } catch (err) {
       _error = err && err.message ? err.message : 'Could not read the results queue.';
       _rows = [];
@@ -305,6 +318,8 @@
     try {
       await loadMedicusPresence({ skipAbsences: true });
       harvestStaffFromBook(_book);
+      persistStaffCache();
+      pinDestColumns();
     } catch (_) {
       _book = null;
     }
@@ -518,6 +533,7 @@
     else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
     var name = C.displayClinicianName(col.title);
     var isTeam = col.kind === 'team';
+    var destOn = !isTeam && !!destKeySet()[col.key];
     var expandHint = isTeam
       ? open
         ? 'Hide staged reports'
@@ -554,6 +570,7 @@
       (selCount ? ' ms-lac-chip-target' : '') +
       (col.count ? ' ms-lac-field-has' : '') +
       (col.kind === 'team' ? ' ms-lac-chip-team' : '') +
+      (destOn ? ' ms-ags-field-on' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="' +
@@ -561,7 +578,9 @@
       '">' +
       '<button type="button" class="ms-lac-chip" data-chip-key="' +
       esc(col.key) +
-      '" aria-expanded="' +
+      '"' +
+      (!isTeam && !selCount ? ' draggable="true"' : '') +
+      ' aria-expanded="' +
       (open ? 'true' : 'false') +
       '" aria-controls="ms-lac-drawer-' +
       esc(col.key).replace(/[^a-z0-9]/gi, '_') +
@@ -635,6 +654,566 @@
     );
   }
 
+  function groupsCore() {
+    return window.AllocationGroupsCore || null;
+  }
+
+  function destStrip() {
+    return window.AllocationDestStrip || null;
+  }
+
+  function groupsIO() {
+    return window.AllocationGroupsIO || null;
+  }
+
+  async function loadGroupsState() {
+    var G = groupsCore();
+    if (!G) return;
+    var state = null;
+    try {
+      var io = groupsIO();
+      if (io && typeof io.loadAllocationGroupsState === 'function') {
+        state = await io.loadAllocationGroupsState();
+      } else if (typeof loadAllocationGroupsState === 'function') {
+        state = await loadAllocationGroupsState();
+      } else if (chrome.storage && chrome.storage.local) {
+        var got = await chrome.storage.local.get(['allocationGroups.presets', 'allocationGroups.config']);
+        state = {
+          presets: G.normalisePresets(got['allocationGroups.presets']),
+          config: G.normaliseConfig(got['allocationGroups.config']),
+        };
+      }
+    } catch (_) {
+      state = null;
+    }
+    _agsPresets = (state && state.presets) || [];
+    _agsConfig = (state && state.config) || G.normaliseConfig({});
+    if (_agsDestReady) return;
+    var last = _agsConfig.lastUsedBySurface && _agsConfig.lastUsedBySurface.lab;
+    var dest = G.defaultDestSet(_agsPresets, new Date(), last);
+    _destKind = (dest && dest.kind) || 'in-today';
+    _destGroupId = (dest && dest.id) || '';
+    _customMembers = [];
+    _agsDestReady = true;
+  }
+
+  async function persistPresets() {
+    var io = groupsIO();
+    try {
+      if (io && typeof io.saveAllocationGroupsPresets === 'function') {
+        await io.saveAllocationGroupsPresets(_agsPresets);
+        return;
+      }
+      if (typeof saveAllocationGroupsPresets === 'function') {
+        await saveAllocationGroupsPresets(_agsPresets);
+        return;
+      }
+      if (chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ 'allocationGroups.presets': _agsPresets });
+      }
+    } catch (_) {
+      /* storage is a convenience, not required to stage */
+    }
+  }
+
+  async function persistConfig() {
+    var io = groupsIO();
+    try {
+      if (io && typeof io.saveAllocationGroupsConfig === 'function') {
+        await io.saveAllocationGroupsConfig(_agsConfig);
+        return;
+      }
+      if (typeof saveAllocationGroupsConfig === 'function') {
+        await saveAllocationGroupsConfig(_agsConfig);
+        return;
+      }
+      if (chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.set({ 'allocationGroups.config': _agsConfig });
+      }
+    } catch (_) {
+      /* last-used is this computer only */
+    }
+  }
+
+  function persistStaffCache() {
+    var G = groupsCore();
+    var list = ((_staffDir && _staffDir.list) || [])
+      .map(function (s) {
+        if (!s || !s.id || !s.name) return null;
+        if (G && !G.isUuid(s.id)) return null;
+        return { id: String(s.id).toLowerCase(), name: s.name };
+      })
+      .filter(Boolean);
+    if (!list.length || !chrome.storage || !chrome.storage.local) return;
+    try {
+      chrome.storage.local.set({ 'allocationGroups.staffCache': list });
+    } catch (_) {
+      /* Options picker reads this when present */
+    }
+  }
+
+  function rememberDest() {
+    var G = groupsCore();
+    if (!G || _destKind === 'custom') return;
+    _agsConfig = G.rememberLastUsed(_agsConfig, 'lab', { kind: _destKind, id: _destGroupId });
+    persistConfig();
+  }
+
+  function destSetOutcome() {
+    var G = groupsCore();
+    var presenceFor = function (member) {
+      return C.presenceForName(presenceOpts(member && member.name));
+    };
+    if (!G) {
+      var fallback = C.pinDestStaffIds(C.asSplitDests(inDayPeople()), _staffDir);
+      return { dests: fallback, skipped: [], collisions: fallback.collisions || [] };
+    }
+    var raw = G.destsFromSet(
+      _destKind === 'custom'
+        ? { kind: 'custom', members: _customMembers }
+        : { kind: _destKind, id: _destGroupId },
+      {
+        presets: _agsPresets,
+        inToday: inDayPeople(),
+        presenceFor: presenceFor,
+        emptyInTodayReason: 'No people with a session on the appointment book to split onto.',
+      }
+    );
+    var dests = C.pinDestStaffIds(C.asSplitDests(raw.dests || []), _staffDir);
+    var collisions = dests.collisions || [];
+    return {
+      dests: dests,
+      skipped: raw.skipped || [],
+      reason: collisions.length ? C.collisionPhrase(collisions) : raw.reason || '',
+      collisions: collisions,
+    };
+  }
+
+  function splitDestinations() {
+    var out = destSetOutcome();
+    var dests = out.dests || [];
+    dests.collisions = out.collisions || dests.collisions || [];
+    return dests;
+  }
+
+  function destKeySet() {
+    var set = {};
+    splitDestinations().forEach(function (d) {
+      if (d && d.key) set[d.key] = true;
+    });
+    return set;
+  }
+
+  function pinDestColumns() {
+    var dests = splitDestinations();
+    _draft = C.replaceDestColumns(_draft || C.emptyDraft(), dests);
+  }
+
+  function visibleUnallocatedCount() {
+    var pool = currentWorkspace().pool;
+    return (pool && pool.tiles && pool.tiles.length) || 0;
+  }
+
+  function tilesForPlan() {
+    var pool = currentWorkspace().pool;
+    return ((pool && pool.tiles) || []).filter(function (t) {
+      return t && t.id;
+    });
+  }
+
+  function destBoxCounts() {
+    var dests = splitDestinations();
+    var counts = {};
+    dests.forEach(function (d) {
+      counts[d.key] = 0;
+    });
+    var board = currentWorkspace();
+    (board.clinicians || []).forEach(function (col) {
+      if (!col || counts[col.key] == null) return;
+      counts[col.key] = (col.tiles || []).length;
+    });
+    return counts;
+  }
+
+  function destsHaveWork() {
+    var counts = destBoxCounts();
+    return Object.keys(counts).some(function (k) {
+      return counts[k] > 0;
+    });
+  }
+
+  function destBoxTiles() {
+    var want = destKeySet();
+    var tiles = [];
+    var seen = {};
+    var board = currentWorkspace();
+    (board.clinicians || []).forEach(function (col) {
+      if (!col || !want[col.key]) return;
+      (col.tiles || []).forEach(function (t) {
+        if (!t || !t.id || seen[t.id]) return;
+        seen[t.id] = true;
+        tiles.push(t);
+      });
+    });
+    return tiles;
+  }
+
+  function splitOpts() {
+    return {
+      dayPhrase: dayPhrase(),
+      emptyDestReason: 'Pick In today, a group, or encircle people.',
+    };
+  }
+
+  function applyPileSplit() {
+    var dests = splitDestinations();
+    if (dests.collisions && dests.collisions.length) {
+      return { ok: false, reason: C.collisionPhrase(dests.collisions) };
+    }
+    var plan = C.planEvenSplit(tilesForPlan(), dests, splitOpts());
+    if (!plan.ok) return plan;
+    _draft = C.applyEvenSplit(C.ensureDestColumns(_draft || C.emptyDraft(), dests), plan);
+    _selected = {};
+    return plan;
+  }
+
+  function applyTopUp() {
+    var dests = splitDestinations();
+    var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), splitOpts());
+    if (!plan.ok) return plan;
+    _draft = C.applyEvenSplit(C.ensureDestColumns(_draft || C.emptyDraft(), dests), plan);
+    _selected = {};
+    return plan;
+  }
+
+  function applyLevel() {
+    var dests = splitDestinations();
+    var seen = {};
+    var tiles = destBoxTiles()
+      .concat(tilesForPlan())
+      .filter(function (t) {
+        if (!t || !t.id || seen[t.id]) return false;
+        seen[t.id] = true;
+        return true;
+      });
+    var plan = C.planLevel(tiles, dests, splitOpts());
+    if (!plan.ok) return plan;
+    _draft = C.applyEvenSplit(C.ensureDestColumns(C.emptyDraft(), dests), plan);
+    _selected = {};
+    return plan;
+  }
+
+  function memberFromFieldKey(key) {
+    if (!key || String(key).indexOf('clinician:') !== 0) return null;
+    var title = '';
+    var staffId = '';
+    inDayPeople().forEach(function (p) {
+      if (p && p.key === key) {
+        title = p.name || title;
+        staffId = p.staffId || staffId;
+      }
+    });
+    if (_draft && _draft.columnTitles && _draft.columnTitles[key]) title = title || _draft.columnTitles[key];
+    if (_draft && _draft.columnStaffIds && _draft.columnStaffIds[key]) {
+      staffId = staffId || _draft.columnStaffIds[key];
+    }
+    var board = currentWorkspace();
+    (board.clinicians || []).forEach(function (col) {
+      if (col && col.key === key) title = title || col.title;
+    });
+    if (!title) return null;
+    if (!staffId) {
+      var pinned = C.pinDestStaffIds([{ key: key, name: title }], _staffDir);
+      staffId = (pinned[0] && pinned[0].staffId) || '';
+    }
+    return { key: key, name: title, staffId: staffId };
+  }
+
+  function setDestKind(kind, groupId) {
+    _destKind = kind || 'in-today';
+    _destGroupId = groupId || '';
+    _agsPicking = kind === 'custom';
+    _agsAllOpen = false;
+    if (kind !== 'custom') _customMembers = [];
+    rememberDest();
+    pinDestColumns();
+    render();
+  }
+
+  function addFieldToCustom(key) {
+    var mem = memberFromFieldKey(key);
+    if (!mem) return;
+    _destKind = 'custom';
+    _destGroupId = '';
+    _agsPicking = true;
+    _agsAllOpen = false;
+    var seen = false;
+    _customMembers.forEach(function (m) {
+      if (m && m.key === key) seen = true;
+    });
+    if (!seen) _customMembers = _customMembers.concat([mem]);
+    pinDestColumns();
+    render();
+  }
+
+  function toggleFieldInCustom(key) {
+    var mem = memberFromFieldKey(key);
+    if (!mem) return;
+    _destKind = 'custom';
+    _destGroupId = '';
+    _agsPicking = true;
+    var next = [];
+    var found = false;
+    _customMembers.forEach(function (m) {
+      if (m && m.key === key) found = true;
+      else if (m) next.push(m);
+    });
+    if (!found) next.push(mem);
+    _customMembers = next;
+    pinDestColumns();
+    render();
+  }
+
+  function setCustomFromFieldKeys(keys) {
+    var G = groupsCore();
+    var cap = G ? G.MAX_MEMBERS : 12;
+    var members = [];
+    var seen = {};
+    (keys || []).forEach(function (key) {
+      if (members.length >= cap) return;
+      var mem = memberFromFieldKey(key);
+      if (!mem || seen[mem.key]) return;
+      seen[mem.key] = true;
+      members.push(mem);
+    });
+    if (!members.length) return;
+    _destKind = 'custom';
+    _destGroupId = '';
+    _agsPicking = true;
+    _agsAllOpen = false;
+    _customMembers = members;
+    pinDestColumns();
+    render();
+  }
+
+  function canSaveCustomGroup() {
+    var G = groupsCore();
+    if (!G || _destKind !== 'custom') return false;
+    return _customMembers.some(function (m) {
+      return m && G.isUuid(m.staffId);
+    });
+  }
+
+  async function saveAsGroup() {
+    var G = groupsCore();
+    if (!G) return;
+    var members = (_customMembers || []).filter(function (m) {
+      return m && G.isUuid(m.staffId);
+    });
+    if (!members.length) {
+      _copyNote = 'Need at least one person with a staff id to save a group.';
+      announce(_copyNote);
+      render();
+      return;
+    }
+    var name = window.prompt('Name this group', 'New group');
+    if (!name) return;
+    var res = G.upsertPreset(_agsPresets, {
+      name: name,
+      members: members.map(function (m) {
+        return { id: m.staffId, name: m.name };
+      }),
+    });
+    if (!res.ok) {
+      _copyNote = (res.errors && res.errors[0]) || 'Could not save that group.';
+      announce(_copyNote);
+      render();
+      return;
+    }
+    _agsPresets = res.presets;
+    _destKind = 'group';
+    _destGroupId = res.preset.id;
+    _agsPicking = false;
+    await persistPresets();
+    rememberDest();
+    _copyNote = 'Saved group ' + res.preset.name + '. Split still stages on this canvas only.';
+    announce(_copyNote);
+    pinDestColumns();
+    render();
+  }
+
+  function allGroupsHtml() {
+    if (!_agsAllOpen) return '';
+    var G = groupsCore();
+    var list = G ? G.normalisePresets(_agsPresets) : [];
+    if (!list.length) {
+      return '<div class="ms-ags-all" id="ms-ags-all-list">No saved groups yet. Encircle people and Save as group.</div>';
+    }
+    return (
+      '<div class="ms-ags-all" id="ms-ags-all-list">' +
+      list
+        .map(function (p) {
+          return (
+            '<button type="button" class="ms-ags-chip' +
+            (_destKind === 'group' && p.id === _destGroupId ? ' ms-ags-chip-on' : '') +
+            '" data-ags-all="' +
+            esc(p.id) +
+            '">' +
+            esc(p.name) +
+            '</button>'
+          );
+        })
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function evenSplitHtml() {
+    var Strip = destStrip();
+    var G = groupsCore();
+    var outcome = destSetOutcome();
+    var dests = outcome.dests;
+    var destPhrase = C.destNamesPhrase(dests);
+    var skippedPhrase = G ? G.skippedPhrase(outcome.skipped) : '';
+    var visible = G ? G.visiblePresets(_agsPresets, new Date()) : [];
+    var strip = Strip
+      ? Strip.destSetStripHtml({
+          destKind: _destKind,
+          destGroupId: _destGroupId,
+          inTodayCount: inDayPeople().length,
+          visibleGroups: visible,
+          destPhrase: destPhrase,
+          skippedPhrase: skippedPhrase,
+          canSave: canSaveCustomGroup(),
+        })
+      : '';
+    var poolN = visibleUnallocatedCount();
+    var haveWork = destsHaveWork();
+    var stagedN = C.draftSummary(_rows, _draft).count;
+    var actions = '';
+    if (!dests.length) {
+      actions = '<span class="ms-lac-split-note">Pick In today, a group, or encircle people.</span>';
+    } else if (poolN && !haveWork) {
+      actions =
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-split" title="Split the unallocated pile evenly. Proposal only, nothing is written until you confirm.">Split equally</button>';
+    } else if (poolN && haveWork) {
+      actions =
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-topup" title="Give leftover unallocated reports to whoever currently has least. Does not move sitting work. Proposal only.">Top up empty boxes</button>' +
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-level" title="Rebalance so each has the same number, or as near as it can be. Moves sitting work on this canvas. Proposal only.">Distribute equally</button>';
+    } else if (haveWork) {
+      actions =
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-level" title="Rebalance sitting work. Proposal only.">Distribute equally</button>';
+    } else {
+      actions =
+        '<span class="ms-lac-split-note">Inbox is clear. Share this box on a person splits only that folder among the current destinations.</span>';
+    }
+    var proposal = stagedN
+      ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal. Not written yet.</strong> ' +
+        stagedN +
+        ' reports would move among ' +
+        esc(destPhrase) +
+        '. Drag a patient from one person onto another to change who gets them.</div>'
+      : '';
+    return (
+      strip +
+      allGroupsHtml() +
+      '<div class="ms-ags-actions">' +
+      actions +
+      '</div>' +
+      proposal
+    );
+  }
+
+  function clinicianFieldsInRect(rect) {
+    var overlay = document.getElementById(OVERLAY_ID);
+    if (!overlay || !rect) return [];
+    var keys = [];
+    overlay.querySelectorAll('.ms-lac-chip-wrap[data-col-kind="clinician"]').forEach(function (el) {
+      var box = el.getBoundingClientRect();
+      var hit =
+        box.right >= rect.x &&
+        box.left <= rect.x + rect.w &&
+        box.bottom >= rect.y &&
+        box.top <= rect.y + rect.h;
+      if (!hit) return;
+      var key = el.getAttribute('data-col-key') || '';
+      if (key) keys.push(key);
+    });
+    return keys;
+  }
+
+  function marqueeBox() {
+    if (!_marquee) return { x: 0, y: 0, w: 0, h: 0 };
+    return {
+      x: Math.min(_marquee.x0, _marquee.x1),
+      y: Math.min(_marquee.y0, _marquee.y1),
+      w: Math.abs(_marquee.x1 - _marquee.x0),
+      h: Math.abs(_marquee.y1 - _marquee.y0),
+    };
+  }
+
+  function paintMarquee() {
+    var el = document.getElementById('ms-ags-marquee');
+    if (!el || !_marquee) return;
+    var box = marqueeBox();
+    el.style.left = box.x + 'px';
+    el.style.top = box.y + 'px';
+    el.style.width = box.w + 'px';
+    el.style.height = box.h + 'px';
+    var keys = {};
+    clinicianFieldsInRect(box).forEach(function (k) {
+      keys[k] = true;
+    });
+    var overlay = document.getElementById(OVERLAY_ID);
+    var dests = destKeySet();
+    if (!overlay) return;
+    overlay.querySelectorAll('.ms-lac-chip-wrap[data-col-kind="clinician"]').forEach(function (node) {
+      var k = node.getAttribute('data-col-key');
+      if (keys[k]) node.classList.add('ms-ags-field-on');
+      else if (!dests[k]) node.classList.remove('ms-ags-field-on');
+    });
+  }
+
+  function clearMarquee() {
+    document.removeEventListener('mousemove', moveMarquee);
+    document.removeEventListener('mouseup', endMarquee);
+    var el = document.getElementById('ms-ags-marquee');
+    if (el) el.remove();
+    _marquee = null;
+  }
+
+  function moveMarquee(e) {
+    if (!_marquee) return;
+    _marquee.x1 = e.clientX;
+    _marquee.y1 = e.clientY;
+    paintMarquee();
+  }
+
+  function endMarquee(e) {
+    if (e) {
+      _marquee.x1 = e.clientX;
+      _marquee.y1 = e.clientY;
+    }
+    var box = marqueeBox();
+    var keys = box.w >= 8 && box.h >= 8 ? clinicianFieldsInRect(box) : [];
+    clearMarquee();
+    if (keys.length) setCustomFromFieldKeys(keys);
+  }
+
+  function startMarquee(e) {
+    clearMarquee();
+    _marquee = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY };
+    var overlay = document.getElementById(OVERLAY_ID);
+    if (!overlay) return;
+    var box = document.createElement('div');
+    box.id = 'ms-ags-marquee';
+    box.className = 'ms-ags-marquee';
+    overlay.appendChild(box);
+    paintMarquee();
+    document.addEventListener('mousemove', moveMarquee);
+    document.addEventListener('mouseup', endMarquee);
+  }
+
   function emptyPoolHtml() {
     return (
       '<div class="ms-lac-empty">' +
@@ -682,6 +1261,7 @@
       '</div>' +
       '<aside class="ms-lac-rail" aria-label="Clinician and team fields">' +
       workingDayHtml() +
+      evenSplitHtml() +
       '<div class="ms-lac-rail-head">' +
       '<h3 class="ms-lac-col-heading">Clinicians</h3>' +
       '<span class="ms-lac-col-meta">' +
@@ -971,6 +1551,100 @@
       dayTomorrow.addEventListener('click', function () {
         setWorkDate(C.addDaysISO(calendarToday(), 1));
       });
+    var inTodayBtn = root.querySelector('#ms-ags-in-today');
+    if (inTodayBtn)
+      inTodayBtn.addEventListener('click', function () {
+        setDestKind('in-today', '');
+      });
+    root.querySelectorAll('[data-ags-group]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        setDestKind('group', btn.getAttribute('data-ags-group') || '');
+      });
+    });
+    root.querySelectorAll('[data-ags-all]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        setDestKind('group', btn.getAttribute('data-ags-all') || '');
+      });
+    });
+    var allBtn = root.querySelector('#ms-ags-all');
+    if (allBtn)
+      allBtn.addEventListener('click', function () {
+        _agsAllOpen = !_agsAllOpen;
+        render();
+      });
+    var saveBtn = root.querySelector('#ms-ags-save');
+    if (saveBtn)
+      saveBtn.addEventListener('click', function () {
+        saveAsGroup();
+      });
+    var well = root.querySelector('#ms-ags-new-group');
+    if (well) {
+      well.addEventListener('click', function () {
+        setDestKind('custom', '');
+        if (!_customMembers.length) {
+          announce('Encircle people, click their fields, or drag them onto New group.');
+        }
+      });
+      well.addEventListener('dragover', function (e) {
+        if (!_dragFieldKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        well.classList.add('ms-ags-well-on');
+      });
+      well.addEventListener('dragleave', function (e) {
+        if (e.relatedTarget && well.contains(e.relatedTarget)) return;
+        if (_destKind !== 'custom') well.classList.remove('ms-ags-well-on');
+      });
+      well.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var key = _dragFieldKey;
+        _dragFieldKey = '';
+        if (!key) return;
+        addFieldToCustom(key);
+      });
+    }
+    function bindPileAction(id, applyFn, okNote) {
+      var btn = root.querySelector(id);
+      if (!btn) return;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_writing) return;
+        var applied = applyFn();
+        _selected = {};
+        _confirmWrite = null;
+        _copyNote =
+          applied && applied.ok ? okNote(applied) : (applied && applied.reason) || 'Could not split.';
+        announce(_copyNote);
+        render();
+      });
+    }
+    bindPileAction('#ms-lac-split', applyPileSplit, function (applied) {
+      return (
+        'Split ' +
+        applied.total +
+        ' equally onto ' +
+        applied.doctors +
+        ' people. Proposal, not written yet. Drag a patient onto another field to change who gets them.'
+      );
+    });
+    bindPileAction('#ms-lac-topup', applyTopUp, function (applied) {
+      return (
+        'Topped up empty boxes with ' +
+        applied.total +
+        ' among the current destinations. Proposal, not written yet. Drag a patient onto another field to change who gets them.'
+      );
+    });
+    bindPileAction('#ms-lac-level', applyLevel, function (applied) {
+      return (
+        'Distributed ' +
+        applied.total +
+        ' equally among ' +
+        applied.doctors +
+        ' people. Proposal, not written yet. Drag a patient onto another field to change who gets them.'
+      );
+    });
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
     var addName = root.querySelector('#ms-lac-add-name');
@@ -1068,6 +1742,7 @@
     function beginDrag(e, startIds) {
       var ids = C.dragIdsFor(_selected, startIds);
       _ignoreClickAfterDrag = true;
+      _dragFieldKey = '';
       _dragIds = ids;
       var from = e.currentTarget;
       var wrap = from && from.closest && from.closest('.ms-lac-chip-wrap');
@@ -1093,6 +1768,7 @@
     }
     function endDrag() {
       _dragIds = null;
+      _dragFieldKey = '';
       _dragOriginKind = '';
       clearDragMarks();
       if (_dragGhost) {
@@ -1180,6 +1856,7 @@
     });
     function bindDropTarget(el) {
       el.addEventListener('dragover', function (e) {
+        if (_dragFieldKey) return;
         e.preventDefault();
         var kind = el.getAttribute('data-col-kind') || '';
         if (C.dropTargetShowsHover(_dragOriginKind, kind)) {
@@ -1194,12 +1871,19 @@
       el.addEventListener('drop', function (e) {
         e.preventDefault();
         el.classList.remove('ms-lac-drop-hover');
+        if (_dragFieldKey) {
+          endDrag();
+          return;
+        }
         var key = el.getAttribute('data-col-key');
         var ids = _dragIds && _dragIds.length ? _dragIds : [];
         if (!ids.length && e.dataTransfer) {
-          ids = String(e.dataTransfer.getData('text/plain') || '')
-            .split(',')
-            .filter(Boolean);
+          var raw = String(e.dataTransfer.getData('text/plain') || '');
+          if (raw.indexOf('field:') === 0) {
+            endDrag();
+            return;
+          }
+          ids = raw.split(',').filter(Boolean);
         }
         endDrag();
         if (!key || !ids.length) return;
@@ -1211,6 +1895,7 @@
       btn.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
+        if (_ignoreClickAfterDrag) return;
         var key = btn.getAttribute('data-chip-key') || '';
         var ids = selectedIds();
         if (ids.length) {
@@ -1219,10 +1904,54 @@
           requestStage(ids, key, btn.closest('.ms-lac-chip-wrap'));
           return;
         }
+        var wrap = btn.closest('.ms-lac-chip-wrap');
+        var kind = (wrap && wrap.getAttribute('data-col-kind')) || '';
+        if (kind === 'clinician' && _agsPicking) {
+          toggleFieldInCustom(key);
+          return;
+        }
         _expandedChip = _expandedChip === key ? '' : key;
         render();
       });
+      btn.addEventListener('dragstart', function (e) {
+        var wrap = btn.closest('.ms-lac-chip-wrap');
+        var kind = (wrap && wrap.getAttribute('data-col-kind')) || '';
+        if (kind !== 'clinician' || selectedIds().length) {
+          e.preventDefault();
+          return;
+        }
+        _dragFieldKey = (wrap && wrap.getAttribute('data-col-key')) || '';
+        _dragIds = null;
+        _ignoreClickAfterDrag = true;
+        if (e.dataTransfer) {
+          e.dataTransfer.setData('text/plain', 'field:' + _dragFieldKey);
+          e.dataTransfer.effectAllowed = 'copy';
+        }
+      });
+      btn.addEventListener('dragend', function () {
+        _dragFieldKey = '';
+        setTimeout(function () {
+          _ignoreClickAfterDrag = false;
+        }, 0);
+      });
     });
+    var rail = root.querySelector('.ms-lac-rail');
+    if (rail) {
+      rail.addEventListener('mousedown', function (e) {
+        if (e.button !== 0 || _writing || _dragIds || _dragFieldKey) return;
+        var t = e.target;
+        if (!t || !t.closest) return;
+        if (
+          t.closest(
+            '.ms-lac-tile, .ms-lac-chip, .ms-lac-group, button, input, select, textarea, a, .ms-ags-chip, .ms-ags-well, .ms-ags-strip, .ms-ags-actions, label'
+          )
+        ) {
+          return;
+        }
+        e.preventDefault();
+        startMarquee(e);
+      });
+    }
   }
 
   function requestStage(ids, key, colEl) {
@@ -1411,6 +2140,14 @@
     _teamDir = C.harvestTeamDirectory([], null);
     _collapsed = {};
     _workDate = '';
+    _destKind = 'in-today';
+    _destGroupId = '';
+    _customMembers = [];
+    _agsPicking = false;
+    _agsAllOpen = false;
+    _agsDestReady = false;
+    _dragFieldKey = '';
+    clearMarquee();
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
     var launch = document.getElementById(LAUNCH_ID);
@@ -1436,6 +2173,13 @@
     _error = null;
     _collapsed = {};
     _workDate = calendarToday();
+    _destKind = 'in-today';
+    _destGroupId = '';
+    _customMembers = [];
+    _agsPicking = false;
+    _agsAllOpen = false;
+    _agsDestReady = false;
+    _dragFieldKey = '';
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
       el = document.createElement('div');
@@ -1448,6 +2192,11 @@
     render();
     var close = el.querySelector('#ms-lac-close');
     if (close) close.focus();
+    loadGroupsState().then(function () {
+      if (!_open) return;
+      pinDestColumns();
+      render();
+    });
     loadBoard();
   }
 
@@ -1493,6 +2242,11 @@
         if (_confirmWrite) {
           _confirmWrite = null;
           announce('Kept planning. Nothing was written.');
+          render();
+          return;
+        }
+        if (_agsAllOpen) {
+          _agsAllOpen = false;
           render();
           return;
         }

@@ -1,29 +1,33 @@
-// © 2026 Graysbrook Ltd. Proprietary — all rights reserved.
-// Medicus Suite — prescription-request canvas (routine and non-routine)
+// © 2026 Graysbrook Ltd. Proprietary - all rights reserved.
+// Medicus Suite - patient-request canvas (medical and admin triage inbox)
 //
-// Sibling of the lab / workflow canvases. Same drag / stage /
-// confirm / bulk-reassign pattern on the routine and non-routine
-// prescription-request task-lists. The large left box is UNALLOCATED
+// Sibling of the Rx / lab / workflow canvases. Same drag / stage /
+// confirm / bulk-reassign pattern on homepage medical and admin
+// patient-request task-lists. The large left box is UNALLOCATED
 // requests, grouped by registered GP when that is on the row. Named GP
 // is a grouping caption, never auto-placement. Split equally / Top up /
-// Distribute equally stage locally — they do not write. Does not issue,
-// sign, or file a prescription.
+// Distribute equally stage locally - they do not write. Does not complete,
+// file, or reply to a request.
 //
-// Writing uses LabAllocateCore.createClient (W23). This file never POSTs.
-// Confirm lists patient → destination. UI copy never claims the write
-// finished, and never claims a requester.
+// Writing uses LabAllocateCore.createClient (W23). Fail-closed until a
+// dummy-patient capture of bulk-reassign on these slugs. This file never
+// POSTs. Confirm lists patient → person. UI copy never claims the write
+// finished.
 'use strict';
 
 (function () {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  if (window.__msRxAllocateCanvas) return;
-  window.__msRxAllocateCanvas = true;
+  if (window.__msRequestAllocateCanvas) return;
+  window.__msRequestAllocateCanvas = true;
 
-  var C = window.RxAllocateCore;
+  var C = window.RequestAllocateCore;
   if (!C) return;
+  var G = window.AllocationGroupsCore || null;
+  var Strip = window.AllocationDestStrip || null;
+  var SURFACE = 'request';
 
-  var OVERLAY_ID = 'ms-rxac-overlay';
-  var LAUNCH_ID = 'ms-rxac-launch';
+  var OVERLAY_ID = 'ms-qac-overlay';
+  var LAUNCH_ID = 'ms-qac-launch';
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -63,17 +67,13 @@
   var _collapsed = {};
   var _workDate = '';
   var _splitDefaulted = false;
-  var _destKind = 'in-today';
-  var _destGroupId = '';
-  var _customMembers = [];
   var _presets = [];
   var _agConfig = { lastUsedBySurface: {} };
-  var _peopleSelected = {};
-  var _lastPeopleKey = '';
-  var _agsAllOpen = false;
-  var _agLoaded = false;
-  var _lastSkipped = [];
-  var _peopleDragKeys = null;
+  var _destSet = { kind: 'in-today' };
+  var _destSetReady = false;
+  var _showAllGroups = false;
+  var _namingGroup = false;
+  var _personDrag = null;
   var _marquee = null;
 
   function fieldIsOpen(key) {
@@ -138,11 +138,11 @@
   }
 
   function currentRoute() {
-    return C.parseRxQueueRoute(location.pathname, location.search);
+    return C.parseRequestQueueRoute(location.pathname, location.search);
   }
 
   function client() {
-    if (!_route) throw new Error('rx-allocate: no non-routine prescription-queue route');
+    if (!_route) throw new Error('request-allocate: no medical/admin request-queue route');
     return C.createClient(_route.apiBase);
   }
 
@@ -157,14 +157,14 @@
   }
 
   function queueTitle() {
-    return C.poolTitle({ routine: _route && _route.routine });
+    return C.poolTitle({ admin: _route && _route.admin });
   }
 
   function currentWorkspace() {
     return C.buildWorkspace(_rows, _draft, {
       teams: (_teamDir && _teamDir.list) || [],
       kind: _route && _route.kind,
-      routine: _route && _route.routine,
+      admin: _route && _route.admin,
     });
   }
 
@@ -199,7 +199,7 @@
     }
     _lastGroupKey = key || _lastGroupKey;
     _lastSelectId = ids[0] || _lastSelectId;
-    announce('Selected ' + selectedIds().length + ' — click a clinician field to stage them, or drag');
+    announce('Selected ' + selectedIds().length + ' - click a clinician field to stage them, or drag');
     render();
   }
 
@@ -209,7 +209,7 @@
     if (node) node.textContent = _overviewProgress;
   }
 
-  // Lab enrichRequesters (requestedBy walker) is deliberately skipped —
+  // Lab enrichRequesters (requestedBy walker) is deliberately skipped -
   // document/workflow overviews do not carry who-ordered. Staff UUIDs still
   // come from harvestStaffFromOverviews + the create-task form.
   async function harvestStaffFromOverviews(rows) {
@@ -225,7 +225,7 @@
       try {
         var payload = await client().fetchOverview(withUrl[i].overviewURL);
         absorbDirectories(null, payload);
-        if (!patientId) patientId = C.pickPatientIdFromPayload(payload);
+        if (!patientId && C.pickPatientIdFromPayload) patientId = C.pickPatientIdFromPayload(payload);
       } catch (_) {
         /* try the next overview */
       }
@@ -251,33 +251,35 @@
     _error = null;
     render();
     try {
-      await loadAgState({ applyDefault: !_agLoaded });
-      _agLoaded = true;
+      await loadAllocationGroups();
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
-      var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
-      var sittingP = C.fetchRxTaskList(_route.apiBase, _route.slug, '').catch(function () {
+      var inboxP = C.fetchRequestTaskList(_route.apiBase, _route.slug, _route.search);
+      var sittingP = C.fetchRequestTaskList(_route.apiBase, _route.slug, '').catch(function () {
         return { rows: [] };
       });
       var out = await inboxP;
       var sitting = await sittingP;
-      _rows = C.mergeInboxAndSitting(out.rows || [], (sitting && sitting.rows) || [], _route.search);
+      _rows = C.mergeInboxAndSitting(
+        out.rows || [],
+        (sitting && sitting.rows) || [],
+        _route.search,
+        _route.admin ? 'admin' : 'medical'
+      );
       _route.slug = out.slug || _route.slug;
       if (out.search) _route.search = out.search;
       _taskList = out.taskList;
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
-      render();
       await presenceP;
       harvestStaffFromBook(_book);
       await harvestStaffFromOverviews(_rows);
       persistStaffCache();
-      _draft = C.ensureWorkingTodayColumns(
-        keepDraft || C.emptyDraft(),
-        splitDestinations()
-      );
+      _draft = keepDraft
+        ? C.ensureWorkingTodayColumns(keepDraft, currentDestinations())
+        : C.replaceDestColumns(C.emptyDraft(), currentDestinations());
       if (!opts.skipSplit) _splitDefaulted = false;
     } catch (err) {
-      _error = err && err.message ? err.message : 'Could not read this prescription queue.';
+      _error = err && err.message ? err.message : 'Could not read this request queue.';
       _rows = [];
     } finally {
       _loading = false;
@@ -326,8 +328,7 @@
     try {
       await loadMedicusPresence();
       harvestStaffFromBook(_book);
-      persistStaffCache();
-      _draft = C.replaceDestColumns(_draft || C.emptyDraft(), destSetPeople());
+      _draft = C.replaceDestColumns(_draft || C.emptyDraft(), currentDestinations());
     } catch (_) {
       _book = null;
     }
@@ -349,7 +350,7 @@
 
   function presenceForClinician(col) {
     if (!col || col.kind !== 'clinician') return { state: 'n/a', reason: 'not-a-person', label: '' };
-    // Display casing — matching is case-insensitive, labels are user-facing.
+    // Display casing - matching is case-insensitive, labels are user-facing.
     return C.presenceForName({
       name: C.displayClinicianName(col.title),
       dateISO: workDate(),
@@ -503,12 +504,12 @@
     var sitting = 0;
     (col.tiles || []).forEach(function (t) {
       if (!t) return;
-      if (t.staged || C.isRxUnallocated(t)) proposed += 1;
+      if (t.staged || C.isRequestUnallocated(t)) proposed += 1;
       else sitting += 1;
     });
     var bits = [];
     if (col.kind === 'team') bits.push('Team');
-    if (proposed) bits.push(proposed + ' proposed — not saved');
+    if (proposed) bits.push(proposed + ' proposed - not saved');
     if (sitting) bits.push(sitting + ' already sitting');
     if (!proposed && !sitting) bits.push(col.kind === 'team' ? 'nothing yet' : 'none yet');
     return bits.join(' · ');
@@ -580,7 +581,6 @@
       (selCount ? ' ms-lac-chip-target' : '') +
       (col.count ? ' ms-lac-field-has' : '') +
       (col.kind === 'team' ? ' ms-lac-chip-team' : '') +
-      (_peopleSelected[col.key] ? ' ms-ags-field-on' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="' +
@@ -645,7 +645,7 @@
       '</svg>' +
       '<div class="ms-lac-empty-title">' +
       (_rows.length
-        ? 'Inbox is on the right — not saved yet'
+        ? 'Inbox is on the right - not saved yet'
         : 'No open requests on this queue') +
       '</div>' +
       '<div class="ms-lac-empty-sub">' +
@@ -659,7 +659,7 @@
     );
   }
 
-  function currentDestinations() {
+  function inTodayPeople() {
     return C.pinDestStaffIds(
       C.workingTodayDoctors({
         book: _book,
@@ -672,378 +672,168 @@
     );
   }
 
-  function groupsCore() {
-    return window.AllocationGroupsCore || null;
-  }
-
-  function destStripApi() {
-    return window.AllocationDestStrip || null;
-  }
-
-  function labCore() {
-    return window.LabAllocateCore || null;
-  }
-
-  function presenceForNameLookup(name) {
-    return C.presenceForName({
-      name: name,
-      dateISO: workDate(),
-      book: _book,
-      absences: _absences,
-      staffList: _rota.staff,
-      leaveList: _rota.leave,
-    });
-  }
-
-  function asSplitDestsPinned(people) {
-    var Lab = labCore();
-    var mapped =
-      typeof C.asSplitDests === 'function'
-        ? C.asSplitDests(people)
-        : Lab && typeof Lab.asSplitDests === 'function'
-          ? Lab.asSplitDests(people)
-          : [];
-    var pinned = C.pinDestStaffIds(mapped, _staffDir);
-    var out = pinned.map(function (d) {
-      if (!d) return d;
-      return Object.assign({}, d, { kind: d.kind || 'clinician' });
-    });
-    out.collisions = pinned.collisions || mapped.collisions || [];
-    return out;
-  }
-
-  function destSetPeople() {
-    // Groups are people (staff UUIDs), never a Medicus team inbox.
-    var Core = groupsCore();
-    _lastSkipped = [];
-    if (!Core || !_destKind || _destKind === 'in-today') {
-      return asSplitDestsPinned(currentDestinations());
-    }
-    var set =
-      _destKind === 'group'
-        ? { kind: 'group', id: _destGroupId }
-        : _destKind === 'custom'
-          ? { kind: 'custom', members: _customMembers }
-          : { kind: 'in-today' };
-    var from = Core.destsFromSet(set, {
+  function destSetOpts() {
+    return {
+      inToday: inTodayPeople(),
       presets: _presets,
       presenceFor: function (member) {
-        return presenceForNameLookup(member && member.name);
+        var name = member && member.name;
+        var id = member && member.staffId;
+        if (id && _rota.staff) {
+          var hit = _rota.staff.filter(function (s) {
+            return s && String(s.id).toLowerCase() === String(id).toLowerCase();
+          })[0];
+          if (hit && hit.name) name = hit.name;
+        }
+        return C.presenceForName({
+          name: name,
+          dateISO: workDate(),
+          book: _book,
+          absences: _absences,
+          staffList: _rota.staff,
+          leaveList: _rota.leave,
+        });
       },
-    });
-    _lastSkipped = from.skipped || [];
-    return asSplitDestsPinned(from.dests || []);
+      emptyInTodayReason:
+        'No doctors with a session on the appointment book for ' + dayPhrase() + ' to split onto.',
+    };
   }
 
-  function currentDestSet() {
-    if (_destKind === 'group') return { kind: 'group', id: _destGroupId };
-    if (_destKind === 'custom') return { kind: 'custom', members: _customMembers };
-    return { kind: 'in-today' };
+  function currentDestResolution() {
+    if (!G) return { dests: inTodayPeople(), skipped: [], reason: '' };
+    return G.destsFromSet(_destSet || { kind: 'in-today' }, destSetOpts());
   }
 
-  async function loadAgState(opts) {
-    opts = opts || {};
-    var Core = groupsCore();
-    if (!chrome.storage || !chrome.storage.local) {
-      if (opts.applyDefault) _destKind = _destKind || 'in-today';
-      return;
-    }
+  function currentDestinations() {
+    var resolved = currentDestResolution();
+    var dests = C.asSplitDests(C.pinDestStaffIds(resolved.dests || [], _staffDir));
+    dests.collisions = dests.collisions || [];
+    return dests;
+  }
+
+  async function loadAllocationGroups() {
+    if (!G || !chrome.storage || !chrome.storage.local) return;
     try {
-      var state = null;
-      if (typeof loadAllocationGroupsState === 'function') {
-        state = await loadAllocationGroupsState();
-      } else if (window.AllocationGroupsIO && typeof window.AllocationGroupsIO.loadAllocationGroupsState === 'function') {
-        state = await window.AllocationGroupsIO.loadAllocationGroupsState();
-      }
-      if (state) {
-        _presets = state.presets || [];
-        _agConfig = state.config || { lastUsedBySurface: {} };
-      } else {
-        var got = await chrome.storage.local.get(['allocationGroups.presets', 'allocationGroups.config']);
-        _presets = Core ? Core.normalisePresets(got['allocationGroups.presets']) : got['allocationGroups.presets'] || [];
-        _agConfig = Core
-          ? Core.normaliseConfig(got['allocationGroups.config'])
-          : got['allocationGroups.config'] || { lastUsedBySurface: {} };
-      }
-      if (opts.applyDefault && Core) {
-        var last = _agConfig.lastUsedBySurface && _agConfig.lastUsedBySurface.rx;
-        var def = Core.defaultDestSet(_presets, new Date(), last);
-        _destKind = def.kind || 'in-today';
-        _destGroupId = def.id || '';
-        if (_destKind !== 'custom') _customMembers = [];
+      var got = await chrome.storage.local.get(['allocationGroups.presets', 'allocationGroups.config']);
+      _presets = G.normalisePresets(got['allocationGroups.presets']);
+      _agConfig = G.normaliseConfig(got['allocationGroups.config']);
+      if (!_destSetReady) {
+        var last = _agConfig.lastUsedBySurface && _agConfig.lastUsedBySurface.request;
+        _destSet = G.defaultDestSet(_presets, new Date(), last) || { kind: 'in-today' };
+        _destSetReady = true;
       }
     } catch (_) {
-      if (opts.applyDefault) _destKind = _destKind || 'in-today';
+      _presets = [];
     }
   }
 
-  async function persistAgPresets() {
-    var Core = groupsCore();
-    var cleaned = Core ? Core.normalisePresets(_presets) : _presets || [];
-    _presets = cleaned;
+  async function persistLastUsed() {
+    if (!G || !chrome.storage || !chrome.storage.local) return;
+    if (!_destSet || _destSet.kind === 'custom') return;
     try {
-      if (typeof saveAllocationGroupsPresets === 'function') {
-        await saveAllocationGroupsPresets(cleaned);
-        return;
-      }
-      if (window.AllocationGroupsIO && typeof window.AllocationGroupsIO.saveAllocationGroupsPresets === 'function') {
-        await window.AllocationGroupsIO.saveAllocationGroupsPresets(cleaned);
-        return;
-      }
-      if (chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set({ 'allocationGroups.presets': cleaned });
-      }
+      _agConfig = G.rememberLastUsed(_agConfig, SURFACE, _destSet);
+      await chrome.storage.local.set({ 'allocationGroups.config': G.normaliseConfig(_agConfig) });
     } catch (_) {}
   }
 
-  async function persistAgConfig() {
-    var Core = groupsCore();
-    var cleaned = Core ? Core.normaliseConfig(_agConfig) : _agConfig || {};
-    _agConfig = cleaned;
-    try {
-      if (typeof saveAllocationGroupsConfig === 'function') {
-        await saveAllocationGroupsConfig(cleaned);
-        return;
-      }
-      if (window.AllocationGroupsIO && typeof window.AllocationGroupsIO.saveAllocationGroupsConfig === 'function') {
-        await window.AllocationGroupsIO.saveAllocationGroupsConfig(cleaned);
-        return;
-      }
-      if (chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set({ 'allocationGroups.config': cleaned });
-      }
-    } catch (_) {}
-  }
-
-  function persistLastUsed() {
-    var Core = groupsCore();
-    if (!Core) return;
-    _agConfig = Core.rememberLastUsed(_agConfig, 'rx', currentDestSet());
-    persistAgConfig();
-  }
-
-  function persistStaffCache() {
+  async function persistStaffCache() {
     if (!chrome.storage || !chrome.storage.local) return;
-    var Core = groupsCore();
-    var harvested = ((_staffDir && _staffDir.list) || [])
-      .map(function (s) {
-        if (!s || !s.id || !s.name) return null;
-        var id = String(s.id).toLowerCase();
-        if (Core && !Core.isUuid(id)) return null;
-        return { id: id, name: s.name };
-      })
-      .filter(Boolean);
-    if (!harvested.length) return;
-    chrome.storage.local.get('allocationGroups.staffCache', function (got) {
+    var list = (_staffDir && _staffDir.list) || [];
+    if (!list.length) return;
+    try {
+      var got = await chrome.storage.local.get('allocationGroups.staffCache');
       var prev = Array.isArray(got['allocationGroups.staffCache']) ? got['allocationGroups.staffCache'] : [];
-      var seen = {};
-      var merged = [];
-      harvested.concat(prev).forEach(function (s) {
-        if (!s || !s.id || seen[s.id]) return;
-        seen[s.id] = true;
-        merged.push({ id: s.id, name: s.name });
+      var byId = {};
+      prev.forEach(function (s) {
+        if (s && s.id) byId[String(s.id).toLowerCase()] = { id: String(s.id).toLowerCase(), name: s.name || '' };
       });
-      chrome.storage.local.set({ 'allocationGroups.staffCache': merged.slice(0, 80) });
-    });
+      list.forEach(function (s) {
+        if (!s || !s.id || !s.name) return;
+        byId[String(s.id).toLowerCase()] = { id: String(s.id).toLowerCase(), name: s.name };
+      });
+      var cache = Object.keys(byId).map(function (k) {
+        return byId[k];
+      });
+      await chrome.storage.local.set({ 'allocationGroups.staffCache': cache });
+    } catch (_) {}
   }
 
-  function peopleSelectedCount() {
-    return Object.keys(_peopleSelected).filter(function (k) {
-      return _peopleSelected[k];
-    }).length;
+  async function persistPresets() {
+    if (!G || !chrome.storage || !chrome.storage.local) return;
+    try {
+      await chrome.storage.local.set({ 'allocationGroups.presets': G.normalisePresets(_presets) });
+    } catch (_) {}
   }
 
-  function peopleSelectedKeys() {
-    return Object.keys(_peopleSelected).filter(function (k) {
-      return _peopleSelected[k];
-    });
+  function setDestSet(next) {
+    _destSet = next || { kind: 'in-today' };
+    _namingGroup = false;
+    _draft = C.replaceDestColumns(_draft || C.emptyDraft(), currentDestinations());
+    persistLastUsed();
   }
 
-  function clearPeopleSelection() {
-    _peopleSelected = {};
-    _lastPeopleKey = '';
-  }
-
-  function clinicianFieldKeys() {
-    return sortClinicianFields((currentWorkspace().clinicians || [])).map(function (c) {
-      return c.key;
-    });
-  }
-
-  function columnByKey(key) {
-    var board = currentWorkspace();
-    var cols = (board.clinicians || []).concat(board.teams || []);
-    for (var i = 0; i < cols.length; i++) {
-      if (cols[i] && cols[i].key === key) return cols[i];
+  function personFromFolder(el) {
+    if (!el || !el.getAttribute) return null;
+    var folder = el.closest ? el.closest('.ms-rxac-folder') : el;
+    if (!folder) return null;
+    var kind = folder.getAttribute('data-col-kind') || '';
+    if (kind === 'pool' || kind === 'team') return null;
+    var key = folder.getAttribute('data-col-key') || '';
+    var nameEl = folder.querySelector('.ms-rxac-folder-name');
+    var name = (nameEl && nameEl.textContent) || '';
+    var staffId = '';
+    if (_draft && _draft.columnStaffIds && key) staffId = _draft.columnStaffIds[key] || '';
+    if (!staffId) {
+      currentDestinations().forEach(function (d) {
+        if (d && d.key === key && d.staffId) staffId = d.staffId;
+      });
     }
-    return null;
+    if (!staffId && _staffDir && _staffDir.list) {
+      var hits = _staffDir.list.filter(function (s) {
+        return s && s.id && s.name && C.displayClinicianName(s.name) === C.displayClinicianName(name);
+      });
+      if (hits.length === 1) staffId = hits[0].id;
+    }
+    if (!name) return null;
+    return { key: key, name: name, staffId: staffId };
   }
 
-  function resolvePersonForCol(col) {
-    if (!col || col.kind === 'team') return null;
-    var name = C.displayClinicianName(col.title);
-    var draft = _draft || C.emptyDraft();
-    var id = (draft.columnStaffIds && draft.columnStaffIds[col.key]) || '';
-    var Lab = labCore();
-    if (!id && Lab && typeof Lab.resolveStaffForColumn === 'function') {
-      var hit = Lab.resolveStaffForColumn(col.key, name, _staffDir, _rows, null, '');
-      if (hit && hit.ok && hit.staff && hit.staff.id) id = hit.staff.id;
-    }
-    if (!id) {
-      var dests = currentDestinations();
-      for (var i = 0; i < dests.length; i++) {
-        if (dests[i] && dests[i].key === col.key && dests[i].staffId) {
-          id = dests[i].staffId;
-          break;
-        }
-      }
-    }
-    return { id: id, name: name, key: col.key };
+  function personFromPeoplePayload(payload) {
+    if (_personDrag) return _personDrag;
+    if (!payload || payload.indexOf('people:') !== 0) return null;
+    var id = payload.slice('people:'.length);
+    if (!G || !G.isUuid(id)) return null;
+    var hit = ((_staffDir && _staffDir.list) || []).filter(function (s) {
+      return s && String(s.id).toLowerCase() === String(id).toLowerCase();
+    })[0];
+    if (hit) return { staffId: hit.id, name: hit.name, key: '' };
+    return { staffId: id, name: '', key: '' };
   }
 
-  function peopleMembersFromKeys(keys) {
-    var Core = groupsCore();
-    var cap = Core ? Core.MAX_MEMBERS : 12;
+  function addPeopleToCustom(people) {
     var members = [];
     var seen = {};
-    (keys || []).forEach(function (key) {
+    var cap = G ? G.MAX_MEMBERS : 12;
+    function push(p) {
+      if (!p || !p.staffId || !G || !G.isUuid(p.staffId)) return;
       if (members.length >= cap) return;
-      var col = columnByKey(key);
-      var person = resolvePersonForCol(col);
-      if (!person || !person.id || seen[person.id]) return;
-      if (Core && !Core.isUuid(person.id)) return;
-      seen[person.id] = true;
-      members.push({ id: person.id, name: person.name });
-    });
-    return members;
-  }
-
-  function applyPeopleClick(key, additive, shiftKey) {
-    if (!key) return;
-    var keys = clinicianFieldKeys();
-    if (shiftKey && _lastPeopleKey) {
-      var a = keys.indexOf(_lastPeopleKey);
-      var b = keys.indexOf(key);
-      if (a !== -1 && b !== -1) {
-        var next = additive ? Object.assign({}, _peopleSelected) : {};
-        var lo = Math.min(a, b);
-        var hi = Math.max(a, b);
-        for (var i = lo; i <= hi; i++) next[keys[i]] = true;
-        _peopleSelected = next;
-        _lastPeopleKey = key;
-        render();
-        return;
-      }
+      var id = String(p.staffId).toLowerCase();
+      if (seen[id]) return;
+      seen[id] = true;
+      members.push({ id: id, name: p.name || '' });
     }
-    if (additive) {
-      if (_peopleSelected[key]) delete _peopleSelected[key];
-      else _peopleSelected[key] = true;
-    } else {
-      _peopleSelected = {};
-      _peopleSelected[key] = true;
-    }
-    _lastPeopleKey = key;
-    render();
-  }
-
-  function setCustomFromKeys(keys) {
-    var members = peopleMembersFromKeys(keys);
-    if (!members.length) {
-      announce('Need a staff id for those people before they can be a group.');
-      return false;
-    }
-    _destKind = 'custom';
-    _destGroupId = '';
-    _customMembers = members;
-    _draft = C.replaceDestColumns(_draft || C.emptyDraft(), destSetPeople());
-    announce('Custom group of ' + members.length + '. Save as group to keep it.');
-    return true;
-  }
-
-  function addPeopleToPreset(groupId, keys) {
-    var Core = groupsCore();
-    if (!Core) return false;
-    var preset = Core.findPreset(_presets, groupId);
-    if (!preset) return false;
-    var incoming = peopleMembersFromKeys(keys);
-    if (!incoming.length) {
-      announce('Need a staff id for those people before they can join a group.');
-      return false;
-    }
-    var members = (preset.memberIds || []).map(function (id) {
-      return { id: id, name: (preset.memberNames && preset.memberNames[id]) || '' };
-    });
-    incoming.forEach(function (m) {
-      var already = members.some(function (x) {
-        return x.id === m.id;
+    if (_destSet && _destSet.kind === 'custom') {
+      ((_destSet.members || [])).forEach(function (m) {
+        push({ staffId: m.id || m.staffId, name: m.name });
       });
-      if (!already) members.push(m);
-    });
-    if (members.length > Core.MAX_MEMBERS) members = members.slice(0, Core.MAX_MEMBERS);
-    var res = Core.upsertPreset(_presets, {
-      id: preset.id,
-      name: preset.name,
-      members: members,
-      schedule: preset.schedule,
-    });
-    if (!res.ok) {
-      announce((res.errors && res.errors[0]) || 'Could not update that group.');
+    }
+    (people || []).forEach(push);
+    if (!members.length) {
+      _copyNote = 'Need a staff id to put that person in a group.';
       return false;
     }
-    _presets = res.presets;
-    _destKind = 'group';
-    _destGroupId = res.preset.id;
-    _customMembers = [];
-    persistAgPresets();
-    persistLastUsed();
-    _draft = C.replaceDestColumns(_draft || C.emptyDraft(), destSetPeople());
-    announce('Added to ' + res.preset.name + '.');
+    setDestSet({ kind: 'custom', members: members });
     return true;
-  }
-
-  function setDestKind(kind, groupId) {
-    _destKind = kind || 'in-today';
-    _destGroupId = groupId || '';
-    if (_destKind !== 'custom') _customMembers = [];
-    _agsAllOpen = false;
-    persistLastUsed();
-    _draft = C.replaceDestColumns(_draft || C.emptyDraft(), destSetPeople());
-    render();
-  }
-
-  function saveCurrentAsGroup() {
-    var Core = groupsCore();
-    if (!Core) return;
-    var members =
-      _destKind === 'custom' && _customMembers.length
-        ? _customMembers.slice()
-        : peopleMembersFromKeys(peopleSelectedKeys());
-    if (!members.length) {
-      announce('Pick people first, then save as a group.');
-      return;
-    }
-    var name = window.prompt('Name this group', '');
-    if (name == null) return;
-    name = String(name).trim();
-    if (!name) {
-      announce('A group needs a name.');
-      return;
-    }
-    var res = Core.upsertPreset(_presets, { name: name, members: members, schedule: null });
-    if (!res.ok) {
-      announce((res.errors && res.errors[0]) || 'Could not save that group.');
-      return;
-    }
-    _presets = res.presets;
-    _destKind = 'group';
-    _destGroupId = res.preset.id;
-    _customMembers = [];
-    clearPeopleSelection();
-    persistAgPresets();
-    persistLastUsed();
-    _draft = C.replaceDestColumns(_draft || C.emptyDraft(), destSetPeople());
-    announce('Saved group ' + res.preset.name + '. Local to this suite, not a Medicus team inbox.');
-    render();
   }
 
   function teamIdForName(name) {
@@ -1065,7 +855,7 @@
     });
     return list.filter(function (t) {
       if (!t || !t.id || !t.name) return false;
-      if (C.isRxInboxName(t.name)) return false;
+      if (C.isRequestInboxName(t.name)) return false;
       var key = C.teamColumnKey(t.name);
       if (!key || used[key]) return false;
       return true;
@@ -1073,7 +863,7 @@
   }
 
   function splitDestinations() {
-    var dests = destSetPeople();
+    var dests = currentDestinations();
     var collisions = dests.collisions ? dests.collisions.slice() : [];
     dests = dests.slice();
     dests.collisions = collisions;
@@ -1086,16 +876,7 @@
       if (!key || seen[key]) return;
       var title = (draft.columnTitles && draft.columnTitles[key]) || '';
       var id = (draft.columnStaffIds && draft.columnStaffIds[key]) || '';
-      if (String(key).indexOf('team:') === 0) {
-        dests.push({
-          key: key,
-          name: title,
-          staffId: id || teamIdForName(title),
-          kind: 'team',
-        });
-        seen[key] = true;
-        return;
-      }
+      if (String(key).indexOf('team:') === 0) return;
       if (String(key).indexOf('clinician:') === 0 && title) {
         var pres = C.presenceForName({
           name: title,
@@ -1223,106 +1004,13 @@
     (board.clinicians || []).forEach(function (col) {
       var n = 0;
       (col.tiles || []).forEach(function (t) {
-        if (C.isRxUnallocated(t)) n += 1;
+        if (C.isRequestUnallocated(t)) n += 1;
       });
       counts[col.key] = n;
     });
     return splitDestinations().map(function (d) {
       return { name: d.name, key: d.key, count: counts[d.key] || 0 };
     });
-  }
-
-  function allGroupsPanelHtml() {
-    var Core = groupsCore();
-    var list = Core ? Core.normalisePresets(_presets) : _presets || [];
-    var days = Core ? Core.DAY_IDS : ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    var cards = list
-      .map(function (p) {
-        if (!p || !p.id) return '';
-        var sched = p.schedule;
-        var dayChecks = days
-          .map(function (d) {
-            var on = sched && sched.days && sched.days.indexOf(d) !== -1;
-            return (
-              '<label style="margin-right:8px;font-size:12px"><input type="checkbox" id="ms-ags-day-' +
-              esc(p.id) +
-              '-' +
-              esc(d) +
-              '" data-ags-day="' +
-              esc(d) +
-              '" data-ags-id="' +
-              esc(p.id) +
-              '"' +
-              (on ? ' checked' : '') +
-              '> ' +
-              esc(d) +
-              '</label>'
-            );
-          })
-          .join('');
-        var names = (p.memberIds || [])
-          .map(function (id) {
-            return (p.memberNames && p.memberNames[id]) || id.slice(0, 8);
-          })
-          .join(', ');
-        return (
-          '<div class="ms-ags-all-card" data-ags-card="' +
-          esc(p.id) +
-          '" style="padding:8px 0;border-top:1px solid var(--border,#e2e8f0)">' +
-          '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
-          '<button type="button" class="ms-lac-ghost" data-ags-pick="' +
-          esc(p.id) +
-          '">Pick</button>' +
-          '<input type="text" id="ms-ags-name-' +
-          esc(p.id) +
-          '" data-ags-rename="' +
-          esc(p.id) +
-          '" value="' +
-          esc(p.name) +
-          '" maxlength="48" aria-label="Group name" style="font-weight:600;width:min(220px,100%)">' +
-          '<button type="button" class="ms-lac-ghost" data-ags-always="' +
-          esc(p.id) +
-          '" title="Show this chip every day, all hours.">Always</button>' +
-          '<button type="button" class="ms-lac-ghost" data-ags-delete="' +
-          esc(p.id) +
-          '">Delete</button>' +
-          '</div>' +
-          '<div style="margin-top:4px;font-size:12px;color:var(--text-3,#64748b)">' +
-          esc(names || 'No people yet') +
-          '</div>' +
-          '<div style="margin-top:6px">' +
-          dayChecks +
-          '</div>' +
-          '<div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-          '<label>From <input type="time" id="ms-ags-start-' +
-          esc(p.id) +
-          '" data-ags-start="' +
-          esc(p.id) +
-          '" value="' +
-          esc((sched && sched.start) || '') +
-          '"></label>' +
-          '<label>to <input type="time" id="ms-ags-end-' +
-          esc(p.id) +
-          '" data-ags-end="' +
-          esc(p.id) +
-          '" value="' +
-          esc((sched && sched.end) || '') +
-          '"></label>' +
-          '<span style="font-size:12px;color:var(--text-3,#64748b)">Leave blank for always.</span>' +
-          '</div></div>'
-        );
-      })
-      .join('');
-    return (
-      '<div class="ms-ags-all" id="ms-ags-all-panel" style="margin:8px 0;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:8px;background:var(--bg-elev,#fff);max-height:280px;overflow:auto">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
-      '<strong>All groups</strong>' +
-      '<button type="button" class="ms-lac-ghost" id="ms-ags-all-close">Close</button>' +
-      '</div>' +
-      '<p style="margin:6px 0 8px;font-size:12px;color:var(--text-3,#64748b)">Every saved group, including those outside their days and times.</p>' +
-      (cards || '<p style="font-size:12px">No groups yet. Encircle people and Save as group.</p>') +
-      '</div>'
-    );
   }
 
   function evenSplitHtml() {
@@ -1334,116 +1022,89 @@
     var stagedN = C.draftSummary(_rows, _draft).count;
     var haveWork = destsHaveWork();
     var destPhrase = C.destNamesPhrase(dests);
-    var Core = groupsCore();
-    var Strip = destStripApi();
-    var skipped = Core ? Core.skippedPhrase(_lastSkipped) : '';
+    var resolved = currentDestResolution();
+    var visible = [];
+    if (G) {
+      visible = _showAllGroups ? G.normalisePresets(_presets) : G.visiblePresets(_presets, new Date());
+    }
     var summary = dests.length
       ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + phrase
-      : _destKind === 'group' || _destKind === 'custom'
-        ? skipped || 'No people in that group to share onto.'
-        : 'No sessions on the book for ' + phrase;
-    var destLine = destPhrase
-      ? '<div class="ms-rxac-dests">To: ' + esc(destPhrase) + '</div>'
-      : '';
-    var canSave =
-      (_destKind === 'custom' && _customMembers.length > 0) || peopleSelectedCount() > 0;
-    var strip = Strip
-      ? Strip.destSetStripHtml({
-          destKind: _destKind,
-          destGroupId: _destGroupId,
-          visibleGroups: Core ? Core.visiblePresets(_presets, new Date()) : [],
-          inTodayCount: currentDestinations().length,
-          destPhrase: destPhrase,
-          skippedPhrase: skipped,
-          canSave: canSave,
-        })
-      : '';
-    if (Strip) destLine = '';
-    var allPanel = _agsAllOpen ? allGroupsPanelHtml() : '';
-    var splitHint =
-      'Split the unallocated pile evenly among ' +
-      destPhrase +
-      ' (' +
-      phrase +
-      '). Proposal only — nothing is written until you confirm.';
-    var topHint =
-      'Give leftover unallocated requests to whoever of these currently has least: ' +
-      destPhrase +
-      '. Does not move work already sitting. Proposal only.';
-    var levelHint =
-      'Rebalance among ' +
-      destPhrase +
-      ' so each has the same number, or as near as it can be. Moves sitting work on this canvas. Proposal only.';
-    var collisionPhrase =
-      dests.collisions && dests.collisions.length
-        ? (C.collisionPhrase || (labCore() && labCore().collisionPhrase) || function () {
-            return 'Two people share a name — split refused.';
-          })(dests.collisions)
-        : '';
-    var actions = '';
-    if (collisionPhrase) {
-      actions = '<span class="ms-lac-split-note">' + esc(collisionPhrase) + '</span>';
-    } else if (!dests.length) {
-      actions =
-        '<span class="ms-lac-split-note">Pick In today, a group, or encircle people. Or pick another day, or add a doctor or team.</span>';
-    } else if (poolN && !haveWork) {
-      actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go ms-rxac-action" id="ms-rxac-split" title="' +
-        esc(splitHint) +
-        '">Split equally</button>';
-    } else if (poolN && haveWork) {
-      actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go ms-rxac-action" id="ms-rxac-topup" title="' +
-        esc(topHint) +
-        '">Top up empty boxes</button>' +
-        '<button type="button" class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-level" title="' +
-        esc(levelHint) +
-        '">Distribute equally</button>';
-    } else if (haveWork) {
-      actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-level" title="' +
-        esc(levelHint) +
-        '">Distribute equally</button>';
-    } else {
-      actions =
-        '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among the current destinations.</span>';
-    }
-    var proposal = stagedN
-      ? '<div class="ms-rxac-proposal" role="status">' +
-        '<strong>Proposal — not written yet.</strong> ' +
-        stagedN +
-        ' would move among ' +
-        esc(destPhrase) +
-        '.' +
-        '<span class="ms-rxac-drag-hint">Drag a patient from one doctor onto another to change who gets them.</span>' +
+      : 'No people to share out to for ' + phrase;
+    var stripState = {
+      destKind: (_destSet && _destSet.kind) || 'in-today',
+      destGroupId: (_destSet && _destSet.id) || '',
+      visibleGroups: visible,
+      inTodayCount: inTodayPeople().length,
+      destPhrase: destPhrase,
+      skippedPhrase: G && resolved.skipped ? G.skippedPhrase(resolved.skipped) : '',
+      canSave: !!(_destSet && _destSet.kind === 'custom' && dests.length),
+    };
+    var actionState = {
+      destPhrase: destPhrase,
+      dayPhrase: phrase,
+      poolN: poolN,
+      haveWork: haveWork,
+      destCount: dests.length,
+      stagedN: stagedN,
+      surfaceNoun: 'requests',
+      collisionPhrase:
+        dests.collisions && dests.collisions.length ? C.collisionPhrase(dests.collisions) : '',
+    };
+    var strip = Strip ? Strip.destSetStripHtml(stripState) : '';
+    var actions = Strip ? Strip.splitActionsHtml(actionState) : '';
+    var naming = _namingGroup
+      ? '<div class="ms-ags-save-row">' +
+        '<label for="ms-ags-save-name">Group name</label>' +
+        '<input type="text" id="ms-ags-save-name" maxlength="48" placeholder="e.g. Morning triage" aria-label="Group name">' +
+        '<button type="button" class="ms-lac-confirm-btn" id="ms-ags-save-go">Save group</button>' +
+        '<button type="button" class="ms-lac-ghost" id="ms-ags-save-cancel">Keep planning</button>' +
         '</div>'
       : '';
+    var allList = '';
+    if (_showAllGroups && G) {
+      var all = G.normalisePresets(_presets);
+      allList =
+        '<div class="ms-ags-all" id="ms-ags-all-list">' +
+        (all.length
+          ? all
+              .map(function (g) {
+                return (
+                  '<button type="button" class="ms-ags-chip" data-ags-group="' +
+                  esc(g.id) +
+                  '">' +
+                  esc(g.name) +
+                  '</button>'
+                );
+              })
+              .join('')
+          : '<span class="ms-lac-split-note">No saved groups yet. Encircle people and save as a group.</span>') +
+        '</div>';
+    }
     return (
       '<div class="ms-lac-split' +
       (stagedN ? ' ms-rxac-split-proposing' : '') +
-      '" id="ms-rxac-split-box">' +
-      strip +
-      allPanel +
+      '" id="ms-qac-split-box">' +
       '<div class="ms-rxac-split-row">' +
-      '<label class="ms-lac-split-day-label" for="ms-rxac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
-      '<input type="date" id="ms-rxac-day" value="' +
+      '<label class="ms-lac-split-day-label" for="ms-qac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
+      '<input type="date" id="ms-qac-day" value="' +
       esc(picked) +
-      '" aria-label="Working day for the even split" title="The appointment book for this date decides who is in.">' +
+      '" aria-label="Working day for In today" title="The appointment book for this date decides who is in.">' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === cal ? ' ms-lac-split-day-on' : '') +
-      '" id="ms-rxac-day-today" title="Use today’s appointment book.">Today</button>' +
+      '" id="ms-qac-day-today" title="Use today’s appointment book.">Today</button>' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === C.addDaysISO(cal, 1) ? ' ms-lac-split-day-on' : '') +
-      '" id="ms-rxac-day-tomorrow" title="Use tomorrow’s appointment book — for allocating the night before.">Tomorrow</button>' +
+      '" id="ms-qac-day-tomorrow" title="Use tomorrow’s appointment book - for sharing out the night before.">Tomorrow</button>' +
       '<span class="ms-lac-split-summary" title="' +
       esc(destPhrase ? 'Destinations: ' + destPhrase : summary) +
       '">' +
       esc(summary) +
       '</span>' +
-      actions +
       '</div>' +
-      destLine +
-      proposal +
+      strip +
+      naming +
+      allList +
+      actions +
       '</div>'
     );
   }
@@ -1510,7 +1171,7 @@
       meta = (meta ? meta + ' · ' : '') + 'No doctors in today to share onto';
     }
     var shareTitle = canShare
-      ? 'Share only ' + name + '’s box equally among ' + C.destNamesPhrase(shareDests) + ' — not the unallocated pile'
+      ? 'Share only ' + name + '’s box equally among ' + C.destNamesPhrase(shareDests) + ' - not the unallocated pile'
       : !inbox && nTiles
         ? 'No doctors in today to share onto. Pick another working day.'
         : '';
@@ -1556,9 +1217,20 @@
         (inbox
           ? clear
             ? 'This box is clear.'
-            : 'Empty — patients are in the doctor boxes.'
+            : 'Empty — those patients are proposed onto the boxes. Nothing is written yet.'
           : 'Nothing in this box yet. Drag a patient here.') +
         '</div>';
+    }
+    var destOn = false;
+    var personId = '';
+    if (!inbox && col.kind !== 'team') {
+      currentDestinations().forEach(function (d) {
+        if (d && d.key === col.key) {
+          destOn = true;
+          if (d.staffId) personId = d.staffId;
+        }
+      });
+      if (!personId && _draft && _draft.columnStaffIds) personId = _draft.columnStaffIds[col.key] || '';
     }
     return (
       '<div class="ms-rxac-folder' +
@@ -1566,20 +1238,19 @@
       (clear ? ' ms-rxac-folder-clear' : '') +
       (away ? ' ms-rxac-folder-away' : '') +
       (proposedN ? ' ms-rxac-folder-proposed' : '') +
-      (!inbox && col.kind !== 'team' ? ' ms-lac-field' : '') +
-      (!inbox && _peopleSelected[col.key] ? ' ms-ags-field-on' : '') +
+      (destOn ? ' ms-ags-field-on' : '') +
       '" data-col-key="' +
       esc(col.key) +
       '" data-col-kind="' +
       esc(inbox ? 'pool' : col.kind || 'clinician') +
-      '">' +
-      '<div class="ms-rxac-folder-head" tabindex="-1"' +
-      (!inbox && col.kind !== 'team'
-        ? ' draggable="true" data-people-key="' + esc(col.key) + '"'
-        : '') +
+      '"' +
+      (personId ? ' data-ags-person="' + esc(personId) + '"' : '') +
       '>' +
+      '<div class="ms-rxac-folder-head" tabindex="-1">' +
       '<div class="ms-rxac-folder-title">' +
-      '<span class="ms-rxac-folder-name">' +
+      '<span class="ms-rxac-folder-name"' +
+      (inbox || col.kind === 'team' ? '' : ' draggable="true"') +
+      '>' +
       esc(name) +
       '</span>' +
       '</div>' +
@@ -1626,15 +1297,8 @@
       .join('');
     var addRow =
       '<div class="ms-lac-add-row">' +
-      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a doctor — e.g. Dr Jane Cole" aria-label="Add a doctor" title="Add a named doctor as a destination, even if they have no session on the book.">' +
+      '<input type="text" id="ms-lac-add-name" maxlength="80" placeholder="Add a doctor - e.g. Dr Jane Cole" aria-label="Add a doctor" title="Add a named doctor as a destination, even if they have no session on the book.">' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-add-btn" title="Add that doctor as a destination for split, top-up, and distribute.">Add doctor</button>' +
-      (teamOpts
-        ? '<select id="ms-rxac-add-team" aria-label="Add a team from Medicus" title="Teams scraped from Medicus assignee options. Adding one includes them in Split equally, Top up, and Distribute equally.">' +
-          '<option value="">Add a team from Medicus…</option>' +
-          teamOpts +
-          '</select>' +
-          '<button type="button" class="ms-lac-ghost" id="ms-rxac-add-team-btn" title="Add the selected Medicus team as a destination.">Add team</button>'
-        : '') +
       '</div>';
     if (inboxEmpty) {
       return (
@@ -1674,9 +1338,40 @@
       ' selected</span>' +
       '<span class="ms-lac-selectbar-label">' +
       esc(preview.label) +
-      ' — click a clinician field to stage them, or drag. Ctrl-click another heading or task to add it</span>' +
+      ' - click a clinician field to stage them, or drag. Ctrl-click another heading or task to add it</span>' +
       '<button type="button" class="ms-lac-ghost" id="ms-lac-sel-clear">Clear selection</button>' +
       '</div>'
+    );
+  }
+
+  function refusedPatientNote(plan) {
+    if (!plan || !plan.refused || !plan.refused.length) return '';
+    var names = [];
+    var dests = [];
+    plan.refused.forEach(function (r) {
+      if (r && r.toTitle) dests.push(C.displayClinicianName(r.toTitle));
+      (r.taskIds || []).forEach(function (id) {
+        var row = null;
+        _rows.forEach(function (x) {
+          if (x && x.id === id) row = x;
+        });
+        if (row && row.patientName && names.indexOf(row.patientName) === -1) names.push(row.patientName);
+      });
+    });
+    var destPhrase = dests.join(', ');
+    if (names.length) {
+      return (
+        '<p class="ms-lac-confirmbar-note">Not included: ' +
+        esc(names.join(', ')) +
+        ' (no unique staff match' +
+        (destPhrase ? ' for ' + destPhrase : '') +
+        '). They stay on this canvas.</p>'
+      );
+    }
+    return (
+      '<p class="ms-lac-confirmbar-note">Not included - no unique staff match: ' +
+      esc(destPhrase) +
+      '. Those stay on this canvas.</p>'
     );
   }
 
@@ -1691,7 +1386,7 @@
     if (_writing) {
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn">' +
-        '<strong>Writing to Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards — this canvas is a working copy.' +
+        '<strong>Writing to Medicus…</strong> The board is frozen until this finishes. Check the queue afterwards - this canvas is a working copy.' +
         '</div>'
       );
     }
@@ -1703,7 +1398,7 @@
         nClose +
         ' staged move' +
         (nClose === 1 ? '' : 's') +
-        ' exist only on this canvas — closing forgets them. The Medicus queue itself is untouched either way.' +
+        ' exist only on this canvas - closing forgets them. The Medicus queue itself is untouched either way.' +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-close-keep">Keep working</button>' +
         '<button type="button" class="ms-lac-confirm-btn" id="ms-lac-close-discard">Discard and close</button>' +
@@ -1729,24 +1424,30 @@
           );
         })
         .join('');
-      var refusedNote = '';
-      if (_confirmWrite.refused && _confirmWrite.refused.length) {
-        refusedNote =
-          '<p class="ms-lac-confirmbar-note">Not included — no unique staff or team match: ' +
-          esc(
-            _confirmWrite.refused
-              .map(function (r) {
-                return C.displayClinicianName(r.toTitle);
-              })
-              .join(', ')
-          ) +
-          '. Those stay on this canvas.</p>';
-      }
+      var refusedNote = refusedPatientNote(_confirmWrite);
+      var writeGate = C.canWriteRequestAllocations({ taskList: _taskList, slug: _route && _route.slug });
+      var writeGo = writeGate.ok
+        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" title="Writes these reassignments to Medicus. Does not complete, file, or reply to the request.">Write to Medicus</button>'
+        : '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" disabled title="' +
+          esc(writeGate.reason || 'Write not captured for this queue yet.') +
+          '">Write to Medicus</button>';
+      var confirmLead = writeGate.ok
+        ? '<strong>This is the write.</strong> Medicus will reassign these requests. This changes who the task sits with - it does not complete, file, or reply to the request.'
+        : '<strong>Proposal — not written yet.</strong> ' +
+          esc(writeGate.copy || C.REQUEST_WRITE_CAPTURE_COPY || 'This is a plan on this canvas only. Medicus does not change.') +
+          ' This changes who the task sits with - it does not complete, file, or reply to the request.';
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn ms-rxac-review-open" role="region" aria-label="Review this proposal">' +
         '<div class="ms-rxac-review-copy">' +
-        '<div class="ms-rxac-review-title">Confirm write to Medicus</div>' +
-        '<strong>This is the write.</strong> Medicus will reassign these prescriptions. This changes who the task sits with — it does not issue, sign, or file the prescription.' +
+        '<div class="ms-rxac-review-title">' +
+        (writeGate.ok ? 'Confirm write to Medicus' : 'Review this proposal') +
+        '</div>' +
+        confirmLead +
+        (writeGate.ok
+          ? ''
+          : '<p class="ms-lac-confirmbar-note">' +
+            esc(writeGate.reason || 'Write not captured for this queue yet.') +
+            '</p>') +
         '<ul class="ms-lac-writelist">' +
         lines +
         '</ul>' +
@@ -1754,31 +1455,41 @@
         '</div>' +
         '<div class="ms-lac-confirmbar-actions">' +
         '<button type="button" class="ms-lac-ghost" id="ms-lac-write-keep">Keep planning</button>' +
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" title="Writes these reassignments to Medicus. Does not issue, sign, or file the prescription.">Write to Medicus</button>' +
+        writeGo +
         '</div></div>'
       );
     }
     var sum = C.draftSummary(_rows, _draft);
-    var gate = C.canWriteAllocations({ taskList: _taskList, slug: _route && _route.slug });
+    var gate = C.canWriteRequestAllocations({ taskList: _taskList, slug: _route && _route.slug });
     var plan = sum.count
       ? C.planBulkReassign(_rows, _draft, _taskList, _staffDir, _route && _route.slug, _teamDir)
       : null;
-    var canWrite = !!(gate.ok && plan && plan.ok && plan.batches && plan.batches.length);
+    var canOpenReview = !!(plan && plan.ok && plan.batches && plan.batches.length);
+    var canWrite = !!(gate.ok && canOpenReview);
+    var captureClosed = !!(sum.count && !gate.ok);
     var blockReason = '';
-    if (sum.count && !canWrite) {
+    if (sum.count && !canOpenReview) {
+      blockReason = C.writeBlockReason(plan);
+    } else if (sum.count && !canWrite && !captureClosed) {
       blockReason = !gate.ok ? gate.reason : C.writeBlockReason(plan);
     }
-    var writeTitle = canWrite
-      ? 'Opens the patient → destination list. You still confirm before anything is written to Medicus.'
+    var writeTitle = canOpenReview
+      ? 'Opens the patient → destination list. Nothing is written until you confirm.'
       : blockReason;
     var writeLabel = 'Review then write ' + sum.count + '…';
-    var status = blockReason
-      ? '<strong>Cannot move these yet.</strong> ' + esc(blockReason)
-      : sum.count
-        ? '<div class="ms-rxac-review-title">Proposal — not written yet</div><strong>' +
-          sum.count +
-          ' would sit with the doctors above.</strong> Drag a patient onto another doctor to change who gets them. Review then write starts the write — you still confirm on the next step.'
-        : 'Drag a patient into a doctor’s box. Medicus does not change until you confirm.';
+    var status = captureClosed
+      ? '<div class="ms-rxac-review-title">Proposal - not written yet</div><strong>' +
+        sum.count +
+        ' would sit with the people above.</strong> ' +
+        esc(gate.copy || C.REQUEST_WRITE_CAPTURE_COPY || '') +
+        ' Drag a patient onto another doctor to change who gets them.'
+      : blockReason
+        ? '<strong>Cannot move these yet.</strong> ' + esc(blockReason)
+        : sum.count
+          ? '<div class="ms-rxac-review-title">Proposal - not written yet</div><strong>' +
+            sum.count +
+            ' would sit with the people above.</strong> Drag a patient onto another doctor to change who gets them. Review then write starts the write - you still confirm on the next step.'
+          : 'Drag a patient into a doctor’s box. Medicus does not change until you confirm.';
     return (
       '<div class="ms-lac-confirmbar' +
       (blockReason ? ' ms-lac-confirmbar-warn' : '') +
@@ -1794,7 +1505,7 @@
       (sum.count
         ? '<button type="button" class="ms-lac-ghost" id="ms-lac-clear" title="Forget this proposal. Nothing has been written to Medicus.">Clear proposals</button>'
         : '') +
-      (canWrite
+      (canOpenReview
         ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-finalise" title="' +
           esc(writeTitle) +
           '">' +
@@ -1884,13 +1595,142 @@
     render();
   }
 
+  function commitSaveGroup() {
+    if (!G) return;
+    var input = document.getElementById('ms-ags-save-name');
+    var name = input && input.value ? String(input.value).trim() : '';
+    var members = currentDestinations()
+      .filter(function (d) {
+        return d && d.staffId;
+      })
+      .map(function (d) {
+        return { id: d.staffId, name: d.name };
+      });
+    var res = G.upsertPreset(_presets, { name: name, members: members });
+    if (!res.ok) {
+      _copyNote = (res.errors && res.errors[0]) || 'Could not save that group.';
+      announce(_copyNote);
+      render();
+      return;
+    }
+    _presets = res.presets;
+    _namingGroup = false;
+    setDestSet({ kind: 'group', id: res.preset.id });
+    persistPresets();
+    _copyNote = 'Saved group ' + res.preset.name + '.';
+    announce(_copyNote);
+    render();
+  }
+
+  function bindPersonDrag(root) {
+    root.querySelectorAll('.ms-rxac-folder-name[draggable="true"]').forEach(function (el) {
+      el.addEventListener('dragstart', function (e) {
+        var person = personFromFolder(el);
+        if (!person || !person.staffId) {
+          e.preventDefault();
+          return;
+        }
+        _personDrag = person;
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('text/plain', 'people:' + (person.staffId || person.name));
+        }
+        e.stopPropagation();
+      });
+      el.addEventListener('dragend', function () {
+        /* Keep _personDrag until drop reads it — dragend can fire first. */
+      });
+    });
+  }
+
+  function marqueeBox() {
+    if (!_marquee || !_marquee.active) return null;
+    var x1 = Math.min(_marquee.x0, _marquee.x);
+    var y1 = Math.min(_marquee.y0, _marquee.y);
+    var x2 = Math.max(_marquee.x0, _marquee.x);
+    var y2 = Math.max(_marquee.y0, _marquee.y);
+    return { left: x1, top: y1, right: x2, bottom: y2, width: x2 - x1, height: y2 - y1 };
+  }
+
+  function paintMarquee() {
+    var el = document.getElementById(OVERLAY_ID);
+    if (!el) return;
+    var node = el.querySelector('.ms-ags-marquee');
+    var box = marqueeBox();
+    if (!box || box.width < 4 || box.height < 4) {
+      if (node) node.style.display = 'none';
+      return;
+    }
+    if (!node) {
+      node = document.createElement('div');
+      node.className = 'ms-ags-marquee';
+      el.appendChild(node);
+    }
+    var overlay = el.getBoundingClientRect();
+    node.style.display = 'block';
+    node.style.left = box.left - overlay.left + 'px';
+    node.style.top = box.top - overlay.top + 'px';
+    node.style.width = box.width + 'px';
+    node.style.height = box.height + 'px';
+  }
+
+  function finishMarquee() {
+    if (!_marquee || !_marquee.active) return;
+    var people = [];
+    var box = marqueeBox();
+    var overlay = document.getElementById(OVERLAY_ID);
+    if (box && overlay && box.width >= 8 && box.height >= 8) {
+      overlay.querySelectorAll('.ms-rxac-folder[data-col-kind="clinician"] .ms-rxac-folder-head').forEach(function (head) {
+        var r = head.getBoundingClientRect();
+        var hit = !(r.right < box.left || r.left > box.right || r.bottom < box.top || r.top > box.bottom);
+        if (!hit) return;
+        var person = personFromFolder(head);
+        if (person) people.push(person);
+      });
+    }
+    _marquee = null;
+    paintMarquee();
+    if (!people.length) return;
+    if (addPeopleToCustom(people)) {
+      _copyNote =
+        'New group of ' +
+        people.length +
+        ' - save as group to keep it, or Split equally to propose.';
+      announce(_copyNote);
+    }
+    render();
+  }
+
+  function marqueeHost(target) {
+    if (!target || !target.closest) return null;
+    return target.closest('.ms-rxac-rail, .ms-rxac-folders');
+  }
+
+  function marqueeBlocked(target) {
+    if (!target || !target.closest) return true;
+    return !!target.closest(
+      '.ms-lac-tile, button, input, select, textarea, a, .ms-rxac-folder-head, .ms-ags-chip, .ms-ags-well, .ms-ags-all, .ms-rxac-share, .ms-rxac-folder-inbox, .ms-lac-group-head'
+    );
+  }
+
+  function bindMarquee(root) {
+    var board = root.querySelector('.ms-rxac-board');
+    if (!board) return;
+    board.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      if (!marqueeHost(e.target) || marqueeBlocked(e.target)) return;
+      _marquee = { active: true, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY };
+      paintMarquee();
+    });
+  }
+
   function addNamedColumn() {
     var input = document.getElementById('ms-lac-add-name');
     var name = input && input.value;
     if (!name || !String(name).trim()) return;
     var trimmed = String(name).trim();
     var teamId = teamIdForName(trimmed);
-    if (teamId && C.isTeamAssignee(trimmed) && !C.isRxInboxName(trimmed)) {
+    if (teamId && C.isTeamAssignee(trimmed) && !C.isRequestInboxName(trimmed)) {
       _draft = C.addTeamColumn(_draft, trimmed, teamId);
       announce('Added team ' + trimmed);
     } else {
@@ -1912,144 +1752,6 @@
     render();
   }
 
-  function scheduleFromAllCard(card) {
-    var Core = groupsCore();
-    if (!Core || !card) return null;
-    var days = [];
-    card.querySelectorAll('[data-ags-day]').forEach(function (box) {
-      if (box.checked) days.push(box.getAttribute('data-ags-day'));
-    });
-    var startEl = card.querySelector('[data-ags-start]');
-    var endEl = card.querySelector('[data-ags-end]');
-    var start = (startEl && startEl.value) || '';
-    var end = (endEl && endEl.value) || '';
-    var raw = { days: days, start: start, end: end };
-    var preset = card.getAttribute('data-ags-card')
-      ? Core.findPreset(_presets, card.getAttribute('data-ags-card'))
-      : null;
-    if (!days.length && !start && !end) return null;
-    if (!days.length || !start || !end) return (preset && preset.schedule) || null;
-    if (Core.scheduleErrors(raw).length) return (preset && preset.schedule) || null;
-    return Core.normaliseSchedule(raw);
-  }
-
-  function upsertPresetFromCard(id, patch) {
-    var Core = groupsCore();
-    if (!Core) return;
-    var preset = Core.findPreset(_presets, id);
-    if (!preset) return;
-    var next = Object.assign({}, preset, patch || {});
-    var res = Core.upsertPreset(_presets, next);
-    if (!res.ok) {
-      announce((res.errors && res.errors[0]) || 'Could not update that group.');
-      return;
-    }
-    _presets = res.presets;
-    persistAgPresets();
-    render();
-  }
-
-  function bindAllGroupsPanel(root) {
-    var panel = root.querySelector('#ms-ags-all-panel');
-    if (!panel) return;
-    panel.addEventListener('click', function (e) {
-      var pick = e.target.closest && e.target.closest('[data-ags-pick]');
-      if (pick) {
-        e.preventDefault();
-        e.stopPropagation();
-        setDestKind('group', pick.getAttribute('data-ags-pick') || '');
-        return;
-      }
-      var always = e.target.closest && e.target.closest('[data-ags-always]');
-      if (always) {
-        e.preventDefault();
-        e.stopPropagation();
-        upsertPresetFromCard(always.getAttribute('data-ags-always') || '', { schedule: null });
-        return;
-      }
-      var del = e.target.closest && e.target.closest('[data-ags-delete]');
-      if (del) {
-        e.preventDefault();
-        e.stopPropagation();
-        var Core = groupsCore();
-        var id = del.getAttribute('data-ags-delete') || '';
-        var preset = Core && Core.findPreset(_presets, id);
-        if (!window.confirm('Delete group' + (preset && preset.name ? ' ' + preset.name : '') + '?')) return;
-        if (!Core) return;
-        _presets = Core.removePreset(_presets, id).presets;
-        if (_destKind === 'group' && _destGroupId === id) {
-          setDestKind('in-today', '');
-          persistAgPresets();
-          render();
-          return;
-        }
-        persistAgPresets();
-        render();
-      }
-    });
-    panel.addEventListener('change', function (e) {
-      var t = e.target;
-      if (!t) return;
-      var id = t.getAttribute('data-ags-rename') || t.getAttribute('data-ags-day') || t.getAttribute('data-ags-start') || t.getAttribute('data-ags-end') || '';
-      if (t.getAttribute('data-ags-id')) id = t.getAttribute('data-ags-id');
-      if (!id) return;
-      var card = t.closest('[data-ags-card]');
-      var patch = { schedule: scheduleFromAllCard(card) };
-      if (t.hasAttribute('data-ags-rename')) patch.name = t.value;
-      upsertPresetFromCard(id, patch);
-    });
-  }
-
-  function endPeopleDrag() {
-    _peopleDragKeys = null;
-    if (_dragGhost) {
-      _dragGhost.remove();
-      _dragGhost = null;
-    }
-    setTimeout(function () {
-      _ignoreClickAfterDrag = false;
-    }, 0);
-  }
-
-  function beginPeopleDrag(e, key) {
-    var keys = peopleSelectedKeys();
-    if (keys.indexOf(key) === -1) keys = [key].concat(keys);
-    var seen = {};
-    keys = keys.filter(function (k) {
-      if (!k || seen[k]) return false;
-      seen[k] = true;
-      return true;
-    });
-    _peopleDragKeys = keys;
-    _ignoreClickAfterDrag = true;
-    var label = keys.length === 1 ? '1 person' : keys.length + ' people';
-    if (e.dataTransfer) {
-      e.dataTransfer.setData('text/plain', 'people:' + keys.join(','));
-      e.dataTransfer.effectAllowed = 'move';
-      if (_dragGhost) _dragGhost.remove();
-      _dragGhost = document.createElement('div');
-      _dragGhost.className = 'ms-lac-drag-ghost';
-      _dragGhost.textContent = label;
-      document.body.appendChild(_dragGhost);
-      e.dataTransfer.setDragImage(_dragGhost, 16, 16);
-    }
-    announce(label);
-  }
-
-  function peopleKeysFromDrop(e) {
-    if (_peopleDragKeys && _peopleDragKeys.length) return _peopleDragKeys.slice();
-    if (e && e.dataTransfer) {
-      var text = String(e.dataTransfer.getData('text/plain') || '');
-      if (text.indexOf('people:') === 0) {
-        return text
-          .slice('people:'.length)
-          .split(',')
-          .filter(Boolean);
-      }
-    }
-    return [];
-  }
-
   function bindOverlay(root) {
     var close = root.querySelector('#ms-lac-close');
     if (close) close.addEventListener('click', requestClose);
@@ -2067,17 +1769,17 @@
       });
     var discardBtn = root.querySelector('#ms-lac-close-discard');
     if (discardBtn) discardBtn.addEventListener('click', closeOverlay);
-    var dayInput = root.querySelector('#ms-rxac-day');
+    var dayInput = root.querySelector('#ms-qac-day');
     if (dayInput)
       dayInput.addEventListener('change', function () {
         setWorkDate(dayInput.value);
       });
-    var dayToday = root.querySelector('#ms-rxac-day-today');
+    var dayToday = root.querySelector('#ms-qac-day-today');
     if (dayToday)
       dayToday.addEventListener('click', function () {
         setWorkDate(calendarToday());
       });
-    var dayTomorrow = root.querySelector('#ms-rxac-day-tomorrow');
+    var dayTomorrow = root.querySelector('#ms-qac-day-tomorrow');
     if (dayTomorrow)
       dayTomorrow.addEventListener('click', function () {
         setWorkDate(C.addDaysISO(calendarToday(), 1));
@@ -2100,7 +1802,7 @@
         render();
       });
     }
-    bindPileAction('#ms-rxac-split', applyPileSplit, function (applied) {
+    bindPileAction('#ms-ags-split', applyPileSplit, function (applied) {
       return (
         'Split ' +
         applied.total +
@@ -2108,19 +1810,19 @@
         applied.doctors +
         ' doctors working ' +
         dayPhrase() +
-        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
+        '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
-    bindPileAction('#ms-rxac-topup', applyPileSplit, function (applied) {
+    bindPileAction('#ms-ags-topup', applyPileSplit, function (applied) {
       return (
         'Topped up empty boxes with ' +
         applied.total +
         ' among doctors working ' +
         dayPhrase() +
-        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
+        '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
-    bindPileAction('#ms-rxac-level', applyLevel, function (applied) {
+    bindPileAction('#ms-ags-level', applyLevel, function (applied) {
       return (
         'Distributed ' +
         applied.total +
@@ -2128,9 +1830,106 @@
         applied.doctors +
         ' doctors working ' +
         dayPhrase() +
-        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
+        '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
+    var inTodayBtn = root.querySelector('#ms-ags-in-today');
+    if (inTodayBtn)
+      inTodayBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDestSet({ kind: 'in-today' });
+        announce('Share out to people in ' + dayPhrase() + '.');
+        render();
+      });
+    root.querySelectorAll('[data-ags-group]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var id = btn.getAttribute('data-ags-group') || '';
+        if (!id) return;
+        setDestSet({ kind: 'group', id: id });
+        _showAllGroups = false;
+        announce('Share out to that group.');
+        render();
+      });
+    });
+    var allBtn = root.querySelector('#ms-ags-all');
+    if (allBtn)
+      allBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        _showAllGroups = !_showAllGroups;
+        render();
+      });
+    var saveBtn = root.querySelector('#ms-ags-save');
+    if (saveBtn)
+      saveBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        _namingGroup = true;
+        render();
+        var input = document.getElementById('ms-ags-save-name');
+        if (input) input.focus();
+      });
+    var saveGo = root.querySelector('#ms-ags-save-go');
+    if (saveGo)
+      saveGo.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        commitSaveGroup();
+      });
+    var saveCancel = root.querySelector('#ms-ags-save-cancel');
+    if (saveCancel)
+      saveCancel.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        _namingGroup = false;
+        render();
+      });
+    var saveName = root.querySelector('#ms-ags-save-name');
+    if (saveName)
+      saveName.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commitSaveGroup();
+        }
+      });
+    var newGroup = root.querySelector('#ms-ags-new-group');
+    if (newGroup) {
+      newGroup.addEventListener('dragover', function (e) {
+        if (!_personDrag) return;
+        e.preventDefault();
+        e.stopPropagation();
+        newGroup.classList.add('ms-ags-well-on');
+      });
+      newGroup.addEventListener('dragleave', function () {
+        newGroup.classList.remove('ms-ags-well-on');
+      });
+      newGroup.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        newGroup.classList.remove('ms-ags-well-on');
+        var payload = e.dataTransfer ? String(e.dataTransfer.getData('text/plain') || '') : '';
+        var person = personFromPeoplePayload(payload);
+        _personDrag = null;
+        if (!person) return;
+        if (addPeopleToCustom([person])) {
+          _copyNote = 'Added ' + C.displayClinicianName(person.name) + ' to a new group. Save as group to keep it.';
+          announce(_copyNote);
+        }
+        render();
+      });
+      newGroup.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        _copyNote = 'Encircle people on the board, or drag a name onto New group.';
+        announce(_copyNote);
+        render();
+      });
+    }
+    bindPersonDrag(root);
+    bindMarquee(root);
     root.querySelectorAll('.ms-rxac-share').forEach(function (btn) {
       ['dragover', 'drop'].forEach(function (ev) {
         btn.addEventListener(ev, function (e) {
@@ -2149,122 +1948,15 @@
         _copyNote =
           applied && applied.ok
             ? 'Shared ' +
-              (applied.fromName ? applied.fromName + '’s box — ' : '') +
+              (applied.fromName ? applied.fromName + '’s box - ' : '') +
               applied.total +
               ' equally among ' +
               applied.doctors +
-              ' doctors in today. Proposal — not written yet.'
+              ' doctors in today. Proposal - not written yet.'
             : (applied && applied.reason) || 'Could not share that box out.';
         announce(_copyNote);
         render();
       });
-    });
-    var inTodayChip = root.querySelector('#ms-ags-in-today');
-    if (inTodayChip)
-      inTodayChip.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        setDestKind('in-today', '');
-      });
-    root.querySelectorAll('[data-ags-group]').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        setDestKind('group', btn.getAttribute('data-ags-group') || '');
-      });
-      ['dragover', 'drop'].forEach(function (ev) {
-        btn.addEventListener(ev, function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (ev !== 'drop') return;
-          var keys = _peopleDragKeys && _peopleDragKeys.length ? _peopleDragKeys.slice() : peopleSelectedKeys();
-          endPeopleDrag();
-          if (!keys.length) return;
-          addPeopleToPreset(btn.getAttribute('data-ags-group') || '', keys);
-          render();
-        });
-      });
-    });
-    var saveGroup = root.querySelector('#ms-ags-save');
-    if (saveGroup)
-      saveGroup.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        saveCurrentAsGroup();
-      });
-    var allBtn = root.querySelector('#ms-ags-all');
-    if (allBtn)
-      allBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        _agsAllOpen = !_agsAllOpen;
-        render();
-      });
-    var allClose = root.querySelector('#ms-ags-all-close');
-    if (allClose)
-      allClose.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        _agsAllOpen = false;
-        render();
-      });
-    bindAllGroupsPanel(root);
-    var newGroup = root.querySelector('#ms-ags-new-group');
-    if (newGroup) {
-      newGroup.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var keys = peopleSelectedKeys();
-        if (!keys.length) {
-          announce('Select people on the rail, then drop them here.');
-          return;
-        }
-        setCustomFromKeys(keys);
-        render();
-      });
-      ['dragover', 'drop'].forEach(function (ev) {
-        newGroup.addEventListener(ev, function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (ev !== 'drop') return;
-          var keys = _peopleDragKeys && _peopleDragKeys.length ? _peopleDragKeys.slice() : peopleSelectedKeys();
-          endPeopleDrag();
-          if (!keys.length) return;
-          setCustomFromKeys(keys);
-          render();
-        });
-      });
-    }
-    bindPileAction('#ms-ags-split', applyPileSplit, function (applied) {
-      return (
-        'Split ' +
-        applied.total +
-        ' equally onto ' +
-        applied.doctors +
-        ' doctors working ' +
-        dayPhrase() +
-        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
-      );
-    });
-    bindPileAction('#ms-ags-topup', applyPileSplit, function (applied) {
-      return (
-        'Topped up empty boxes with ' +
-        applied.total +
-        ' among doctors working ' +
-        dayPhrase() +
-        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
-      );
-    });
-    bindPileAction('#ms-ags-level', applyLevel, function (applied) {
-      return (
-        'Distributed ' +
-        applied.total +
-        ' equally among ' +
-        applied.doctors +
-        ' doctors working ' +
-        dayPhrase() +
-        '. Proposal — not written yet. Drag a patient onto another doctor to change who gets them.'
-      );
     });
     var addBtn = root.querySelector('#ms-lac-add-btn');
     if (addBtn) addBtn.addEventListener('click', addNamedColumn);
@@ -2298,7 +1990,7 @@
     var clearBtn = root.querySelector('#ms-lac-clear');
     if (clearBtn)
       clearBtn.addEventListener('click', function () {
-        _draft = C.ensureWorkingTodayColumns(C.emptyDraft(), splitDestinations());
+        _draft = C.ensureWorkingTodayColumns(C.emptyDraft(), currentDestinations());
         _splitDefaulted = false;
         _openDests = {};
         _expandedChip = '';
@@ -2373,7 +2065,6 @@
         });
     }
     function beginDrag(e, startIds) {
-      _peopleDragKeys = null;
       var ids = C.dragIdsFor(_selected, startIds);
       _ignoreClickAfterDrag = true;
       _dragIds = ids;
@@ -2496,9 +2187,7 @@
       el.addEventListener('dragover', function (e) {
         e.preventDefault();
         var kind = el.getAttribute('data-col-kind') || '';
-        if (_peopleDragKeys && _peopleDragKeys.length) {
-          if (kind === 'clinician') el.classList.add('ms-lac-drop-hover');
-        } else if (C.dropTargetShowsHover(_dragOriginKind, kind)) {
+        if (C.dropTargetShowsHover(_dragOriginKind, kind)) {
           el.classList.add('ms-lac-drop-hover');
         }
         scrollNearEdge(e);
@@ -2510,25 +2199,20 @@
       el.addEventListener('drop', function (e) {
         e.preventDefault();
         el.classList.remove('ms-lac-drop-hover');
-        var peopleKeys = peopleKeysFromDrop(e);
-        if (peopleKeys.length) {
-          var pKind = el.getAttribute('data-col-kind') || '';
-          var pKey = el.getAttribute('data-col-key') || '';
-          endPeopleDrag();
+        var payload = e.dataTransfer ? String(e.dataTransfer.getData('text/plain') || '') : '';
+        if (_personDrag || payload.indexOf('people:') === 0) {
+          var person = personFromPeoplePayload(payload);
+          _personDrag = null;
           endDrag();
-          if (pKind === 'clinician' && pKey) {
-            if (peopleKeys.indexOf(pKey) === -1) peopleKeys.push(pKey);
-            setCustomFromKeys(peopleKeys);
-            render();
-          }
+          var kind = el.getAttribute('data-col-kind') || '';
+          if (person && kind !== 'pool' && kind !== 'team') addPeopleToCustom([person]);
+          render();
           return;
         }
         var key = el.getAttribute('data-col-key');
         var ids = _dragIds && _dragIds.length ? _dragIds : [];
-        if (!ids.length && e.dataTransfer) {
-          ids = String(e.dataTransfer.getData('text/plain') || '')
-            .split(',')
-            .filter(Boolean);
+        if (!ids.length && payload && payload.indexOf('people:') !== 0) {
+          ids = payload.split(',').filter(Boolean);
         }
         endDrag();
         if (!key || !ids.length) return;
@@ -2537,38 +2221,6 @@
       });
     }
     root.querySelectorAll('.ms-lac-col, .ms-lac-chip-wrap, .ms-rxac-folder').forEach(bindDropTarget);
-    root.querySelectorAll('.ms-rxac-folder-head[data-people-key]').forEach(function (head) {
-      head.addEventListener('click', function (e) {
-        if (_ignoreClickAfterDrag) return;
-        if (e.target && e.target.closest && e.target.closest('button, .ms-lac-tile, input, select')) return;
-        e.preventDefault();
-        e.stopPropagation();
-        applyPeopleClick(head.getAttribute('data-people-key') || '', !!(e.metaKey || e.ctrlKey), !!e.shiftKey);
-      });
-      head.addEventListener('dragstart', function (e) {
-        if (e.target && e.target.closest && e.target.closest('.ms-lac-tile, button')) return;
-        e.stopPropagation();
-        beginPeopleDrag(e, head.getAttribute('data-people-key') || '');
-      });
-      head.addEventListener('dragend', function () {
-        endPeopleDrag();
-      });
-    });
-    root.addEventListener('click', function (e) {
-      if (_ignoreClickAfterDrag) return;
-      if (!peopleSelectedCount()) return;
-      if (
-        e.target &&
-        e.target.closest &&
-        e.target.closest(
-          '.ms-rxac-folder-head, .ms-ags-chip, .ms-ags-well, .ms-ags-all, .ms-lac-tile, button, input, select, textarea, .ms-ags-strip'
-        )
-      ) {
-        return;
-      }
-      clearPeopleSelection();
-      render();
-    });
     root.querySelectorAll('.ms-lac-chip').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
         e.preventDefault();
@@ -2598,11 +2250,17 @@
 
   function requestStage(ids, key, colEl) {
     if (_writing) return;
+    var known = {};
+    _rows.forEach(function (r) {
+      if (r && r.id) known[r.id] = true;
+    });
+    ids = (ids || []).filter(function (id) {
+      return known[id];
+    });
+    if (!ids.length) return;
     var kind = (colEl && colEl.getAttribute('data-col-kind')) || '';
     var titleEl =
-      (colEl && colEl.querySelector('.ms-lac-chip-name')) ||
-      (colEl && colEl.querySelector('.ms-rxac-folder-name')) ||
-      (colEl && colEl.querySelector('.ms-lac-col-heading'));
+      (colEl && colEl.querySelector('.ms-lac-chip-name')) || (colEl && colEl.querySelector('.ms-lac-col-heading'));
     var title = C.displayClinicianName((titleEl && titleEl.textContent) || '');
     if (kind === 'clinician') {
       var abs = C.presenceForName({
@@ -2653,7 +2311,7 @@
     var done = function (ok) {
       _copyNote = ok
         ? 'Working list copied. It is not a record of anything written to Medicus.'
-        : 'Could not copy — select the list from a text dump if you need it.';
+        : 'Could not copy - select the list from a text dump if you need it.';
       render();
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2697,12 +2355,25 @@
       return;
     }
     _confirmWrite = plan;
-    announce('Review the list, then confirm. Medicus will reassign those tasks.');
+    var gate = C.canWriteRequestAllocations({ taskList: _taskList, slug: _route && _route.slug });
+    announce(
+      gate.ok
+        ? 'Review the list, then confirm. Medicus will reassign those tasks.'
+        : gate.copy || C.REQUEST_WRITE_CAPTURE_COPY || 'Review the list. Nothing will be written.'
+    );
     render();
   }
 
   async function commitWrite() {
     if (_writing || !_confirmWrite) return;
+    var gate = C.canWriteRequestAllocations({ taskList: _taskList, slug: _route && _route.slug });
+    if (!gate.ok) {
+      _confirmWrite = null;
+      _error = (gate && gate.reason) || 'Write not captured for this queue yet.';
+      announce(_error);
+      render();
+      return;
+    }
     _writing = true;
     _error = null;
     render();
@@ -2716,27 +2387,30 @@
         directory: _staffDir,
         teamDirectory: _teamDir,
         fetchList: function () {
-          return C.fetchRxMergedTaskList(_route.apiBase, _route.slug, _route.search);
+          return C.fetchRequestMergedTaskList(_route.apiBase, _route.slug, _route.search, {
+            requireSitting: true,
+          });
         },
       });
       if (!result || !result.ok) {
         var failReason =
           (result && result.reason) || 'Medicus did not accept the reassignment. Nothing further was written.';
         _confirmWrite = null;
-        _writing = false;
         announce(failReason);
         // A batch that stopped part-way DID write the earlier groups. The
         // board is stale the moment that happens: those rows still show as
         // staged, so the count says work is pending that Medicus already
-        // took. Re-read before telling the clinician to check the queue —
+        // took. Re-read before telling the clinician to check the queue -
         // loadBoard() clears _error, so restore the message after it.
         if (result && result.written > 0) {
           await loadBoard({ skipSplit: true });
           _error = failReason;
+          _writing = false;
           render();
           return;
         }
         _error = failReason;
+        _writing = false;
         render();
         return;
       }
@@ -2752,10 +2426,11 @@
         (leftover
           ? '. ' + leftover + ' destination' + (leftover === 1 ? '' : 's') + ' had no unique staff id and stayed unallocated'
           : '') +
-        '. The open list is the same queue with new assignees — reload Medicus if the grid still shows the old number.';
-      _writing = false;
+        '. The open list is the same queue with new assignees - reload Medicus if the grid still shows the old number.';
       announce(_copyNote);
       await loadBoard({ skipSplit: true });
+      _writing = false;
+      render();
     } catch (err) {
       _writing = false;
       _confirmWrite = null;
@@ -2802,15 +2477,11 @@
     _collapsed = {};
     _workDate = '';
     _splitDefaulted = false;
-    _destKind = 'in-today';
-    _destGroupId = '';
-    _customMembers = [];
-    _peopleSelected = {};
-    _lastPeopleKey = '';
-    _agsAllOpen = false;
-    _agLoaded = false;
-    _lastSkipped = [];
-    _peopleDragKeys = null;
+    _destSet = { kind: 'in-today' };
+    _destSetReady = false;
+    _showAllGroups = false;
+    _namingGroup = false;
+    _personDrag = null;
     _marquee = null;
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
@@ -2839,15 +2510,11 @@
     _collapsed = {};
     _workDate = calendarToday();
     _splitDefaulted = false;
-    _destKind = 'in-today';
-    _destGroupId = '';
-    _customMembers = [];
-    _peopleSelected = {};
-    _lastPeopleKey = '';
-    _agsAllOpen = false;
-    _agLoaded = false;
-    _lastSkipped = [];
-    _peopleDragKeys = null;
+    _destSet = { kind: 'in-today' };
+    _destSetReady = false;
+    _showAllGroups = false;
+    _namingGroup = false;
+    _personDrag = null;
     _marquee = null;
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
@@ -2890,135 +2557,32 @@
     }
   }
 
-  function marqueeHost(target) {
-    if (!target || !target.closest) return null;
-    return target.closest('.ms-rxac-rail, .ms-rxac-folders');
-  }
-
-  function marqueeBlocked(target) {
-    if (!target || !target.closest) return true;
-    return !!target.closest(
-      '.ms-lac-tile, button, input, select, textarea, a, .ms-rxac-folder-head, .ms-ags-chip, .ms-ags-well, .ms-ags-all, .ms-rxac-share, .ms-rxac-folder-inbox'
-    );
-  }
-
-  function removeMarqueeBox() {
-    var box = document.getElementById('ms-ags-marquee');
-    if (box) box.remove();
-    _marquee = null;
-  }
-
-  function updateMarqueeBox(x1, y1, x2, y2) {
-    var overlay = document.getElementById(OVERLAY_ID);
-    if (!overlay) return;
-    var box = document.getElementById('ms-ags-marquee');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'ms-ags-marquee';
-      box.className = 'ms-ags-marquee';
-      overlay.appendChild(box);
-    }
-    var rect = overlay.getBoundingClientRect();
-    var left = Math.min(x1, x2) - rect.left;
-    var top = Math.min(y1, y2) - rect.top;
-    box.style.left = left + 'px';
-    box.style.top = top + 'px';
-    box.style.width = Math.abs(x2 - x1) + 'px';
-    box.style.height = Math.abs(y2 - y1) + 'px';
-  }
-
-  function clinicianFieldsInMarquee(x1, y1, x2, y2) {
-    var overlay = document.getElementById(OVERLAY_ID);
-    if (!overlay) return [];
-    var left = Math.min(x1, x2);
-    var right = Math.max(x1, x2);
-    var top = Math.min(y1, y2);
-    var bottom = Math.max(y1, y2);
-    var keys = [];
-    overlay.querySelectorAll('.ms-lac-field, .ms-rxac-folder[data-col-kind="clinician"]').forEach(function (el) {
-      if (el.classList.contains('ms-rxac-folder-inbox')) return;
-      if (el.getAttribute('data-col-kind') === 'team') return;
-      var r = el.getBoundingClientRect();
-      var hit = r.left < right && r.right > left && r.top < bottom && r.bottom > top;
-      if (!hit) return;
-      var key = el.getAttribute('data-col-key');
-      if (key && keys.indexOf(key) === -1) keys.push(key);
-    });
-    return keys;
-  }
-
-  document.addEventListener(
-    'pointerdown',
-    function (e) {
-      if (!_open || _writing || e.button !== 0) return;
-      var overlay = document.getElementById(OVERLAY_ID);
-      if (!overlay || !overlay.contains(e.target)) return;
-      if (marqueeBlocked(e.target)) return;
-      if (!marqueeHost(e.target)) return;
-      _marquee = {
-        x: e.clientX,
-        y: e.clientY,
-        moved: false,
-        additive: !!(e.metaKey || e.ctrlKey),
-      };
-      try {
-        if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
-      } catch (_) {}
-    },
-    true
-  );
-
-  document.addEventListener(
-    'pointermove',
-    function (e) {
-      if (!_marquee || !_open) return;
-      var dx = e.clientX - _marquee.x;
-      var dy = e.clientY - _marquee.y;
-      if (!_marquee.moved && Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
-      _marquee.moved = true;
-      e.preventDefault();
-      updateMarqueeBox(_marquee.x, _marquee.y, e.clientX, e.clientY);
-    },
-    true
-  );
-
-  document.addEventListener(
-    'pointerup',
-    function (e) {
-      if (!_marquee || !_open) return;
-      var start = _marquee;
-      var moved = start.moved;
-      var x2 = e.clientX;
-      var y2 = e.clientY;
-      removeMarqueeBox();
-      if (!moved) return;
-      var keys = clinicianFieldsInMarquee(start.x, start.y, x2, y2);
-      if (start.additive) {
-        keys.forEach(function (k) {
-          _peopleSelected[k] = true;
-        });
-      } else {
-        _peopleSelected = {};
-        keys.forEach(function (k) {
-          _peopleSelected[k] = true;
-        });
-      }
-      if (keys.length) _lastPeopleKey = keys[keys.length - 1];
-      _ignoreClickAfterDrag = true;
-      setTimeout(function () {
-        _ignoreClickAfterDrag = false;
-      }, 0);
-      render();
-    },
-    true
-  );
-
   document.addEventListener(
     'dragover',
     function (e) {
-      if ((!_dragIds && !_peopleDragKeys) || !_open) return;
+      if (!_dragIds || !_open) return;
       e.preventDefault();
       scrollNearEdge(e);
+    },
+    true
+  );
+
+  document.addEventListener(
+    'mousemove',
+    function (e) {
+      if (!_marquee || !_marquee.active || !_open) return;
+      _marquee.x = e.clientX;
+      _marquee.y = e.clientY;
+      paintMarquee();
+    },
+    true
+  );
+
+  document.addEventListener(
+    'mouseup',
+    function () {
+      if (!_marquee || !_marquee.active) return;
+      finishMarquee();
     },
     true
   );
@@ -3029,24 +2593,14 @@
       if (e.key === 'Escape' && _open) {
         e.stopPropagation();
         if (_writing) return;
-        if (_marquee) {
-          removeMarqueeBox();
+        if (_marquee && _marquee.active) {
+          _marquee = null;
+          paintMarquee();
           return;
         }
         if (_confirmWrite) {
           _confirmWrite = null;
           announce('Kept planning. Nothing was written.');
-          render();
-          return;
-        }
-        if (_agsAllOpen) {
-          _agsAllOpen = false;
-          render();
-          return;
-        }
-        if (peopleSelectedCount()) {
-          clearPeopleSelection();
-          announce('People selection cleared');
           render();
           return;
         }

@@ -1415,6 +1415,23 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | **Controls added at pre-merge review (2026-09-04)** | (i) `effectiveMinimumForDate` reports `calendarKnown` and `evaluateDay` marks any future day past the bundled calendar's year-end as unchecked with the reason "Bank-holiday calendar ends YYYY-MM-DD — update Medicus Suite", so `complete` is false and the all-clear is withheld (`calendarCoversISO`, pinned by `test-uk-calendar.js` / `test-capacity-core.js`). (j) A future weekday with a minimum but `sessionsCount === 0` is reported as unchecked ("No sessions in the book yet"), never as closed/safe; bank holidays and zero-minimum days are still simply closed. (k) The shared scan cache carries the day it was run and a key of the look-ahead settings; the Today card only reuses a scan from today under identical settings. (l) Slots "Next working day" uses the practice's chosen bank-holiday nation, the same as Forecast. |
 | **Acceptability**               | **Proposed — pending CSO sign-off** on the release PR. Consistent with H-022 control (d) and H-058 control (b): a degraded state withdraws reassurance, it never presents as zero. |
 
+### H-071 — Wrong patient-request task reassigned, or reassigned to the wrong person, from the request allocation canvas or a stale allocation group
+
+| Field                           | Value |
+| ------------------------------- | ----- |
+| **Hazard ID**                   | H-071 |
+| **Description**                 | The patient-request allocation canvas stages even-split of homepage medical/admin inbox tasks onto a named set of people (In today, a saved allocation group, or an ad-hoc encircled set). Confirming writes the same Medicus `POST /tasks/{slug}/task-list/bulk-reassign` as the lab canvas (W23). A **wrong task** in the batch, or a **wrong staff UUID** (stale group member, surname+initial collision, treating a group as a Medicus team inbox), moves a request onto someone who should not own it — the right GP may never see it. **Write on these slugs is fail-closed until a dummy-patient capture** (`REQUEST_WRITE_CAPTURED = false`); staging still works. Split equally / Top up / Distribute equally are local staging only. Named GP is a grouping caption, never auto-placement. |
+| **Potential causes**            | Name match colliding two people who share surname + first initial; a group member UUID that no longer exists guessed-through; assigning onto a Medicus team inbox instead of the people in the group (cherry-pick pile); a stale canvas after the queue moved; posting extra/invented keys; treating named GP as auto-placement; even-split using cancelled sessions or absences; **Distribute equally** rebalancing sitting work; inbox-only re-GET treating sitting work as vanished; launching on `viewContext=workflow` (collision with the workflow canvas) or on Rx / results / EPS. |
+| **Affected users / components** | GPs and reception allocating medical/admin patient-request inboxes. Components: `shared/request-allocate-core.js`, `content-scripts/request-allocate-canvas.js`, `shared/allocation-groups-core.js`, write owned by `shared/lab-allocate-core.js`. |
+| **Initial severity**            | 4 (Significant — a medical request routed to the wrong inbox can delay care) |
+| **Initial likelihood**          | 3 (Possible — bulk name-match plus even-split against a saved group) |
+| **Initial risk**                | 12 |
+| **Controls / mitigations**      | (a) **Same W23 write controls as H-064** — named patient → person confirm, unique staff UUID or refuse, exactly four captured keys. Vanish-check aborts the whole batch if any staged taskId is missing from the merged inbox+sitting list. (b) **Write fail-closed on these slugs** until a dummy capture is recorded in `docs/learnings-request-allocate.md`; `canWriteRequestAllocations` refuses with "Write not captured for this queue yet." (c) **Sibling canvas** — homepage `medical_patient_request_task` / `admin_patient_request_task` only; `viewContext=workflow` stays on the workflow canvas; Rx / results / EPS excluded. (d) **Named GP is a grouping caption only.** (e) **Split / top-up / distribute are local staging only.** Destinations are In today, a saved group of people, or an ad-hoc encircled set — never a Medicus team inbox as the group write. Away members are skipped and named. (f) Confirm copy states the write **does not complete, file, or reply**. (g) Neither new file POSTs. (h) Copy never claims Done / Sent / Allocated / Submitted. Pinned by `test-request-allocate-core.js` and `test-write-path-inventory.js` (W23 stays on `lab-allocate-core.js`). |
+| **Residual severity**           | 4 |
+| **Residual likelihood**         | 1 |
+| **Residual risk**               | 4 — Acceptable (ALARP) while Write is blocked; after capture, residual depends on the clinician reading the named confirm list. |
+| **Acceptability**               | **Proposed — pending CSO sign-off** on the release PR. |
+
 ---
 
 ## 6. Hazard summary
@@ -1491,6 +1508,7 @@ A residual score of 12 or above blocks release. A residual score of 10 or 11 req
 | H-068 | Wrong Rx request reassigned from the allocation canvas                                          | 4×3         | 12           | 4×1          | 4             | Proposed — pending CSO sign-off              |
 | H-069 | Companion outstanding-investigations / open-tasks list misread as more certain than the data supports | 3×3         | 9            | 3×1          | 3             | Proposed — pending CSO sign-off              |
 | H-070 | Capacity look-ahead reports "no days at risk" from a scan it could not complete                   | 2×4         | 8            | 2×1          | 2             | Proposed — pending CSO sign-off              |
+| H-071 | Wrong patient-request reassigned from the request canvas or a stale allocation group              | 4×3         | 12           | 4×1          | 4             | Proposed — pending CSO sign-off              |
 
 **Addendum at v3.211.0 (hazard-log v3.22):** H-058 and H-059 cover the rota surface subsumed into the suite at v3.211.0. They are recorded here on the CSO's own review of the rota port; they do **not** constitute a new full re-baseline, and the product-version pin in the header remains at v3.202.0 (the last CSO-reviewed version) until the next one.
 

@@ -1,15 +1,16 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — non-routine prescription-request allocation core.
+// Medicus Suite — patient-request (medical / admin triage inbox) allocation core.
 //
-// Sibling of lab-allocate-core / workflow-allocate-core. Same stage →
-// confirm → bulk-reassign write (W23 via LabAllocateCore.createClient) on
-// the non-routine prescription-request task-list. Named GP is a grouping
-// caption, never auto-placement. Even-split among doctors with a session
-// on today’s appointment book is local staging only — it does not write.
-// This file does not POST — the lab client owns the write.
+// Sibling of rx-allocate-core. Same stage → confirm → bulk-reassign write
+// (W23 via LabAllocateCore.createClient) on homepage medical/admin request
+// task-lists. Named GP is a grouping caption, never auto-placement.
+// Even-split is local staging only. This file does not POST.
 //
-// Dual-mode: module.exports for Node tests, window.RxAllocateCore in the
-// content-script canvas. Pure: no DOM, no chrome.*, no fetch.
+// WRITE is fail-closed until a dummy-patient capture of bulk-reassign on
+// these slugs is recorded in docs/learnings-request-allocate.md.
+//
+// Dual-mode: module.exports for Node tests, window.RequestAllocateCore
+// in the content-script canvas. Pure: no DOM, no chrome.*, no fetch.
 
 'use strict';
 
@@ -23,43 +24,39 @@
       }
     }
     if (global && global.LabAllocateCore) return global.LabAllocateCore;
-    throw new Error('RxAllocateCore needs LabAllocateCore');
+    throw new Error('RequestAllocateCore needs LabAllocateCore');
   }
 
   var Lab = loadLab();
   var UNKNOWN_GROUP = 'unknown';
-  var NON_ROUTINE_SLUG_RE = /non[_\-]?routine/i;
-  var PRESCRIPTION_SLUG_RE = /prescription/i;
-  var EXCLUDE_SLUG_RE = /eps|cancellation|privacy|officer/i;
-  var ROUTINE_ONLY_SLUG_RE = /prescription_request_task_routine|prescription-request-task-routine/i;
-  var NOT_A_DOCTOR_RE =
-    /\b(nurse|nursing|hca|phlebotom|reception|secretar|dispenser|pharmacist|paramedic|hcs\s?w|healthcare assistant|health care assistant)\b/i;
-  var DOCTOR_HINT_RE = /\b(dr|doctor|gp|partner|locum|salaried|registrar|consultant|gpst)\b/i;
+  var MEDICAL_SLUG_RE = /medical[_-]?patient[_-]?request[_-]?task/i;
+  var ADMIN_SLUG_RE = /admin[_-]?patient[_-]?request[_-]?task/i;
+  var EXCLUDE_SLUG_RE = /prescription|privacy|eps|officer|cancellation|investigation|result|document|inbound|filing/i;
+  var REQUEST_WRITE_CAPTURED = false;
 
-  function isRoutineRxQueueSlug(slug) {
-    return ROUTINE_ONLY_SLUG_RE.test(String(slug || ''));
+  function hasWorkflowViewContext(search) {
+    var raw = String(search == null ? '' : search);
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    return /(?:^|&)viewContext=workflow(?:&|$)/i.test(raw);
   }
 
-  function isNonRoutineRxQueueSlug(slug) {
+  function isMedicalRequestSlug(slug) {
+    return MEDICAL_SLUG_RE.test(String(slug || ''));
+  }
+
+  function isAdminRequestSlug(slug) {
+    return ADMIN_SLUG_RE.test(String(slug || ''));
+  }
+
+  function isRequestQueueSlug(slug) {
     var s = String(slug || '');
     if (!s) return false;
     if (Lab.isResultsQueueSlug(s)) return false;
     if (EXCLUDE_SLUG_RE.test(s)) return false;
-    if (!PRESCRIPTION_SLUG_RE.test(s)) return false;
-    if (NON_ROUTINE_SLUG_RE.test(s)) return true;
-    return false;
+    return isMedicalRequestSlug(s) || isAdminRequestSlug(s);
   }
 
-  function isRxQueueSlug(slug) {
-    return isNonRoutineRxQueueSlug(slug) || isRoutineRxQueueSlug(slug);
-  }
-
-  // The live routine inbox is
-  //   ?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>
-  // That masterAssignee IS the routine box. Lab lists drop it so sitting
-  // work is visible; here dropping it hides the inbox and only the
-  // already-allocated GP piles remain.
-  function queryStringForRxList(search) {
+  function queryStringForRequestList(search) {
     var raw = String(search == null ? '' : search).trim();
     if (!raw) return '';
     if (raw.charAt(0) === '?') raw = raw.slice(1);
@@ -70,32 +67,33 @@
     return kept.length ? '?' + kept.join('&') : '';
   }
 
-  function parseRxQueueRoute(pathname, search) {
+  function parseRequestQueueRoute(pathname, search) {
     var path = String(pathname == null ? '' : pathname);
     var m = path.match(/^\/?([0-9a-z]{2,})\/tasks\/(?:data\/)?([^/]+)\/task-list\/?$/i);
     if (!m) return null;
     var slug = m[2];
-    if (!isRxQueueSlug(slug)) return null;
+    if (!isRequestQueueSlug(slug)) return null;
+    if (hasWorkflowViewContext(search)) return null;
     return {
       siteId: m[1],
       slug: slug,
-      search: queryStringForRxList(search),
+      search: queryStringForRequestList(search),
       apiBase: 'https://' + m[1] + '.api.england.medicus.health',
-      kind: 'rx',
-      routine: isRoutineRxQueueSlug(slug),
+      kind: 'request',
+      admin: isAdminRequestSlug(slug),
     };
   }
 
-  function isRxInboxName(name) {
+  function isRequestInboxName(name) {
     var s = String(name || '').trim();
     if (!s) return true;
     if (/^unassigned$/i.test(s)) return true;
     if (Lab.isTeamAssignee(s)) return true;
-    return /prescription/i.test(s) || /non[-\s]?routine/i.test(s) || /^routine$/i.test(s);
+    return /patient\s*request/i.test(s) || /^(medical|admin)$/i.test(s);
   }
 
   function inboxAssigneeId(search) {
-    var qs = queryStringForRxList(search);
+    var qs = queryStringForRequestList(search);
     var parts = String(qs || '')
       .replace(/^\?/, '')
       .split('&');
@@ -115,35 +113,50 @@
     return '';
   }
 
-  function isRxUnallocated(row) {
+  function isRequestUnallocated(row) {
     if (!row || !row.id) return false;
-    if (row.rxInboxPile) return true;
-    if (isRxInboxName(row.assignedTo)) return true;
+    if (row.requestInboxPile) return true;
+    if (isRequestInboxName(row.assignedTo)) return true;
     return Lab.homeColumnKey(row) === Lab.POOL;
   }
 
-  function decorateRxRow(row) {
+  function decorateRequestRow(row, kind) {
     if (!row) return row;
     var next = Object.assign({}, row);
-    next.kind = 'rx';
+    next.kind = kind === 'admin' ? 'admin-request' : 'medical-request';
     return next;
   }
 
-  // Inbox GET (page masterAssignee) is the box to share out. Bare GET of
-  // the same slug is everyone already sitting with a GP. Folders need both.
-  function mergeInboxAndSitting(inboxRows, sittingRows, search) {
-    var inbox = markInboxRows(inboxRows, search);
+  function markInboxRows(rows, search, kind) {
+    var inboxId = inboxAssigneeId(search);
+    return (Array.isArray(rows) ? rows : [])
+      .map(function (row) {
+        var next = decorateRequestRow(row, kind);
+        if (!next) return next;
+        if (!inboxId) return next;
+        var assignedId = String(next.assignedId || '').toLowerCase();
+        if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
+        next.requestInboxPile = true;
+        next.requestInboxAssignedTo = next.assignedTo || '';
+        next.assignedTo = 'Unassigned';
+        return next;
+      })
+      .filter(Boolean);
+  }
+
+  function mergeInboxAndSitting(inboxRows, sittingRows, search, kind) {
+    var inbox = markInboxRows(inboxRows, search, kind);
     var seen = {};
     inbox.forEach(function (r) {
       if (r && r.id) seen[r.id] = true;
     });
     var sitting = [];
     (Array.isArray(sittingRows) ? sittingRows : []).forEach(function (raw) {
-      var row = decorateRxRow(raw);
+      var row = decorateRequestRow(raw, kind);
       if (!row || !row.id || seen[row.id]) return;
-      if (isRxUnallocated(row)) {
-        row.rxInboxPile = true;
-        row.rxInboxAssignedTo = row.assignedTo || '';
+      if (isRequestUnallocated(row)) {
+        row.requestInboxPile = true;
+        row.requestInboxAssignedTo = row.assignedTo || '';
         row.assignedTo = 'Unassigned';
         inbox.push(row);
         seen[row.id] = true;
@@ -155,28 +168,7 @@
     return inbox.concat(sitting);
   }
 
-  // The page filter is the box to work. Those rows are assigned to the
-  // inbox UUID (often a person-shaped name on assignedTo), which made
-  // homeColumnKey treat the whole pile as already sitting with a GP.
-  // Stamp them Unassigned so they stay in the unallocated list.
-  function markInboxRows(rows, search) {
-    var inboxId = inboxAssigneeId(search);
-    return (Array.isArray(rows) ? rows : [])
-      .map(function (row) {
-        var next = decorateRxRow(row);
-        if (!next) return next;
-        if (!inboxId) return next;
-        var assignedId = String(next.assignedId || '').toLowerCase();
-        if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
-        next.rxInboxPile = true;
-        next.rxInboxAssignedTo = next.assignedTo || '';
-        next.assignedTo = 'Unassigned';
-        return next;
-      })
-      .filter(Boolean);
-  }
-
-  function rxGroupName(tile) {
+  function requestGroupName(tile) {
     if (tile && tile.requester) return tile.requester;
     if (tile && tile.namedGp) return tile.namedGp;
     return '';
@@ -187,7 +179,7 @@
     var order = [];
     (Array.isArray(tiles) ? tiles : []).forEach(function (tile) {
       if (!tile) return;
-      var name = rxGroupName(tile);
+      var name = requestGroupName(tile);
       var key = name ? Lab.clinicianColumnKey(name) : UNKNOWN_GROUP;
       if (!map[key]) {
         map[key] = {
@@ -257,8 +249,8 @@
 
   function poolTitle(opts) {
     if (opts && opts.poolTitle) return opts.poolTitle;
-    if (opts && (opts.routine || opts.kind === 'rx-routine')) return 'Routine prescriptions';
-    return 'Non-routine prescriptions';
+    if (opts && (opts.admin || opts.kind === 'admin-request')) return 'Admin requests';
+    return 'Medical requests';
   }
 
   function buildWorkspace(rows, draft, opts) {
@@ -308,121 +300,68 @@
     return lines.join('\n').trim();
   }
 
-  function columnTitle(key, rows, titles, aliases, teamList) {
-    if (key === 'pool' || key === 'unallocated') {
-      if (titles && titles[key]) return titles[key];
-      return 'Unallocated';
-    }
-    return Lab.columnTitle(key, rows, titles, aliases, teamList);
-  }
-
-  function isLikelyDoctor(name, service) {
-    var blob = String(name || '') + ' ' + String(service || '');
-    if (NOT_A_DOCTOR_RE.test(blob)) return false;
-    if (DOCTOR_HINT_RE.test(blob)) return true;
-    return false;
-  }
-
-  function workingTodayDoctors(opts) {
-    opts = opts || {};
-    var book = opts.book || null;
-    var list = book && Array.isArray(book.present) ? book.present : [];
-    var seen = {};
-    var people = [];
-    list.forEach(function (rec) {
-      if (!rec || !rec.name) return;
-      if (Lab.isTeamAssignee(rec.name)) return;
-      var key = rec.key || Lab.clinicianColumnKey(rec.name);
-      if (!key || key === Lab.UNALLOCATED || key === Lab.POOL) return;
-      if (seen[key]) return;
-      var presence = Lab.presenceForName({
-        name: rec.name,
-        dateISO: opts.dateISO || Lab.todayISO(),
-        book: book,
-        absences: opts.absences,
-        staffList: opts.staffList,
-        leaveList: opts.leaveList,
-      });
-      if (presence.state === 'away' || presence.state === 'away-pending') return;
-      if (!(presence.state === 'present' && presence.reason === 'in-today')) return;
-      seen[key] = true;
-      people.push({
-        key: key,
-        name: rec.name,
-        sessions: rec.sessions || presence.sessions || 0,
-        site: rec.site || presence.site || '',
-        service: rec.service || '',
-        likelyDoctor: isLikelyDoctor(rec.name, rec.service),
-        staffId: rec.staffId || '',
-      });
-    });
-    var doctors = people.filter(function (p) {
-      return p.likelyDoctor;
-    });
-    var chosen = doctors.length ? doctors : people;
-    chosen.sort(function (a, b) {
-      var na = Lab.displayClinicianName(a.name).toLowerCase();
-      var nb = Lab.displayClinicianName(b.name).toLowerCase();
-      if (na < nb) return -1;
-      if (na > nb) return 1;
-      return 0;
-    });
-    return chosen;
-  }
-
-  function rxSplitOpts(opts) {
+  function requestSplitOpts(opts) {
     var next = Object.assign({}, opts || {});
-    if (!next.anyTile && !next.isUnallocated) next.isUnallocated = isRxUnallocated;
+    if (!next.anyTile && !next.isUnallocated) next.isUnallocated = isRequestUnallocated;
     return next;
   }
 
-  function destNamesPhrase(dests) {
-    return Lab.destNamesPhrase(dests);
-  }
-
   function planEvenSplit(tiles, destinations, opts) {
-    return Lab.planEvenSplit(tiles, destinations, rxSplitOpts(opts));
+    return Lab.planEvenSplit(tiles, destinations, requestSplitOpts(opts));
   }
 
-  function applyEvenSplit(draft, plan) {
-    return Lab.applyEvenSplit(draft, plan);
+  function planTopUp(tiles, destinations, boxCounts, opts) {
+    return Lab.planTopUp(tiles, destinations, boxCounts, requestSplitOpts(opts));
+  }
+
+  function planLevel(tiles, destinations, opts) {
+    return Lab.planLevel(tiles, destinations, requestSplitOpts(opts));
   }
 
   function unallocatedNotStaged(rows, draft) {
     var moves = (draft && draft.moves) || {};
     return (Array.isArray(rows) ? rows : []).filter(function (r) {
-      return r && r.id && isRxUnallocated(r) && !moves[r.id];
+      return r && r.id && isRequestUnallocated(r) && !moves[r.id];
     });
   }
 
-  function planTopUp(tiles, destinations, boxCounts, opts) {
-    return Lab.planTopUp(tiles, destinations, boxCounts, rxSplitOpts(opts));
+  var REQUEST_WRITE_CAPTURE_REASON = 'Write not captured for this queue yet.';
+  var REQUEST_WRITE_CAPTURE_COPY =
+    'This is a plan on this canvas only. Medicus does not change. Assign in Medicus until write is enabled for this queue.';
+
+  function canWriteRequestAllocations(opts) {
+    if (!REQUEST_WRITE_CAPTURED) {
+      return {
+        ok: false,
+        reason: REQUEST_WRITE_CAPTURE_REASON,
+        copy: REQUEST_WRITE_CAPTURE_COPY,
+      };
+    }
+    return Lab.canWriteAllocations(opts || {});
   }
 
-  function planLevel(tiles, destinations, opts) {
-    return Lab.planLevel(tiles, destinations, rxSplitOpts(opts));
-  }
-
-  function ensureWorkingTodayColumns(draft, destinations) {
-    return Lab.ensureDestColumns(draft, destinations);
-  }
-
-  function replaceDestColumns(draft, destinations) {
-    return Lab.replaceDestColumns(draft, destinations);
-  }
-
-  function pinDestStaffIds(dests, directory) {
-    return Lab.pinDestStaffIds(dests, directory);
-  }
-
-  // Live routine inbox (2026-08-31): statuses[]=pending-review, homepage,
-  // masterAssignee=<inbox uuid>. That filtered GET is the box on the page.
-  // Bare GET returns every open task of the type, including already
-  // allocated to GPs. Prefer the page query; fall back to bare GET only
-  // if the inbox filter comes back empty.
-  async function fetchRxTaskList(apiBase, slug, search, deps) {
+  function createClient(apiBase, deps) {
     var client = Lab.createClient(apiBase, deps);
-    var pageQs = queryStringForRxList(search);
+    var inner = client.commitAllocations.bind(client);
+    client.commitAllocations = function (opts) {
+      var gate = canWriteRequestAllocations(opts || {});
+      if (!gate.ok) {
+        return Promise.resolve({
+          ok: false,
+          written: 0,
+          reason: gate.reason,
+          batches: [],
+          refused: [],
+        });
+      }
+      return inner(opts);
+    };
+    return client;
+  }
+
+  async function fetchRequestTaskList(apiBase, slug, search, deps) {
+    var client = Lab.createClient(apiBase, deps);
+    var pageQs = queryStringForRequestList(search);
     var filtered = null;
     if (pageQs) {
       filtered = await client.fetchTaskList(slug, pageQs, { keepMasterAssignee: true });
@@ -433,17 +372,19 @@
     return filtered || openPile;
   }
 
-  // Write vanish-check needs every staged id, including already-sitting
-  // GP work that Distribute equally rebalances. The page-inbox GET is
-  // only the pile; the bare GET is sitting work. Same merge as loadBoard.
-  async function fetchRxMergedTaskList(apiBase, slug, search, deps) {
-    var inbox = await fetchRxTaskList(apiBase, slug, search, deps);
+  async function fetchRequestMergedTaskList(apiBase, slug, search, deps) {
+    var inbox = await fetchRequestTaskList(apiBase, slug, search, deps);
     var sitting = { rows: [], slug: '', taskList: undefined, body: null };
     try {
-      sitting = await fetchRxTaskList(apiBase, slug, '', deps);
-    } catch (_) {}
+      sitting = await fetchRequestTaskList(apiBase, slug, '', deps);
+    } catch (err) {
+      if (deps && deps.requireSitting) {
+        throw new Error('Could not re-read sitting work — nothing was sent.');
+      }
+    }
+    var kind = isAdminRequestSlug(slug) ? 'admin' : 'medical';
     return {
-      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], search),
+      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], search, kind),
       slug: inbox.slug || sitting.slug || slug,
       taskList: inbox.taskList || sitting.taskList,
       search: inbox.search || search || '',
@@ -452,43 +393,49 @@
   }
 
   var api = {
-    isNonRoutineRxQueueSlug: isNonRoutineRxQueueSlug,
-    isRoutineRxQueueSlug: isRoutineRxQueueSlug,
-    isRxQueueSlug: isRxQueueSlug,
-    queryStringForRxList: queryStringForRxList,
-    parseRxQueueRoute: parseRxQueueRoute,
-    decorateRxRow: decorateRxRow,
+    REQUEST_WRITE_CAPTURED: REQUEST_WRITE_CAPTURED,
+    REQUEST_WRITE_CAPTURE_REASON: REQUEST_WRITE_CAPTURE_REASON,
+    REQUEST_WRITE_CAPTURE_COPY: REQUEST_WRITE_CAPTURE_COPY,
+    isMedicalRequestSlug: isMedicalRequestSlug,
+    isAdminRequestSlug: isAdminRequestSlug,
+    isRequestQueueSlug: isRequestQueueSlug,
+    hasWorkflowViewContext: hasWorkflowViewContext,
+    queryStringForRequestList: queryStringForRequestList,
+    parseRequestQueueRoute: parseRequestQueueRoute,
+    decorateRequestRow: decorateRequestRow,
     markInboxRows: markInboxRows,
     mergeInboxAndSitting: mergeInboxAndSitting,
     inboxAssigneeId: inboxAssigneeId,
-    isRxInboxName: isRxInboxName,
-    isRxUnallocated: isRxUnallocated,
-    rxGroupName: rxGroupName,
+    isRequestInboxName: isRequestInboxName,
+    isRequestUnallocated: isRequestUnallocated,
+    requestGroupName: requestGroupName,
     groupTiles: groupTiles,
     buildWorkspace: buildWorkspace,
     buildBoard: buildWorkspace,
     copyList: copyList,
     poolTitle: poolTitle,
-    columnTitle: columnTitle,
-    isLikelyDoctor: isLikelyDoctor,
-    coerceWorkDate: Lab.coerceWorkDate,
-    addDaysISO: Lab.addDaysISO,
-    workDayPhrase: Lab.workDayPhrase,
-    formatLeaveDate: Lab.formatLeaveDate,
-    workingTodayDoctors: workingTodayDoctors,
-    destNamesPhrase: destNamesPhrase,
     planEvenSplit: planEvenSplit,
     planTopUp: planTopUp,
     planLevel: planLevel,
+    applyEvenSplit: Lab.applyEvenSplit,
     unallocatedNotStaged: unallocatedNotStaged,
-    applyEvenSplit: applyEvenSplit,
-    ensureWorkingTodayColumns: ensureWorkingTodayColumns,
-    replaceDestColumns: replaceDestColumns,
-    pinDestStaffIds: pinDestStaffIds,
+    ensureWorkingTodayColumns: Lab.ensureDestColumns,
+    replaceDestColumns: Lab.replaceDestColumns,
+    pinDestStaffIds: Lab.pinDestStaffIds,
+    destNamesPhrase: Lab.destNamesPhrase,
     asSplitDests: Lab.asSplitDests,
-    collisionPhrase: Lab.collisionPhrase,
-    fetchRxTaskList: fetchRxTaskList,
-    fetchRxMergedTaskList: fetchRxMergedTaskList,
+    workingTodayDoctors: function (opts) {
+      if (typeof require === 'function') {
+        try {
+          return require('./rx-allocate-core.js').workingTodayDoctors(opts);
+        } catch (_) {}
+      }
+      if (global && global.RxAllocateCore) return global.RxAllocateCore.workingTodayDoctors(opts);
+      return [];
+    },
+    fetchRequestTaskList: fetchRequestTaskList,
+    fetchRequestMergedTaskList: fetchRequestMergedTaskList,
+    canWriteRequestAllocations: canWriteRequestAllocations,
     isResultsQueueSlug: Lab.isResultsQueueSlug,
     queryStringForList: Lab.queryStringForList,
     sanitizeSlug: Lab.sanitizeSlug,
@@ -499,24 +446,25 @@
     stageMoves: Lab.stageMoves,
     draftSummary: Lab.draftSummary,
     homeColumnKey: Lab.homeColumnKey,
-    placementReason: Lab.placementReason,
-    applyRequester: Lab.applyRequester,
     normaliseTaskRow: Lab.normaliseTaskRow,
     harvestStaffDirectory: Lab.harvestStaffDirectory,
     mergeStaffDirectory: Lab.mergeStaffDirectory,
     harvestTeamDirectory: Lab.harvestTeamDirectory,
     mergeTeamDirectory: Lab.mergeTeamDirectory,
-    canWriteAllocations: Lab.canWriteAllocations,
+    canWriteAllocations: canWriteRequestAllocations,
     planBulkReassign: Lab.planBulkReassign,
     writeBlockReason: Lab.writeBlockReason,
-    createClient: Lab.createClient,
-    pickPatientIdFromPayload: Lab.pickPatientIdFromPayload,
+    createClient: createClient,
+    collisionPhrase: Lab.collisionPhrase,
     displayClinicianName: Lab.displayClinicianName,
     teamColumnKey: Lab.teamColumnKey,
     isTeamAssignee: Lab.isTeamAssignee,
     todayISO: Lab.todayISO,
     presenceForName: Lab.presenceForName,
     parseTodayBook: Lab.parseTodayBook,
+    coerceWorkDate: Lab.coerceWorkDate,
+    addDaysISO: Lab.addDaysISO,
+    workDayPhrase: Lab.workDayPhrase,
     selectedIdList: Lab.selectedIdList,
     replaceSelection: Lab.replaceSelection,
     addToSelection: Lab.addToSelection,
@@ -537,5 +485,5 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   }
-  if (global) global.RxAllocateCore = api;
+  if (global) global.RequestAllocateCore = api;
 })(typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : this);
