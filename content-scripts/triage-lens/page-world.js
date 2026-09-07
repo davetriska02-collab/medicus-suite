@@ -13,6 +13,7 @@
 // the bits the isolated content script needs as a window CustomEvent (which
 // crosses the world boundary for JSON-serialisable detail):
 //   • /tasks/data/{slug}/task-list      → 'ch-task-list-data'   (queue monitoring)
+//   • Pusher presence-{site}-task-{uuid} → 'ch-native-task-presence' (occupied masthead)
 //
 // It also notes WHICH PATIENT the page's embedded Clinical Summary panel was
 // last fetched for (2026-08-03): any request to
@@ -203,6 +204,156 @@
     if (!found && staffPollCount < 30) setTimeout(pollStaffIdentity, 2000);
   }
   setTimeout(pollStaffIdentity, 2000);
+
+  // ---- Native Pusher task presence (2026-09-07) ----
+  // Medicus now subscribes to presence-{site}-task-{taskUuid} while a request
+  // is open (live capture: presence-560b6c-task-{uuid}, member ids = staff
+  // UUIDs, stock pusher:member_added / member_removed). Forward the current
+  // task's member list to the isolated world as 'ch-native-task-presence'.
+  // Channel names + member ids + staff-shaped info keys only — drop anything
+  // that looks like a patient identifier. No writes; we never subscribe
+  // ourselves (Pusher presence auth is Medicus's).
+  var PRESENCE_TASK_CH_RE =
+    /^presence-([0-9a-z]{2,})-task-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  var lastPresenceSig = '';
+  var boundPresenceCh = '';
+
+  function currentOverviewTaskUuid() {
+    var m = String(location.pathname || '').match(
+      /\/tasks\/(?:data\/)?[^/]+\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+    );
+    return m ? m[1].toLowerCase() : '';
+  }
+
+  function staffShapedInfo(info) {
+    if (!info || typeof info !== 'object') return {};
+    var out = {};
+    try {
+      var keys = Object.keys(info);
+      for (var i = 0; i < keys.length && i < 30; i++) {
+        var k = keys[i];
+        if (/patient|nhs|dob|dateofbirth|address|postcode|phone|mobile/i.test(k)) continue;
+        var v = info[k];
+        if (typeof v === 'string') out[k] = v.slice(0, 120);
+        else if (typeof v === 'number' && isFinite(v)) out[k] = v;
+        else if (typeof v === 'boolean') out[k] = v;
+      }
+    } catch (_) {}
+    return out;
+  }
+
+  function emitNativePresence(taskUuid, members) {
+    var sig =
+      String(taskUuid || '') +
+      ':' +
+      members
+        .map(function (m) {
+          return m.id;
+        })
+        .sort()
+        .join(',');
+    if (sig === lastPresenceSig) return;
+    lastPresenceSig = sig;
+    try {
+      window.dispatchEvent(
+        new CustomEvent('ch-native-task-presence', { detail: { taskUuid: taskUuid || '', members: members } })
+      );
+    } catch (_) {}
+  }
+
+  function collectPresenceMembers(ch) {
+    var members = [];
+    var seen = {};
+    function add(id, info) {
+      if (typeof id !== 'string' || !UUID_RE.test(id)) return;
+      var sid = id.toLowerCase();
+      if (seen[sid]) return;
+      seen[sid] = 1;
+      members.push({ id: sid, info: staffShapedInfo(info) });
+    }
+    if (!ch || !ch.members) return members;
+    try {
+      if (typeof ch.members.each === 'function') {
+        ch.members.each(function (m) {
+          if (m) add(m.id, m.info);
+        });
+      }
+    } catch (_) {}
+    try {
+      var hash = ch.members.members;
+      if (hash && typeof hash === 'object') {
+        Object.keys(hash).forEach(function (id) {
+          var m = hash[id];
+          if (m && typeof m === 'object') add(m.id || id, m.info || m);
+          else add(id, {});
+        });
+      }
+    } catch (_) {}
+    return members;
+  }
+
+  function readPresenceChannel(ch, taskUuid) {
+    emitNativePresence(taskUuid, collectPresenceMembers(ch));
+  }
+
+  function pollNativePresence() {
+    var taskUuid = currentOverviewTaskUuid();
+    if (!taskUuid) {
+      if (lastPresenceSig) {
+        lastPresenceSig = '';
+        boundPresenceCh = '';
+        emitNativePresence('', []);
+      }
+      setTimeout(pollNativePresence, 2000);
+      return;
+    }
+    // Switching request: wipe immediately so the previous occupant cannot
+    // paint on this overview while the new channel is still attaching.
+    if (lastPresenceSig && lastPresenceSig.indexOf(taskUuid + ':') !== 0) {
+      lastPresenceSig = taskUuid + ':';
+      emitNativePresence(taskUuid, []);
+    }
+    try {
+      var app = document.querySelector('#app') || document.querySelector('[data-v-app]');
+      var gp = app && app.__vue_app__ && app.__vue_app__.config && app.__vue_app__.config.globalProperties;
+      var pusher = gp && gp.$pusher;
+      var map = pusher && pusher.channels && pusher.channels.channels;
+      if (map) {
+        var found = false;
+        for (var name in map) {
+          if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
+          var pm = name.match(PRESENCE_TASK_CH_RE);
+          if (!pm) continue;
+          if (pm[2].toLowerCase() !== taskUuid) continue;
+          found = true;
+          var ch = map[name];
+          if (boundPresenceCh !== name) {
+            boundPresenceCh = name;
+            try {
+              var boundName = name;
+              var onChange = function () {
+                var live = currentOverviewTaskUuid();
+                var liveMatch = boundName.match(PRESENCE_TASK_CH_RE);
+                if (!live || !liveMatch || liveMatch[2].toLowerCase() !== live) return;
+                readPresenceChannel(ch, live);
+              };
+              ch.bind('pusher:member_added', onChange);
+              ch.bind('pusher:member_removed', onChange);
+              ch.bind('pusher:subscription_succeeded', onChange);
+            } catch (_) {}
+          }
+          readPresenceChannel(ch, taskUuid);
+          break;
+        }
+        if (!found && lastPresenceSig !== taskUuid + ':') {
+          lastPresenceSig = taskUuid + ':';
+          emitNativePresence(taskUuid, []);
+        }
+      }
+    } catch (_) {}
+    setTimeout(pollNativePresence, 2000);
+  }
+  setTimeout(pollNativePresence, 2500);
 
   console.debug('[ClinHUD] page-world interceptors installed (MAIN world)');
 })();

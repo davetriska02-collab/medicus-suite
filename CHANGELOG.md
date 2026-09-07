@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.1] — 2026-09-07
+
+### Occupied request — native presence strip
+
+Medicus now broadcasts who is on a request (`presence-{site}-task-{taskUuid}`,
+staff UUID members). When someone else is on the same request you have open,
+a one-line amber strip drops in: initials, “X is on this request”, Live, and
+“Not a lock”. Advisory only — no bar does not mean no one.
+
+Fail-closed so it cannot paint you as occupying your own request, cannot
+carry a previous request’s occupants onto the next, and cannot treat the
+queue presence channel as a per-request occupant.
+
+Uses Medicus’s own Pusher presence (no shared-folder / Supabase required).
+The older store-backed chips remain as fallback.
+
+Design-crit + synthetic 5-GP panel (2026-09-07): collapsed from a two-line
+huddle bar to an instrument strip; Live is a real heartbeat (not “Opened N
+min ago” from when this tab noticed them); unnamed identity is “Someone
+else”, never a fake name.
+
 ## [v3.261.0] — 2026-09-06
 
 ### Lab allocation canvas — who’s in tomorrow
