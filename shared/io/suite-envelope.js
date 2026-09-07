@@ -106,6 +106,7 @@ const VALID_SCOPES = [
   'phrases',
   'rota',
   'board',
+  'allocationGroups',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -500,6 +501,16 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Rota');
+    if (m) lines.push(m);
+  }
+
+  if (mods.allocationGroups) {
+    const n = Array.isArray(mods.allocationGroups.presets) ? mods.allocationGroups.presets.length : 0;
+    lines.push(
+      `Allocation groups: ${n} named group${n === 1 ? '' : 's'} of people work is split onto (not Medicus team inboxes)`
+    );
+  } else {
+    const m = missing('Allocation groups');
     if (m) lines.push(m);
   }
 

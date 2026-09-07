@@ -1038,6 +1038,7 @@
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="quickactions">Quick Actions</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
+        <button class="nav-item" data-section="allocation-groups">Allocation groups</button>
         <button class="nav-item" data-section="leaflets">Leaflets</button>
         <button class="nav-item" data-section="pdc-prefs">Cleanup code preferences</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
@@ -2283,6 +2284,23 @@
           </div>
         </section>
 
+        <section class="opt-section" id="sect-allocation-groups">
+          <h1>Allocation groups <span class="module-badge">share-out presets</span></h1>
+          <p class="section-desc">
+            Named groups of <strong>people</strong> the allocation canvases split work onto &mdash; morning triage,
+            afternoon triage, the duty pair. These are not Medicus team inboxes. Assigning a pile
+            <em>to</em> an inbox is the shared list people cherry-pick from; a group here is the people the pile is
+            split <em>onto</em>, one request each. Day-to-day you can also encircle or drag people on the canvas and
+            save. Optional days and times only control when the chip appears for picking (Europe/London). Last-used
+            group is this computer only; the named groups can be published with the practice profile.
+          </p>
+          <div id="agList" style="display: flex; flex-direction: column; gap: 10px"></div>
+          <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+            <button class="ghost" id="agAdd">New group</button>
+            <span class="saved" id="agSaved">Saved &check;</span>
+          </div>
+        </section>
+
         <!-- Knowledge section -->
         <section class="opt-section" id="sect-knowledge">
           <h1>Knowledge <span class="module-badge">practice reference base</span></h1>
@@ -3174,6 +3192,14 @@
                 </div>
               </div>
               <div class="module-export-card">
+                <div class="mec-name">Allocation groups</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="allocationGroups">Export</button>
+                  <button class="ghost" data-mod-import="allocationGroups">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="allocationGroups" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
                 <div class="mec-name">Capacity Forecast</div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="capacity">Export</button>
@@ -3446,6 +3472,8 @@
     <script src="../shared/io/reception-io.js"></script>
     <script src="../shared/knowledge-utils.js"></script>
     <script src="../shared/io/knowledge-io.js"></script>
+    <script src="../shared/allocation-groups-core.js"></script>
+    <script src="../shared/io/allocation-groups-io.js"></script>
     <script src="../shared/phrases-core.js"></script>
     <script src="../shared/io/phrases-io.js"></script>
     <script src="../shared/quick-actions-core.js"></script>

@@ -373,6 +373,48 @@ console.log('\n--- top-up empty boxes and distribute equally ---');
     dests[0],
   ]);
   check(teamPlan.ok && teamPlan.doctors === 2, 'even split can land on a harvested team');
+
+  const Groups = require('./shared/allocation-groups-core.js');
+  const morning = Groups.normalisePreset({
+    name: 'Morning triage',
+    memberIds: [uuid(51), uuid(52)],
+    memberNames: { [uuid(51)]: 'Dr Dave Triska', [uuid(52)]: 'Dr Sarah Chen' },
+  });
+  const fromGroup = Groups.destsFromSet({ kind: 'group', id: morning.id }, { presets: [morning] });
+  const groupDests = Lab.asSplitDests(fromGroup.dests);
+  check(groupDests.length === 2, 'a saved group becomes two staff dests');
+  check(
+    groupDests.every((d) => String(d.key).indexOf('clinician:') === 0),
+    'group dests are people, not Medicus team inboxes'
+  );
+  const pinnedGroup = C.pinDestStaffIds(groupDests, {
+    list: [
+      { id: uuid(51), name: 'Dr Dave Triska' },
+      { id: uuid(52), name: 'Dr Sarah Chen' },
+    ],
+  });
+  check(
+    pinnedGroup[0].staffId === uuid(51) && pinnedGroup[1].staffId === uuid(52),
+    'group dest staff ids stay pinned for Write'
+  );
+  const gPlan = C.planEvenSplit([rxRow(61), rxRow(62), rxRow(63), rxRow(64)], pinnedGroup);
+  check(gPlan.ok && gPlan.doctors === 2 && gPlan.total === 4, 'even split onto a group of two people');
+  const replaced = C.replaceDestColumns(
+    C.ensureWorkingTodayColumns(C.emptyDraft(), dests),
+    pinnedGroup
+  );
+  check(
+    replaced.extraColumns.length === 2 &&
+      pinnedGroup.every((d) => replaced.extraColumns.indexOf(d.key) !== -1),
+    'switching dest set replaces leftover In-today columns, it does not union them'
+  );
+  const leftoverMove = C.stageMove(
+    C.ensureWorkingTodayColumns(C.emptyDraft(), dests),
+    rxRow(70).id,
+    dests[0].key
+  );
+  const cleared = C.replaceDestColumns(leftoverMove, pinnedGroup);
+  check(!cleared.moves[rxRow(70).id], 'switching dest set drops staged moves onto leftover In-today dests');
 }
 
 console.log('\n--- even-split dest staff UUID is what Write uses ---');
@@ -475,6 +517,13 @@ console.log('\n--- write stays on the lab client ---');
   check(/ms-rxac-review-open/.test(canvas), 'confirm list opens in the review dock, not a scrim');
   check(/ms-rxac-dests/.test(canvas) && /To:/.test(canvas), 'top-up and distribute name who they go to');
   check(/Add a team from Medicus/.test(canvas), 'Medicus teams can be added as destinations');
+  check(
+    /function setCustomFromKeys[\s\S]{0,500}replaceDestColumns/.test(canvas),
+    'custom dest-set change replaces leftover In-today columns'
+  );
+  check(/setData\('text\/plain', 'people:'/.test(canvas), 'people-drag uses a people: payload');
+  check(/indexOf\('people:'\) === 0/.test(canvas), 'people: payload is not staged as a task id');
+  check(/these prescriptions/.test(canvas), 'Rx confirm names prescriptions, not requests');
   check(/addTeamColumn/.test(canvas), 'adding a team uses addTeamColumn, not a doctor field');
   check(/visibleUnallocatedCount/.test(canvas), 'unallocated count is the visible pile, not sitting work');
   check(/splitDestinations/.test(canvas), 'split dests include in-today doctors plus added teams');
@@ -554,6 +603,21 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/#ms-rxac-launch:focus-visible/.test(css), 'launcher focus ring is a literal (html-appended)');
   check(!/ms-rxac-overlay/.test(labCanvas), 'lab canvas does not open the rx overlay');
   check(!/ms-rxac-overlay/.test(wfCanvas), 'workflow canvas does not open the rx overlay');
+  check(
+    /AllocationGroupsCore/.test(canvas) || /destSetStripHtml/.test(canvas) || /ms-ags-in-today/.test(canvas),
+    'rx canvas uses allocation groups dest-set strip'
+  );
+  check(/destSetStripHtml/.test(canvas) && /ms-ags-in-today/.test(canvas), 'dest-set strip includes In today');
+  check(/id="ms-rxac-split"/.test(canvas) && /bindPileAction\('#ms-rxac-split'/.test(canvas), 'Split equally still uses ms-rxac-split');
+  check(/ms-ags-marquee/.test(canvas) && /ms-ags-field-on/.test(canvas), 'people marquee and selected field chrome');
+  check(/ms-ags-new-group/.test(canvas), 'New group well is on the dest-set strip');
+  check(/Save as group/.test(canvas) && /ms-ags-save/.test(canvas), 'Save as group is on the canvas');
+  check(/data-people-key/.test(canvas), 'people-drag starts from clinician field headers, not patient tiles');
+  check(
+    /Named GP[\s\S]{0,80}never auto-placement/.test(canvas),
+    'named GP still never auto-places'
+  );
+  check(!/assigneeType:\s*['"]team['"]/.test(canvas), 'groups never write assigneeType team');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
   check(/fetchRxTaskList/.test(canvas), 'canvas loads the pile via fetchRxTaskList');

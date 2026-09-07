@@ -2,6 +2,42 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.3] — 2026-09-07
+
+### Allocation groups — even-split onto a named set of people
+
+Stop cherry-picking from a shared triage inbox. Save a named group of people
+(Morning triage, Afternoon triage), or encircle them on the canvas, then
+**Split equally**. Same dest-set model on investigations and prescription
+requests.
+
+- **Groups are people**, not Medicus team inboxes. Work is split onto staff
+  UUIDs (`assigneeType: staff`). Optional days/times (Europe/London) only
+  control when the chip appears for picking.
+- **On the canvas:** In today / saved groups / New group well / All groups.
+  Encircle or drag clinician fields (not patient tiles) to make a group;
+  Save as group is explicit. Split equally / Top up / Distribute equally
+  remain local staging. Confirm still names every patient → person.
+- **New request canvas** on homepage medical and admin patient-request
+  lists (`Share out this inbox…`). Staging works; **Write is blocked**
+  until a dummy-patient capture of bulk-reassign on those slugs
+  (`REQUEST_WRITE_CAPTURED`). `viewContext=workflow` stays on the workflow
+  canvas.
+- **Labs** gain the same even-split verbs (nurses stay valid dests).
+- **Rx** dests are no longer only everyone in today — pick a group.
+- Options → Allocation groups; practice-profile module `allocationGroups`
+  (replace). Last-used dest set is this computer only.
+
+See H-071. W23 still owns the write.
+
+Red-team (10 Practice personas + 10 coder lenses) then adopted on this branch:
+dest-set change replaces leftover In-today columns on lab and on Rx encircle;
+surname+initial collisions refuse the split; people-drag cannot stage a name;
+request Write stays blocked but Review then write still names the capture gap;
+confirm lists refused patients.
+
+Patch on 3.261 because the hazard-log CSO-gap gate fails at minor 3.262.
+
 ## [v3.261.2] — 2026-09-07
 
 Occupied strip: do not restyle the whole Medicus page (tokens/font stayed on
