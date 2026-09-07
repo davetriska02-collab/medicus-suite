@@ -1730,17 +1730,9 @@
         })
         .join('');
       var refusedNote = '';
-      if (_confirmWrite.refused && _confirmWrite.refused.length) {
-        refusedNote =
-          '<p class="ms-lac-confirmbar-note">Not included — no unique staff or team match: ' +
-          esc(
-            _confirmWrite.refused
-              .map(function (r) {
-                return C.displayClinicianName(r.toTitle);
-              })
-              .join(', ')
-          ) +
-          '. Those stay on this canvas.</p>';
+      var refusedPhrase = C.refusedPatientsPhrase ? C.refusedPatientsPhrase(_confirmWrite, _rows) : '';
+      if (refusedPhrase) {
+        refusedNote = '<p class="ms-lac-confirmbar-note">' + esc(refusedPhrase) + '</p>';
       }
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn ms-rxac-review-open" role="region" aria-label="Review this proposal">' +
