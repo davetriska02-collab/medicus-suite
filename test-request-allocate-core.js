@@ -187,7 +187,7 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/content-scripts\//.test(between), 'canvas is immediately after request-allocate-core');
   check(!/\bmethod:\s*['"]POST['"]/.test(canvas), 'canvas has no POST');
   check(!/\bfetch\s*\(/.test(canvas), 'canvas never fetches');
-  check(/Draft a split of this inbox/.test(canvas), 'launcher names the inbox');
+  check(/Draft a split \(nothing is sent\)…/.test(canvas), 'launcher names the inbox and says nothing is sent');
   check(/Nothing is written\. Opens a planning board\./.test(canvas), 'launcher title is fail-closed');
   check(/ms-qac-overlay/.test(canvas) && /ms-qac-launch/.test(canvas), 'overlay and launcher use qac ids');
   check(/Write not captured for this queue yet/.test(canvas), 'write-closed copy is on the canvas');

@@ -2787,7 +2787,7 @@
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Draft a split of this inbox…';
+    var launchLabel = 'Draft a split (nothing is sent)…';
     var launchTitle = 'Nothing is written. Opens a planning board.';
     if (!launch) {
       launch = document.createElement('button');
