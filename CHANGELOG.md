@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.11] — 2026-09-08
+
+### Signing Queue — turn soft flags on from the page
+
+The Options checkbox wrote `suite.signing.softFlags`, but Signing Queue only
+read that key at init or Refresh. An already-open Signing tab kept the pack
+off, so QOF-review badges and the Flagged filter never appeared.
+
+- **Show monitoring & QOF review flags** now sits on the Signing Queue next to
+  Routine / Non-routine. It writes the same key and re-runs the pass.
+- Signing Queue and Options stay in sync over `chrome.storage.onChanged`.
+- Monitoring chips stay always-on. Pack still defaults off.
+
 ## [v3.261.10] — 2026-09-08
 
 ### Signing Queue — soft QOF-review look-twice (Option A)
