@@ -134,6 +134,7 @@ console.log('\n--- real API shape: structured medicationIssueHistory startDate i
   };
   const meds = normalisers.normaliseMedications(rawRegimen);
   check(meds.length === 1 && meds[0].startDate === '2021-11-01', `startDate parsed as earliest issue (got ${meds[0] && meds[0].startDate})`);
+  check(meds[0].lastIssueDate === '2022-02-20', `lastIssueDate parsed as latest issue (got ${meds[0] && meds[0].lastIssueDate})`);
 
   const chips = engine.evaluatePatient(meds, [ue('2022-02-23')], [aceArb], { now: NOW });
   const chip = chips.find((c) => c.ruleId === 'ace-arb');
