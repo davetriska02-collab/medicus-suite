@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Slots refresh — visual exploration</title>
+    <link rel="stylesheet" href="../../../side-panel/panel.css" />
+    <link rel="stylesheet" href="../../../side-panel/modules/slots/slots.css" />
+    <link rel="stylesheet" href="../../../side-panel/modules/shared/first-available.css" />
+    <link rel="stylesheet" href="looks/_shared.css" />
+    <link id="lookSheet" rel="stylesheet" href="looks/baseline.css" />
+  </head>
+  <body>
+    <div class="look-banner" id="lookBanner">Baseline — current Slots</div>
+    <nav class="look-switcher" id="lookSwitcher" aria-label="Look switcher">
+      <a href="?look=baseline">Baseline</a>
+      <a href="?look=a">A Swiss</a>
+      <a href="?look=b">B Dense</a>
+      <a href="?look=c">C Soft</a>
+      <a href="?look=d">D Dark</a>
+      <a href="?look=e">E Ledger</a>
+    </nav>
+
+    <div class="panel-frame">
+      <div class="suite-shell">
+        <nav class="suite-nav" id="suiteNav">
+          <div class="nav-brand">
+            <img class="nav-logo" src="../../../icons/icon-16.png" alt="" width="16" height="16" />
+            <span class="nav-name">Medicus Suite</span>
+          </div>
+          <div class="nav-tabs">
+            <button class="nav-tab" type="button" aria-label="Today">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+              <span>Today</span>
+            </button>
+            <button class="nav-tab active" type="button" aria-label="Slot Counter">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span>Slots</span>
+            </button>
+            <button class="nav-tab" type="button" aria-label="Monitoring">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+              <span>Monitoring</span>
+            </button>
+          </div>
+          <div class="nav-actions">
+            <button class="icon-btn" type="button" title="All tabs" aria-label="All tabs">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+            </button>
+            <button class="icon-btn" type="button" title="Help" aria-label="Help">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </button>
+          </div>
+        </nav>
+
+        <main class="suite-content" id="suiteContent">
+          <div class="module-wrap slots-module">
+            <div class="mod-header">
+              <div>
+                <div class="mod-eyebrow">Appointment Book · Today</div>
+              </div>
+            </div>
+            <div class="date-presets">
+              <button class="preset-btn active" type="button">Today</button>
+              <button class="preset-btn" type="button">Next working day</button>
+              <input type="date" id="slotsDate" value="2026-09-08" max="2099-12-31" class="date-input" />
+              <button class="ghost-btn date-refresh-btn" id="refreshSlots" title="Refresh" type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              </button>
+              <button class="ghost-btn" id="slotsCsvBtn" type="button">&#x2193; CSV</button>
+              <button class="ghost-btn date-refresh-btn has-alert-rules" id="slotsAlertToggle" aria-expanded="false" title="Alert thresholds" type="button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+              </button>
+            </div>
+
+            <div id="slotsBanner" class="banner hidden"></div>
+
+            <div class="slots-alert-ribbon slots-alert-ribbon-amber">
+              <span class="slots-alert-icon">
+                <span aria-label="Warning">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                </span>
+              </span>
+              <div class="slots-alert-items">
+                <div class="slots-alert-item">Telephone: <span class="slots-alert-count">3</span> slots remaining</div>
+              </div>
+              <button class="slots-ribbon-link" id="slotsRibbonEdit" type="button">Edit thresholds</button>
+            </div>
+
+            <div class="slots-hero-card slots-hero-card--amber">
+              <div class="slots-hero-main">
+                <div class="slots-count-hero">47</div>
+                <div class="slots-hero-right">
+                  <div class="slots-count-label amber">Free slots remaining today</div>
+                  <div class="slots-ampm-split">
+                    <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">28</span></span>
+                    <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">19</span></span>
+                  </div>
+                  <div class="slots-hero-asat">practice-wide · as at 08:14</div>
+                </div>
+              </div>
+              <div class="slots-pill-row" id="pillRow" aria-live="polite">
+                <span class="slot-pill" data-pill-type="Routine GP" title="Routine GP — 11 am · 7 pm" aria-label="Routine GP, 18 slots">
+                  <span class="slot-pill-dot" aria-hidden="true"></span>
+                  <span class="slot-pill-name">Routine GP</span>
+                  <span class="slot-pill-num">18</span>
+                </span>
+                <span class="slot-pill" data-pill-type="Acute" title="Acute — 8 am · 4 pm" aria-label="Acute, 12 slots">
+                  <span class="slot-pill-dot" aria-hidden="true"></span>
+                  <span class="slot-pill-name">Acute</span>
+                  <span class="slot-pill-num">12</span>
+                </span>
+                <span class="slot-pill" data-pill-type="Medication review" title="Medication review — 5 am · 3 pm" aria-label="Medication review, 8 slots">
+                  <span class="slot-pill-dot" aria-hidden="true"></span>
+                  <span class="slot-pill-name">Medication review</span>
+                  <span class="slot-pill-num">8</span>
+                </span>
+                <span class="slot-pill" data-pill-type="Practice nurse" title="Practice nurse — 3 am · 3 pm" aria-label="Practice nurse, 6 slots">
+                  <span class="slot-pill-dot" aria-hidden="true"></span>
+                  <span class="slot-pill-name">Practice nurse</span>
+                  <span class="slot-pill-num">6</span>
+                </span>
+                <span class="slot-pill pill-amber" data-pill-type="Telephone" title="Telephone — 1 am · 2 pm · below alert threshold" aria-label="Telephone, 3 slots">
+                  <span class="slot-pill-dot" aria-hidden="true"></span>
+                  <span class="slot-pill-name">Telephone</span>
+                  <span class="slot-pill-num">3</span>
+                </span>
+                <button class="pill-organise-btn" id="pillOrganiseBtn" title="Organise pills" aria-pressed="false" type="button">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <section class="slots-section">
+              <details class="slot-types-details" open>
+                <summary class="slot-types-summary section-label"><span>By type — include/exclude &amp; am/pm detail</span></summary>
+                <div class="slot-list">
+                  <div class="slot-row">
+                    <span class="slot-share" style="width:38%" aria-hidden="true"></span>
+                    <label class="slot-label">
+                      <input type="checkbox" class="type-toggle" checked />
+                      <span class="slot-type">Routine GP</span>
+                    </label>
+                    <span class="slot-count-group" title="38% of visible total">
+                      <span class="slot-count-ampm" title="Morning">11<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="slot-count-ampm" title="Afternoon">7<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-total">18</span>
+                    </span>
+                  </div>
+                  <div class="slot-row">
+                    <span class="slot-share" style="width:26%" aria-hidden="true"></span>
+                    <label class="slot-label">
+                      <input type="checkbox" class="type-toggle" checked />
+                      <span class="slot-type">Acute</span>
+                    </label>
+                    <span class="slot-count-group" title="26% of visible total">
+                      <span class="slot-count-ampm" title="Morning">8<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="slot-count-ampm" title="Afternoon">4<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-total">12</span>
+                    </span>
+                  </div>
+                  <div class="slot-row">
+                    <span class="slot-share" style="width:17%" aria-hidden="true"></span>
+                    <label class="slot-label">
+                      <input type="checkbox" class="type-toggle" checked />
+                      <span class="slot-type">Medication review</span>
+                    </label>
+                    <span class="slot-count-group" title="17% of visible total">
+                      <span class="slot-count-ampm" title="Morning">5<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="slot-count-ampm" title="Afternoon">3<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-total">8</span>
+                    </span>
+                  </div>
+                  <div class="slot-row">
+                    <span class="slot-share" style="width:13%" aria-hidden="true"></span>
+                    <label class="slot-label">
+                      <input type="checkbox" class="type-toggle" checked />
+                      <span class="slot-type">Practice nurse</span>
+                    </label>
+                    <span class="slot-count-group" title="13% of visible total">
+                      <span class="slot-count-ampm" title="Morning">3<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="slot-count-ampm" title="Afternoon">3<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-total">6</span>
+                    </span>
+                  </div>
+                  <div class="slot-row">
+                    <span class="slot-share" style="width:6%" aria-hidden="true"></span>
+                    <label class="slot-label">
+                      <input type="checkbox" class="type-toggle" checked />
+                      <span class="slot-type">Telephone</span>
+                    </label>
+                    <span class="slot-count-group" title="6% of visible total">
+                      <span class="slot-count-ampm" title="Morning">1<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="slot-count-ampm" title="Afternoon">2<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-total">3</span>
+                    </span>
+                  </div>
+                  <button class="excluded-toggle" id="excludedToggle" type="button">
+                    <span>▸</span>
+                    <span>1 excluded type</span>
+                  </button>
+                </div>
+                <div class="section-hint">Untick a type to exclude it from the total.</div>
+              </details>
+            </section>
+
+            <section class="slots-section">
+              <div class="section-label">By clinician</div>
+              <div class="staff-list">
+                <div class="staff-row">
+                  <button class="staff-toggle" type="button" title="30% of visible total · AM 9 · PM 5" aria-label="Dr A. Chen — 30% of visible total">
+                    <span class="staff-share" style="width:30%" aria-hidden="true"></span>
+                    <span class="staff-split" aria-hidden="true"><span class="split-am" style="width:64%"></span><span class="split-pm" style="width:36%"></span></span>
+                    <span class="staff-chevron">▸</span>
+                    <span class="staff-name">Dr A. Chen</span>
+                    <span class="staff-count-mini">
+                      <span title="Morning">9<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span title="Afternoon">5<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="staff-count">14</span>
+                    </span>
+                  </button>
+                </div>
+                <div class="staff-row">
+                  <button class="staff-toggle" type="button" title="23% of visible total · AM 7 · PM 4" aria-label="Dr R. Patel — 23% of visible total">
+                    <span class="staff-share" style="width:23%" aria-hidden="true"></span>
+                    <span class="staff-split" aria-hidden="true"><span class="split-am" style="width:64%"></span><span class="split-pm" style="width:36%"></span></span>
+                    <span class="staff-chevron">▾</span>
+                    <span class="staff-name">Dr R. Patel</span>
+                    <span class="staff-count-mini">
+                      <span title="Morning">7<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span title="Afternoon">4<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="staff-count">11</span>
+                    </span>
+                  </button>
+                  <div class="staff-detail">
+                    <div class="staff-type-row">
+                      <span>Routine GP</span>
+                      <span class="staff-type-counts">
+                        <span>4<span class="ampm-tag-inline">am</span></span>
+                        <span class="slot-count-sep">·</span>
+                        <span>3<span class="ampm-tag-inline">pm</span></span>
+                        <span class="slot-count-sep">·</span>
+                        <span class="staff-type-total">7</span>
+                      </span>
+                    </div>
+                    <div class="staff-type-row">
+                      <span>Acute</span>
+                      <span class="staff-type-counts">
+                        <span>2<span class="ampm-tag-inline">am</span></span>
+                        <span class="slot-count-sep">·</span>
+                        <span>1<span class="ampm-tag-inline">pm</span></span>
+                        <span class="slot-count-sep">·</span>
+                        <span class="staff-type-total">3</span>
+                      </span>
+                    </div>
+                    <div class="staff-type-row">
+                      <span>Telephone</span>
+                      <span class="staff-type-counts">
+                        <span>1<span class="ampm-tag-inline">am</span></span>
+                        <span class="slot-count-sep">·</span>
+                        <span>0<span class="ampm-tag-inline">pm</span></span>
+                        <span class="slot-count-sep">·</span>
+                        <span class="staff-type-total">1</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div class="staff-row">
+                  <button class="staff-toggle" type="button" title="19% of visible total · AM 6 · PM 3" aria-label="Dr S. Okonkwo — 19% of visible total">
+                    <span class="staff-share" style="width:19%" aria-hidden="true"></span>
+                    <span class="staff-split" aria-hidden="true"><span class="split-am" style="width:67%"></span><span class="split-pm" style="width:33%"></span></span>
+                    <span class="staff-chevron">▸</span>
+                    <span class="staff-name">Dr S. Okonkwo</span>
+                    <span class="staff-count-mini">
+                      <span title="Morning">6<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span title="Afternoon">3<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="staff-count">9</span>
+                    </span>
+                  </button>
+                </div>
+                <div class="staff-row">
+                  <button class="staff-toggle" type="button" title="17% of visible total · AM 4 · PM 4" aria-label="ANP J. Walsh — 17% of visible total">
+                    <span class="staff-share" style="width:17%" aria-hidden="true"></span>
+                    <span class="staff-split" aria-hidden="true"><span class="split-am" style="width:50%"></span><span class="split-pm" style="width:50%"></span></span>
+                    <span class="staff-chevron">▸</span>
+                    <span class="staff-name">ANP J. Walsh</span>
+                    <span class="staff-count-mini">
+                      <span title="Morning">4<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span title="Afternoon">4<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="staff-count">8</span>
+                    </span>
+                  </button>
+                </div>
+                <div class="staff-row">
+                  <button class="staff-toggle" type="button" title="11% of visible total · AM 2 · PM 3" aria-label="Nurse M. Reid — 11% of visible total">
+                    <span class="staff-share" style="width:11%" aria-hidden="true"></span>
+                    <span class="staff-split" aria-hidden="true"><span class="split-am" style="width:40%"></span><span class="split-pm" style="width:60%"></span></span>
+                    <span class="staff-chevron">▸</span>
+                    <span class="staff-name">Nurse M. Reid</span>
+                    <span class="staff-count-mini">
+                      <span title="Morning">2<span class="ampm-tag-inline">am</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span title="Afternoon">3<span class="ampm-tag-inline">pm</span></span>
+                      <span class="slot-count-sep">·</span>
+                      <span class="staff-count">5</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="slots-section" id="faMount">
+              <button type="button" class="fa-toggle-row" id="faToggle" aria-expanded="false">
+                <span class="fa-toggle-chevron" aria-hidden="true">▸</span>
+                <span class="fa-toggle-text">First available appointment</span>
+                <span class="fa-toggle-badge">3 favs</span>
+              </button>
+            </section>
+
+            <section class="slots-section bk-section">
+              <button class="bk-toggle-row" id="bkToggle" aria-expanded="false" type="button">
+                <span class="bk-toggle-chevron" aria-hidden="true">▸</span>
+                <span class="bk-toggle-text">Book appointment for patient</span>
+              </button>
+            </section>
+
+            <div class="foot">
+              <span class="freshness-stamp" title="Last updated at 08:14:18">Updated · 42s ago</span>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script src="fixture.js"></script>
+  </body>
+</html>

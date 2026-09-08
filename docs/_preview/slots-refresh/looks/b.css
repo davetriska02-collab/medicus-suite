@@ -1,0 +1,241 @@
+/* Option B — Dense clinical dashboard. Data first. Tight. Grid. */
+
+:root {
+  --bg-deep: #eef1f4;
+  --bg-mid: #e6eaee;
+  --bg-elev: #ffffff;
+  --bg-hover: #e8eef6;
+  --border: #c5ced8;
+  --border-hi: #8b97a5;
+  --text-1: #0b1220;
+  --text-2: #1a2740;
+  --text-3: #3d4d63;
+  --text-4: #5a6b80;
+  --text-5: #6d7d90;
+  --accent: #1d4ed8;
+  --accent-hover: #1e40af;
+  --accent-dim: rgba(29, 78, 216, 0.08);
+  --accent-line: rgba(29, 78, 216, 0.35);
+  --green: #047857;
+  --green-dim: rgba(4, 120, 87, 0.08);
+  --green-line: rgba(4, 120, 87, 0.3);
+  --amber: #b45309;
+  --amber-dim: #fff7ed;
+  --amber-line: #f59e0b;
+  --red: #b91c1c;
+  --red-dim: #fef2f2;
+  --red-line: #ef4444;
+  --r-sm: 2px;
+  --r-md: 2px;
+  --r-lg: 2px;
+  --r-pill: 2px;
+  --shadow-1: none;
+  --shadow-2: none;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+.suite-nav {
+  height: 36px;
+  background: #d9e0e8;
+  padding: 0 6px;
+}
+
+.nav-tab {
+  padding: 3px 7px;
+  font-size: 9px;
+}
+
+.module-wrap {
+  padding: 8px 8px 12px;
+}
+
+.mod-header {
+  margin-bottom: 6px;
+}
+
+.mod-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.date-presets {
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.preset-btn,
+.date-input,
+.ghost-btn,
+.date-refresh-btn {
+  padding: 2px 6px;
+  height: 22px;
+  font-size: 8px;
+  border-radius: 2px;
+}
+
+.slots-alert-ribbon {
+  padding: 4px 6px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  font-size: 10px;
+  gap: 4px;
+}
+
+.slots-hero-card {
+  padding: 6px 8px 6px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.slots-hero-main {
+  gap: 10px;
+}
+
+.slots-count-hero {
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.slots-hero-right {
+  gap: 2px;
+}
+
+.slots-count-label {
+  font-size: 10px;
+}
+
+.ampm-chip {
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+.ampm-num {
+  font-size: 11px;
+}
+
+.slots-hero-asat {
+  margin-top: 0;
+  font-size: 8px;
+}
+
+.slots-pill-row {
+  gap: 3px;
+  margin-top: 6px;
+  padding-top: 5px;
+}
+
+.slot-pill {
+  padding: 1px 5px 1px 4px;
+  gap: 4px;
+  border-radius: 2px;
+}
+
+.slot-pill-name {
+  font-size: 10px;
+}
+
+.slot-pill-num {
+  font-size: 11px;
+}
+
+.slot-pill-dot {
+  width: 5px;
+  height: 5px;
+}
+
+.slots-section {
+  margin-bottom: 8px;
+}
+
+.section-label,
+.slot-types-summary {
+  font-size: 10px;
+  font-weight: 700;
+  margin-bottom: 3px;
+  padding-bottom: 2px;
+}
+
+.slot-list,
+.staff-list {
+  gap: 0;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+
+.slot-row,
+.staff-toggle {
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  padding: 2px 6px;
+  background: transparent;
+}
+
+.slot-row:last-child,
+.staff-row:last-child .staff-toggle {
+  border-bottom: none;
+}
+
+.slot-type,
+.staff-name {
+  font-size: 10px;
+}
+
+.slot-count-group,
+.staff-count-mini {
+  font-size: 10px;
+  gap: 2px;
+}
+
+.slot-count-total,
+.staff-count {
+  font-size: 11px;
+  min-width: 22px;
+  margin-left: 4px;
+}
+
+.staff-detail {
+  padding: 2px 6px 3px 18px;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+}
+
+.staff-type-row {
+  font-size: 9px;
+  padding: 1px 0;
+}
+
+.excluded-toggle {
+  padding: 2px 6px;
+  font-size: 9px;
+  margin: 0;
+  border-radius: 0;
+  border-top: 1px dashed var(--border);
+}
+
+.section-hint {
+  font-size: 9px;
+  margin-top: 2px;
+}
+
+.fa-toggle-row,
+.bk-toggle-row {
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  border-radius: 2px;
+  font-size: 10px;
+}
+
+.foot {
+  margin-top: 6px;
+  font-size: 8px;
+}
+
+.pill-organise-btn {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 4px;
+}
