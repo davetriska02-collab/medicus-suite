@@ -489,25 +489,25 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
 
   const NOW = Date.parse('2026-09-07T12:00:00Z');
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === 'Here now',
-    'native <1 min is Here now only (no seen-here yet)'
+    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === 'On it now',
+    'native <1 min is On it now only (no seen-here yet)'
   );
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === 'Here now · seen here 3 min',
+    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === 'On it now · seen here 3 min',
     'native dwell is counted from when this tab noticed them'
   );
   check(
     !/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
     'native note never says Opened'
   );
-  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'Here now', 'store just-now -> Here now');
+  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'On it now', 'store just-now -> On it now');
   check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen, not Opened');
 
   const inner = occupiedInnerHtml(
     [{ label: 'Aisha Malik', initials: 'AM', hue: '#047857', native: true, openedAtMs: NOW }],
     NOW
   );
-  check(/Here now/.test(inner) && !/>Live</.test(inner), 'strip HTML visible word is Here now, not LIVE');
+  check(/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML visible word is On it now, not LIVE');
   check(/class="ms-tp-live"/.test(inner), 'pulse pip class stays ms-tp-live');
   check(
     inner.indexOf('They have it open. You can still work it.') >= 0,
@@ -517,6 +517,7 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     inner.indexOf(occupancyHideHint()) >= 0 && /aria-label="/.test(inner) && /title="/.test(inner),
     'Hide button has title and aria-label'
   );
+  check(/>Hide for now</.test(inner), 'Hide button visible label is Hide for now');
   check(!/ms-tp-hide"[^>]*tabindex="-1"/.test(inner), 'Hide button is not removed from tab order');
   check(
     occupiedInnerHtml([{ label: 'A colleague', initials: '?', native: true, openedAtMs: NOW }], NOW).indexOf(

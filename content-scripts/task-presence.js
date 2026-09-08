@@ -549,12 +549,12 @@
     if (native) {
       var seenAt = others[0].openedAtMs;
       var mins = Math.floor((nowMs - seenAt) / 60000);
-      if (!isFinite(mins) || mins < 1) return 'Here now';
-      return 'Here now · seen here ' + mins + ' min';
+      if (!isFinite(mins) || mins < 1) return 'On it now';
+      return 'On it now · seen here ' + mins + ' min';
     }
     var opened = others[0].openedAtMs;
     var ago = minutesAgoText(typeof opened === 'number' ? opened : nowMs, nowMs);
-    return ago === 'just now' ? 'Here now' : 'Seen ' + ago;
+    return ago === 'just now' ? 'On it now' : 'Seen ' + ago;
   }
 
   function sanitizeSelfExtras(detail, myStaffId, expectedTaskUuid) {
@@ -1082,15 +1082,15 @@
       if (others[ni] && others[ni].native) nativeLive = true;
     }
     var seenExtra = '';
-    if (nativeLive && /^Here now\s*·\s*/i.test(recency)) {
-      seenExtra = recency.replace(/^Here now\s*·\s*/i, '');
+    if (nativeLive && /^On it now\s*·\s*/i.test(recency)) {
+      seenExtra = recency.replace(/^On it now\s*·\s*/i, '');
     }
     var recencyHtml;
     if (nativeLive) {
       recencyHtml =
         '<span class="ms-tp-recency">' +
         '<span class="ms-tp-live" aria-hidden="true"></span>' +
-        '<span class="ms-tp-recency-live">Here now</span>' +
+        '<span class="ms-tp-recency-live">On it now</span>' +
         (seenExtra ? '<span class="ms-tp-seen"> · ' + esc(seenExtra) + '</span>' : '') +
         '</span>';
     } else {
@@ -1115,7 +1115,7 @@
       esc(hideHint) +
       '" aria-label="' +
       esc(hideHint) +
-      '">Hide</button>' +
+      '">Hide for now</button>' +
       '</span>'
     );
   }
