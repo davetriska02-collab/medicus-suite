@@ -41,9 +41,16 @@ honest limits — see [`docs/VISION.md`](docs/VISION.md).
 
 From v1.3.1 the extension checks this repository once a day for new releases.
 When a newer version is published, a banner appears in the Options page with
-a link to the release page. Download the new zip and replace the unzipped
-folder on disk, then click the refresh icon on the extension card in
-`chrome://extensions`.
+a link to the release page.
+
+**Practice gold copy:** drop the new zip on the share. Each PC that has
+connected both folders (Options → Backup & Restore → Automatic updates)
+copies the files itself and reloads when idle. Nobody reopens
+`chrome://extensions` after the first Load unpacked. See
+[`docs/PRACTICE-ROLLOUT.md`](docs/PRACTICE-ROLLOUT.md).
+
+A lone local install can still replace the unzipped folder on disk and
+click the refresh icon on the extension card.
 
 ## Cutting a release
 

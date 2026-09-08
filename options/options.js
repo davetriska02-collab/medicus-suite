@@ -618,6 +618,166 @@ presenceForgetFolderBtn?.addEventListener('click', async () => {
   }
 });
 
+// ── Gold-copy → local-clone sync (practice rollout) ─────────────────────────
+// Picker + re-allow live here (user gesture). The service worker does the copy.
+
+(function initGoldSyncSection() {
+  const statusEl = document.getElementById('ppGoldSyncStatus');
+  const goldBtn = document.getElementById('ppGoldPickBtn');
+  const usePresenceBtn = document.getElementById('ppGoldUsePresenceBtn');
+  const localBtn = document.getElementById('ppLocalPickBtn');
+  const syncBtn = document.getElementById('ppGoldSyncNowBtn');
+  const reallowBtn = document.getElementById('ppGoldReallowBtn');
+  if (!statusEl || typeof GoldSync === 'undefined') return;
+
+  function paintStatus(s, extra) {
+    if (!s) {
+      statusEl.textContent = extra || 'status unavailable';
+      statusEl.style.color = 'var(--amber)';
+      return;
+    }
+    const goldBit = s.gold
+      ? `gold "${s.gold.name}" (${s.gold.permission})`
+      : 'gold not connected';
+    const localBit = s.local
+      ? `this PC "${s.local.name}" (${s.local.permission})`
+      : 'this PC not connected';
+    const verBit = `running v${s.runningVersion || '?'}` +
+      (s.goldVersion ? ` · gold v${s.goldVersion}` : '') +
+      (s.localVersion ? ` · local v${s.localVersion}` : '');
+    const last = s.meta && s.meta.lastAt
+      ? ` · last sync ${new Date(s.meta.lastAt).toLocaleString()}` +
+        (s.meta.lastOk ? ` (${s.meta.lastCopied || 0} files)` : ` failed (${s.meta.lastReason || 'error'})`)
+      : '';
+    let line = `${goldBit} · ${localBit} · ${verBit}${last}`;
+    let color = 'var(--text-3)';
+    if (s.sameFolder) {
+      line = 'Gold and this-PC folders are the same path. Pick the local clone, not the share.';
+      color = 'var(--amber)';
+    } else if (s.configured && s.gold?.permission === 'granted' && s.local?.permission === 'granted') {
+      color = 'var(--green)';
+    } else if (s.gold || s.local) {
+      color = 'var(--amber)';
+    }
+    if (extra) line += ` · ${extra}`;
+    statusEl.textContent = line;
+    statusEl.style.color = color;
+    const needReallow =
+      (s.gold && s.gold.permission !== 'granted') || (s.local && s.local.permission !== 'granted');
+    if (reallowBtn) reallowBtn.style.display = needReallow ? '' : 'none';
+  }
+
+  async function refresh(extra) {
+    try {
+      const s = await chrome.runtime.sendMessage({ action: 'goldSync:status' });
+      paintStatus(s, extra);
+      return s;
+    } catch (e) {
+      paintStatus(null, extra || e.message);
+      return null;
+    }
+  }
+
+  goldBtn?.addEventListener('click', async () => {
+    if (typeof window.showDirectoryPicker !== 'function') {
+      alert('Folder access is not available in this browser.');
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'read', id: 'ms-gold' });
+      const ver = await GoldSync.readManifestVersion(handle);
+      if (!ver) {
+        alert('That folder has no manifest.json. Pick the Medicus Suite gold copy (the share folder that contains manifest.json).');
+        return;
+      }
+      await GoldSync.saveGold(handle);
+      await refresh('gold folder saved');
+    } catch (e) {
+      if (e && e.name !== 'AbortError') console.warn('[Gold sync pick gold]', e.message);
+    }
+  });
+
+  usePresenceBtn?.addEventListener('click', async () => {
+    if (typeof PresenceFolder === 'undefined') {
+      alert('Task Presence is not available in this page.');
+      return;
+    }
+    try {
+      const handle = await PresenceFolder.loadHandle();
+      if (!handle) {
+        alert('Task Presence has no folder yet. Choose the gold folder directly, or connect Task Presence first.');
+        return;
+      }
+      const perm = await handle.requestPermission({ mode: 'read' });
+      if (perm !== 'granted') return;
+      const ver = await GoldSync.readManifestVersion(handle);
+      if (!ver) {
+        alert('The Task Presence folder has no manifest.json. Pick the gold copy that contains the suite files.');
+        return;
+      }
+      await GoldSync.saveGold(handle);
+      await refresh('using Task Presence folder as gold');
+    } catch (e) {
+      if (e && e.name !== 'AbortError') console.warn('[Gold sync use presence]', e.message);
+    }
+  });
+
+  localBtn?.addEventListener('click', async () => {
+    if (typeof window.showDirectoryPicker !== 'function') {
+      alert('Folder access is not available in this browser.');
+      return;
+    }
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'ms-local' });
+      const ver = await GoldSync.readManifestVersion(handle);
+      if (!ver) {
+        alert(
+          'That folder has no manifest.json. Run copy-to-this-pc.cmd first, then pick %LOCALAPPDATA%\\MedicusSuite.'
+        );
+        return;
+      }
+      await GoldSync.saveLocal(handle);
+      await refresh('this PC folder saved');
+    } catch (e) {
+      if (e && e.name !== 'AbortError') console.warn('[Gold sync pick local]', e.message);
+    }
+  });
+
+  reallowBtn?.addEventListener('click', async () => {
+    try {
+      const gold = await GoldSync.loadGold();
+      const local = await GoldSync.loadLocal();
+      if (gold) await gold.requestPermission({ mode: 'read' });
+      if (local) await local.requestPermission({ mode: 'readwrite' });
+      await refresh('access re-allowed');
+    } catch (e) {
+      console.warn('[Gold sync re-allow]', e.message);
+    }
+  });
+
+  syncBtn?.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    try {
+      const result = await chrome.runtime.sendMessage({ action: 'goldSync:run' });
+      if (result && result.ok) {
+        await refresh(
+          result.mode === 'full'
+            ? `copied ${result.copied} files (v${result.goldVersion}) — reload when idle`
+            : `profile files checked (${result.copied} updated)`
+        );
+      } else {
+        await refresh(result && result.reason ? result.reason : 'sync failed');
+      }
+    } catch (e) {
+      await refresh(e.message);
+    } finally {
+      syncBtn.disabled = false;
+    }
+  });
+
+  refresh();
+})();
+
 savePresenceBtn?.addEventListener('click', async () => {
   const url = (presenceUrlInput?.value || '').trim().replace(/\/+$/, '');
   // Same gate the content script applies (validPresenceConfig): https on

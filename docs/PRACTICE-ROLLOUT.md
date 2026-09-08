@@ -6,25 +6,43 @@ install (Pete's case: loaded from a mapped / Y: / "wide" drive, then Chrome
 or Edge dropped it on reboot) and for whoever then copies it onto the rest
 of the PCs.
 
-## Pete is right
+## Why it works on your drive (and not Pete's)
 
-**Load unpacked from a folder on this PC. Do not Load unpacked from the
-practice share.**
+A local disk — C:, `D:\`, `%LOCALAPPDATA%`, a laptop folder you never
+unmap — is already there when Chrome or Edge starts. The browser re-reads
+the unpacked folder at launch, finds `manifest.json`, and keeps the
+extension. That is why a home PC or a surgery PC that Load-unpacked from
+its own disk stays stable across restart.
 
-Chrome and Edge re-check the unpacked folder when they start. A mapped
-network drive is often not mounted yet at that moment (or is briefly
-offline). The browser then treats the extension as gone: the icon
-disappears, Developer mode still looks on, and nothing in Medicus is
-decorated. That is a silent failure of every safety surface (H-005), not a
-cosmetic glitch.
+Pete's Y: / wide / practice share is a **mapped network drive**. Windows
+often maps it *after* the browser has already started (especially if Edge
+is in the startup list). The folder looks missing for a few seconds, and
+Chrome/Edge drop the unpacked extension. Developer mode can still look on.
+The next launch does not put it back.
 
-IT policy can make the same symptom worse (Developer mode reset, unpacked
-extensions blocked). Check that second if a **local** copy still vanishes.
-The first fix is still: move the Load-unpacked path off the share.
+Same suite. Different path. The share is not "wrong" — it is the wrong
+place to **Load unpacked** from.
 
-The share is still useful. It is the **gold copy** and the home of
-`practice-profile.json`, presence, and Knowledge. It is not the folder the
-browser should load from.
+IT policy (Developer mode reset, allowlists) is a second, separate reason
+it can vanish. Check that only after a **local** copy still drops.
+
+The share stays the **gold copy**: `practice-profile.json`, presence,
+Knowledge, and new zips. It is not the folder the browser should load from.
+
+## Updates without walking every desk
+
+Load unpacked is **once per PC**. After that, connect the gold folder and
+this PC's folder in Options → Backup & Restore → **Automatic updates from
+the gold copy** (or click **Use Task Presence folder** if presence already
+points at the gold copy). The service worker copies newer files every 15
+minutes and on browser start, then reloads when the PC is idle — the same
+polite reload the suite already used when everyone loaded from the share.
+
+Staff do not open `edge://extensions` on each release. An admin drops the
+new zip on the gold copy; each connected PC pulls it.
+
+`copy-to-this-pc.cmd` is still the first-time (or emergency) copy, and
+still works as a login script if you want a belt-and-braces refresh.
 
 ## The two folders
 
@@ -59,6 +77,9 @@ to land.
    the share / Y: / `\\server\...`. Leave only the local one.
 8. Restart the PC. Open Edge/Chrome. The suite should still be there. If it
    is gone, skip to [If it still drops](#if-it-still-drops--it-policy).
+9. Options → Backup & Restore → **Choose gold folder** (the share) and
+   **Choose this PC's folder** (`%LOCALAPPDATA%\MedicusSuite`). Allow on
+   every visit. Click **Sync now** once to prove it.
 
 Pin the icon. Open a Medicus tab and confirm the side panel comes back.
 
@@ -72,12 +93,14 @@ Do this once per PC. About two minutes after the first one.
 3. Pin the icon. Open Options once so the practice code can auto-detect
    from a Medicus tab.
 4. **Do not** Load unpacked from the share on these PCs either.
+5. Connect gold + this-PC folders (or Use Task Presence folder + pick local).
+   That is the last time that person touches extensions settings.
 
 Practice settings (rules, Knowledge, module defaults) do **not** require
 everyone to load from the share. Publish them with **Options → Backup &
 Restore → Publish to shared folder** onto the gold copy's
-`practice-profile.json`. After each PC's next `copy-to-this-pc` (or login
-script), the 15-minute apply and the idle code-reload pick the new file up.
+`practice-profile.json`. Connected PCs copy that file on the next start or
+within about 15 minutes.
 
 Task presence: Options → Task Presence → **Choose folder…** and pick the
 **gold copy** (the share). That grant is File System Access, not the

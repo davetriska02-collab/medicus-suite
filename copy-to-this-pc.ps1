@@ -94,9 +94,10 @@ Write-Info "       $Dest"
 Write-Info "  5. If you exported in step 1, Import the backup."
 Write-Info "  6. Remove the old network-drive install from the extensions list."
 Write-Info ""
-Write-Info "The share stays the gold copy. Re-run this script after a suite update"
-Write-Info "(or as a login script) so this PC picks up new files. Then Chrome/Edge"
-Write-Info "reload themselves when idle."
+Write-Info "Then, once: Options → Backup & Restore → Choose gold folder (the share)"
+Write-Info "and Choose this PC's folder (the path above). After that, updates copy"
+Write-Info "themselves — you do not Load unpacked again. Re-run this script only"
+Write-Info "if auto-sync is not connected, or as a login-script backstop."
 Write-Info ""
 
 exit 0

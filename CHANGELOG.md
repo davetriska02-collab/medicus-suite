@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.5] — 2026-09-08
+
+### Automatic updates from the gold copy
+
+A local drive stays loaded because the folder is already on disk when
+Chrome or Edge starts. The share is still the right place for the gold
+copy — it was the per-person Load unpacked on every zip that hurt.
+
+Once each PC has Load-unpacked from `%LOCALAPPDATA%\MedicusSuite` and
+connected both folders (Options → Backup & Restore → Automatic updates,
+or Use Task Presence folder + pick local), the service worker copies
+newer gold files every 15 minutes and on browser start. Same-version
+publishes only refresh `practice-profile.json` / `presence-config.json`.
+A new suite version copies the tree (manifest last) and the existing
+idle reload fires. Nobody reopens `edge://extensions`.
+
+`ms-presence` is never copied onto the local clone — presence stays on
+the share. Gold and local being the same path is refused.
+
 ## [v3.261.4] — 2026-09-08
 
 ### Practice rollout — load unpacked from this PC, not the share

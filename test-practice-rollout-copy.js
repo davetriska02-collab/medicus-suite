@@ -69,6 +69,19 @@ check(
   optionsHtml.includes('edge://policy') && optionsHtml.includes('DeveloperToolsAvailability'),
   'options guide names IT-policy checks if a local install still drops'
 );
+check(
+  optionsHtml.includes('id="ppGoldSync"') && optionsHtml.includes('Automatic updates from the gold copy'),
+  'options has a gold → local auto-sync card'
+);
+check(
+  optionsHtml.includes('shared/gold-sync.js'),
+  'options page loads shared/gold-sync.js'
+);
+check(
+  /Load unpacked<\/strong>\s*<strong>once<\/strong>|Load unpacked\s+<strong>once<\/strong>/.test(optionsHtml) ||
+    optionsHtml.includes('Load unpacked') && optionsHtml.includes('once</strong> from'),
+  'options warning says Load unpacked is once, not every update'
+);
 
 check(/local disk/i.test(readme) || /LOCALAPPDATA/i.test(readme), 'README install step requires a local disk');
 check(
