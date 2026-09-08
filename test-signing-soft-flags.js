@@ -1,11 +1,5 @@
 // Medicus Suite — Signing Queue soft-flag pack wiring
 // Run with: node test-signing-soft-flags.js
-//
-// v3.261.10 shipped suite.signing.softFlags behind Options only. Dave turned
-// that checkbox on and the Signing Queue chips stayed dead: the module reads
-// the key at init/Refresh and never listens for storage changes, and the
-// Signing page itself has no control. This file fails closed on that wiring
-// and pins the engine path that must fire once the pack is actually on.
 
 'use strict';
 

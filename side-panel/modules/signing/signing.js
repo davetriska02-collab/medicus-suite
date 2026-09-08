@@ -388,7 +388,6 @@ async function loadRules() {
   });
 }
 
-// Practice toggle — absent / anything other than true is OFF (default).
 const SOFT_FLAGS_KEY = 'suite.signing.softFlags';
 
 function loadSoftFlags() {
@@ -428,6 +427,10 @@ function onSoftFlagsStorageChange(changes, area) {
   state.softFlags = next;
   const box = container.querySelector('#sgSoftFlags');
   if (box) box.checked = next;
+  rerunPass();
+}
+
+function rerunPass() {
   _abort = true;
   setTimeout(() => fetchAndRun(), 0);
 }
@@ -481,23 +484,20 @@ function renderShell() {
   `;
 
   container.querySelector('#sgRefreshBtn')?.addEventListener('click', () => {
-    _abort = true; // stop any in-flight pass; fetchAndRun resets it
-    setTimeout(() => fetchAndRun(), 0);
+    rerunPass();
   });
   container.querySelectorAll('.sg-type-toggle input[data-type]').forEach((cb) => {
     cb.addEventListener('change', () => {
       state.types[cb.dataset.type] = cb.checked;
       saveUiState('signing', { types: state.types });
-      _abort = true;
-      setTimeout(() => fetchAndRun(), 0);
+      rerunPass();
     });
   });
   container.querySelector('#sgSoftFlags')?.addEventListener('change', async (e) => {
     const on = e.target.checked === true;
     state.softFlags = on;
     await saveSoftFlags(on);
-    _abort = true;
-    setTimeout(() => fetchAndRun(), 0);
+    rerunPass();
   });
 }
 
