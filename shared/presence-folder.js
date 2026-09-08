@@ -3,8 +3,10 @@
 //
 // THE PRACTICE'S OWN SHARED FOLDER IS THE STORE (user decision 2026-08-04:
 // "the practice extension folder acts as the repository, not sending data off
-// somewhere else"). Practices already mount one shared folder on every
-// machine — the one the unpacked extension loads from — so presence rides it:
+// somewhere else"). Practices already mount one shared gold-copy folder on
+// every machine. Presence rides that share (File System Access), NOT the
+// local Load-unpacked folder — Chrome/Edge drop an unpacked extension that
+// lives on a mapped drive after a restart (see docs/PRACTICE-ROLLOUT.md):
 //
 //   <picked folder>/ms-presence/<site>-<staffId>.json
 //

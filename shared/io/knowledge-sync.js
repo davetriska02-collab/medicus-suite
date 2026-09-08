@@ -5,8 +5,9 @@
 // chrome.storage.local (per browser profile). An upload populated beautifully
 // on one PC and was invisible on every other machine in the same practice,
 // including the same user at home. There is no Medicus org-cloud for this;
-// the existing shared store is practice-profile.json on the shared extension
-// folder (the same channel as published practice rules / settings).
+// the existing shared store is practice-profile.json on the practice gold
+// copy (the same channel as published practice rules / settings). Each PC
+// Load-unpacked from a local clone — see docs/PRACTICE-ROLLOUT.md.
 //
 // Distinct from a full "Publish to shared folder" (options.js doPublish), which
 // curates and overwrites every module an admin opted into. A Knowledge sync
@@ -365,7 +366,7 @@
     if (hasHandle && (result === 'pushed' || result === 'no-change')) {
       return {
         kind: 'shared',
-        text: 'Shared with the practice. Written to the shared folder as practice-profile.json. Colleagues pick this up within about 15 minutes, or on their next browser start.',
+        text: 'Shared with the practice. Written to the gold copy as practice-profile.json. Colleagues pick this up after their next copy-to-this-pc sync, then within about 15 minutes or on their next browser start.',
         action: null,
       };
     }

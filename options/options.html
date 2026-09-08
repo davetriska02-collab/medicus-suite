@@ -2977,6 +2977,29 @@
               </div>
             </div>
 
+            <!-- Install-location warning: unpacked from a network drive is dropped on restart -->
+            <div
+              id="ppInstallWarn"
+              style="
+                border-top: 1px solid var(--amber-line);
+                background: var(--amber-dim);
+                padding: 12px 16px;
+                font-size: 12px;
+                line-height: 1.65;
+                color: var(--text-2);
+              "
+            >
+              <strong style="display: block; color: var(--amber); margin-bottom: 4px"
+                >Do not Load unpacked from a network or Y: drive</strong
+              >
+              Chrome and Edge drop the suite after a restart if the folder is on a share — the drive is often not
+              mounted yet when the browser starts, so every chip and panel vanishes (not a settings glitch). Keep a
+              <strong>gold copy</strong> on the share, then on each PC double-click <code>copy-to-this-pc.cmd</code> and
+              Load unpacked from <code>%LOCALAPPDATA%\MedicusSuite</code>. Export the suite first if you are moving an
+              existing install — a new path is a new install. Full playbook:
+              <code>docs/PRACTICE-ROLLOUT.md</code>.
+            </div>
+
             <!-- Collapsible setup guide -->
             <details style="border-top: 1px solid var(--border)">
               <summary
@@ -2989,7 +3012,7 @@
                   user-select: none;
                 "
               >
-                &#9654; How to set up shared-folder deployment
+                &#9654; How to roll the suite out across the practice
               </summary>
               <div
                 style="
@@ -3001,20 +3024,20 @@
                 "
               >
                 <strong style="display: block; margin-bottom: 6px"
-                  >1. One-time: put the extension on your shared drive</strong
+                  >1. One-time: put the gold copy on your shared drive</strong
                 >
                 <ol style="margin: 0 0 14px; padding-left: 20px">
                   <li>
-                    Copy the entire Medicus Suite extension folder to a shared network location that every PC at the
-                    practice can open — for example <em>S:\Medicus Suite\extension</em>.
+                    Copy the entire Medicus Suite folder to a shared network location that every PC can open — for
+                    example <em>S:\Medicus Suite</em>. This is the gold copy, not the folder the browser loads.
                   </li>
                   <li>
                     The practice manager needs <strong>write access</strong> to that folder. Everyone else only needs to
                     be able to read from it.
                   </li>
                   <li>
-                    Make sure the folder contains <em>manifest.json</em> at its top level — that is the file Edge and
-                    Chrome use to recognise an extension.
+                    Make sure the folder contains <em>manifest.json</em> and <em>copy-to-this-pc.cmd</em> at its top
+                    level.
                   </li>
                 </ol>
 
@@ -3023,20 +3046,30 @@
                 >
                 <ol style="margin: 0 0 14px; padding-left: 20px">
                   <li>
-                    <strong>Edge (NHS default):</strong> Open Edge and type <code>edge://extensions</code> in the
-                    address bar, then press Enter. In the top-right corner, turn on the
-                    <strong>Developer mode</strong> toggle. Click <strong>Load unpacked</strong>. In the window that
-                    opens, navigate to the shared extension folder and click <strong>Select Folder</strong>.
+                    On that PC, open the gold copy and double-click <strong>copy-to-this-pc.cmd</strong>. It copies the
+                    suite to <code>%LOCALAPPDATA%\MedicusSuite</code> on the local disk.
                   </li>
                   <li>
-                    <strong>Chrome:</strong> The steps are identical — type <code>chrome://extensions</code> instead,
-                    then follow the same Developer mode → Load unpacked steps.
+                    If this PC already had the suite loaded from the share, open this Options page first and
+                    <strong>Export entire suite</strong> — then Import after the new Load unpacked. A new folder path is
+                    a new install and does not keep the old settings.
                   </li>
                   <li>
-                    You should now see the Medicus Suite icon in the browser toolbar. Click it (or open the side panel)
-                    to confirm the extension is running.
+                    <strong>Edge (NHS default):</strong> type <code>edge://extensions</code>, turn on
+                    <strong>Developer mode</strong>, click <strong>Load unpacked</strong>, and pick
+                    <code>%LOCALAPPDATA%\MedicusSuite</code> — a folder on this PC, never the share.
                   </li>
-                  <li>Repeat on every PC that needs the extension. Each PC points to the same shared folder.</li>
+                  <li>
+                    <strong>Chrome:</strong> the steps are identical at <code>chrome://extensions</code>.
+                  </li>
+                  <li>
+                    Confirm the toolbar icon is there, then <strong>Remove</strong> any older install whose source is
+                    the share / Y: / a <code>\\server</code> path.
+                  </li>
+                  <li>
+                    Repeat on every PC. Optional: run <code>copy-to-this-pc.ps1 -Quiet</code> as a login script so later
+                    gold-copy updates land without walking the desks.
+                  </li>
                 </ol>
 
                 <strong style="display: block; margin-bottom: 6px"
@@ -3064,46 +3097,52 @@
                     </ul>
                   </li>
                   <li>
-                    Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — navigate
-                    to the shared extension folder and save the file there (replace the existing
-                    <em>practice-profile.json</em> if asked). After the first time, the extension remembers the location
-                    and publishing is a single click.
+                    Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — save
+                    <em>practice-profile.json</em> in the <strong>gold copy</strong> on the share (next to
+                    <em>manifest.json</em>). After the first time, the extension remembers the location and publishing
+                    is a single click.
                   </li>
                 </ol>
 
                 <strong style="display: block; margin-bottom: 6px">4. What happens on everyone else's PC</strong>
                 <ol style="margin: 0 0 14px; padding-left: 20px">
                   <li>
-                    There is nothing for other staff to do. Each PC checks the shared folder roughly every 15 minutes
-                    while the browser is open, and also checks on every browser start.
+                    After that PC next runs <code>copy-to-this-pc</code> (double-click or login script), it has the new
+                    <em>practice-profile.json</em> next to its local <em>manifest.json</em>.
                   </li>
                   <li>
-                    When it finds a new version, it quietly applies the updated settings in the background. Staff do not
-                    need to restart their browser or do anything at all.
+                    Each PC then applies the profile roughly every 15 minutes while the browser is open, and also on
+                    every browser start. Staff do not need to reinstall.
                   </li>
-                  <li>If the browser is closed, the changes will be picked up the next time it starts.</li>
                   <li>
-                    New versions of the extension itself (when you update the files in the shared folder) install
-                    themselves automatically when the PC is next idle — no manual reinstall needed.
+                    New versions of the extension itself work the same way: update the gold copy, let each PC sync, and
+                    the suite reloads itself the next time that PC is idle.
                   </li>
                 </ol>
 
                 <strong style="display: block; margin-bottom: 6px">5. If something isn't working</strong>
                 <ul style="margin: 0; padding-left: 20px">
                   <li>
-                    <strong>Is the PC running the extension from the shared folder?</strong> Open
-                    <code>edge://extensions</code>, find Medicus Suite, click <strong>Details</strong>, and look under
-                    <em>Source</em> or <em>Loaded from</em>. It should show the shared folder path, not a local path on
-                    that PC.
+                    <strong>Is this PC loading from the local disk?</strong> Open <code>edge://extensions</code>, find
+                    Medicus Suite, click <strong>Details</strong>, and look under <em>Source</em> or
+                    <em>Loaded from</em>. It must be a path on this PC (usually under
+                    <code>%LOCALAPPDATA%\MedicusSuite</code>), not a Y: / S: / <code>\\server</code> path. A network
+                    path is why the suite vanishes after a restart.
                   </li>
                   <li>
-                    <strong>Is practice-profile.json in the right place?</strong> The file must sit in the same folder
-                    as <em>manifest.json</em> — not inside a subfolder. You can check by opening the shared extension
-                    folder and looking for both files side by side (the practice-profile.json file is a JSON text file).
+                    <strong>If a local install still vanishes after restart:</strong> that is IT policy, not the share.
+                    Check <code>edge://policy</code> (or <code>chrome://policy</code>) for DeveloperToolsAvailability,
+                    ExtensionInstallBlocklist, or ExtensionInstallAllowlist. See
+                    <code>docs/PRACTICE-ROLLOUT.md</code>.
+                  </li>
+                  <li>
+                    <strong>Is practice-profile.json in the gold copy?</strong> The file must sit next to
+                    <em>manifest.json</em> on the share — not inside a subfolder — and each PC must have synced it
+                    locally.
                   </li>
                   <li>
                     <strong>Test it immediately:</strong> Press <em>Check for update</em> on this page. If an update is
-                    found it will say so; if not, the file is either missing or the version hasn't changed.
+                    found it will say so; if not, the local file is missing, stale, or the version hasn't changed.
                   </li>
                   <li>
                     <strong>A colleague's setting didn't change:</strong> The module is probably set to

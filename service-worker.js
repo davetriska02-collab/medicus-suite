@@ -351,10 +351,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ── Task-presence shared-folder config (fire-and-forget, 2026-08-04) ─────────
-// Practices load the unpacked extension from a shared folder, so a single
-// `presence-config.json` dropped into that folder configures EVERY machine at
-// once — no per-machine Options entry. This syncs the packaged file (if
-// present) into chrome.storage.local as 'presence.fileCache', which
+// A `presence-config.json` sitting next to manifest.json in the *loaded*
+// folder (the local clone after copy-to-this-pc, or a lone local install)
+// configures that machine with no Options entry. Drop the file on the gold
+// copy and let each PC sync. This syncs the packaged file (if present) into
+// chrome.storage.local as 'presence.fileCache', which
 // content-scripts/task-presence.js resolves as its config source (manual
 // Options values, when set, take precedence). The storage cache also survives
 // a folder replacement that forgets to re-copy the json: presence keeps
@@ -640,7 +641,7 @@ async function _checkForCodeUpdate() {
     let diskManifest;
     try {
       const resp = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
-      // On a shared network drive the file may be mid-copy — any error = skip silently
+      // During a gold-copy → local sync the file may be mid-copy — any error = skip silently
       if (!resp.ok) return;
       diskManifest = await resp.json();
     } catch (_) {

@@ -22,10 +22,16 @@ honest limits — see [`docs/VISION.md`](docs/VISION.md).
 
 1. Download the latest `medicus-suite-vX.Y.Z.zip` from the
    [releases page](https://github.com/davetriska02-collab/medicus-suite/releases/latest).
-2. Unzip somewhere permanent on your computer.
-3. Open `chrome://extensions` in Chrome.
+2. Unzip somewhere **permanent on this computer's local disk** (C: or
+   `%LOCALAPPDATA%\MedicusSuite`). Do **not** Load unpacked from a network,
+   mapped, Y:, or USB drive — Chrome and Edge drop the extension after a
+   restart when that folder is not already mounted. Practice-wide rollout
+   (gold copy on the share, local clone on each PC) is in
+   [`docs/PRACTICE-ROLLOUT.md`](docs/PRACTICE-ROLLOUT.md). The
+   `copy-to-this-pc.cmd` helper in the zip does the local copy.
+3. Open `chrome://extensions` in Chrome (or `edge://extensions` in Edge).
 4. Switch on **Developer mode** (top right).
-5. Click **Load unpacked** and pick the unzipped folder.
+5. Click **Load unpacked** and pick the **local** unzipped folder.
 6. Pin the extension to the toolbar so the icon is visible.
 7. Open the extension Options page once: the practice code is auto-detected
    from any open Medicus tab. If you want to use the Triage Request Monitor,

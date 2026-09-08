@@ -1939,7 +1939,7 @@ async function isPracticeAccepted() {
           // themselves — which they may never do.
           downloadJson(profileJson, 'practice-profile.json');
           setPublishStatus(
-            `Profile downloaded as practice-profile.json (v${version}). Move it into the shared extension folder, replacing the old file, and the update will reach everyone within 15 minutes.`
+            `Profile downloaded as practice-profile.json (v${version}). Put it in the gold copy on the share (next to manifest.json), then let each PC run copy-to-this-pc so the update reaches everyone.`
           );
         }
 
@@ -4596,7 +4596,7 @@ initPdcTallySection({
     if (!KS) return setIoStatus('Knowledge sync is not loaded.', true);
     if (
       !window.confirm(
-        'The file must be practice-profile.json in the shared extension folder, next to manifest.json. The live Knowledge set will be written into that file so every computer using this folder sees it.'
+        'The file must be practice-profile.json in the gold copy on the share, next to manifest.json. The live Knowledge set is written there so every computer that syncs the gold copy locally sees it.'
       )
     ) {
       return;
@@ -4620,7 +4620,7 @@ initPdcTallySection({
               !window.confirm(
                 'That file is named "' +
                   handle.name +
-                  '", not practice-profile.json. Other computers only load practice-profile.json next to manifest.json. Use it anyway?'
+                  '", not practice-profile.json. Other computers only pick up practice-profile.json next to manifest.json on the gold copy. Use it anyway?'
               )
             ) {
               return;
@@ -4637,14 +4637,14 @@ initPdcTallySection({
           const built = KS.buildKnowledgeContribution(null, data, { allowCreate: true, KU, now: new Date() });
           if (built.json) {
             downloadJson(built.json, 'practice-profile.json');
-            setIoStatus('Downloaded practice-profile.json. Put it next to manifest.json in the shared extension folder.');
+            setIoStatus('Downloaded practice-profile.json. Put it next to manifest.json in the gold copy on the share.');
             await refreshSync();
             return;
           }
         }
       }
       if (result.wrote || result.reason === 'no-change') {
-        setIoStatus('Written to the shared folder as practice-profile.json. Other computers using that folder will pick it up on next open or within about 15 minutes.');
+        setIoStatus('Written to the gold copy as practice-profile.json. Other computers pick it up after their next copy-to-this-pc sync, then on next open or within about 15 minutes.');
       } else {
         setIoStatus(
           KS.shareErrorText(result.reason, result.detail || (result.dropped && result.dropped.length)) ||

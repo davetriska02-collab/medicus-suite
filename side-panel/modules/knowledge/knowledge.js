@@ -932,7 +932,7 @@ async function connectAndShare() {
   }
   if (
     !window.confirm(
-      'The file must be practice-profile.json in the shared extension folder, next to manifest.json. The live Knowledge set will be written into that file so every computer using this folder sees it.'
+      'The file must be practice-profile.json in the gold copy on the share, next to manifest.json. The live Knowledge set is written there so every computer that syncs the gold copy locally sees it.'
     )
   ) {
     return;
@@ -984,7 +984,7 @@ async function connectAndShare() {
           downloadJson(built.json, 'practice-profile.json');
           _syncUi = {
             kind: 'local',
-            text: 'Downloaded practice-profile.json. Put it in the shared extension folder, next to manifest.json, so everyone picks it up.',
+            text: 'Downloaded practice-profile.json. Put it in the gold copy on the share, next to manifest.json, so everyone picks it up after they sync.',
             action: 'share',
           };
         }
@@ -992,7 +992,7 @@ async function connectAndShare() {
     }
     if (result && (result.wrote || result.reason === 'no-change')) {
       window.alert(
-        'Written to the shared folder as practice-profile.json. Other computers using that folder will pick it up on next open or within about 15 minutes.'
+        'Written to the gold copy as practice-profile.json. Other computers pick it up after their next copy-to-this-pc sync, then on next open or within about 15 minutes.'
       );
     } else if (result && !result.wrote && result.reason !== 'no-shared-profile' && result.reason !== 'no-handle') {
       window.alert(KS.shareErrorText(result.reason, result.detail || result.dropped && result.dropped.length) || result.reason);
