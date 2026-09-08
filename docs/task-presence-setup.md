@@ -15,10 +15,18 @@ practices whose Medicus build does not yet expose the presence channel.
 - **Occupied strip** prepended into `<main>` when a colleague is in the same
   request you have open. One line, for example:
 
-  `PN  Dr Priya Nair is on this request  LIVE  Check with them before you reply, or carry on. You are not locked out.`
+  `PN  Dr Priya Nair has this open. You can still work it.`
 
   Avatars use identity colours (never status red or amber). Two colleagues are
   named; more become "and N others", with a `+N` disc after three avatars.
+
+- **Queue title strip** on a task-list: a compact named notice in the title
+  row when a colleague also has that list open (native
+  `presence-{site}-task-list-{slug}`). Example: `Dr Priya Nair is also on
+  this list. You can still work it.` It replaces Medicus's unnamed "GP is
+  also working this list" widget. Absence of the strip is not evidence
+  nobody else is on the list. List occupancy is never treated as a
+  per-request occupant and never becomes a row 👁 chip.
 
 - **Hide** (this tab only) sits at the end of the strip. It hides the bar for
   this request and this set of people until someone new joins, or until the
@@ -153,16 +161,25 @@ on that row. Close A's tab; within ~90 s the chip clears.
 ## Mechanics (for future maintainers)
 
 - Native occupancy: `content-scripts/triage-lens/page-world.js` polls
-  Medicus's `$pusher` for `presence-{site}-task-{taskUuid}` (never the queue
-  channel `presence-{site}-task-list-{slug}`), emits
-  `ch-native-task-presence` with `{ taskUuid, members, live? }`. Empty wipe
-  on task change; `idle` sentinel after leaving an overview so the poll does
-  not flap. `live: false` when `connection.state` is not `connected` or
-  `pusher:subscription_error` fired. Identity re-stamped from the counters
-  channel for the life of the page.
-- Isolated world: `content-scripts/task-presence.js` prepends `#ms-tp-banner`
-  into `<main>`. Fail closed: no self id → no strip; wrong task → no strip;
-  `live === false` → hide. Missing `live` is treated as live.
+  Medicus's `$pusher` for two channels and never subscribes itself:
+  - `presence-{site}-task-{taskUuid}` → `ch-native-task-presence` with
+    `{ taskUuid, members, live? }` (occupied masthead on the open request).
+  - `presence-{site}-task-list-{slug}` → `ch-native-list-presence` with
+    `{ slug, members, live? }` (compact named strip in the **queue title
+    row** only). The list channel is still never a per-request occupant
+    and never feeds a row 👁 chip. Empty wipe on slug change; `idle`
+    sentinel after leaving a list so the poll does not flap.
+  Empty wipe on task change; `idle` sentinel after leaving an overview so
+  the poll does not flap. `live: false` when `connection.state` is not
+  `connected` or `pusher:subscription_error` fired. Identity re-stamped
+  from the counters channel for the life of the page.
+- Isolated world: `content-scripts/task-presence.js` prepends
+  `#ms-tp-banner` into `<main>` on an overview, and `#ms-tp-list` into the
+  queue title row (replacing Medicus's "is also working this list"
+  widget; host styles recorded and restored when our strip is gone). Fail
+  closed: no self id → no strip; wrong task/slug → no strip;
+  `live === false` → hide. Missing `live` is treated as live. List
+  members carry `listSlug`, never a request UUID.
 - Folder store: `shared/presence-folder.js` (pure helpers + IDB handle
   persistence + FSA IO), driven by the service worker's `presence:folder*`
   message handlers; the Options page owns the picker and permission prompts

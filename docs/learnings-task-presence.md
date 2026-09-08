@@ -1,6 +1,6 @@
 # Learnings — is a task tagged as "being worked on"?
 
-**Updated:** 2026-09-07 — Medicus has since shipped native Pusher **presence**
+**Updated:** 2026-09-08 — list occupancy strip on the queue title.
 channels. Live on a medical patient-request overview:
 
 | Channel                            | Meaning                                                                                                                                                                                |
@@ -10,7 +10,10 @@ channels. Live on a medical patient-request overview:
 
 The overview REST payload still has no viewers field. The Suite occupied
 strip (v3.261.1) reads the per-task presence channel via page-world.js.
-The August finding below is kept as history of the gap that existed then.
+The list channel is used only for the **queue title** strip (v3.261.5):
+who else has that task-list open. It is still never treated as a
+per-request occupant and never feeds a row 👁 chip. The August finding
+below is kept as history of the gap that existed then.
 
 **2026-09-07 (occupied-strip fixes).** Two page-world bugs bit the native
 strip. (1) Occupant wipe never dispatched: both the task-change and
@@ -26,12 +29,22 @@ socket is up: bind `pusher:subscription_error`, read
 subscription errored) emit `members: []` with `live: false`. The isolated
 world treats `live === false` as hide (missing `live` stays live, which is
 what the screenshot rig sends). Queue channel
-`presence-{site}-task-list-{slug}` is still not a per-request occupant.
-Dual-tab same-UUID is not visible: Pusher-js hashes presence members by
+`presence-{site}-task-list-{slug}` is still not a per-request occupant —
+it now feeds only the compact named strip in the queue title row
+(`#ms-tp-list`), replacing Medicus's unnamed "GP is also working this
+list" widget. Dual-tab same-UUID is not visible: Pusher-js hashes presence members by
 user_id (the staff UUID), so two tabs of the same clinician collapse to one
 id; `members.count` matches unique ids. The cheap `selfExtras` detector
 still ships and the isolated world will paint "You also have this open
 somewhere else." if extras ever arrive — we do not query `chrome.tabs`.
+
+**2026-09-08 (list occupancy).** `pollNativePresence` returned early when
+there was no overview task UUID, so on a queue page the Suite never read
+the list channel. The poll now runs task occupancy and list occupancy in
+parallel. `parsePresenceTaskChannel` still rejects `…-task-list-…`. We
+do not subscribe ourselves; we bind Medicus's existing channel and emit
+`ch-native-list-presence` (never `ch-native-task-presence`). Leaving a
+list emits one idle empty event so the 2 s poll does not flap.
 
 **Captured:** 2026-08-04, live Medicus, `communication-thread` task opened from a
 `medical_patient_request_task` queue, via `scripts/task-presence-capture.js`.

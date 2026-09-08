@@ -19,6 +19,7 @@ const {
   parseStaffAttr,
   displayLabel,
   parseTaskOverviewPath,
+  parseTaskListPath,
   validPresenceConfig,
   buildHeartbeatPayload,
   activeOthers,
@@ -31,15 +32,19 @@ const {
   initialsFromLabel,
   avatarHue,
   sanitizeNativePresence,
+  sanitizeNativeListPresence,
   parsePresenceTaskChannel,
+  parsePresenceListChannel,
   othersOnTask,
   occupiedHeadline,
+  listOccupiedHeadline,
   occupiedAction,
   occupiedNote,
   occupiedNameList,
   occupiedBannerTitle,
   occupancyHideHint,
   occupiedInnerHtml,
+  listOccupiedInnerHtml,
   unknownColleagueLabel,
   preferKnownLabel,
   occupancyDismissKey,
@@ -50,7 +55,12 @@ const {
   AVATAR_HUES,
   safeAvatarHue,
 } = require('./content-scripts/task-presence.js');
-const { presenceEmitDecision, presenceSelfExtras } = require('./content-scripts/triage-lens/page-world.js');
+const {
+  presenceEmitDecision,
+  presenceSelfExtras,
+  currentTaskListSlug,
+  PRESENCE_LIST_CH_RE,
+} = require('./content-scripts/triage-lens/page-world.js');
 
 let passed = 0,
   failed = 0;
@@ -600,6 +610,112 @@ console.log('--- live:false hides; missing live still shows ---');
       UUID_A
     ).length === 1,
     'live === true keeps the member'
+  );
+}
+
+console.log('--- list channel parse + path: queue occupancy, never a request occupant ---');
+{
+  const listCh = parsePresenceListChannel('presence-560b6c-task-list-medical_patient_request_task');
+  check(!!listCh && listCh.site === '560b6c', 'list channel site');
+  check(listCh.slug === 'medical_patient_request_task', 'list channel slug');
+  check(
+    parsePresenceListChannel('presence-560b6c-task-' + UUID_A) === null,
+    'per-task uuid channel is NOT a list channel'
+  );
+  check(
+    parsePresenceTaskChannel('presence-560b6c-task-list-medical_patient_request_task') === null,
+    'list channel is still null from parsePresenceTaskChannel'
+  );
+  check(PRESENCE_LIST_CH_RE.test('presence-560b6c-task-' + UUID_A) === false, 'task-uuid regex does not consume list');
+  check(
+    PRESENCE_LIST_CH_RE.test('presence-560b6c-task-list-medical_patient_request_task') === true,
+    'list regex matches task-list slug'
+  );
+  check(
+    currentTaskListSlug('/560b6c/tasks/medical_patient_request_task/task-list') === 'medical_patient_request_task',
+    'currentTaskListSlug from /tasks/{slug}/task-list'
+  );
+  check(
+    currentTaskListSlug('/560b6c/tasks/data/medical_patient_request_task/task-list') === 'medical_patient_request_task',
+    'currentTaskListSlug from /tasks/data/{slug}/task-list'
+  );
+  check(
+    currentTaskListSlug('/560b6c/tasks/medical_patient_request_task/overview/' + UUID_A) === '',
+    'overview is not a list'
+  );
+  check(
+    parseTaskListPath('/560b6c/tasks/medical_patient_request_task/task-list').slug === 'medical_patient_request_task',
+    'parseTaskListPath route shape'
+  );
+  check(
+    parseTaskListPath('/560b6c/tasks/data/medical_patient_request_task/task-list').slug ===
+      'medical_patient_request_task',
+    'parseTaskListPath data shape'
+  );
+}
+
+console.log('--- listOccupiedHeadline: 1 / 2 / 3+ / unknown ---');
+{
+  check(
+    listOccupiedHeadline([{ label: 'Dr Priya Nair' }]) === 'Dr Priya Nair is also on this list. You can still work it.',
+    'one named colleague'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'Dr Sam Okonkwo' }]) ===
+      'Dr Priya Nair and Dr Sam Okonkwo are also on this list. You can still work it.',
+    'two named colleagues'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }]) ===
+      'A, B and 1 other are also on this list. You can still work it.',
+    'three+ uses A, B and N others'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
+      'A, B and 2 others are also on this list. You can still work it.',
+    'four is A, B and 2 others'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'A colleague' }]) === 'A colleague is also on this list. You can still work it.',
+    'unknown colleague'
+  );
+  check(listOccupiedHeadline([]) === '', 'empty others -> empty headline');
+  const listHtml = listOccupiedInnerHtml([{ label: 'Dr Priya Nair', initials: 'PN', hue: '#1e3a5f', native: true }]);
+  check(listHtml.indexOf('Dr Priya Nair is also on this list.') >= 0, 'list inner html carries the lead');
+  check(listHtml.indexOf('You can still work it.') >= 0, 'list inner html carries the quiet clause');
+  check(listHtml.indexOf('ms-tp-quiet') >= 0, 'quiet clause is one step quieter');
+  check(!/lock/i.test(listHtml), 'list strip never says lock');
+}
+
+console.log('--- sanitizeNativeListPresence: drop self; empty / live:false hides ---');
+{
+  const slug = 'medical_patient_request_task';
+  const priya = {
+    slug,
+    members: [{ id: UUID_B, info: { displayName: 'Dr Priya Nair' } }],
+  };
+  const got = sanitizeNativeListPresence(priya, UUID_ME, slug);
+  check(got.length === 1 && got[0].staffId === UUID_B, 'other on this list kept');
+  check(got[0].listSlug === slug && got[0].taskUuid === undefined, 'list member carries listSlug, never a taskUuid');
+  check(
+    sanitizeNativeListPresence({ slug, members: [{ id: UUID_ME, info: { displayName: 'Me' } }] }, UUID_ME, slug)
+      .length === 0,
+    'only-self membership -> hide'
+  );
+  check(sanitizeNativeListPresence(priya, null, slug).length === 0, 'no self id -> hide');
+  check(sanitizeNativeListPresence(priya, UUID_ME, 'other_slug').length === 0, 'wrong slug -> hide');
+  check(
+    sanitizeNativeListPresence(
+      { slug, members: [{ id: UUID_B, info: { displayName: 'Priya' } }], live: false },
+      UUID_ME,
+      slug
+    ).length === 0,
+    'live === false hides'
+  );
+  check(sanitizeNativeListPresence(priya, UUID_ME, slug).length === 1, 'omitted live is treated as live');
+  check(
+    othersOnTask([{ staffId: UUID_B, listSlug: slug, label: 'Priya' }], UUID_A).length === 0,
+    'list members are not per-request occupants'
   );
 }
 

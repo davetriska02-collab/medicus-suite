@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.5] — 2026-09-08
+
+### Queue title strip — named list occupancy
+
+Medicus already paints an unnamed "GP is also working this list" widget on
+task-list pages from `presence-{site}-task-list-{slug}`. The Suite now reads
+that list channel (still never as a per-request occupant) and replaces the
+host widget with a compact named notice in the title row.
+
+- `Dr Priya Nair is also on this list.` / two names / `A, B and N others` /
+  unknown: `A colleague is also on this list.` Optional quiet clause:
+  `You can still work it.`
+- Avatars + pulse pip, 20px. Fail-closed: no self id, wrong slug, only-self,
+  or `live: false` hides our strip and restores the host widget. Absence of
+  the strip is not evidence nobody is on the list.
+
 ## [v3.261.4] — 2026-09-08
 
 ### Occupied strip and allocation groups — review pass on main

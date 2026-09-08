@@ -7,7 +7,8 @@
    .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) — when the
    canon changes, update this block in the same commit. */
 .ms-tp-chips,
-#ms-tp-banner {
+#ms-tp-banner,
+#ms-tp-list {
   --bg-deep: #f8fafc;
   --bg-elev: #ffffff;
   --border: #cbd5e1;
@@ -113,6 +114,53 @@
   line-height: 1.25;
   flex-wrap: nowrap;
   overflow: hidden;
+}
+
+/* Compact inline list occupancy — title-row notice, not a masthead.
+   Replaces Medicus's unnamed "GP is also working this list" widget. */
+#ms-tp-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 0 6px;
+  padding: 2px 8px 2px 4px;
+  max-width: min(46rem, 62%);
+  vertical-align: middle;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.2;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#ms-tp-list .ms-tp-inner {
+  gap: 6px;
+}
+
+#ms-tp-list .ms-tp-av {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+
+#ms-tp-list .ms-tp-who {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+#ms-tp-list .ms-tp-quiet {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+#ms-tp-list .ms-tp-live {
+  width: 5px;
+  height: 5px;
 }
 
 .ms-tp-inner {

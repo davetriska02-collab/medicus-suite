@@ -14,6 +14,7 @@
 // crosses the world boundary for JSON-serialisable detail):
 //   • /tasks/data/{slug}/task-list      → 'ch-task-list-data'   (queue monitoring)
 //   • Pusher presence-{site}-task-{uuid} → 'ch-native-task-presence' (occupied masthead)
+//   • Pusher presence-{site}-task-list-{slug} → 'ch-native-list-presence' (list occupancy)
 //
 // It also notes WHICH PATIENT the page's embedded Clinical Summary panel was
 // last fetched for (2026-08-03): any request to
@@ -86,10 +87,33 @@
     return n > 0 ? n : 0;
   }
 
+  // List occupancy channel. Slug is not a UUID — must not match
+  // presence-{site}-task-{uuid}. Empty slug (trailing hyphen only) is rejected
+  // because (.+) needs at least one character.
+  var PRESENCE_LIST_CH_RE = /^presence-([0-9a-z]{2,})-task-list-(.+)$/i;
+
+  function currentTaskListSlug(pathname) {
+    var path = pathname;
+    if (path == null && typeof location !== 'undefined') {
+      try {
+        path = location.pathname;
+      } catch (_) {
+        path = '';
+      }
+    }
+    var m = String(path || '').match(/\/tasks\/(?:data\/)?([^/]+)\/task-list\/?$/i);
+    return m && m[1] ? m[1] : '';
+  }
+
   // Node tests require this file for the helper only. MAIN-world behaviour is
   // unchanged: chrome content scripts have no `module`, so we fall through.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { presenceEmitDecision: presenceEmitDecision, presenceSelfExtras: presenceSelfExtras };
+    module.exports = {
+      presenceEmitDecision: presenceEmitDecision,
+      presenceSelfExtras: presenceSelfExtras,
+      currentTaskListSlug: currentTaskListSlug,
+      PRESENCE_LIST_CH_RE: PRESENCE_LIST_CH_RE,
+    };
     return;
   }
 
@@ -279,9 +303,11 @@
   // is open (live capture: presence-560b6c-task-{uuid}, member ids = staff
   // UUIDs, stock pusher:member_added / member_removed). Forward the current
   // task's member list to the isolated world as 'ch-native-task-presence'.
-  // Channel names + member ids + staff-shaped info keys only — drop anything
-  // that looks like a patient identifier. No writes; we never subscribe
-  // ourselves (Pusher presence auth is Medicus's).
+  // On a task-list page it also reads presence-{site}-task-list-{slug} and
+  // emits 'ch-native-list-presence' — list occupancy, never a per-request
+  // occupant. Channel names + member ids + staff-shaped info keys only —
+  // drop anything that looks like a patient identifier. No writes; we never
+  // subscribe ourselves (Pusher presence auth is Medicus's).
   var PRESENCE_TASK_CH_RE =
     /^presence-([0-9a-z]{2,})-task-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
   var lastPresenceSig = '';
@@ -289,6 +315,11 @@
   var boundPresenceRef = null; // { ch, onChange, onSucceeded, onError }
   var boundPresenceNames = new Set();
   var presenceSubErrored = false;
+  var lastListPresenceSig = '';
+  var boundListPresenceCh = '';
+  var boundListPresenceRef = null;
+  var boundListPresenceNames = new Set();
+  var listPresenceSubErrored = false;
 
   function currentOverviewTaskUuid() {
     var m = String(location.pathname || '').match(
@@ -325,6 +356,24 @@
     if (extras >= 1) detail.selfExtras = extras;
     try {
       window.dispatchEvent(new CustomEvent('ch-native-task-presence', { detail: detail }));
+    } catch (_) {}
+  }
+
+  function emitNativeListPresence(slug, members, live) {
+    var list = Array.isArray(members) ? members : [];
+    var prev = lastListPresenceSig;
+    var d = presenceEmitDecision(lastListPresenceSig, slug, list, live);
+    if (!d.emit) return;
+    lastListPresenceSig = d.sig;
+    var detailSlug = slug || '';
+    if (!detailSlug && d.sig === 'idle' && prev && prev !== 'idle') {
+      var colon = prev.indexOf(':');
+      detailSlug = colon >= 0 ? prev.slice(0, colon) : prev;
+    }
+    var detail = { slug: detailSlug, members: list };
+    if (live === false) detail.live = false;
+    try {
+      window.dispatchEvent(new CustomEvent('ch-native-list-presence', { detail: detail }));
     } catch (_) {}
   }
 
@@ -441,19 +490,78 @@
     } catch (_) {}
   }
 
+  function unbindListPresenceChannel() {
+    if (boundListPresenceRef) {
+      var ch = boundListPresenceRef.ch;
+      try {
+        if (ch && typeof ch.unbind === 'function') {
+          ch.unbind('pusher:member_added', boundListPresenceRef.onChange);
+          ch.unbind('pusher:member_removed', boundListPresenceRef.onChange);
+          ch.unbind('pusher:subscription_succeeded', boundListPresenceRef.onSucceeded);
+          ch.unbind('pusher:subscription_error', boundListPresenceRef.onError);
+        }
+      } catch (_) {}
+      boundListPresenceRef = null;
+    }
+    if (boundListPresenceCh) {
+      try {
+        boundListPresenceNames.delete(boundListPresenceCh);
+      } catch (_) {}
+    }
+    boundListPresenceCh = '';
+    listPresenceSubErrored = false;
+  }
+
+  function bindListPresenceChannel(name, ch) {
+    if (boundListPresenceCh === name && boundListPresenceRef) return;
+    unbindListPresenceChannel();
+    boundListPresenceCh = name;
+    boundListPresenceNames.add(name);
+    listPresenceSubErrored = false;
+    try {
+      var boundName = name;
+      var onChange = function () {
+        var liveSlug = currentTaskListSlug();
+        var liveMatch = boundName.match(PRESENCE_LIST_CH_RE);
+        if (!liveSlug || !liveMatch || String(liveMatch[2]).toLowerCase() !== liveSlug.toLowerCase()) return;
+        var pusherNow = readPusher();
+        var connected = pusherNow && pusherNow.connection && pusherNow.connection.state === 'connected';
+        if (!connected || listPresenceSubErrored) {
+          emitNativeListPresence(liveSlug, [], false);
+          return;
+        }
+        var got = collectPresenceMembers(ch);
+        emitNativeListPresence(liveSlug, got.members, true);
+      };
+      var onSucceeded = function () {
+        listPresenceSubErrored = false;
+        onChange();
+      };
+      var onError = function () {
+        listPresenceSubErrored = true;
+        var liveSlug = currentTaskListSlug();
+        if (liveSlug) emitNativeListPresence(liveSlug, [], false);
+      };
+      ch.bind('pusher:member_added', onChange);
+      ch.bind('pusher:member_removed', onChange);
+      ch.bind('pusher:subscription_succeeded', onSucceeded);
+      ch.bind('pusher:subscription_error', onError);
+      boundListPresenceRef = { ch: ch, onChange: onChange, onSucceeded: onSucceeded, onError: onError };
+    } catch (_) {}
+  }
+
   function socketIsLive(pusher) {
     return !!(pusher && pusher.connection && pusher.connection.state === 'connected' && !presenceSubErrored);
   }
 
-  function pollNativePresence() {
-    var taskUuid = currentOverviewTaskUuid();
-    var pusher = readPusher();
-    stampStaffIdentity(pusher);
+  function listSocketIsLive(pusher) {
+    return !!(pusher && pusher.connection && pusher.connection.state === 'connected' && !listPresenceSubErrored);
+  }
 
+  function pollTaskPresence(taskUuid, pusher) {
     if (!taskUuid) {
       unbindPresenceChannel();
       emitNativePresence('', []);
-      setTimeout(pollNativePresence, 2000);
       return;
     }
 
@@ -468,7 +576,6 @@
     try {
       if (!socketIsLive(pusher)) {
         emitNativePresence(taskUuid, [], false);
-        setTimeout(pollNativePresence, 2000);
         return;
       }
       var map = pusher && pusher.channels && pusher.channels.channels;
@@ -494,6 +601,55 @@
         }
       }
     } catch (_) {}
+  }
+
+  function pollListPresence(slug, pusher) {
+    if (!slug) {
+      unbindListPresenceChannel();
+      emitNativeListPresence('', []);
+      return;
+    }
+    var slugKey = String(slug).toLowerCase();
+    if (lastListPresenceSig && lastListPresenceSig !== 'idle' && lastListPresenceSig.indexOf(slugKey + ':') !== 0) {
+      emitNativeListPresence(slug, []);
+    }
+    try {
+      if (!listSocketIsLive(pusher)) {
+        emitNativeListPresence(slug, [], false);
+        return;
+      }
+      var map = pusher && pusher.channels && pusher.channels.channels;
+      if (map) {
+        var found = false;
+        for (var name in map) {
+          if (!Object.prototype.hasOwnProperty.call(map, name)) continue;
+          var pm = name.match(PRESENCE_LIST_CH_RE);
+          if (!pm) continue;
+          if (String(pm[2]).toLowerCase() !== slugKey) continue;
+          found = true;
+          bindListPresenceChannel(name, map[name]);
+          if (listPresenceSubErrored) emitNativeListPresence(slug, [], false);
+          else {
+            var pollGot = collectPresenceMembers(map[name]);
+            emitNativeListPresence(slug, pollGot.members, true);
+          }
+          break;
+        }
+        if (!found) {
+          unbindListPresenceChannel();
+          emitNativeListPresence(slug, []);
+        }
+      }
+    } catch (_) {}
+  }
+
+  function pollNativePresence() {
+    var taskUuid = currentOverviewTaskUuid();
+    var listSlug = currentTaskListSlug();
+    var pusher = readPusher();
+    stampStaffIdentity(pusher);
+    pollTaskPresence(taskUuid, pusher);
+    pollListPresence(listSlug, pusher);
     setTimeout(pollNativePresence, 2000);
   }
   setTimeout(pollNativePresence, 2500);
