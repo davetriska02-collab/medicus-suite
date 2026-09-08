@@ -42,6 +42,23 @@ Earlier passes (LIVE / Not a lock / Here now / On it now) scored 4–8. Those wo
 - Do not show a “just you” chip (would nag Margaret on every open).
 - Do not invent opened-at. Membership has no timestamp.
 
+## Addendum — queue title strip (v3.261.5)
+
+The live queue showed Medicus’s own grey **GP** disc + “is also working this list”. The Suite now replaces that widget with a named peach pill (`Dr Priya Nair is also on this list. You can still work it.`) from `presence-{site}-task-list-{slug}`. List members are never treated as per-request occupants. Only-self restores the host widget.
+
+Retargeted bar is an **average of 8/10**, not 9 per feature. Fresh 6-person scores on the named pill + request strip:
+
+| Handle | Score |
+|---|---|
+| Margaret | 6 |
+| Tom | 8 |
+| Chloe | 7 |
+| Sam | 7 |
+| Priya | 8 |
+| Geoff | 8 |
+
+Mean **7.3**. Named peach was preferred to the GP disc by every persona. Not 8 yet: Margaret still wants a name every time (unnamed “A colleague” is a 3 for her); Chloe still wants a lock (overruled).
+
 ## Reproduce
 
-`node test-task-presence.js`. Rig: `/tmp/the-practice/rig/run.sh`.
+`node test-task-presence.js`. Rig: `/tmp/the-practice/rig/run.sh` (list states under `shots/list/`).
