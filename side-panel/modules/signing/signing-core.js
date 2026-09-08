@@ -16,7 +16,7 @@
 //   amber — only due_soon chips
 //   null  — no drug-monitoring flags among the evaluated chips
 //
-// Soft QOF-review badges (v3.261.9, H-038 p) are a separate reducer of the
+// Soft QOF-review badges (v3.261.10, H-038 p) are a separate reducer of the
 // same shape. They never replace monitoring chips and never produce a green
 // or "clear to approve" state.
 

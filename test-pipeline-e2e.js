@@ -168,6 +168,10 @@ check(
   mtxMed.name.toLowerCase().includes('methotrexate'),
   `normalised med.name contains "methotrexate" (got "${mtxMed.name}")`
 );
+check(
+  mtxMed.lastIssueDate === daysAgoIso(112),
+  `normalised lastIssueDate is the latest issue (got "${mtxMed.lastIssueDate}")`
+);
 
 // CONTRACT FIELD: observations must carry a "name" field and a "date" field
 // (ISO string). findLatestObservation() in the rules engine reads obs.name and

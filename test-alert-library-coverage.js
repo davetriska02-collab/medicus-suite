@@ -67,7 +67,12 @@ const EXPECTED = {
   'pincer-4': { type: 'drug-combo', severity: 'red', terms: ['ramipril', 'losartan', 'ibuprofen'] },
   'pincer-5': { type: 'drug-combo', severity: 'red', terms: ['bisoprolol', 'verapamil', 'diltiazem'] },
   'pincer-6': { type: 'drug-combo', severity: 'red', terms: ['ibuprofen', 'naproxen'] },
-  'pincer-7': { type: 'drug-monitoring', drugTerms: ['warfarin', 'marevan'], intervals: { inr: 84 } },
+  'pincer-7': {
+    type: 'drug-monitoring',
+    drugTerms: ['warfarin', 'marevan'],
+    intervals: { inr: 84 },
+    issuedWithinDays: 180,
+  },
   'pincer-8': {
     type: 'drug-combo',
     severity: 'amber',
@@ -196,6 +201,13 @@ for (const [id, exp] of Object.entries(EXPECTED)) {
     for (const t of exp.drugTerms) {
       check(dm.includes(t), `${id} drug.match contains "${t}"`);
     }
+  }
+
+  if (exp.issuedWithinDays != null) {
+    check(
+      rule.drug && rule.drug.issuedWithinDays === exp.issuedWithinDays,
+      `${id} drug.issuedWithinDays === ${exp.issuedWithinDays} (got ${rule.drug && rule.drug.issuedWithinDays})`
+    );
   }
 
   if (exp.intervals) {

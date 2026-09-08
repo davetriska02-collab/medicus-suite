@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.261.9] — 2026-09-08
+## [v3.261.10] — 2026-09-08
 
 ### Signing Queue — soft QOF-review look-twice (Option A)
 
@@ -17,6 +17,25 @@ When on, Signing Queue still shows the existing monitoring chips (overdue / stal
 When off, Signing Queue behaves as today: monitoring chips stay, no QOF badges, no Flagged-from-QOF filter.
 
 Honest-state header when the pack is on: QOF here is **review codes we can see**, not a QOF claim. Never green, never “clear to approve”, never disables Medicus Approve. A quiet row is not “review is up to date”. Target misses (e.g. DM020) do not badge. Hazard log: **H-038** control (p).
+
+## [v3.261.9] — 2026-09-08
+
+### Companion — do not flag INR after warfarin has stopped
+
+Companion was asking for an INR on patients whose last warfarin issue was
+months ago and who no longer have it on repeats. Medicus keeps every acute
+in a rolling 12-month bucket; the `warfarin-vka` rule then treated that
+stale acute as "currently on warfarin".
+
+- Current repeats still always raise the INR chip (even if last collection
+  is old — they may just be overdue to collect).
+- Acute / OTC warfarin only counts when last issued within **180 days**
+  (PCIT / PINCER-style "currently on warfarin"). A December 2025 acute no
+  longer chips in September 2026.
+- Hospital / "prescribed elsewhere" and a missing last-issue date fail
+  open, so anticoagulation-clinic patients are not silently dropped.
+- Same 180-day gate on the PINCER #7 library copy, for practices that
+  added it as a custom rule.
 
 ## [v3.261.8] — 2026-09-08
 
