@@ -67,6 +67,31 @@
     return kept.length ? '?' + kept.join('&') : '';
   }
 
+  function requestLaunchLabel(count) {
+    var n = Number(count);
+    if (isFinite(n) && n > 0 && Math.floor(n) === n && n < 1000000) {
+      return 'Draft a split of ' + Math.floor(n) + ' (nothing is sent)…';
+    }
+    return 'Draft a split (nothing is sent)…';
+  }
+
+  function requestLaunchTitle() {
+    return 'Nothing is written. Opens a planning board.';
+  }
+
+  // Bridged ch-task-list-data is untrusted. Count only — never treat the
+  // rows as occupants or as write targets.
+  function inboxCountFromTaskListBridge(detail, expectedSlug) {
+    if (!detail || typeof detail !== 'object') return 0;
+    if (!Array.isArray(detail.rows)) return 0;
+    var slug = String(detail.taskTypeSlug || '').trim();
+    if (!slug || !isRequestQueueSlug(slug)) return 0;
+    if (expectedSlug && slug !== String(expectedSlug)) return 0;
+    var n = detail.rows.length;
+    if (!isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }
+
   function parseRequestQueueRoute(pathname, search) {
     var path = String(pathname == null ? '' : pathname);
     var m = path.match(/^\/?([0-9a-z]{2,})\/tasks\/(?:data\/)?([^/]+)\/task-list\/?$/i);
@@ -424,6 +449,9 @@
     hasWorkflowViewContext: hasWorkflowViewContext,
     queryStringForRequestList: queryStringForRequestList,
     parseRequestQueueRoute: parseRequestQueueRoute,
+    requestLaunchLabel: requestLaunchLabel,
+    requestLaunchTitle: requestLaunchTitle,
+    inboxCountFromTaskListBridge: inboxCountFromTaskListBridge,
     decorateRequestRow: decorateRequestRow,
     markInboxRows: markInboxRows,
     mergeInboxAndSitting: mergeInboxAndSitting,

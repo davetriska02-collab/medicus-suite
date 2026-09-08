@@ -78,6 +78,10 @@
   var _scheduleAutoPick = false;
   var _personDrag = null;
   var _marquee = null;
+  var _inboxCount = 0;
+  var _inboxCountSlug = '';
+  var _bridgeCount = 0;
+  var _bridgeTimer = null;
 
   function fieldIsOpen(key) {
     return _expandedChip === key || !!_openDests[key];
@@ -124,6 +128,55 @@
     if (!_destSet || _destSet.kind !== 'group' || !G) return '';
     var preset = G.findPreset(_presets, _destSet.id);
     return (preset && preset.name) || '';
+  }
+
+  function destPhraseState() {
+    return {
+      destKind: (_destSet && _destSet.kind) || 'in-today',
+      destGroupName: destGroupName(),
+      dayPhrase: dayPhrase(),
+    };
+  }
+
+  function destScopePhrase() {
+    if (Strip && typeof Strip.destScopePhrase === 'function') {
+      return Strip.destScopePhrase(destPhraseState());
+    }
+    return destGroupName() || dayPhrase();
+  }
+
+  function destPeoplePhrase() {
+    if (Strip && typeof Strip.destPeoplePhrase === 'function') {
+      return Strip.destPeoplePhrase(destPhraseState());
+    }
+    var name = destGroupName();
+    return name || 'doctors working ' + dayPhrase();
+  }
+
+  function destOntoPhrase(nDoctors) {
+    if (Strip && typeof Strip.destOntoPhrase === 'function') {
+      return Strip.destOntoPhrase(nDoctors, destPhraseState());
+    }
+    var name = destGroupName();
+    var n = Number(nDoctors) || 0;
+    var people = n === 1 ? '1 doctor' : n + ' doctors';
+    return name ? people + ' on ' + name : people + ' working ' + dayPhrase();
+  }
+
+  function currentInboxCount() {
+    var route = currentRoute() || _route;
+    if (_open && _rows && _rows.length) return _rows.length;
+    if (route && _inboxCountSlug === route.slug && _inboxCount > 0) return _inboxCount;
+    return 0;
+  }
+
+  function rememberInboxCount(detail) {
+    var route = currentRoute() || _route;
+    if (!route || !C.inboxCountFromTaskListBridge) return;
+    var n = C.inboxCountFromTaskListBridge(detail, route.slug);
+    if (!n) return;
+    _inboxCount = n;
+    _inboxCountSlug = route.slug;
   }
 
   function destFlag() {
@@ -361,6 +414,10 @@
       _route.slug = out.slug || _route.slug;
       if (out.search) _route.search = out.search;
       _taskList = out.taskList;
+      if (_route && _rows && _rows.length) {
+        _inboxCount = _rows.length;
+        _inboxCountSlug = _route.slug;
+      }
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
       await presenceP;
@@ -428,8 +485,8 @@
     _overviewProgress = '';
     announce(
       _splitDefaulted
-        ? 'Even split staged for doctors working ' + dayPhrase() + '. Drag a request to move it.'
-        : 'Even split is for doctors working ' + dayPhrase() + '.'
+        ? 'Even split staged for ' + destPeoplePhrase() + '. Drag a request to move it.'
+        : 'Even split is for ' + destPeoplePhrase() + '.'
     );
     render();
   }
@@ -1121,7 +1178,6 @@
 
   function evenSplitHtml() {
     var dests = splitDestinations();
-    var phrase = dayPhrase();
     var cal = calendarToday();
     var picked = workDate();
     var poolN = visibleUnallocatedCount();
@@ -1136,11 +1192,12 @@
     var destKind = (_destSet && _destSet.kind) || 'in-today';
     var inTodayN = inTodayPeople().length;
     var emptyBook = destKind === 'in-today' && inTodayN === 0;
+    var scope = destScopePhrase();
     var summary = dests.length
-      ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + phrase
+      ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + scope
       : emptyBook
         ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
-        : 'No people to share out to for ' + phrase;
+        : 'No people to share out to for ' + scope;
     var stripState = {
       destKind: destKind,
       destGroupId: (_destSet && _destSet.id) || '',
@@ -1155,7 +1212,7 @@
     };
     var actionState = {
       destPhrase: destPhrase,
-      dayPhrase: phrase,
+      dayPhrase: dayPhrase(),
       poolN: poolN,
       haveWork: haveWork,
       destCount: dests.length,
@@ -2046,9 +2103,7 @@
         'Split ' +
         applied.total +
         ' equally onto ' +
-        applied.doctors +
-        ' doctors working ' +
-        dayPhrase() +
+        destOntoPhrase(applied.doctors) +
         '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
@@ -2056,8 +2111,8 @@
       return (
         'Topped up empty boxes with ' +
         applied.total +
-        ' among doctors working ' +
-        dayPhrase() +
+        ' among ' +
+        destOntoPhrase(applied.doctors) +
         '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
@@ -2066,9 +2121,7 @@
         'Distributed ' +
         applied.total +
         ' equally among ' +
-        applied.doctors +
-        ' doctors working ' +
-        dayPhrase() +
+        destOntoPhrase(applied.doctors) +
         '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
@@ -2089,7 +2142,8 @@
         if (!id) return;
         setDestSet({ kind: 'group', id: id });
         _showAllGroups = false;
-        announce('Share out to that group.');
+        var picked = destGroupName();
+        announce(picked ? 'Share out to ' + picked + '.' : 'Share out to that group.');
         render();
       });
     });
@@ -2787,8 +2841,12 @@
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Draft a split (nothing is sent)…';
-    var launchTitle = 'Nothing is written. Opens a planning board.';
+    if (_inboxCountSlug && _inboxCountSlug !== route.slug) {
+      _inboxCount = 0;
+      _inboxCountSlug = '';
+    }
+    var launchLabel = C.requestLaunchLabel ? C.requestLaunchLabel(currentInboxCount()) : 'Draft a split (nothing is sent)…';
+    var launchTitle = C.requestLaunchTitle ? C.requestLaunchTitle() : 'Nothing is written. Opens a planning board.';
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
@@ -2877,6 +2935,18 @@
   });
   _mo.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('popstate', ensureLauncher);
+  window.addEventListener('ch-task-list-data', function (e) {
+    _bridgeCount++;
+    if (!_bridgeTimer) {
+      _bridgeTimer = setTimeout(function () {
+        _bridgeCount = 0;
+        _bridgeTimer = null;
+      }, 5000);
+    }
+    if (_bridgeCount > 10) return;
+    rememberInboxCount(e && e.detail);
+    ensureLauncher();
+  });
   setInterval(ensureLauncher, 1500);
   ensureLauncher();
 })();

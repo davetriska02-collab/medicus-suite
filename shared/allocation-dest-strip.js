@@ -54,6 +54,39 @@
     return workingFlagLabel(state);
   }
 
+  // Footer / announce scope: Morning triage when that dest set is on,
+  // otherwise the working-day word (today / 8 Sep).
+  function destScopePhrase(state) {
+    state = state || {};
+    if (state.destKind === 'group') {
+      var groupName = String(state.destGroupName || '').trim();
+      if (groupName) return groupName;
+    }
+    var day = String(state.dayPhrase || '').trim();
+    return day || 'today';
+  }
+
+  function destPeoplePhrase(state) {
+    state = state || {};
+    if (state.destKind === 'group') {
+      var groupName = String(state.destGroupName || '').trim();
+      if (groupName) return groupName;
+    }
+    return 'doctors working ' + destScopePhrase(state);
+  }
+
+  function destOntoPhrase(nDoctors, state) {
+    var n = Number(nDoctors);
+    if (!isFinite(n) || n < 0) n = 0;
+    n = Math.floor(n);
+    var people = n === 1 ? '1 doctor' : n + ' doctors';
+    if (state && state.destKind === 'group') {
+      var groupName = String(state.destGroupName || '').trim();
+      if (groupName) return people + ' on ' + groupName;
+    }
+    return people + ' working ' + destScopePhrase(state);
+  }
+
   var DAY_SHORT = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
 
   function padHm(s) {
@@ -304,6 +337,9 @@
     workingTodayChipLabel: workingTodayChipLabel,
     workingFlagLabel: workingFlagLabel,
     destFlagLabel: destFlagLabel,
+    destScopePhrase: destScopePhrase,
+    destPeoplePhrase: destPeoplePhrase,
+    destOntoPhrase: destOntoPhrase,
     groupChipLabel: groupChipLabel,
     groupChipTitle: groupChipTitle,
     scheduleHoursLabel: scheduleHoursLabel,

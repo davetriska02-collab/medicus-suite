@@ -171,6 +171,33 @@ console.log('\n--- pool titles ---');
   check(C.poolTitle({ admin: true }) === 'Admin requests', 'admin pool title');
 }
 
+console.log('\n--- request launch label + bridge count ---');
+{
+  check(C.requestLaunchLabel() === 'Draft a split (nothing is sent)…', 'no count: fail-closed label');
+  check(C.requestLaunchLabel(0) === 'Draft a split (nothing is sent)…', 'zero is not shown');
+  check(C.requestLaunchLabel(47) === 'Draft a split of 47 (nothing is sent)…', '47 from the task-list sits on the button');
+  check(C.requestLaunchTitle() === 'Nothing is written. Opens a planning board.', 'title stays fail-closed');
+  check(
+    C.inboxCountFromTaskListBridge(
+      { rows: new Array(47), taskTypeSlug: 'medical_patient_request_task' },
+      'medical_patient_request_task'
+    ) === 47,
+    'bridge count is rows.length when slug matches'
+  );
+  check(
+    C.inboxCountFromTaskListBridge(
+      { rows: new Array(47), taskTypeSlug: 'investigation_result_task' },
+      'medical_patient_request_task'
+    ) === 0,
+    'labs slug is not a request inbox count'
+  );
+  check(
+    C.inboxCountFromTaskListBridge({ rows: new Array(5), taskTypeSlug: 'medical_patient_request_task' }, 'other') === 0,
+    'wrong expected slug is fail-closed'
+  );
+  check(C.inboxCountFromTaskListBridge({ rows: 'nope', taskTypeSlug: 'medical_patient_request_task' }) === 0, 'non-array rows ignored');
+}
+
 console.log('\n--- canvas + manifest source locks ---');
 {
   const canvasPath = path.join(__dirname, 'content-scripts/request-allocate-canvas.js');
@@ -187,7 +214,10 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/content-scripts\//.test(between), 'canvas is immediately after request-allocate-core');
   check(!/\bmethod:\s*['"]POST['"]/.test(canvas), 'canvas has no POST');
   check(!/\bfetch\s*\(/.test(canvas), 'canvas never fetches');
-  check(/Draft a split \(nothing is sent\)…/.test(canvas), 'launcher names the inbox and says nothing is sent');
+  check(/requestLaunchLabel/.test(canvas), 'launcher label comes from core so the count can sit on the button');
+  check(/ch-task-list-data/.test(canvas), 'launcher listens for the task-list bridge count');
+  check(/inboxCountFromTaskListBridge/.test(canvas), 'bridge count is validated in core');
+  check(/destScopePhrase/.test(canvas), 'footer dest scope follows the dest set');
   check(/Nothing is written\. Opens a planning board\./.test(canvas), 'launcher title is fail-closed');
   check(/ms-qac-overlay/.test(canvas) && /ms-qac-launch/.test(canvas), 'overlay and launcher use qac ids');
   check(/Write not captured for this queue yet/.test(canvas), 'write-closed copy is on the canvas');

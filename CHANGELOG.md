@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.6] — 2026-09-08
+
+### Occupied strip and allocation groups — 8/10 average retarget
+
+- Occupied / list heading now starts **Looking:** so the bar itself says a colleague is looking, not that the request or list is taken. Still never the word lock. Quiet clause unchanged: `You can still work it.`
+- Request launcher shows the task-list count when the bridge has it: **Draft a split of 47 (nothing is sent)…**. Visible AG-Grid rows are not the inbox size.
+- Dest-set footer and split notes name the selected set (`3 destinations for Morning triage` / `onto 3 doctors on Morning triage`), not “doctors working today”, when a group is on.
+
 ## [v3.261.5] — 2026-09-08
 
 ### Queue title strip — named list occupancy

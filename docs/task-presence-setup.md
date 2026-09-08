@@ -15,15 +15,15 @@ practices whose Medicus build does not yet expose the presence channel.
 - **Occupied strip** prepended into `<main>` when a colleague is in the same
   request you have open. One line, for example:
 
-  `PN  Dr Priya Nair has this open. You can still work it.`
+  `PN  Looking: Dr Priya Nair has this open. You can still work it.`
 
   Avatars use identity colours (never status red or amber). Two colleagues are
   named; more become "and N others", with a `+N` disc after three avatars.
 
 - **Queue title strip** on a task-list: a compact named notice in the title
   row when a colleague also has that list open (native
-  `presence-{site}-task-list-{slug}`). Example: `Dr Priya Nair is also on
-  this list. You can still work it.` It replaces Medicus's unnamed "GP is
+  `presence-{site}-task-list-{slug}`). Example: `Looking: Dr Priya Nair is
+  also on this list. You can still work it.` It replaces Medicus's unnamed "GP is
   also working this list" widget. Absence of the strip is not evidence
   nobody else is on the list. List occupancy is never treated as a
   per-request occupant and never becomes a row 👁 chip.

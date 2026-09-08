@@ -531,12 +531,19 @@
     return names[0] + ', ' + names[1] + ', ' + names[2] + ' and ' + rest + (rest === 1 ? ' other' : ' others');
   }
 
+  // Margaret read peach as a lock. "Looking:" is the heading saying this is
+  // a note that a colleague is looking — never the word "lock".
+  function withLookingLead(body) {
+    if (!body) return '';
+    return 'Looking: ' + body;
+  }
+
   // Who + instruction as ONE sentence. Native recency is the pulse pip,
   // not a word — "On it now" / "is on this request" read as leave it.
   function occupiedHeadline(others) {
     if (!Array.isArray(others) || !others.length) return '';
     if (others.length === 1 && others[0] && others[0].selfExtra) {
-      return 'You also have this open somewhere else. You can still work it.';
+      return withLookingLead('You also have this open somewhere else. You can still work it.');
     }
     var named = [];
     var unknownCount = 0;
@@ -548,45 +555,45 @@
     }
     var work = ' You can still work it.';
     if (!named.length) {
-      if (unknownCount === 1) return 'A colleague has this open.' + work;
-      if (unknownCount === 2) return 'Two colleagues have this open (names not shown).' + work;
-      return unknownCount + ' colleagues have this open (names not shown).' + work;
+      if (unknownCount === 1) return withLookingLead('A colleague has this open.' + work);
+      if (unknownCount === 2) return withLookingLead('Two colleagues have this open (names not shown).' + work);
+      return withLookingLead(unknownCount + ' colleagues have this open (names not shown).' + work);
     }
     var shown = named.slice();
     if (unknownCount === 1) shown.push('a colleague');
     else if (unknownCount > 1) {
       if (named.length >= 3) {
         var more = named.length - 3 + unknownCount;
-        return (
+        return withLookingLead(
           named[0] +
-          ', ' +
-          named[1] +
-          ', ' +
-          named[2] +
-          ' and ' +
-          more +
-          (more === 1 ? ' other' : ' others') +
-          ' have this open.' +
-          work
+            ', ' +
+            named[1] +
+            ', ' +
+            named[2] +
+            ' and ' +
+            more +
+            (more === 1 ? ' other' : ' others') +
+            ' have this open.' +
+            work
         );
       }
       if (named.length === 1) {
         var col = unknownCount === 2 ? 'two colleagues' : unknownCount + ' colleagues';
-        return named[0] + ' and ' + col + ' have this open.' + work;
+        return withLookingLead(named[0] + ' and ' + col + ' have this open.' + work);
       }
-      return (
+      return withLookingLead(
         named[0] +
-        ', ' +
-        named[1] +
-        ' and ' +
-        unknownCount +
-        (unknownCount === 1 ? ' other' : ' others') +
-        ' have this open.' +
-        work
+          ', ' +
+          named[1] +
+          ' and ' +
+          unknownCount +
+          (unknownCount === 1 ? ' other' : ' others') +
+          ' have this open.' +
+          work
       );
     }
     var who = occupiedNameList(shown);
-    return who + (shown.length === 1 ? ' has this open.' : ' have this open.') + work;
+    return withLookingLead(who + (shown.length === 1 ? ' has this open.' : ' have this open.') + work);
   }
 
   // Same name-list rules as occupiedHeadline, list-level verb.
@@ -602,58 +609,60 @@
     }
     var work = ' You can still work it.';
     if (!named.length) {
-      if (unknownCount === 1) return 'A colleague is also on this list.' + work;
-      if (unknownCount === 2) return 'Two colleagues are also on this list (names not shown).' + work;
-      return unknownCount + ' colleagues are also on this list (names not shown).' + work;
+      if (unknownCount === 1) return withLookingLead('A colleague is also on this list.' + work);
+      if (unknownCount === 2) return withLookingLead('Two colleagues are also on this list (names not shown).' + work);
+      return withLookingLead(unknownCount + ' colleagues are also on this list (names not shown).' + work);
     }
     var shown = named.slice();
     if (unknownCount === 1) shown.push('a colleague');
     else if (unknownCount > 1) {
       if (named.length >= 3) {
         var more = named.length - 3 + unknownCount;
-        return (
+        return withLookingLead(
           named[0] +
-          ', ' +
-          named[1] +
-          ', ' +
-          named[2] +
-          ' and ' +
-          more +
-          (more === 1 ? ' other' : ' others') +
-          ' are also on this list.' +
-          work
+            ', ' +
+            named[1] +
+            ', ' +
+            named[2] +
+            ' and ' +
+            more +
+            (more === 1 ? ' other' : ' others') +
+            ' are also on this list.' +
+            work
         );
       }
       if (named.length === 1) {
         var col = unknownCount === 2 ? 'two colleagues' : unknownCount + ' colleagues';
-        return named[0] + ' and ' + col + ' are also on this list.' + work;
+        return withLookingLead(named[0] + ' and ' + col + ' are also on this list.' + work);
       }
-      return (
+      return withLookingLead(
         named[0] +
-        ', ' +
-        named[1] +
-        ' and ' +
-        unknownCount +
-        (unknownCount === 1 ? ' other' : ' others') +
-        ' are also on this list.' +
-        work
+          ', ' +
+          named[1] +
+          ' and ' +
+          unknownCount +
+          (unknownCount === 1 ? ' other' : ' others') +
+          ' are also on this list.' +
+          work
       );
     }
     if (shown.length >= 3) {
       var restN = shown.length - 2;
-      return (
+      return withLookingLead(
         shown[0] +
-        ', ' +
-        shown[1] +
-        ' and ' +
-        restN +
-        (restN === 1 ? ' other' : ' others') +
-        ' are also on this list.' +
-        work
+          ', ' +
+          shown[1] +
+          ' and ' +
+          restN +
+          (restN === 1 ? ' other' : ' others') +
+          ' are also on this list.' +
+          work
       );
     }
     var who = occupiedNameList(shown);
-    return who + (shown.length === 1 ? ' is also on this list.' : ' are also on this list.') + work;
+    return withLookingLead(
+      who + (shown.length === 1 ? ' is also on this list.' : ' are also on this list.') + work
+    );
   }
 
   function listOccupiedBannerTitle() {

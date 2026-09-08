@@ -79,6 +79,29 @@ check(
   S.groupChipLabel(morningPreset) === 'Morning triage (3) \u00b7 08:00\u201313:00',
   'groupChipLabel is name (n) · HH:MM–HH:MM'
 );
+
+check(
+  S.destScopePhrase({ destKind: 'group', destGroupName: 'Morning triage', dayPhrase: 'today' }) === 'Morning triage',
+  'dest scope for a group is the group name, not today'
+);
+check(S.destScopePhrase({ destKind: 'in-today', dayPhrase: 'today' }) === 'today', 'in-today scope is the day word');
+check(
+  S.destPeoplePhrase({ destKind: 'group', destGroupName: 'Morning triage', dayPhrase: 'today' }) === 'Morning triage',
+  'people phrase for a group is the group name'
+);
+check(
+  S.destPeoplePhrase({ destKind: 'in-today', dayPhrase: 'today' }) === 'doctors working today',
+  'people phrase for Working today keeps the day'
+);
+check(
+  S.destOntoPhrase(3, { destKind: 'group', destGroupName: 'Morning triage', dayPhrase: 'today' }) ===
+    '3 doctors on Morning triage',
+  'onto phrase names the dest set'
+);
+check(
+  S.destOntoPhrase(12, { destKind: 'in-today', dayPhrase: 'today' }) === '12 doctors working today',
+  'onto phrase for Working today keeps the day'
+);
 check(
   S.groupChipTitle(morningPreset) === 'Mon, Tue, Wed, Thu, Fri. Split onto the people in this group.',
   'group chip title still explains days'
