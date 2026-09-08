@@ -2785,8 +2785,7 @@
     }
     if (!_open) _route = route;
     var launchLabel = 'Plan a share-out of this inbox…';
-    var launchTitle =
-      'Opens a planning board. Nothing is written to Medicus until Write is enabled and you confirm.';
+    var launchTitle = 'Opens a planning board. Nothing is written to Medicus until Write is enabled and you confirm.';
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
