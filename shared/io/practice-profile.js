@@ -126,8 +126,9 @@ const PracticeProfile = (() => {
   async function fetchProfile() {
     try {
       const url = chrome.runtime.getURL('practice-profile.json');
-      // cache: 'no-store' ensures a changed file on the shared network drive is
-      // always re-read rather than served from the browser HTTP cache.
+      // cache: 'no-store' ensures a changed file on the loaded folder (local
+      // clone after copy-to-this-pc, or a lone install) is always re-read
+      // rather than served from the browser HTTP cache.
       const resp = await fetch(url, { cache: 'no-store' });
       if (!resp.ok) return null; // 404 means no profile file — silent no-op
       const profile = await resp.json();

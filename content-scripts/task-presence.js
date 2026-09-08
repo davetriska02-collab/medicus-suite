@@ -233,7 +233,7 @@
   // url AND key set) win, else the shared-folder file cache
   // ('presence.fileCache', synced by the service worker from
   // presence-config.json in the extension folder — one file configures every
-  // machine that loads from the shared folder). Enabled semantics are
+  // machine that has synced the gold copy). Enabled semantics are
   // "on unless this machine explicitly opted out": presence.enabled is only
   // false when someone unticked the Options box, so a machine that has never
   // opened Options runs the moment the shared file exists.

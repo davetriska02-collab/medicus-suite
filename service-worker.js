@@ -129,6 +129,11 @@ try {
 } catch (e) {
   console.warn('[Suite] importScripts shared/presence-folder.js failed:', e && e.message);
 }
+try {
+  importScripts('shared/gold-sync.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/gold-sync.js failed:', e && e.message);
+}
 
 // Transactional API integration (official Medicus API via our backend proxy).
 // The proxy caller credential (txn.callerKey) is only ever read HERE, in the
@@ -351,10 +356,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // ── Task-presence shared-folder config (fire-and-forget, 2026-08-04) ─────────
-// Practices load the unpacked extension from a shared folder, so a single
-// `presence-config.json` dropped into that folder configures EVERY machine at
-// once — no per-machine Options entry. This syncs the packaged file (if
-// present) into chrome.storage.local as 'presence.fileCache', which
+// A `presence-config.json` sitting next to manifest.json in the *loaded*
+// folder (the local clone after copy-to-this-pc, or a lone local install)
+// configures that machine with no Options entry. Drop the file on the gold
+// copy and let each PC sync. This syncs the packaged file (if present) into
+// chrome.storage.local as 'presence.fileCache', which
 // content-scripts/task-presence.js resolves as its config source (manual
 // Options values, when set, take precedence). The storage cache also survives
 // a folder replacement that forgets to re-copy the json: presence keeps
@@ -576,10 +582,12 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }
 
   if (alarm.name === PP_ALARM) {
-    // Re-apply practice profile if a new version is available on the share
-    runStartupTask('pp-check checkAndApply', () => applyPracticeProfile());
-    // Also check whether the extension files on disk have been updated
-    runStartupTask('pp-check codeUpdate', _checkForCodeUpdate);
+    // Gold → local first so apply + code-update see the files the share just grew.
+    runStartupTask('pp-check goldSync+apply+codeUpdate', async () => {
+      await runGoldSync();
+      await applyPracticeProfile();
+      await _checkForCodeUpdate();
+    });
   }
 });
 
@@ -640,7 +648,7 @@ async function _checkForCodeUpdate() {
     let diskManifest;
     try {
       const resp = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
-      // On a shared network drive the file may be mid-copy — any error = skip silently
+      // During a gold-copy → local sync the file may be mid-copy — any error = skip silently
       if (!resp.ok) return;
       diskManifest = await resp.json();
     } catch (_) {
@@ -748,7 +756,10 @@ chrome.runtime.onInstalled.addListener(async () => {
   runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
   runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
   runStartupTask('schedulePpAlarm', _schedulePpAlarm);
-  applyPracticeProfile();
+  runStartupTask('goldSync then apply', async () => {
+    await runGoldSync();
+    await applyPracticeProfile();
+  });
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -758,7 +769,10 @@ chrome.runtime.onStartup.addListener(() => {
   runStartupTask('schedulePpAlarm', _schedulePpAlarm);
   // Clear stale popout window ID on browser restart
   chrome.storage.local.remove('popout.windowId');
-  applyPracticeProfile();
+  runStartupTask('goldSync then apply', async () => {
+    await runGoldSync();
+    await applyPracticeProfile();
+  });
 });
 
 async function applyPracticeProfile() {
@@ -769,6 +783,99 @@ async function applyPracticeProfile() {
     console.warn('[Practice Profile] startup apply failed:', e.message);
   }
 }
+
+// ── Gold-copy → local-clone sync ─────────────────────────────────────────────
+// After the first Load unpacked from a local folder, this copies newer files
+// from the practice gold copy so staff never reopen chrome://extensions.
+
+async function goldSyncStatus() {
+  if (typeof GoldSync === 'undefined') {
+    return { configured: false, gold: null, local: null, meta: null, runningVersion: chrome.runtime.getManifest().version };
+  }
+  const gold = await GoldSync.loadGold();
+  const local = await GoldSync.loadLocal();
+  const [goldPerm, localPerm] = await Promise.all([
+    GoldSync.permissionState(gold, 'read'),
+    GoldSync.permissionState(local, 'readwrite'),
+  ]);
+  let sameFolder = false;
+  if (gold && local && typeof gold.isSameEntry === 'function') {
+    try {
+      sameFolder = await gold.isSameEntry(local);
+    } catch (_) {
+      sameFolder = false;
+    }
+  }
+  let meta = null;
+  try {
+    const r = await chrome.storage.local.get('suite.goldSync');
+    meta = r['suite.goldSync'] || null;
+  } catch (_) {}
+  return {
+    configured: !!(gold && local),
+    sameFolder,
+    gold: gold ? { name: gold.name || '', permission: goldPerm } : null,
+    local: local ? { name: local.name || '', permission: localPerm } : null,
+    goldVersion: gold && goldPerm === 'granted' ? await GoldSync.readManifestVersion(gold) : null,
+    localVersion: local && localPerm === 'granted' ? await GoldSync.readManifestVersion(local) : null,
+    runningVersion: chrome.runtime.getManifest().version,
+    meta,
+  };
+}
+
+async function runGoldSync() {
+  if (typeof GoldSync === 'undefined') return { ok: false, reason: 'module-missing' };
+  const gold = await GoldSync.loadGold();
+  const local = await GoldSync.loadLocal();
+  if (!gold || !local) return { ok: false, reason: 'not-configured' };
+  const goldPerm = await GoldSync.permissionState(gold, 'read');
+  const localPerm = await GoldSync.permissionState(local, 'readwrite');
+  if (goldPerm !== 'granted' || localPerm !== 'granted') {
+    return { ok: false, reason: 'permission-' + (goldPerm !== 'granted' ? 'gold' : 'local') };
+  }
+  const runningVersion = chrome.runtime.getManifest().version;
+  let result;
+  try {
+    result = await GoldSync.sync(gold, local, runningVersion);
+  } catch (e) {
+    result = { ok: false, reason: String((e && e.message) || e).slice(0, 200), copied: 0 };
+  }
+  const meta = {
+    lastAt: Date.now(),
+    lastOk: !!result.ok,
+    lastReason: result.reason || (result.ok ? result.mode : 'error'),
+    lastCopied: result.copied || 0,
+    lastGoldVersion: result.goldVersion || null,
+    goldName: gold.name || '',
+    localName: local.name || '',
+  };
+  try {
+    await chrome.storage.local.set({ 'suite.goldSync': meta });
+  } catch (_) {}
+  return result;
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return;
+  if (!msg || typeof msg.action !== 'string' || msg.action.indexOf('goldSync:') !== 0) return;
+  if (msg.action === 'goldSync:status') {
+    goldSyncStatus()
+      .then(sendResponse)
+      .catch(() => sendResponse({ configured: false }));
+    return true;
+  }
+  if (msg.action === 'goldSync:run') {
+    runGoldSync()
+      .then((result) => {
+        if (result && result.ok && result.mode === 'full') {
+          runStartupTask('goldSync codeUpdate', _checkForCodeUpdate);
+        }
+        sendResponse(result);
+      })
+      .catch((e) => sendResponse({ ok: false, reason: String((e && e.message) || e).slice(0, 200) }));
+    return true;
+  }
+});
 
 // ── Popout window lifecycle ───────────────────────────────────────────────────
 

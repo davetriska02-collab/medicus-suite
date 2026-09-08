@@ -367,6 +367,11 @@ const ALLOWLIST = new Set([
   // rationale (see side-panel/setup/setup.js):
   'suite.setup',
 
+  // Per-machine gold-copy → local-clone sync status (last run, file counts).
+  // Not user config; restoring it onto another PC would lie about that
+  // machine's folders. See shared/gold-sync.js:
+  'suite.goldSync',
+
   // Transient mute timer — ephemeral, resets naturally (suite.quietUntil is removed
   // when clear() is called; restoring it would silently re-mute a new install):
   'suite.quietUntil',

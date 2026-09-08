@@ -13,16 +13,19 @@ presence channel), so the signal has to be the Suite's own.
 
 ## Setup: one click per machine. That's it.
 
-The store is **the practice's own shared folder** — the same one the
-unpacked extension already loads from on every machine. Presence data never
-leaves the practice network; there are no accounts, no cloud, no credentials,
-no config files.
+The store is **the practice's own shared folder** — typically the gold copy
+on the practice share, not the local folder Edge/Chrome Load unpacked from.
+(Load unpacked from a network drive and the suite is dropped after a
+restart; see `docs/PRACTICE-ROLLOUT.md`.) Presence data never leaves the
+practice network; there are no accounts, no cloud, no credentials, no
+config files.
 
 On each machine, once:
 
 1. Suite Options → **Task Presence** → **Choose folder…**
-2. Select the Medicus Suite shared folder (any folder every machine mounts
-   works — the extension folder is the natural choice).
+2. Select the practice gold-copy folder on the share (any folder every
+   machine mounts works — the shared gold copy is the natural choice, not
+   `%LOCALAPPDATA%\MedicusSuite`).
 3. When Chrome asks, choose **"Allow on every visit"** (this is what makes
    the access survive browser restarts).
 

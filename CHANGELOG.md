@@ -2,6 +2,63 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.6] — 2026-09-08
+
+### Share-load is valid when it stays up
+
+A working Load-unpacked from the practice share is not a bug. The drop
+after restart is a race (browser starts before the mapped drive is up),
+not a rule that shares are forbidden. Options, README and the rollout
+playbook now say: leave a PC that survives reboot on the share; use the
+local clone + gold sync only on PCs that drop.
+
+## [v3.261.5] — 2026-09-08
+
+### Automatic updates from the gold copy
+
+A local drive stays loaded because the folder is already on disk when
+Chrome or Edge starts. The share is still the right place for the gold
+copy — it was the per-person Load unpacked on every zip that hurt.
+
+Once each PC has Load-unpacked from `%LOCALAPPDATA%\MedicusSuite` and
+connected both folders (Options → Backup & Restore → Automatic updates,
+or Use Task Presence folder + pick local), the service worker copies
+newer gold files every 15 minutes and on browser start. Same-version
+publishes only refresh `practice-profile.json` / `presence-config.json`.
+A new suite version copies the tree (manifest last) and the existing
+idle reload fires. Nobody reopens `edge://extensions`.
+
+`ms-presence` is never copied onto the local clone — presence stays on
+the share. Gold and local being the same path is refused.
+
+## [v3.261.4] — 2026-09-08
+
+### Practice rollout — load unpacked from this PC, not the share
+
+Pete's report: the suite was on a mapped / Y: / "wide" drive, and after a
+restart Chrome or Edge dropped it. That is the browser, not a settings
+glitch — an unpacked extension whose folder is not mounted yet at browser
+start is treated as gone, so every chip and panel vanishes (H-005).
+
+The Options page had been telling practices to Load unpacked *from* the
+share. That advice is reversed.
+
+- **Gold copy** stays on the practice share (`practice-profile.json`,
+  presence, Knowledge, new zips).
+- **Each PC** Load-unpacked from `%LOCALAPPDATA%\MedicusSuite`.
+- `copy-to-this-pc.cmd` / `.ps1` at the repo root robocopy the gold folder
+  onto this PC and print the path. Re-run after an update, or as a login
+  script.
+- Options → Backup & Restore now has a visible amber warning and a rewritten
+  rollout guide. README and `docs/PRACTICE-ROLLOUT.md` match.
+- A new Load-unpacked path is a new install: export first, then import.
+- If a *local* copy still vanishes, that is IT policy
+  (`edge://policy`: DeveloperToolsAvailability, ExtensionInstallBlocklist /
+  Allowlist) — the playbook names what to ask CSU.
+
+`test-practice-rollout-copy.js` fails closed if the old "load from the
+share" wording comes back.
+
 ## [v3.261.3] — 2026-09-07
 
 ### Allocation groups — even-split onto a named set of people
