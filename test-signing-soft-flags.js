@@ -96,7 +96,8 @@ const qof = require('./rules/qof-rules.json');
     'pack toggle / saveSuite does not set practiceAcceptedAt'
   );
   const ppSrc = fs.readFileSync(path.join(__dirname, 'shared/io/practice-profile.js'), 'utf8');
-  check(!/suiteImport\s*\(/.test(ppSrc), 'applyProfile does not call suiteImport()');
+  const ppCode = ppSrc.replace(/\/\/.*$/gm, '');
+  check(!/suiteImport\s*\(/.test(ppCode), 'applyProfile does not call suiteImport()');
   const allowList = (ppSrc.match(/const ALLOWED_SUITE_KEYS = \[([^\]]+)\]/) || [])[1] || '';
   check(
     /'signing\.softFlags'/.test(allowList),
