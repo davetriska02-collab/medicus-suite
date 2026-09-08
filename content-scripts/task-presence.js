@@ -36,10 +36,10 @@
 // anywhere.
 //
 // SAFETY POSTURE — advisory, never a lock:
-//   - The strip says to check with them or carry on. It never claims
-//     exclusivity, never blocks Medicus's own UI, and never asks the second
-//     clinician to leave — the two-GPs-collide failure is wasted duplicate
-//     work, and the fix is awareness, not enforcement.
+//   - The strip says they have it open and you can still work it. It never
+//     claims exclusivity, never blocks Medicus's own UI, and never asks the
+//     second clinician to leave — the two-GPs-collide failure is wasted
+//     duplicate work, and the fix is awareness, not enforcement.
 //   - ABSENCE of a chip/banner is NEVER evidence nobody is on the request
 //     (store unconfigured, offline, colleague without the Suite). The Options
 //     card and setup doc both say so. Nothing here suppresses or reorders any
@@ -342,25 +342,43 @@
     return typeof hue === 'string' && HUE_HEX_RE.test(hue) ? hue : '';
   }
 
-  // Prefer a previously-known staff label over the "Someone else" fallback
+  // Fallback when member.info is empty. Never "Someone else" — that reads
+  // like a named person we chose not to identify.
+  function unknownColleagueLabel() {
+    return 'A colleague';
+  }
+
+  function isUnknownColleagueLabel(s) {
+    var t = typeof s === 'string' ? s.trim() : '';
+    if (!t) return true;
+    var lower = t.toLowerCase();
+    return (
+      lower === 'a colleague' ||
+      lower === 'a colleague (name not shown)' ||
+      lower === 'someone else' ||
+      lower === 'someone'
+    );
+  }
+
+  // Prefer a previously-known staff label over the unknown-colleague fallback
   // when native member.info is empty. knownMap is staffId → display label
   // (store heartbeats + prior native names). Never invent a name.
   function preferKnownLabel(label, staffId, knownMap) {
     var current = typeof label === 'string' ? label.trim() : '';
-    if (current && current !== 'Someone else') return current.slice(0, 60);
+    if (current && !isUnknownColleagueLabel(current)) return current.slice(0, 60);
     var known = '';
     if (knownMap && typeof staffId === 'string') {
       var k = knownMap[staffId] || knownMap[String(staffId).toLowerCase()];
       if (typeof k === 'string') known = k.trim();
     }
-    if (known && known !== 'Someone else' && known !== 'A colleague') return known.slice(0, 60);
-    return current || 'Someone else';
+    if (known && !isUnknownColleagueLabel(known)) return known.slice(0, 60);
+    return unknownColleagueLabel();
   }
 
   function rememberKnownLabel(staffId, label, knownMap) {
     if (!knownMap || typeof staffId !== 'string' || !staffId) return knownMap;
     var s = typeof label === 'string' ? label.trim() : '';
-    if (!s || s === 'Someone else' || s === 'A colleague') return knownMap;
+    if (!s || isUnknownColleagueLabel(s)) return knownMap;
     knownMap[staffId] = s.slice(0, 60);
     return knownMap;
   }
@@ -404,7 +422,7 @@
       var info = m.info && typeof m.info === 'object' ? m.info : {};
       var label = labelFromPresenceInfo(info);
       var unknown = !label;
-      if (!label) label = 'Someone else';
+      if (!label) label = unknownColleagueLabel();
       var initials = unknown
         ? '?'
         : typeof info.initials === 'string' && /^[A-Za-z]{1,3}$/.test(info.initials.trim())
@@ -438,32 +456,86 @@
     return out;
   }
 
-  function occupiedHeadline(others) {
-    if (!Array.isArray(others) || !others.length) return '';
-    var n = others.length;
-    function lab(i) {
-      var s = others[i] && others[i].label;
-      return typeof s === 'string' && s.trim() ? s.trim() : 'Someone else';
-    }
-    function second(s) {
-      return s === 'Someone else' ? 'someone else' : s;
-    }
-    var a = lab(0);
-    if (n === 1) return a + ' is on this request';
-    if (n === 2) return a + ' and ' + second(lab(1)) + ' are on this request';
-    if (a === 'Someone else') {
-      var rest = n - 1;
-      if (rest === 1) return 'Someone else and one other person are on this request';
-      return 'Someone else and ' + rest + ' other people are on this request';
-    }
-    var b = second(lab(1));
-    var more = n - 2;
-    if (more === 1) return a + ', ' + b + ' and 1 other are on this request';
-    return a + ', ' + b + ' and ' + more + ' others are on this request';
+  // 1 name; 2 "A and B"; 3 "A, B and C"; 4+ "A, B, C and N others".
+  function occupiedNameList(names) {
+    if (!Array.isArray(names) || !names.length) return '';
+    var n = names.length;
+    if (n === 1) return names[0];
+    if (n === 2) return names[0] + ' and ' + names[1];
+    if (n === 3) return names[0] + ', ' + names[1] + ' and ' + names[2];
+    var rest = n - 3;
+    return names[0] + ', ' + names[1] + ', ' + names[2] + ' and ' + rest + (rest === 1 ? ' other' : ' others');
   }
 
-  function occupiedAction() {
-    return 'Check with them before you reply, or carry on. You are not locked out.';
+  function occupiedHeadline(others) {
+    if (!Array.isArray(others) || !others.length) return '';
+    if (others.length === 1 && others[0] && others[0].selfExtra) {
+      return 'You also have this open somewhere else.';
+    }
+    var named = [];
+    var unknownCount = 0;
+    for (var i = 0; i < others.length; i++) {
+      var s = others[i] && others[i].label;
+      var t = typeof s === 'string' ? s.trim() : '';
+      if (!t || isUnknownColleagueLabel(t)) unknownCount++;
+      else named.push(t);
+    }
+    if (!named.length) {
+      if (unknownCount === 1) return 'A colleague is on this request';
+      if (unknownCount === 2) return 'Two colleagues are on this request (names not shown)';
+      return unknownCount + ' colleagues are on this request (names not shown)';
+    }
+    var shown = named.slice();
+    if (unknownCount === 1) shown.push('a colleague');
+    else if (unknownCount > 1) {
+      if (named.length >= 3) {
+        var more = named.length - 3 + unknownCount;
+        return (
+          named[0] +
+          ', ' +
+          named[1] +
+          ', ' +
+          named[2] +
+          ' and ' +
+          more +
+          (more === 1 ? ' other' : ' others') +
+          ' are on this request'
+        );
+      }
+      if (named.length === 1) {
+        var col = unknownCount === 2 ? 'two colleagues' : unknownCount + ' colleagues';
+        return named[0] + ' and ' + col + ' are on this request';
+      }
+      return (
+        named[0] +
+        ', ' +
+        named[1] +
+        ' and ' +
+        unknownCount +
+        (unknownCount === 1 ? ' other' : ' others') +
+        ' are on this request'
+      );
+    }
+    var who = occupiedNameList(shown);
+    return who + (shown.length === 1 ? ' is ' : ' are ') + 'on this request';
+  }
+
+  function occupiedAction(others) {
+    if (Array.isArray(others) && others.length && others[0] && others[0].selfExtra) {
+      return 'This tab is not the only one. You can still work it.';
+    }
+    return 'They have it open. You can still work it.';
+  }
+
+  function occupiedBannerTitle(others) {
+    if (Array.isArray(others) && others.length && others[0] && others[0].selfExtra) {
+      return 'You also have this open somewhere else. This tab is not the only one. You can still work it.';
+    }
+    return 'A colleague has this request open. It is not assigned to them. You can still work it.';
+  }
+
+  function occupancyHideHint() {
+    return 'Hide this warning until someone else joins. It comes back if the people change.';
   }
 
   // Native Pusher membership is live NOW. "seen here N min" is counted from
@@ -477,12 +549,24 @@
     if (native) {
       var seenAt = others[0].openedAtMs;
       var mins = Math.floor((nowMs - seenAt) / 60000);
-      if (!isFinite(mins) || mins < 1) return 'Live';
-      return 'Live · seen here ' + mins + ' min';
+      if (!isFinite(mins) || mins < 1) return 'Here now';
+      return 'Here now · seen here ' + mins + ' min';
     }
     var opened = others[0].openedAtMs;
     var ago = minutesAgoText(typeof opened === 'number' ? opened : nowMs, nowMs);
-    return ago === 'just now' ? 'Live' : 'Seen ' + ago;
+    return ago === 'just now' ? 'Here now' : 'Seen ' + ago;
+  }
+
+  function sanitizeSelfExtras(detail, myStaffId, expectedTaskUuid) {
+    if (!detail || typeof detail !== 'object') return 0;
+    if (detail.live === false) return 0;
+    if (typeof myStaffId !== 'string' || !UUID_RE.test(myStaffId)) return 0;
+    if (typeof expectedTaskUuid !== 'string' || !UUID_RE.test(expectedTaskUuid)) return 0;
+    if (typeof detail.taskUuid !== 'string' || !UUID_RE.test(detail.taskUuid)) return 0;
+    if (detail.taskUuid.toLowerCase() !== expectedTaskUuid.toLowerCase()) return 0;
+    var n = detail.selfExtras;
+    if (typeof n !== 'number' || !isFinite(n) || n < 1) return 0;
+    return Math.min(20, Math.floor(n));
   }
 
   function occupancyDismissKey(taskUuid) {
@@ -548,12 +632,19 @@
       occupiedHeadline: occupiedHeadline,
       occupiedAction: occupiedAction,
       occupiedNote: occupiedNote,
+      occupiedNameList: occupiedNameList,
+      occupiedBannerTitle: occupiedBannerTitle,
+      occupancyHideHint: occupancyHideHint,
+      occupiedInnerHtml: occupiedInnerHtml,
+      unknownColleagueLabel: unknownColleagueLabel,
+      isUnknownColleagueLabel: isUnknownColleagueLabel,
       preferKnownLabel: preferKnownLabel,
       rememberKnownLabel: rememberKnownLabel,
       occupancyDismissKey: occupancyDismissKey,
       occupancyDismissValue: occupancyDismissValue,
       occupancyIsDismissed: occupancyIsDismissed,
       occupancyWriteDismiss: occupancyWriteDismiss,
+      sanitizeSelfExtras: sanitizeSelfExtras,
       AVATAR_HUES: AVATAR_HUES,
       safeAvatarHue: safeAvatarHue,
     };
@@ -857,6 +948,7 @@
   var BANNER_ID = 'ms-tp-banner';
   var _nativeOthers = [];
   var _nativeTaskUuid = '';
+  var _selfExtras = 0;
   var _storeOthers = [];
   var _firstSeen = {}; // staffId → first-seen ms on this overview (this-tab dwell)
   var _knownLabels = {}; // staffId → last known display label (store + native)
@@ -901,7 +993,7 @@
       var label = preferKnownLabel(n.label, n.staffId, _knownLabels);
       var initials = n.initials;
       if (label !== n.label) {
-        initials = label === 'Someone else' ? '?' : initialsFromLabel(label);
+        initials = isUnknownColleagueLabel(label) ? '?' : initialsFromLabel(label);
       }
       by[n.staffId] = {
         staffId: n.staffId,
@@ -960,11 +1052,12 @@
         var extra = o.initials === '?' ? ' ms-tp-av-unknown' : '';
         var hue = o.initials === '?' ? '' : safeAvatarHue(o.hue);
         var bg = hue ? 'background:' + hue + ';' : '';
+        var avTitle = isUnknownColleagueLabel(o.label) ? 'A colleague (name not shown)' : o.label;
         return (
           '<span class="ms-tp-av' +
           extra +
           '" title="' +
-          esc(o.label) +
+          esc(avTitle) +
           '" aria-hidden="true" style="z-index:' +
           (i + 1) +
           ';' +
@@ -989,20 +1082,21 @@
       if (others[ni] && others[ni].native) nativeLive = true;
     }
     var seenExtra = '';
-    if (nativeLive && /^Live\s*·\s*/i.test(recency)) {
-      seenExtra = recency.replace(/^Live\s*·\s*/i, '');
+    if (nativeLive && /^Here now\s*·\s*/i.test(recency)) {
+      seenExtra = recency.replace(/^Here now\s*·\s*/i, '');
     }
     var recencyHtml;
     if (nativeLive) {
       recencyHtml =
         '<span class="ms-tp-recency">' +
         '<span class="ms-tp-live" aria-hidden="true"></span>' +
-        '<span class="ms-tp-recency-live">Live</span>' +
+        '<span class="ms-tp-recency-live">Here now</span>' +
         (seenExtra ? '<span class="ms-tp-seen"> · ' + esc(seenExtra) + '</span>' : '') +
         '</span>';
     } else {
       recencyHtml = '<span class="ms-tp-recency">' + esc(recency) + '</span>';
     }
+    var hideHint = occupancyHideHint();
     return (
       '<span class="ms-tp-inner">' +
       '<span class="ms-tp-avs' +
@@ -1015,9 +1109,13 @@
       '</span>' +
       recencyHtml +
       '<span class="ms-tp-action">' +
-      esc(occupiedAction()) +
+      esc(occupiedAction(others)) +
       '</span>' +
-      '<button type="button" class="ms-tp-hide">Hide</button>' +
+      '<button type="button" class="ms-tp-hide" title="' +
+      esc(hideHint) +
+      '" aria-label="' +
+      esc(hideHint) +
+      '">Hide</button>' +
       '</span>'
     );
   }
@@ -1038,11 +1136,36 @@
     });
   }
 
+  function selfExtraOccupants(taskUuid) {
+    var me = myIdentity();
+    var sid = me && me.staffId ? me.staffId : 'self';
+    var initials = '?';
+    var label = 'You';
+    if (me && me.email) {
+      var fromEmail = displayLabel('', me.email);
+      if (fromEmail) initials = initialsFromLabel(fromEmail);
+    }
+    return [
+      {
+        staffId: sid,
+        label: label,
+        initials: initials,
+        hue: avatarHue(sid),
+        native: true,
+        selfExtra: true,
+        taskUuid: taskUuid,
+      },
+    ];
+  }
+
   function paintOccupied() {
     var path = location.pathname;
     var ctx = parseTaskOverviewPath(path);
     var others = ctx ? othersOnTask(mergedOthers(), ctx.taskUuid) : [];
     var nowMs = Date.now();
+    if (ctx && !others.length && _selfExtras >= 1) {
+      others = selfExtraOccupants(ctx.taskUuid);
+    }
     if (ctx && others.length && occupancyIsDismissed(ctx.taskUuid, staffIdList(others), sessionStorage)) {
       others = [];
     }
@@ -1066,7 +1189,7 @@
       return;
     }
     var html = occupiedInnerHtml(others, nowMs);
-    var title = headline + (note ? ' · ' + note : '') + '. ' + occupiedAction();
+    var title = occupiedBannerTitle(others);
     var idSet = staffIdList(others).slice().sort().join(',');
     try {
       document.documentElement.classList.add('ms-tp-occupied');
@@ -1081,6 +1204,7 @@
       else el.insertAdjacentHTML('afterbegin', html);
       el.setAttribute('data-sig', sig);
       el.setAttribute('title', title);
+      el.setAttribute('tabindex', '-1');
       el.setAttribute('aria-live', 'off');
       var sr = el.querySelector('.ms-tp-sr');
       if (!sr) {
@@ -1103,6 +1227,7 @@
     el.id = BANNER_ID;
     el.setAttribute('aria-live', 'off');
     el.setAttribute('title', title);
+    el.setAttribute('tabindex', '-1');
     el.setAttribute('data-sig', sig);
     el.innerHTML = html + '<span class="ms-tp-sr" role="status" aria-live="polite"></span>';
     var srNew = el.querySelector('.ms-tp-sr');
@@ -1156,6 +1281,7 @@
     if (!expected) {
       _nativeOthers = [];
       _nativeTaskUuid = '';
+      _selfExtras = 0;
       _lastNativeDetail = null;
       _firstSeen = {};
       paintOccupied();
@@ -1164,10 +1290,12 @@
     _nativeTaskUuid = expected;
     if (!me) {
       _nativeOthers = [];
+      _selfExtras = 0;
       paintOccupied();
       return;
     }
     _nativeOthers = sanitizeNativePresence(_lastNativeDetail, me.staffId, expected);
+    _selfExtras = sanitizeSelfExtras(_lastNativeDetail, me.staffId, expected);
     paintOccupied();
   }
   window.addEventListener('ch-native-task-presence', function (e) {
@@ -1331,6 +1459,7 @@
       if (!ctx || ctx.taskUuid !== _nativeTaskUuid) {
         _nativeOthers = [];
         _nativeTaskUuid = ctx ? ctx.taskUuid : '';
+        _selfExtras = 0;
         _firstSeen = {};
         _storeOthers = [];
         _lastNativeDetail = null;

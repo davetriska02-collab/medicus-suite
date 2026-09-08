@@ -27,6 +27,11 @@ subscription errored) emit `members: []` with `live: false`. The isolated
 world treats `live === false` as hide (missing `live` stays live, which is
 what the screenshot rig sends). Queue channel
 `presence-{site}-task-list-{slug}` is still not a per-request occupant.
+Dual-tab same-UUID is not visible: Pusher-js hashes presence members by
+user_id (the staff UUID), so two tabs of the same clinician collapse to one
+id; `members.count` matches unique ids. The cheap `selfExtras` detector
+still ships and the isolated world will paint "You also have this open
+somewhere else." if extras ever arrive — we do not query `chrome.tabs`.
 
 **Captured:** 2026-08-04, live Medicus, `communication-thread` task opened from a
 `medical_patient_request_task` queue, via `scripts/task-presence-capture.js`.

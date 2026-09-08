@@ -36,15 +36,21 @@ const {
   occupiedHeadline,
   occupiedAction,
   occupiedNote,
+  occupiedNameList,
+  occupiedBannerTitle,
+  occupancyHideHint,
+  occupiedInnerHtml,
+  unknownColleagueLabel,
   preferKnownLabel,
   occupancyDismissKey,
   occupancyDismissValue,
   occupancyIsDismissed,
   occupancyWriteDismiss,
+  sanitizeSelfExtras,
   AVATAR_HUES,
   safeAvatarHue,
 } = require('./content-scripts/task-presence.js');
-const { presenceEmitDecision } = require('./content-scripts/triage-lens/page-world.js');
+const { presenceEmitDecision, presenceSelfExtras } = require('./content-scripts/triage-lens/page-world.js');
 
 let passed = 0,
   failed = 0;
@@ -390,8 +396,8 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(sanitizeNativePresence(null, UUID_ME, UUID_A).length === 0, 'null detail -> empty');
   check(
     sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_A)[0].label ===
-      'Someone else',
-    'empty info -> Someone else'
+      'A colleague',
+    'empty info -> A colleague (never Someone else)'
   );
   check(
     sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_A)[0].initials ===
@@ -399,6 +405,7 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     'unknown identity uses ? not invented initials'
   );
 
+  check(unknownColleagueLabel() === 'A colleague', 'fallback helper is A colleague, not Someone');
   check(occupiedHeadline([{ label: 'Aisha Malik' }]) === 'Aisha Malik is on this request', 'single headline');
   check(
     occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }]) ===
@@ -407,8 +414,8 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   );
   check(
     occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }, { label: 'c' }]) ===
-      'Aisha Malik, Miles Scholar and 1 other are on this request',
-    'three: two names then 1 other'
+      'Aisha Malik, Miles Scholar and c are on this request',
+    'three: all three names, no "1 other"'
   );
   check(
     occupiedHeadline([
@@ -418,41 +425,105 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
       { label: 'd' },
       { label: 'e' },
       { label: 'f' },
-    ]) === 'Dr Priya Nair, Dr Sam Okonkwo and 4 others are on this request',
-    'six: two names then 4 others'
+    ]) === 'Dr Priya Nair, Dr Sam Okonkwo, c and 3 others are on this request',
+    'six: three names then 3 others'
   );
   check(
-    occupiedHeadline([{ label: 'Someone else' }, { label: 'Someone else' }]) ===
-      'Someone else and someone else are on this request',
-    'two unknowns: second someone else is lowercase'
+    occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
+      'A, B, C and 1 other are on this request',
+    'four: three names then 1 other'
+  );
+  check(occupiedNameList(['A']) === 'A', 'name list: 1');
+  check(occupiedNameList(['A', 'B']) === 'A and B', 'name list: 2');
+  check(occupiedNameList(['A', 'B', 'C']) === 'A, B and C', 'name list: 3');
+  check(occupiedNameList(['A', 'B', 'C', 'D']) === 'A, B, C and 1 other', 'name list: 4+');
+  check(
+    occupiedHeadline([{ label: 'A colleague' }]) === 'A colleague is on this request',
+    'one unknown: A colleague is on this request'
   );
   check(
-    occupiedHeadline([{ label: 'Someone else' }, { label: 'Someone else' }, { label: 'Someone else' }]) ===
-      'Someone else and 2 other people are on this request',
-    'three unknowns use person/people wording'
+    occupiedHeadline([{ label: '' }]) === 'A colleague is on this request',
+    'blank label uses A colleague, never Someone else'
+  );
+  check(
+    occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }]) ===
+      'Two colleagues are on this request (names not shown)',
+    'two unknowns: Two colleagues (names not shown), not "a colleague and a colleague"'
+  );
+  check(
+    occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }, { label: 'A colleague' }]) ===
+      '3 colleagues are on this request (names not shown)',
+    'three unknowns: N colleagues (names not shown)'
+  );
+  check(
+    occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'A colleague' }]) ===
+      'Dr Priya Nair and a colleague are on this request',
+    'mixed: named + a colleague'
+  );
+  check(!/someone else/i.test(occupiedHeadline([{ label: 'Someone else' }])), 'legacy Someone else is rewritten');
+  check(
+    occupiedHeadline([{ selfExtra: true, label: 'You' }]) === 'You also have this open somewhere else.',
+    'dual-tab self headline'
   );
   check(occupiedHeadline([]) === '', 'no others -> empty headline');
   check(
-    occupiedAction() === 'Check with them before you reply, or carry on. You are not locked out.',
-    'action clause is plain English, no lock claim, no gendered pronoun'
+    occupiedAction() === 'They have it open. You can still work it.',
+    'action is same weight instruction, no lock claim'
+  );
+  check(
+    occupiedAction([{ selfExtra: true }]) === 'This tab is not the only one. You can still work it.',
+    'dual-tab self action'
   );
   check(!/opened/i.test(occupiedAction()), 'action never says opened');
+  check(!/locked out/i.test(occupiedAction()), 'action never says locked out');
+  check(!/carry on/i.test(occupiedAction()), 'action never says carry on');
+  check(!/check with them/i.test(occupiedAction()), 'action never says check with them');
+  check(
+    occupiedBannerTitle() === 'A colleague has this request open. It is not assigned to them. You can still work it.',
+    'tooltip: colleague has it open, not assigned, can still work it'
+  );
+  check(
+    occupancyHideHint() === 'Hide this warning until someone else joins. It comes back if the people change.',
+    'Hide title/aria-label explains dismiss-until-set-changes'
+  );
 
   const NOW = Date.parse('2026-09-07T12:00:00Z');
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === 'Live',
-    'native <1 min is Live only (no seen-here yet)'
+    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === 'Here now',
+    'native <1 min is Here now only (no seen-here yet)'
   );
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === 'Live · seen here 3 min',
+    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === 'Here now · seen here 3 min',
     'native dwell is counted from when this tab noticed them'
   );
   check(
     !/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
     'native note never says Opened'
   );
-  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'Live', 'store just-now -> Live');
+  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'Here now', 'store just-now -> Here now');
   check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen, not Opened');
+
+  const inner = occupiedInnerHtml(
+    [{ label: 'Aisha Malik', initials: 'AM', hue: '#047857', native: true, openedAtMs: NOW }],
+    NOW
+  );
+  check(/Here now/.test(inner) && !/>Live</.test(inner), 'strip HTML visible word is Here now, not LIVE');
+  check(/class="ms-tp-live"/.test(inner), 'pulse pip class stays ms-tp-live');
+  check(
+    inner.indexOf('They have it open. You can still work it.') >= 0,
+    'strip HTML carries the action at headline weight'
+  );
+  check(
+    inner.indexOf(occupancyHideHint()) >= 0 && /aria-label="/.test(inner) && /title="/.test(inner),
+    'Hide button has title and aria-label'
+  );
+  check(!/ms-tp-hide"[^>]*tabindex="-1"/.test(inner), 'Hide button is not removed from tab order');
+  check(
+    occupiedInnerHtml([{ label: 'A colleague', initials: '?', native: true, openedAtMs: NOW }], NOW).indexOf(
+      'A colleague (name not shown)'
+    ) >= 0,
+    'unknown avatar title is A colleague (name not shown)'
+  );
 
   check(
     sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, null, UUID_A).length === 0,
@@ -526,14 +597,15 @@ console.log('--- live:false hides; missing live still shows ---');
 console.log('--- preferKnownLabel: native empty info uses store/cache name ---');
 {
   const cache = {};
-  check(preferKnownLabel('Someone else', UUID_B, cache) === 'Someone else', 'nothing known -> Someone else');
+  check(preferKnownLabel('A colleague', UUID_B, cache) === 'A colleague', 'nothing known -> A colleague');
+  check(preferKnownLabel('Someone else', UUID_B, cache) === 'A colleague', 'legacy Someone else -> A colleague');
   check(preferKnownLabel('Aisha Malik', UUID_B, { [UUID_B]: 'Other' }) === 'Aisha Malik', 'a real native name wins');
   check(
-    preferKnownLabel('Someone else', UUID_B, { [UUID_B]: 'Dr Priya Nair' }) === 'Dr Priya Nair',
+    preferKnownLabel('A colleague', UUID_B, { [UUID_B]: 'Dr Priya Nair' }) === 'Dr Priya Nair',
     'empty native info + known cache -> known label'
   );
   check(
-    preferKnownLabel('', UUID_B, { [UUID_B]: 'A colleague' }) === 'Someone else',
+    preferKnownLabel('', UUID_B, { [UUID_B]: 'A colleague' }) === 'A colleague',
     'generic A colleague is not a known name'
   );
 }
@@ -591,6 +663,32 @@ console.log('--- presenceEmitDecision: wipe fires; idle emits once ---');
   const dead = presenceEmitDecision(first.sig, UUID_A, [], false);
   check(dead.emit === true, 'socket-down (live:false, members:[]) emits so the strip can hide');
   check(/:0$/.test(dead.sig), 'dead-socket sig carries the live:false bit');
+
+  const extra1 = presenceEmitDecision('', UUID_A, [{ id: UUID_ME }], true, 1);
+  check(extra1.emit === true && /:x1$/.test(extra1.sig), 'selfExtras>=1 is in the emit sig');
+  const extraSame = presenceEmitDecision(extra1.sig, UUID_A, [{ id: UUID_ME }], true, 1);
+  check(extraSame.emit === false, 'unchanged selfExtras is de-duped');
+  const extraOff = presenceEmitDecision(extra1.sig, UUID_A, [{ id: UUID_ME }], true, 0);
+  check(extraOff.emit === true, 'selfExtras dropping to 0 emits so the dual-tab strip can hide');
+}
+
+console.log('--- presenceSelfExtras / sanitizeSelfExtras: dual-tab only when extras visible ---');
+{
+  check(presenceSelfExtras([UUID_ME, UUID_B], 2, UUID_ME) === 0, 'unique hash, count==unique -> 0 (Pusher collapse)');
+  check(presenceSelfExtras([UUID_ME, UUID_ME], 1, UUID_ME) === 1, 'same staff UUID twice -> 1 extra');
+  check(presenceSelfExtras([UUID_ME], 2, UUID_ME) === 1, 'count > unique and self present -> extras');
+  check(presenceSelfExtras([UUID_B, UUID_B], 3, UUID_ME) === 0, 'extras on someone else, not self -> 0');
+  check(presenceSelfExtras([UUID_ME], 2, '') === 0, 'no self id -> 0');
+  check(
+    sanitizeSelfExtras({ taskUuid: UUID_A, members: [], selfExtras: 1 }, UUID_ME, UUID_A) === 1,
+    'selfExtras on the event is accepted'
+  );
+  check(
+    sanitizeSelfExtras({ taskUuid: UUID_A, members: [], selfExtras: 1, live: false }, UUID_ME, UUID_A) === 0,
+    'live:false drops selfExtras (fail closed)'
+  );
+  check(sanitizeSelfExtras({ taskUuid: UUID_A, selfExtras: 0 }, UUID_ME, UUID_A) === 0, 'selfExtras 0 is not extras');
+  check(sanitizeSelfExtras({ taskUuid: UUID_B, selfExtras: 2 }, UUID_ME, UUID_A) === 0, 'wrong task -> 0');
 }
 
 console.log('--- avatar hues: applied hex, contrast, not status colours ---');

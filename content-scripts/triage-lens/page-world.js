@@ -38,7 +38,7 @@
   // (sig compared equal to itself and the previous request's names stuck).
   // Idle sentinel: after leaving an overview, sig becomes 'idle' so the 2s
   // poll emits exactly one empty event, not an empty event forever.
-  function presenceEmitDecision(prevSig, taskUuid, members, live) {
+  function presenceEmitDecision(prevSig, taskUuid, members, live, selfExtras) {
     var prev = typeof prevSig === 'string' ? prevSig : '';
     var list = Array.isArray(members) ? members : [];
     var ids = [];
@@ -48,17 +48,48 @@
     }
     ids.sort();
     var liveBit = live === false ? '0' : '1';
+    var extras = typeof selfExtras === 'number' && isFinite(selfExtras) && selfExtras >= 1 ? Math.floor(selfExtras) : 0;
     if (!taskUuid) {
       return { sig: 'idle', emit: prev !== '' && prev !== 'idle' };
     }
     var sig = String(taskUuid).toLowerCase() + ':' + ids.join(',') + ':' + liveBit;
+    if (extras >= 1) sig += ':x' + extras;
     return { sig: sig, emit: sig !== prev };
+  }
+
+  // Cheap dual-tab detector: extra copies of the same staff UUID in the
+  // presence member list, or members.count greater than unique ids, with
+  // self among them. Pusher-js hashes members by user_id, so two tabs of
+  // the same UUID typically collapse to one entry and this returns 0.
+  function presenceSelfExtras(rawIds, declaredCount, selfId) {
+    if (typeof selfId !== 'string' || !selfId) return 0;
+    var me = selfId.toLowerCase();
+    var unique = {};
+    var seenMe = 0;
+    var list = Array.isArray(rawIds) ? rawIds : [];
+    for (var i = 0; i < list.length; i++) {
+      var id = typeof list[i] === 'string' ? list[i].toLowerCase() : '';
+      if (!id) continue;
+      if (!unique[id]) unique[id] = 1;
+      else unique[id]++;
+      if (id === me) seenMe++;
+    }
+    var uniqueN = 0;
+    for (var k in unique) {
+      if (Object.prototype.hasOwnProperty.call(unique, k)) uniqueN++;
+    }
+    if (!unique[me]) return 0;
+    var extrasFromDupes = seenMe > 1 ? seenMe - 1 : 0;
+    var declared = typeof declaredCount === 'number' && isFinite(declaredCount) ? declaredCount : uniqueN;
+    var extrasFromCount = declared > uniqueN ? declared - uniqueN : 0;
+    var n = extrasFromDupes > extrasFromCount ? extrasFromDupes : extrasFromCount;
+    return n > 0 ? n : 0;
   }
 
   // Node tests require this file for the helper only. MAIN-world behaviour is
   // unchanged: chrome content scripts have no `module`, so we fall through.
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { presenceEmitDecision: presenceEmitDecision };
+    module.exports = { presenceEmitDecision: presenceEmitDecision, presenceSelfExtras: presenceSelfExtras };
     return;
   }
 
@@ -283,13 +314,15 @@
     return out;
   }
 
-  function emitNativePresence(taskUuid, members, live) {
+  function emitNativePresence(taskUuid, members, live, selfExtras) {
     var list = Array.isArray(members) ? members : [];
-    var d = presenceEmitDecision(lastPresenceSig, taskUuid, list, live);
+    var extras = typeof selfExtras === 'number' && isFinite(selfExtras) && selfExtras >= 1 ? Math.floor(selfExtras) : 0;
+    var d = presenceEmitDecision(lastPresenceSig, taskUuid, list, live, extras);
     if (!d.emit) return;
     lastPresenceSig = d.sig;
     var detail = { taskUuid: taskUuid || '', members: list };
     if (live === false) detail.live = false;
+    if (extras >= 1) detail.selfExtras = extras;
     try {
       window.dispatchEvent(new CustomEvent('ch-native-task-presence', { detail: detail }));
     } catch (_) {}
@@ -298,24 +331,21 @@
   function collectPresenceMembers(ch) {
     var members = [];
     var seen = {};
+    var rawIds = [];
     function add(id, info) {
       if (typeof id !== 'string' || !UUID_RE.test(id)) return;
       var sid = id.toLowerCase();
+      rawIds.push(sid);
       if (seen[sid]) return;
       seen[sid] = 1;
       members.push({ id: sid, info: staffShapedInfo(info) });
     }
-    if (!ch || !ch.members) return members;
-    try {
-      if (typeof ch.members.each === 'function') {
-        ch.members.each(function (m) {
-          if (m) add(m.id, m.info);
-        });
-      }
-    } catch (_) {}
+    if (!ch || !ch.members) return { members: members, selfExtras: 0 };
+    var usedHash = false;
     try {
       var hash = ch.members.members;
       if (hash && typeof hash === 'object') {
+        usedHash = true;
         Object.keys(hash).forEach(function (id) {
           var m = hash[id];
           if (m && typeof m === 'object') add(m.id || id, m.info || m);
@@ -323,7 +353,32 @@
         });
       }
     } catch (_) {}
-    return members;
+    if (!usedHash) {
+      try {
+        if (typeof ch.members.each === 'function') {
+          ch.members.each(function (m) {
+            if (m) add(m.id, m.info);
+          });
+        }
+      } catch (_) {}
+    }
+    var declared = 0;
+    try {
+      if (typeof ch.members.count === 'number' && isFinite(ch.members.count)) declared = ch.members.count;
+    } catch (_) {}
+    var selfId = '';
+    try {
+      if (typeof ch.members.myID === 'string' && UUID_RE.test(ch.members.myID)) selfId = ch.members.myID;
+    } catch (_) {}
+    if (!selfId) {
+      try {
+        var attr = document.documentElement.getAttribute('data-ch-staff') || '';
+        var bar = attr.indexOf('|');
+        var idp = (bar >= 0 ? attr.slice(0, bar) : attr).trim();
+        if (UUID_RE.test(idp)) selfId = idp;
+      } catch (_) {}
+    }
+    return { members: members, selfExtras: presenceSelfExtras(rawIds, declared, selfId) };
   }
 
   function unbindPresenceChannel() {
@@ -366,7 +421,8 @@
           emitNativePresence(liveUuid, [], false);
           return;
         }
-        emitNativePresence(liveUuid, collectPresenceMembers(ch), true);
+        var got = collectPresenceMembers(ch);
+        emitNativePresence(liveUuid, got.members, true, got.selfExtras);
       };
       var onSucceeded = function () {
         presenceSubErrored = false;
@@ -426,7 +482,10 @@
           found = true;
           bindPresenceChannel(name, map[name]);
           if (presenceSubErrored) emitNativePresence(taskUuid, [], false);
-          else emitNativePresence(taskUuid, collectPresenceMembers(map[name]), true);
+          else {
+            var pollGot = collectPresenceMembers(map[name]);
+            emitNativePresence(taskUuid, pollGot.members, true, pollGot.selfExtras);
+          }
           break;
         }
         if (!found) {

@@ -189,10 +189,10 @@
 }
 
 .ms-tp-recency-live {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--amber);
 }
 
@@ -206,10 +206,10 @@
 }
 
 .ms-tp-action {
-  flex: 0 1 auto;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-3);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
   white-space: nowrap;
 }
 
@@ -253,12 +253,6 @@
   border-radius: var(--r-pill);
   background: var(--amber);
   pointer-events: none;
-}
-
-@media (max-width: 720px) {
-  .ms-tp-action {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
