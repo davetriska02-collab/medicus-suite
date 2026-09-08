@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.4] — 2026-09-08
+
+### Occupied strip and allocation groups — review pass on main
+
+Follow-up on v3.261.1–.3 (PR #369/#370 occupied strip; PR #368 allocation groups plus the unmerged All-groups / refused-patients commit). Correctness and plain-English fixes from a code review of main, then a synthetic Practice panel. The panel did **not** reach 9/10 on either surface (occupied ~7, groups ~7–8). Chloe’s ask for a lock, and Tom’s ask to enable request Write before dummy capture, stay overruled.
+
+**Occupied strip**
+- Presence wipe actually emits on task change; idle pages emit one empty event, not a 2s flap.
+- `Live` / `Here now` / `On it now` words dropped. Pulse pip only. One sentence: “Dr Priya Nair has this open. You can still work it.”
+- Unknown identity is “A colleague”, never “Someone else”. Hide for now, explained. Three names then “and N others”.
+- Prefer a known store name over an empty Pusher `info`. `live: false` / dead socket hides the bar.
+- Rail is a 1px hairline on the banner, not a 4px inset on `<main>`. Avatars keep identity hues.
+
+**Allocation groups**
+- All groups editor on lab and request (Pick / rename / hours / Delete). Confirm names refused patients.
+- `asSplitDests` collides on surname+initial even when the first id is empty. Lab shows `collisionPhrase`.
+- Rx In-today count is people on the book. Split equally / Top up bind the right planner.
+- Practice-profile merge is by preset id. Overnight windows wrap. Options New group works with no staff cache.
+- Chip: **Working today (N)** / **Working 8 Sep (N)**. Hours on group chips. Selected chip has ✓ and `aria-pressed`.
+- Launcher: **Plan a share-out of this inbox…**. After split the button stays Split equally. Remainder doctor is named.
+- Request Write control is omitted while gated (not a disabled Write). Review is the page; dest cards no longer overlap.
+
+See `docs/appraisal/PRACTICE-occupied-strip-2026-09-08.md` and `docs/appraisal/PRACTICE-allocation-groups-2026-09-08.md`.
+
 ## [v3.261.3] — 2026-09-07
 
 ### Allocation groups — even-split onto a named set of people
