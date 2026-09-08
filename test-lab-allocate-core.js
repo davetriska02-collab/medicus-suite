@@ -414,6 +414,19 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/ms-lac-lifting/.test(canvasCss), 'lifting a group dims the rest of the pile, not the well');
   check(/ms-lac-drag-source/.test(canvasCss), 'the dragged reports are marked, not the whole list');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
+  check(
+    /\.ms-lac-shell[\s\S]{0,280}rgba\(15,\s*23,\s*42,\s*0\.5\)/.test(canvasCss),
+    'allocate shell uses the problem-organiser scrim'
+  );
+  check(
+    /\.ms-lac-header[\s\S]{0,220}background:\s*var\(--bg-mid\)/.test(canvasCss),
+    'allocate header is the canvas mid-slate strip'
+  );
+  check(
+    /\.ms-lac-confirmbar[\s\S]{0,220}background:\s*var\(--bg-mid\)/.test(canvasCss),
+    'allocate confirm bar is the canvas mid-slate strip'
+  );
+  check(/--r-lg:\s*10px/.test(canvasCss), 'allocate panel radius matches the problem-organiser canvas');
   check(/#ms-lac-overlay \.ms-lac-daybar/.test(canvasCss), 'working-day bar is scoped to the lab overlay');
   check(!/Add clinician column/.test(canvas), 'clinicians are fields, not full-page columns');
   const capture = fs.readFileSync(path.join(__dirname, 'scripts/staff-scheduling-capture.js'), 'utf8');

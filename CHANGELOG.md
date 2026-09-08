@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.13] — 2026-09-08
+
+### Allocate canvases share the problem-organiser chrome
+
+Investigations, prescriptions and the request/triage inbox already shared one
+stylesheet. They did not share the Suite canvas look: full-bleed takeover,
+white header, white footer, pill confirms.
+
+They now sit in the same chrome as Organise problems: slate scrim, elevated
+rounded panel, mid-slate header, explainer strip, mid-slate confirm bar,
+accent primary. The workbench inside stays full-bleed (not a 1320px modal).
+List tiles stay rows so a 73-item pile still reads.
+
+Workflow allocate uses the same CSS. It is a leftover sibling, not a fourth look.
+No write-path or allocation-logic change.
+
 ## [v3.261.12] — 2026-09-08
 
 ### Practice features v1 — Signing soft flags travel with the practice profile
