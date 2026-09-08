@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.12] — 2026-09-08
+
+### Practice features v1 — Signing soft flags travel with the practice profile
+
+The Signing Queue pack (`suite.signing.softFlags`) can now be published on the
+practice profile, and practice admins have a dedicated Options → **Practice
+features** view of the same switch.
+
+- Allow-list is the literal `signing.softFlags` so apply writes
+  `suite.signing.softFlags` only. Dual-reads the envelope alias
+  `signingSoftFlags` (what `suiteExport()` / Publish already emits) so today's
+  published profiles apply. Does not call `suiteImport()`.
+- Merge is sticky-on: incoming true turns a local off back on; once local is
+  on, merge will not write false. Replace may write false. A practice that
+  wants the pack off must publish Suite in replace mode.
+- Extras planted on the suite module (display, tabOrder, hiddenTabs,
+  letterhead, practiceAcceptedAt, attestations, waiting-room, roll-up, txn.*,
+  request-monitor) are unread.
+- Accept-for-practice stays a separate clinical gate (reception + alert
+  library). Accept does not enable soft flags; the pack does not set Accept.
+- Options → Suite `#signingSoftFlags` and Signing `#sgSoftFlags` kept.
+  `saveSuite` does not write false because a box is missing.
+
 ## [v3.261.11] — 2026-09-08
 
 ### Signing Queue — turn soft flags on from the page
