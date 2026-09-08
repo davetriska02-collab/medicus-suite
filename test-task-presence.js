@@ -470,7 +470,10 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     'dual-tab self headline'
   );
   check(occupiedHeadline([]) === '', 'no others -> empty headline');
-  check(!/is on this request/i.test(occupiedHeadline([{ label: 'Dr Priya Nair' }])), 'headline never says is on this request');
+  check(
+    !/is on this request/i.test(occupiedHeadline([{ label: 'Dr Priya Nair' }])),
+    'headline never says is on this request'
+  );
   check(occupiedAction() === '', 'action is not a separate visible line');
   check(occupiedAction([{ selfExtra: true }]) === '', 'dual-tab self action is empty (folded into headline)');
   check(!/opened/i.test(occupiedAction()), 'action never says opened');
@@ -499,7 +502,10 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     !/On it now/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
     'native note never says On it now'
   );
-  check(!/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)), 'native note never says Opened');
+  check(
+    !/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
+    'native note never says Opened'
+  );
   check(occupiedNote([{ openedAtMs: NOW }], NOW) === '', 'store just-now has no recency word');
   check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen N min ago');
 
@@ -508,10 +514,7 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     NOW
   );
   check(!/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML has no On it now / LIVE word');
-  check(
-    /class="ms-tp-live"[^>]*aria-hidden="true"/.test(inner),
-    'pulse pip stays, aria-hidden, no recency word'
-  );
+  check(/class="ms-tp-live"[^>]*aria-hidden="true"/.test(inner), 'pulse pip stays, aria-hidden, no recency word');
   check(
     inner.indexOf('Dr Priya Nair has this open. You can still work it.') >= 0,
     'strip HTML is one sentence at headline weight'
