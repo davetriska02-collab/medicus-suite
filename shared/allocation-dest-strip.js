@@ -45,6 +45,55 @@
     return 'Working today';
   }
 
+  function destFlagLabel(state) {
+    state = state || {};
+    if (state.destKind === 'group') {
+      var groupName = String(state.destGroupName || '').trim();
+      if (groupName) return groupName;
+    }
+    return workingFlagLabel(state);
+  }
+
+  var DAY_SHORT = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+
+  function padHm(s) {
+    var m = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(s || '').trim());
+    if (!m) return '';
+    var h = m[1].length === 1 ? '0' + m[1] : m[1];
+    return h + ':' + m[2];
+  }
+
+  function scheduleHoursLabel(schedule) {
+    if (!schedule) return '';
+    var start = padHm(schedule.start);
+    var end = padHm(schedule.end);
+    if (!start || !end) return '';
+    return start + '\u2013' + end;
+  }
+
+  function groupChipLabel(group) {
+    group = group || {};
+    var name = String(group.name || '').trim();
+    var n = Array.isArray(group.memberIds) ? group.memberIds.length : 0;
+    var hours = scheduleHoursLabel(group.schedule);
+    var label = name;
+    if (n) label += ' (' + n + ')';
+    if (hours) label += ' \u00b7 ' + hours;
+    return label;
+  }
+
+  function groupChipTitle(group) {
+    group = group || {};
+    var days = group.schedule && Array.isArray(group.schedule.days) ? group.schedule.days : [];
+    var dayBits = [];
+    days.forEach(function (d) {
+      var short = DAY_SHORT[d] || '';
+      if (short) dayBits.push(short);
+    });
+    var when = dayBits.length ? dayBits.join(', ') + '. ' : '';
+    return when + 'Split onto the people in this group.';
+  }
+
   function evenSplitDistributionPhrase(itemCount, destCount, noun) {
     var n = Number(itemCount) || 0;
     var k = Number(destCount) || 0;
@@ -107,10 +156,11 @@
           esc(g.id) +
           '"' +
           chipPressed(on) +
-          ' title="Split onto the people in this group.">' +
+          ' title="' +
+          esc(groupChipTitle(g)) +
+          '">' +
           chipMark(on) +
-          esc(g.name) +
-          (Array.isArray(g.memberIds) && g.memberIds.length ? ' (' + g.memberIds.length + ')' : '') +
+          esc(groupChipLabel(g)) +
           '</button>'
       );
     });
@@ -167,17 +217,20 @@
     if (state.collisionPhrase) {
       actions = '<span class="ms-lac-split-note">' + esc(state.collisionPhrase) + '</span>';
     } else if (!dests) {
-      actions = '<span class="ms-lac-split-note">Pick Working today, a group, or encircle people.</span>';
+      var emptyBook = (state.destKind || 'in-today') === 'in-today' && state.inTodayCount === 0;
+      actions = emptyBook
+        ? '<span class="ms-lac-split-note">No one is on the book for this day. Type a name below to add them, or pick a saved group.</span>'
+        : '<span class="ms-lac-split-note">Pick Working today, a group, or encircle people.</span>';
     } else if (poolN && !haveWork) {
       actions =
         '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-ags-split" id="ms-ags-split" title="Split the unallocated pile evenly. Proposal only — nothing is written until you confirm.">Split equally</button>';
     } else if (poolN && haveWork) {
       actions =
         '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-ags-split" id="ms-ags-topup" title="Give leftover unallocated work to whoever currently has least. Does not move sitting work. Proposal only.">Top up empty boxes</button>' +
-        '<button type="button" class="ms-lac-confirm-btn ms-ags-split" id="ms-ags-level" title="Rebalance so each has the same number, or as near as it can be. Moves sitting work on this canvas. Proposal only.">Distribute equally</button>';
+        '<button type="button" class="ms-lac-confirm-btn ms-ags-split" id="ms-ags-level" title="Split equally again so each has the same number, or as near as it can be. Moves sitting work on this canvas. Proposal only.">Split equally</button>';
     } else if (haveWork) {
       actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-ags-split" id="ms-ags-level" title="Rebalance sitting work. Proposal only.">Distribute equally</button>';
+        '<button type="button" class="ms-lac-confirm-btn ms-ags-split" id="ms-ags-level" title="Split equally again. Proposal only.">Split equally</button>';
     } else {
       actions =
         '<span class="ms-lac-split-note">Inbox is clear. Share this box on a person splits only that folder among the current destinations.</span>';
@@ -197,6 +250,10 @@
     saveGroupRowHtml: saveGroupRowHtml,
     workingTodayChipLabel: workingTodayChipLabel,
     workingFlagLabel: workingFlagLabel,
+    destFlagLabel: destFlagLabel,
+    groupChipLabel: groupChipLabel,
+    groupChipTitle: groupChipTitle,
+    scheduleHoursLabel: scheduleHoursLabel,
     evenSplitDistributionPhrase: evenSplitDistributionPhrase,
     formatDMmm: formatDMmm,
   };

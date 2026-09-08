@@ -336,7 +336,8 @@
       reviewButton: n ? 'Review plan (' + n + ')' : 'Review plan',
       reviewHeadline: REQUEST_WRITE_REVIEW_HEADLINE,
       reviewBody: REQUEST_WRITE_REVIEW_BODY,
-      writeButton: REQUEST_WRITE_DISABLED_BUTTON,
+      writeButton: '',
+      hideWrite: true,
     };
   }
 
@@ -350,7 +351,8 @@
         reviewButton: gated.reviewButton,
         reviewHeadline: gated.reviewHeadline,
         reviewBody: gated.reviewBody,
-        writeButton: gated.writeButton,
+        writeButton: '',
+        hideWrite: true,
       };
     }
     return Lab.canWriteAllocations(opts || {});

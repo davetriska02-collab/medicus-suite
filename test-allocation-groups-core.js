@@ -317,7 +317,7 @@ console.log('\n--- Options editor + practice-profile merge source locks ---');
   const profile = fs.readFileSync(path.join(__dirname, 'shared/io/practice-profile.js'), 'utf8');
   check(/allowEmpty:\s*true/.test(options), 'Options New group can create an empty shell');
   check(
-    /No names yet on this computer\. Open Share out this inbox once on Medicus/.test(options),
+    /No names yet on this computer\. Open Plan a share-out of this inbox once on Medicus/.test(options),
     'empty staff picker shows how to harvest names'
   );
   check(!/agAdd[\s\S]{0,900}alert\(/.test(options), 'New group does not alert()');
@@ -329,6 +329,7 @@ console.log('\n--- Options editor + practice-profile merge source locks ---');
   );
   check(/They are not Medicus team inboxes/.test(optionsHtml), 'Options intro says groups are not team inboxes');
   check(/Overnight windows wrap past midnight/.test(options), 'Options names overnight wrap');
+  check(/ghost danger-quiet/.test(options) && /Delete group/.test(options), 'Delete group is a quiet text button');
 }
 
 console.log('\n--- ' + passed + ' passed, ' + failed + ' failed ---');

@@ -120,6 +120,43 @@
     return 'Working today';
   }
 
+  function destGroupName() {
+    var Core = groupsCore();
+    if (_destKind !== 'group' || !Core) return '';
+    var preset = Core.findPreset(_presets, _destGroupId);
+    return (preset && preset.name) || '';
+  }
+
+  function destFlag() {
+    var Strip = destStripApi();
+    if (Strip && typeof Strip.destFlagLabel === 'function') {
+      return Strip.destFlagLabel({
+        destKind: _destKind || 'in-today',
+        destGroupName: destGroupName(),
+        workDateISO: workDate(),
+        calendarTodayISO: calendarToday(),
+      });
+    }
+    var name = destGroupName();
+    if (name) return name;
+    return workingFlag();
+  }
+
+  function destFlagHtml(col, abs) {
+    var away = abs.state === 'away' || abs.state === 'away-pending';
+    var inToday = abs.state === 'present' && abs.reason === 'in-today';
+    if (away) return '<span class="ms-lac-chip-flag">AWAY</span>';
+    if (col.kind === 'team') return '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>';
+    if (_destKind === 'group') {
+      var group = destFlag();
+      return group ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(group) + '</span>' : '';
+    }
+    if (inToday) {
+      return '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>';
+    }
+    return '';
+  }
+
   function inTodayPeople() {
     return C.pinDestStaffIds(
       C.workingTodayDoctors({
@@ -562,13 +599,7 @@
         return tileHtml(t, { showWho: true, showAssignee: false });
       })
       .join('');
-    var flag = away
-      ? '<span class="ms-lac-chip-flag">AWAY</span>'
-      : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>'
-        : col.kind === 'team'
-          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
-          : '';
+    var flag = destFlagHtml(col, abs);
     var note = '';
     if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
     else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
@@ -1413,7 +1444,7 @@
       ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + phrase
       : _destKind === 'group' || _destKind === 'custom'
         ? skipped || 'No people in that group to share onto.'
-        : 'No sessions on the book for ' + phrase;
+        : 'No one is on the book for this day. Type a name below to add them, or pick a saved group.';
     var destLine = destPhrase ? '<div class="ms-rxac-dests">To: ' + esc(destPhrase) + '</div>' : '';
     var canSave = (_destKind === 'custom' && _customMembers.length > 0) || peopleSelectedCount() > 0;
     var strip = Strip
@@ -1460,8 +1491,13 @@
     if (collisionPhrase) {
       actions = '<span class="ms-lac-split-note">' + esc(collisionPhrase) + '</span>';
     } else if (!dests.length) {
+      var emptyBook = _destKind === 'in-today' && inTodayPeople().length === 0;
       actions =
-        '<span class="ms-lac-split-note">Pick Working today, a group, or encircle people. Or pick another day, or add a doctor or team.</span>';
+        '<span class="ms-lac-split-note">' +
+        (emptyBook
+          ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
+          : 'Pick Working today, a group, or encircle people. Or pick another day, or add a doctor or team.') +
+        '</span>';
     } else if (poolN && !haveWork) {
       actions =
         '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-split-go ms-rxac-action" id="ms-rxac-split" title="' +
@@ -1565,16 +1601,9 @@
     var inbox = !!opts.inbox;
     var abs = inbox ? { state: 'n/a', label: '' } : presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
-    var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var clear = inbox && !(col.tiles && col.tiles.length);
     var name = inbox ? 'Unallocated' : C.displayClinicianName(col.title);
-    var flag = away
-      ? '<span class="ms-lac-chip-flag">AWAY</span>'
-      : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>'
-        : col.kind === 'team'
-          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
-          : '';
+    var flag = inbox ? '' : destFlagHtml(col, abs);
     var meta = inbox ? (clear ? 'Clear' : col.count + ' in this box') : fieldCounts(col);
     if (!inbox && away && abs.label) meta = abs.label + (meta ? ' · ' + meta : '');
     var shareDests = inbox ? [] : inTodayShareDests(col.key);

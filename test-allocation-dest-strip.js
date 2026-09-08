@@ -63,6 +63,37 @@ const counted = S.destSetStripHtml({
 });
 check(/Morning triage \(3\)/.test(counted), 'group chip shows headcount');
 
+const morningPreset = {
+  id: 'aaaaaaaa-bbbb-cccc-dddd-000000000001',
+  name: 'Morning triage',
+  memberIds: ['a', 'b', 'c'],
+  schedule: { days: ['mon', 'tue', 'wed', 'thu', 'fri'], start: '08:00', end: '13:00' },
+};
+const timed = S.destSetStripHtml({
+  destKind: 'group',
+  destGroupId: morningPreset.id,
+  visibleGroups: [morningPreset],
+});
+check(/Morning triage \(3\) \u00b7 08:00\u201313:00/.test(timed), 'group chip with a complete window shows hours');
+check(
+  S.groupChipLabel(morningPreset) === 'Morning triage (3) \u00b7 08:00\u201313:00',
+  'groupChipLabel is name (n) · HH:MM–HH:MM'
+);
+check(
+  S.groupChipTitle(morningPreset) === 'Mon, Tue, Wed, Thu, Fri. Split onto the people in this group.',
+  'group chip title still explains days'
+);
+check(
+  S.destFlagLabel({ destKind: 'group', destGroupName: 'Morning triage' }) === 'Morning triage',
+  'dest flag for a named group is the group name'
+);
+check(S.destFlagLabel({ destKind: 'in-today' }) === 'Working today', 'dest flag for Working today stays Working today');
+check(
+  S.destFlagLabel({ destKind: 'in-today', workDateISO: '2026-09-08', calendarTodayISO: '2026-09-07' }) ===
+    'Working 8 Sep',
+  'dest flag for a dated Working today is Working d MMM'
+);
+
 const hostile = S.destSetStripHtml({
   destKind: 'group',
   destGroupId: 'aaaaaaaa-bbbb-cccc-dddd-000000000001',
@@ -130,6 +161,21 @@ check(
   'proposal names the even-split numbers'
 );
 check(/Drag a patient from one person onto another/.test(proposed), 'proposal keeps the drag hint');
+check(/Split equally/.test(proposed), 'after a split the even-split button stays Split equally');
+check(!/Distribute equally/.test(proposed), 'after a split does not rename to Distribute equally');
+
+const emptyBook = S.splitActionsHtml({
+  destCount: 0,
+  destKind: 'in-today',
+  inTodayCount: 0,
+  poolN: 5,
+});
+check(
+  /No one is on the book for this day\. Type a name below to add them, or pick a saved group/.test(emptyBook),
+  'empty Working today dests name the book and add-a-name'
+);
+check(!/id="ms-ags-split"/.test(emptyBook), 'Split equally is not offered when dests.length is 0');
+check(!/No people to share out to/.test(emptyBook), 'old empty-dest copy is gone');
 
 console.log('\n--- ' + passed + ' passed, ' + failed + ' failed ---');
 if (failed) process.exit(1);

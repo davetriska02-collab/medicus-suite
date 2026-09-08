@@ -2242,7 +2242,8 @@
 
 #ms-qac-overlay .ms-rxac-review-open {
   align-items: start;
-  max-height: 36vh;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   background: var(--bg-elev);
   border-color: var(--amber-line);
@@ -2269,7 +2270,7 @@
 }
 
 #ms-qac-overlay .ms-rxac-review-open .ms-lac-writelist {
-  max-height: 22vh;
+  max-height: none;
 }
 
 #ms-qac-overlay .ms-rxac-review-dock .ms-lac-confirmbar-actions,

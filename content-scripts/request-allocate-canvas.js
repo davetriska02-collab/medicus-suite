@@ -5,8 +5,8 @@
 // confirm / bulk-reassign pattern on homepage medical and admin
 // patient-request task-lists. The large left box is UNALLOCATED
 // requests, grouped by registered GP when that is on the row. Named GP
-// is a grouping caption, never auto-placement. Split equally / Top up /
-// Distribute equally stage locally - they do not write. Does not complete,
+// is a grouping caption, never auto-placement. Split equally / Top up
+// stage locally - they do not write. Does not complete,
 // file, or reply to a request.
 //
 // Writing uses LabAllocateCore.createClient (W23). Fail-closed until a
@@ -118,6 +118,42 @@
       return Strip.workingFlagLabel({ workDateISO: workDate(), calendarTodayISO: calendarToday() });
     }
     return 'Working today';
+  }
+
+  function destGroupName() {
+    if (!_destSet || _destSet.kind !== 'group' || !G) return '';
+    var preset = G.findPreset(_presets, _destSet.id);
+    return (preset && preset.name) || '';
+  }
+
+  function destFlag() {
+    if (Strip && typeof Strip.destFlagLabel === 'function') {
+      return Strip.destFlagLabel({
+        destKind: (_destSet && _destSet.kind) || 'in-today',
+        destGroupName: destGroupName(),
+        workDateISO: workDate(),
+        calendarTodayISO: calendarToday(),
+      });
+    }
+    var name = destGroupName();
+    if (name) return name;
+    return workingFlag();
+  }
+
+  function destFlagHtml(col, abs) {
+    var away = abs.state === 'away' || abs.state === 'away-pending';
+    var inToday = abs.state === 'present' && abs.reason === 'in-today';
+    if (away) return '<span class="ms-lac-chip-flag">AWAY</span>';
+    if (col.kind === 'team') return '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>';
+    var kind = (_destSet && _destSet.kind) || 'in-today';
+    if (kind === 'group') {
+      var group = destFlag();
+      return group ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(group) + '</span>' : '';
+    }
+    if (inToday) {
+      return '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>';
+    }
+    return '';
   }
 
   function scheduleHintText() {
@@ -582,13 +618,7 @@
         return tileHtml(t, { showWho: true, showAssignee: false });
       })
       .join('');
-    var flag = away
-      ? '<span class="ms-lac-chip-flag">AWAY</span>'
-      : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>'
-        : col.kind === 'team'
-          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
-          : '';
+    var flag = destFlagHtml(col, abs);
     var note = '';
     if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
     else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
@@ -1103,14 +1133,19 @@
     if (G) {
       visible = _showAllGroups ? G.normalisePresets(_presets) : G.visiblePresets(_presets, new Date());
     }
+    var destKind = (_destSet && _destSet.kind) || 'in-today';
+    var inTodayN = inTodayPeople().length;
+    var emptyBook = destKind === 'in-today' && inTodayN === 0;
     var summary = dests.length
       ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + phrase
-      : 'No people to share out to for ' + phrase;
+      : emptyBook
+        ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
+        : 'No people to share out to for ' + phrase;
     var stripState = {
-      destKind: (_destSet && _destSet.kind) || 'in-today',
+      destKind: destKind,
       destGroupId: (_destSet && _destSet.id) || '',
       visibleGroups: visible,
-      inTodayCount: inTodayPeople().length,
+      inTodayCount: inTodayN,
       workDateISO: workDate(),
       calendarTodayISO: calendarToday(),
       destPhrase: destPhrase,
@@ -1124,6 +1159,8 @@
       poolN: poolN,
       haveWork: haveWork,
       destCount: dests.length,
+      destKind: destKind,
+      inTodayCount: inTodayN,
       stagedN: stagedN,
       surfaceNoun: 'requests',
       collisionPhrase: dests.collisions && dests.collisions.length ? C.collisionPhrase(dests.collisions) : '',
@@ -1374,16 +1411,9 @@
     var inbox = !!opts.inbox;
     var abs = inbox ? { state: 'n/a', label: '' } : presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
-    var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var clear = inbox && !(col.tiles && col.tiles.length);
     var name = inbox ? 'Unallocated' : C.displayClinicianName(col.title);
-    var flag = away
-      ? '<span class="ms-lac-chip-flag">AWAY</span>'
-      : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>'
-        : col.kind === 'team'
-          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
-          : '';
+    var flag = inbox ? '' : destFlagHtml(col, abs);
     var meta = inbox ? (clear ? 'Clear' : col.count + ' in this box') : fieldCounts(col);
     if (!inbox && away && abs.label) meta = abs.label + (meta ? ' · ' + meta : '');
     var shareDests = inbox ? [] : inTodayShareDests(col.key);
@@ -1632,15 +1662,12 @@
             reviewHeadline: 'This is a plan on this canvas only. Medicus has not changed.',
             reviewBody:
               'To move these today, assign them in Medicus. Writing from this canvas is switched off for this queue until it has been checked on a test patient.',
-            writeButton: 'Write to Medicus (not yet available for this queue)',
+            writeButton: '',
+            hideWrite: true,
           };
       var writeGo = writeGate.ok
         ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" title="Writes these reassignments to Medicus. Does not complete, file, or reply to the request.">Write to Medicus</button>'
-        : '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" disabled title="' +
-          esc(writeGate.reason || 'Write not captured for this queue yet.') +
-          '">' +
-          esc(writeGate.writeButton || gated.writeButton) +
-          '</button>';
+        : '';
       var confirmLead = writeGate.ok
         ? '<strong>This is the write.</strong> Medicus will reassign these requests. This changes who the task sits with - it does not complete, file, or reply to the request.'
         : '<div class="ms-rxac-review-title">' +
@@ -1749,7 +1776,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note" title="Unallocated is the pile still sitting in this inbox. Split equally / Top up / Distribute equally propose moves among the named destinations. Drag a patient onto another folder to change one. Nothing is written until you confirm.">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among the current destinations.</span>' +
+      '<span class="ms-lac-header-note" title="Unallocated is the pile still sitting in this inbox. Split equally / Top up propose moves among the named destinations. Drag a patient onto another folder to change one. Nothing is written until you confirm.">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among the current destinations.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -2757,12 +2784,15 @@
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Share out this inbox…';
+    var launchLabel = 'Plan a share-out of this inbox…';
+    var launchTitle =
+      'Opens a planning board. Nothing is written to Medicus until Write is enabled and you confirm.';
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
       launch.id = LAUNCH_ID;
       launch.textContent = launchLabel;
+      launch.title = launchTitle;
       launch.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -2771,6 +2801,7 @@
       document.documentElement.appendChild(launch);
     } else {
       launch.textContent = launchLabel;
+      launch.title = launchTitle;
     }
   }
 

@@ -5298,7 +5298,7 @@ initPdcTallySection({
           .join('');
         const noNames = people.length
           ? ''
-          : '<p class="section-desc" data-ag-no-names>No names yet on this computer. Open Share out this inbox once on Medicus and the people will appear here.</p>';
+          : '<p class="section-desc" data-ag-no-names>No names yet on this computer. Open Plan a share-out of this inbox once on Medicus and the people will appear here.</p>';
         return (
           '<div class="card" data-ag-card="' +
           escAttr(p.id) +
@@ -5338,7 +5338,7 @@ initPdcTallySection({
           '"></label>' +
           '<span class="section-desc">Leave blank for always. Overnight windows wrap past midnight (for example 18:00 to 08:00).</span>' +
           '</div>' +
-          '<button type="button" class="ghost" data-ag-delete data-ag-id="' +
+          '<button type="button" class="ghost danger-quiet" data-ag-delete data-ag-id="' +
           escAttr(p.id) +
           '" style="margin-top:10px">Delete group</button>' +
           '</div>'

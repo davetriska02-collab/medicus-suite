@@ -150,10 +150,8 @@ console.log('\n--- write is fail-closed ---');
     'review headline says Medicus has not changed'
   );
   check(/checked on a test patient/.test(gated.reviewBody), 'review body names the capture gap');
-  check(
-    gated.writeButton === 'Write to Medicus (not yet available for this queue)',
-    'disabled write button names the queue gap'
-  );
+  check(!gated.writeButton && gated.hideWrite === true, 'gated copy hides Write entirely');
+  check(gate.hideWrite === true && !gate.writeButton, 'canWriteRequestAllocations hides Write while gated');
   check(gate.reviewHeadline === gated.reviewHeadline, 'canWriteRequestAllocations carries the headline');
   const src = fs.readFileSync(path.join(__dirname, 'shared/request-allocate-core.js'), 'utf8');
   check(!/\bmethod:\s*['"]POST['"]/.test(src), 'request core has no POST');
@@ -189,7 +187,11 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/content-scripts\//.test(between), 'canvas is immediately after request-allocate-core');
   check(!/\bmethod:\s*['"]POST['"]/.test(canvas), 'canvas has no POST');
   check(!/\bfetch\s*\(/.test(canvas), 'canvas never fetches');
-  check(/Share out this inbox/.test(canvas), 'launcher names the inbox');
+  check(/Plan a share-out of this inbox/.test(canvas), 'launcher names the inbox');
+  check(
+    /Opens a planning board\. Nothing is written to Medicus until Write is enabled/.test(canvas),
+    'launcher title is fail-closed'
+  );
   check(/ms-qac-overlay/.test(canvas) && /ms-qac-launch/.test(canvas), 'overlay and launcher use qac ids');
   check(/Write not captured for this queue yet/.test(canvas), 'write-closed copy is on the canvas');
   check(/canWriteRequestAllocations/.test(canvas), 'write path consults the request gate before commit');
@@ -223,6 +225,8 @@ console.log('\n--- canvas + manifest source locks ---');
     /Keep planning/.test(canvas) && /Write to Medicus/.test(canvas),
     'confirm is Keep planning vs Write to Medicus'
   );
+  check(!/Write to Medicus \(not yet available/.test(canvas), 'gated review does not show a Write control');
+  check(/writeGo = writeGate\.ok[\s\S]{0,400}: ''/.test(canvas), 'Write button is omitted while the gate is closed');
   check(/fetchRequestMergedTaskList/.test(canvas), 'Write vanish-check re-GETs inbox plus sitting work');
   check(/requireSitting:\s*true/.test(canvas), 'Write vanish-check fails closed if sitting GET throws');
   check(/replaceDestColumns/.test(canvas), 'request dest-set change replaces leftover columns');
@@ -268,6 +272,12 @@ console.log('\n--- canvas + manifest source locks ---');
     /#ms-qac-overlay \.ms-lac-panel\.ms-rxac-reviewing \.ms-lac-body[\s\S]{0,200}display:\s*none/.test(css),
     'review-open hides the board so the proposal list is the page'
   );
+  check(
+    !/#ms-qac-overlay \.ms-rxac-review-open \{[\s\S]{0,180}max-height:\s*36vh/.test(css),
+    'request review list is not height-capped to 36vh'
+  );
+  check(/No one is on the book for this day/.test(canvas), 'cold-start empty book names the book and add-a-name');
+  check(/destFlagLabel/.test(canvas) && /destFlagHtml/.test(canvas), 'dest-person flag follows the dest set');
 }
 
 console.log('\n--- ' + passed + ' passed, ' + failed + ' failed ---');
