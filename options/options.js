@@ -110,6 +110,7 @@ const feedbackEmailInput = document.getElementById('feedbackEmail');
 const letterheadPracticeInput = document.getElementById('letterheadPractice');
 const letterheadClinicianInput = document.getElementById('letterheadClinician');
 const signingSoftFlagsInput = document.getElementById('signingSoftFlags');
+const pfSoftFlagsInput = document.getElementById('pfSoftFlags');
 const saveSuiteBtn = document.getElementById('saveSuite');
 const suiteSaved = document.getElementById('suiteSaved');
 const codeDetectedRow = document.getElementById('codeDetectedRow');
@@ -143,9 +144,13 @@ const testConnectionResult = document.getElementById('testConnectionResult');
         if (letterheadClinicianInput) letterheadClinicianInput.value = lh.clinicianName || '';
       });
     }
-    if (signingSoftFlagsInput) {
+    const softFlagBoxes = [signingSoftFlagsInput, pfSoftFlagsInput].filter(Boolean);
+    if (softFlagBoxes.length) {
       chrome.storage.local.get(['suite.signing.softFlags'], (res) => {
-        signingSoftFlagsInput.checked = res['suite.signing.softFlags'] === true;
+        const on = res['suite.signing.softFlags'] === true;
+        softFlagBoxes.forEach((el) => {
+          el.checked = on;
+        });
       });
     }
     // Try to auto-detect from open Medicus tab
@@ -177,7 +182,7 @@ saveSuiteBtn?.addEventListener('click', async () => {
   if (!practiceCodeInput) return;
   const code = practiceCodeInput.value.trim().toLowerCase();
   const { 'submissions.config': existingSubConfig = {} } = await chrome.storage.local.get('submissions.config');
-  await chrome.storage.local.set({
+  const suiteToSet = {
     'suite.practiceCode': code,
     'submissions.config': { ...existingSubConfig, practiceCode: code },
     'suite.feedbackEmail': (feedbackEmailInput?.value || '').trim(),
@@ -185,21 +190,31 @@ saveSuiteBtn?.addEventListener('click', async () => {
       practiceName: (letterheadPracticeInput?.value || '').trim(),
       clinicianName: (letterheadClinicianInput?.value || '').trim(),
     },
-    'suite.signing.softFlags': signingSoftFlagsInput ? signingSoftFlagsInput.checked : false,
-  });
+  };
+  // Never write false just because a checkbox is missing from the DOM.
+  if (signingSoftFlagsInput) {
+    suiteToSet['suite.signing.softFlags'] = signingSoftFlagsInput.checked === true;
+  }
+  await chrome.storage.local.set(suiteToSet);
   if (suiteSaved) {
     suiteSaved.classList.add('show');
     setTimeout(() => suiteSaved.classList.remove('show'), 2000);
   }
 });
 
-signingSoftFlagsInput?.addEventListener('change', async () => {
-  await chrome.storage.local.set({ 'suite.signing.softFlags': signingSoftFlagsInput.checked === true });
-});
+function bindSoftFlagsCheckbox(el) {
+  el?.addEventListener('change', async () => {
+    await chrome.storage.local.set({ 'suite.signing.softFlags': el.checked === true });
+  });
+}
+bindSoftFlagsCheckbox(signingSoftFlagsInput);
+bindSoftFlagsCheckbox(pfSoftFlagsInput);
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area && area !== 'local') return;
-  if (!signingSoftFlagsInput || !changes['suite.signing.softFlags']) return;
-  signingSoftFlagsInput.checked = changes['suite.signing.softFlags'].newValue === true;
+  if (!changes['suite.signing.softFlags']) return;
+  const on = changes['suite.signing.softFlags'].newValue === true;
+  if (signingSoftFlagsInput) signingSoftFlagsInput.checked = on;
+  if (pfSoftFlagsInput) pfSoftFlagsInput.checked = on;
 });
 
 // Guided tour replay — clears the seen-version marker (localStorage is shared
@@ -1512,10 +1527,10 @@ async function isPracticeAccepted() {
       },
       {
         id: 'suite',
-        label: 'Practice code &amp; feedback email',
+        label: 'Practice code, feedback email &amp; Signing soft flags',
         defaultChecked: true,
         defaultMode: 'merge',
-        desc: 'Practice code and feedback email only — never personal display prefs',
+        desc: 'Practice code, feedback email, and Signing soft flags (travel with the practice profile). Merge is sticky-on: incoming true turns a local off back on; once local is on, merge will not write false. A practice that wants the pack off must use replace. Never personal display prefs or Accept-for-practice',
       },
     ];
 

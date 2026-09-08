@@ -55,6 +55,58 @@ const qof = require('./rules/qof-rules.json');
   check(optionsOnChanged, 'Options checkbox re-reads suite.signing.softFlags on storage change');
   check(/id="signingSoftFlags"/.test(optionsHtml), 'Options Suite checkbox is still present (same key)');
 
+  console.log('\n--- third view: Options → Practice features, same key + onChanged ---');
+  check(/id="pfSoftFlags"/.test(optionsHtml), 'Practice features card has #pfSoftFlags (third view of the same pack)');
+  check(/data-section="practice-features"/.test(optionsHtml), 'Options nav has Practice features');
+  check(/id="sect-practice-features"/.test(optionsHtml), 'Options has #sect-practice-features');
+  check(
+    /Signing Queue: show overdue monitoring &(?:amp;)? QOF review flags/.test(optionsHtml) &&
+      (optionsHtml.match(/Signing Queue: show overdue monitoring &(?:amp;)? QOF review flags/g) || []).length >= 2,
+    'Practice features uses the same Signing soft-flags label as Suite'
+  );
+  check(
+    /bindSoftFlagsCheckbox\(pfSoftFlagsInput\)/.test(optionsJs) &&
+      /pfSoftFlagsInput/.test(optionsJs) &&
+      /changes\['suite\.signing\.softFlags'\]/.test(optionsJs) &&
+      /pfSoftFlagsInput\.checked = on/.test(optionsJs),
+    'Practice features writes and re-reads suite.signing.softFlags on storage change'
+  );
+  check(
+    /Never write false just because a checkbox is missing/.test(optionsJs) &&
+      !/signingSoftFlagsInput \? signingSoftFlagsInput\.checked : false/.test(optionsJs),
+    'saveSuite must not write false because a box is missing'
+  );
+  const paletteSrc = fs.readFileSync(path.join(__dirname, 'side-panel/palette/palette.js'), 'utf8');
+  check(
+    /'suite',\s*'Suite',\s*'[^']*signing soft flags QOF review/.test(paletteSrc) &&
+      /'practice-features',\s*'Practice features',\s*'[^']*signing soft flags QOF review/.test(paletteSrc),
+    'palette Suite / Practice features keywords include signing, soft flags, QOF review'
+  );
+
+  console.log('\n--- two-door lock: Accept stays separate from the pack ---');
+  const acceptFn = optionsJs.match(/async function acceptForPractice\(\)[\s\S]*?\nasync function withdrawPracticeAcceptance/);
+  check(
+    !!acceptFn && !/signing\.softFlags/.test(acceptFn[0]) && !/pfSoftFlags/.test(acceptFn[0]),
+    'tick Accept does not write suite.signing.softFlags'
+  );
+  check(
+    /practiceAcceptedAt/.test(optionsJs) &&
+      !/chrome\.storage\.local\.set\(\{[^}]*practiceAcceptedAt[^}]*softFlags/.test(optionsJs) &&
+      !/chrome\.storage\.local\.set\(\{[^}]*softFlags[^}]*practiceAcceptedAt/.test(optionsJs),
+    'pack toggle / saveSuite does not set practiceAcceptedAt'
+  );
+  const ppSrc = fs.readFileSync(path.join(__dirname, 'shared/io/practice-profile.js'), 'utf8');
+  check(!/suiteImport\s*\(/.test(ppSrc), 'applyProfile does not call suiteImport()');
+  const allowList = (ppSrc.match(/const ALLOWED_SUITE_KEYS = \[([^\]]+)\]/) || [])[1] || '';
+  check(
+    /'signing\.softFlags'/.test(allowList),
+    'allow-list is the literal signing.softFlags (suite.${key} → suite.signing.softFlags)'
+  );
+  check(
+    !/practiceAcceptedAt/.test(allowList),
+    'practiceAcceptedAt is not on the pack allow-list'
+  );
+
   console.log('\n--- monitoring chips stay always-on ---');
   check(/verdict:\s*monitoringVerdict\(chips\)/.test(signingSrc), 'monitoringVerdict runs on every evaluated row');
   check(!/softFlags\s*\?\s*monitoringVerdict/.test(signingSrc), 'monitoringVerdict is not gated on softFlags');

@@ -793,6 +793,139 @@ function makeProfile(over = {}) {
   check(store['suite.practiceCode'] === 'REPLACED',
     'suite replace: practiceCode overwritten');
 
+  // ── Suite: signing.softFlags pack (Practice features v1) ───────────────────
+  // ONE storage key: suite.signing.softFlags. Allow-list is the literal
+  // `signing.softFlags` so suite.${key} lands on that key. Today's published
+  // envelopes emit the suiteExport alias `signingSoftFlags` — dual-read it.
+  console.log('\n--- suite: signing.softFlags allow-list + extras unread ---');
+  reset();
+  const extrasPlanted = {
+    display: { theme: 'dark' },
+    tabOrder: ['slots', 'sentinel'],
+    hiddenTabs: ['signing'],
+    letterhead: { practiceName: 'Must not write' },
+    practiceAcceptedAt: '2026-01-01T00:00:00Z',
+    attestations: { reception: { by: 'admin', at: '2026-01-01T00:00:00Z', via: 'practice-profile' } },
+    waitingRoomThresholds: { amber: 10, red: 20 },
+    rollupAlwaysExpanded: true,
+    txn: { token: 'nope' },
+    requestMonitor: { enabled: true },
+  };
+  const sfAllowProfile = makeProfile({
+    profileVersion: 'sf-allow-1',
+    apply: { modules: { suite: 'replace' } },
+    envelope: {
+      modules: {
+        suite: {
+          'signing.softFlags': true,
+          ...extrasPlanted,
+        },
+      },
+    },
+  });
+  await PP.applyProfile(sfAllowProfile);
+  check(store['suite.signing.softFlags'] === true,
+    'suite replace: signing.softFlags writes suite.signing.softFlags');
+  check(store['suite.display'] === undefined, 'suite extras: display unread');
+  check(store['suite.tabOrder'] === undefined, 'suite extras: tabOrder unread');
+  check(store['suite.hiddenTabs'] === undefined, 'suite extras: hiddenTabs unread');
+  check(store['suite.letterhead'] === undefined, 'suite extras: letterhead unread');
+  check(store['suite.practiceAcceptedAt'] === undefined, 'suite extras: practiceAcceptedAt unread (not on pack allow-list)');
+  check(store['suite.practiceProfile.attestations'] === undefined, 'suite extras: attestations unread');
+  check(store['suite.waitingRoom.thresholds'] === undefined, 'suite extras: waitingRoomThresholds unread');
+  check(store['suite.rollup.alwaysExpanded'] === undefined, 'suite extras: rollupAlwaysExpanded unread');
+  check(store['suite.txn'] === undefined && Object.keys(store).every((k) => !k.startsWith('txn.')),
+    'suite extras: txn.* unread');
+  check(Object.keys(store).every((k) => !k.startsWith('suite.requestMonitor') && k !== 'requestMonitor'),
+    'suite extras: request-monitor unread from suite module');
+  check(!('suite.practice.softFlags' in store) && !('suite.signingSoftFlags' in store),
+    'never invents suite.practice.softFlags or suite.signingSoftFlags as storage');
+
+  console.log('\n--- suite: envelope alias signingSoftFlags applies to real storage key ---');
+  reset();
+  const sfAliasProfile = makeProfile({
+    profileVersion: 'sf-alias-1',
+    apply: { modules: { suite: 'merge' } },
+    envelope: {
+      modules: {
+        suite: { signingSoftFlags: true }, // today's published shape from suiteExport()
+      },
+    },
+  });
+  await PP.applyProfile(sfAliasProfile);
+  check(store['suite.signing.softFlags'] === true,
+    'envelope alias signingSoftFlags applies to suite.signing.softFlags (today\'s published profiles)');
+  check(!('suite.signingSoftFlags' in store),
+    'alias does not invent a suite.signingSoftFlags storage key');
+
+  console.log('\n--- suite: sticky-on merge (local true survives incoming false; local false + incoming true turns ON) ---');
+  reset();
+  store['suite.signing.softFlags'] = true;
+  const sfMergeOff = makeProfile({
+    profileVersion: 'sf-sticky-1',
+    apply: { modules: { suite: 'merge' } },
+    envelope: { modules: { suite: { 'signing.softFlags': false } } },
+  });
+  await PP.applyProfile(sfMergeOff);
+  check(store['suite.signing.softFlags'] === true,
+    'sticky-on merge: local true is not overwritten by incoming false');
+
+  reset();
+  store['suite.signing.softFlags'] = false;
+  const sfMergeOn = makeProfile({
+    profileVersion: 'sf-sticky-2',
+    apply: { modules: { suite: 'merge' } },
+    envelope: { modules: { suite: { signingSoftFlags: true } } },
+  });
+  await PP.applyProfile(sfMergeOn);
+  check(store['suite.signing.softFlags'] === true,
+    'sticky-on merge: incoming true turns clinician OFF back ON (pack-push; not nullish)');
+
+  console.log('\n--- suite: replace may write false ---');
+  reset();
+  store['suite.signing.softFlags'] = true;
+  const sfReplaceOff = makeProfile({
+    profileVersion: 'sf-rep-1',
+    apply: { modules: { suite: 'replace' } },
+    envelope: { modules: { suite: { 'signing.softFlags': false } } },
+  });
+  await PP.applyProfile(sfReplaceOff);
+  check(store['suite.signing.softFlags'] === false,
+    'replace: may write false (practice that wants OFF uses replace)');
+
+  console.log('\n--- suite: Accept-for-practice stays separate from the pack ---');
+  reset();
+  store['suite.practiceAcceptedAt'] = '2026-06-01T09:00:00Z';
+  const sfPackOnly = makeProfile({
+    profileVersion: 'sf-accept-sep-1',
+    apply: { modules: { suite: 'replace' } },
+    envelope: { modules: { suite: { 'signing.softFlags': true, practiceAcceptedAt: '2099-01-01T00:00:00Z' } } },
+  });
+  await PP.applyProfile(sfPackOnly);
+  check(store['suite.signing.softFlags'] === true, 'turning pack on writes suite.signing.softFlags');
+  check(store['suite.practiceAcceptedAt'] === '2026-06-01T09:00:00Z',
+    'turning pack on leaves practiceAcceptedAt unchanged (planted extra unread)');
+
+  reset();
+  store['suite.signing.softFlags'] = false;
+  const acceptOnlyProfile = makeProfile({
+    profileVersion: 'sf-accept-sep-2',
+    apply: { modules: {} },
+    practiceAttestation: {
+      attestedBy: 'cso@gp.nhs.uk',
+      attestedAt: '2026-06-02T08:00:00Z',
+      gates: { reception: true, alertLibrary: true },
+    },
+    envelope: { modules: {} },
+  });
+  await PP.applyProfile(acceptOnlyProfile);
+  check(store['reception.config']?.disclaimerAcceptedAt === '2026-06-02T08:00:00Z',
+    'Accept/attestation still writes reception disclaimer');
+  check(store['suite.signing.softFlags'] === false,
+    'tick Accept / attestation does not enable softFlags');
+  check(store['suite.practiceAcceptedAt'] === undefined,
+    'central attestation does not write suite.practiceAcceptedAt either');
+
   // ── Cleanup Code Preferences: tallies always max(), override follows mode ──
   console.log('\n--- problemDescriptionCleanup merge: tally reconciles via max(), never adds ---');
   reset();

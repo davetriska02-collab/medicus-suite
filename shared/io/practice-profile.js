@@ -979,10 +979,18 @@ const PracticeProfile = (() => {
       }
     }
 
-    // ── Suite: practiceCode + feedbackEmail only (v2 new) ─────────────────────
-    // NEVER push display, tabOrder, hiddenTabs (the user's tab choice is
-    // theirs alone — see side-panel/tab-catalog.js), or any other suite.* key — those are
-    // personal preferences of the individual user, not practice-wide config.
+    // ── Suite: practiceCode + feedbackEmail + signing.softFlags (v2 new) ──────
+    // NEVER push display, tabOrder, hiddenTabs, letterhead, practiceAcceptedAt,
+    // attestations, waitingRoomThresholds, rollupAlwaysExpanded, txn.*, or
+    // request-monitor from this allow-list (the user's tab choice is theirs
+    // alone — see side-panel/tab-catalog.js). Those are personal preferences
+    // or a separate clinical gate, not optional-pack config.
+    //
+    // signing.softFlags is the dotted allow-list key so `suite.${key}` writes
+    // the one real storage key `suite.signing.softFlags`. Today's published
+    // envelopes emit the suiteExport alias `signingSoftFlags` — dual-read it
+    // so apply does not no-op on current profiles. Do NOT call suiteImport()
+    // here (it would also write display / practiceAcceptedAt / etc.).
     const suiteModData =
       mods.suite ||
       // v1 fallback: practiceCode may have lived under mods.submissions (already
@@ -1019,13 +1027,25 @@ const PracticeProfile = (() => {
       try {
         const merge = modMap.get('suite') === 'merge';
         const toSet = {};
-        const ALLOWED_SUITE_KEYS = ['practiceCode', 'feedbackEmail'];
+        // Literal `signing.softFlags` so suite.${key} → suite.signing.softFlags.
+        // Never add practiceAcceptedAt here — Accept-for-practice stays a
+        // separate clinical gate (reception + alert library), not this pack.
+        const ALLOWED_SUITE_KEYS = ['practiceCode', 'feedbackEmail', 'signing.softFlags'];
 
         for (const key of ALLOWED_SUITE_KEYS) {
-          const val = suiteModData[key];
+          let val = suiteModData[key];
+          // Dual-read the envelope alias suiteExport() / Publish already emits.
+          if (val == null && key === 'signing.softFlags' && typeof suiteModData.signingSoftFlags === 'boolean') {
+            val = suiteModData.signingSoftFlags;
+          }
           if (val == null) continue;
           const storageKey = `suite.${key}`;
           if (merge) {
+            // Sticky-on: `!ex[storageKey]` treats local false as empty, so
+            // incoming true turns a clinician OFF back ON (intentional pack-push).
+            // Once local is true, merge will not write false. Do NOT switch this
+            // key to nullish (`== null`) — that would block practice ON over
+            // local OFF. Replace may write false.
             const ex = await chrome.storage.local.get(storageKey);
             if (!ex[storageKey]) toSet[storageKey] = val;
           } else {
@@ -1033,7 +1053,9 @@ const PracticeProfile = (() => {
           }
         }
         // Explicitly block any other keys even if accidentally present in the profile
-        // (display, tabOrder, etc. are personal preferences and must never be pushed).
+        // (display, tabOrder, hiddenTabs, letterhead, practiceAcceptedAt,
+        // attestations, waitingRoomThresholds, rollupAlwaysExpanded, txn.*,
+        // request-monitor — personal prefs or a separate gate, never pushed).
 
         if (Object.keys(toSet).length > 0) {
           await chrome.storage.local.set(toSet);

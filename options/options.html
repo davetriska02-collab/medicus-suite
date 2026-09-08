@@ -1150,6 +1150,7 @@
         <button class="nav-item" data-section="allocation-groups">Allocation groups</button>
         <button class="nav-item" data-section="leaflets">Leaflets</button>
         <button class="nav-item" data-section="pdc-prefs">Cleanup code preferences</button>
+        <button class="nav-item" data-section="practice-features">Practice features</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="diagnostics">Diagnostics</button>
         <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
@@ -2753,6 +2754,45 @@
           <div id="pdcRemapList" style="font-size: 12px; color: var(--text-3)">Loading&hellip;</div>
         </section>
 
+        <!-- Practice features — optional packs (separate from Accept for practice) -->
+        <section class="opt-section" id="sect-practice-features">
+          <h1>Practice features</h1>
+          <p class="section-desc">
+            Optional packs the practice can turn on. These are <strong>not</strong> the Clinical Safety
+            <strong>Accept for practice</strong> switch (reception capture + alert library). Soft flags never
+            set Accept, and Accept never enables a pack. Toggling here writes this machine only — publish
+            from Backup &amp; Restore when the practice should have it.
+          </p>
+
+          <div
+            style="border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 24px"
+          >
+            <label class="checkbox-row" style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="pfSoftFlags" style="margin-top: 3px; flex-shrink: 0" />
+              <span>
+                <span class="field-label" style="margin: 0"
+                  >Signing Queue: show overdue monitoring &amp; QOF review flags</span
+                >
+                <span class="field-help" style="display: block; margin-top: 4px">
+                  Off by default. Same toggle as Options → Suite and the Signing Queue page. When on, the
+                  Signing Queue adds a look-twice badge for a short list of
+                  <strong>review codes we can see</strong> (asthma, COPD, heart failure, SMI, dementia) and a
+                  <strong>Flagged</strong> filter that includes overdue monitoring, those review badges, and
+                  unread / unread-error rows. Existing monitoring chips stay visible either way. This is not a
+                  QOF claim and never blocks Medicus Approve.
+                </span>
+                <span class="field-help" style="display: block; margin-top: 8px">
+                  A published profile that turns this <strong>on</strong> will turn it on for clinicians who
+                  had it off (merge is sticky-on, so a pack-push wins over a local off). Once a machine has it
+                  on, merge will not turn it off. A practice that wants the pack
+                  <strong>off</strong> practice-wide must publish Suite in <strong>replace</strong> mode (or a
+                  clinician can turn it off locally until the next replace).
+                </span>
+              </span>
+            </label>
+          </div>
+        </section>
+
         <!-- Clinical Safety section -->
         <section class="opt-section" id="sect-safety">
           <h1>Clinical Safety</h1>
@@ -2814,11 +2854,12 @@
               Accept clinical features for this practice
             </h2>
             <p class="field-help" style="margin: 0 0 12px">
-              One practice-level acceptance that switches on the features that ship off by default: the
-              <strong>reception guided-capture pathways</strong>, the <strong>Sentinel alert library</strong> (extra
-              monitoring), and the <strong>Knowledge notice</strong>. Unlike the per-install attestations, this
-              acceptance is carried in a suite backup, so restoring that backup on another machine propagates it across
-              the practice.
+              One practice-level acceptance that switches on the <strong>clinical modules</strong> that ship off by
+              default: the <strong>reception guided-capture pathways</strong>, the
+              <strong>Sentinel alert library</strong> (extra monitoring), and the <strong>Knowledge notice</strong>.
+              It does <strong>not</strong> enable optional packs (Signing soft flags live under
+              <strong>Practice features</strong>). Unlike the per-install attestations, this acceptance is carried in
+              a suite backup, so restoring that backup on another machine propagates it across the practice.
             </p>
             <div id="practiceAcceptStatus" style="margin-bottom: 10px; font-size: 12px"></div>
             <label
