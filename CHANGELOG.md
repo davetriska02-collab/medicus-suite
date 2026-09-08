@@ -11,7 +11,9 @@ Dave could review the allocate-canvas chrome on main. The chrome is on
 main. Nothing in the extension, tests, or CI reads those files. They still
 shipped in the release zip because `docs/` is not excluded.
 
-This patch deletes them. `scripts/canvas-chrome-fixture.html` and
+This patch deletes them. It also drops `docs/draft-duplicate-checker-copy-2026-07-05.md`
+(copy already live in `duplicate-checker.html`) and `docs/v1.5.0-design.md`
+(pre-v3 design note, no callers). `scripts/canvas-chrome-fixture.html` and
 `scripts/canvas-chrome-shots.mjs` stay so the shots can be regenerated
 locally. No canvas, write-path, or rule change.
 
