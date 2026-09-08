@@ -20,6 +20,7 @@ const SUITE_KEYS = [
   'suite.waitingRoom.thresholds',
   'suite.letterhead',
   'suite.practiceProfile.attestations',
+  'suite.signing.softFlags',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -52,6 +53,9 @@ async function suiteExport() {
     // travel in a backup so a restore doesn't lose the "accepted centrally by
     // <admin>" provenance shown by options.js and knowledge.js.
     attestations: r['suite.practiceProfile.attestations'] ?? null,
+    // Signing Queue soft-flag pack (QOF-review badges + Flagged filter).
+    // Default OFF — absent/null exports as null; only explicit true enables.
+    signingSoftFlags: r['suite.signing.softFlags'] ?? null,
   };
 }
 
@@ -138,6 +142,12 @@ async function suiteImport(data) {
       };
     }
     toSet['suite.practiceProfile.attestations'] = cleanAtt;
+  }
+  if (data.signingSoftFlags != null) {
+    if (typeof data.signingSoftFlags !== 'boolean') {
+      throw new Error('suite.signing.softFlags must be a boolean.');
+    }
+    toSet['suite.signing.softFlags'] = data.signingSoftFlags;
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

@@ -34,12 +34,16 @@ import {
   requestedDrugFlags,
   combinationVerdict,
   requestedComboFlags,
+  qofReviewVerdict,
+  medicusReviewDue,
+  MEDICUS_REVIEW_DUE_LABEL,
   sortSigningRows,
   requestAgeDays,
   renalContext,
   formatObsAge,
   locationBuckets,
   rowMatchesLocationFilter,
+  rowMatchesFlaggedFilter,
   filterHiddenSummary,
   isDispensaryLocation,
   emptyStateKind,
@@ -81,6 +85,12 @@ let state = {
   // deliberately never persisted — a filter remembered across days could
   // silently hide rows from a user who forgot they set it.
   locationFilter: new Set(),
+  // Flagged filter: session-only, same doctrine as locationFilter. Only
+  // painted when the practice has turned on the soft-flag pack.
+  flaggedOnly: false,
+  // Practice toggle (suite.signing.softFlags, default OFF): QOF-review
+  // badges + Flagged filter. Existing monitoring chips stay always-on.
+  softFlags: false,
   lastFetched: null,
   error: null,
   noCode: false,
@@ -96,6 +106,7 @@ export async function init(el) {
   if (saved && saved.types && typeof saved.types === 'object') {
     state.types = { routine: saved.types.routine !== false, nonRoutine: saved.types.nonRoutine === true };
   }
+  state.softFlags = await loadSoftFlags();
 
   renderShell();
   _stopFresh = attachFreshnessTicker(container);
@@ -129,6 +140,7 @@ async function fetchAndRun() {
     state.error = null;
     state.noCode = false;
 
+    state.softFlags = await loadSoftFlags();
     const { code } = await window.PracticeCode.resolve();
     if (!code || !_SITE_CODE_RE.test(code)) {
       state.noCode = true;
@@ -177,6 +189,8 @@ async function fetchAndRun() {
             typeof t.collectionLocationName === 'string' ? t.collectionLocationName.trim().slice(0, 40) : '',
           state: ROW_STATE.PENDING,
           verdict: null,
+          qofVerdict: null,
+          medicusReviewDue: false,
           requestedHits: [],
           error: null,
         });
@@ -239,8 +253,14 @@ async function runMonitoringPass(apiBase) {
           renderList();
           return;
         }
-        const { chips, renal } = await evaluatePatient(apiBase, patientUuid, rules);
-        entry = { verdict: monitoringVerdict(chips), combo: combinationVerdict(chips), renal };
+        const { chips, renal, medications } = await evaluatePatient(apiBase, patientUuid, rules);
+        entry = {
+          verdict: monitoringVerdict(chips),
+          combo: combinationVerdict(chips),
+          renal,
+          qof: state.softFlags ? qofReviewVerdict(chips) : { level: null, items: [], label: '' },
+          medicusReviewDue: state.softFlags ? medicusReviewDue(medications) : false,
+        };
         _verdictByUuid.set(patientUuid, entry);
         evaluations++;
         await new Promise((r) => setTimeout(r, PER_PATIENT_DELAY_MS));
@@ -248,6 +268,8 @@ async function runMonitoringPass(apiBase) {
       row.state = ROW_STATE.DONE;
       row.verdict = entry.verdict;
       row.comboVerdict = entry.combo || { level: null, items: [] };
+      row.qofVerdict = entry.qof || { level: null, items: [], label: '' };
+      row.medicusReviewDue = !!entry.medicusReviewDue;
       row.renal = entry.renal;
       row.requestedHits = requestedDrugFlags(row.summary, entry.verdict.items);
       row.requestedComboHits = requestedComboFlags(row.summary, row.comboVerdict.items);
@@ -323,19 +345,28 @@ async function evaluatePatient(apiBase, patientUuid, rules) {
     observationHistory: data.observationHistory || [],
     patientRegisters: data.patientRegisters != null ? data.patientRegisters : null,
   });
-  // Renal context rides along with the verdict — same fetch, zero extra cost.
-  return { chips, renal: renalContext(data.observations || [], Date.now()) };
+  // Renal context and current-regimen review-due ride along — same fetch.
+  return {
+    chips,
+    renal: renalContext(data.observations || [], Date.now()),
+    medications: data.medications || [],
+  };
 }
 
-// Drug rules + practice/org/custom overlays — the same merge order Sweep uses,
-// but drug-monitoring only (QOF/vaccine rules are irrelevant to a signing
-// context and cost per-patient compute). Custom rules of other types are
-// filtered out by monitoringVerdict anyway.
+// Drug rules + practice/org/custom overlays — the same merge order Sweep uses.
+// QOF rules are loaded only when the practice has turned on the soft-flag
+// pack (qofReviewVerdict filters to the review-process allow-list). Vaccine
+// rules stay out: they are not a signing-queue look-twice. Custom rules of
+// other types are filtered out by the reducers.
 let _rulesCache = null;
+let _rulesCacheSoftFlags = null;
 async function loadRules() {
-  if (_rulesCache) return _rulesCache;
+  if (_rulesCache && _rulesCacheSoftFlags === state.softFlags) return _rulesCache;
   const drugDoc = await fetch(chrome.runtime.getURL('rules/drug-rules.json')).then((r) => r.json());
-  const canonical = drugDoc.rules || [];
+  const qofDoc = state.softFlags
+    ? await fetch(chrome.runtime.getURL('rules/qof-rules.json')).then((r) => r.json())
+    : { rules: [] };
+  const canonical = [...(drugDoc.rules || []), ...(qofDoc.rules || [])];
   return new Promise((resolve) => {
     chrome.storage.local.get(['sentinel.rules', 'sentinel.orgRules', 'sentinel.customRules'], (res) => {
       const individual = res['sentinel.rules'] || {};
@@ -350,8 +381,22 @@ async function loadRules() {
       }
       merged.push(...customRules.filter((r) => r.enabled !== false));
       _rulesCache = merged;
+      _rulesCacheSoftFlags = state.softFlags;
       resolve(merged);
     });
+  });
+}
+
+// Practice toggle — absent / anything other than true is OFF (default).
+function loadSoftFlags() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get('suite.signing.softFlags', (r) => {
+        resolve(r['suite.signing.softFlags'] === true);
+      });
+    } catch (_) {
+      resolve(false);
+    }
   });
 }
 
@@ -380,17 +425,14 @@ function renderShell() {
         </div>
       </div>
 
-      <div class="sg-honest" role="note">
-        Monitoring shown is what is <strong>recorded</strong>, not what is true. Combination alerts are the
-        practice's configured Monitoring rules, re-shown here. No flag &ne; safe to sign — verify in the record
-        before authorising. This panel never writes to Medicus.
-      </div>
+      <div class="sg-honest" role="note" id="sgHonest">${honestStateHtml()}</div>
 
       <div class="sg-controls">
         ${TASK_TYPES.map(
           (tt) =>
             `<label class="sg-type-toggle"><input type="checkbox" data-type="${tt.key}" ${state.types[tt.key] ? 'checked' : ''}/> ${tt.label}</label>`
         ).join('')}
+        <div id="sgFlagPills" class="sg-flag-pills"></div>
       </div>
 
       <div id="sgLocPills" class="sg-loc-pills"></div>
@@ -416,8 +458,19 @@ function renderShell() {
   });
 }
 
+function honestStateHtml() {
+  const qofBit = state.softFlags
+    ? ' QOF review flags here are the <strong>review codes we can see</strong> on this record (asthma, COPD, heart failure, SMI, dementia) &mdash; not a QOF claim, and a quiet row is not &ldquo;review is up to date&rdquo;.'
+    : '';
+  return `Monitoring shown is what is <strong>recorded</strong>, not what is true. Combination alerts are the
+        practice's configured Monitoring rules, re-shown here.${qofBit} No flag &ne; safe to sign — verify in the record
+        before authorising. This panel never writes to Medicus.`;
+}
+
 function renderAll() {
   if (!container) return;
+  const honest = container.querySelector('#sgHonest');
+  if (honest) honest.innerHTML = honestStateHtml();
   const banner = container.querySelector('#sgBanner');
   if (banner) {
     if (state.noCode) {
@@ -437,6 +490,7 @@ function renderAll() {
     title.textContent =
       state.noCode || state.error ? 'Repeat requests' : `${n} open repeat request${n === 1 ? '' : 's'}`;
   }
+  renderFlagPills();
   renderLocPills();
   renderList();
   const foot = container.querySelector('#sgFoot');
@@ -451,9 +505,12 @@ function verdictHtml(row) {
   }
   const v = row.verdict;
   const cv = row.comboVerdict;
+  const qv = row.qofVerdict;
   const monItems = (v && v.items) || [];
   const comboItems = (cv && cv.items) || [];
-  if (!monItems.length && !comboItems.length) {
+  const qofLabel = (qv && qv.label) || '';
+  const medicusDue = !!row.medicusReviewDue;
+  if (!monItems.length && !comboItems.length && !qofLabel && !medicusDue) {
     return (
       '<span class="sg-status sg-status--clear">no monitoring flags recorded <span class="sg-clear-caveat">&ne; all clear</span></span>' +
       renalHtml(row)
@@ -486,7 +543,14 @@ function verdictHtml(row) {
       </span>`;
     })
     .join('');
-  return monHtml + comboHtml + renalHtml(row);
+  const qofHtml =
+    qofLabel && qv && qv.level
+      ? `<span class="sg-chip sg-chip--${esc(qv.level)} sg-chip--qof" title="Look twice — review codes we can see on this record, not a QOF claim">${esc(qofLabel)}</span>`
+      : '';
+  const medicusHtml = medicusDue
+    ? `<span class="sg-chip sg-chip--amber sg-chip--medicus" title="Medicus marked a current medication review as overdue — verbatim recorded fact">${esc(MEDICUS_REVIEW_DUE_LABEL)}</span>`
+    : '';
+  return monHtml + comboHtml + qofHtml + medicusHtml + renalHtml(row);
 }
 
 // Renal fact — verbatim latest recorded eGFR, value NEVER shown without its
@@ -495,7 +559,12 @@ function verdictHtml(row) {
 // a quiet row's missing eGFR would be noise on every young healthy patient.
 function renalHtml(row) {
   const r = row.renal;
-  const flagged = !!((row.verdict && row.verdict.level) || (row.comboVerdict && row.comboVerdict.level));
+  const flagged = !!(
+    (row.verdict && row.verdict.level) ||
+    (row.comboVerdict && row.comboVerdict.level) ||
+    (row.qofVerdict && row.qofVerdict.level) ||
+    row.medicusReviewDue
+  );
   if (!r) {
     return flagged ? '<span class="sg-renal sg-renal--stale">no eGFR on record</span>' : '';
   }
@@ -520,7 +589,7 @@ function renderList() {
     // type selected, no filter). A narrowed view keeps the neutral wording:
     // warmth on a false all-clear is worse than no warmth at all.
     const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
-    const kind = emptyStateKind(0, allTypes, state.locationFilter.size > 0);
+    const kind = emptyStateKind(0, allTypes, state.locationFilter.size > 0 || state.flaggedOnly);
     list.innerHTML =
       kind === 'done'
         ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
@@ -530,8 +599,20 @@ function renderList() {
   }
 
   const now = Date.now();
-  const visible = state.rows.filter((r) => rowMatchesLocationFilter(r, state.locationFilter));
+  const visible = state.rows.filter(
+    (r) => rowMatchesLocationFilter(r, state.locationFilter) && rowMatchesFlaggedFilter(r, state.flaggedOnly)
+  );
   renderFilterNote();
+  if (visible.length === 0) {
+    const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
+    const kind = emptyStateKind(0, allTypes, true);
+    list.innerHTML =
+      kind === 'done'
+        ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
+        : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
+    renderMore(state.rows.filter((r) => r.state === ROW_STATE.PENDING).length);
+    return;
+  }
   const sorted = sortSigningRows(visible);
   list.innerHTML = sorted
     .map((row) => {
@@ -582,6 +663,28 @@ function collectChip(row) {
 // bucket; the whole row is invisible at practices that don't use the field.
 // Display-only — the monitoring pass always checks EVERY row regardless of
 // the active filter, so verdicts are complete even while the view is narrowed.
+function renderFlagPills() {
+  const host = container?.querySelector('#sgFlagPills');
+  if (!host) return;
+  if (!state.softFlags) {
+    host.innerHTML = '';
+    state.flaggedOnly = false;
+    return;
+  }
+  const count = state.rows.filter((r) => rowMatchesFlaggedFilter(r, true)).length;
+  host.innerHTML = `<button class="sg-loc-pill sg-flag-pill${state.flaggedOnly ? ' sg-loc-pill--active' : ''}"
+      type="button" role="switch" aria-checked="${state.flaggedOnly}"
+      aria-label="Show flagged requests only (${count})">
+      Flagged <span class="sg-loc-count">${count}</span>
+    </button>`;
+  host.querySelector('.sg-flag-pill')?.addEventListener('click', () => {
+    state.flaggedOnly = !state.flaggedOnly;
+    renderFlagPills();
+    renderLocPills();
+    renderList();
+  });
+}
+
 function renderLocPills() {
   const host = container?.querySelector('#sgLocPills');
   if (!host) return;
@@ -621,7 +724,7 @@ function renderLocPills() {
 function renderFilterNote() {
   const note = container?.querySelector('#sgFilterNote');
   if (!note) return;
-  const summary = filterHiddenSummary(state.rows, state.locationFilter);
+  const summary = filterHiddenSummary(state.rows, state.locationFilter, state.flaggedOnly);
   if (!summary || summary.hidden === 0) {
     note.className = 'sg-filter-note hidden';
     note.innerHTML = '';

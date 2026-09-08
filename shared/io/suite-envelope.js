@@ -542,6 +542,9 @@ function previewEnvelope(envelope) {
         'WARNING: Carries practice acceptance — importing switches ON reception capture pathways and the Sentinel alert library on THIS install.'
       );
     }
+    if (mods.suite.signingSoftFlags === true) {
+      lines.push('Signing Queue: overdue monitoring & QOF review flags ON');
+    }
   }
 
   return lines;

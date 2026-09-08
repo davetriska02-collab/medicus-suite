@@ -733,6 +733,25 @@ console.log('\n--- applyWithRollback rollback ---');
   const expLhUnset = await suiteIo.suiteExport();
   assert(expLhUnset.letterhead === null, 'suiteExport: unset letterhead exports as null');
 
+  // ── suite.signing.softFlags round-trip + validation ───────────────────────
+  await suiteIo.suiteImport({ signingSoftFlags: true });
+  assert(suiteStore['suite.signing.softFlags'] === true, 'suiteImport: writes suite.signing.softFlags');
+  const expSf = await suiteIo.suiteExport();
+  assert(expSf.signingSoftFlags === true, 'suiteExport: round-trips suite.signing.softFlags');
+  let sfErr = null;
+  try {
+    await suiteIo.suiteImport({ signingSoftFlags: 'yes' });
+  } catch (e) {
+    sfErr = e.message;
+  }
+  assert(sfErr && sfErr.includes('boolean'), 'suiteImport: rejects non-boolean signingSoftFlags');
+  assert(suiteStore['suite.signing.softFlags'] === true, 'suiteImport: rejected signingSoftFlags leaves prior value');
+  const sfLines = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { signingSoftFlags: true } }));
+  assert(
+    sfLines.some((l) => l.includes('QOF review flags ON')),
+    'previewEnvelope: mentions Signing Queue soft-flag pack when ON'
+  );
+
   // ── suite.practiceAcceptedAt round-trip + validation ──────────────────────
   // The single "Accept for practice" flag DOES travel (unlike per-install
   // attestations), so it must round-trip and reject non-ISO values.
