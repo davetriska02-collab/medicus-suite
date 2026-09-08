@@ -416,20 +416,123 @@
     return { site: m[1].toLowerCase(), slug: slug };
   }
 
+  // Fold a staff label / email local-part so "Dr David Triska" matches
+  // "david.triska". Titles and punctuation drop; case is ignored.
+  function foldPresenceName(s) {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/^(dr|prof|professor|mr|mrs|ms|miss)\.?\s+/i, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // Keys that mean "this is me" on a native presence member. Staff UUID from
+  // data-ch-staff is not always Pusher members.myID — live Medicus has shown
+  // the two diverge, which painted the logged-in user as a colleague.
+  // Optional selfHint: { selfId, email, name }.
+  function presenceSelfKeys(myStaffId, selfHint) {
+    var ids = {};
+    var emails = {};
+    var names = {};
+    var lastInitial = null;
+    function addId(id) {
+      if (typeof id === 'string' && UUID_RE.test(id)) ids[id.toLowerCase()] = 1;
+    }
+    addId(myStaffId);
+    var hint = selfHint && typeof selfHint === 'object' ? selfHint : {};
+    addId(hint.selfId);
+    var email = typeof hint.email === 'string' ? hint.email.trim().toLowerCase() : '';
+    if (email && email.indexOf('@') > 0 && email.length <= 120) {
+      emails[email] = 1;
+      var local = email.slice(0, email.indexOf('@'));
+      var foldedLocal = foldPresenceName(local.replace(/[._-]+/g, ' '));
+      if (foldedLocal) names[foldedLocal] = 1;
+      var parts = local.split(/[._-]+/).filter(Boolean);
+      // Single-letter first token only (d.triska → David Triska). A full first
+      // token ("sam") must not match a longer first name (Samira Okonkwo).
+      if (parts.length >= 2 && parts[0].length === 1) {
+        lastInitial = {
+          last: foldPresenceName(parts[parts.length - 1]),
+          first: parts[0].toLowerCase(),
+        };
+      }
+    }
+    if (typeof hint.name === 'string' && hint.name.trim()) {
+      var foldedName = foldPresenceName(hint.name);
+      if (foldedName) names[foldedName] = 1;
+    }
+    return { ids: ids, emails: emails, names: names, lastInitial: lastInitial };
+  }
+
+  function memberLooksLikeSelf(member, keys) {
+    if (!member || typeof member !== 'object' || !keys) return false;
+    var sid = typeof member.id === 'string' ? member.id.toLowerCase() : '';
+    if (sid && keys.ids && keys.ids[sid]) return true;
+    var info = member.info && typeof member.info === 'object' ? member.info : {};
+    var email = typeof info.email === 'string' ? info.email.trim().toLowerCase() : '';
+    if (email && keys.emails && keys.emails[email]) return true;
+    var label = labelFromPresenceInfo(info);
+    var folded = foldPresenceName(label);
+    if (folded && keys.names && keys.names[folded]) return true;
+    if (keys.lastInitial && folded) {
+      var tokens = folded.split(' ').filter(Boolean);
+      if (tokens.length >= 2) {
+        var last = tokens[tokens.length - 1];
+        var first = tokens[0].charAt(0);
+        if (last === keys.lastInitial.last && first === keys.lastInitial.first) return true;
+      }
+    }
+    return false;
+  }
+
+  function hasSelfIdentity(myStaffId, selfHint) {
+    if (typeof myStaffId === 'string' && UUID_RE.test(myStaffId)) return true;
+    if (selfHint && typeof selfHint.selfId === 'string' && UUID_RE.test(selfHint.selfId)) return true;
+    return false;
+  }
+
+  function memberFromNative(m, extra) {
+    var info = m.info && typeof m.info === 'object' ? m.info : {};
+    var label = labelFromPresenceInfo(info);
+    var unknown = !label;
+    if (!label) label = unknownColleagueLabel();
+    var initials = unknown
+      ? '?'
+      : typeof info.initials === 'string' && /^[A-Za-z]{1,3}$/.test(info.initials.trim())
+        ? info.initials.trim().toUpperCase()
+        : initialsFromLabel(label);
+    var row = {
+      staffId: m.id.toLowerCase(),
+      label: label,
+      initials: initials,
+      hue: avatarHue(m.id),
+      native: true,
+    };
+    if (extra) {
+      if (extra.taskUuid) row.taskUuid = extra.taskUuid;
+      if (extra.listSlug) row.listSlug = extra.listSlug;
+    }
+    return row;
+  }
+
   // Untrusted ch-native-task-presence detail → other clinicians on THIS task.
   // Fail closed: without a known self id we cannot tell "me" from a colleague,
   // so showing anyone would paint YOU as occupying your own request.
-  function sanitizeNativePresence(detail, myStaffId, expectedTaskUuid) {
+  // Optional 4th arg selfHint keeps the 3-arg signature for existing tests.
+  function sanitizeNativePresence(detail, myStaffId, expectedTaskUuid, selfHint) {
     if (!detail || typeof detail !== 'object') return [];
     // Missing `live` is treated as live (rig fixtures omit it). live === false
     // means the socket is down or the subscription errored — fail closed, hide.
     if (detail.live === false) return [];
-    if (typeof myStaffId !== 'string' || !UUID_RE.test(myStaffId)) return [];
+    var hint = selfHint && typeof selfHint === 'object' ? selfHint : {};
+    if (!hint.selfId && typeof detail.selfId === 'string') hint = { selfId: detail.selfId, email: hint.email, name: hint.name };
+    if (!hasSelfIdentity(myStaffId, hint)) return [];
     if (typeof expectedTaskUuid !== 'string' || !UUID_RE.test(expectedTaskUuid)) return [];
     if (typeof detail.taskUuid !== 'string' || !UUID_RE.test(detail.taskUuid)) return [];
     var taskUuid = detail.taskUuid.toLowerCase();
     if (taskUuid !== expectedTaskUuid.toLowerCase()) return [];
-    var me = myStaffId.toLowerCase();
+    var keys = presenceSelfKeys(myStaffId, hint);
     var raw = Array.isArray(detail.members) ? detail.members.slice(0, 20) : [];
     var seen = {};
     var out = [];
@@ -438,25 +541,9 @@
       if (!m || typeof m !== 'object') continue;
       if (typeof m.id !== 'string' || !UUID_RE.test(m.id)) continue;
       var sid = m.id.toLowerCase();
-      if (sid === me || seen[sid]) continue;
+      if (seen[sid] || memberLooksLikeSelf(m, keys)) continue;
       seen[sid] = 1;
-      var info = m.info && typeof m.info === 'object' ? m.info : {};
-      var label = labelFromPresenceInfo(info);
-      var unknown = !label;
-      if (!label) label = unknownColleagueLabel();
-      var initials = unknown
-        ? '?'
-        : typeof info.initials === 'string' && /^[A-Za-z]{1,3}$/.test(info.initials.trim())
-          ? info.initials.trim().toUpperCase()
-          : initialsFromLabel(label);
-      out.push({
-        staffId: sid,
-        label: label,
-        initials: initials,
-        hue: avatarHue(sid),
-        taskUuid: taskUuid,
-        native: true,
-      });
+      out.push(memberFromNative(m, { taskUuid: taskUuid }));
     }
     return out;
   }
@@ -464,15 +551,17 @@
   // Untrusted ch-native-list-presence detail → other clinicians on THIS list.
   // Same member rules as sanitizeNativePresence. List members carry listSlug,
   // never a request UUID — othersOnTask must not treat them as occupants.
-  function sanitizeNativeListPresence(detail, myStaffId, expectedSlug) {
+  function sanitizeNativeListPresence(detail, myStaffId, expectedSlug, selfHint) {
     if (!detail || typeof detail !== 'object') return [];
     if (detail.live === false) return [];
-    if (typeof myStaffId !== 'string' || !UUID_RE.test(myStaffId)) return [];
+    var hint = selfHint && typeof selfHint === 'object' ? selfHint : {};
+    if (!hint.selfId && typeof detail.selfId === 'string') hint = { selfId: detail.selfId, email: hint.email, name: hint.name };
+    if (!hasSelfIdentity(myStaffId, hint)) return [];
     if (typeof expectedSlug !== 'string' || !expectedSlug) return [];
     if (typeof detail.slug !== 'string' || !detail.slug) return [];
     var slug = detail.slug;
     if (slug.toLowerCase() !== expectedSlug.toLowerCase()) return [];
-    var me = myStaffId.toLowerCase();
+    var keys = presenceSelfKeys(myStaffId, hint);
     var raw = Array.isArray(detail.members) ? detail.members.slice(0, 20) : [];
     var seen = {};
     var out = [];
@@ -481,25 +570,9 @@
       if (!m || typeof m !== 'object') continue;
       if (typeof m.id !== 'string' || !UUID_RE.test(m.id)) continue;
       var sid = m.id.toLowerCase();
-      if (sid === me || seen[sid]) continue;
+      if (seen[sid] || memberLooksLikeSelf(m, keys)) continue;
       seen[sid] = 1;
-      var info = m.info && typeof m.info === 'object' ? m.info : {};
-      var label = labelFromPresenceInfo(info);
-      var unknown = !label;
-      if (!label) label = unknownColleagueLabel();
-      var initials = unknown
-        ? '?'
-        : typeof info.initials === 'string' && /^[A-Za-z]{1,3}$/.test(info.initials.trim())
-          ? info.initials.trim().toUpperCase()
-          : initialsFromLabel(label);
-      out.push({
-        staffId: sid,
-        label: label,
-        initials: initials,
-        hue: avatarHue(sid),
-        listSlug: slug,
-        native: true,
-      });
+      out.push(memberFromNative(m, { listSlug: slug }));
     }
     return out;
   }
@@ -686,6 +759,31 @@
     return 'Hide this warning until someone else joins. It comes back if the people change.';
   }
 
+  function occupancyLookHint() {
+    return 'Change colour, size and highlight. Saved for this machine.';
+  }
+
+  function splitOccupiedQuiet(full) {
+    var quiet = 'You can still work it.';
+    var src = typeof full === 'string' ? full : '';
+    if (src.slice(-quiet.length - 1) === ' ' + quiet) {
+      return { lead: src.slice(0, -(quiet.length + 1)), quiet: quiet };
+    }
+    return { lead: src, quiet: '' };
+  }
+
+  function lookButtonHtml(compact) {
+    return (
+      '<button type="button" class="ms-tp-look-btn" title="' +
+      esc(occupancyLookHint()) +
+      '" aria-label="' +
+      esc(occupancyLookHint()) +
+      '">' +
+      (compact ? 'Look' : 'Change look') +
+      '</button>'
+    );
+  }
+
   // Store-backed recency only ("Seen N min ago"). Native membership is live
   // NOW — the orange pulse pip is the recency signal, not a word.
   function occupiedNote(others, nowMs) {
@@ -773,6 +871,11 @@
       avatarHue: avatarHue,
       sanitizeNativePresence: sanitizeNativePresence,
       sanitizeNativeListPresence: sanitizeNativeListPresence,
+      foldPresenceName: foldPresenceName,
+      presenceSelfKeys: presenceSelfKeys,
+      memberLooksLikeSelf: memberLooksLikeSelf,
+      splitOccupiedQuiet: splitOccupiedQuiet,
+      occupancyLookHint: occupancyLookHint,
       parsePresenceTaskChannel: parsePresenceTaskChannel,
       parsePresenceListChannel: parsePresenceListChannel,
       othersOnTask: othersOnTask,
@@ -803,6 +906,62 @@
 
   // ── config (chrome.storage; dormant until a store is configured) ──────────
   var _cfg = { enabled: false, url: '', key: '', name: '', source: 'none' };
+  var _look =
+    typeof PresenceLook !== 'undefined' ? PresenceLook.sanitizePresenceLook(null) : {
+      colour: 'fluoro',
+      size: 'medium',
+      highlight: 'fill',
+      avatars: true,
+      quiet: true,
+      weight: 'bold',
+    };
+
+  function applyLookNow() {
+    if (typeof PresenceLook === 'undefined') return;
+    var banner = document.getElementById(BANNER_ID);
+    var list = document.getElementById(LIST_ID);
+    if (banner) PresenceLook.applyLookToEl(banner, _look);
+    if (list) PresenceLook.applyLookToEl(list, _look);
+  }
+
+  function refreshLook() {
+    try {
+      chrome.storage.local.get('suite.display', function (r) {
+        if (chrome.runtime.lastError) return;
+        var d = r && r['suite.display'];
+        _look =
+          typeof PresenceLook !== 'undefined'
+            ? PresenceLook.sanitizePresenceLook(d && d.presenceLook)
+            : _look;
+        applyLookNow();
+        refreshLookPopover();
+      });
+    } catch (_) {}
+  }
+
+  function savePresenceLook(patch) {
+    var next =
+      typeof PresenceLook !== 'undefined'
+        ? PresenceLook.sanitizePresenceLook(Object.assign({}, _look, patch || {}))
+        : Object.assign({}, _look, patch || {});
+    _look = next;
+    applyLookNow();
+    refreshLookPopover();
+    try {
+      chrome.storage.local.get('suite.display', function (r) {
+        if (chrome.runtime.lastError) return;
+        var cur = r && r['suite.display'] && typeof r['suite.display'] === 'object' && !Array.isArray(r['suite.display'])
+          ? r['suite.display']
+          : {};
+        var merged = {};
+        Object.keys(cur).forEach(function (k) {
+          merged[k] = cur[k];
+        });
+        merged.presenceLook = next;
+        chrome.storage.local.set({ 'suite.display': merged });
+      });
+    } catch (_) {}
+  }
 
   function refreshConfig() {
     try {
@@ -816,6 +975,7 @@
     } catch (_) {}
   }
   refreshConfig();
+  refreshLook();
   // Ask the service worker to (re)sync presence-config.json from the shared
   // extension folder — fire-and-forget; a successful sync lands in
   // presence.fileCache and the onChanged listener below re-resolves.
@@ -835,6 +995,19 @@
         changes['presence.fileCache']
       ) {
         refreshConfig();
+        if (changes['presence.name']) {
+          applyNativePresence();
+          applyNativeListPresence();
+        }
+      }
+      if (changes['suite.display']) {
+        var d = changes['suite.display'].newValue;
+        _look =
+          typeof PresenceLook !== 'undefined'
+            ? PresenceLook.sanitizePresenceLook(d && d.presenceLook)
+            : _look;
+        applyLookNow();
+        refreshLookPopover();
       }
     });
   } catch (_) {}
@@ -1185,6 +1358,7 @@
   }
 
   function removeBanner() {
+    closeLookPopover();
     var el = document.getElementById(BANNER_ID);
     if (el) el.remove();
     try {
@@ -1247,6 +1421,7 @@
     var hideHint = occupancyHideHint();
     var action = occupiedAction(others);
     var actionHtml = action ? '<span class="ms-tp-action">' + esc(action) + '</span>' : '';
+    var parts = splitOccupiedQuiet(occupiedHeadline(others));
     return (
       '<span class="ms-tp-inner">' +
       '<span class="ms-tp-avs' +
@@ -1255,10 +1430,12 @@
       avatars +
       '</span>' +
       '<span class="ms-tp-who">' +
-      esc(occupiedHeadline(others)) +
+      esc(parts.lead) +
+      (parts.quiet ? ' <span class="ms-tp-quiet">' + esc(parts.quiet) + '</span>' : '') +
       '</span>' +
       recencyHtml +
       actionHtml +
+      lookButtonHtml(false) +
       '<button type="button" class="ms-tp-hide" title="' +
       esc(hideHint) +
       '" aria-label="' +
@@ -1302,14 +1479,7 @@
         extraCount +
         '</span>';
     }
-    var full = listOccupiedHeadline(list);
-    var quiet = 'You can still work it.';
-    var lead = full;
-    if (full.slice(-quiet.length - 1) === ' ' + quiet) {
-      lead = full.slice(0, -(quiet.length + 1));
-    } else {
-      quiet = '';
-    }
+    var parts = splitOccupiedQuiet(listOccupiedHeadline(list));
     return (
       '<span class="ms-tp-inner">' +
       '<span class="ms-tp-avs' +
@@ -1318,10 +1488,11 @@
       avatars +
       '</span>' +
       '<span class="ms-tp-who">' +
-      esc(lead) +
-      (quiet ? ' <span class="ms-tp-quiet">' + esc(quiet) + '</span>' : '') +
+      esc(parts.lead) +
+      (parts.quiet ? ' <span class="ms-tp-quiet">' + esc(parts.quiet) + '</span>' : '') +
       '</span>' +
       '<span class="ms-tp-recency"><span class="ms-tp-live" aria-hidden="true"></span></span>' +
+      lookButtonHtml(true) +
       '</span>'
     );
   }
@@ -1331,15 +1502,196 @@
     el.setAttribute('data-hide-bound', '1');
     el.addEventListener('click', function (e) {
       var t = e.target;
-      if (!t || !t.classList || !t.classList.contains('ms-tp-hide')) return;
+      if (t && t.closest && t.closest('.ms-tp-hide')) {
+        e.preventDefault();
+        e.stopPropagation();
+        var ctx = parseTaskOverviewPath(location.pathname);
+        if (!ctx) return;
+        var others = othersOnTask(mergedOthers(), ctx.taskUuid);
+        occupancyWriteDismiss(ctx.taskUuid, staffIdList(others), sessionStorage);
+        removeBanner();
+        closeLookPopover();
+        return;
+      }
+      if (t && t.closest && t.closest('#ms-tp-look')) return;
       e.preventDefault();
       e.stopPropagation();
-      var ctx = parseTaskOverviewPath(location.pathname);
-      if (!ctx) return;
-      var others = othersOnTask(mergedOthers(), ctx.taskUuid);
-      occupancyWriteDismiss(ctx.taskUuid, staffIdList(others), sessionStorage);
-      removeBanner();
+      openLookPopover(el);
     });
+  }
+
+  function bindListClicks(el) {
+    if (!el || el.getAttribute('data-look-bound') === '1') return;
+    el.setAttribute('data-look-bound', '1');
+    el.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.closest && t.closest('#ms-tp-look')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openLookPopover(el);
+    });
+  }
+
+  function lookChoiceBtn(field, value, label, pressed) {
+    return (
+      '<button type="button" class="ms-tp-look-choice" data-look-field="' +
+      esc(field) +
+      '" data-look-value="' +
+      esc(value) +
+      '" aria-pressed="' +
+      (pressed ? 'true' : 'false') +
+      '">' +
+      esc(label) +
+      '</button>'
+    );
+  }
+
+  function lookPopoverHtml(look) {
+    var Look = typeof PresenceLook !== 'undefined' ? PresenceLook : null;
+    var safe = Look ? Look.sanitizePresenceLook(look) : look;
+    var swatches = '';
+    if (Look) {
+      Object.keys(Look.COLOURS).forEach(function (k) {
+        var c = Look.COLOURS[k];
+        swatches +=
+          '<button type="button" class="ms-tp-look-swatch" data-look-field="colour" data-look-value="' +
+          esc(k) +
+          '" title="' +
+          esc(c.label) +
+          '" aria-label="' +
+          esc(c.label) +
+          '" aria-pressed="' +
+          (k === safe.colour ? 'true' : 'false') +
+          '" style="background:' +
+          c.wash +
+          ';border-color:' +
+          c.border +
+          '"></button>';
+      });
+    }
+    var sizes = '';
+    var highlights = '';
+    if (Look) {
+      Object.keys(Look.SIZES).forEach(function (k) {
+        sizes += lookChoiceBtn('size', k, Look.SIZES[k].label, k === safe.size);
+      });
+      Object.keys(Look.HIGHLIGHTS).forEach(function (k) {
+        highlights += lookChoiceBtn('highlight', k, Look.HIGHLIGHTS[k].label, k === safe.highlight);
+      });
+    }
+    return (
+      '<div class="ms-tp-look-head">Change look</div>' +
+      '<p class="ms-tp-look-help">Saved on this machine. Options → Task Presence has the same table.</p>' +
+      '<div class="ms-tp-look-row"><span class="ms-tp-look-label">Colour</span><span class="ms-tp-look-swatches">' +
+      swatches +
+      '</span></div>' +
+      '<div class="ms-tp-look-row"><span class="ms-tp-look-label">Size</span><span class="ms-tp-look-choices">' +
+      sizes +
+      '</span></div>' +
+      '<div class="ms-tp-look-row"><span class="ms-tp-look-label">Highlight</span><span class="ms-tp-look-choices">' +
+      highlights +
+      '</span></div>' +
+      '<div class="ms-tp-look-row"><span class="ms-tp-look-label">Show</span><span class="ms-tp-look-choices">' +
+      lookChoiceBtn('avatars', safe.avatars ? '0' : '1', safe.avatars ? 'Hide avatars' : 'Show avatars', false) +
+      lookChoiceBtn('quiet', safe.quiet ? '0' : '1', safe.quiet ? 'Hide quiet clause' : 'Show quiet clause', false) +
+      lookChoiceBtn('weight', safe.weight === 'bold' ? 'regular' : 'bold', safe.weight === 'bold' ? 'Regular type' : 'Bold type', false) +
+      '</span></div>' +
+      '<button type="button" class="ms-tp-look-close">Close</button>'
+    );
+  }
+
+  function positionLookPopover(pop, anchor) {
+    if (!pop || !anchor) return;
+    var r = anchor.getBoundingClientRect();
+    var w = pop.offsetWidth || 320;
+    var h = pop.offsetHeight || 240;
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    var left = r.left;
+    if (left + w > window.innerWidth - 8) left = Math.max(8, window.innerWidth - w - 8);
+    pop.style.top = Math.round(top) + 'px';
+    pop.style.left = Math.round(left) + 'px';
+  }
+
+  function closeLookPopover() {
+    var pop = document.getElementById('ms-tp-look');
+    if (pop) {
+      try {
+        pop.remove();
+      } catch (_) {}
+    }
+    if (_lookDocBound) {
+      try {
+        document.removeEventListener('mousedown', _lookDocClose, true);
+        document.removeEventListener('keydown', _lookEscClose, true);
+      } catch (_) {}
+      _lookDocBound = false;
+    }
+  }
+
+  function _lookDocClose(e) {
+    var t = e && e.target;
+    if (!t) return;
+    if (t.closest && (t.closest('#ms-tp-look') || t.closest('#ms-tp-banner') || t.closest('#ms-tp-list'))) return;
+    closeLookPopover();
+  }
+
+  function _lookEscClose(e) {
+    if (e && e.key === 'Escape') closeLookPopover();
+  }
+
+  var _lookDocBound = false;
+
+  function refreshLookPopover() {
+    var pop = document.getElementById('ms-tp-look');
+    if (!pop) return;
+    pop.innerHTML = lookPopoverHtml(_look);
+  }
+
+  function openLookPopover(anchor) {
+    if (!anchor) return;
+    var existing = document.getElementById('ms-tp-look');
+    if (existing) {
+      closeLookPopover();
+      return;
+    }
+    var pop = document.createElement('div');
+    pop.id = 'ms-tp-look';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', 'Occupancy look');
+    pop.innerHTML = lookPopoverHtml(_look);
+    pop.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t) return;
+      if (t.closest && t.closest('.ms-tp-look-close')) {
+        e.preventDefault();
+        closeLookPopover();
+        return;
+      }
+      var btn = t.closest ? t.closest('[data-look-field]') : null;
+      if (!btn) return;
+      e.preventDefault();
+      var field = btn.getAttribute('data-look-field');
+      var value = btn.getAttribute('data-look-value');
+      var patch = {};
+      if (field === 'avatars') patch.avatars = value === '1';
+      else if (field === 'quiet') patch.quiet = value === '1';
+      else if (field === 'weight' || field === 'colour' || field === 'size' || field === 'highlight') {
+        patch[field] = value;
+      } else return;
+      savePresenceLook(patch);
+    });
+    try {
+      document.documentElement.appendChild(pop);
+    } catch (_) {
+      document.body.appendChild(pop);
+    }
+    positionLookPopover(pop, anchor);
+    if (!_lookDocBound) {
+      document.addEventListener('mousedown', _lookDocClose, true);
+      document.addEventListener('keydown', _lookEscClose, true);
+      _lookDocBound = true;
+    }
   }
 
   function selfExtraOccupants(taskUuid) {
@@ -1392,6 +1744,7 @@
       el.parentNode &&
       el.parentNode === _paintCache.parent
     ) {
+      applyLookNow();
       return;
     }
     var html = occupiedInnerHtml(others, nowMs);
@@ -1425,6 +1778,7 @@
         _liveIds = idSet;
       }
       bindBannerClicks(el);
+      applyLookNow();
       if (host && el.parentNode !== host) host.insertBefore(el, host.firstChild);
       _paintCache = { path: path, sig: sig, parent: el.parentNode };
       return;
@@ -1440,6 +1794,7 @@
     if (srNew) srNew.textContent = headline;
     _liveIds = idSet;
     bindBannerClicks(el);
+    applyLookNow();
     // PREPEND into <main> — trailing foreign nodes get reconciled away by Vue
     // (CLAUDE.md queue-chip rule 1).
     if (host) host.insertBefore(el, host.firstChild);
@@ -1494,14 +1849,13 @@
       return;
     }
     _nativeTaskUuid = expected;
-    if (!me) {
-      _nativeOthers = [];
-      _selfExtras = 0;
-      paintOccupied();
-      return;
-    }
-    _nativeOthers = sanitizeNativePresence(_lastNativeDetail, me.staffId, expected);
-    _selfExtras = sanitizeSelfExtras(_lastNativeDetail, me.staffId, expected);
+    var hint = {
+      selfId: _lastNativeDetail && _lastNativeDetail.selfId,
+      email: me && me.email,
+      name: _cfg && _cfg.name,
+    };
+    _nativeOthers = sanitizeNativePresence(_lastNativeDetail, me && me.staffId, expected, hint);
+    _selfExtras = sanitizeSelfExtras(_lastNativeDetail, me && me.staffId, expected);
     paintOccupied();
   }
   window.addEventListener('ch-native-task-presence', function (e) {
@@ -1647,6 +2001,7 @@
   }
 
   function removeListStrip() {
+    closeLookPopover();
     restoreNativeListWidgets();
     var el = document.getElementById(LIST_ID);
     if (el) el.remove();
@@ -1721,6 +2076,7 @@
       el.parentNode === found.host
     ) {
       if (found.native) hideNativeListWidget(found.native);
+      applyLookNow();
       return;
     }
     var html = listOccupiedInnerHtml(others);
@@ -1745,6 +2101,8 @@
         sr.textContent = headline;
         _listLiveIds = idSet;
       }
+      bindListClicks(el);
+      applyLookNow();
       placeListStrip(el, found);
       if (found.native) hideNativeListWidget(found.native);
       _listPaintCache = { slug: ctx.slug, sig: sig, parent: el.parentNode };
@@ -1759,6 +2117,8 @@
     var srNew = el.querySelector('.ms-tp-sr');
     if (srNew) srNew.textContent = headline;
     _listLiveIds = idSet;
+    bindListClicks(el);
+    applyLookNow();
     placeListStrip(el, found);
     if (found.native) hideNativeListWidget(found.native);
     _listPaintCache = { slug: ctx.slug, sig: sig, parent: el.parentNode };
@@ -1776,12 +2136,12 @@
       return;
     }
     _nativeListSlug = expected;
-    if (!me) {
-      _nativeListOthers = [];
-      paintListOccupied();
-      return;
-    }
-    _nativeListOthers = sanitizeNativeListPresence(_lastNativeListDetail, me.staffId, expected);
+    var hint = {
+      selfId: _lastNativeListDetail && _lastNativeListDetail.selfId,
+      email: me && me.email,
+      name: _cfg && _cfg.name,
+    };
+    _nativeListOthers = sanitizeNativeListPresence(_lastNativeListDetail, me && me.staffId, expected, hint);
     paintListOccupied();
   }
   window.addEventListener('ch-native-list-presence', function (e) {

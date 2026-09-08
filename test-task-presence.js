@@ -33,6 +33,10 @@ const {
   avatarHue,
   sanitizeNativePresence,
   sanitizeNativeListPresence,
+  foldPresenceName,
+  presenceSelfKeys,
+  memberLooksLikeSelf,
+  occupancyLookHint,
   parsePresenceTaskChannel,
   parsePresenceListChannel,
   othersOnTask,
@@ -527,9 +531,13 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(!/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML has no On it now / LIVE word');
   check(/class="ms-tp-live"[^>]*aria-hidden="true"/.test(inner), 'pulse pip stays, aria-hidden, no recency word');
   check(
-    inner.indexOf('Note: Dr Priya Nair has this open. You can still work it.') >= 0,
-    'strip HTML is one sentence at headline weight'
+    inner.indexOf('Note: Dr Priya Nair has this open.') >= 0 &&
+      inner.indexOf('ms-tp-quiet') >= 0 &&
+      inner.indexOf('You can still work it.') >= 0,
+    'strip HTML is one sentence with a quieter clause'
   );
+  check(inner.indexOf('Change look') >= 0, 'request strip has Change look');
+  check(inner.indexOf(occupancyLookHint()) >= 0, 'Change look carries the look hint');
   check(!/They have it open/.test(inner) && !/is on this request/.test(inner), 'old two-line copy is gone');
   check(!/class="ms-tp-action"/.test(inner), 'no separate action span on the visible strip');
   check(
@@ -688,6 +696,7 @@ console.log('--- listOccupiedHeadline: 1 / 2 / 3+ / unknown ---');
   check(/^Note:/.test(listOccupiedHeadline([{ label: 'Dr Priya Nair' }])), 'list heading starts Note:');
   check(listHtml.indexOf('You can still work it.') >= 0, 'list inner html carries the quiet clause');
   check(listHtml.indexOf('ms-tp-quiet') >= 0, 'quiet clause is one step quieter');
+  check(listHtml.indexOf('>Look<') >= 0, 'list strip has a Look control');
   check(!/lock/i.test(listHtml), 'list strip never says lock');
 }
 
@@ -720,6 +729,96 @@ console.log('--- sanitizeNativeListPresence: drop self; empty / live:false hides
   check(
     othersOnTask([{ staffId: UUID_B, listSlug: slug, label: 'Priya' }], UUID_A).length === 0,
     'list members are not per-request occupants'
+  );
+}
+
+const UUID_PUSHER = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+console.log('--- self filter: Pusher myID / name / email, not only staff UUID ---');
+{
+  check(foldPresenceName('Dr David Triska') === 'david triska', 'folds title + case');
+  check(foldPresenceName('david.triska') === 'david triska', 'dots become spaces');
+
+  const keys = presenceSelfKeys(UUID_ME, {
+    selfId: UUID_PUSHER,
+    email: 'david.triska@nhs.net',
+    name: 'Dr David Triska',
+  });
+  check(!!keys.ids[UUID_ME] && !!keys.ids[UUID_PUSHER], 'staff UUID and Pusher myID are both self');
+  check(
+    memberLooksLikeSelf({ id: UUID_PUSHER, info: { displayName: 'Dr David Triska' } }, keys) === true,
+    'Pusher id is self even when it is not the staff stamp'
+  );
+  check(
+    memberLooksLikeSelf({ id: UUID_B, info: { displayName: 'Dr David Triska' } }, keys) === true,
+    'folded display name matching Options name is self'
+  );
+  check(
+    memberLooksLikeSelf({ id: UUID_B, info: { email: 'david.triska@nhs.net' } }, keys) === true,
+    'matching email is self'
+  );
+  check(
+    memberLooksLikeSelf({ id: UUID_B, info: { displayName: 'Dr Priya Nair' } }, keys) === false,
+    'a different named colleague is kept'
+  );
+  check(
+    memberLooksLikeSelf({ id: UUID_B, info: { displayName: 'Samira Okonkwo' } }, presenceSelfKeys(UUID_ME, {
+      email: 'sam.okonkwo@nhs.net',
+    })) === false,
+    'sam.okonkwo does not drop Samira Okonkwo'
+  );
+  check(
+    memberLooksLikeSelf({ id: UUID_B, info: { displayName: 'Dr David Triska' } }, presenceSelfKeys(UUID_ME, {
+      email: 'd.triska@nhs.net',
+    })) === true,
+    'd.triska matches David Triska via last name + single-letter first'
+  );
+
+  const leaked = sanitizeNativeListPresence(
+    {
+      slug: 'medical_patient_request_task',
+      members: [{ id: UUID_PUSHER, info: { displayName: 'Dr David Triska' } }],
+      selfId: UUID_PUSHER,
+    },
+    UUID_ME,
+    'medical_patient_request_task',
+    { selfId: UUID_PUSHER, email: 'david.triska@nhs.net', name: 'Dr David Triska' }
+  );
+  check(leaked.length === 0, 'only-self via Pusher myID hides the list strip');
+
+  const namedDrop = sanitizeNativePresence(
+    {
+      taskUuid: UUID_A,
+      members: [{ id: UUID_B, info: { displayName: 'Dr David Triska' } }],
+    },
+    UUID_ME,
+    UUID_A,
+    { name: 'Dr David Triska' }
+  );
+  check(namedDrop.length === 0, 'request strip drops a member whose name is the logged-in user');
+
+  const colleague = sanitizeNativePresence(
+    {
+      taskUuid: UUID_A,
+      members: [
+        { id: UUID_PUSHER, info: { displayName: 'Dr David Triska' } },
+        { id: UUID_B, info: { displayName: 'Dr Priya Nair' } },
+      ],
+      selfId: UUID_PUSHER,
+    },
+    UUID_ME,
+    UUID_A,
+    { selfId: UUID_PUSHER }
+  );
+  check(colleague.length === 1 && colleague[0].staffId === UUID_B, 'selfId drop keeps the real colleague');
+
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Priya' } }], selfId: UUID_PUSHER },
+      null,
+      UUID_A
+    ).length === 1,
+    'Pusher selfId on the event is enough identity when the staff stamp is missing'
   );
 }
 
@@ -840,24 +939,50 @@ console.log('--- avatar hues: applied hex, contrast, not status colours ---');
   check(safeAvatarHue('javascript:alert(1)') === '', 'non-colour rejected');
 }
 
-console.log('--- occupied masthead is a note wash, not peach ---');
+console.log('--- occupied masthead defaults to fluoro look vars, not peach ---');
 {
   const fs = require('fs');
   const path = require('path');
   const css = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.css'), 'utf8');
+  check(/--ms-tp-wash:\s*#fff44a/.test(css), 'default wash is fluoro yellow');
   check(
-    /#ms-tp-banner\s*\{[^}]*background:\s*var\(--accent-dim\)/.test(css),
-    'banner uses the accent/note wash'
+    /#ms-tp-banner\s*\{[^}]*background:\s*var\(--ms-tp-wash\)/.test(css),
+    'banner uses the look wash token'
   );
   check(!/#ms-tp-banner\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css), 'banner is not peach/amber');
   check(
-    /#ms-tp-list\s*\{\s*display:\s*inline-flex[^}]*background:\s*var\(--accent-dim\)/.test(css),
-    'list pill uses the accent/note wash'
+    /#ms-tp-list\s*\{[^}]*background:\s*var\(--ms-tp-wash\)/.test(css),
+    'list pill uses the look wash token'
   );
   check(
-    !/#ms-tp-list\s*\{\s*display:\s*inline-flex[^}]*background:\s*var\(--amber-dim\)/.test(css),
+    !/#ms-tp-list\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css),
     'list pill is not peach/amber'
   );
+  check(/#ms-tp-look\s*\{/.test(css), 'click-the-strip look popover is styled');
+}
+
+console.log('--- presence look sanitiser ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
+  check(
+    /"shared\/presence-look\.js",\s*"content-scripts\/task-presence\.js"/.test(manifest),
+    'presence-look.js loads immediately before task-presence.js'
+  );
+  const opt = fs.readFileSync(path.join(__dirname, 'options/options.html'), 'utf8');
+  check(/Occupancy look \(this machine\)/.test(opt), 'Options has the occupancy look table');
+  check(/id="presenceLookPreview"/.test(opt), 'Options has a live look preview');
+  const Look = require('./shared/presence-look.js');
+  check(Look.DEFAULTS.colour === 'fluoro', 'default colour is fluoro');
+  check(Look.sanitizePresenceLook(null).colour === 'fluoro', 'null -> fluoro');
+  check(Look.sanitizePresenceLook({ colour: 'nope' }).colour === 'fluoro', 'unknown colour -> fluoro');
+  check(Look.sanitizePresenceLook({ colour: 'pink', size: 'large' }).size === 'large', 'known size kept');
+  check(Look.sanitizePresenceLook({ avatars: false }).avatars === false, 'avatars can turn off');
+  check(Look.sanitizePresenceLook({ quiet: false }).quiet === false, 'quiet can turn off');
+  const vars = Look.lookCssVars({ colour: 'blue', size: 'compact' });
+  check(vars['--ms-tp-wash'] === Look.COLOURS.blue.wash, 'css vars follow colour');
+  check(vars['--ms-tp-font'] === Look.SIZES.compact.font, 'css vars follow size');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

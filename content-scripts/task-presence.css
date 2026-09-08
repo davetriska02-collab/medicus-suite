@@ -8,7 +8,8 @@
    canon changes, update this block in the same commit. */
 .ms-tp-chips,
 #ms-tp-banner,
-#ms-tp-list {
+#ms-tp-list,
+#ms-tp-look {
   --bg-deep: #f8fafc;
   --bg-elev: #ffffff;
   --border: #cbd5e1;
@@ -95,9 +96,22 @@
 /* ── occupied masthead (advisory, not a lock) ───────────────────────────────
    Prepended into <main> on a task overview when someone else is in the
    native Pusher presence channel (or the suite store, as fallback).
-   Accent/note wash, not amber: peach/amber was read as a halt. This is
-   a note that a colleague is looking, never a lock. Hairline on the
-   banner itself so we never restyle the host Medicus <html> or <main>. */
+   Default is fluoro yellow — the previous accent-blue wash was missed.
+   Practice/user look (Options + click-the-strip) overrides via --ms-tp-*
+   and data-look-*. Hairline on the banner itself so we never restyle the
+   host Medicus <html> or <main>. */
+
+#ms-tp-banner,
+#ms-tp-list {
+  --ms-tp-wash: #fff44a;
+  --ms-tp-border: #c9b400;
+  --ms-tp-text: #1a1600;
+  --ms-tp-quiet: #3d3400;
+  --ms-tp-pad-y: 7px;
+  --ms-tp-pad-x: 10px;
+  --ms-tp-font: 13.5px;
+  --ms-tp-avatar: 22px;
+}
 
 #ms-tp-banner {
   position: relative;
@@ -105,15 +119,16 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 8px 16px;
-  background: var(--accent-dim);
-  border: 1px solid var(--border);
+  padding: var(--ms-tp-pad-y) 16px;
+  background: var(--ms-tp-wash);
+  border: 1px solid var(--ms-tp-border);
   border-radius: 0;
-  color: var(--text-1);
-  font-size: 12px;
+  color: var(--ms-tp-text);
+  font-size: var(--ms-tp-font);
   line-height: 1.25;
   flex-wrap: nowrap;
   overflow: hidden;
+  cursor: pointer;
 }
 
 /* Compact inline list occupancy — title-row notice, not a masthead.
@@ -123,18 +138,19 @@
   align-items: center;
   gap: 6px;
   margin: 0 8px 0 6px;
-  padding: 2px 8px 2px 4px;
+  padding: 2px var(--ms-tp-pad-x) 2px 4px;
   max-width: min(46rem, 62%);
   vertical-align: middle;
-  background: var(--accent-dim);
-  border: 1px solid var(--accent-line);
+  background: var(--ms-tp-wash);
+  border: 1px solid var(--ms-tp-border);
   border-radius: var(--r-pill);
-  color: var(--text-2);
-  font-size: 12px;
+  color: var(--ms-tp-text);
+  font-size: var(--ms-tp-font);
   line-height: 1.2;
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
+  cursor: pointer;
 }
 
 #ms-tp-list .ms-tp-inner {
@@ -142,20 +158,20 @@
 }
 
 #ms-tp-list .ms-tp-av {
-  width: 20px;
-  height: 20px;
+  width: var(--ms-tp-avatar);
+  height: var(--ms-tp-avatar);
   font-size: 9px;
 }
 
 #ms-tp-list .ms-tp-who {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-2);
+  font-size: var(--ms-tp-font);
+  font-weight: 700;
+  color: var(--ms-tp-text);
 }
 
 #ms-tp-list .ms-tp-quiet {
   font-weight: 400;
-  color: var(--text-3);
+  color: var(--ms-tp-quiet);
 }
 
 #ms-tp-list .ms-tp-live {
@@ -179,8 +195,8 @@
 
 .ms-tp-av {
   flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  width: var(--ms-tp-avatar, 24px);
+  height: var(--ms-tp-avatar, 24px);
   border-radius: var(--r-pill);
   display: inline-flex;
   align-items: center;
@@ -213,9 +229,9 @@
 .ms-tp-who {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-1);
+  font-size: var(--ms-tp-font, 12px);
+  font-weight: 700;
+  color: var(--ms-tp-text, var(--text-1));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -301,6 +317,145 @@
   pointer-events: none;
 }
 
+.ms-tp-look-btn {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--ms-tp-border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ms-tp-text);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.ms-tp-look-btn:hover,
+.ms-tp-look-btn:focus {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+#ms-tp-banner[data-look-avatars='0'] .ms-tp-avs,
+#ms-tp-list[data-look-avatars='0'] .ms-tp-avs {
+  display: none;
+}
+
+#ms-tp-banner[data-look-quiet='0'] .ms-tp-quiet,
+#ms-tp-list[data-look-quiet='0'] .ms-tp-quiet {
+  display: none;
+}
+
+#ms-tp-banner[data-look-weight='regular'] .ms-tp-who,
+#ms-tp-list[data-look-weight='regular'] .ms-tp-who {
+  font-weight: 400;
+}
+
+#ms-tp-banner[data-look-highlight='edge'],
+#ms-tp-list[data-look-highlight='edge'] {
+  background: var(--bg-elev);
+  border-color: var(--border);
+  border-left: 5px solid var(--ms-tp-border);
+}
+
+#ms-tp-look {
+  position: fixed;
+  z-index: 2147483646;
+  width: min(26rem, calc(100vw - 16px));
+  padding: 12px 14px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.18);
+  color: var(--text-1);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ms-tp-look-head {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.ms-tp-look-help {
+  margin: 0 0 10px;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.ms-tp-look-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.ms-tp-look-label {
+  flex: 0 0 4.5rem;
+  padding-top: 4px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+
+.ms-tp-look-swatches,
+.ms-tp-look-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ms-tp-look-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid #94a3b8;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ms-tp-look-swatch[aria-pressed='true'] {
+  box-shadow: 0 0 0 2px var(--text-1);
+}
+
+.ms-tp-look-choice {
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-deep);
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ms-tp-look-choice[aria-pressed='true'] {
+  border-color: var(--text-1);
+  background: var(--bg-elev);
+  color: var(--text-1);
+}
+
+.ms-tp-look-close {
+  margin: 4px 0 0;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .ms-tp-recency .ms-tp-live {
     animation: ms-tp-live-pulse 1.8s var(--ease) infinite;
@@ -312,6 +467,19 @@
     }
     50% {
       box-shadow: 0 0 0 2px var(--amber-line);
+    }
+  }
+  #ms-tp-banner[data-look-highlight='flash'],
+  #ms-tp-list[data-look-highlight='flash'] {
+    animation: ms-tp-look-flash 1.6s var(--ease) infinite;
+  }
+  @keyframes ms-tp-look-flash {
+    0%,
+    100% {
+      box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0);
+    }
+    50% {
+      box-shadow: inset 0 0 0 2px var(--ms-tp-border);
     }
   }
 }

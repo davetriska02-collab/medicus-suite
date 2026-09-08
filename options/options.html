@@ -233,6 +233,99 @@
         line-height: 1.5;
       }
 
+      .ms-look-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      .ms-look-table th,
+      .ms-look-table td {
+        text-align: left;
+        vertical-align: top;
+        padding: 10px 8px 10px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .ms-look-table th {
+        color: var(--text-4);
+        font-weight: 600;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .ms-look-table td:first-child {
+        width: 18%;
+        font-weight: 600;
+        color: var(--text-2);
+        white-space: nowrap;
+      }
+      .ms-look-table td:last-child {
+        color: var(--text-3);
+        width: 38%;
+      }
+      .ms-look-choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .ms-look-swatch {
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        border: 2px solid var(--border-hi);
+        border-radius: 999px;
+        cursor: pointer;
+      }
+      .ms-look-swatch[aria-pressed='true'] {
+        box-shadow: 0 0 0 2px var(--text-1);
+      }
+      .ms-look-choice {
+        margin: 0;
+        padding: 4px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-sm);
+        background: var(--bg-mid);
+        color: var(--text-2);
+        font-family: var(--sans);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .ms-look-choice[aria-pressed='true'] {
+        border-color: var(--text-1);
+        background: var(--bg-elev);
+        color: var(--text-1);
+      }
+      .ms-look-preview {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 0 0 16px;
+        padding: 7px 12px;
+        border: 1px solid #c9b400;
+        background: #fff44a;
+        color: #1a1600;
+        font-size: 13.5px;
+        font-weight: 700;
+        border-radius: var(--r-sm);
+      }
+      .ms-look-preview .ms-tp-quiet {
+        font-weight: 400;
+        color: #3d3400;
+      }
+      .ms-look-preview .ms-tp-av {
+        width: 22px;
+        height: 22px;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 700;
+        color: #fff;
+        background: #1e3a5f;
+      }
+
       input[type='text'],
       input[type='email'],
       input[type='number'],
@@ -1944,6 +2037,74 @@
             </span>
           </div>
 
+          <div class="field" id="presenceLookBlock">
+            <label class="field-label">Occupancy look (this machine)</label>
+            <p class="field-help" style="margin-bottom: 10px">
+              Colour, size and highlight of the occupied request bar and the list pill. Default is fluoro yellow so it
+              is hard to miss. The same choices open when you click the live alert (or press Change look). Saved here,
+              not a lock, and not a clinical setting.
+            </p>
+            <div class="ms-look-preview" id="presenceLookPreview" aria-hidden="true">
+              <span class="ms-tp-av">PN</span>
+              <span
+                >Note: Dr Priya Nair is also on this list. <span class="ms-tp-quiet">You can still work it.</span></span
+              >
+            </div>
+            <table class="ms-look-table">
+              <thead>
+                <tr>
+                  <th>Setting</th>
+                  <th>Choice</th>
+                  <th>What you get</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Colour</td>
+                  <td>
+                    <div class="ms-look-choices" id="presenceLookColour"></div>
+                  </td>
+                  <td>Wash on the bar. Fluoro yellow is the default; note blue is the old quiet wash.</td>
+                </tr>
+                <tr>
+                  <td>Size</td>
+                  <td>
+                    <div class="ms-look-choices" id="presenceLookSize"></div>
+                  </td>
+                  <td>Padding, type size and avatar size on both the request bar and the list pill.</td>
+                </tr>
+                <tr>
+                  <td>Highlight</td>
+                  <td>
+                    <div class="ms-look-choices" id="presenceLookHighlight"></div>
+                  </td>
+                  <td>Fill + border, a left edge only, or fill with a pulse (pulse respects reduced motion).</td>
+                </tr>
+                <tr>
+                  <td>Avatars</td>
+                  <td>
+                    <div class="ms-look-choices" id="presenceLookAvatars"></div>
+                  </td>
+                  <td>Initials discs next to the names. Off keeps the sentence only.</td>
+                </tr>
+                <tr>
+                  <td>Quiet clause</td>
+                  <td>
+                    <div class="ms-look-choices" id="presenceLookQuiet"></div>
+                  </td>
+                  <td>The trailing <em>You can still work it.</em> Off hides that reminder only.</td>
+                </tr>
+                <tr>
+                  <td>Headline weight</td>
+                  <td>
+                    <div class="ms-look-choices" id="presenceLookWeight"></div>
+                  </td>
+                  <td>Bold is the default so the names read as the alert. Regular is quieter type.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
           <div class="actions">
             <button class="primary" id="savePresenceBtn">Save</button>
             <span class="saved" id="presenceSaved">Saved &#10003;</span>
@@ -3530,6 +3691,7 @@
     <script src="../engine/triage-alert-engine.js"></script>
     <script src="../shared/update-checker.js"></script>
     <script src="../shared/rule-currency.js"></script>
+    <script src="../shared/presence-look.js"></script>
     <script src="../shared/display-prefs.js"></script>
     <script src="../shared/dom-contracts.js"></script>
     <script src="../shared/event-ledger.js"></script>

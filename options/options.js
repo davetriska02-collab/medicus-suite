@@ -526,6 +526,7 @@ const presenceSaved = document.getElementById('presenceSaved');
       'presence.key',
       'presence.name',
       'presence.fileCache',
+      'suite.display',
     ]);
     // "On unless explicitly opted out" — matches task-presence.js's gate.
     if (presenceEnabledInput) presenceEnabledInput.checked = res['presence.enabled'] !== false;
@@ -542,10 +543,129 @@ const presenceSaved = document.getElementById('presenceSaved');
         presenceFileStatus.style.color = 'var(--text-3)';
       }
     }
+    initPresenceLook(res['suite.display']);
   } catch (e) {
     console.warn('[Presence section init]', e.message);
   }
 })();
+
+function presenceLookCurrent(display) {
+  const Look = typeof PresenceLook !== 'undefined' ? PresenceLook : null;
+  const raw = display && typeof display === 'object' ? display.presenceLook : null;
+  return Look ? Look.sanitizePresenceLook(raw) : { colour: 'fluoro', size: 'medium', highlight: 'fill', avatars: true, quiet: true, weight: 'bold' };
+}
+
+function presenceLookChoice(field, value, label, pressed) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ms-look-choice';
+  btn.dataset.lookField = field;
+  btn.dataset.lookValue = value;
+  btn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  btn.textContent = label;
+  return btn;
+}
+
+function renderPresenceLook(look) {
+  const Look = typeof PresenceLook !== 'undefined' ? PresenceLook : null;
+  if (!Look) return;
+  const safe = Look.sanitizePresenceLook(look);
+  const fill = (id, nodes) => {
+    const host = document.getElementById(id);
+    if (!host) return;
+    host.replaceChildren(...nodes);
+  };
+  fill(
+    'presenceLookColour',
+    Object.keys(Look.COLOURS).map((k) => {
+      const c = Look.COLOURS[k];
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ms-look-swatch';
+      btn.dataset.lookField = 'colour';
+      btn.dataset.lookValue = k;
+      btn.title = c.label;
+      btn.setAttribute('aria-label', c.label);
+      btn.setAttribute('aria-pressed', k === safe.colour ? 'true' : 'false');
+      btn.style.background = c.wash;
+      btn.style.borderColor = c.border;
+      return btn;
+    })
+  );
+  fill(
+    'presenceLookSize',
+    Object.keys(Look.SIZES).map((k) => presenceLookChoice('size', k, Look.SIZES[k].label, k === safe.size))
+  );
+  fill(
+    'presenceLookHighlight',
+    Object.keys(Look.HIGHLIGHTS).map((k) =>
+      presenceLookChoice('highlight', k, Look.HIGHLIGHTS[k].label, k === safe.highlight)
+    )
+  );
+  fill('presenceLookAvatars', [
+    presenceLookChoice('avatars', '1', 'On', safe.avatars),
+    presenceLookChoice('avatars', '0', 'Off', !safe.avatars),
+  ]);
+  fill('presenceLookQuiet', [
+    presenceLookChoice('quiet', '1', 'On', safe.quiet),
+    presenceLookChoice('quiet', '0', 'Off', !safe.quiet),
+  ]);
+  fill(
+    'presenceLookWeight',
+    Object.keys(Look.WEIGHTS).map((k) => presenceLookChoice('weight', k, Look.WEIGHTS[k].label, k === safe.weight))
+  );
+  const preview = document.getElementById('presenceLookPreview');
+  if (preview) {
+    Look.applyLookToEl(preview, safe);
+    preview.style.background = 'var(--ms-tp-wash)';
+    preview.style.borderColor = 'var(--ms-tp-border)';
+    preview.style.color = 'var(--ms-tp-text)';
+    preview.style.fontSize = 'var(--ms-tp-font)';
+    preview.style.padding = 'var(--ms-tp-pad-y) var(--ms-tp-pad-x)';
+    preview.style.fontWeight = safe.weight === 'regular' ? '400' : '700';
+    const av = preview.querySelector('.ms-tp-av');
+    if (av) av.style.display = safe.avatars ? '' : 'none';
+    const q = preview.querySelector('.ms-tp-quiet');
+    if (q) {
+      q.style.display = safe.quiet ? '' : 'none';
+      q.style.color = 'var(--ms-tp-quiet)';
+    }
+    if (safe.highlight === 'edge') {
+      preview.style.background = 'var(--bg-elev)';
+      preview.style.borderLeft = '5px solid var(--ms-tp-border)';
+    } else {
+      preview.style.borderLeft = '';
+    }
+  }
+}
+
+async function persistPresenceLook(look) {
+  const Look = typeof PresenceLook !== 'undefined' ? PresenceLook : null;
+  const safe = Look ? Look.sanitizePresenceLook(look) : look;
+  const r = await chrome.storage.local.get('suite.display');
+  const cur = r['suite.display'] && typeof r['suite.display'] === 'object' ? r['suite.display'] : {};
+  await chrome.storage.local.set({ 'suite.display': { ...cur, presenceLook: safe } });
+  renderPresenceLook(safe);
+}
+
+function initPresenceLook(display) {
+  const look = presenceLookCurrent(display);
+  renderPresenceLook(look);
+  const block = document.getElementById('presenceLookBlock');
+  if (!block) return;
+  block.addEventListener('click', async (e) => {
+    const btn = e.target && e.target.closest && e.target.closest('[data-look-field]');
+    if (!btn) return;
+    const field = btn.getAttribute('data-look-field');
+    const value = btn.getAttribute('data-look-value');
+    const next = { ...presenceLookCurrent((await chrome.storage.local.get('suite.display'))['suite.display']) };
+    if (field === 'avatars') next.avatars = value === '1';
+    else if (field === 'quiet') next.quiet = value === '1';
+    else if (field === 'colour' || field === 'size' || field === 'highlight' || field === 'weight') next[field] = value;
+    else return;
+    await persistPresenceLook(next);
+  });
+}
 
 // ── Folder store: pick / re-allow / disconnect ────────────────────────────────
 // The FSA picker and any permission prompt REQUIRE a user gesture, which is

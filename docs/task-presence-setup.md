@@ -28,7 +28,15 @@ practices whose Medicus build does not yet expose the presence channel.
   nobody else is on the list. List occupancy is never treated as a
   per-request occupant and never becomes a row 👁 chip.
 
-- **Hide** (this tab only) sits at the end of the strip. It hides the bar for
+- **You** are never shown as the occupant. The strip hides when the only
+  member is you — including when Pusher's member id is not the staff UUID
+  on the page. Matching also uses your login email and Options display name.
+
+- **Look** (colour, size, highlight, avatars, quiet clause, type weight) is
+  set in Options → Task Presence and by clicking the live alert. Default is
+  fluoro yellow. Saved on this machine under `suite.display.presenceLook`.
+
+- **Hide** (this tab only) sits at the end of the request strip. It hides the bar for
   this request and this set of people until someone new joins, or until the
   tab is closed. It is `sessionStorage`, never a cross-session memory, and it
   is not a lock.
