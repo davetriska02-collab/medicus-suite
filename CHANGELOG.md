@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.14] — 2026-09-08
+
+### Drop #378 canvas-chrome review shots
+
+`docs/_preview/canvas-chrome/**` was seven before/after PNGs committed so
+Dave could review the allocate-canvas chrome on main. The chrome is on
+main. Nothing in the extension, tests, or CI reads those files. They still
+shipped in the release zip because `docs/` is not excluded.
+
+This patch deletes them. `scripts/canvas-chrome-fixture.html` and
+`scripts/canvas-chrome-shots.mjs` stay so the shots can be regenerated
+locally. No canvas, write-path, or rule change.
+
 ## [v3.261.13] — 2026-09-08
 
 ### Allocate canvases share the problem-organiser chrome
