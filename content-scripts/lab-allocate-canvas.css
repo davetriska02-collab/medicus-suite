@@ -2137,12 +2137,28 @@
 }
 
 /* After-split dest cards must size to their contents. max-height: 100% plus
-   min-height: 0 on the dest grid crushed the folder-head into the patient list. */
+   min-height: 0 on the dest grid crushed the folder-head into the patient list.
+   The dest grid itself must also grow with those cards (body scrolls) — a
+   128px footer pad inside a 1fr row left a ~0px content box at 720px. */
+#ms-qac-overlay .ms-rxac-board-clear,
+#ms-rxac-overlay .ms-rxac-board-clear {
+  grid-template-rows: auto auto auto;
+  height: auto;
+  min-height: min-content;
+  align-items: start;
+  flex: 1 0 auto;
+}
+
 #ms-qac-overlay .ms-rxac-board-clear > .ms-rxac-folders,
 #ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folders {
   align-items: start;
   align-content: start;
   grid-auto-rows: auto;
+  grid-row: 1 / 3;
+  min-height: min-content;
+  height: auto;
+  overflow: visible;
+  padding-bottom: 8px;
 }
 
 #ms-qac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder,
@@ -2158,7 +2174,7 @@
 #ms-rxac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder-body {
   flex: 0 1 auto;
   min-height: 44px;
-  max-height: 280px;
+  max-height: 440px;
   overflow: auto;
 }
 
