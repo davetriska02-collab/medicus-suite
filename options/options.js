@@ -109,6 +109,7 @@ const practiceCodeInput = document.getElementById('practiceCode');
 const feedbackEmailInput = document.getElementById('feedbackEmail');
 const letterheadPracticeInput = document.getElementById('letterheadPractice');
 const letterheadClinicianInput = document.getElementById('letterheadClinician');
+const signingSoftFlagsInput = document.getElementById('signingSoftFlags');
 const saveSuiteBtn = document.getElementById('saveSuite');
 const suiteSaved = document.getElementById('suiteSaved');
 const codeDetectedRow = document.getElementById('codeDetectedRow');
@@ -140,6 +141,11 @@ const testConnectionResult = document.getElementById('testConnectionResult');
         const lh = res['suite.letterhead'] || {};
         if (letterheadPracticeInput) letterheadPracticeInput.value = lh.practiceName || '';
         if (letterheadClinicianInput) letterheadClinicianInput.value = lh.clinicianName || '';
+      });
+    }
+    if (signingSoftFlagsInput) {
+      chrome.storage.local.get(['suite.signing.softFlags'], (res) => {
+        signingSoftFlagsInput.checked = res['suite.signing.softFlags'] === true;
       });
     }
     // Try to auto-detect from open Medicus tab
@@ -179,11 +185,16 @@ saveSuiteBtn?.addEventListener('click', async () => {
       practiceName: (letterheadPracticeInput?.value || '').trim(),
       clinicianName: (letterheadClinicianInput?.value || '').trim(),
     },
+    'suite.signing.softFlags': signingSoftFlagsInput ? signingSoftFlagsInput.checked : false,
   });
   if (suiteSaved) {
     suiteSaved.classList.add('show');
     setTimeout(() => suiteSaved.classList.remove('show'), 2000);
   }
+});
+
+signingSoftFlagsInput?.addEventListener('change', async () => {
+  await chrome.storage.local.set({ 'suite.signing.softFlags': signingSoftFlagsInput.checked === true });
 });
 
 // Guided tour replay — clears the seen-version marker (localStorage is shared
@@ -552,7 +563,9 @@ const presenceSaved = document.getElementById('presenceSaved');
 function presenceLookCurrent(display) {
   const Look = typeof PresenceLook !== 'undefined' ? PresenceLook : null;
   const raw = display && typeof display === 'object' ? display.presenceLook : null;
-  return Look ? Look.sanitizePresenceLook(raw) : { colour: 'fluoro', size: 'medium', highlight: 'fill', avatars: true, quiet: true, weight: 'bold' };
+  return Look
+    ? Look.sanitizePresenceLook(raw)
+    : { colour: 'fluoro', size: 'medium', highlight: 'fill', avatars: true, quiet: true, weight: 'bold' };
 }
 
 function presenceLookChoice(field, value, label, pressed) {

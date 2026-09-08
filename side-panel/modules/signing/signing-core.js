@@ -15,6 +15,10 @@
 //   red   — any drug-monitoring chip with status overdue / stale / no_data
 //   amber — only due_soon chips
 //   null  — no drug-monitoring flags among the evaluated chips
+//
+// Soft QOF-review badges (v3.261.9, H-038 p) are a separate reducer of the
+// same shape. They never replace monitoring chips and never produce a green
+// or "clear to approve" state.
 
 'use strict';
 
@@ -28,6 +32,22 @@ export const CHIP_STATUS_TEXT = {
   no_data: 'no data',
   due_soon: 'due soon',
 };
+
+// Soft QOF-review badges (Option A): re-display only the review-process
+// indicators we can already evaluate — never a QOF claim, never a target
+// miss (HbA1c / BP / lipids). Exact codes pinned in test-signing-core.js.
+// Statuses that badge: overdue (red) / not_met (amber). Disjoint by design.
+export const QOF_REVIEW_CODES = Object.freeze(['AST015', 'COPD010', 'HF007', 'MH002', 'DEM004']);
+export const QOF_REVIEW_NAMES = Object.freeze({
+  AST015: 'asthma',
+  COPD010: 'COPD',
+  HF007: 'heart failure',
+  MH002: 'SMI',
+  DEM004: 'dementia',
+});
+export const QOF_REVIEW_RED_STATUSES = ['overdue'];
+export const QOF_REVIEW_AMBER_STATUSES = ['not_met'];
+export const MEDICUS_REVIEW_DUE_LABEL = 'Medicus: review due';
 
 // Reduce a patient's engine chips (SentinelRules.evaluatePatient output) to a
 // signing-row verdict: { level: 'red'|'amber'|null, items: [{ name, status,
@@ -53,6 +73,75 @@ export function monitoringVerdict(chips) {
     });
   }
   return { level: red ? 'red' : amber ? 'amber' : null, items };
+}
+
+// Reduce engine chips to a signing-row QOF-review verdict — same shape as
+// monitoringVerdict: { level: 'red'|'amber'|null, items, label }.
+// Only type === 'qof-indicator' chips on the fixed review-process allow-list
+// with overdue / not_met status count. A DM020 target miss must never badge.
+// H-038 control (p): re-display of already-evaluated chips; no new rule.
+export function qofReviewVerdict(chips) {
+  const items = [];
+  let red = false;
+  let amber = false;
+  const seen = new Set();
+  for (const chip of Array.isArray(chips) ? chips : []) {
+    if (!chip || chip.type !== 'qof-indicator') continue;
+    const code = String(chip.indicatorCode || '').toUpperCase();
+    if (!QOF_REVIEW_CODES.includes(code) || seen.has(code)) continue;
+    const status = chip.status;
+    const isRed = QOF_REVIEW_RED_STATUSES.includes(status);
+    const isAmber = QOF_REVIEW_AMBER_STATUSES.includes(status);
+    if (!isRed && !isAmber) continue;
+    seen.add(code);
+    if (isRed) red = true;
+    else amber = true;
+    items.push({
+      code,
+      name: QOF_REVIEW_NAMES[code] || code,
+      status,
+    });
+  }
+  const level = red ? 'red' : amber ? 'amber' : null;
+  return { level, items, label: formatQofReviewBadge({ level, items }) };
+}
+
+// Compact badge copy: "QOF review overdue — asthma, COPD +1". Two names max.
+// Never green, never "clear", never a QOF-claim verb.
+export function formatQofReviewBadge(verdict) {
+  const items = (verdict && verdict.items) || [];
+  if (!items.length) return '';
+  const word = verdict.level === 'red' ? 'overdue' : 'not met';
+  const names = items.map((it) => it.name).filter(Boolean);
+  const shown = names.slice(0, 2);
+  const extra = names.length > 2 ? ` +${names.length - 2}` : '';
+  return `QOF review ${word} — ${shown.join(', ')}${extra}`;
+}
+
+// Verbatim Medicus fact: any current-regimen med flagged isReviewOverDue.
+// Display copy is MEDICUS_REVIEW_DUE_LABEL — do not paraphrase.
+export function medicusReviewDue(medications) {
+  return (Array.isArray(medications) ? medications : []).some((m) => m && m.isReviewOverDue);
+}
+
+// Flagged-filter membership when the soft-flag pack is on: monitoring
+// red/amber, QOF-review badge, Medicus review-due fact, or unread/error.
+// Combination red/amber is already a signing flag of the same family.
+export function rowIsFlagged(row) {
+  if (!row) return false;
+  if (row.state === ROW_STATE.ERROR || row.state === ROW_STATE.PENDING || row.state === ROW_STATE.CHECKING) {
+    return true;
+  }
+  if (row.verdict && row.verdict.level) return true;
+  if (row.comboVerdict && row.comboVerdict.level) return true;
+  if (row.qofVerdict && row.qofVerdict.level) return true;
+  if (row.medicusReviewDue) return true;
+  return false;
+}
+
+export function rowMatchesFlaggedFilter(row, flaggedOnly) {
+  if (!flaggedOnly) return true;
+  return rowIsFlagged(row);
 }
 
 // Short "which tests" detail from a chip, e.g. "FBC, U&E overdue" — capped so
@@ -168,7 +257,12 @@ export function sortSigningRows(rows) {
   const bandOf = (r) => {
     if (r.state === ROW_STATE.DONE && r.verdict) {
       const combo = (r.comboVerdict && r.comboVerdict.level) || null;
-      const level = r.verdict.level === 'red' || combo === 'red' ? 'red' : r.verdict.level || combo;
+      const qof = (r.qofVerdict && r.qofVerdict.level) || null;
+      const medicusAmber = r.medicusReviewDue ? 'amber' : null;
+      const level =
+        r.verdict.level === 'red' || combo === 'red' || qof === 'red'
+          ? 'red'
+          : r.verdict.level || combo || qof || medicusAmber;
       if (level === 'red') {
         const requested =
           (r.requestedHits && r.requestedHits.length) || (r.requestedComboHits && r.requestedComboHits.length);
@@ -287,14 +381,21 @@ export function rowMatchesLocationFilter(row, filterKeys) {
 // Safety note for an active filter: how many rows are hidden, and — the part
 // that must never be silent — how many of those carry a RED verdict. A filter
 // may narrow the view, but a hidden red flag is always called out by count.
-export function filterHiddenSummary(rows, filterKeys) {
-  if (!filterKeys || filterKeys.size === 0) return null;
+export function filterHiddenSummary(rows, filterKeys, flaggedOnly) {
+  const locActive = !!(filterKeys && filterKeys.size > 0);
+  if (!locActive && !flaggedOnly) return null;
   let hidden = 0;
   let hiddenRed = 0;
   for (const r of Array.isArray(rows) ? rows : []) {
-    if (rowMatchesLocationFilter(r, filterKeys)) continue;
+    if (rowMatchesLocationFilter(r, filterKeys) && rowMatchesFlaggedFilter(r, flaggedOnly)) continue;
     hidden++;
-    if ((r.verdict && r.verdict.level === 'red') || (r.comboVerdict && r.comboVerdict.level === 'red')) hiddenRed++;
+    if (
+      (r.verdict && r.verdict.level === 'red') ||
+      (r.comboVerdict && r.comboVerdict.level === 'red') ||
+      (r.qofVerdict && r.qofVerdict.level === 'red')
+    ) {
+      hiddenRed++;
+    }
   }
   return { hidden, hiddenRed };
 }

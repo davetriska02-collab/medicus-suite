@@ -1325,6 +1325,24 @@
           </div>
 
           <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="signingSoftFlags" style="margin-top: 3px; flex-shrink: 0" />
+              <span>
+                <span class="field-label" style="margin: 0"
+                  >Signing Queue: show overdue monitoring &amp; QOF review flags</span
+                >
+                <span class="field-help" style="display: block; margin-top: 4px">
+                  Off by default. When on, the Signing Queue adds a look-twice badge for a short list of
+                  <strong>review codes we can see</strong> (asthma, COPD, heart failure, SMI, dementia) and a
+                  <strong>Flagged</strong> filter that includes overdue monitoring, those review badges, and unread /
+                  unread-error rows. Existing monitoring chips stay visible either way. This is not a QOF claim and
+                  never blocks Medicus Approve.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div class="field">
             <label class="field-label">Guided tour</label>
             <div style="display: flex; align-items: center; gap: 10px">
               <button class="ghost" id="replayTourBtn">Show the tour again</button>

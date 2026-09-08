@@ -15,8 +15,21 @@
 
 .sg-controls {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+.sg-flag-pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sg-flag-pills:empty {
+  display: none;
 }
 
 .sg-type-toggle {
@@ -121,6 +134,17 @@
    border distinguishes the family; the red/amber classes carry the tier. */
 .sg-chip--combo {
   border-style: dashed;
+}
+
+/* QOF-review family (H-038 p): re-display of review-process codes we can
+   see. Dotted border distinguishes from monitoring (solid) and combo
+   (dashed). Never green. */
+.sg-chip--qof {
+  border-style: dotted;
+}
+
+.sg-chip--medicus {
+  font-weight: 600;
 }
 
 .sg-chip-req {

@@ -26,6 +26,12 @@ const path = require('path');
     requestedDrugFlags,
     combinationVerdict,
     requestedComboFlags,
+    qofReviewVerdict,
+    formatQofReviewBadge,
+    medicusReviewDue,
+    MEDICUS_REVIEW_DUE_LABEL,
+    rowIsFlagged,
+    rowMatchesFlaggedFilter,
     sortSigningRows,
     requestAgeDays,
     renalContext,
@@ -39,6 +45,9 @@ const path = require('path');
     ROW_STATE,
     RED_CHIP_STATUSES,
     AMBER_CHIP_STATUSES,
+    QOF_REVIEW_CODES,
+    QOF_REVIEW_RED_STATUSES,
+    QOF_REVIEW_AMBER_STATUSES,
   } = await import(corePath);
 
   // ── monitoringVerdict ────────────────────────────────────────────────────────
@@ -80,6 +89,88 @@ const path = require('path');
   check(
     RED_CHIP_STATUSES.every((s) => !AMBER_CHIP_STATUSES.includes(s)),
     'red and amber status sets are disjoint'
+  );
+
+  // ── qofReviewVerdict ─────────────────────────────────────────────────────────
+  console.log('\n--- qofReviewVerdict ---');
+  check(
+    QOF_REVIEW_CODES.join(',') === 'AST015,COPD010,HF007,MH002,DEM004',
+    'allow-list is exactly AST015, COPD010, HF007, MH002, DEM004'
+  );
+  check(
+    QOF_REVIEW_RED_STATUSES.every((s) => !QOF_REVIEW_AMBER_STATUSES.includes(s)),
+    'QOF-review red and amber status sets are disjoint'
+  );
+
+  const qofChip = (over) => ({ type: 'qof-indicator', indicatorCode: 'AST015', status: 'overdue', ...over });
+  let qv = qofReviewVerdict([qofChip({})]);
+  check(qv.level === 'red' && qv.items.length === 1 && qv.items[0].code === 'AST015', 'AST015 overdue → red badge');
+  check(qv.label === 'QOF review overdue — asthma', 'AST015 label is look-twice copy, not a QOF claim');
+
+  qv = qofReviewVerdict([qofChip({ indicatorCode: 'DM020', status: 'overdue' })]);
+  check(qv.level === null && qv.items.length === 0 && qv.label === '', 'QOF target miss (DM020) does not badge');
+
+  qv = qofReviewVerdict(null);
+  check(qv.level === null && qv.items.length === 0 && qv.label === '', 'null chips stay empty');
+
+  qv = qofReviewVerdict([qofChip({ status: 'not_met' })]);
+  check(qv.level === 'amber' && /not met/.test(qv.label), 'AST015 not_met → amber');
+
+  qv = qofReviewVerdict([qofChip({ status: 'achieved' }), qofChip({ indicatorCode: 'COPD010', status: 'no_data' })]);
+  check(qv.level === null, 'achieved / no_data review chips do not badge');
+
+  qv = qofReviewVerdict([
+    qofChip({}),
+    qofChip({ indicatorCode: 'COPD010', status: 'overdue' }),
+    qofChip({ indicatorCode: 'HF007', status: 'not_met' }),
+  ]);
+  check(qv.level === 'red' && qv.items.length === 3, 'mixed review codes: red wins, all overdue/not_met kept');
+  check(qv.label === 'QOF review overdue — asthma, COPD +1', 'badge caps at two names +N');
+
+  qv = qofReviewVerdict([
+    { type: 'drug-monitoring', drugName: 'Lithium', status: 'overdue' },
+    qofChip({ indicatorCode: 'MH002', status: 'overdue' }),
+  ]);
+  check(qv.items.length === 1 && qv.items[0].code === 'MH002', 'drug-monitoring chips ignored by QOF-review verdict');
+
+  check(monitoringVerdict([qofChip({})]).level === null, 'monitoringVerdict still ignores QOF chips');
+  check(formatQofReviewBadge({ level: null, items: [] }) === '', 'formatQofReviewBadge empty verdict → empty string');
+
+  check(medicusReviewDue([{ name: 'Ramipril', isReviewOverDue: true }]) === true, 'any current med isReviewOverDue');
+  check(medicusReviewDue([{ name: 'Ramipril', isReviewOverDue: false }]) === false, 'no review-due med → false');
+  check(medicusReviewDue(null) === false, 'null medications → false');
+  check(MEDICUS_REVIEW_DUE_LABEL === 'Medicus: review due', 'Medicus review-due copy is verbatim');
+
+  check(rowIsFlagged({ state: ROW_STATE.DONE, verdict: { level: 'red', items: [{}] } }), 'monitoring red is flagged');
+  check(
+    rowIsFlagged({ state: ROW_STATE.DONE, verdict: { level: 'amber', items: [{}] } }),
+    'monitoring amber is flagged'
+  );
+  check(rowIsFlagged({ state: ROW_STATE.ERROR, verdict: null }), 'unread/error row is flagged');
+  check(rowIsFlagged({ state: ROW_STATE.PENDING, verdict: null }), 'pending/unread row is flagged');
+  check(
+    rowIsFlagged({
+      state: ROW_STATE.DONE,
+      verdict: { level: null, items: [] },
+      qofVerdict: { level: 'red', items: [{}] },
+    }),
+    'QOF-review badge is flagged'
+  );
+  check(
+    !rowIsFlagged({
+      state: ROW_STATE.DONE,
+      verdict: { level: null, items: [] },
+      qofVerdict: { level: null, items: [] },
+    }),
+    'quiet done row is not flagged'
+  );
+  check(
+    rowMatchesFlaggedFilter({ state: ROW_STATE.DONE, verdict: { level: null, items: [] } }, false) === true,
+    'Flagged filter off → show all'
+  );
+  check(
+    rowMatchesFlaggedFilter({ state: ROW_STATE.DONE, verdict: { level: null, items: [] } }, true) === false,
+    'Flagged filter on hides a quiet row'
   );
 
   // ── requestedDrugFlags ───────────────────────────────────────────────────────
@@ -172,6 +263,14 @@ const path = require('path');
   check(order2[1] === 'comboRed' && order2[2] === 'comboAmber', 'combo red above combo amber');
   check(order2[3] === 'clear', 'quiet row still last');
 
+  const qofRed = row({ taskId: 'qofRed', qofVerdict: { level: 'red', items: [{}] } });
+  const qofAmber = row({ taskId: 'qofAmber', qofVerdict: { level: 'amber', items: [{}] } });
+  const order3 = sortSigningRows([clear, qofAmber, qofRed]).map((r) => r.taskId);
+  check(
+    order3[0] === 'qofRed' && order3[1] === 'qofAmber' && order3[2] === 'clear',
+    'QOF-review red above amber above quiet'
+  );
+
   // hidden-red note counts combination reds too
   const hsc = filterHiddenSummary(
     [
@@ -181,6 +280,15 @@ const path = require('path');
     new Set(['Dispensary'])
   );
   check(hsc.hidden === 1 && hsc.hiddenRed === 1, 'hidden COMBO red counted in the filter note (H-038 j+k)');
+
+  const hsq = filterHiddenSummary(
+    [
+      { collectionLocation: 'Boots', verdict: { level: null, items: [] }, qofVerdict: { level: 'red', items: [{}] } },
+      { collectionLocation: 'Dispensary', verdict: { level: null, items: [] } },
+    ],
+    new Set(['Dispensary'])
+  );
+  check(hsq.hidden === 1 && hsq.hiddenRed === 1, 'hidden QOF-review red counted in the filter note (H-038 p)');
 
   // ── requestAgeDays ───────────────────────────────────────────────────────────
   console.log('\n--- requestAgeDays ---');

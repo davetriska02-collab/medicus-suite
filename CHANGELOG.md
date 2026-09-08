@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.9] — 2026-09-08
+
+### Signing Queue — soft QOF-review look-twice (Option A)
+
+Optional, **off by default**. Options → Suite: **Signing Queue: show overdue monitoring & QOF review flags**.
+
+When on, Signing Queue still shows the existing monitoring chips (overdue / stale / no_data / due_soon) and additionally:
+
+- One compact look-twice badge for a fixed review-process allow-list: **AST015, COPD010, HF007, MH002, DEM004** only, statuses **overdue** (red) / **not_met** (amber). Cap two names + “+N”. Example: `QOF review overdue — asthma`.
+- Optional verbatim Medicus fact: `Medicus: review due` when any current med has `isReviewOverDue`.
+- A **Flagged** filter = monitoring red/amber **or** QOF-review badge **or** unread/error.
+
+When off, Signing Queue behaves as today: monitoring chips stay, no QOF badges, no Flagged-from-QOF filter.
+
+Honest-state header when the pack is on: QOF here is **review codes we can see**, not a QOF claim. Never green, never “clear to approve”, never disables Medicus Approve. A quiet row is not “review is up to date”. Target misses (e.g. DM020) do not badge. Hazard log: **H-038** control (p).
+
 ## [v3.261.8] — 2026-09-08
 
 ### Occupied strip — do not show yourself; practice-set look
