@@ -467,10 +467,12 @@
     return names[0] + ', ' + names[1] + ', ' + names[2] + ' and ' + rest + (rest === 1 ? ' other' : ' others');
   }
 
+  // Who + instruction as ONE sentence. Native recency is the pulse pip,
+  // not a word — "On it now" / "is on this request" read as leave it.
   function occupiedHeadline(others) {
     if (!Array.isArray(others) || !others.length) return '';
     if (others.length === 1 && others[0] && others[0].selfExtra) {
-      return 'You also have this open somewhere else.';
+      return 'You also have this open somewhere else. You can still work it.';
     }
     var named = [];
     var unknownCount = 0;
@@ -480,10 +482,11 @@
       if (!t || isUnknownColleagueLabel(t)) unknownCount++;
       else named.push(t);
     }
+    var work = ' You can still work it.';
     if (!named.length) {
-      if (unknownCount === 1) return 'A colleague is on this request';
-      if (unknownCount === 2) return 'Two colleagues are on this request (names not shown)';
-      return unknownCount + ' colleagues are on this request (names not shown)';
+      if (unknownCount === 1) return 'A colleague has this open.' + work;
+      if (unknownCount === 2) return 'Two colleagues have this open (names not shown).' + work;
+      return unknownCount + ' colleagues have this open (names not shown).' + work;
     }
     var shown = named.slice();
     if (unknownCount === 1) shown.push('a colleague');
@@ -499,12 +502,13 @@
           ' and ' +
           more +
           (more === 1 ? ' other' : ' others') +
-          ' are on this request'
+          ' have this open.' +
+          work
         );
       }
       if (named.length === 1) {
         var col = unknownCount === 2 ? 'two colleagues' : unknownCount + ' colleagues';
-        return named[0] + ' and ' + col + ' are on this request';
+        return named[0] + ' and ' + col + ' have this open.' + work;
       }
       return (
         named[0] +
@@ -513,18 +517,18 @@
         ' and ' +
         unknownCount +
         (unknownCount === 1 ? ' other' : ' others') +
-        ' are on this request'
+        ' have this open.' +
+        work
       );
     }
     var who = occupiedNameList(shown);
-    return who + (shown.length === 1 ? ' is ' : ' are ') + 'on this request';
+    return who + (shown.length === 1 ? ' has this open.' : ' have this open.') + work;
   }
 
-  function occupiedAction(others) {
-    if (Array.isArray(others) && others.length && others[0] && others[0].selfExtra) {
-      return 'This tab is not the only one. You can still work it.';
-    }
-    return 'They have it open. You can still work it.';
+  // Visible strip no longer uses a separate action line — occupiedHeadline
+  // already ends "You can still work it." Kept as an empty hook for tests.
+  function occupiedAction() {
+    return '';
   }
 
   function occupiedBannerTitle(others) {
@@ -538,23 +542,19 @@
     return 'Hide this warning until someone else joins. It comes back if the people change.';
   }
 
-  // Native Pusher membership is live NOW. "seen here N min" is counted from
-  // when THIS tab first noticed the member (_firstSeen) — never "Opened".
+  // Store-backed recency only ("Seen N min ago"). Native membership is live
+  // NOW — the orange pulse pip is the recency signal, not a word.
   function occupiedNote(others, nowMs) {
     if (!Array.isArray(others) || !others.length) return '';
     var native = false;
     for (var i = 0; i < others.length; i++) {
       if (others[i] && others[i].native) native = true;
     }
-    if (native) {
-      var seenAt = others[0].openedAtMs;
-      var mins = Math.floor((nowMs - seenAt) / 60000);
-      if (!isFinite(mins) || mins < 1) return 'On it now';
-      return 'On it now · seen here ' + mins + ' min';
-    }
+    if (native) return '';
     var opened = others[0].openedAtMs;
     var ago = minutesAgoText(typeof opened === 'number' ? opened : nowMs, nowMs);
-    return ago === 'just now' ? 'On it now' : 'Seen ' + ago;
+    if (ago === 'just now') return '';
+    return 'Seen ' + ago;
   }
 
   function sanitizeSelfExtras(detail, myStaffId, expectedTaskUuid) {
@@ -1081,22 +1081,15 @@
     for (var ni = 0; ni < others.length; ni++) {
       if (others[ni] && others[ni].native) nativeLive = true;
     }
-    var seenExtra = '';
-    if (nativeLive && /^On it now\s*·\s*/i.test(recency)) {
-      seenExtra = recency.replace(/^On it now\s*·\s*/i, '');
-    }
-    var recencyHtml;
+    var recencyHtml = '';
     if (nativeLive) {
-      recencyHtml =
-        '<span class="ms-tp-recency">' +
-        '<span class="ms-tp-live" aria-hidden="true"></span>' +
-        '<span class="ms-tp-recency-live">On it now</span>' +
-        (seenExtra ? '<span class="ms-tp-seen"> · ' + esc(seenExtra) + '</span>' : '') +
-        '</span>';
-    } else {
+      recencyHtml = '<span class="ms-tp-recency"><span class="ms-tp-live" aria-hidden="true"></span></span>';
+    } else if (recency) {
       recencyHtml = '<span class="ms-tp-recency">' + esc(recency) + '</span>';
     }
     var hideHint = occupancyHideHint();
+    var action = occupiedAction(others);
+    var actionHtml = action ? '<span class="ms-tp-action">' + esc(action) + '</span>' : '';
     return (
       '<span class="ms-tp-inner">' +
       '<span class="ms-tp-avs' +
@@ -1108,9 +1101,7 @@
       esc(occupiedHeadline(others)) +
       '</span>' +
       recencyHtml +
-      '<span class="ms-tp-action">' +
-      esc(occupiedAction(others)) +
-      '</span>' +
+      actionHtml +
       '<button type="button" class="ms-tp-hide" title="' +
       esc(hideHint) +
       '" aria-label="' +

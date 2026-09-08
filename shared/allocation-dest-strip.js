@@ -94,7 +94,52 @@
     return when + 'Split onto the people in this group.';
   }
 
-  function evenSplitDistributionPhrase(itemCount, destCount, noun) {
+  function destTitleJoin(names) {
+    if (!Array.isArray(names) || !names.length) return '';
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names[0] + ' and ' + names[1];
+    return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+  }
+
+  function destTitleText(entry) {
+    if (typeof entry === 'string') return entry.trim();
+    if (entry && typeof entry === 'object') {
+      if (typeof entry.title === 'string' && entry.title.trim()) return entry.title.trim();
+      if (typeof entry.name === 'string' && entry.name.trim()) return entry.name.trim();
+    }
+    return '';
+  }
+
+  function destTitlesAreCountRows(destTitles) {
+    if (!Array.isArray(destTitles) || !destTitles.length) return false;
+    var first = destTitles[0];
+    return !!(first && typeof first === 'object' && (typeof first.count === 'number' || first.title || first.name));
+  }
+
+  function smallerPileNames(destTitles, destCount, rem, smallerCount) {
+    if (!Array.isArray(destTitles) || !destTitles.length) return '';
+    var names = [];
+    var i;
+    if (destTitlesAreCountRows(destTitles)) {
+      for (i = 0; i < destTitles.length; i++) {
+        var row = destTitles[i];
+        if (!row) continue;
+        var c = Number(row.count);
+        var title = destTitleText(row);
+        if (c === smallerCount && title) names.push(title);
+      }
+      return destTitleJoin(names);
+    }
+    if (destTitles.length < destCount) return '';
+    for (i = rem; i < destCount; i++) {
+      var s = destTitleText(destTitles[i]);
+      if (!s) return '';
+      names.push(s);
+    }
+    return destTitleJoin(names);
+  }
+
+  function evenSplitDistributionPhrase(itemCount, destCount, noun, destTitles) {
     var n = Number(itemCount) || 0;
     var k = Number(destCount) || 0;
     var word = noun || 'items';
@@ -105,8 +150,16 @@
     var base = Math.floor(n / k);
     var rem = n % k;
     if (rem === 0) return head + ': ' + base + ' each.';
-    if (base === 0) return head + ': ' + rem + ' with 1, ' + (k - rem) + ' with none.';
-    return head + ': ' + rem + ' with ' + (base + 1) + ', ' + (k - rem) + ' with ' + base + '.';
+    var highN = rem;
+    var highCount = base === 0 ? 1 : base + 1;
+    var smallerPeople = k - rem;
+    var smallerCount = base;
+    var highBit = highN + ' with ' + highCount;
+    var named = smallerPileNames(destTitles, k, rem, smallerCount);
+    var lowBit = named
+      ? named + ' with ' + (smallerCount === 0 ? 'none' : smallerCount)
+      : smallerPeople + ' with ' + (smallerCount === 0 ? 'none' : smallerCount);
+    return head + ': ' + highBit + ', ' + lowBit + '.';
   }
 
   function chipPressed(on) {
@@ -235,7 +288,7 @@
       actions =
         '<span class="ms-lac-split-note">Inbox is clear. Share this box on a person splits only that folder among the current destinations.</span>';
     }
-    var dist = stagedN && dests ? evenSplitDistributionPhrase(stagedN, dests, noun) : '';
+    var dist = stagedN && dests ? evenSplitDistributionPhrase(stagedN, dests, noun, state.destTitles) : '';
     var proposal = stagedN
       ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal, not written yet.</strong> ' +
         esc(dist || stagedN + ' ' + noun + ' would sit with ' + dests + ' people.') +

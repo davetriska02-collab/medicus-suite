@@ -1348,7 +1348,14 @@
     }
     var dist =
       stagedN && dests.length && Strip && typeof Strip.evenSplitDistributionPhrase === 'function'
-        ? Strip.evenSplitDistributionPhrase(stagedN, dests.length, 'reports')
+        ? Strip.evenSplitDistributionPhrase(
+            stagedN,
+            dests.length,
+            'reports',
+            dests.map(function (d) {
+              return d && d.name ? String(d.name) : '';
+            })
+          )
         : '';
     var proposal = stagedN
       ? '<div class="ms-rxac-proposal" role="status"><strong>Proposal, not written yet.</strong> ' +

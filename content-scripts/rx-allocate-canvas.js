@@ -1523,7 +1523,14 @@
     var naming = _namingGroup && Strip && typeof Strip.saveGroupRowHtml === 'function' ? Strip.saveGroupRowHtml() : '';
     var dist =
       stagedN && dests.length && Strip && typeof Strip.evenSplitDistributionPhrase === 'function'
-        ? Strip.evenSplitDistributionPhrase(stagedN, dests.length, 'prescriptions')
+        ? Strip.evenSplitDistributionPhrase(
+            stagedN,
+            dests.length,
+            'prescriptions',
+            dests.map(function (d) {
+              return d && d.name ? String(d.name) : '';
+            })
+          )
         : '';
     var proposal = stagedN
       ? '<div class="ms-rxac-proposal" role="status">' +

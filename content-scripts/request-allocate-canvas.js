@@ -1163,6 +1163,9 @@
       inTodayCount: inTodayN,
       stagedN: stagedN,
       surfaceNoun: 'requests',
+      destTitles: dests.map(function (d) {
+        return d && d.name ? String(d.name) : '';
+      }),
       collisionPhrase: dests.collisions && dests.collisions.length ? C.collisionPhrase(dests.collisions) : '',
     };
     var strip = Strip ? Strip.destSetStripHtml(stripState) : '';

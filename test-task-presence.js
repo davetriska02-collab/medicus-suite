@@ -406,15 +406,18 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   );
 
   check(unknownColleagueLabel() === 'A colleague', 'fallback helper is A colleague, not Someone');
-  check(occupiedHeadline([{ label: 'Aisha Malik' }]) === 'Aisha Malik is on this request', 'single headline');
   check(
-    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }]) ===
-      'Aisha Malik and Miles Scholar are on this request',
+    occupiedHeadline([{ label: 'Dr Priya Nair' }]) === 'Dr Priya Nair has this open. You can still work it.',
+    'single headline merges who + you can still work it'
+  );
+  check(
+    occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'Dr Sam Okonkwo' }]) ===
+      'Dr Priya Nair and Dr Sam Okonkwo have this open. You can still work it.',
     'two names'
   );
   check(
-    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }, { label: 'c' }]) ===
-      'Aisha Malik, Miles Scholar and c are on this request',
+    occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }]) ===
+      'A, B and C have this open. You can still work it.',
     'three: all three names, no "1 other"'
   );
   check(
@@ -425,12 +428,12 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
       { label: 'd' },
       { label: 'e' },
       { label: 'f' },
-    ]) === 'Dr Priya Nair, Dr Sam Okonkwo, c and 3 others are on this request',
+    ]) === 'Dr Priya Nair, Dr Sam Okonkwo, c and 3 others have this open. You can still work it.',
     'six: three names then 3 others'
   );
   check(
     occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
-      'A, B, C and 1 other are on this request',
+      'A, B, C and 1 other have this open. You can still work it.',
     'four: three names then 1 other'
   );
   check(occupiedNameList(['A']) === 'A', 'name list: 1');
@@ -438,42 +441,38 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(occupiedNameList(['A', 'B', 'C']) === 'A, B and C', 'name list: 3');
   check(occupiedNameList(['A', 'B', 'C', 'D']) === 'A, B, C and 1 other', 'name list: 4+');
   check(
-    occupiedHeadline([{ label: 'A colleague' }]) === 'A colleague is on this request',
-    'one unknown: A colleague is on this request'
+    occupiedHeadline([{ label: 'A colleague' }]) === 'A colleague has this open. You can still work it.',
+    'one unknown: A colleague has this open'
   );
   check(
-    occupiedHeadline([{ label: '' }]) === 'A colleague is on this request',
+    occupiedHeadline([{ label: '' }]) === 'A colleague has this open. You can still work it.',
     'blank label uses A colleague, never Someone else'
   );
   check(
     occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }]) ===
-      'Two colleagues are on this request (names not shown)',
+      'Two colleagues have this open (names not shown). You can still work it.',
     'two unknowns: Two colleagues (names not shown), not "a colleague and a colleague"'
   );
   check(
     occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }, { label: 'A colleague' }]) ===
-      '3 colleagues are on this request (names not shown)',
+      '3 colleagues have this open (names not shown). You can still work it.',
     'three unknowns: N colleagues (names not shown)'
   );
   check(
     occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'A colleague' }]) ===
-      'Dr Priya Nair and a colleague are on this request',
+      'Dr Priya Nair and a colleague have this open. You can still work it.',
     'mixed: named + a colleague'
   );
   check(!/someone else/i.test(occupiedHeadline([{ label: 'Someone else' }])), 'legacy Someone else is rewritten');
   check(
-    occupiedHeadline([{ selfExtra: true, label: 'You' }]) === 'You also have this open somewhere else.',
+    occupiedHeadline([{ selfExtra: true, label: 'You' }]) ===
+      'You also have this open somewhere else. You can still work it.',
     'dual-tab self headline'
   );
   check(occupiedHeadline([]) === '', 'no others -> empty headline');
-  check(
-    occupiedAction() === 'They have it open. You can still work it.',
-    'action is same weight instruction, no lock claim'
-  );
-  check(
-    occupiedAction([{ selfExtra: true }]) === 'This tab is not the only one. You can still work it.',
-    'dual-tab self action'
-  );
+  check(!/is on this request/i.test(occupiedHeadline([{ label: 'Dr Priya Nair' }])), 'headline never says is on this request');
+  check(occupiedAction() === '', 'action is not a separate visible line');
+  check(occupiedAction([{ selfExtra: true }]) === '', 'dual-tab self action is empty (folded into headline)');
   check(!/opened/i.test(occupiedAction()), 'action never says opened');
   check(!/locked out/i.test(occupiedAction()), 'action never says locked out');
   check(!/carry on/i.test(occupiedAction()), 'action never says carry on');
@@ -489,30 +488,36 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
 
   const NOW = Date.parse('2026-09-07T12:00:00Z');
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === 'On it now',
-    'native <1 min is On it now only (no seen-here yet)'
+    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === '',
+    'native recency is the pulse, not a word'
   );
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === 'On it now · seen here 3 min',
-    'native dwell is counted from when this tab noticed them'
+    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === '',
+    'native dwell is not a visible word either'
   );
   check(
-    !/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
-    'native note never says Opened'
+    !/On it now/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
+    'native note never says On it now'
   );
-  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'On it now', 'store just-now -> On it now');
-  check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen, not Opened');
+  check(!/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)), 'native note never says Opened');
+  check(occupiedNote([{ openedAtMs: NOW }], NOW) === '', 'store just-now has no recency word');
+  check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen N min ago');
 
   const inner = occupiedInnerHtml(
-    [{ label: 'Aisha Malik', initials: 'AM', hue: '#047857', native: true, openedAtMs: NOW }],
+    [{ label: 'Dr Priya Nair', initials: 'PN', hue: '#047857', native: true, openedAtMs: NOW }],
     NOW
   );
-  check(/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML visible word is On it now, not LIVE');
-  check(/class="ms-tp-live"/.test(inner), 'pulse pip class stays ms-tp-live');
+  check(!/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML has no On it now / LIVE word');
   check(
-    inner.indexOf('They have it open. You can still work it.') >= 0,
-    'strip HTML carries the action at headline weight'
+    /class="ms-tp-live"[^>]*aria-hidden="true"/.test(inner),
+    'pulse pip stays, aria-hidden, no recency word'
   );
+  check(
+    inner.indexOf('Dr Priya Nair has this open. You can still work it.') >= 0,
+    'strip HTML is one sentence at headline weight'
+  );
+  check(!/They have it open/.test(inner) && !/is on this request/.test(inner), 'old two-line copy is gone');
+  check(!/class="ms-tp-action"/.test(inner), 'no separate action span on the visible strip');
   check(
     inner.indexOf(occupancyHideHint()) >= 0 && /aria-label="/.test(inner) && /title="/.test(inner),
     'Hide button has title and aria-label'

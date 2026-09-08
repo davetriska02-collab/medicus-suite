@@ -132,7 +132,23 @@ check(/Drag a person's name onto New group/.test(custom), 'selected New group sh
 
 check(
   S.evenSplitDistributionPhrase(47, 12, 'requests') === '47 requests would sit with 12 people: 11 with 4, 1 with 3.',
-  '47/12 even-split phrase'
+  '47/12 even-split phrase without titles keeps the count fallback'
+);
+const titles47 = [];
+for (let i = 0; i < 11; i++) titles47.push('Dr ' + i);
+titles47.push('Dr Tomasz Kowalski');
+check(
+  S.evenSplitDistributionPhrase(47, 12, 'requests', titles47) ===
+    '47 requests would sit with 12 people: 11 with 4, Dr Tomasz Kowalski with 3.',
+  '47/12 with dest titles names the smaller pile'
+);
+const countRows47 = titles47.map(function (title, i) {
+  return { count: i < 11 ? 4 : 3, title: title };
+});
+check(
+  S.evenSplitDistributionPhrase(47, 12, 'requests', countRows47) ===
+    '47 requests would sit with 12 people: 11 with 4, Dr Tomasz Kowalski with 3.',
+  '47/12 with {count, title} rows names the smaller pile'
 );
 check(
   S.evenSplitDistributionPhrase(10, 3, 'items') === '10 items would sit with 3 people: 1 with 4, 2 with 3.',
@@ -159,6 +175,19 @@ check(/Proposal, not written yet/.test(proposed), 'proposal line uses a comma, n
 check(
   /47 requests would sit with 12 people: 11 with 4, 1 with 3/.test(proposed),
   'proposal names the even-split numbers'
+);
+const namedProposed = S.splitActionsHtml({
+  destCount: 12,
+  poolN: 0,
+  haveWork: true,
+  stagedN: 47,
+  surfaceNoun: 'requests',
+  destPhrase: 'twelve people',
+  destTitles: titles47,
+});
+check(
+  /47 requests would sit with 12 people: 11 with 4, Dr Tomasz Kowalski with 3/.test(namedProposed),
+  'proposal names the remainder person when dest titles are passed'
 );
 check(/Drag a patient from one person onto another/.test(proposed), 'proposal keeps the drag hint');
 check(/Split equally/.test(proposed), 'after a split the even-split button stays Split equally');
