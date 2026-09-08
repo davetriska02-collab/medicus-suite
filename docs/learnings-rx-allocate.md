@@ -132,4 +132,7 @@ total can stay the same while unallocated drops.
 
 `#ms-rxac-overlay` / `#ms-rxac-launch` share `lab-allocate-canvas.css`.
 Layout classes stay `.ms-lac-*`. The launcher is on `<html>`, so its
-focus ring is a literal hex, not `var(--accent)`.
+focus ring is a literal hex, not `var(--accent)`. After-split dest cards
+in `.ms-rxac-board-clear .ms-rxac-folders` size to content (no
+`max-height: 100%`); folder-head does not shrink. Review-open adds
+`ms-rxac-reviewing` and hides the board.

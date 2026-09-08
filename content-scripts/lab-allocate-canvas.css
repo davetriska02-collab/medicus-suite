@@ -1191,7 +1191,7 @@
 #ms-rxac-overlay .ms-rxac-folders {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
   min-height: 0;
   overflow: auto;
@@ -1429,6 +1429,7 @@
   row-gap: 2px;
   padding: 8px 10px 6px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 #ms-rxac-overlay .ms-rxac-folder-head:focus-visible {
@@ -1791,7 +1792,7 @@
 #ms-qac-overlay .ms-rxac-folders {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
   min-height: 0;
   overflow: auto;
@@ -2029,6 +2030,7 @@
   row-gap: 2px;
   padding: 8px 10px 6px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 #ms-qac-overlay .ms-rxac-folder-head:focus-visible {
@@ -2132,6 +2134,61 @@
 #ms-rxac-overlay .ms-lac-body,
 #ms-lac-overlay .ms-lac-body {
   padding-bottom: var(--ms-lac-footer-space, 128px);
+}
+
+/* After-split dest cards must size to their contents. max-height: 100% plus
+   min-height: 0 on the dest grid crushed the folder-head into the patient list. */
+#ms-qac-overlay .ms-rxac-board-clear > .ms-rxac-folders,
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folders {
+  align-items: start;
+  align-content: start;
+  grid-auto-rows: auto;
+}
+
+#ms-qac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder,
+#ms-rxac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder {
+  height: auto;
+  max-height: none;
+  min-height: unset;
+  overflow: hidden;
+  align-self: start;
+}
+
+#ms-qac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder-body,
+#ms-rxac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder-body {
+  flex: 0 1 auto;
+  min-height: 44px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+#ms-qac-overlay .ms-rxac-folders .ms-lac-tile,
+#ms-rxac-overlay .ms-rxac-folders .ms-lac-tile {
+  flex-shrink: 0;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-body,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-body {
+  display: none;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board,
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board-clear,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board-clear {
+  display: none;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-review-open,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-review-open {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-writelist,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-writelist {
+  max-height: none;
 }
 
 #ms-qac-overlay .ms-rxac-folders,

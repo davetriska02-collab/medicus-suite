@@ -1499,8 +1499,14 @@
     var teams = board.teams || [];
     var inboxEmpty = !(pool.tiles && pool.tiles.length);
     var inboxFolder = folderHtml(pool, { inbox: true });
-    var docFolders = clinicians
-      .concat(teams)
+    var destCols = clinicians.concat(teams);
+    if (inboxEmpty) {
+      destCols = destCols.filter(function (col) {
+        if (!col || col.kind !== 'team') return true;
+        return !!(col.tiles && col.tiles.length);
+      });
+    }
+    var docFolders = destCols
       .map(function (col) {
         return folderHtml(col, {});
       })
@@ -1734,6 +1740,7 @@
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
       (stagedN ? ' ms-rxac-proposing' : '') +
+      (_confirmWrite ? ' ms-rxac-reviewing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate ' +

@@ -522,6 +522,7 @@ console.log('\n--- write stays on the lab client ---');
     'review is a floating dock in the panel'
   );
   check(/ms-rxac-review-open/.test(canvas), 'confirm list opens in the review dock, not a scrim');
+  check(/ms-rxac-reviewing/.test(canvas), 'review-open puts a reviewing class on the panel');
   check(/ms-rxac-dests/.test(canvas) && /To:/.test(canvas), 'top-up and distribute name who they go to');
   check(/Add a team from Medicus/.test(canvas), 'Medicus teams can be added as destinations');
   check(
@@ -614,6 +615,20 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/#ms-rxac-overlay \.ms-rxac-split-go/.test(css), 'split equally is sized as the primary action');
   check(/#ms-rxac-overlay \.ms-rxac-count-pop/.test(css), 'proposed dest counts are a pop number');
   check(/#ms-rxac-overlay \.ms-rxac-review-dock/.test(css), 'review docks inside the panel');
+  check(
+    /#ms-rxac-overlay \.ms-rxac-folders[\s\S]{0,160}minmax\(280px/.test(css),
+    'rx dest-grid cards are at least 280px wide'
+  );
+  check(
+    /#ms-rxac-overlay \.ms-rxac-board-clear \.ms-rxac-folders \.ms-rxac-folder[\s\S]{0,200}max-height:\s*none/.test(
+      css
+    ),
+    'after-split rx dest cards are not height-capped to the board'
+  );
+  check(
+    /#ms-rxac-overlay \.ms-lac-panel\.ms-rxac-reviewing \.ms-lac-body[\s\S]{0,200}display:\s*none/.test(css),
+    'rx review-open hides the board so the proposal list is the page'
+  );
   check(/#ms-rxac-launch/.test(css), 'rx launcher has the same chrome as the lab launcher');
   check(/#ms-rxac-launch:focus-visible/.test(css), 'launcher focus ring is a literal (html-appended)');
   check(!/ms-rxac-overlay/.test(labCanvas), 'lab canvas does not open the rx overlay');

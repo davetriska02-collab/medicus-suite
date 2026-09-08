@@ -96,3 +96,13 @@ bare GET). Pin `_route` while the overlay is open.
 Layout classes stay `.ms-lac-*` / `.ms-rxac-*`. Dest-set strip is
 `.ms-ags-*`. The launcher is on `<html>`, so its focus ring is a
 literal hex, not `var(--accent)`.
+
+After Split equally the dest grid (`.ms-rxac-board-clear .ms-rxac-folders`)
+must size cards to their contents (`height: auto; max-height: none`).
+`max-height: 100%` plus `min-height: 0` on dest folders crushes the
+folder-head into the patient list. Folder-head is `flex-shrink: 0`.
+Dest minmax is 280px so name + proposed count + Share this box fit.
+An empty leftover team folder (the queue inbox, 0 tiles) is omitted
+from that dest grid; a team that still has sitting tiles stays.
+While Review is open the panel gets `ms-rxac-reviewing` and the board
+is hidden so the page is the proposal list + Keep planning + Write.

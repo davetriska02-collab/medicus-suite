@@ -250,6 +250,24 @@ console.log('\n--- canvas + manifest source locks ---');
     'open overlay pins _route so ensureLauncher cannot clobber search'
   );
   check(!/\b(Done|Sent|Allocated|Submitted|Filed|Replied)\b/.test(canvas), 'canvas copy has no completion verbs');
+  check(/ms-rxac-reviewing/.test(canvas), 'review-open puts a reviewing class on the panel');
+  check(
+    /if \(inboxEmpty\)[\s\S]{0,400}kind !== 'team'[\s\S]{0,200}tiles && col\.tiles\.length/.test(canvas),
+    'empty leftover team folders drop out of the after-split dest grid'
+  );
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.css'), 'utf8');
+  check(
+    /#ms-qac-overlay \.ms-rxac-folders[\s\S]{0,160}minmax\(280px/.test(css),
+    'request dest-grid cards are at least 280px wide'
+  );
+  check(
+    /#ms-qac-overlay \.ms-rxac-board-clear \.ms-rxac-folders \.ms-rxac-folder[\s\S]{0,200}max-height:\s*none/.test(css),
+    'after-split dest cards are not height-capped to the board'
+  );
+  check(
+    /#ms-qac-overlay \.ms-lac-panel\.ms-rxac-reviewing \.ms-lac-body[\s\S]{0,200}display:\s*none/.test(css),
+    'review-open hides the board so the proposal list is the page'
+  );
 }
 
 console.log('\n--- ' + passed + ' passed, ' + failed + ' failed ---');

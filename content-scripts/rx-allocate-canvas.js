@@ -1876,6 +1876,7 @@
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
       (stagedN ? ' ms-rxac-proposing' : '') +
+      (_confirmWrite ? ' ms-rxac-reviewing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate ' +
