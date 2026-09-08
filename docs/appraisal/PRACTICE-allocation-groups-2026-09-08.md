@@ -45,6 +45,24 @@ First-pass scores (2026-09-07) were 3–7. Adopted copy and layout are why the f
 - Rename Working today to “this morning’s doctors”.
 - Chloe-style “Preview equal split” (kept Split equally; Tom’s two-click path).
 
+## Addendum — inbox count + dest-set footer (v3.261.6–.7)
+
+Synthetic panel on fresh rig shots (`request-launcher`, `request-group-selected`, `request-after-split-morning`, `request-confirm-morning`). Not user research.
+
+Maureen’s 5-vs-47 scare is addressed on the queue: **47 in this inbox** beside **Draft a split of 47 (nothing is sent)…**. The five visible fixture rows are not the inbox size; the task-list bridge is. Footer and split notes now say **3 destinations for Morning triage** / **onto 3 doctors on Morning triage** when that dest set is on.
+
+| Handle | Score | One line |
+|---|---|---|
+| Maureen | 8 | Same 47 on the chip and the button; Morning triage already ticked |
+| Margaret | 8 | Nothing is sent; Morning triage named after the split |
+| Tom | 8 | Two clicks to a proposal; Write-off is the capture gate (overruled) |
+| Chloe | 8 | Plan only / Medicus has not changed |
+| Janet | 8 | 47 = 16+16+15; dest set named in the footer |
+
+Five-person mean **8.0**. Tom’s ask to enable Write stays overruled. Empty-book cold start still hurts a locum (Sam) and is not in this five.
+
+Feature average with occupied 8.0 is **8.0**.
+
 ## Reproduce
 
 `node test-allocation-groups-core.js`, `node test-allocation-dest-strip.js`, `node test-request-allocate-core.js`, `node test-rx-allocate-core.js`, `node test-lab-allocate-core.js`. Rig: `/tmp/the-practice/rig/run.sh` (includes `request-after-split-morning`).

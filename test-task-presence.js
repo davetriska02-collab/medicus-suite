@@ -851,11 +851,11 @@ console.log('--- occupied masthead is a note wash, not peach ---');
   );
   check(!/#ms-tp-banner\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css), 'banner is not peach/amber');
   check(
-    /#ms-tp-list\s*\{\s*display:\s*inline-flex[\s\S]*?background:\s*var\(--accent-dim\)/.test(css),
+    /#ms-tp-list\s*\{\s*display:\s*inline-flex[^}]*background:\s*var\(--accent-dim\)/.test(css),
     'list pill uses the accent/note wash'
   );
   check(
-    !/#ms-tp-list\s*\{\s*display:\s*inline-flex[\s\S]*?background:\s*var\(--amber-dim\)/.test(css),
+    !/#ms-tp-list\s*\{\s*display:\s*inline-flex[^}]*background:\s*var\(--amber-dim\)/.test(css),
     'list pill is not peach/amber'
   );
 }

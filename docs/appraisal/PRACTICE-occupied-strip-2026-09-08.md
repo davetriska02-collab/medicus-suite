@@ -59,6 +59,27 @@ Retargeted bar is an **average of 8/10**, not 9 per feature. Fresh 6-person scor
 
 Mean **7.3**. Named peach was preferred to the GP disc by every persona. Not 8 yet: Margaret still wants a name every time (unnamed “A colleague” is a 3 for her); Chloe still wants a lock (overruled).
 
+## Addendum — Note lead + note wash (v3.261.7)
+
+Synthetic panel on fresh rig shots (`one-other-light`, `list-one`, `list-self-only`). Not user research.
+
+`Looking:` was tried and dropped: Margaret and Sam read it as peeking, not as “this is a note”. The heading is now **Note:**. Peach/amber wash on the masthead and list pill was read as a halt; both now use the accent/note wash. Queue 👁 chips stay amber.
+
+Host **GP is also working this list** on `list-self-only` and on the request-launcher (no list presence) is fail-closed restore of Medicus’s widget, not an unnamed Suite strip. Personas who scored that as our defect were overruled on the evidence.
+
+| Handle | Score | One line |
+|---|---|---|
+| Margaret | 8 | Note: + cool wash; she would work a named request |
+| Tom | 8 | One glance is enough |
+| Chloe | 8 | Named + “You can still work it”; lock still overruled |
+| Sam | 8 | Named path is enough at a new practice |
+| Priya | 8 | Observational, not exclusive |
+| Geoff | 8 | Same verb set on request and list; launcher no longer fights the strip |
+
+Mean **8.0** on the named primary path. Unnamed “A colleague” stays a 3 for Margaret (fail-closed: no invented name). Chloe lock stays overruled.
+
+Feature average with groups 8.0 is **8.0**.
+
 ## Reproduce
 
 `node test-task-presence.js`. Rig: `/tmp/the-practice/rig/run.sh` (list states under `shots/list/`).
