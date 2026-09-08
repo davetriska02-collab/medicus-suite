@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Canvas chrome fixture</title>
+    <link rel="stylesheet" href="/content-scripts/problem-nesting-canvas.css" />
+    <link rel="stylesheet" href="/content-scripts/lab-allocate-canvas.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: #e8eef6;
+        color: #0f172a;
+      }
+      .host {
+        padding: 20px 28px;
+      }
+      .host h1 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .host-row {
+        display: flex;
+        gap: 16px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: #fff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+      }
+      .view-pnc #ms-lac-overlay,
+      .view-pnc #ms-rxac-overlay,
+      .view-pnc #ms-qac-overlay,
+      .view-lac #ms-pnc-overlay,
+      .view-lac #ms-rxac-overlay,
+      .view-lac #ms-qac-overlay,
+      .view-rxac #ms-pnc-overlay,
+      .view-rxac #ms-lac-overlay,
+      .view-rxac #ms-qac-overlay,
+      .view-qac #ms-pnc-overlay,
+      .view-qac #ms-lac-overlay,
+      .view-qac #ms-rxac-overlay {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="view-lac">
+    <div class="host">
+      <h1>Medicus queue (fixture host)</h1>
+      <div class="host-row">A. Nother · FBC · Results</div>
+      <div class="host-row">B. Sample · U&amp;E · Results</div>
+      <div class="host-row">C. Demo · LFT · Results</div>
+    </div>
+
+    <div id="ms-pnc-overlay">
+      <div class="ms-pnc-live" aria-live="polite"></div>
+      <div class="ms-pnc-backdrop">
+        <div class="ms-pnc-panel" role="dialog" aria-modal="true" aria-label="Organise problems">
+          <div class="ms-pnc-header">
+            <h2 class="ms-pnc-title">Organise problems</h2>
+            <button type="button" class="ms-pnc-close">Close</button>
+          </div>
+          <div class="ms-pnc-explainer">
+            Drag a problem onto another to nest or link it. Drop on <strong>Major / Minor / Unresolved</strong> or
+            <strong>End</strong> to stage the change, then <strong>Finalise</strong>.
+          </div>
+          <div class="ms-pnc-body">
+            <div class="ms-pnc-lanes">
+              <div class="ms-pnc-lane" data-sig-lane="major">
+                <div class="ms-pnc-lane-heading">Major</div>
+                <div class="ms-pnc-roots">
+                  <div class="ms-pnc-root-item">
+                    <div class="ms-pnc-tile-row">
+                      <div class="ms-pnc-tile">
+                        <div class="ms-pnc-tile-main">
+                          <div class="ms-pnc-tile-copy">
+                            <div class="ms-pnc-tile-desc">Type 2 diabetes mellitus</div>
+                            <div class="ms-pnc-tile-date">2019</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="ms-pnc-root-item">
+                    <div class="ms-pnc-tile-row">
+                      <div class="ms-pnc-tile">
+                        <div class="ms-pnc-tile-main">
+                          <div class="ms-pnc-tile-copy">
+                            <div class="ms-pnc-tile-desc">Hypertension</div>
+                            <div class="ms-pnc-tile-date">2021</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ms-pnc-lane" data-sig-lane="minor">
+                <div class="ms-pnc-lane-heading">Minor</div>
+                <div class="ms-pnc-roots">
+                  <div class="ms-pnc-root-item">
+                    <div class="ms-pnc-tile-row">
+                      <div class="ms-pnc-tile">
+                        <div class="ms-pnc-tile-main">
+                          <div class="ms-pnc-tile-copy">
+                            <div class="ms-pnc-tile-desc">Hay fever</div>
+                            <div class="ms-pnc-tile-date">2018</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="ms-pnc-lane">
+                <div class="ms-pnc-lane-heading">Unresolved</div>
+                <div class="ms-pnc-empty">None</div>
+              </div>
+              <div class="ms-pnc-bin">
+                <div class="ms-pnc-bin-heading">End</div>
+                <div class="ms-pnc-bin-hint">Drop here to stage ending a problem.</div>
+              </div>
+            </div>
+          </div>
+          <div class="ms-pnc-footer">
+            <span class="ms-pnc-draft-summary">2 staged</span>
+            <span class="ms-pnc-footer-gap"></span>
+            <button type="button">Discard</button>
+            <button type="button" class="ms-pnc-finalise">Finalise</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ms-lac-overlay">
+      <div class="ms-lac-live" aria-live="polite"></div>
+      <div class="ms-lac-shell">
+        <div class="ms-lac-panel" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">
+          <div class="ms-lac-header">
+            <h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>
+            <span class="ms-lac-header-counts">12 results · 8 unallocated · 2 requester groups</span>
+            <span class="ms-lac-header-note"
+              >Unallocated on the left. Click a report, or a clinician heading for the lot. Ctrl-click to add more. Drag
+              onto a field — or click the field. Writing happens only when you confirm.</span
+            >
+            <span class="ms-lac-hint">Reading overviews…</span>
+            <button type="button" class="ms-lac-close">Close</button>
+          </div>
+          <div class="ms-lac-selectbar">
+            <span class="ms-lac-selectbar-count">3 selected</span>
+            <span class="ms-lac-selectbar-label">Drop onto a field, or click the field.</span>
+            <button type="button" class="ms-lac-ghost">Clear</button>
+          </div>
+          <div class="ms-lac-body">
+            <div class="ms-lac-board">
+              <div class="ms-lac-workspace">
+                <div class="ms-lac-col ms-lac-pool">
+                  <div class="ms-lac-pool-head">
+                    <div class="ms-lac-pool-titles">
+                      <p class="ms-lac-pool-eyebrow">Inbox</p>
+                      <p class="ms-lac-pool-title">Unallocated</p>
+                    </div>
+                    <span class="ms-lac-pool-count">8</span>
+                  </div>
+                  <section class="ms-lac-group">
+                    <div class="ms-lac-group-head">
+                      <span class="ms-lac-group-grip">⠿</span>
+                      <span class="ms-lac-group-title">Dr Cole</span>
+                      <span class="ms-lac-group-count">3</span>
+                      <button type="button" class="ms-lac-group-pick">Select</button>
+                    </div>
+                    <div class="ms-lac-tile ms-lac-tile-picked">
+                      <span class="ms-lac-tile-check">✓</span>
+                      <span class="ms-lac-tile-name">A. Nother</span>
+                      <span class="ms-lac-tile-test">FBC</span>
+                      <span class="ms-lac-tile-token">today</span>
+                    </div>
+                    <div class="ms-lac-tile">
+                      <span class="ms-lac-tile-check"></span>
+                      <span class="ms-lac-tile-name">B. Sample</span>
+                      <span class="ms-lac-tile-test">U&amp;E</span>
+                      <span class="ms-lac-tile-token">today</span>
+                    </div>
+                  </section>
+                </div>
+                <div class="ms-lac-rail">
+                  <div class="ms-lac-rail-head">
+                    <h3 class="ms-lac-col-heading">Working today</h3>
+                    <div class="ms-lac-col-meta">Click a field to allocate</div>
+                  </div>
+                  <div class="ms-lac-field">
+                    <button type="button" class="ms-lac-chip">
+                      <span class="ms-lac-chip-name">Dr Cole</span>
+                      <span class="ms-lac-chip-flag ms-lac-chip-flag-in">In</span>
+                      <span class="ms-lac-chip-count">2 sitting</span>
+                    </button>
+                  </div>
+                  <div class="ms-lac-field ms-lac-chip-away">
+                    <button type="button" class="ms-lac-chip">
+                      <span class="ms-lac-chip-name">Dr Shah</span>
+                      <span class="ms-lac-chip-flag">AWAY</span>
+                      <span class="ms-lac-chip-count">0 sitting</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ms-lac-confirmbar">
+            <span class="ms-lac-confirmbar-note">3 reports staged. Nothing is written until you confirm.</span>
+            <div class="ms-lac-confirmbar-actions">
+              <button type="button" class="ms-lac-confirm-btn">Discard</button>
+              <button type="button" class="ms-lac-confirm-btn ms-lac-primary">Finalise</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ms-rxac-overlay">
+      <div class="ms-lac-live" aria-live="polite"></div>
+      <div class="ms-lac-shell">
+        <div class="ms-lac-panel ms-rxac-proposing" role="dialog" aria-modal="true">
+          <div class="ms-lac-header">
+            <h2 class="ms-lac-title">Allocate non-routine prescriptions</h2>
+            <span class="ms-lac-header-counts">6 unallocated · 2 proposed · to 3 destinations</span>
+            <span class="ms-lac-header-note"
+              >Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that
+              doctor’s requests among the current destinations.</span
+            >
+            <button type="button" class="ms-lac-close">Close</button>
+          </div>
+          <div class="ms-lac-body">
+            <div class="ms-lac-board">
+              <div class="ms-lac-workspace">
+                <div class="ms-lac-col ms-lac-pool">
+                  <div class="ms-lac-pool-head">
+                    <div class="ms-lac-pool-titles">
+                      <p class="ms-lac-pool-eyebrow">Inbox</p>
+                      <p class="ms-lac-pool-title">Unallocated</p>
+                    </div>
+                    <span class="ms-lac-pool-count">6</span>
+                  </div>
+                  <div class="ms-lac-tile">
+                    <span class="ms-lac-tile-name">D. Example</span>
+                    <span class="ms-lac-tile-test">Sertraline 50mg</span>
+                  </div>
+                  <div class="ms-lac-tile ms-lac-tile-staged">
+                    <span class="ms-lac-tile-name">E. Fixture</span>
+                    <span class="ms-lac-tile-test">Amlodipine 5mg</span>
+                    <span class="ms-lac-tile-token">proposed</span>
+                  </div>
+                </div>
+                <div class="ms-lac-rail">
+                  <div class="ms-lac-field">
+                    <button type="button" class="ms-lac-chip">
+                      <span class="ms-lac-chip-name">Dr Cole</span>
+                      <span class="ms-lac-chip-count">1 sitting</span>
+                    </button>
+                  </div>
+                  <div class="ms-lac-field">
+                    <button type="button" class="ms-lac-chip">
+                      <span class="ms-lac-chip-name">Dr Shah</span>
+                      <span class="ms-lac-chip-count">0 sitting</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ms-lac-confirmbar">
+            <span class="ms-lac-confirmbar-note">2 proposed. Split equally is a proposal only.</span>
+            <div class="ms-lac-confirmbar-actions">
+              <button type="button" class="ms-lac-confirm-btn">Distribute equally</button>
+              <button type="button" class="ms-lac-confirm-btn ms-lac-primary">Split equally</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ms-qac-overlay">
+      <div class="ms-lac-live" aria-live="polite"></div>
+      <div class="ms-lac-shell">
+        <div class="ms-lac-panel" role="dialog" aria-modal="true">
+          <div class="ms-lac-header">
+            <h2 class="ms-lac-title">Allocate medical requests</h2>
+            <span class="ms-lac-header-counts">9 unallocated · to 3 destinations</span>
+            <span class="ms-lac-header-note"
+              >Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that
+              doctor’s requests among the current destinations.</span
+            >
+            <button type="button" class="ms-lac-close">Close</button>
+          </div>
+          <div class="ms-lac-body">
+            <div class="ms-lac-board">
+              <div class="ms-lac-workspace">
+                <div class="ms-lac-col ms-lac-pool">
+                  <div class="ms-lac-pool-head">
+                    <div class="ms-lac-pool-titles">
+                      <p class="ms-lac-pool-eyebrow">Triage inbox</p>
+                      <p class="ms-lac-pool-title">Unallocated</p>
+                    </div>
+                    <span class="ms-lac-pool-count">9</span>
+                  </div>
+                  <div class="ms-lac-tile">
+                    <span class="ms-lac-tile-name">F. Demo</span>
+                    <span class="ms-lac-tile-test">Chest pain</span>
+                    <span class="ms-lac-tile-token">urgent</span>
+                  </div>
+                  <div class="ms-lac-tile">
+                    <span class="ms-lac-tile-name">G. Sample</span>
+                    <span class="ms-lac-tile-test">Sick note</span>
+                  </div>
+                </div>
+                <div class="ms-lac-rail">
+                  <div class="ms-lac-field">
+                    <button type="button" class="ms-lac-chip">
+                      <span class="ms-lac-chip-name">Morning triage</span>
+                      <span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>
+                      <span class="ms-lac-chip-count">3 destinations</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ms-lac-confirmbar">
+            <span class="ms-lac-confirmbar-note">Nothing is written until you confirm.</span>
+            <div class="ms-lac-confirmbar-actions">
+              <button type="button" class="ms-lac-confirm-btn ms-lac-primary">Split equally</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      var view = new URLSearchParams(location.search).get('view') || 'lac';
+      document.body.className = 'view-' + view;
+    </script>
+  </body>
+</html>

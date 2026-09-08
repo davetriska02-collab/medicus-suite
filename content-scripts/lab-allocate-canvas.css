@@ -1,7 +1,8 @@
-/* Lab + workflow + non-routine Rx allocation canvases. Injected surfaces:
-   #ms-lac-overlay, #ms-wac-overlay and #ms-rxac-overlay carry their own
-   token block (panel.css :root is not available on Medicus pages) — values
-   mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
+/* Lab + workflow + Rx + request allocation canvases. Injected surfaces:
+   #ms-lac-overlay, #ms-wac-overlay, #ms-rxac-overlay and #ms-qac-overlay
+   carry their own token block (panel.css :root is not available on Medicus
+   pages) — values mirror the canon light column in
+   .claude/skills/ui-design/TOKENS.md. */
 #ms-qac-launch-wrap {
   position: fixed;
   top: 12px;
@@ -93,7 +94,7 @@
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-dim: rgba(37, 99, 235, 0.09);
-  --accent-line: rgba(37, 99, 235, 0.3);
+  --accent-line: rgba(37, 99, 235, 0.35);
   --red: #dc2626;
   --amber: #b45309;
   --amber-dim: rgba(180, 83, 9, 0.09);
@@ -103,7 +104,7 @@
   --green-line: rgba(22, 163, 74, 0.3);
   --r-sm: 4px;
   --r-md: 6px;
-  --r-lg: 8px;
+  --r-lg: 10px;
   --r-pill: 999px;
   --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.05);
   --shadow-2: 0 2px 8px rgba(15, 23, 42, 0.08);
@@ -134,30 +135,37 @@
   clip: rect(0 0 0 0);
 }
 
-/* Full-bleed workbench — the user parks here for minutes moving 73 items;
-   there is nothing behind a scrim they need to see. */
-.ms-lac-shell,
-.ms-lac-panel {
+.ms-lac-shell {
   position: absolute;
   inset: 0;
+  background: rgba(15, 23, 42, 0.5);
   display: flex;
-  flex-direction: column;
-  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
 }
 
 .ms-lac-panel {
-  background: var(--bg-deep);
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-elev);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.28);
   color: var(--text-1);
   overflow: hidden;
 }
 
 .ms-lac-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elev);
+  gap: 10px 12px;
+  padding: 14px 18px 0;
+  background: var(--bg-mid);
   flex: 0 0 auto;
 }
 
@@ -165,7 +173,7 @@
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--text-1);
+  color: var(--text-2);
   white-space: nowrap;
 }
 
@@ -178,13 +186,16 @@
 }
 
 .ms-lac-header-note {
+  flex: 1 1 100%;
+  order: 20;
+  margin: 0 -18px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-deep);
   font-size: 11.5px;
-  color: var(--text-4);
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 
 .ms-lac-close,
@@ -199,8 +210,12 @@
   color: var(--text-2);
   cursor: pointer;
   transition:
-    background 150ms var(--ease),
-    border-color 150ms var(--ease);
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+}
+
+.ms-lac-close {
+  margin-left: auto;
 }
 
 .ms-lac-close:hover,
@@ -233,7 +248,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 16px;
+  padding: 6px 18px;
   border-bottom: 1px solid var(--accent-line);
   background: var(--accent-dim);
   flex: 0 0 auto;
@@ -269,7 +284,7 @@
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
-  padding: 10px 16px;
+  padding: 12px 18px;
 }
 
 .ms-lac-workspace {
@@ -880,16 +895,16 @@
   color: var(--text-4);
 }
 
-/* Footer confirm bar. */
 .ms-lac-confirmbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 9px 16px;
+  padding: 12px 18px;
   border-top: 1px solid var(--border);
-  background: var(--bg-elev);
+  background: var(--bg-mid);
   font-size: 12px;
+  line-height: 1.5;
   color: var(--text-2);
   flex: 0 0 auto;
 }
@@ -932,23 +947,34 @@
 }
 
 .ms-lac-confirm-btn {
-  padding: 4px 14px;
+  padding: 4px 12px;
   border: 1px solid var(--border-hi);
-  border-radius: var(--r-pill);
-  background: var(--bg-mid);
-  font-size: 12px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font-size: 11px;
   font-weight: 600;
   font-family: inherit;
   color: var(--text-2);
   cursor: pointer;
   transition:
-    background 150ms var(--ease),
-    border-color 150ms var(--ease);
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 
 .ms-lac-confirm-btn:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--accent-dim);
+}
+
+.ms-lac-confirm-btn.ms-lac-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-deep);
+}
+
+.ms-lac-confirm-btn.ms-lac-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .ms-lac-split {
@@ -1566,6 +1592,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-1);
+  background: var(--bg-mid);
   padding: 10px 14px;
 }
 
@@ -2254,6 +2281,7 @@
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-1);
+  background: var(--bg-mid);
   padding: 10px 14px;
   position: relative;
   z-index: 4;
