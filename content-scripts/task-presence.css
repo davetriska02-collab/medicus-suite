@@ -95,9 +95,9 @@
 /* ── occupied masthead (advisory, not a lock) ───────────────────────────────
    Prepended into <main> on a task overview when someone else is in the
    native Pusher presence channel (or the suite store, as fallback).
-   Amber wash: duplicate-work caution, never clinical red. Advisory —
-   it warns, it never blocks. Hairline on the banner itself so we
-   never restyle the host Medicus <html> or <main>. */
+   Accent/note wash, not amber: peach/amber was read as a halt. This is
+   a note that a colleague is looking, never a lock. Hairline on the
+   banner itself so we never restyle the host Medicus <html> or <main>. */
 
 #ms-tp-banner {
   position: relative;
@@ -106,7 +106,7 @@
   gap: 8px;
   margin: 0;
   padding: 8px 16px;
-  background: var(--amber-dim);
+  background: var(--accent-dim);
   border: 1px solid var(--border);
   border-radius: 0;
   color: var(--text-1);
@@ -126,8 +126,8 @@
   padding: 2px 8px 2px 4px;
   max-width: min(46rem, 62%);
   vertical-align: middle;
-  background: var(--amber-dim);
-  border: 1px solid var(--amber-line);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
   border-radius: var(--r-pill);
   color: var(--text-2);
   font-size: 12px;

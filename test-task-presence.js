@@ -418,17 +418,17 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(unknownColleagueLabel() === 'A colleague', 'fallback helper is A colleague, not Someone');
   check(
     occupiedHeadline([{ label: 'Dr Priya Nair' }]) ===
-      'Looking: Dr Priya Nair has this open. You can still work it.',
+      'Note: Dr Priya Nair has this open. You can still work it.',
     'single headline merges who + you can still work it'
   );
   check(
     occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'Dr Sam Okonkwo' }]) ===
-      'Looking: Dr Priya Nair and Dr Sam Okonkwo have this open. You can still work it.',
+      'Note: Dr Priya Nair and Dr Sam Okonkwo have this open. You can still work it.',
     'two names'
   );
   check(
     occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }]) ===
-      'Looking: A, B and C have this open. You can still work it.',
+      'Note: A, B and C have this open. You can still work it.',
     'three: all three names, no "1 other"'
   );
   check(
@@ -439,12 +439,12 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
       { label: 'd' },
       { label: 'e' },
       { label: 'f' },
-    ]) === 'Looking: Dr Priya Nair, Dr Sam Okonkwo, c and 3 others have this open. You can still work it.',
+    ]) === 'Note: Dr Priya Nair, Dr Sam Okonkwo, c and 3 others have this open. You can still work it.',
     'six: three names then 3 others'
   );
   check(
     occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
-      'Looking: A, B, C and 1 other have this open. You can still work it.',
+      'Note: A, B, C and 1 other have this open. You can still work it.',
     'four: three names then 1 other'
   );
   check(occupiedNameList(['A']) === 'A', 'name list: 1');
@@ -452,32 +452,32 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(occupiedNameList(['A', 'B', 'C']) === 'A, B and C', 'name list: 3');
   check(occupiedNameList(['A', 'B', 'C', 'D']) === 'A, B, C and 1 other', 'name list: 4+');
   check(
-    occupiedHeadline([{ label: 'A colleague' }]) === 'Looking: A colleague has this open. You can still work it.',
+    occupiedHeadline([{ label: 'A colleague' }]) === 'Note: A colleague has this open. You can still work it.',
     'one unknown: A colleague has this open'
   );
   check(
-    occupiedHeadline([{ label: '' }]) === 'Looking: A colleague has this open. You can still work it.',
+    occupiedHeadline([{ label: '' }]) === 'Note: A colleague has this open. You can still work it.',
     'blank label uses A colleague, never Someone else'
   );
   check(
     occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }]) ===
-      'Looking: Two colleagues have this open (names not shown). You can still work it.',
+      'Note: Two colleagues have this open (names not shown). You can still work it.',
     'two unknowns: Two colleagues (names not shown), not "a colleague and a colleague"'
   );
   check(
     occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }, { label: 'A colleague' }]) ===
-      'Looking: 3 colleagues have this open (names not shown). You can still work it.',
+      'Note: 3 colleagues have this open (names not shown). You can still work it.',
     'three unknowns: N colleagues (names not shown)'
   );
   check(
     occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'A colleague' }]) ===
-      'Looking: Dr Priya Nair and a colleague have this open. You can still work it.',
+      'Note: Dr Priya Nair and a colleague have this open. You can still work it.',
     'mixed: named + a colleague'
   );
   check(!/someone else/i.test(occupiedHeadline([{ label: 'Someone else' }])), 'legacy Someone else is rewritten');
   check(
     occupiedHeadline([{ selfExtra: true, label: 'You' }]) ===
-      'Looking: You also have this open somewhere else. You can still work it.',
+      'Note: You also have this open somewhere else. You can still work it.',
     'dual-tab self headline'
   );
   check(occupiedHeadline([]) === '', 'no others -> empty headline');
@@ -527,7 +527,7 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(!/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML has no On it now / LIVE word');
   check(/class="ms-tp-live"[^>]*aria-hidden="true"/.test(inner), 'pulse pip stays, aria-hidden, no recency word');
   check(
-    inner.indexOf('Looking: Dr Priya Nair has this open. You can still work it.') >= 0,
+    inner.indexOf('Note: Dr Priya Nair has this open. You can still work it.') >= 0,
     'strip HTML is one sentence at headline weight'
   );
   check(!/They have it open/.test(inner) && !/is on this request/.test(inner), 'old two-line copy is gone');
@@ -659,33 +659,33 @@ console.log('--- listOccupiedHeadline: 1 / 2 / 3+ / unknown ---');
 {
   check(
     listOccupiedHeadline([{ label: 'Dr Priya Nair' }]) ===
-      'Looking: Dr Priya Nair is also on this list. You can still work it.',
+      'Note: Dr Priya Nair is also on this list. You can still work it.',
     'one named colleague'
   );
   check(
     listOccupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'Dr Sam Okonkwo' }]) ===
-      'Looking: Dr Priya Nair and Dr Sam Okonkwo are also on this list. You can still work it.',
+      'Note: Dr Priya Nair and Dr Sam Okonkwo are also on this list. You can still work it.',
     'two named colleagues'
   );
   check(
     listOccupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }]) ===
-      'Looking: A, B and 1 other are also on this list. You can still work it.',
+      'Note: A, B and 1 other are also on this list. You can still work it.',
     'three+ uses A, B and N others'
   );
   check(
     listOccupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
-      'Looking: A, B and 2 others are also on this list. You can still work it.',
+      'Note: A, B and 2 others are also on this list. You can still work it.',
     'four is A, B and 2 others'
   );
   check(
     listOccupiedHeadline([{ label: 'A colleague' }]) ===
-      'Looking: A colleague is also on this list. You can still work it.',
+      'Note: A colleague is also on this list. You can still work it.',
     'unknown colleague'
   );
   check(listOccupiedHeadline([]) === '', 'empty others -> empty headline');
   const listHtml = listOccupiedInnerHtml([{ label: 'Dr Priya Nair', initials: 'PN', hue: '#1e3a5f', native: true }]);
-  check(listHtml.indexOf('Looking: Dr Priya Nair is also on this list.') >= 0, 'list inner html carries the lead');
-  check(/^Looking:/.test(listOccupiedHeadline([{ label: 'Dr Priya Nair' }])), 'list heading starts Looking:');
+  check(listHtml.indexOf('Note: Dr Priya Nair is also on this list.') >= 0, 'list inner html carries the lead');
+  check(/^Note:/.test(listOccupiedHeadline([{ label: 'Dr Priya Nair' }])), 'list heading starts Note:');
   check(listHtml.indexOf('You can still work it.') >= 0, 'list inner html carries the quiet clause');
   check(listHtml.indexOf('ms-tp-quiet') >= 0, 'quiet clause is one step quieter');
   check(!/lock/i.test(listHtml), 'list strip never says lock');
@@ -838,6 +838,26 @@ console.log('--- avatar hues: applied hex, contrast, not status colours ---');
   check(safeAvatarHue('red') === '', 'non-hex rejected');
   check(safeAvatarHue('#fff') === '', 'short hex rejected');
   check(safeAvatarHue('javascript:alert(1)') === '', 'non-colour rejected');
+}
+
+console.log('--- occupied masthead is a note wash, not peach ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.css'), 'utf8');
+  check(
+    /#ms-tp-banner\s*\{[^}]*background:\s*var\(--accent-dim\)/.test(css),
+    'banner uses the accent/note wash'
+  );
+  check(!/#ms-tp-banner\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css), 'banner is not peach/amber');
+  check(
+    /#ms-tp-list\s*\{\s*display:\s*inline-flex[\s\S]*?background:\s*var\(--accent-dim\)/.test(css),
+    'list pill uses the accent/note wash'
+  );
+  check(
+    !/#ms-tp-list\s*\{\s*display:\s*inline-flex[\s\S]*?background:\s*var\(--amber-dim\)/.test(css),
+    'list pill is not peach/amber'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

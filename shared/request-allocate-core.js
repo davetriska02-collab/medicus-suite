@@ -79,6 +79,14 @@
     return 'Nothing is written. Opens a planning board.';
   }
 
+  function requestInboxCountLabel(count) {
+    var n = Number(count);
+    if (isFinite(n) && n > 0 && Math.floor(n) === n && n < 1000000) {
+      return Math.floor(n) + ' in this inbox';
+    }
+    return '';
+  }
+
   // Bridged ch-task-list-data is untrusted. Count only — never treat the
   // rows as occupants or as write targets.
   function inboxCountFromTaskListBridge(detail, expectedSlug) {
@@ -451,6 +459,7 @@
     parseRequestQueueRoute: parseRequestQueueRoute,
     requestLaunchLabel: requestLaunchLabel,
     requestLaunchTitle: requestLaunchTitle,
+    requestInboxCountLabel: requestInboxCountLabel,
     inboxCountFromTaskListBridge: inboxCountFromTaskListBridge,
     decorateRequestRow: decorateRequestRow,
     markInboxRows: markInboxRows,

@@ -176,6 +176,8 @@ console.log('\n--- request launch label + bridge count ---');
   check(C.requestLaunchLabel() === 'Draft a split (nothing is sent)…', 'no count: fail-closed label');
   check(C.requestLaunchLabel(0) === 'Draft a split (nothing is sent)…', 'zero is not shown');
   check(C.requestLaunchLabel(47) === 'Draft a split of 47 (nothing is sent)…', '47 from the task-list sits on the button');
+  check(C.requestInboxCountLabel(47) === '47 in this inbox', 'inbox count chip names the pile');
+  check(C.requestInboxCountLabel(0) === '', 'no count chip when the bridge is empty');
   check(C.requestLaunchTitle() === 'Nothing is written. Opens a planning board.', 'title stays fail-closed');
   check(
     C.inboxCountFromTaskListBridge(
@@ -215,6 +217,8 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/\bmethod:\s*['"]POST['"]/.test(canvas), 'canvas has no POST');
   check(!/\bfetch\s*\(/.test(canvas), 'canvas never fetches');
   check(/requestLaunchLabel/.test(canvas), 'launcher label comes from core so the count can sit on the button');
+  check(/requestInboxCountLabel/.test(canvas), 'inbox count chip comes from core');
+  check(/ms-qac-inbox-n/.test(canvas), 'inbox count chip is on the queue');
   check(/ch-task-list-data/.test(canvas), 'launcher listens for the task-list bridge count');
   check(/inboxCountFromTaskListBridge/.test(canvas), 'bridge count is validated in core');
   check(/destScopePhrase/.test(canvas), 'footer dest scope follows the dest set');

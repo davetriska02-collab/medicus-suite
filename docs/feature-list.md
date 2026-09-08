@@ -146,7 +146,8 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.261.6 (8 Sep)** — Occupied/list heading starts Looking:; request launcher shows the task-list count; dest-set footer names Morning triage when that set is on
+- **v3.261.7 (8 Sep)** — Occupied/list heading starts Note:; note wash not peach; queue shows 47 in this inbox from the task-list bridge
+- **v3.261.6 (8 Sep)** — Occupied/list heading starts Note:; request launcher shows the task-list count; dest-set footer names Morning triage when that set is on
 - **v3.261.5 (8 Sep)** — Queue title strip: named list occupancy from Medicus `presence-{site}-task-list-{slug}` replaces the host "GP is also working this list" widget (advisory, never a per-request occupant)
 - **v3.261.4 (8 Sep)** — Occupied strip and allocation groups review pass: wipe/idle/socket fail-closed; one-sentence occupancy copy; Working today chips, gated Write hidden, dest cards no longer overlap (see CHANGELOG)
 - **v3.261.3 (7 Sep)** — Allocation groups: named sets of people to even-split onto (encircle/drag on the canvas, optional days/times); same dest-set on labs and Rx; new homepage medical/admin request canvas (Write blocked until capture)

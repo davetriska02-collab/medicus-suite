@@ -531,11 +531,11 @@
     return names[0] + ', ' + names[1] + ', ' + names[2] + ' and ' + rest + (rest === 1 ? ' other' : ' others');
   }
 
-  // Margaret read peach as a lock. "Looking:" is the heading saying this is
+  // Margaret read peach as a lock. "Note:" is the heading saying this is
   // a note that a colleague is looking — never the word "lock".
-  function withLookingLead(body) {
+  function withNoteLead(body) {
     if (!body) return '';
-    return 'Looking: ' + body;
+    return 'Note: ' + body;
   }
 
   // Who + instruction as ONE sentence. Native recency is the pulse pip,
@@ -543,7 +543,7 @@
   function occupiedHeadline(others) {
     if (!Array.isArray(others) || !others.length) return '';
     if (others.length === 1 && others[0] && others[0].selfExtra) {
-      return withLookingLead('You also have this open somewhere else. You can still work it.');
+      return withNoteLead('You also have this open somewhere else. You can still work it.');
     }
     var named = [];
     var unknownCount = 0;
@@ -555,16 +555,16 @@
     }
     var work = ' You can still work it.';
     if (!named.length) {
-      if (unknownCount === 1) return withLookingLead('A colleague has this open.' + work);
-      if (unknownCount === 2) return withLookingLead('Two colleagues have this open (names not shown).' + work);
-      return withLookingLead(unknownCount + ' colleagues have this open (names not shown).' + work);
+      if (unknownCount === 1) return withNoteLead('A colleague has this open.' + work);
+      if (unknownCount === 2) return withNoteLead('Two colleagues have this open (names not shown).' + work);
+      return withNoteLead(unknownCount + ' colleagues have this open (names not shown).' + work);
     }
     var shown = named.slice();
     if (unknownCount === 1) shown.push('a colleague');
     else if (unknownCount > 1) {
       if (named.length >= 3) {
         var more = named.length - 3 + unknownCount;
-        return withLookingLead(
+        return withNoteLead(
           named[0] +
             ', ' +
             named[1] +
@@ -579,9 +579,9 @@
       }
       if (named.length === 1) {
         var col = unknownCount === 2 ? 'two colleagues' : unknownCount + ' colleagues';
-        return withLookingLead(named[0] + ' and ' + col + ' have this open.' + work);
+        return withNoteLead(named[0] + ' and ' + col + ' have this open.' + work);
       }
-      return withLookingLead(
+      return withNoteLead(
         named[0] +
           ', ' +
           named[1] +
@@ -593,7 +593,7 @@
       );
     }
     var who = occupiedNameList(shown);
-    return withLookingLead(who + (shown.length === 1 ? ' has this open.' : ' have this open.') + work);
+    return withNoteLead(who + (shown.length === 1 ? ' has this open.' : ' have this open.') + work);
   }
 
   // Same name-list rules as occupiedHeadline, list-level verb.
@@ -609,16 +609,16 @@
     }
     var work = ' You can still work it.';
     if (!named.length) {
-      if (unknownCount === 1) return withLookingLead('A colleague is also on this list.' + work);
-      if (unknownCount === 2) return withLookingLead('Two colleagues are also on this list (names not shown).' + work);
-      return withLookingLead(unknownCount + ' colleagues are also on this list (names not shown).' + work);
+      if (unknownCount === 1) return withNoteLead('A colleague is also on this list.' + work);
+      if (unknownCount === 2) return withNoteLead('Two colleagues are also on this list (names not shown).' + work);
+      return withNoteLead(unknownCount + ' colleagues are also on this list (names not shown).' + work);
     }
     var shown = named.slice();
     if (unknownCount === 1) shown.push('a colleague');
     else if (unknownCount > 1) {
       if (named.length >= 3) {
         var more = named.length - 3 + unknownCount;
-        return withLookingLead(
+        return withNoteLead(
           named[0] +
             ', ' +
             named[1] +
@@ -633,9 +633,9 @@
       }
       if (named.length === 1) {
         var col = unknownCount === 2 ? 'two colleagues' : unknownCount + ' colleagues';
-        return withLookingLead(named[0] + ' and ' + col + ' are also on this list.' + work);
+        return withNoteLead(named[0] + ' and ' + col + ' are also on this list.' + work);
       }
-      return withLookingLead(
+      return withNoteLead(
         named[0] +
           ', ' +
           named[1] +
@@ -648,7 +648,7 @@
     }
     if (shown.length >= 3) {
       var restN = shown.length - 2;
-      return withLookingLead(
+      return withNoteLead(
         shown[0] +
           ', ' +
           shown[1] +
@@ -660,7 +660,7 @@
       );
     }
     var who = occupiedNameList(shown);
-    return withLookingLead(
+    return withNoteLead(
       who + (shown.length === 1 ? ' is also on this list.' : ' are also on this list.') + work
     );
   }

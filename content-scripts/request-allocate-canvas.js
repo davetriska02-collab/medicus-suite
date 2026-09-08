@@ -28,6 +28,8 @@
 
   var OVERLAY_ID = 'ms-qac-overlay';
   var LAUNCH_ID = 'ms-qac-launch';
+  var LAUNCH_WRAP_ID = 'ms-qac-launch-wrap';
+  var INBOX_N_ID = 'ms-qac-inbox-n';
   var OVERVIEW_CAP = 120;
   var OVERVIEW_CONCURRENCY = 4;
 
@@ -2835,8 +2837,12 @@
   function ensureLauncher() {
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
+    var wrap = document.getElementById(LAUNCH_WRAP_ID);
+    var countEl = document.getElementById(INBOX_N_ID);
     if (!route) {
       if (launch) launch.remove();
+      if (countEl) countEl.remove();
+      if (wrap) wrap.remove();
       if (_open) closeOverlay();
       return;
     }
@@ -2845,8 +2851,15 @@
       _inboxCount = 0;
       _inboxCountSlug = '';
     }
-    var launchLabel = C.requestLaunchLabel ? C.requestLaunchLabel(currentInboxCount()) : 'Draft a split (nothing is sent)…';
+    var n = currentInboxCount();
+    var launchLabel = C.requestLaunchLabel ? C.requestLaunchLabel(n) : 'Draft a split (nothing is sent)…';
     var launchTitle = C.requestLaunchTitle ? C.requestLaunchTitle() : 'Nothing is written. Opens a planning board.';
+    var countLabel = C.requestInboxCountLabel ? C.requestInboxCountLabel(n) : n ? n + ' in this inbox' : '';
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = LAUNCH_WRAP_ID;
+      document.documentElement.appendChild(wrap);
+    }
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
@@ -2858,10 +2871,21 @@
         e.stopPropagation();
         openOverlay();
       });
-      document.documentElement.appendChild(launch);
+      wrap.appendChild(launch);
     } else {
       launch.textContent = launchLabel;
       launch.title = launchTitle;
+      if (launch.parentNode !== wrap) wrap.appendChild(launch);
+    }
+    if (countLabel) {
+      if (!countEl) {
+        countEl = document.createElement('span');
+        countEl.id = INBOX_N_ID;
+        wrap.insertBefore(countEl, wrap.firstChild);
+      }
+      countEl.textContent = countLabel;
+    } else if (countEl) {
+      countEl.remove();
     }
   }
 
@@ -2929,7 +2953,8 @@
   var _mo = new MutationObserver(function (records) {
     for (var i = 0; i < records.length; i++) {
       var t = records[i].target;
-      if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_ID))) return;
+      if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_WRAP_ID) || t.closest('#' + LAUNCH_ID)))
+        return;
     }
     ensureLauncher();
   });
