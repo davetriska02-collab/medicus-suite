@@ -7,7 +7,8 @@
    .claude/skills/ui-design/TOKENS.md ("Injected surfaces" rule) — when the
    canon changes, update this block in the same commit. */
 .ms-tp-chips,
-#ms-tp-banner {
+#ms-tp-banner,
+#ms-tp-list {
   --bg-deep: #f8fafc;
   --bg-elev: #ffffff;
   --border: #cbd5e1;
@@ -91,30 +92,83 @@
   border: 1px solid var(--accent-line);
 }
 
-/* ── occupied masthead + rail (treatment B, 2026-09-07) ─────────────────────
+/* ── occupied masthead (advisory, not a lock) ───────────────────────────────
    Prepended into <main> on a task overview when someone else is in the
    native Pusher presence channel (or the suite store, as fallback).
-   Amber triad: caution / duplicate-work, never clinical red. Advisory —
-   it warns, it never blocks. Rail is a 4px inset on <main>. */
-/* Rail only — do not hang tokens or font-family on `html` (that restyles
-   the whole Medicus document while occupied). */
-html.ms-tp-occupied main {
-  box-shadow: inset 4px 0 0 #b45309;
-}
+   Accent/note wash, not amber: peach/amber was read as a halt. This is
+   a note that a colleague is looking, never a lock. Hairline on the
+   banner itself so we never restyle the host Medicus <html> or <main>. */
 
 #ms-tp-banner {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 8px 22px;
-  background: var(--amber-dim);
-  border: 0;
-  border-bottom: 1px solid var(--amber-line);
+  padding: 8px 16px;
+  background: var(--accent-dim);
+  border: 1px solid var(--border);
   border-radius: 0;
   color: var(--text-1);
   font-size: 12px;
   line-height: 1.25;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* Compact inline list occupancy — title-row notice, not a masthead.
+   Replaces Medicus's unnamed "GP is also working this list" widget. */
+#ms-tp-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 0 6px;
+  padding: 2px 8px 2px 4px;
+  max-width: min(46rem, 62%);
+  vertical-align: middle;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.2;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#ms-tp-list .ms-tp-inner {
+  gap: 6px;
+}
+
+#ms-tp-list .ms-tp-av {
+  width: 20px;
+  height: 20px;
+  font-size: 9px;
+}
+
+#ms-tp-list .ms-tp-who {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+#ms-tp-list .ms-tp-quiet {
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+#ms-tp-list .ms-tp-live {
+  width: 5px;
+  height: 5px;
+}
+
+.ms-tp-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .ms-tp-avs {
@@ -142,6 +196,12 @@ html.ms-tp-occupied main {
   background: var(--text-3);
 }
 
+.ms-tp-av-more {
+  background: var(--text-1);
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
 .ms-tp-avs-many .ms-tp-av {
   box-shadow: 0 0 0 2px var(--amber-dim);
 }
@@ -151,6 +211,7 @@ html.ms-tp-occupied main {
 }
 
 .ms-tp-who {
+  flex: 1 1 auto;
   min-width: 0;
   font-size: 12px;
   font-weight: 600;
@@ -174,32 +235,74 @@ html.ms-tp-occupied main {
 }
 
 .ms-tp-recency-live {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--amber);
 }
 
-.ms-tp-lock {
-  flex: 0 0 auto;
+.ms-tp-seen {
+  font-family: var(--mono);
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-3);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-2);
+}
+
+.ms-tp-action {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
   white-space: nowrap;
+}
+
+.ms-tp-hide {
+  flex: 0 0 auto;
+  margin: 0;
+  margin-left: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.ms-tp-hide:hover,
+.ms-tp-hide:focus {
+  background: var(--amber-dim);
+}
+
+.ms-tp-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .ms-tp-live {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--r-pill);
-  background: var(--amber);
+  background: var(--text-3);
   pointer-events: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .ms-tp-recency-live .ms-tp-live {
+  .ms-tp-recency .ms-tp-live {
     animation: ms-tp-live-pulse 1.8s var(--ease) infinite;
   }
   @keyframes ms-tp-live-pulse {
@@ -208,7 +311,7 @@ html.ms-tp-occupied main {
       box-shadow: 0 0 0 0 var(--amber-line);
     }
     50% {
-      box-shadow: 0 0 0 4px var(--amber-line);
+      box-shadow: 0 0 0 2px var(--amber-line);
     }
   }
 }

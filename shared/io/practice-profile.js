@@ -995,11 +995,17 @@ const PracticeProfile = (() => {
         const allocationGroupsImport = _io('allocationGroupsImport');
         if (!allocationGroupsImport) throw new Error('allocationGroupsImport not available in this context.');
         if (merge) {
+          const Core =
+            (typeof global !== 'undefined' && global.AllocationGroupsCore) ||
+            (typeof self !== 'undefined' && self.AllocationGroupsCore) ||
+            (typeof require === 'function' ? require('../allocation-groups-core.js') : null);
           const ex = await chrome.storage.local.get('allocationGroups.presets');
-          if (!Array.isArray(ex['allocationGroups.presets']) || ex['allocationGroups.presets'].length === 0) {
-            await allocationGroupsImport(mods.allocationGroups);
-            applied.push('allocationGroups');
-          }
+          const local = Array.isArray(ex['allocationGroups.presets']) ? ex['allocationGroups.presets'] : [];
+          const incoming = Array.isArray(mods.allocationGroups.presets) ? mods.allocationGroups.presets : [];
+          const merged =
+            Core && typeof Core.mergePresetsById === 'function' ? Core.mergePresetsById(local, incoming) : incoming;
+          await allocationGroupsImport({ presets: merged });
+          applied.push('allocationGroups');
         } else {
           await allocationGroupsImport(mods.allocationGroups);
           applied.push('allocationGroups');

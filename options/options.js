@@ -1370,7 +1370,7 @@ async function isPracticeAccepted() {
         label: 'Allocation groups',
         defaultChecked: true,
         defaultMode: 'replace',
-        desc: 'Named groups of people the canvases split work onto (not Medicus team inboxes)',
+        desc: 'Replace: every group on this computer is replaced by the practice set. Merge: adds the practice groups and keeps yours.',
       },
       {
         id: 'suite',
@@ -4580,10 +4580,19 @@ initPdcTallySection({
             : pushed && pushed.reason === 'no-handle'
               ? 'Imported on this computer only — click Share with practice to push it to everyone.'
               : pushed && pushed.reason && pushed.reason !== 'no-change' && pushed.reason !== 'skipped'
-                ? (KS && KS.shareErrorText(pushed.reason, pushed.detail || (pushed.dropped && pushed.dropped.length))) ||
+                ? (KS &&
+                    KS.shareErrorText(pushed.reason, pushed.detail || (pushed.dropped && pushed.dropped.length))) ||
                   'Imported. Review the set on the Knowledge tab.'
                 : 'Imported. Review the set on the Knowledge tab.',
-        !!(pushed && pushed.reason && !pushed.wrote && pushed.reason !== 'no-handle' && pushed.reason !== 'no-change' && pushed.reason !== 'skipped' && shareOk)
+        !!(
+          pushed &&
+          pushed.reason &&
+          !pushed.wrote &&
+          pushed.reason !== 'no-handle' &&
+          pushed.reason !== 'no-change' &&
+          pushed.reason !== 'skipped' &&
+          shareOk
+        )
       );
       await refreshStats();
     } catch (err) {
@@ -4603,7 +4612,11 @@ initPdcTallySection({
     }
     try {
       let result = await KS.pushLiveKnowledge({ allowCreate: true, requestPermission: true });
-      if (result.reason === 'no-handle' || result.reason === 'permission-not-granted' || result.reason === 'no-shared-profile') {
+      if (
+        result.reason === 'no-handle' ||
+        result.reason === 'permission-not-granted' ||
+        result.reason === 'no-shared-profile'
+      ) {
         if (typeof showSaveFilePicker === 'function') {
           let handle;
           try {
@@ -4637,14 +4650,18 @@ initPdcTallySection({
           const built = KS.buildKnowledgeContribution(null, data, { allowCreate: true, KU, now: new Date() });
           if (built.json) {
             downloadJson(built.json, 'practice-profile.json');
-            setIoStatus('Downloaded practice-profile.json. Put it next to manifest.json in the shared extension folder.');
+            setIoStatus(
+              'Downloaded practice-profile.json. Put it next to manifest.json in the shared extension folder.'
+            );
             await refreshSync();
             return;
           }
         }
       }
       if (result.wrote || result.reason === 'no-change') {
-        setIoStatus('Written to the shared folder as practice-profile.json. Other computers using that folder will pick it up on next open or within about 15 minutes.');
+        setIoStatus(
+          'Written to the shared folder as practice-profile.json. Other computers using that folder will pick it up on next open or within about 15 minutes.'
+        );
       } else {
         setIoStatus(
           KS.shareErrorText(result.reason, result.detail || (result.dropped && result.dropped.length)) ||
@@ -4757,7 +4774,9 @@ initPdcTallySection({
       if (!window.confirm(phi.join('\n') + '\n\nImport anyway? You can keep them on this computer only.')) {
         return fail('Import cancelled — identifier warning.');
       }
-      shareOk = window.confirm('These entries may contain patient-identifiable text. Share them to the practice folder?');
+      shareOk = window.confirm(
+        'These entries may contain patient-identifiable text. Share them to the practice folder?'
+      );
     }
 
     await chrome.storage.local.set({
@@ -5201,6 +5220,7 @@ initPdcTallySection({
   const DAYS = Core.DAY_IDS;
   let presets = [];
   let staffCache = [];
+  let rotaStaff = [];
 
   function flash() {
     const el = document.getElementById('agSaved');
@@ -5219,6 +5239,21 @@ initPdcTallySection({
     return (p.memberNames && p.memberNames[id]) || id.slice(0, 8);
   }
 
+  function namedStaff(list) {
+    return (list || [])
+      .filter((s) => s && Core.isUuid(s.id) && (s.name || s.displayName))
+      .map((s) => ({
+        id: String(s.id).toLowerCase(),
+        name: s.name || s.displayName || '',
+      }));
+  }
+
+  function pickerStaff() {
+    const fromCache = namedStaff(staffCache);
+    if (fromCache.length) return fromCache;
+    return rotaStaff;
+  }
+
   function render() {
     const host = document.getElementById('agList');
     if (!host) return;
@@ -5227,6 +5262,7 @@ initPdcTallySection({
         '<p class="section-desc">No groups yet. Encircle people on a canvas and Save as group, or start one here and add people from the canvas.</p>';
       return;
     }
+    const people = pickerStaff();
     host.innerHTML = presets
       .map((p) => {
         const sched = p.schedule;
@@ -5256,17 +5292,13 @@ initPdcTallySection({
               '" aria-label="Remove">×</button></span>'
           )
           .join('');
-        const staffOpts = staffCache
+        const staffOpts = people
           .filter((s) => s && s.id && (p.memberIds || []).indexOf(String(s.id).toLowerCase()) === -1)
-          .map(
-            (s) =>
-              '<option value="' +
-              escAttr(String(s.id).toLowerCase()) +
-              '">' +
-              escHtml(s.name) +
-              '</option>'
-          )
+          .map((s) => '<option value="' + escAttr(String(s.id).toLowerCase()) + '">' + escHtml(s.name) + '</option>')
           .join('');
+        const noNames = people.length
+          ? ''
+          : '<p class="section-desc" data-ag-no-names>No names yet on this computer. Open Draft a split (nothing is sent)… once on Medicus and the people will appear here.</p>';
         return (
           '<div class="card" data-ag-card="' +
           escAttr(p.id) +
@@ -5279,7 +5311,7 @@ initPdcTallySection({
           Core.MAX_NAME +
           '" aria-label="Group name" style="font-weight:600;width:min(280px,100%)">' +
           '<div style="margin-top:8px">' +
-          (members || '<span class="section-desc">No people yet — add them on a canvas or from the list below.</span>') +
+          (members || '<span class="section-desc">No people yet. Add them from the list below.</span>') +
           '</div>' +
           (staffOpts
             ? '<label class="field-label" style="margin-top:8px">Add a person' +
@@ -5288,7 +5320,7 @@ initPdcTallySection({
               '"><option value="">Choose…</option>' +
               staffOpts +
               '</select></label>'
-            : '') +
+            : noNames) +
           '<div style="margin-top:10px;font-size:12px;color:var(--text-3)">When this chip appears (optional)</div>' +
           '<div style="margin-top:4px">' +
           dayChecks +
@@ -5304,9 +5336,9 @@ initPdcTallySection({
           '" value="' +
           escAttr((sched && sched.end) || '') +
           '"></label>' +
-          '<span class="section-desc">Leave blank for always.</span>' +
+          '<span class="section-desc">Leave blank for always. Overnight windows wrap past midnight (for example 18:00 to 08:00).</span>' +
           '</div>' +
-          '<button type="button" class="ghost" data-ag-delete data-ag-id="' +
+          '<button type="button" class="ghost danger-quiet" data-ag-delete data-ag-id="' +
           escAttr(p.id) +
           '" style="margin-top:10px">Delete group</button>' +
           '</div>'
@@ -5336,21 +5368,37 @@ initPdcTallySection({
   async function load() {
     const state = await loadAllocationGroupsState();
     presets = state.presets || [];
-    const cache = await chrome.storage.local.get('allocationGroups.staffCache');
+    const cache = await chrome.storage.local.get(['allocationGroups.staffCache', 'rota.staff']);
     staffCache = Array.isArray(cache['allocationGroups.staffCache']) ? cache['allocationGroups.staffCache'] : [];
+    const rawRota = Array.isArray(cache['rota.staff']) ? cache['rota.staff'] : [];
+    rotaStaff = rawRota
+      .filter((s) => s && Core.isUuid(s.id) && (s.name || s.displayName))
+      .map((s) => ({
+        id: String(s.id).toLowerCase(),
+        name: s.name || s.displayName || '',
+      }));
     render();
   }
 
   document.getElementById('agAdd')?.addEventListener('click', async () => {
-    const res = Core.upsertPreset(presets, {
-      name: 'New group',
-      members: staffCache[0] ? [{ id: staffCache[0].id, name: staffCache[0].name }] : [],
-      memberIds: staffCache[0] ? [staffCache[0].id] : [],
-      memberNames: staffCache[0] ? { [String(staffCache[0].id).toLowerCase()]: staffCache[0].name } : {},
-    });
+    const res = Core.upsertPreset(
+      presets,
+      {
+        name: 'New group',
+        memberIds: [],
+        memberNames: {},
+      },
+      { allowEmpty: true }
+    );
     if (!res.ok) {
-      // A group needs at least one person. Seed a placeholder the canvas will replace.
-      window.alert('Open an allocation canvas and save a group from the people on the board. Options can then rename it and set days and times.');
+      const host = document.getElementById('agList');
+      if (host) {
+        const note = document.createElement('p');
+        note.className = 'section-desc';
+        note.setAttribute('data-ag-add-error', '1');
+        note.textContent = (res.errors && res.errors[0]) || 'Could not start a group.';
+        host.prepend(note);
+      }
       return;
     }
     presets = res.presets;
@@ -5366,7 +5414,7 @@ initPdcTallySection({
     if (ev.target.hasAttribute('data-ag-name')) p.name = ev.target.value;
     if (ev.target.hasAttribute('data-ag-add-staff')) {
       const sid = ev.target.value;
-      const staff = staffCache.filter((s) => String(s.id).toLowerCase() === sid)[0];
+      const staff = pickerStaff().filter((s) => String(s.id).toLowerCase() === sid)[0];
       if (staff && Core.isUuid(sid)) {
         p.memberIds = (p.memberIds || []).concat([sid]);
         p.memberNames = Object.assign({}, p.memberNames || {}, { [sid]: staff.name });
@@ -5392,15 +5440,24 @@ initPdcTallySection({
         const raw = { days, start, end };
         const errs = Core.scheduleErrors(raw);
         if (errs.length) {
-          window.alert(errs[0]);
+          let note = card.querySelector('[data-ag-sched-error]');
+          if (!note) {
+            note = document.createElement('p');
+            note.className = 'section-desc';
+            note.setAttribute('data-ag-sched-error', '1');
+            card.appendChild(note);
+          }
+          note.textContent = errs[0];
           return;
         }
+        const oldNote = card.querySelector('[data-ag-sched-error]');
+        if (oldNote) oldNote.remove();
         p.schedule = Core.normaliseSchedule(raw);
       }
     } else {
       p.schedule = scheduleFromCard(p, card);
     }
-    const res = Core.upsertPreset(presets, p);
+    const res = Core.upsertPreset(presets, p, { allowEmpty: true });
     if (res.ok) {
       presets = res.presets;
       await persist();
@@ -5422,13 +5479,8 @@ initPdcTallySection({
     const drop = btn.getAttribute('data-ag-drop-member');
     p.memberIds = (p.memberIds || []).filter((m) => m !== drop);
     if (p.memberNames) delete p.memberNames[drop];
-    if (!p.memberIds.length) {
-      if (!window.confirm('That was the last person — delete this group?')) return;
-      presets = Core.removePreset(presets, id).presets;
-    } else {
-      const res = Core.upsertPreset(presets, p);
-      if (res.ok) presets = res.presets;
-    }
+    const res = Core.upsertPreset(presets, p, { allowEmpty: true });
+    if (res.ok) presets = res.presets;
     await persist();
   });
 

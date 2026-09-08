@@ -352,13 +352,16 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/fetchStaffScheduleAbsences/.test(canvas), 'canvas may parse GET staff-schedule for absences');
   check(!/change-absence/.test(canvas), 'canvas never calls change-absence');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
+  check(/workingFlag\(\)/.test(canvas), 'chips can show Working today / Working d MMM from the appointment book');
   check(
-    /In ' \+ esc\(dayPhrase\(\)\)/.test(canvas),
-    'chips can show In today / In <picked day> from the appointment book'
+    /ms-lac-day/.test(canvas) && /ms-lac-day-tomorrow/.test(canvas),
+    'working-day date input and Tomorrow shortcut are on the canvas'
   );
-  check(/ms-lac-day/.test(canvas) && /ms-lac-day-tomorrow/.test(canvas), 'working-day date input and Tomorrow shortcut are on the canvas');
   check(/mergeInDayClinicians/.test(canvas), 'people on the picked day’s book appear as drop fields');
-  check(/setWorkDate/.test(canvas) && /reloadWorkingDay/.test(canvas), 'changing working day re-reads that day’s appointment book');
+  check(
+    /setWorkDate/.test(canvas) && /reloadWorkingDay/.test(canvas),
+    'changing working day re-reads that day’s appointment book'
+  );
   check(
     /ms-lac-pool/.test(canvas) && /ms-lac-field/.test(canvas) && /ms-lac-chip/.test(canvas),
     'canvas is an unallocated pool plus clinician fields'
@@ -367,7 +370,10 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
   check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
   check(!/list\.length >= 8/.test(canvas), 'overview harvest does not stop at eight staff ids');
-  check(/fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas), 'task-list GET uses the page query (minus masterAssignee)');
+  check(
+    /fetchTaskList\(_route\.slug, _route\.search\)/.test(canvas),
+    'task-list GET uses the page query (minus masterAssignee)'
+  );
   check(/search: _route && _route\.search/.test(canvas), 'write re-GET keeps the page filters');
   check(/sortClinicianFields/.test(canvas), 'In today clinicians are sorted to the top of the rail');
   check(/scrollNearEdge/.test(canvas), 'the rail scrolls while a drag is held over it');
@@ -526,7 +532,10 @@ console.log('\n--- multi-select and drag origin ---');
   );
   check(C.dropTargetShowsHover('pool', 'pool') === false, 'lifting from unallocated does not shade the pile');
   check(C.dropTargetShowsHover('pool', 'clinician') === true, 'a clinician field still highlights as the drop');
-  check(C.dropTargetShowsHover('clinician', 'pool') === true, 'bringing work back to unallocated does highlight the well');
+  check(
+    C.dropTargetShowsHover('clinician', 'pool') === true,
+    'bringing work back to unallocated does highlight the well'
+  );
   check(C.dropTargetShowsHover('clinician', 'clinician') === true, 'field-to-field still highlights the destination');
   check(C.dropTargetShowsHover('pool', 'team') === true, 'a team field highlights as a drop from the pile');
   check(C.dropTargetShowsHover('team', 'pool') === true, 'bringing work back from a team highlights the well');
@@ -596,7 +605,10 @@ console.log('\n--- one person, two wire formats ---');
     C.clinicianColumnKey('Triska David') !== C.clinicianColumnKey('Dr David Triska'),
     'raw keys still differ — merge happens at board build'
   );
-  check(C.sameClusterPerson('Triska David', 'Dr David Triska') === true, 'those two names are one person for chip merge');
+  check(
+    C.sameClusterPerson('Triska David', 'Dr David Triska') === true,
+    'those two names are one person for chip merge'
+  );
   check(C.sameClusterPerson('AZADIAN N', 'Dr Amy Azadian') === false, 'different initials stay two people on the rail');
 
   const daveId = uuid(61);
@@ -828,9 +840,7 @@ console.log('\n--- Medicus today-book presence (captured 2026-08-25) ---');
   check(!C.bookPresenceForName(book, 'Dr David Triska'), 'a cancelled-only diary is not In today');
   const withId = C.parseTodayBook({
     date: '2026-08-25',
-    staffSchedules: [
-      { id: uuid(21), name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] },
-    ],
+    staffSchedules: [{ id: uuid(21), name: 'Dr Natalie Azadian', schedule: [{ scheduleType: 'diary' }] }],
   });
   check(
     withId.present[0] && withId.present[0].staffId === uuid(21),
@@ -947,14 +957,8 @@ console.log('\n--- in-day clinicians from the picked day’s book ---');
     people.some((p) => p.name === 'Dr Natalie Azadian') && people.some((p) => p.name === 'Practice Nurse Smith'),
     'everyone with a live session is in-day, not doctors only'
   );
-  check(
-    !people.some((p) => /Triska/i.test(p.name)),
-    'cancelled-only diary is not in-day'
-  );
-  check(
-    !people.some((p) => /Downs/i.test(p.name)),
-    'Medicus absence on the picked day is not in-day'
-  );
+  check(!people.some((p) => /Triska/i.test(p.name)), 'cancelled-only diary is not in-day');
+  check(!people.some((p) => /Downs/i.test(p.name)), 'Medicus absence on the picked day is not in-day');
   const az = people.find((p) => p.name === 'Dr Natalie Azadian');
   check(az && az.staffId === azadianId, 'book staff UUID is copied onto the in-day person');
   check(az && az.key === C.clinicianColumnKey('AZADIAN N'), 'caps requester form shares the in-day key');
@@ -976,7 +980,10 @@ console.log('\n--- in-day clinicians from the picked day’s book ---');
     'queue clinicians stay when in-day people are merged'
   );
   const emptyAz = merged.find((c) => /Azadian/i.test(c.title));
-  check(emptyAz && emptyAz.count === 0 && emptyAz.kind === 'clinician', 'in-day person not on the queue is an empty field');
+  check(
+    emptyAz && emptyAz.count === 0 && emptyAz.kind === 'clinician',
+    'in-day person not on the queue is an empty field'
+  );
   const requesterRow = C.normaliseTaskRow(
     {
       id: uuid(2),
@@ -987,7 +994,9 @@ console.log('\n--- in-day clinicians from the picked day’s book ---');
   );
   const withRequester = C.buildBoard([requesterRow], C.emptyDraft());
   const deduped = C.mergeInDayClinicians(withRequester.clinicians, people);
-  const azFields = deduped.filter((c) => /Azadian|AZADIAN/i.test(c.title) || c.key === C.clinicianColumnKey('AZADIAN N'));
+  const azFields = deduped.filter(
+    (c) => /Azadian|AZADIAN/i.test(c.title) || c.key === C.clinicianColumnKey('AZADIAN N')
+  );
   check(azFields.length === 1, 'AZADIAN N on the queue and Dr Natalie Azadian on the book share one field');
 }
 
@@ -1036,10 +1045,7 @@ console.log('\n--- staff directory + unique UUID resolve ---');
     staffOptions: [{ value: { id: azadianId, name: 'Natalie' }, label: 'Dr Natalie Azadian' }],
   });
   check(wrappedVal.byId[azadianId], 'Vue-wrapped staffOptions value object is harvested');
-  check(
-    wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1,
-    'outer full label wins over inner first name'
-  );
+  check(wrappedVal.byId[azadianId].name.indexOf('Azadian') !== -1, 'outer full label wins over inner first name');
   check(
     C.pickStaffFields({ id: azadianId, name: 'Natalie', label: 'Dr Natalie Azadian' }).name.indexOf('Azadian') !== -1,
     'prefers full label over short name field'
@@ -1076,7 +1082,10 @@ console.log('\n--- staff directory + unique UUID resolve ---');
   });
   check(wrappedData.byId[azadianId], 'staffOptions nested under data is harvested');
   check(C.pickPatientId({ patientId: uuid(5) }) === uuid(5), 'row patientId is a UUID');
-  check(C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6), 'overview patient.id is picked');
+  check(
+    C.pickPatientIdFromPayload({ data: { patient: { id: uuid(6) } } }) === uuid(6),
+    'overview patient.id is picked'
+  );
   const hit = C.resolveStaffForColumn(C.clinicianColumnKey('AZADIAN N'), 'AZADIAN N', dir);
   check(hit.ok && hit.staff.id === azadianId, 'AZADIAN N resolves to the Azadian UUID');
   const miss = C.resolveStaffForColumn(C.clinicianColumnKey('Dr Mystery'), 'Dr Mystery', dir);
@@ -1163,10 +1172,7 @@ console.log('\n--- sitting assignedId is the write destination ---');
   );
   const clash = C.planBulkReassign([sitting, clashSit, pile], draft, 'token', emptyDir);
   check(clash.ok === false, 'two assignedIds on one field refuse');
-  check(
-    clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id',
-    'reason is ambiguous-assigned-id'
-  );
+  check(clash.refused[0] && clash.refused[0].reason === 'ambiguous-assigned-id', 'reason is ambiguous-assigned-id');
   check(/more than one staff id/.test(C.writeBlockReason(clash)), 'refuse copy names two ids on the field');
 
   const emptyDraft = C.addColumn(C.emptyDraft(), 'Dr Mystery');
@@ -1233,10 +1239,7 @@ async function testClient() {
       };
     },
   });
-  const out = await client.fetchTaskList(
-    'review-investigation-report',
-    '?viewContext=workflow&masterAssignee=team-1'
-  );
+  const out = await client.fetchTaskList('review-investigation-report', '?viewContext=workflow&masterAssignee=team-1');
   check(out.rows.length === 1, 'client maps the task-list');
   check(out.taskList === 'envelope-token', 'client keeps the envelope taskList token');
   check(calls[0].method === 'GET', 'task-list fetch is GET');
@@ -1443,14 +1446,8 @@ async function testClient() {
 
   const idA = uuid(21);
   const idB = uuid(22);
-  const rowA = C.normaliseTaskRow(
-    { id: uuid(31), patientName: 'A', assignedTo: 'Investigation Reports' },
-    'x'
-  );
-  const rowB = C.normaliseTaskRow(
-    { id: uuid(32), patientName: 'B', assignedTo: 'Investigation Reports' },
-    'x'
-  );
+  const rowA = C.normaliseTaskRow({ id: uuid(31), patientName: 'A', assignedTo: 'Investigation Reports' }, 'x');
+  const rowB = C.normaliseTaskRow({ id: uuid(32), patientName: 'B', assignedTo: 'Investigation Reports' }, 'x');
   let seqDraft = C.emptyDraft();
   seqDraft = C.addColumn(seqDraft, 'Dr Natalie Azadian', idA);
   seqDraft = C.addColumn(seqDraft, 'Dr David Triska', idB);
@@ -1501,7 +1498,10 @@ async function testClient() {
     taskList: 'envelope-token',
     directory: { list: [] },
   });
-  check(seqWritten.partial === true && seqWritten.written === 1, 'a later dest failing still keeps the dests already written');
+  check(
+    seqWritten.partial === true && seqWritten.written === 1,
+    'a later dest failing still keeps the dests already written'
+  );
   check(
     seqPosts.some(function (p) {
       return p.assigneeId === idA;
@@ -1618,6 +1618,31 @@ console.log('\n--- even split onto dests including nurses ---');
     }, 0) === 3,
     'every unallocated row is assigned'
   );
+  const even47 = [];
+  for (let i = 0; i < 47; i++) {
+    even47.push(
+      C.normaliseTaskRow(
+        { id: uuid(200 + i), patientName: 'P' + i, assignedTo: 'Investigation Reports', summary: 'FBC' },
+        'x'
+      )
+    );
+  }
+  const twelve = [];
+  for (let i = 0; i < 12; i++) {
+    twelve.push({ key: 'clinician:cole|' + i, name: 'Dr ' + i + ' Cole', staffId: uuid(300 + i) });
+  }
+  const evenPlan = C.planEvenSplit(even47, twelve);
+  const evenCounts = evenPlan.shares.map((s) => s.count).sort((a, b) => a - b);
+  check(evenPlan.ok && evenCounts.join(',') === '3,4,4,4,4,4,4,4,4,4,4,4', 'even split 47/12 is eleven 4s and one 3');
+  const topCounts = { [twelve[0].key]: 10, [twelve[1].key]: 0, [twelve[2].key]: 0 };
+  twelve.slice(3).forEach((d) => {
+    topCounts[d.key] = 4;
+  });
+  const leftover = even47.slice(0, 6);
+  const topPlan = C.planTopUp(leftover, twelve, topCounts);
+  check(topPlan.ok && topPlan.mode === 'top-up', 'top-up is a distinct plan mode');
+  check(topPlan.shares[0].count === 0, 'top-up does not add to the already-full dest');
+  check(topPlan.shares[1].count + topPlan.shares[2].count === 6, 'top-up pours leftover onto the emptiest dests');
   const sitting = C.normaliseTaskRow(
     { id: uuid(14), patientName: 'D', assignedTo: 'Dr Jane Cole', assignedId: uuid(1) },
     'x'
@@ -1642,13 +1667,25 @@ console.log('\n--- dest-set strip + even-split canvas source locks ---');
   check(/ms-ags-marquee/.test(canvas), 'people marquee uses #ms-ags-marquee');
   check(/ms-ags-new-group/.test(canvas), 'New group well is on the lab canvas');
   check(/ms-ags-field-on/.test(canvas), 'dest people are clinician fields, not patient tiles');
-  check(/id="ms-lac-split"/.test(canvas) && /id="ms-lac-topup"/.test(canvas) && /id="ms-lac-level"/.test(canvas), 'split actions use lab ids');
+  check(
+    /id="ms-lac-split"/.test(canvas) && /id="ms-lac-topup"/.test(canvas) && /id="ms-lac-level"/.test(canvas),
+    'split actions use lab ids'
+  );
   check(/inDayClinicians/.test(canvas) && /mergeInDayClinicians/.test(canvas), 'In today for labs includes nurses');
   check(!/workingTodayDoctors/.test(canvas) && !/isLikelyDoctor/.test(canvas), 'lab dests are not Rx doctors-only');
   check(/upsertPreset/.test(canvas), 'Save as group uses upsertPreset');
-  check(/lastUsedBySurface\.lab/.test(canvas) && /rememberLastUsed/.test(canvas), 'last-used dest set is remembered for surface lab');
+  check(
+    /lastUsedBySurface\.lab/.test(canvas) && /rememberLastUsed/.test(canvas),
+    'last-used dest set is remembered for surface lab'
+  );
   check(/allocationGroups\.staffCache/.test(canvas), 'staff directory is harvested into allocationGroups.staffCache');
-  check(/planEvenSplit/.test(canvas) && /planTopUp/.test(canvas) && /planLevel/.test(canvas), 'split / top-up / level go through LabAllocateCore');
+  check(
+    /planEvenSplit/.test(canvas) && /planTopUp/.test(canvas) && /planLevel/.test(canvas),
+    'split / top-up / level go through LabAllocateCore'
+  );
+  check(/function applyTopUp[\s\S]{0,240}dests\.collisions/.test(canvas), 'lab top-up bails when dests collide');
+  check(/function applyLevel[\s\S]{0,240}dests\.collisions/.test(canvas), 'lab distribute bails when dests collide');
+  check(/collisionPhrase\(dests\.collisions\)/.test(canvas), 'lab renders collisionPhrase instead of pick-dest copy');
   check(/applyEvenSplit/.test(canvas), 'even split stages locally');
   check(!/\b(Done|Sent|Allocated|Submitted|Filed)\b/.test(canvas), 'propose copy has no completion verbs');
   check(/replaceDestColumns/.test(canvas), 'lab dest-set change replaces leftover columns');
@@ -1656,6 +1693,9 @@ console.log('\n--- dest-set strip + even-split canvas source locks ---');
     /kind === 'custom'[\s\S]{0,200}destsFromSet|destsFromSet\([\s\S]{0,80}kind: 'custom'/.test(canvas),
     'lab custom dests go through destsFromSet'
   );
+  check(/ms-ags-all-panel/.test(canvas) && /data-ags-always/.test(canvas), 'lab All groups panel can edit schedule');
+  check(/saveGroupRowHtml/.test(canvas), 'lab Save as group uses the on-canvas name field');
+  check(!/window\.prompt/.test(canvas), 'lab Save as group does not use window.prompt');
 }
 
 console.log('\n--- asSplitDests identity ---');
@@ -1671,6 +1711,18 @@ console.log('\n--- asSplitDests identity ---');
   check(clash.length === 0, 'surname+initial collision refuses dests');
   check(clash.collisions && clash.collisions.length >= 2, 'collisions names both people');
   check(/share a name/.test(C.collisionPhrase(clash.collisions)), 'collision phrase names the clash');
+  const janeOnly = uuid(23);
+  const emptyThenNamed = C.asSplitDests([{ name: 'Dr Jane Smith' }, { name: 'Dr John Smith', staffId: janeOnly }]);
+  check(emptyThenNamed.length === 0, 'empty staffId on the first hit still collides with a second person');
+  check(
+    emptyThenNamed.collisions && emptyThenNamed.collisions.length >= 2,
+    'collision names both people when the first UUID is missing'
+  );
+  const sameTwice = C.asSplitDests([
+    { name: 'Dr Jane Smith', staffId: jane },
+    { name: 'Dr Jane Smith', staffId: jane },
+  ]);
+  check(sameTwice.length === 1 && !sameTwice.collisions.length, 'same person listed twice is not a collision');
   const pinnedJunk = C.pinDestStaffIds(
     [{ key: C.clinicianColumnKey('Dr Jane Cole'), name: 'Dr Jane Cole', staffId: 'not-a-uuid' }],
     { list: [{ id: uuid(88), name: 'Dr Jane Cole' }] }
@@ -1701,6 +1753,8 @@ console.log('\n--- dest UUID vs sitting UUID mismatch ---');
     }),
     'reason is dest-mismatch'
   );
+  const phrase = C.refusedPatientsPhrase(plan, [sitting, pile]);
+  check(/Not included/.test(phrase) && /B/.test(phrase), 'refused phrase names the patient left behind');
 }
 
 testClient()

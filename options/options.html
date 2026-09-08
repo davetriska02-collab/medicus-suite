@@ -341,6 +341,22 @@
         opacity: 0.45;
         cursor: not-allowed;
       }
+      button.ghost.danger-quiet {
+        text-transform: none;
+        letter-spacing: 0;
+        font-weight: 500;
+        font-family: inherit;
+        font-size: 12px;
+        padding: 2px 0;
+        border-color: transparent;
+        background: transparent;
+        color: var(--text-3);
+      }
+      button.ghost.danger-quiet:hover {
+        border-color: transparent;
+        background: transparent;
+        color: var(--red);
+      }
 
       /* Feedback type toggle (Settings › Suite › Send feedback) — a ghost
          button that also carries a selected state. */
@@ -1145,8 +1161,9 @@
             <input type="email" id="feedbackEmail" placeholder="davetriska02@gmail.com" maxlength="120" />
             <span class="field-help">
               Where the <strong>Send feedback</strong> composer below sends email. Also used by the Monitoring panel's
-              "Report a possible missing brand" link. Leave blank to use the default
-              (<code style="color: var(--text-3)">davetriska02@gmail.com</code>).
+              "Report a possible missing brand" link. Leave blank to use the default (<code style="color: var(--text-3)"
+                >davetriska02@gmail.com</code
+              >).
             </span>
           </div>
 
@@ -1157,7 +1174,12 @@
                it follows the tab rather than being dropped with it. -->
           <div class="field">
             <label class="field-label">Send feedback</label>
-            <div class="fb-types" role="group" aria-label="Feedback type" style="display: flex; gap: 6px; margin-bottom: 8px">
+            <div
+              class="fb-types"
+              role="group"
+              aria-label="Feedback type"
+              style="display: flex; gap: 6px; margin-bottom: 8px"
+            >
               <button type="button" class="ghost fb-type-btn active" data-fb-type="Feedback">Feedback</button>
               <button type="button" class="ghost fb-type-btn" data-fb-type="Feature request">Feature request</button>
               <button type="button" class="ghost fb-type-btn" data-fb-type="Bug report">Bug report</button>
@@ -2287,12 +2309,9 @@
         <section class="opt-section" id="sect-allocation-groups">
           <h1>Allocation groups <span class="module-badge">share-out presets</span></h1>
           <p class="section-desc">
-            Named groups of <strong>people</strong> the allocation canvases split work onto &mdash; morning triage,
-            afternoon triage, the duty pair. These are not Medicus team inboxes. Assigning a pile
-            <em>to</em> an inbox is the shared list people cherry-pick from; a group here is the people the pile is
-            split <em>onto</em>, one request each. Day-to-day you can also encircle or drag people on the canvas and
-            save. Optional days and times only control when the chip appears for picking (Europe/London). Last-used
-            group is this computer only; the named groups can be published with the practice profile.
+            Groups are the people a pile of work is shared out onto: Morning triage, Afternoon triage, the duty pair.
+            They are not Medicus team inboxes. Days and times only decide when a group is offered; groups can be shared
+            with the practice, and the last-used group is remembered on this computer only.
           </p>
           <div id="agList" style="display: flex; flex-direction: column; gap: 10px"></div>
           <div style="margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
@@ -2333,9 +2352,7 @@
           </div>
 
           <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 16px">
-            <button class="ghost" id="kboExportLive" style="font-size: 11px; padding: 5px 12px">
-              Save backup
-            </button>
+            <button class="ghost" id="kboExportLive" style="font-size: 11px; padding: 5px 12px">Save backup</button>
             <button class="ghost" id="kboImportFile" style="font-size: 11px; padding: 5px 12px">Import JSON</button>
             <button class="primary" id="kboShare" style="font-size: 11px; padding: 5px 14px">
               Share with practice
@@ -2957,11 +2974,20 @@
                   Contribute cleanup choices
                 </div>
                 <p class="field-help" style="margin: 0 0 8px">
-                  Share this machine's own "Clean up code" tallies with the practice pool automatically, without
-                  going through the full publish flow above. Only Cleanup Code Preferences data is ever written
-                  this way — nothing else this machine has configured is ever published.
+                  Share this machine's own "Clean up code" tallies with the practice pool automatically, without going
+                  through the full publish flow above. Only Cleanup Code Preferences data is ever written this way —
+                  nothing else this machine has configured is ever published.
                 </p>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 11px; cursor: pointer; margin-bottom: 8px">
+                <label
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    font-size: 11px;
+                    cursor: pointer;
+                    margin-bottom: 8px;
+                  "
+                >
                   <input type="checkbox" id="pdcContribEnabled" style="width: 14px; height: 14px; cursor: pointer" />
                   <span>Contribute this machine's cleanup choices to the practice automatically</span>
                 </label>
@@ -3196,7 +3222,13 @@
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="allocationGroups">Export</button>
                   <button class="ghost" data-mod-import="allocationGroups">Import</button>
-                  <input type="file" class="mod-file-input" data-mod="allocationGroups" accept=".json" style="display: none" />
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="allocationGroups"
+                    accept=".json"
+                    style="display: none"
+                  />
                 </div>
               </div>
               <div class="module-export-card">

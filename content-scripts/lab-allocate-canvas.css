@@ -2,6 +2,37 @@
    #ms-lac-overlay, #ms-wac-overlay and #ms-rxac-overlay carry their own
    token block (panel.css :root is not available on Medicus pages) — values
    mirror the canon light column in .claude/skills/ui-design/TOKENS.md. */
+#ms-qac-launch-wrap {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 2147482990;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#ms-qac-inbox-n {
+  padding: 6px 12px;
+  font:
+    650 13px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #0f172a;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+}
+
+#ms-qac-launch-wrap #ms-qac-launch {
+  position: static;
+  top: auto;
+  right: auto;
+  z-index: auto;
+}
+
 #ms-lac-launch,
 #ms-wac-launch,
 #ms-rxac-launch,
@@ -85,6 +116,10 @@
   --text-5: #5f6f85;
   --red-dim: rgba(220, 38, 38, 0.08);
   --red-line: rgba(220, 38, 38, 0.3);
+  --chip-on-bg: #eff4fd;
+  --chip-on-text: #1e3a5f;
+  --chip-on-border: #2563eb;
+  --ms-lac-footer-space: 128px;
   position: fixed;
   inset: 0;
   z-index: 2147483000;
@@ -227,6 +262,7 @@
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
+  overflow: auto;
 }
 
 .ms-lac-board {
@@ -1186,7 +1222,7 @@
 #ms-rxac-overlay .ms-rxac-folders {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
   min-height: 0;
   overflow: auto;
@@ -1233,9 +1269,8 @@
 
 #ms-rxac-overlay .ms-rxac-rail .ms-lac-add-row {
   flex: 0 0 auto;
-  margin-top: auto;
-  position: sticky;
-  bottom: 0;
+  margin-top: 8px;
+  position: static;
   padding-top: 8px;
   background: var(--bg-deep);
 }
@@ -1244,7 +1279,8 @@
   display: grid;
   grid-template-columns: minmax(148px, 200px) minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
-  align-items: start;
+  align-items: stretch;
+  min-height: 0;
 }
 
 #ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folder-inbox {
@@ -1258,10 +1294,13 @@
   grid-row: 1 / 3;
   grid-column: 2;
   min-height: 0;
+  overflow: auto;
 }
 
 #ms-rxac-overlay .ms-rxac-board-clear > .ms-lac-add-row {
+  grid-row: 3;
   grid-column: 1 / -1;
+  position: static;
 }
 
 #ms-rxac-overlay .ms-rxac-folders .ms-rxac-folder {
@@ -1421,6 +1460,7 @@
   row-gap: 2px;
   padding: 8px 10px 6px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 #ms-rxac-overlay .ms-rxac-folder-head:focus-visible {
@@ -1594,9 +1634,7 @@
   cursor: not-allowed;
 }
 
-
 /* qac reuses rx folder board */
-
 
 #ms-qac-overlay .ms-lac-field {
   display: flex;
@@ -1604,12 +1642,10 @@
   align-items: stretch;
 }
 
-
 #ms-qac-overlay .ms-lac-chip {
   flex: 1 1 auto;
   min-width: 0;
 }
-
 
 #ms-qac-overlay button.ms-lac-field-expand {
   flex: 0 0 auto;
@@ -1625,23 +1661,19 @@
   font-weight: 650;
 }
 
-
 #ms-qac-overlay button.ms-lac-field-expand:hover,
 #ms-qac-overlay button.ms-lac-field-expand:focus-visible {
   background: var(--accent-dim);
 }
 
-
 #ms-qac-overlay .ms-lac-chip-drawer {
   flex: 1 1 100%;
 }
-
 
 #ms-qac-overlay .ms-lac-board {
   flex-direction: column;
   gap: 10px;
 }
-
 
 #ms-qac-overlay .ms-lac-split {
   display: flex;
@@ -1655,7 +1687,6 @@
   pointer-events: auto;
 }
 
-
 #ms-qac-overlay .ms-rxac-split-row {
   display: flex;
   flex-wrap: wrap;
@@ -1663,12 +1694,10 @@
   gap: 6px 10px;
 }
 
-
 #ms-qac-overlay .ms-lac-split .ms-lac-confirm-btn,
 #ms-qac-overlay .ms-lac-split .ms-lac-ghost {
   width: auto;
 }
-
 
 #ms-qac-overlay .ms-lac-split-summary {
   font-family: var(--sans);
@@ -1677,7 +1706,6 @@
   flex: 1 1 auto;
   margin-left: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-split-go,
 #ms-qac-overlay .ms-rxac-action {
@@ -1690,13 +1718,11 @@
   width: auto;
 }
 
-
 #ms-qac-overlay .ms-rxac-split-go {
   margin-left: auto;
   padding: 10px 22px;
   font-size: 14px;
 }
-
 
 #ms-qac-overlay .ms-rxac-dests {
   font-size: 12px;
@@ -1704,7 +1730,6 @@
   color: var(--text-2);
   line-height: 1.35;
 }
-
 
 #ms-qac-overlay #ms-rxac-add-team {
   min-width: 180px;
@@ -1718,12 +1743,10 @@
   font-size: 12px;
 }
 
-
 #ms-qac-overlay .ms-rxac-split-proposing {
   border-color: var(--accent-line);
   background: var(--accent-dim);
 }
-
 
 #ms-qac-overlay .ms-rxac-proposal {
   padding: 8px 10px;
@@ -1735,11 +1758,9 @@
   line-height: 1.35;
 }
 
-
 #ms-qac-overlay .ms-rxac-proposal strong {
   font-weight: 650;
 }
-
 
 #ms-qac-overlay .ms-rxac-drag-hint {
   display: block;
@@ -1749,12 +1770,10 @@
   color: var(--text-1);
 }
 
-
 #ms-qac-overlay #ms-rxac-add-team:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-
 
 #ms-qac-overlay #ms-rxac-day {
   padding: 3px 6px;
@@ -1766,12 +1785,10 @@
   background: var(--bg-deep);
 }
 
-
 #ms-qac-overlay #ms-rxac-day:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-
 
 #ms-qac-overlay .ms-lac-primary {
   background: var(--accent);
@@ -1779,25 +1796,21 @@
   border-color: var(--accent);
 }
 
-
 #ms-qac-overlay .ms-lac-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
   filter: none;
 }
 
-
 #ms-qac-overlay .ms-lac-primary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-
 #ms-qac-overlay .ms-lac-header-note {
   white-space: normal;
   color: var(--text-3);
 }
-
 
 #ms-qac-overlay .ms-lac-pool-eyebrow {
   text-transform: none;
@@ -1807,17 +1820,15 @@
   color: var(--text-2);
 }
 
-
 #ms-qac-overlay .ms-rxac-folders {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 8px;
   min-height: 0;
   overflow: auto;
   align-content: start;
 }
-
 
 #ms-qac-overlay .ms-rxac-board {
   flex: 1 1 auto;
@@ -1826,19 +1837,16 @@
   gap: 12px;
 }
 
-
 #ms-qac-overlay .ms-rxac-main {
   flex: 1 1 64%;
   min-width: 0;
   display: flex;
 }
 
-
 #ms-qac-overlay .ms-rxac-main .ms-rxac-folder {
   flex: 1 1 auto;
   min-height: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-rail {
   flex: 0 0 260px;
@@ -1849,37 +1857,32 @@
   overflow: auto;
 }
 
-
 #ms-qac-overlay .ms-rxac-rail .ms-rxac-folder {
   min-height: 0;
   max-height: 220px;
   flex: 0 0 auto;
 }
 
-
 #ms-qac-overlay .ms-rxac-rail .ms-rxac-folder-body {
   min-height: 0;
   max-height: 140px;
 }
 
-
 #ms-qac-overlay .ms-rxac-rail .ms-lac-add-row {
   flex: 0 0 auto;
-  margin-top: auto;
-  position: sticky;
-  bottom: 0;
+  margin-top: 8px;
+  position: static;
   padding-top: 8px;
   background: var(--bg-deep);
 }
-
 
 #ms-qac-overlay .ms-rxac-board-clear {
   display: grid;
   grid-template-columns: minmax(148px, 200px) minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
-  align-items: start;
+  align-items: stretch;
+  min-height: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-board-clear > .ms-rxac-folder-inbox {
   grid-row: 1;
@@ -1888,29 +1891,27 @@
   align-self: start;
 }
 
-
 #ms-qac-overlay .ms-rxac-board-clear > .ms-rxac-folders {
   grid-row: 1 / 3;
   grid-column: 2;
   min-height: 0;
+  overflow: auto;
 }
-
 
 #ms-qac-overlay .ms-rxac-board-clear > .ms-lac-add-row {
+  grid-row: 3;
   grid-column: 1 / -1;
+  position: static;
 }
-
 
 #ms-qac-overlay .ms-rxac-folders .ms-rxac-folder {
   min-height: 0;
 }
 
-
 #ms-qac-overlay .ms-rxac-folders .ms-rxac-folder-body {
   min-height: 44px;
   max-height: 140px;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder {
   display: flex;
@@ -1927,19 +1928,16 @@
     background-color var(--fast) var(--ease);
 }
 
-
 #ms-qac-overlay .ms-rxac-folder:hover {
   border-color: var(--border-hi);
   box-shadow: var(--shadow-2);
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-inbox {
   background: var(--bg-mid);
   border-style: dashed;
   border-color: var(--border-hi);
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear {
   background: var(--green-dim);
@@ -1948,22 +1946,18 @@
   box-shadow: none;
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear:hover {
   border-color: var(--green-line);
   box-shadow: none;
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-name {
   color: var(--text-2);
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-count {
   color: var(--green);
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-meta,
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-meta-text {
@@ -1973,27 +1967,22 @@
   font-variant-numeric: tabular-nums;
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-inbox.ms-rxac-folder-clear .ms-rxac-folder-body {
   min-height: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-away {
   background: var(--amber-dim);
   border-color: var(--amber-line);
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-away:hover {
   border-color: var(--amber-line);
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-away .ms-rxac-folder-name {
   color: var(--text-2);
 }
-
 
 #ms-qac-overlay .ms-rxac-share {
   grid-column: 1 / -1;
@@ -2018,12 +2007,10 @@
     border-color var(--fast) var(--ease);
 }
 
-
 #ms-qac-overlay .ms-rxac-share-quiet {
   color: var(--text-3);
   background: transparent;
 }
-
 
 #ms-qac-overlay .ms-rxac-share:hover:not(:disabled),
 #ms-qac-overlay .ms-rxac-share-quiet:hover:not(:disabled) {
@@ -2031,7 +2018,6 @@
   color: var(--text-2);
   background: var(--accent-dim);
 }
-
 
 #ms-qac-overlay .ms-rxac-share:focus-visible {
   outline: 2px solid var(--accent);
@@ -2041,13 +2027,11 @@
   background: var(--accent-dim);
 }
 
-
 #ms-qac-overlay .ms-rxac-share-away:not(:disabled) {
   color: var(--amber);
   border-color: var(--amber-line);
   background: var(--amber-dim);
 }
-
 
 #ms-qac-overlay .ms-rxac-share-away:hover:not(:disabled),
 #ms-qac-overlay .ms-rxac-share-away:focus-visible {
@@ -2055,7 +2039,6 @@
   color: var(--amber);
   background: var(--amber-dim);
 }
-
 
 #ms-qac-overlay .ms-rxac-share-off,
 #ms-qac-overlay .ms-rxac-share:disabled {
@@ -2066,11 +2049,9 @@
   background: transparent;
 }
 
-
 #ms-qac-overlay.ms-lac-lifting .ms-rxac-share {
   pointer-events: none;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-head {
   display: grid;
@@ -2080,14 +2061,13 @@
   row-gap: 2px;
   padding: 8px 10px 6px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-head:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-title {
   display: flex;
@@ -2097,7 +2077,6 @@
   min-width: 0;
   overflow: hidden;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-name {
   flex: 1 1 0;
@@ -2110,7 +2089,6 @@
   white-space: nowrap;
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-proposed {
   border-color: var(--accent-line);
   box-shadow:
@@ -2118,11 +2096,9 @@
     var(--shadow-1);
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-proposed:hover {
   border-color: var(--accent-line);
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-count {
   font-family: var(--mono);
@@ -2133,7 +2109,6 @@
   line-height: 1.3;
 }
 
-
 #ms-qac-overlay .ms-rxac-count-proposed {
   display: flex;
   flex-direction: column;
@@ -2141,7 +2116,6 @@
   gap: 0;
   line-height: 1;
 }
-
 
 #ms-qac-overlay .ms-rxac-count-pop {
   font-family: var(--mono);
@@ -2152,7 +2126,6 @@
   line-height: 1;
 }
 
-
 #ms-qac-overlay .ms-rxac-count-label {
   font-family: var(--sans);
   font-size: 10px;
@@ -2160,14 +2133,12 @@
   color: var(--accent);
 }
 
-
 #ms-qac-overlay .ms-rxac-count-sit {
   font-family: var(--mono);
   font-size: 10px;
   color: var(--text-4);
   margin-top: 2px;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-meta {
   grid-column: 1 / -1;
@@ -2179,11 +2150,9 @@
   color: var(--text-4);
 }
 
-
 #ms-qac-overlay .ms-rxac-folder-meta-text {
   min-width: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-folder-body {
   flex: 1 1 auto;
@@ -2192,6 +2161,92 @@
   padding: 2px 0 6px;
 }
 
+#ms-qac-overlay .ms-lac-body,
+#ms-rxac-overlay .ms-lac-body,
+#ms-lac-overlay .ms-lac-body {
+  padding-bottom: var(--ms-lac-footer-space, 128px);
+}
+
+/* After-split dest cards must size to their contents. max-height: 100% plus
+   min-height: 0 on the dest grid crushed the folder-head into the patient list.
+   The dest grid itself must also grow with those cards (body scrolls) — a
+   128px footer pad inside a 1fr row left a ~0px content box at 720px. */
+#ms-qac-overlay .ms-rxac-board-clear,
+#ms-rxac-overlay .ms-rxac-board-clear {
+  grid-template-rows: auto auto auto;
+  height: auto;
+  min-height: min-content;
+  align-items: start;
+  flex: 1 0 auto;
+}
+
+#ms-qac-overlay .ms-rxac-board-clear > .ms-rxac-folders,
+#ms-rxac-overlay .ms-rxac-board-clear > .ms-rxac-folders {
+  align-items: start;
+  align-content: start;
+  grid-auto-rows: auto;
+  grid-row: 1 / 3;
+  min-height: min-content;
+  height: auto;
+  overflow: visible;
+  padding-bottom: 8px;
+}
+
+#ms-qac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder,
+#ms-rxac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder {
+  height: auto;
+  max-height: none;
+  min-height: unset;
+  overflow: hidden;
+  align-self: start;
+}
+
+#ms-qac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder-body,
+#ms-rxac-overlay .ms-rxac-board-clear .ms-rxac-folders .ms-rxac-folder-body {
+  flex: 0 1 auto;
+  min-height: 44px;
+  max-height: 440px;
+  overflow: auto;
+}
+
+#ms-qac-overlay .ms-rxac-folders .ms-lac-tile,
+#ms-rxac-overlay .ms-rxac-folders .ms-lac-tile {
+  flex-shrink: 0;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-body,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-body {
+  display: none;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board,
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board-clear,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-board-clear {
+  display: none;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-review-open,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-rxac-review-open {
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
+}
+
+#ms-qac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-writelist,
+#ms-rxac-overlay .ms-lac-panel.ms-rxac-reviewing .ms-lac-writelist {
+  max-height: none;
+}
+
+#ms-qac-overlay .ms-rxac-folders,
+#ms-rxac-overlay .ms-rxac-folders {
+  padding-bottom: var(--ms-lac-footer-space, 128px);
+}
+
+#ms-qac-overlay .ms-rxac-rail,
+#ms-rxac-overlay .ms-rxac-rail {
+  padding-bottom: 8px;
+}
 
 #ms-qac-overlay .ms-lac-confirmbar {
   flex: 0 0 auto;
@@ -2200,8 +2255,9 @@
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-1);
   padding: 10px 14px;
+  position: relative;
+  z-index: 4;
 }
-
 
 #ms-qac-overlay .ms-rxac-review-dock,
 #ms-qac-overlay .ms-rxac-review-open {
@@ -2215,20 +2271,18 @@
   box-shadow: var(--shadow-2);
 }
 
-
 #ms-qac-overlay .ms-rxac-review-open {
   align-items: start;
-  max-height: 36vh;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   background: var(--bg-elev);
   border-color: var(--amber-line);
 }
 
-
 #ms-qac-overlay .ms-rxac-review-copy {
   min-width: 0;
 }
-
 
 #ms-qac-overlay .ms-rxac-review-title {
   font-size: 13px;
@@ -2236,7 +2290,6 @@
   color: var(--text-1);
   margin: 0 0 4px;
 }
-
 
 #ms-qac-overlay .ms-rxac-review-go {
   font-size: 16px;
@@ -2247,11 +2300,9 @@
   white-space: nowrap;
 }
 
-
 #ms-qac-overlay .ms-rxac-review-open .ms-lac-writelist {
-  max-height: 22vh;
+  max-height: none;
 }
-
 
 #ms-qac-overlay .ms-rxac-review-dock .ms-lac-confirmbar-actions,
 #ms-qac-overlay .ms-rxac-review-open .ms-lac-confirmbar-actions {
@@ -2260,74 +2311,119 @@
   align-items: stretch;
 }
 
-
 #ms-qac-overlay .ms-lac-tile-staged {
   background: var(--accent-dim);
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-
 #ms-qac-overlay .ms-lac-tile-staged .ms-lac-tile-name {
   color: var(--text-1);
 }
-.ms-ags-strip {
+#ms-lac-overlay .ms-ags-strip,
+#ms-rxac-overlay .ms-ags-strip,
+#ms-qac-overlay .ms-ags-strip {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin: 0 0 8px;
+  margin: 6px 0;
 }
-.ms-ags-label {
-  font: 600 11px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--text-3, #64748b);
+#ms-lac-overlay .ms-ags-label,
+#ms-rxac-overlay .ms-ags-label,
+#ms-qac-overlay .ms-ags-label {
+  font: 600 12px/1.2 var(--sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  color: var(--text-2, #1e3a5f);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.ms-ags-chips {
+#ms-lac-overlay .ms-ags-chips,
+#ms-rxac-overlay .ms-ags-chips,
+#ms-qac-overlay .ms-ags-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
 }
-.ms-ags-chip,
-.ms-ags-well {
+#ms-lac-overlay .ms-ags-chip,
+#ms-lac-overlay .ms-ags-well,
+#ms-rxac-overlay .ms-ags-chip,
+#ms-rxac-overlay .ms-ags-well,
+#ms-qac-overlay .ms-ags-chip,
+#ms-qac-overlay .ms-ags-well {
   padding: 4px 10px;
-  font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font: 600 12px/1.3 var(--sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   color: var(--text-1, #0f172a);
   background: var(--bg-elev, #fff);
   border: 1px solid var(--border, #cbd5e1);
   border-radius: 999px;
   cursor: pointer;
 }
-.ms-ags-chip-on,
-.ms-ags-well-on {
-  border-color: var(--accent, #2563eb);
-  background: #eff4fd;
-  color: #1e3a5f;
+#ms-lac-overlay .ms-ags-chip-on,
+#ms-lac-overlay .ms-ags-well-on,
+#ms-rxac-overlay .ms-ags-chip-on,
+#ms-rxac-overlay .ms-ags-well-on,
+#ms-qac-overlay .ms-ags-chip-on,
+#ms-qac-overlay .ms-ags-well-on {
+  border-color: var(--chip-on-border, var(--accent, #2563eb));
+  background: var(--chip-on-bg, #eff4fd);
+  color: var(--chip-on-text, #1e3a5f);
 }
-.ms-ags-well {
+#ms-lac-overlay .ms-ags-well,
+#ms-rxac-overlay .ms-ags-well,
+#ms-qac-overlay .ms-ags-well {
   border-style: dashed;
 }
-.ms-ags-to,
-.ms-ags-skip {
-  font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--text-2, #334155);
+#ms-lac-overlay .ms-ags-to,
+#ms-lac-overlay .ms-ags-skip,
+#ms-lac-overlay .ms-ags-hint,
+#ms-rxac-overlay .ms-ags-to,
+#ms-rxac-overlay .ms-ags-skip,
+#ms-rxac-overlay .ms-ags-hint,
+#ms-qac-overlay .ms-ags-to,
+#ms-qac-overlay .ms-ags-skip,
+#ms-qac-overlay .ms-ags-hint {
+  font: 12px/1.4 var(--sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  color: var(--text-2, #1e3a5f);
 }
-.ms-ags-skip {
+#ms-lac-overlay .ms-ags-skip,
+#ms-rxac-overlay .ms-ags-skip,
+#ms-qac-overlay .ms-ags-skip {
   color: var(--amber);
 }
-.ms-ags-actions {
+#ms-lac-overlay .ms-ags-actions,
+#ms-rxac-overlay .ms-ags-actions,
+#ms-qac-overlay .ms-ags-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
-.ms-ags-field-on {
-  outline: 2px solid #2563eb;
+#ms-lac-overlay .ms-ags-save-row,
+#ms-rxac-overlay .ms-ags-save-row,
+#ms-qac-overlay .ms-ags-save-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font: 12px/1.4 var(--sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+}
+#ms-lac-overlay .ms-ags-save-row input,
+#ms-rxac-overlay .ms-ags-save-row input,
+#ms-qac-overlay .ms-ags-save-row input {
+  min-width: 160px;
+  font: 12px/1.4 inherit;
+  padding: 4px 8px;
+}
+#ms-lac-overlay .ms-ags-field-on,
+#ms-rxac-overlay .ms-ags-field-on,
+#ms-qac-overlay .ms-ags-field-on {
+  outline: 2px solid var(--accent, #2563eb);
   outline-offset: 2px;
 }
-.ms-ags-marquee {
+#ms-lac-overlay .ms-ags-marquee,
+#ms-rxac-overlay .ms-ags-marquee,
+#ms-qac-overlay .ms-ags-marquee {
   position: absolute;
-  border: 1px dashed #2563eb;
+  border: 1px dashed var(--accent, #2563eb);
   background: rgba(37, 99, 235, 0.08);
   pointer-events: none;
   z-index: 5;

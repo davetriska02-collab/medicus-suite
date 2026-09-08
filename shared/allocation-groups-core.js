@@ -28,7 +28,9 @@
   }
 
   function clip(s, n) {
-    var t = String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+    var t = String(s == null ? '' : s)
+      .replace(/\s+/g, ' ')
+      .trim();
     if (t.length <= n) return t;
     return t.slice(0, n).trim();
   }
@@ -126,7 +128,6 @@
     var end = parseHm(raw.end);
     if (start == null) return ['schedule start must be HH:MM'];
     if (end == null) return ['schedule end must be HH:MM'];
-    if (end <= start) return ['schedule end must be after start (no overnight windows)'];
     return [];
   }
 
@@ -184,12 +185,12 @@
     return { memberIds: ids, memberNames: names };
   }
 
-  function presetErrors(raw) {
+  function presetErrors(raw, opts) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return ['group must be an object'];
     var name = clip(raw.name, MAX_NAME);
     if (!name) return ['group needs a name'];
     var mem = memberList(raw);
-    if (!mem.memberIds.length) return ['group needs at least one person'];
+    if (!mem.memberIds.length && !(opts && opts.allowEmpty)) return ['group needs at least one person'];
     if (mem.memberIds.length > MAX_MEMBERS) return ['a group can have at most ' + MAX_MEMBERS + ' people'];
     if (raw.id != null && raw.id !== '' && !isUuid(raw.id)) return ['group id must be a UUID'];
     if (raw.schedule != null) {
@@ -199,11 +200,12 @@
     return [];
   }
 
-  function normalisePreset(raw) {
-    if (presetErrors(raw).length) return null;
+  function normalisePreset(raw, opts) {
+    if (presetErrors(raw, opts).length) return null;
     var mem = memberList(raw);
     var id = isUuid(raw.id) ? String(raw.id).toLowerCase() : generateGroupId();
-    var updatedAt = raw.updatedAt && !isNaN(new Date(raw.updatedAt).getTime()) ? new Date(raw.updatedAt).toISOString() : null;
+    var updatedAt =
+      raw.updatedAt && !isNaN(new Date(raw.updatedAt).getTime()) ? new Date(raw.updatedAt).toISOString() : null;
     return {
       id: id,
       name: clip(raw.name, MAX_NAME),
@@ -218,7 +220,7 @@
     var out = [];
     var seen = {};
     (Array.isArray(raw) ? raw : []).forEach(function (item) {
-      var p = normalisePreset(item);
+      var p = normalisePreset(item, { allowEmpty: true });
       if (!p || seen[p.id]) return;
       seen[p.id] = true;
       out.push(p);
@@ -231,11 +233,26 @@
     if (!p) return false;
     if (!p.schedule) return true;
     var clock = londonClock(now);
-    if (p.schedule.days.indexOf(clock.day) === -1) return false;
     var start = parseHm(p.schedule.start);
     var end = parseHm(p.schedule.end);
     if (start == null || end == null) return false;
-    return clock.minutes >= start && clock.minutes < end;
+    return clockInScheduleWindow(clock, p.schedule.days, start, end);
+  }
+
+  function previousDay(day) {
+    var i = DAY_IDS.indexOf(day);
+    if (i <= 0) return DAY_IDS[DAY_IDS.length - 1];
+    return DAY_IDS[i - 1];
+  }
+
+  function clockInScheduleWindow(clock, days, start, end) {
+    var listed = Array.isArray(days) ? days : [];
+    if (end > start) {
+      return listed.indexOf(clock.day) !== -1 && clock.minutes >= start && clock.minutes < end;
+    }
+    if (clock.minutes >= start) return listed.indexOf(clock.day) !== -1;
+    if (clock.minutes < end) return listed.indexOf(previousDay(clock.day)) !== -1;
+    return false;
   }
 
   function findPreset(presets, id) {
@@ -287,9 +304,7 @@
       return {
         dests: [],
         skipped: skipped,
-        reason: skipped.length
-          ? 'Everyone in that group is away.'
-          : 'No people in that group.',
+        reason: skipped.length ? 'Everyone in that group is away.' : 'No people in that group.',
       };
     }
     return { dests: dests, skipped: skipped };
@@ -416,13 +431,14 @@
     return out;
   }
 
-  function upsertPreset(list, raw) {
+  function upsertPreset(list, raw, opts) {
     var incoming = normalisePreset(
       Object.assign({}, raw || {}, {
         updatedAt: (raw && raw.updatedAt) || new Date().toISOString(),
-      })
+      }),
+      opts
     );
-    if (!incoming) return { ok: false, presets: normalisePresets(list), errors: presetErrors(raw) };
+    if (!incoming) return { ok: false, presets: normalisePresets(list), errors: presetErrors(raw, opts) };
     var presets = normalisePresets(list);
     var hit = -1;
     for (var i = 0; i < presets.length; i++) {
@@ -442,6 +458,62 @@
       return p.id !== uid;
     });
     return { ok: true, presets: presets };
+  }
+
+  function stampMs(iso) {
+    var t = iso ? Date.parse(iso) : NaN;
+    return Number.isFinite(t) ? t : 0;
+  }
+
+  function mergePresetsById(local, incoming) {
+    var loc = normalisePresets(local);
+    var inc = normalisePresets(incoming);
+    var byId = {};
+    loc.forEach(function (p) {
+      byId[p.id] = p;
+    });
+    inc.forEach(function (p) {
+      if (!byId[p.id]) {
+        byId[p.id] = p;
+        return;
+      }
+      if (stampMs(p.updatedAt) > stampMs(byId[p.id].updatedAt)) byId[p.id] = p;
+    });
+    var out = [];
+    loc.forEach(function (p) {
+      if (byId[p.id]) {
+        out.push(byId[p.id]);
+        delete byId[p.id];
+      }
+    });
+    inc.forEach(function (p) {
+      if (byId[p.id]) {
+        out.push(byId[p.id]);
+        delete byId[p.id];
+      }
+    });
+    return out;
+  }
+
+  var WEEKDAYS = {
+    mon: 'Monday',
+    tue: 'Tuesday',
+    wed: 'Wednesday',
+    thu: 'Thursday',
+    fri: 'Friday',
+    sat: 'Saturday',
+    sun: 'Sunday',
+  };
+
+  function scheduleAutoPickPhrase(preset, now, inTodayLabel) {
+    var p = preset && Array.isArray(preset.memberIds) ? preset : normalisePreset(preset, { allowEmpty: true });
+    if (!p) return '';
+    var clock = londonClock(now);
+    var time = formatHm(clock.minutes);
+    var day = WEEKDAYS[clock.day] || clock.day;
+    var n = (p.memberIds || []).length;
+    var today = inTodayLabel || 'Working today';
+    return 'Using ' + p.name + ' (' + n + ') because it is ' + time + ' on a ' + day + '. Or pick ' + today + '.';
   }
 
   var api = {
@@ -474,6 +546,8 @@
     normaliseConfig: normaliseConfig,
     upsertPreset: upsertPreset,
     removePreset: removePreset,
+    mergePresetsById: mergePresetsById,
+    scheduleAutoPickPhrase: scheduleAutoPickPhrase,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

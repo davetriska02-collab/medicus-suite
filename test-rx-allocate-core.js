@@ -77,10 +77,7 @@ console.log('--- parseRxQueueRoute ---');
     C.parseRxQueueRoute('/e38a9f/tasks/review_inbound_document_task/task-list') === null,
     'document queue stays on the workflow canvas'
   );
-  check(
-    C.parseRxQueueRoute('/e38a9f/tasks/eps-prescription-order-item/task-list') === null,
-    'EPS queue is excluded'
-  );
+  check(C.parseRxQueueRoute('/e38a9f/tasks/eps-prescription-order-item/task-list') === null, 'EPS queue is excluded');
   check(C.isNonRoutineRxQueueSlug('prescription_request_task_non_routine') === true, 'non-routine slug matches');
   check(C.isNonRoutineRxQueueSlug('prescription_request_task_routine') === false, 'routine slug does not match');
   check(
@@ -178,7 +175,9 @@ console.log('\n--- even split among doctors working today ---');
       },
       {
         name: 'Practice Nurse Pat',
-        schedule: [{ summary: { status: { isCancelled: false }, site: { name: 'Witley' }, service: { name: 'Nurse' } } }],
+        schedule: [
+          { summary: { status: { isCancelled: false }, site: { name: 'Witley' }, service: { name: 'Nurse' } } },
+        ],
       },
     ],
   });
@@ -196,7 +195,10 @@ console.log('\n--- even split among doctors working today ---');
   check(plan.total === 5, 'plan total is 5');
   check(plan.doctors === 2, 'plan doctors is 2');
   check(
-    plan.shares.map((s) => s.count).sort().join(',') === '2,3',
+    plan.shares
+      .map((s) => s.count)
+      .sort()
+      .join(',') === '2,3',
     'counts are 3 and 2 (got ' + plan.shares.map((s) => s.count).join(',') + ')'
   );
   check(
@@ -232,7 +234,10 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   const pool = [rxRow(1, { namedGp: 'Dr A' }), rxRow(2, { namedGp: 'Dr A' })];
   const sitting = rxRow(9, { assignedTo: 'Dr A' });
   const plan = C.planEvenSplit(pool.concat([sitting]), dests);
-  check(plan.shares.every((s) => s.count === 1), 'two pool tiles split 1+1, ignoring named GP');
+  check(
+    plan.shares.every((s) => s.count === 1),
+    'two pool tiles split 1+1, ignoring named GP'
+  );
   check(
     !plan.shares.some((s) => (s.tileIds || []).indexOf(sitting.id) !== -1),
     'already-sitting work is not in the even-split plan'
@@ -240,7 +245,10 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   check(plan.total === 2, 'sitting rows are not counted in the split total');
   const sharePlan = C.planEvenSplit([sitting], dests, { anyTile: true });
   check(sharePlan.ok === true && sharePlan.total === 1, 'a doctor folder can be shared out among those in today');
-  check((sharePlan.shares || []).every((s) => (s.tileIds || []).indexOf(sitting.id) !== -1 || s.count === 0 || s.tileIds), 'share-out uses the sitting tiles');
+  check(
+    (sharePlan.shares || []).every((s) => (s.tileIds || []).indexOf(sitting.id) !== -1 || s.count === 0 || s.tileIds),
+    'share-out uses the sitting tiles'
+  );
   const holidayTiles = [
     rxRow(21, { assignedTo: 'Dr Away' }),
     rxRow(22, { assignedTo: 'Dr Away' }),
@@ -249,7 +257,10 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
   const holidayPlan = C.planEvenSplit(holidayTiles, dests, { anyTile: true, dayPhrase: 'today' });
   check(holidayPlan.ok === true && holidayPlan.total === 3, 'a holiday box of three shares out among those in today');
   check(
-    holidayPlan.shares.map((s) => s.count).sort().join(',') === '1,2',
+    holidayPlan.shares
+      .map((s) => s.count)
+      .sort()
+      .join(',') === '1,2',
     'holiday share-out is even (2 and 1)'
   );
   const holidayDraft = C.applyEvenSplit(C.emptyDraft(), holidayPlan);
@@ -271,17 +282,12 @@ console.log('\n--- even split ignores named GP and already-sitting work ---');
 
   const boxId = '0198ef96-6a17-71e4-8354-78de2b371ef3';
   const inBox = rxRow(6, { assignedTo: 'Dr Jane Cole', assignedId: boxId });
-  const marked = C.markInboxRows(
-    [inBox],
-    '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId
-  );
+  const marked = C.markInboxRows([inBox], '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId);
   check(marked[0] && marked[0].rxInboxPile === true, 'page-inbox rows are stamped as the box to work');
   check(C.isRxUnallocated(marked[0]) === true, 'the twelve in the box are unallocated for the split');
   check(Lab.homeColumnKey(marked[0]) === Lab.POOL, 'inbox rows sit in the unallocated list, not on a GP field');
   check(
-    C.inboxAssigneeId(
-      '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId
-    ) === boxId,
+    C.inboxAssigneeId('?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + boxId) === boxId,
     'inboxAssigneeId reads masterAssignee from the page query'
   );
   const untouched = C.markInboxRows([sittingGp], '');
@@ -334,7 +340,10 @@ console.log('\n--- top-up empty boxes and distribute equally ---');
   );
   const evenish = C.planTopUp(pile, dests, {});
   check(
-    evenish.shares.map((s) => s.count).sort().join(',') === '1,1,1',
+    evenish.shares
+      .map((s) => s.count)
+      .sort()
+      .join(',') === '1,1,1',
     'top-up from empty dests is even'
   );
   const sitting = [
@@ -368,10 +377,10 @@ console.log('\n--- top-up empty boxes and distribute equally ---');
   const teamKey = Lab.teamColumnKey('Duty GP');
   const teamDraft = C.addTeamColumn(C.emptyDraft(), 'Duty GP', uuid(40));
   check(teamDraft.extraColumns.indexOf(teamKey) !== -1, 'addTeamColumn keeps a Medicus team as a destination');
-  const teamPlan = C.planEvenSplit([rxRow(41), rxRow(42)], [
-    { key: teamKey, name: 'Duty GP', staffId: uuid(40) },
-    dests[0],
-  ]);
+  const teamPlan = C.planEvenSplit(
+    [rxRow(41), rxRow(42)],
+    [{ key: teamKey, name: 'Duty GP', staffId: uuid(40) }, dests[0]]
+  );
   check(teamPlan.ok && teamPlan.doctors === 2, 'even split can land on a harvested team');
 
   const Groups = require('./shared/allocation-groups-core.js');
@@ -399,20 +408,12 @@ console.log('\n--- top-up empty boxes and distribute equally ---');
   );
   const gPlan = C.planEvenSplit([rxRow(61), rxRow(62), rxRow(63), rxRow(64)], pinnedGroup);
   check(gPlan.ok && gPlan.doctors === 2 && gPlan.total === 4, 'even split onto a group of two people');
-  const replaced = C.replaceDestColumns(
-    C.ensureWorkingTodayColumns(C.emptyDraft(), dests),
-    pinnedGroup
-  );
+  const replaced = C.replaceDestColumns(C.ensureWorkingTodayColumns(C.emptyDraft(), dests), pinnedGroup);
   check(
-    replaced.extraColumns.length === 2 &&
-      pinnedGroup.every((d) => replaced.extraColumns.indexOf(d.key) !== -1),
+    replaced.extraColumns.length === 2 && pinnedGroup.every((d) => replaced.extraColumns.indexOf(d.key) !== -1),
     'switching dest set replaces leftover In-today columns, it does not union them'
   );
-  const leftoverMove = C.stageMove(
-    C.ensureWorkingTodayColumns(C.emptyDraft(), dests),
-    rxRow(70).id,
-    dests[0].key
-  );
+  const leftoverMove = C.stageMove(C.ensureWorkingTodayColumns(C.emptyDraft(), dests), rxRow(70).id, dests[0].key);
   const cleared = C.replaceDestColumns(leftoverMove, pinnedGroup);
   check(!cleared.moves[rxRow(70).id], 'switching dest set drops staged moves onto leftover In-today dests');
 }
@@ -420,9 +421,7 @@ console.log('\n--- top-up empty boxes and distribute equally ---');
 console.log('\n--- even-split dest staff UUID is what Write uses ---');
 {
   const staffId = uuid(77);
-  const dests = [
-    { key: Lab.clinicianColumnKey('Dr Natalie Azadian'), name: 'Dr Natalie Azadian', staffId: staffId },
-  ];
+  const dests = [{ key: Lab.clinicianColumnKey('Dr Natalie Azadian'), name: 'Dr Natalie Azadian', staffId: staffId }];
   const tiles = [rxRow(1), rxRow(2)];
   const plan = C.planEvenSplit(tiles, dests);
   check(plan.shares[0] && plan.shares[0].staffId === staffId, 'share carries the book staff UUID');
@@ -491,18 +490,23 @@ console.log('\n--- write stays on the lab client ---');
   check(/_confirmWrite/.test(canvas), 'write goes through a named patient → destination confirm');
   check(/Keep planning/.test(canvas), 'confirm defaults the clinician back to planning');
   check(/does not issue, sign, or file the prescription/.test(canvas), 'confirm says the write does not issue the Rx');
-  check(!/\b(Done|Sent|Booked|Submitted|Allocated|Filed|Issued|Signed)\b/.test(canvas), 'canvas copy has no completion verbs');
+  check(
+    !/\b(Done|Sent|Booked|Submitted|Allocated|Filed|Issued|Signed)\b/.test(canvas),
+    'canvas copy has no completion verbs'
+  );
   check(!/Ordered by|who ordered|Who ordered/.test(canvas), 'canvas copy never claims who ordered');
   check(/mergeInboxAndSitting/.test(canvas), 'rows are decorated after the task-list GET');
   check(/Split equally/.test(canvas), 'split equally is a user-initiated proposal');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied when you ask for it');
   check(/applyPileSplit/.test(canvas) && /planTopUp/.test(canvas), 'new unallocated work can top up empty boxes');
+  check(/function applyPileSplit[\s\S]{0,500}planEvenSplit/.test(canvas), 'Split equally binds planEvenSplit');
+  check(/function applyTopUp[\s\S]{0,500}planTopUp/.test(canvas), 'Top up binds planTopUp');
   check(/applyLevel/.test(canvas) && /planLevel/.test(canvas), 'distribute equally levels sitting plus new work');
   check(/unallocatedNotStaged/.test(canvas), 'staged unallocated tiles leave the split pile');
   check(/Top up empty boxes/.test(canvas), 'top-up is a named action');
   check(/Distribute equally/.test(canvas), 'distribute equally is a named action');
   check(!/Re-split equally/.test(canvas), 'proposal page does not offer a redundant re-split');
-  check(/Drag a patient from one doctor onto another/.test(canvas), 'proposal explains drag and drop');
+  check(/Drag a patient from one person onto another/.test(canvas), 'proposal explains drag and drop');
   check(/Review then write/.test(canvas), 'the review control says it starts the write');
   check(/Confirm write to Medicus/.test(canvas), 'the confirm card is the write step');
   check(/data-share-key/.test(canvas), 'each doctor folder can share its box among those in today');
@@ -513,8 +517,12 @@ console.log('\n--- write stays on the lab client ---');
   check(/ms-rxac-split-go/.test(canvas), 'split equally is a primary control');
   check(/ms-rxac-proposal/.test(canvas), 'after split the board names it a proposal');
   check(/ms-rxac-count-pop/.test(canvas), 'proposed numbers on each doctor pop');
-  check(/ms-rxac-review-dock/.test(canvas) && /ms-rxac-review-go/.test(canvas), 'review is a floating dock in the panel');
+  check(
+    /ms-rxac-review-dock/.test(canvas) && /ms-rxac-review-go/.test(canvas),
+    'review is a floating dock in the panel'
+  );
   check(/ms-rxac-review-open/.test(canvas), 'confirm list opens in the review dock, not a scrim');
+  check(/ms-rxac-reviewing/.test(canvas), 'review-open puts a reviewing class on the panel');
   check(/ms-rxac-dests/.test(canvas) && /To:/.test(canvas), 'top-up and distribute name who they go to');
   check(/Add a team from Medicus/.test(canvas), 'Medicus teams can be added as destinations');
   check(
@@ -524,6 +532,7 @@ console.log('\n--- write stays on the lab client ---');
   check(/setData\('text\/plain', 'people:'/.test(canvas), 'people-drag uses a people: payload');
   check(/indexOf\('people:'\) === 0/.test(canvas), 'people: payload is not staged as a task id');
   check(/these prescriptions/.test(canvas), 'Rx confirm names prescriptions, not requests');
+  check(/refusedPatientsPhrase/.test(canvas), 'Rx confirm names refused patients');
   check(/addTeamColumn/.test(canvas), 'adding a team uses addTeamColumn, not a doctor field');
   check(/visibleUnallocatedCount/.test(canvas), 'unallocated count is the visible pile, not sitting work');
   check(/splitDestinations/.test(canvas), 'split dests include in-today doctors plus added teams');
@@ -536,10 +545,14 @@ console.log('\n--- write stays on the lab client ---');
     'loadBoard snapshots the draft at entry so a successful Write cannot restage during re-GET'
   );
   check(/ms-rxac-folder-clear/.test(canvas), 'empty unallocated is greened out');
-  check(/ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas), 'unallocated is the main pane, doctors sit in a rail');
+  check(
+    /ms-rxac-board/.test(canvas) && /ms-rxac-rail/.test(canvas),
+    'unallocated is the main pane, doctors sit in a rail'
+  );
   check(/ms-rxac-board-clear/.test(canvas), 'an empty unallocated pile lays doctors out as a grid');
   check(
-    /function bindPileAction[\s\S]{0,400}?stopPropagation/.test(canvas) && /bindPileAction\('#ms-rxac-split'/.test(canvas),
+    /function bindPileAction[\s\S]{0,400}?stopPropagation/.test(canvas) &&
+      /bindPileAction\('#ms-rxac-split'/.test(canvas),
     'split click is not swallowed by the pool drop target'
   );
   check(
@@ -558,7 +571,10 @@ console.log('\n--- write stays on the lab client ---');
     /evenSplitHtml\(\) \+[\s\S]{0,80}?ms-rxac-folders/.test(canvas),
     'even-split box is outside the unallocated pool drop target'
   );
-  check(/Unallocated is the pile/.test(canvas) && /drag a patient onto a doctor/.test(canvas), 'copy says you can still move requests by hand');
+  check(
+    /Unallocated is the pile/.test(canvas) && /drag a patient onto a doctor/.test(canvas),
+    'copy says you can still move requests by hand'
+  );
   check(/Share this box/.test(canvas), 'header says Share this box splits only that doctor’s requests');
   check(/ms-rxac-split/.test(canvas), 'even-split control has its own id');
   check(/id="ms-rxac-day"/.test(canvas), 'working-day date input is on the canvas');
@@ -599,6 +615,20 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/#ms-rxac-overlay \.ms-rxac-split-go/.test(css), 'split equally is sized as the primary action');
   check(/#ms-rxac-overlay \.ms-rxac-count-pop/.test(css), 'proposed dest counts are a pop number');
   check(/#ms-rxac-overlay \.ms-rxac-review-dock/.test(css), 'review docks inside the panel');
+  check(
+    /#ms-rxac-overlay \.ms-rxac-folders[\s\S]{0,160}minmax\(280px/.test(css),
+    'rx dest-grid cards are at least 280px wide'
+  );
+  check(
+    /#ms-rxac-overlay \.ms-rxac-board-clear \.ms-rxac-folders \.ms-rxac-folder[\s\S]{0,200}max-height:\s*none/.test(
+      css
+    ),
+    'after-split rx dest cards are not height-capped to the board'
+  );
+  check(
+    /#ms-rxac-overlay \.ms-lac-panel\.ms-rxac-reviewing \.ms-lac-body[\s\S]{0,200}display:\s*none/.test(css),
+    'rx review-open hides the board so the proposal list is the page'
+  );
   check(/#ms-rxac-launch/.test(css), 'rx launcher has the same chrome as the lab launcher');
   check(/#ms-rxac-launch:focus-visible/.test(css), 'launcher focus ring is a literal (html-appended)');
   check(!/ms-rxac-overlay/.test(labCanvas), 'lab canvas does not open the rx overlay');
@@ -607,16 +637,22 @@ console.log('\n--- canvas + manifest + css source locks ---');
     /AllocationGroupsCore/.test(canvas) || /destSetStripHtml/.test(canvas) || /ms-ags-in-today/.test(canvas),
     'rx canvas uses allocation groups dest-set strip'
   );
-  check(/destSetStripHtml/.test(canvas) && /ms-ags-in-today/.test(canvas), 'dest-set strip includes In today');
-  check(/id="ms-rxac-split"/.test(canvas) && /bindPileAction\('#ms-rxac-split'/.test(canvas), 'Split equally still uses ms-rxac-split');
+  check(
+    /destSetStripHtml/.test(canvas) && /ms-ags-in-today/.test(canvas),
+    'dest-set strip includes Working today chip id'
+  );
+  check(/inTodayPeople\(\)\.length/.test(canvas), 'Working today count is people on the book, not current dests');
+  check(
+    /id="ms-rxac-split"/.test(canvas) && /bindPileAction\('#ms-rxac-split'/.test(canvas),
+    'Split equally still uses ms-rxac-split'
+  );
   check(/ms-ags-marquee/.test(canvas) && /ms-ags-field-on/.test(canvas), 'people marquee and selected field chrome');
   check(/ms-ags-new-group/.test(canvas), 'New group well is on the dest-set strip');
   check(/Save as group/.test(canvas) && /ms-ags-save/.test(canvas), 'Save as group is on the canvas');
+  check(/saveGroupRowHtml/.test(canvas), 'rx Save as group uses the on-canvas name field');
+  check(!/window\.prompt/.test(canvas), 'rx Save as group does not use window.prompt');
   check(/data-people-key/.test(canvas), 'people-drag starts from clinician field headers, not patient tiles');
-  check(
-    /Named GP[\s\S]{0,80}never auto-placement/.test(canvas),
-    'named GP still never auto-places'
-  );
+  check(/Named GP[\s\S]{0,80}never auto-placement/.test(canvas), 'named GP still never auto-places');
   check(!/assigneeType:\s*['"]team['"]/.test(canvas), 'groups never write assigneeType team');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
@@ -630,9 +666,18 @@ console.log('\n--- canvas + manifest + css source locks ---');
     /fetchRxMergedTaskList/.test(canvas),
     'Write vanish-check re-GETs inbox plus already-sitting work (distribute equally)'
   );
-  check(/if \(!_open\) _route = route/.test(canvas), 'open overlay pins _route so ensureLauncher cannot clobber search');
-  check(/reload Medicus if the grid still shows the old number/.test(canvas), 'after Write the canvas says the open-list count may not drop');
-  check(/cache:\s*['"]no-store['"]/.test(fs.readFileSync(path.join(__dirname, 'shared/lab-allocate-core.js'), 'utf8')), 'queue re-GET is not served from HTTP cache');
+  check(
+    /if \(!_open\) _route = route/.test(canvas),
+    'open overlay pins _route so ensureLauncher cannot clobber search'
+  );
+  check(
+    /reload Medicus if the grid still shows the old number/.test(canvas),
+    'after Write the canvas says the open-list count may not drop'
+  );
+  check(
+    /cache:\s*['"]no-store['"]/.test(fs.readFileSync(path.join(__dirname, 'shared/lab-allocate-core.js'), 'utf8')),
+    'queue re-GET is not served from HTTP cache'
+  );
 }
 
 (async function () {
@@ -660,21 +705,26 @@ console.log('\n--- canvas + manifest + css source locks ---');
       text: async () => JSON.stringify(body),
     };
   };
-  const qs =
-    '?statuses[]=pending-review&viewContext=homepage&masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3';
+  const qs = '?statuses[]=pending-review&viewContext=homepage&masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3';
   const out = await C.fetchRxTaskList(
     'https://560b6c.api.england.medicus.health',
     'prescription_request_task_routine',
     qs,
     { fetchImpl: fetchImpl }
   );
-  check(out.rows && out.rows.length === 2, 'page inbox GET returns the routine box (got ' + ((out.rows && out.rows.length) || 0) + ')');
+  check(
+    out.rows && out.rows.length === 2,
+    'page inbox GET returns the routine box (got ' + ((out.rows && out.rows.length) || 0) + ')'
+  );
   check(
     calls[0] && calls[0].indexOf('masterAssignee=0198ef96-6a17-71e4-8354-78de2b371ef3') !== -1,
     'first request keeps the inbox masterAssignee'
   );
   check(C.isRxUnallocated(out.rows[0]) === true, 'inbox-assigned routine requests are the unallocated pile');
-  check(/fetchRxTaskList/.test(fs.readFileSync(path.join(__dirname, 'content-scripts/rx-allocate-canvas.js'), 'utf8')), 'canvas calls fetchRxTaskList');
+  check(
+    /fetchRxTaskList/.test(fs.readFileSync(path.join(__dirname, 'content-scripts/rx-allocate-canvas.js'), 'utf8')),
+    'canvas calls fetchRxTaskList'
+  );
 
   const emptyCalls = [];
   const emptyThenBare = async (url) => {
@@ -712,7 +762,10 @@ console.log('\n--- canvas + manifest + css source locks ---');
     qs,
     { fetchImpl: mergeFetch }
   );
-  check(merged.rows && merged.rows.length === 3, 'write re-GET merges inbox pile with already-sitting work (got ' + ((merged.rows && merged.rows.length) || 0) + ')');
+  check(
+    merged.rows && merged.rows.length === 3,
+    'write re-GET merges inbox pile with already-sitting work (got ' + ((merged.rows && merged.rows.length) || 0) + ')'
+  );
   check(
     merged.rows.some((r) => r.id === uuid(99)),
     'already-sitting GP work is on the write re-GET so Distribute equally does not vanish'

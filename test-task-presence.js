@@ -19,6 +19,7 @@ const {
   parseStaffAttr,
   displayLabel,
   parseTaskOverviewPath,
+  parseTaskListPath,
   validPresenceConfig,
   buildHeartbeatPayload,
   activeOthers,
@@ -31,11 +32,35 @@ const {
   initialsFromLabel,
   avatarHue,
   sanitizeNativePresence,
+  sanitizeNativeListPresence,
   parsePresenceTaskChannel,
+  parsePresenceListChannel,
   othersOnTask,
   occupiedHeadline,
+  listOccupiedHeadline,
+  occupiedAction,
   occupiedNote,
+  occupiedNameList,
+  occupiedBannerTitle,
+  occupancyHideHint,
+  occupiedInnerHtml,
+  listOccupiedInnerHtml,
+  unknownColleagueLabel,
+  preferKnownLabel,
+  occupancyDismissKey,
+  occupancyDismissValue,
+  occupancyIsDismissed,
+  occupancyWriteDismiss,
+  sanitizeSelfExtras,
+  AVATAR_HUES,
+  safeAvatarHue,
 } = require('./content-scripts/task-presence.js');
+const {
+  presenceEmitDecision,
+  presenceSelfExtras,
+  currentTaskListSlug,
+  PRESENCE_LIST_CH_RE,
+} = require('./content-scripts/triage-lens/page-world.js');
 
 let passed = 0,
   failed = 0;
@@ -381,8 +406,8 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
   check(sanitizeNativePresence(null, UUID_ME, UUID_A).length === 0, 'null detail -> empty');
   check(
     sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_A)[0].label ===
-      'Someone else',
-    'empty info -> Someone else'
+      'A colleague',
+    'empty info -> A colleague (never Someone else)'
   );
   check(
     sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, UUID_ME, UUID_A)[0].initials ===
@@ -390,26 +415,135 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     'unknown identity uses ? not invented initials'
   );
 
-  check(occupiedHeadline([{ label: 'Aisha Malik' }]) === 'Aisha Malik is on this request', 'single headline');
+  check(unknownColleagueLabel() === 'A colleague', 'fallback helper is A colleague, not Someone');
   check(
-    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'Miles Scholar' }]) ===
-      'Aisha Malik and Miles Scholar are on this request',
+    occupiedHeadline([{ label: 'Dr Priya Nair' }]) ===
+      'Note: Dr Priya Nair has this open. You can still work it.',
+    'single headline merges who + you can still work it'
+  );
+  check(
+    occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'Dr Sam Okonkwo' }]) ===
+      'Note: Dr Priya Nair and Dr Sam Okonkwo have this open. You can still work it.',
     'two names'
   );
   check(
-    occupiedHeadline([{ label: 'Aisha Malik' }, { label: 'b' }, { label: 'c' }]) ===
-      'Aisha Malik and 2 others are on this request',
-    'three+ counted'
+    occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }]) ===
+      'Note: A, B and C have this open. You can still work it.',
+    'three: all three names, no "1 other"'
+  );
+  check(
+    occupiedHeadline([
+      { label: 'Dr Priya Nair' },
+      { label: 'Dr Sam Okonkwo' },
+      { label: 'c' },
+      { label: 'd' },
+      { label: 'e' },
+      { label: 'f' },
+    ]) === 'Note: Dr Priya Nair, Dr Sam Okonkwo, c and 3 others have this open. You can still work it.',
+    'six: three names then 3 others'
+  );
+  check(
+    occupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
+      'Note: A, B, C and 1 other have this open. You can still work it.',
+    'four: three names then 1 other'
+  );
+  check(occupiedNameList(['A']) === 'A', 'name list: 1');
+  check(occupiedNameList(['A', 'B']) === 'A and B', 'name list: 2');
+  check(occupiedNameList(['A', 'B', 'C']) === 'A, B and C', 'name list: 3');
+  check(occupiedNameList(['A', 'B', 'C', 'D']) === 'A, B, C and 1 other', 'name list: 4+');
+  check(
+    occupiedHeadline([{ label: 'A colleague' }]) === 'Note: A colleague has this open. You can still work it.',
+    'one unknown: A colleague has this open'
+  );
+  check(
+    occupiedHeadline([{ label: '' }]) === 'Note: A colleague has this open. You can still work it.',
+    'blank label uses A colleague, never Someone else'
+  );
+  check(
+    occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }]) ===
+      'Note: Two colleagues have this open (names not shown). You can still work it.',
+    'two unknowns: Two colleagues (names not shown), not "a colleague and a colleague"'
+  );
+  check(
+    occupiedHeadline([{ label: 'A colleague' }, { label: 'A colleague' }, { label: 'A colleague' }]) ===
+      'Note: 3 colleagues have this open (names not shown). You can still work it.',
+    'three unknowns: N colleagues (names not shown)'
+  );
+  check(
+    occupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'A colleague' }]) ===
+      'Note: Dr Priya Nair and a colleague have this open. You can still work it.',
+    'mixed: named + a colleague'
+  );
+  check(!/someone else/i.test(occupiedHeadline([{ label: 'Someone else' }])), 'legacy Someone else is rewritten');
+  check(
+    occupiedHeadline([{ selfExtra: true, label: 'You' }]) ===
+      'Note: You also have this open somewhere else. You can still work it.',
+    'dual-tab self headline'
   );
   check(occupiedHeadline([]) === '', 'no others -> empty headline');
+  check(
+    !/is on this request/i.test(occupiedHeadline([{ label: 'Dr Priya Nair' }])),
+    'headline never says is on this request'
+  );
+  check(occupiedAction() === '', 'action is not a separate visible line');
+  check(occupiedAction([{ selfExtra: true }]) === '', 'dual-tab self action is empty (folded into headline)');
+  check(!/opened/i.test(occupiedAction()), 'action never says opened');
+  check(!/locked out/i.test(occupiedAction()), 'action never says locked out');
+  check(!/carry on/i.test(occupiedAction()), 'action never says carry on');
+  check(!/check with them/i.test(occupiedAction()), 'action never says check with them');
+  check(
+    occupiedBannerTitle() === 'A colleague has this request open. It is not assigned to them. You can still work it.',
+    'tooltip: colleague has it open, not assigned, can still work it'
+  );
+  check(
+    occupancyHideHint() === 'Hide this warning until someone else joins. It comes back if the people change.',
+    'Hide title/aria-label explains dismiss-until-set-changes'
+  );
 
   const NOW = Date.parse('2026-09-07T12:00:00Z');
   check(
-    occupiedNote([{ native: true, openedAtMs: NOW - 120000 }], NOW) === 'Live',
-    'native presence is live, not a fake opened-ago'
+    occupiedNote([{ native: true, openedAtMs: NOW - 20000 }], NOW) === '',
+    'native recency is the pulse, not a word'
   );
-  check(occupiedNote([{ openedAtMs: NOW }], NOW) === 'Live', 'store just-now -> Live');
-  check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen, not Opened');
+  check(
+    occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW) === '',
+    'native dwell is not a visible word either'
+  );
+  check(
+    !/On it now/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
+    'native note never says On it now'
+  );
+  check(
+    !/Opened/i.test(occupiedNote([{ native: true, openedAtMs: NOW - 180000 }], NOW)),
+    'native note never says Opened'
+  );
+  check(occupiedNote([{ openedAtMs: NOW }], NOW) === '', 'store just-now has no recency word');
+  check(occupiedNote([{ openedAtMs: NOW - 120000 }], NOW) === 'Seen 2 min ago', 'store recency is Seen N min ago');
+
+  const inner = occupiedInnerHtml(
+    [{ label: 'Dr Priya Nair', initials: 'PN', hue: '#047857', native: true, openedAtMs: NOW }],
+    NOW
+  );
+  check(!/On it now/.test(inner) && !/>Live</.test(inner), 'strip HTML has no On it now / LIVE word');
+  check(/class="ms-tp-live"[^>]*aria-hidden="true"/.test(inner), 'pulse pip stays, aria-hidden, no recency word');
+  check(
+    inner.indexOf('Note: Dr Priya Nair has this open. You can still work it.') >= 0,
+    'strip HTML is one sentence at headline weight'
+  );
+  check(!/They have it open/.test(inner) && !/is on this request/.test(inner), 'old two-line copy is gone');
+  check(!/class="ms-tp-action"/.test(inner), 'no separate action span on the visible strip');
+  check(
+    inner.indexOf(occupancyHideHint()) >= 0 && /aria-label="/.test(inner) && /title="/.test(inner),
+    'Hide button has title and aria-label'
+  );
+  check(/>Hide for now</.test(inner), 'Hide button visible label is Hide for now');
+  check(!/ms-tp-hide"[^>]*tabindex="-1"/.test(inner), 'Hide button is not removed from tab order');
+  check(
+    occupiedInnerHtml([{ label: 'A colleague', initials: '?', native: true, openedAtMs: NOW }], NOW).indexOf(
+      'A colleague (name not shown)'
+    ) >= 0,
+    'unknown avatar title is A colleague (name not shown)'
+  );
 
   check(
     sanitizeNativePresence({ taskUuid: UUID_A, members: [{ id: UUID_B, info: {} }] }, null, UUID_A).length === 0,
@@ -446,6 +580,284 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
     UUID_A
   );
   check(leftover.length === 1 && leftover[0].staffId === UUID_B, 'stale occupant from another request dropped');
+  check(
+    othersOnTask([{ staffId: UUID_B, label: 'no uuid' }], UUID_A).length === 0,
+    'missing taskUuid is dropped when an expected uuid is set'
+  );
+}
+
+console.log('--- live:false hides; missing live still shows ---');
+{
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Aisha' } }], live: false },
+      UUID_ME,
+      UUID_A
+    ).length === 0,
+    'live === false -> empty (strip hides; do not claim Live on a dead socket)'
+  );
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Aisha' } }] },
+      UUID_ME,
+      UUID_A
+    ).length === 1,
+    'omitted live is treated as live (rig fixtures omit it)'
+  );
+  check(
+    sanitizeNativePresence(
+      { taskUuid: UUID_A, members: [{ id: UUID_B, info: { displayName: 'Aisha' } }], live: true },
+      UUID_ME,
+      UUID_A
+    ).length === 1,
+    'live === true keeps the member'
+  );
+}
+
+console.log('--- list channel parse + path: queue occupancy, never a request occupant ---');
+{
+  const listCh = parsePresenceListChannel('presence-560b6c-task-list-medical_patient_request_task');
+  check(!!listCh && listCh.site === '560b6c', 'list channel site');
+  check(listCh.slug === 'medical_patient_request_task', 'list channel slug');
+  check(
+    parsePresenceListChannel('presence-560b6c-task-' + UUID_A) === null,
+    'per-task uuid channel is NOT a list channel'
+  );
+  check(
+    parsePresenceTaskChannel('presence-560b6c-task-list-medical_patient_request_task') === null,
+    'list channel is still null from parsePresenceTaskChannel'
+  );
+  check(PRESENCE_LIST_CH_RE.test('presence-560b6c-task-' + UUID_A) === false, 'task-uuid regex does not consume list');
+  check(
+    PRESENCE_LIST_CH_RE.test('presence-560b6c-task-list-medical_patient_request_task') === true,
+    'list regex matches task-list slug'
+  );
+  check(
+    currentTaskListSlug('/560b6c/tasks/medical_patient_request_task/task-list') === 'medical_patient_request_task',
+    'currentTaskListSlug from /tasks/{slug}/task-list'
+  );
+  check(
+    currentTaskListSlug('/560b6c/tasks/data/medical_patient_request_task/task-list') === 'medical_patient_request_task',
+    'currentTaskListSlug from /tasks/data/{slug}/task-list'
+  );
+  check(
+    currentTaskListSlug('/560b6c/tasks/medical_patient_request_task/overview/' + UUID_A) === '',
+    'overview is not a list'
+  );
+  check(
+    parseTaskListPath('/560b6c/tasks/medical_patient_request_task/task-list').slug === 'medical_patient_request_task',
+    'parseTaskListPath route shape'
+  );
+  check(
+    parseTaskListPath('/560b6c/tasks/data/medical_patient_request_task/task-list').slug ===
+      'medical_patient_request_task',
+    'parseTaskListPath data shape'
+  );
+}
+
+console.log('--- listOccupiedHeadline: 1 / 2 / 3+ / unknown ---');
+{
+  check(
+    listOccupiedHeadline([{ label: 'Dr Priya Nair' }]) ===
+      'Note: Dr Priya Nair is also on this list. You can still work it.',
+    'one named colleague'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'Dr Priya Nair' }, { label: 'Dr Sam Okonkwo' }]) ===
+      'Note: Dr Priya Nair and Dr Sam Okonkwo are also on this list. You can still work it.',
+    'two named colleagues'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }]) ===
+      'Note: A, B and 1 other are also on this list. You can still work it.',
+    'three+ uses A, B and N others'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }]) ===
+      'Note: A, B and 2 others are also on this list. You can still work it.',
+    'four is A, B and 2 others'
+  );
+  check(
+    listOccupiedHeadline([{ label: 'A colleague' }]) ===
+      'Note: A colleague is also on this list. You can still work it.',
+    'unknown colleague'
+  );
+  check(listOccupiedHeadline([]) === '', 'empty others -> empty headline');
+  const listHtml = listOccupiedInnerHtml([{ label: 'Dr Priya Nair', initials: 'PN', hue: '#1e3a5f', native: true }]);
+  check(listHtml.indexOf('Note: Dr Priya Nair is also on this list.') >= 0, 'list inner html carries the lead');
+  check(/^Note:/.test(listOccupiedHeadline([{ label: 'Dr Priya Nair' }])), 'list heading starts Note:');
+  check(listHtml.indexOf('You can still work it.') >= 0, 'list inner html carries the quiet clause');
+  check(listHtml.indexOf('ms-tp-quiet') >= 0, 'quiet clause is one step quieter');
+  check(!/lock/i.test(listHtml), 'list strip never says lock');
+}
+
+console.log('--- sanitizeNativeListPresence: drop self; empty / live:false hides ---');
+{
+  const slug = 'medical_patient_request_task';
+  const priya = {
+    slug,
+    members: [{ id: UUID_B, info: { displayName: 'Dr Priya Nair' } }],
+  };
+  const got = sanitizeNativeListPresence(priya, UUID_ME, slug);
+  check(got.length === 1 && got[0].staffId === UUID_B, 'other on this list kept');
+  check(got[0].listSlug === slug && got[0].taskUuid === undefined, 'list member carries listSlug, never a taskUuid');
+  check(
+    sanitizeNativeListPresence({ slug, members: [{ id: UUID_ME, info: { displayName: 'Me' } }] }, UUID_ME, slug)
+      .length === 0,
+    'only-self membership -> hide'
+  );
+  check(sanitizeNativeListPresence(priya, null, slug).length === 0, 'no self id -> hide');
+  check(sanitizeNativeListPresence(priya, UUID_ME, 'other_slug').length === 0, 'wrong slug -> hide');
+  check(
+    sanitizeNativeListPresence(
+      { slug, members: [{ id: UUID_B, info: { displayName: 'Priya' } }], live: false },
+      UUID_ME,
+      slug
+    ).length === 0,
+    'live === false hides'
+  );
+  check(sanitizeNativeListPresence(priya, UUID_ME, slug).length === 1, 'omitted live is treated as live');
+  check(
+    othersOnTask([{ staffId: UUID_B, listSlug: slug, label: 'Priya' }], UUID_A).length === 0,
+    'list members are not per-request occupants'
+  );
+}
+
+console.log('--- preferKnownLabel: native empty info uses store/cache name ---');
+{
+  const cache = {};
+  check(preferKnownLabel('A colleague', UUID_B, cache) === 'A colleague', 'nothing known -> A colleague');
+  check(preferKnownLabel('Someone else', UUID_B, cache) === 'A colleague', 'legacy Someone else -> A colleague');
+  check(preferKnownLabel('Aisha Malik', UUID_B, { [UUID_B]: 'Other' }) === 'Aisha Malik', 'a real native name wins');
+  check(
+    preferKnownLabel('A colleague', UUID_B, { [UUID_B]: 'Dr Priya Nair' }) === 'Dr Priya Nair',
+    'empty native info + known cache -> known label'
+  );
+  check(
+    preferKnownLabel('', UUID_B, { [UUID_B]: 'A colleague' }) === 'A colleague',
+    'generic A colleague is not a known name'
+  );
+}
+
+console.log('--- occupancy dismiss key: this request + this tab ---');
+{
+  const mem = {
+    store: {},
+    getItem: function (k) {
+      return Object.prototype.hasOwnProperty.call(this.store, k) ? this.store[k] : null;
+    },
+    setItem: function (k, v) {
+      this.store[k] = String(v);
+    },
+  };
+  check(occupancyDismissKey(UUID_A) === 'ms-tp-dismiss:' + UUID_A, 'sessionStorage key is ms-tp-dismiss:{taskUuid}');
+  check(
+    occupancyDismissValue([UUID_B, UUID_ME]) === occupancyDismissValue([UUID_ME, UUID_B]),
+    'dismiss value is sorted, order-independent'
+  );
+  occupancyWriteDismiss(UUID_A, [UUID_B, UUID_ME], mem);
+  check(occupancyIsDismissed(UUID_A, [UUID_ME, UUID_B], mem) === true, 'same member set stays hidden');
+  check(occupancyIsDismissed(UUID_A, [UUID_B], mem) === false, 'a new joiner (set change) is not dismissed');
+  check(occupancyIsDismissed(UUID_B, [UUID_B, UUID_ME], mem) === false, 'a different request is not dismissed');
+  check(
+    occupancyIsDismissed(UUID_A, [UUID_B, UUID_ME], {
+      getItem: function () {
+        return null;
+      },
+    }) === false,
+    'empty storage -> not dismissed'
+  );
+}
+
+console.log('--- presenceEmitDecision: wipe fires; idle emits once ---');
+{
+  const first = presenceEmitDecision('', UUID_A, [{ id: UUID_B }], true);
+  check(first.emit === true, 'first occupy emits');
+  check(first.sig.indexOf(UUID_A + ':' + UUID_B) === 0, 'sig starts with task:member');
+
+  const same = presenceEmitDecision(first.sig, UUID_A, [{ id: UUID_B }], true);
+  check(same.emit === false, 'unchanged members are de-duped');
+
+  const wipe = presenceEmitDecision(first.sig, UUID_B, [], true);
+  check(wipe.emit === true, 'task change emits empty members (the wipe that used to be de-duped)');
+  check(wipe.sig.indexOf(UUID_B + ':') === 0, 'wipe sig is the new task with empty members');
+
+  const idle1 = presenceEmitDecision(wipe.sig, '', []);
+  check(idle1.emit === true && idle1.sig === 'idle', 'leaving an overview emits idle once');
+  const idle2 = presenceEmitDecision('idle', '', []);
+  check(idle2.emit === false && idle2.sig === 'idle', 'idle does not flap an empty event forever');
+  const idle0 = presenceEmitDecision('', '', []);
+  check(idle0.emit === false, 'a page that never had presence does not emit idle');
+
+  const dead = presenceEmitDecision(first.sig, UUID_A, [], false);
+  check(dead.emit === true, 'socket-down (live:false, members:[]) emits so the strip can hide');
+  check(/:0$/.test(dead.sig), 'dead-socket sig carries the live:false bit');
+
+  const extra1 = presenceEmitDecision('', UUID_A, [{ id: UUID_ME }], true, 1);
+  check(extra1.emit === true && /:x1$/.test(extra1.sig), 'selfExtras>=1 is in the emit sig');
+  const extraSame = presenceEmitDecision(extra1.sig, UUID_A, [{ id: UUID_ME }], true, 1);
+  check(extraSame.emit === false, 'unchanged selfExtras is de-duped');
+  const extraOff = presenceEmitDecision(extra1.sig, UUID_A, [{ id: UUID_ME }], true, 0);
+  check(extraOff.emit === true, 'selfExtras dropping to 0 emits so the dual-tab strip can hide');
+}
+
+console.log('--- presenceSelfExtras / sanitizeSelfExtras: dual-tab only when extras visible ---');
+{
+  check(presenceSelfExtras([UUID_ME, UUID_B], 2, UUID_ME) === 0, 'unique hash, count==unique -> 0 (Pusher collapse)');
+  check(presenceSelfExtras([UUID_ME, UUID_ME], 1, UUID_ME) === 1, 'same staff UUID twice -> 1 extra');
+  check(presenceSelfExtras([UUID_ME], 2, UUID_ME) === 1, 'count > unique and self present -> extras');
+  check(presenceSelfExtras([UUID_B, UUID_B], 3, UUID_ME) === 0, 'extras on someone else, not self -> 0');
+  check(presenceSelfExtras([UUID_ME], 2, '') === 0, 'no self id -> 0');
+  check(
+    sanitizeSelfExtras({ taskUuid: UUID_A, members: [], selfExtras: 1 }, UUID_ME, UUID_A) === 1,
+    'selfExtras on the event is accepted'
+  );
+  check(
+    sanitizeSelfExtras({ taskUuid: UUID_A, members: [], selfExtras: 1, live: false }, UUID_ME, UUID_A) === 0,
+    'live:false drops selfExtras (fail closed)'
+  );
+  check(sanitizeSelfExtras({ taskUuid: UUID_A, selfExtras: 0 }, UUID_ME, UUID_A) === 0, 'selfExtras 0 is not extras');
+  check(sanitizeSelfExtras({ taskUuid: UUID_B, selfExtras: 2 }, UUID_ME, UUID_A) === 0, 'wrong task -> 0');
+}
+
+console.log('--- avatar hues: applied hex, contrast, not status colours ---');
+{
+  AVATAR_HUES.forEach(function (h) {
+    check(safeAvatarHue(h) === h, 'whitelist accepts ' + h);
+    const r = parseInt(h.slice(1, 3), 16) / 255;
+    const g = parseInt(h.slice(3, 5), 16) / 255;
+    const b = parseInt(h.slice(5, 7), 16) / 255;
+    const f = function (c) {
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const L = 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+    const contrast = 1.05 / (L + 0.05);
+    check(contrast >= 4.5, h + ' contrast vs white is AA (' + contrast.toFixed(2) + ')');
+    check(!/^#dc2626$/i.test(h) && !/^#b45309$/i.test(h), h + ' is not status red/amber');
+  });
+  check(safeAvatarHue('red') === '', 'non-hex rejected');
+  check(safeAvatarHue('#fff') === '', 'short hex rejected');
+  check(safeAvatarHue('javascript:alert(1)') === '', 'non-colour rejected');
+}
+
+console.log('--- occupied masthead is a note wash, not peach ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.css'), 'utf8');
+  check(
+    /#ms-tp-banner\s*\{[^}]*background:\s*var\(--accent-dim\)/.test(css),
+    'banner uses the accent/note wash'
+  );
+  check(!/#ms-tp-banner\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css), 'banner is not peach/amber');
+  check(
+    /#ms-tp-list\s*\{\s*display:\s*inline-flex[^}]*background:\s*var\(--accent-dim\)/.test(css),
+    'list pill uses the accent/note wash'
+  );
+  check(
+    !/#ms-tp-list\s*\{\s*display:\s*inline-flex[^}]*background:\s*var\(--amber-dim\)/.test(css),
+    'list pill is not peach/amber'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

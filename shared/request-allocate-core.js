@@ -67,6 +67,39 @@
     return kept.length ? '?' + kept.join('&') : '';
   }
 
+  function requestLaunchLabel(count) {
+    var n = Number(count);
+    if (isFinite(n) && n > 0 && Math.floor(n) === n && n < 1000000) {
+      return 'Draft a split of ' + Math.floor(n) + ' (nothing is sent)…';
+    }
+    return 'Draft a split (nothing is sent)…';
+  }
+
+  function requestLaunchTitle() {
+    return 'Nothing is written. Opens a planning board.';
+  }
+
+  function requestInboxCountLabel(count) {
+    var n = Number(count);
+    if (isFinite(n) && n > 0 && Math.floor(n) === n && n < 1000000) {
+      return Math.floor(n) + ' in this inbox';
+    }
+    return '';
+  }
+
+  // Bridged ch-task-list-data is untrusted. Count only — never treat the
+  // rows as occupants or as write targets.
+  function inboxCountFromTaskListBridge(detail, expectedSlug) {
+    if (!detail || typeof detail !== 'object') return 0;
+    if (!Array.isArray(detail.rows)) return 0;
+    var slug = String(detail.taskTypeSlug || '').trim();
+    if (!slug || !isRequestQueueSlug(slug)) return 0;
+    if (expectedSlug && slug !== String(expectedSlug)) return 0;
+    var n = detail.rows.length;
+    if (!isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }
+
   function parseRequestQueueRoute(pathname, search) {
     var path = String(pathname == null ? '' : pathname);
     var m = path.match(/^\/?([0-9a-z]{2,})\/tasks\/(?:data\/)?([^/]+)\/task-list\/?$/i);
@@ -286,11 +319,7 @@
     (board && board.columns ? board.columns : []).forEach(function (col) {
       lines.push(col.title + ' (' + col.count + ')');
       (col.tiles || []).forEach(function (t) {
-        var hint = t.requester
-          ? ' · grouped as ' + t.requester
-          : t.namedGp
-            ? ' · usual GP ' + t.namedGp
-            : '';
+        var hint = t.requester ? ' · grouped as ' + t.requester : t.namedGp ? ' · usual GP ' + t.namedGp : '';
         var staged = t.staged ? ' · staged on this canvas only' : '';
         lines.push('  - ' + (t.patientName || 'Unknown') + (t.summary ? ' · ' + t.summary : '') + hint + staged);
       });
@@ -327,14 +356,36 @@
 
   var REQUEST_WRITE_CAPTURE_REASON = 'Write not captured for this queue yet.';
   var REQUEST_WRITE_CAPTURE_COPY =
-    'This is a plan on this canvas only. Medicus does not change. Assign in Medicus until write is enabled for this queue.';
+    'This is a plan on this canvas only. Medicus has not changed. To move these today, assign them in Medicus. Writing from this canvas is switched off for this queue until it has been checked on a test patient.';
+  var REQUEST_WRITE_REVIEW_HEADLINE = 'This is a plan on this canvas only. Medicus has not changed.';
+  var REQUEST_WRITE_REVIEW_BODY =
+    'To move these today, assign them in Medicus. Writing from this canvas is switched off for this queue until it has been checked on a test patient.';
+  var REQUEST_WRITE_DISABLED_BUTTON = 'Write to Medicus (not yet available for this queue)';
+
+  function requestGatedWriteCopy(opts) {
+    opts = opts || {};
+    var n = Number(opts.count) || 0;
+    return {
+      reviewButton: n ? 'Review plan (' + n + ')' : 'Review plan',
+      reviewHeadline: REQUEST_WRITE_REVIEW_HEADLINE,
+      reviewBody: REQUEST_WRITE_REVIEW_BODY,
+      writeButton: '',
+      hideWrite: true,
+    };
+  }
 
   function canWriteRequestAllocations(opts) {
     if (!REQUEST_WRITE_CAPTURED) {
+      var gated = requestGatedWriteCopy(opts || {});
       return {
         ok: false,
         reason: REQUEST_WRITE_CAPTURE_REASON,
         copy: REQUEST_WRITE_CAPTURE_COPY,
+        reviewButton: gated.reviewButton,
+        reviewHeadline: gated.reviewHeadline,
+        reviewBody: gated.reviewBody,
+        writeButton: '',
+        hideWrite: true,
       };
     }
     return Lab.canWriteAllocations(opts || {});
@@ -396,12 +447,20 @@
     REQUEST_WRITE_CAPTURED: REQUEST_WRITE_CAPTURED,
     REQUEST_WRITE_CAPTURE_REASON: REQUEST_WRITE_CAPTURE_REASON,
     REQUEST_WRITE_CAPTURE_COPY: REQUEST_WRITE_CAPTURE_COPY,
+    REQUEST_WRITE_REVIEW_HEADLINE: REQUEST_WRITE_REVIEW_HEADLINE,
+    REQUEST_WRITE_REVIEW_BODY: REQUEST_WRITE_REVIEW_BODY,
+    REQUEST_WRITE_DISABLED_BUTTON: REQUEST_WRITE_DISABLED_BUTTON,
+    requestGatedWriteCopy: requestGatedWriteCopy,
     isMedicalRequestSlug: isMedicalRequestSlug,
     isAdminRequestSlug: isAdminRequestSlug,
     isRequestQueueSlug: isRequestQueueSlug,
     hasWorkflowViewContext: hasWorkflowViewContext,
     queryStringForRequestList: queryStringForRequestList,
     parseRequestQueueRoute: parseRequestQueueRoute,
+    requestLaunchLabel: requestLaunchLabel,
+    requestLaunchTitle: requestLaunchTitle,
+    requestInboxCountLabel: requestInboxCountLabel,
+    inboxCountFromTaskListBridge: inboxCountFromTaskListBridge,
     decorateRequestRow: decorateRequestRow,
     markInboxRows: markInboxRows,
     mergeInboxAndSitting: mergeInboxAndSitting,
@@ -454,6 +513,7 @@
     canWriteAllocations: canWriteRequestAllocations,
     planBulkReassign: Lab.planBulkReassign,
     writeBlockReason: Lab.writeBlockReason,
+    refusedPatientsPhrase: Lab.refusedPatientsPhrase,
     createClient: createClient,
     collisionPhrase: Lab.collisionPhrase,
     displayClinicianName: Lab.displayClinicianName,

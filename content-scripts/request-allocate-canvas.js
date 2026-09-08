@@ -5,8 +5,8 @@
 // confirm / bulk-reassign pattern on homepage medical and admin
 // patient-request task-lists. The large left box is UNALLOCATED
 // requests, grouped by registered GP when that is on the row. Named GP
-// is a grouping caption, never auto-placement. Split equally / Top up /
-// Distribute equally stage locally - they do not write. Does not complete,
+// is a grouping caption, never auto-placement. Split equally / Top up
+// stage locally - they do not write. Does not complete,
 // file, or reply to a request.
 //
 // Writing uses LabAllocateCore.createClient (W23). Fail-closed until a
@@ -28,6 +28,10 @@
 
   var OVERLAY_ID = 'ms-qac-overlay';
   var LAUNCH_ID = 'ms-qac-launch';
+  var LAUNCH_WRAP_ID = 'ms-qac-launch-wrap';
+  var INBOX_N_ID = 'ms-qac-inbox-n';
+  var OVERVIEW_CAP = 120;
+  var OVERVIEW_CONCURRENCY = 4;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -73,8 +77,13 @@
   var _destSetReady = false;
   var _showAllGroups = false;
   var _namingGroup = false;
+  var _scheduleAutoPick = false;
   var _personDrag = null;
   var _marquee = null;
+  var _inboxCount = 0;
+  var _inboxCountSlug = '';
+  var _bridgeCount = 0;
+  var _bridgeTimer = null;
 
   function fieldIsOpen(key) {
     return _expandedChip === key || !!_openDests[key];
@@ -108,6 +117,114 @@
 
   function dayPhrase() {
     return C.workDayPhrase(workDate(), calendarToday());
+  }
+
+  function workingFlag() {
+    if (Strip && typeof Strip.workingFlagLabel === 'function') {
+      return Strip.workingFlagLabel({ workDateISO: workDate(), calendarTodayISO: calendarToday() });
+    }
+    return 'Working today';
+  }
+
+  function destGroupName() {
+    if (!_destSet || _destSet.kind !== 'group' || !G) return '';
+    var preset = G.findPreset(_presets, _destSet.id);
+    return (preset && preset.name) || '';
+  }
+
+  function destPhraseState() {
+    return {
+      destKind: (_destSet && _destSet.kind) || 'in-today',
+      destGroupName: destGroupName(),
+      dayPhrase: dayPhrase(),
+    };
+  }
+
+  function destScopePhrase() {
+    if (Strip && typeof Strip.destScopePhrase === 'function') {
+      return Strip.destScopePhrase(destPhraseState());
+    }
+    return destGroupName() || dayPhrase();
+  }
+
+  function destPeoplePhrase() {
+    if (Strip && typeof Strip.destPeoplePhrase === 'function') {
+      return Strip.destPeoplePhrase(destPhraseState());
+    }
+    var name = destGroupName();
+    return name || 'doctors working ' + dayPhrase();
+  }
+
+  function destOntoPhrase(nDoctors) {
+    if (Strip && typeof Strip.destOntoPhrase === 'function') {
+      return Strip.destOntoPhrase(nDoctors, destPhraseState());
+    }
+    var name = destGroupName();
+    var n = Number(nDoctors) || 0;
+    var people = n === 1 ? '1 doctor' : n + ' doctors';
+    return name ? people + ' on ' + name : people + ' working ' + dayPhrase();
+  }
+
+  function currentInboxCount() {
+    var route = currentRoute() || _route;
+    if (_open && _rows && _rows.length) return _rows.length;
+    if (route && _inboxCountSlug === route.slug && _inboxCount > 0) return _inboxCount;
+    return 0;
+  }
+
+  function rememberInboxCount(detail) {
+    var route = currentRoute() || _route;
+    if (!route || !C.inboxCountFromTaskListBridge) return;
+    var n = C.inboxCountFromTaskListBridge(detail, route.slug);
+    if (!n) return;
+    _inboxCount = n;
+    _inboxCountSlug = route.slug;
+  }
+
+  function destFlag() {
+    if (Strip && typeof Strip.destFlagLabel === 'function') {
+      return Strip.destFlagLabel({
+        destKind: (_destSet && _destSet.kind) || 'in-today',
+        destGroupName: destGroupName(),
+        workDateISO: workDate(),
+        calendarTodayISO: calendarToday(),
+      });
+    }
+    var name = destGroupName();
+    if (name) return name;
+    return workingFlag();
+  }
+
+  function destFlagHtml(col, abs) {
+    var away = abs.state === 'away' || abs.state === 'away-pending';
+    var inToday = abs.state === 'present' && abs.reason === 'in-today';
+    if (away) return '<span class="ms-lac-chip-flag">AWAY</span>';
+    if (col.kind === 'team') return '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>';
+    var kind = (_destSet && _destSet.kind) || 'in-today';
+    if (kind === 'group') {
+      var group = destFlag();
+      return group ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(group) + '</span>' : '';
+    }
+    if (inToday) {
+      return '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">' + esc(workingFlag()) + '</span>';
+    }
+    return '';
+  }
+
+  function scheduleHintText() {
+    if (!_scheduleAutoPick || !_destSet || _destSet.kind !== 'group') return '';
+    if (!G || typeof G.scheduleAutoPickPhrase !== 'function') return '';
+    var preset = G.findPreset(_presets, _destSet.id);
+    if (!preset) return '';
+    var todayLabel =
+      Strip && typeof Strip.workingTodayChipLabel === 'function'
+        ? Strip.workingTodayChipLabel({
+            inTodayCount: inTodayPeople().length,
+            workDateISO: workDate(),
+            calendarTodayISO: calendarToday(),
+          })
+        : 'Working today';
+    return G.scheduleAutoPickPhrase(preset, new Date(), todayLabel);
   }
 
   function announce(text) {
@@ -216,26 +333,57 @@
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
-    var cap = Math.min(withUrl.length, 12);
+    if (withUrl.length > OVERVIEW_CAP) withUrl = withUrl.slice(0, OVERVIEW_CAP);
     var patientId = '';
     (rows || []).forEach(function (r) {
       if (!patientId && r && r.patientId) patientId = r.patientId;
     });
-    for (var i = 0; i < cap; i++) {
-      try {
-        var payload = await client().fetchOverview(withUrl[i].overviewURL);
-        absorbDirectories(null, payload);
-        if (!patientId && C.pickPatientIdFromPayload) patientId = C.pickPatientIdFromPayload(payload);
-      } catch (_) {
-        /* try the next overview */
+    var cli = client();
+    var i = 0;
+    async function worker() {
+      while (i < withUrl.length) {
+        var idx = i++;
+        try {
+          var payload = await cli.fetchOverview(withUrl[idx].overviewURL);
+          absorbDirectories(null, payload);
+          if (!patientId && C.pickPatientIdFromPayload) patientId = C.pickPatientIdFromPayload(payload);
+        } catch (_) {
+          /* try the next overview */
+        }
       }
     }
+    if (withUrl.length) {
+      var workers = [];
+      var n = Math.min(OVERVIEW_CONCURRENCY, withUrl.length);
+      for (var w = 0; w < n; w++) workers.push(worker());
+      await Promise.all(workers);
+    }
+    if (!patientId) return;
+    try {
+      var form = await cli.fetchAssigneeStaff(patientId);
+      absorbDirectories(null, form);
+    } catch (_) {
+      /* create-task form is a bonus directory, not required to stage */
+    }
+  }
+
+  async function ensureDestStaffResolved() {
+    var dests = currentDestinations();
+    if (dests.collisions && dests.collisions.length) return;
+    var missing = dests.some(function (d) {
+      return d && !d.staffId;
+    });
+    if (!missing) return;
+    var patientId = '';
+    (_rows || []).forEach(function (r) {
+      if (!patientId && r && r.patientId) patientId = r.patientId;
+    });
     if (!patientId) return;
     try {
       var form = await client().fetchAssigneeStaff(patientId);
       absorbDirectories(null, form);
     } catch (_) {
-      /* create-task form is a bonus directory, not required to stage */
+      /* dest UUIDs stay blank and Write will refuse */
     }
   }
 
@@ -268,6 +416,10 @@
       _route.slug = out.slug || _route.slug;
       if (out.search) _route.search = out.search;
       _taskList = out.taskList;
+      if (_route && _rows && _rows.length) {
+        _inboxCount = _rows.length;
+        _inboxCountSlug = _route.slug;
+      }
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
       await presenceP;
@@ -335,8 +487,8 @@
     _overviewProgress = '';
     announce(
       _splitDefaulted
-        ? 'Even split staged for doctors working ' + dayPhrase() + '. Drag a request to move it.'
-        : 'Even split is for doctors working ' + dayPhrase() + '.'
+        ? 'Even split staged for ' + destPeoplePhrase() + '. Drag a request to move it.'
+        : 'Even split is for ' + destPeoplePhrase() + '.'
     );
     render();
   }
@@ -525,15 +677,7 @@
         return tileHtml(t, { showWho: true, showAssignee: false });
       })
       .join('');
-    var flag = away
-      ? '<span class="ms-lac-chip-flag">AWAY</span>'
-      : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In ' +
-          esc(dayPhrase()) +
-          '</span>'
-        : col.kind === 'team'
-          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
-          : '';
+    var flag = destFlagHtml(col, abs);
     var note = '';
     if (away && abs.label) note = '<div class="ms-lac-col-absence">' + esc(abs.label) + '</div>';
     else if (inToday && abs.label) note = '<div class="ms-lac-col-in">' + esc(abs.label) + '</div>';
@@ -644,9 +788,7 @@
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
       '<div class="ms-lac-empty-title">' +
-      (_rows.length
-        ? 'Inbox is on the right - not saved yet'
-        : 'No open requests on this queue') +
+      (_rows.length ? 'Inbox is on the right - not saved yet' : 'No open requests on this queue') +
       '</div>' +
       '<div class="ms-lac-empty-sub">' +
       (_rows.length
@@ -694,8 +836,7 @@
           leaveList: _rota.leave,
         });
       },
-      emptyInTodayReason:
-        'No doctors with a session on the appointment book for ' + dayPhrase() + ' to split onto.',
+      emptyInTodayReason: 'No doctors with a session on the appointment book for ' + dayPhrase() + ' to split onto.',
     };
   }
 
@@ -720,6 +861,7 @@
       if (!_destSetReady) {
         var last = _agConfig.lastUsedBySurface && _agConfig.lastUsedBySurface.request;
         _destSet = G.defaultDestSet(_presets, new Date(), last) || { kind: 'in-today' };
+        _scheduleAutoPick = _destSet.kind === 'group';
         _destSetReady = true;
       }
     } catch (_) {
@@ -768,6 +910,7 @@
   function setDestSet(next) {
     _destSet = next || { kind: 'in-today' };
     _namingGroup = false;
+    _scheduleAutoPick = false;
     _draft = C.replaceDestColumns(_draft || C.emptyDraft(), currentDestinations());
     persistLastUsed();
   }
@@ -823,7 +966,7 @@
       members.push({ id: id, name: p.name || '' });
     }
     if (_destSet && _destSet.kind === 'custom') {
-      ((_destSet.members || [])).forEach(function (m) {
+      (_destSet.members || []).forEach(function (m) {
         push({ staffId: m.id || m.staffId, name: m.name });
       });
     }
@@ -872,7 +1015,7 @@
       if (d && d.key) seen[d.key] = true;
     });
     var draft = _draft || C.emptyDraft();
-    ((draft.extraColumns) || []).forEach(function (key) {
+    (draft.extraColumns || []).forEach(function (key) {
       if (!key || seen[key]) return;
       var title = (draft.columnTitles && draft.columnTitles[key]) || '';
       var id = (draft.columnStaffIds && draft.columnStaffIds[key]) || '';
@@ -964,6 +1107,23 @@
     if (dests.collisions && dests.collisions.length) {
       return { ok: false, reason: C.collisionPhrase(dests.collisions) };
     }
+    var plan = C.planEvenSplit(tilesForPlan(), dests, { dayPhrase: dayPhrase() });
+    if (!plan.ok) {
+      _splitDefaulted = false;
+      return plan;
+    }
+    _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
+    _splitDefaulted = true;
+    _selected = {};
+    openDestsFromPlan(plan);
+    return plan;
+  }
+
+  function applyTopUp() {
+    var dests = splitDestinations();
+    if (dests.collisions && dests.collisions.length) {
+      return { ok: false, reason: C.collisionPhrase(dests.collisions) };
+    }
     var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
@@ -982,12 +1142,17 @@
 
   function applyLevel() {
     var dests = splitDestinations();
+    if (dests.collisions && dests.collisions.length) {
+      return { ok: false, reason: C.collisionPhrase(dests.collisions) };
+    }
     var seen = {};
-    var tiles = inTodayBoxTiles().concat(tilesForPlan()).filter(function (t) {
-      if (!t || !t.id || seen[t.id]) return false;
-      seen[t.id] = true;
-      return true;
-    });
+    var tiles = inTodayBoxTiles()
+      .concat(tilesForPlan())
+      .filter(function (t) {
+        if (!t || !t.id || seen[t.id]) return false;
+        seen[t.id] = true;
+        return true;
+      });
     var plan = C.planLevel(tiles, dests, { dayPhrase: dayPhrase() });
     if (!plan.ok) return plan;
     var next = C.ensureWorkingTodayColumns(C.emptyDraft(), dests);
@@ -1015,7 +1180,6 @@
 
   function evenSplitHtml() {
     var dests = splitDestinations();
-    var phrase = dayPhrase();
     var cal = calendarToday();
     var picked = workDate();
     var poolN = visibleUnallocatedCount();
@@ -1027,59 +1191,56 @@
     if (G) {
       visible = _showAllGroups ? G.normalisePresets(_presets) : G.visiblePresets(_presets, new Date());
     }
+    var destKind = (_destSet && _destSet.kind) || 'in-today';
+    var inTodayN = inTodayPeople().length;
+    var emptyBook = destKind === 'in-today' && inTodayN === 0;
+    var scope = destScopePhrase();
     var summary = dests.length
-      ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + phrase
-      : 'No people to share out to for ' + phrase;
+      ? poolN + ' unallocated · ' + dests.length + ' destination' + (dests.length === 1 ? '' : 's') + ' for ' + scope
+      : emptyBook
+        ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
+        : 'No people to share out to for ' + scope;
     var stripState = {
-      destKind: (_destSet && _destSet.kind) || 'in-today',
+      destKind: destKind,
       destGroupId: (_destSet && _destSet.id) || '',
       visibleGroups: visible,
-      inTodayCount: inTodayPeople().length,
+      inTodayCount: inTodayN,
+      workDateISO: workDate(),
+      calendarTodayISO: calendarToday(),
       destPhrase: destPhrase,
       skippedPhrase: G && resolved.skipped ? G.skippedPhrase(resolved.skipped) : '',
       canSave: !!(_destSet && _destSet.kind === 'custom' && dests.length),
+      scheduleHint: scheduleHintText(),
     };
     var actionState = {
       destPhrase: destPhrase,
-      dayPhrase: phrase,
+      dayPhrase: dayPhrase(),
       poolN: poolN,
       haveWork: haveWork,
       destCount: dests.length,
+      destKind: destKind,
+      inTodayCount: inTodayN,
       stagedN: stagedN,
       surfaceNoun: 'requests',
-      collisionPhrase:
-        dests.collisions && dests.collisions.length ? C.collisionPhrase(dests.collisions) : '',
+      destTitles: dests.map(function (d) {
+        return d && d.name ? String(d.name) : '';
+      }),
+      collisionPhrase: dests.collisions && dests.collisions.length ? C.collisionPhrase(dests.collisions) : '',
     };
     var strip = Strip ? Strip.destSetStripHtml(stripState) : '';
     var actions = Strip ? Strip.splitActionsHtml(actionState) : '';
-    var naming = _namingGroup
-      ? '<div class="ms-ags-save-row">' +
-        '<label for="ms-ags-save-name">Group name</label>' +
-        '<input type="text" id="ms-ags-save-name" maxlength="48" placeholder="e.g. Morning triage" aria-label="Group name">' +
-        '<button type="button" class="ms-lac-confirm-btn" id="ms-ags-save-go">Save group</button>' +
-        '<button type="button" class="ms-lac-ghost" id="ms-ags-save-cancel">Keep planning</button>' +
-        '</div>'
-      : '';
-    var allList = '';
-    if (_showAllGroups && G) {
-      var all = G.normalisePresets(_presets);
-      allList =
-        '<div class="ms-ags-all" id="ms-ags-all-list">' +
-        (all.length
-          ? all
-              .map(function (g) {
-                return (
-                  '<button type="button" class="ms-ags-chip" data-ags-group="' +
-                  esc(g.id) +
-                  '">' +
-                  esc(g.name) +
-                  '</button>'
-                );
-              })
-              .join('')
-          : '<span class="ms-lac-split-note">No saved groups yet. Encircle people and save as a group.</span>') +
-        '</div>';
-    }
+    var naming =
+      _namingGroup && Strip && typeof Strip.saveGroupRowHtml === 'function'
+        ? Strip.saveGroupRowHtml()
+        : _namingGroup
+          ? '<div class="ms-ags-save-row">' +
+            '<label for="ms-ags-save-name">Group name</label>' +
+            '<input type="text" id="ms-ags-save-name" maxlength="48" placeholder="e.g. Morning triage" aria-label="Group name">' +
+            '<button type="button" class="ms-lac-confirm-btn" id="ms-ags-save-go">Save group</button>' +
+            '<button type="button" class="ms-lac-ghost" id="ms-ags-save-cancel">Keep planning</button>' +
+            '</div>'
+          : '';
+    var allList = _showAllGroups ? allGroupsPanelHtml() : '';
     return (
       '<div class="ms-lac-split' +
       (stagedN ? ' ms-rxac-split-proposing' : '') +
@@ -1088,7 +1249,7 @@
       '<label class="ms-lac-split-day-label" for="ms-qac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
       '<input type="date" id="ms-qac-day" value="' +
       esc(picked) +
-      '" aria-label="Working day for In today" title="The appointment book for this date decides who is in.">' +
+      '" aria-label="Working day for Working today" title="The appointment book for this date decides who is in.">' +
       '<button type="button" class="ms-lac-ghost' +
       (picked === cal ? ' ms-lac-split-day-on' : '') +
       '" id="ms-qac-day-today" title="Use today’s appointment book.">Today</button>' +
@@ -1107,6 +1268,171 @@
       actions +
       '</div>'
     );
+  }
+
+  function allGroupsPanelHtml() {
+    if (!G) return '';
+    var list = G.normalisePresets(_presets);
+    var days = G.DAY_IDS || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    var cards = list
+      .map(function (p) {
+        if (!p || !p.id) return '';
+        var sched = p.schedule;
+        var dayChecks = days
+          .map(function (d) {
+            var on = sched && sched.days && sched.days.indexOf(d) !== -1;
+            return (
+              '<label style="margin-right:8px;font-size:12px"><input type="checkbox" data-ags-day="' +
+              esc(d) +
+              '" data-ags-id="' +
+              esc(p.id) +
+              '"' +
+              (on ? ' checked' : '') +
+              '> ' +
+              esc(d) +
+              '</label>'
+            );
+          })
+          .join('');
+        var names = (p.memberIds || [])
+          .map(function (id) {
+            return (p.memberNames && p.memberNames[id]) || id.slice(0, 8);
+          })
+          .join(', ');
+        return (
+          '<div class="ms-ags-all-card" data-ags-card="' +
+          esc(p.id) +
+          '" style="padding:8px 0;border-top:1px solid var(--border,#e2e8f0)">' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">' +
+          '<button type="button" class="ms-lac-ghost" data-ags-pick="' +
+          esc(p.id) +
+          '">Pick</button>' +
+          '<input type="text" data-ags-rename="' +
+          esc(p.id) +
+          '" value="' +
+          esc(p.name) +
+          '" maxlength="48" aria-label="Group name" style="font-weight:600;width:min(220px,100%)">' +
+          '<button type="button" class="ms-lac-ghost" data-ags-always="' +
+          esc(p.id) +
+          '" title="Show this chip every day, all hours.">Always</button>' +
+          '<button type="button" class="ms-lac-ghost" data-ags-delete="' +
+          esc(p.id) +
+          '">Delete</button>' +
+          '</div>' +
+          '<div style="margin-top:4px;font-size:12px;color:var(--text-3,#64748b)">' +
+          esc(names || 'No people yet') +
+          '</div>' +
+          '<div style="margin-top:6px">' +
+          dayChecks +
+          '</div>' +
+          '<div style="margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          '<label>From <input type="time" data-ags-start="' +
+          esc(p.id) +
+          '" value="' +
+          esc((sched && sched.start) || '') +
+          '"></label>' +
+          '<label>to <input type="time" data-ags-end="' +
+          esc(p.id) +
+          '" value="' +
+          esc((sched && sched.end) || '') +
+          '"></label>' +
+          '<span style="font-size:12px;color:var(--text-3,#64748b)">Leave blank for always.</span>' +
+          '</div></div>'
+        );
+      })
+      .join('');
+    return (
+      '<div class="ms-ags-all" id="ms-ags-all-panel" style="margin:8px 0;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:8px;background:var(--bg-elev,#fff);max-height:280px;overflow:auto">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+      '<strong>All groups</strong>' +
+      '<button type="button" class="ms-lac-ghost" id="ms-ags-all-close">Close</button>' +
+      '</div>' +
+      '<p style="margin:6px 0 8px;font-size:12px;color:var(--text-3,#64748b)">Every saved group, including those outside their days and times.</p>' +
+      (cards || '<p style="font-size:12px">No groups yet. Encircle people and Save as group.</p>') +
+      '</div>'
+    );
+  }
+
+  function scheduleFromAllCard(card) {
+    if (!G || !card) return null;
+    var days = [];
+    card.querySelectorAll('[data-ags-day]').forEach(function (box) {
+      if (box.checked) days.push(box.getAttribute('data-ags-day'));
+    });
+    var startEl = card.querySelector('[data-ags-start]');
+    var endEl = card.querySelector('[data-ags-end]');
+    var start = (startEl && startEl.value) || '';
+    var end = (endEl && endEl.value) || '';
+    var raw = { days: days, start: start, end: end };
+    var preset = card.getAttribute('data-ags-card') ? G.findPreset(_presets, card.getAttribute('data-ags-card')) : null;
+    if (!days.length && !start && !end) return null;
+    if (!days.length || !start || !end) return (preset && preset.schedule) || null;
+    if (G.scheduleErrors(raw).length) return (preset && preset.schedule) || null;
+    return G.normaliseSchedule(raw);
+  }
+
+  function upsertPresetFromCard(id, patch) {
+    if (!G) return;
+    var preset = G.findPreset(_presets, id);
+    if (!preset) return;
+    var res = G.upsertPreset(_presets, Object.assign({}, preset, patch || {}));
+    if (!res.ok) {
+      _copyNote = (res.errors && res.errors[0]) || 'Could not update that group.';
+      announce(_copyNote);
+      return;
+    }
+    _presets = res.presets;
+    persistPresets();
+    render();
+  }
+
+  function bindAllGroupsPanel(root) {
+    var panel = root.querySelector('#ms-ags-all-panel');
+    if (!panel) return;
+    var close = panel.querySelector('#ms-ags-all-close');
+    if (close)
+      close.addEventListener('click', function () {
+        _showAllGroups = false;
+        render();
+      });
+    panel.addEventListener('click', function (e) {
+      var pick = e.target.closest && e.target.closest('[data-ags-pick]');
+      if (pick) {
+        e.preventDefault();
+        setDestSet({ kind: 'group', id: pick.getAttribute('data-ags-pick') || '' });
+        _showAllGroups = false;
+        render();
+        return;
+      }
+      var always = e.target.closest && e.target.closest('[data-ags-always]');
+      if (always) {
+        e.preventDefault();
+        upsertPresetFromCard(always.getAttribute('data-ags-always') || '', { schedule: null });
+        return;
+      }
+      var del = e.target.closest && e.target.closest('[data-ags-delete]');
+      if (del) {
+        e.preventDefault();
+        var id = del.getAttribute('data-ags-delete') || '';
+        var preset = G && G.findPreset(_presets, id);
+        if (!window.confirm('Delete group' + (preset && preset.name ? ' ' + preset.name : '') + '?')) return;
+        if (!G) return;
+        _presets = G.removePreset(_presets, id).presets;
+        if (_destSet && _destSet.kind === 'group' && _destSet.id === id) setDestSet({ kind: 'in-today' });
+        persistPresets();
+        render();
+      }
+    });
+    panel.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t) return;
+      var id = t.getAttribute('data-ags-rename') || t.getAttribute('data-ags-id') || '';
+      if (!id) return;
+      var card = t.closest('[data-ags-card]');
+      var patch = { schedule: scheduleFromAllCard(card) };
+      if (t.hasAttribute('data-ags-rename')) patch.name = t.value;
+      upsertPresetFromCard(id, patch);
+    });
   }
 
   function inTodayShareDests(exceptKey) {
@@ -1147,33 +1473,22 @@
     var inbox = !!opts.inbox;
     var abs = inbox ? { state: 'n/a', label: '' } : presenceForClinician(col);
     var away = abs.state === 'away' || abs.state === 'away-pending';
-    var inToday = abs.state === 'present' && abs.reason === 'in-today';
     var clear = inbox && !(col.tiles && col.tiles.length);
     var name = inbox ? 'Unallocated' : C.displayClinicianName(col.title);
-    var flag = away
-      ? '<span class="ms-lac-chip-flag">AWAY</span>'
-      : inToday
-        ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-in">In ' + esc(dayPhrase()) + '</span>'
-        : col.kind === 'team'
-          ? '<span class="ms-lac-chip-flag ms-lac-chip-flag-team">Team</span>'
-          : '';
-    var meta = inbox
-      ? clear
-        ? 'Clear'
-        : col.count + ' in this box'
-      : fieldCounts(col);
+    var flag = inbox ? '' : destFlagHtml(col, abs);
+    var meta = inbox ? (clear ? 'Clear' : col.count + ' in this box') : fieldCounts(col);
     if (!inbox && away && abs.label) meta = abs.label + (meta ? ' · ' + meta : '');
     var shareDests = inbox ? [] : inTodayShareDests(col.key);
     var nTiles = (col.tiles || []).length;
     var canShare = !inbox && nTiles && shareDests.length;
     var loud = !!(!inbox && away && nTiles);
     if (!inbox && nTiles && !shareDests.length) {
-      meta = (meta ? meta + ' · ' : '') + 'No doctors in today to share onto';
+      meta = (meta ? meta + ' · ' : '') + 'No doctors working today to share onto';
     }
     var shareTitle = canShare
       ? 'Share only ' + name + '’s box equally among ' + C.destNamesPhrase(shareDests) + ' - not the unallocated pile'
       : !inbox && nTiles
-        ? 'No doctors in today to share onto. Pick another working day.'
+        ? 'No doctors working today to share onto. Pick another working day.'
         : '';
     var shareBtn = '';
     if (!inbox && nTiles) {
@@ -1276,23 +1591,21 @@
     var teams = board.teams || [];
     var inboxEmpty = !(pool.tiles && pool.tiles.length);
     var inboxFolder = folderHtml(pool, { inbox: true });
-    var docFolders = clinicians
-      .concat(teams)
+    var destCols = clinicians.concat(teams);
+    if (inboxEmpty) {
+      destCols = destCols.filter(function (col) {
+        if (!col || col.kind !== 'team') return true;
+        return !!(col.tiles && col.tiles.length);
+      });
+    }
+    var docFolders = destCols
       .map(function (col) {
         return folderHtml(col, {});
       })
       .join('');
     var teamOpts = addableTeams()
       .map(function (t) {
-        return (
-          '<option value="' +
-          esc(t.id) +
-          '" data-name="' +
-          esc(t.name) +
-          '">' +
-          esc(t.name) +
-          '</option>'
-        );
+        return '<option value="' + esc(t.id) + '" data-name="' + esc(t.name) + '">' + esc(t.name) + '</option>';
       })
       .join('');
     var addRow =
@@ -1345,34 +1658,9 @@
   }
 
   function refusedPatientNote(plan) {
-    if (!plan || !plan.refused || !plan.refused.length) return '';
-    var names = [];
-    var dests = [];
-    plan.refused.forEach(function (r) {
-      if (r && r.toTitle) dests.push(C.displayClinicianName(r.toTitle));
-      (r.taskIds || []).forEach(function (id) {
-        var row = null;
-        _rows.forEach(function (x) {
-          if (x && x.id === id) row = x;
-        });
-        if (row && row.patientName && names.indexOf(row.patientName) === -1) names.push(row.patientName);
-      });
-    });
-    var destPhrase = dests.join(', ');
-    if (names.length) {
-      return (
-        '<p class="ms-lac-confirmbar-note">Not included: ' +
-        esc(names.join(', ')) +
-        ' (no unique staff match' +
-        (destPhrase ? ' for ' + destPhrase : '') +
-        '). They stay on this canvas.</p>'
-      );
-    }
-    return (
-      '<p class="ms-lac-confirmbar-note">Not included - no unique staff match: ' +
-      esc(destPhrase) +
-      '. Those stay on this canvas.</p>'
-    );
+    var phrase = C.refusedPatientsPhrase ? C.refusedPatientsPhrase(plan, _rows) : '';
+    if (!phrase) return '';
+    return '<p class="ms-lac-confirmbar-note">' + esc(phrase) + '</p>';
   }
 
   function confirmBarHtml() {
@@ -1425,29 +1713,37 @@
         })
         .join('');
       var refusedNote = refusedPatientNote(_confirmWrite);
-      var writeGate = C.canWriteRequestAllocations({ taskList: _taskList, slug: _route && _route.slug });
+      var writeGate = C.canWriteRequestAllocations({
+        taskList: _taskList,
+        slug: _route && _route.slug,
+        count: (_confirmWrite.items || []).length,
+      });
+      var gated = C.requestGatedWriteCopy
+        ? C.requestGatedWriteCopy({ count: (_confirmWrite.items || []).length })
+        : {
+            reviewHeadline: 'This is a plan on this canvas only. Medicus has not changed.',
+            reviewBody:
+              'To move these today, assign them in Medicus. Writing from this canvas is switched off for this queue until it has been checked on a test patient.',
+            writeButton: '',
+            hideWrite: true,
+          };
       var writeGo = writeGate.ok
         ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" title="Writes these reassignments to Medicus. Does not complete, file, or reply to the request.">Write to Medicus</button>'
-        : '<button type="button" class="ms-lac-confirm-btn ms-lac-primary ms-rxac-review-go" id="ms-lac-write-go" disabled title="' +
-          esc(writeGate.reason || 'Write not captured for this queue yet.') +
-          '">Write to Medicus</button>';
+        : '';
       var confirmLead = writeGate.ok
         ? '<strong>This is the write.</strong> Medicus will reassign these requests. This changes who the task sits with - it does not complete, file, or reply to the request.'
-        : '<strong>Proposal — not written yet.</strong> ' +
-          esc(writeGate.copy || C.REQUEST_WRITE_CAPTURE_COPY || 'This is a plan on this canvas only. Medicus does not change.') +
-          ' This changes who the task sits with - it does not complete, file, or reply to the request.';
+        : '<div class="ms-rxac-review-title">' +
+          esc(writeGate.reviewHeadline || gated.reviewHeadline) +
+          '</div>' +
+          esc(writeGate.reviewBody || gated.reviewBody);
       return (
         '<div class="ms-lac-confirmbar ms-lac-confirmbar-warn ms-rxac-review-open" role="region" aria-label="Review this proposal">' +
         '<div class="ms-rxac-review-copy">' +
         '<div class="ms-rxac-review-title">' +
-        (writeGate.ok ? 'Confirm write to Medicus' : 'Review this proposal') +
+        (writeGate.ok ? 'Confirm write to Medicus' : '') +
         '</div>' +
         confirmLead +
-        (writeGate.ok
-          ? ''
-          : '<p class="ms-lac-confirmbar-note">' +
-            esc(writeGate.reason || 'Write not captured for this queue yet.') +
-            '</p>') +
+        (writeGate.ok ? '' : '') +
         '<ul class="ms-lac-writelist">' +
         lines +
         '</ul>' +
@@ -1476,19 +1772,22 @@
     var writeTitle = canOpenReview
       ? 'Opens the patient → destination list. Nothing is written until you confirm.'
       : blockReason;
-    var writeLabel = 'Review then write ' + sum.count + '…';
+    var gatedCopy = C.requestGatedWriteCopy ? C.requestGatedWriteCopy({ count: sum.count }) : null;
+    var writeLabel = gate.ok
+      ? 'Review then write ' + sum.count + '…'
+      : (gatedCopy && gatedCopy.reviewButton) || (sum.count ? 'Review plan (' + sum.count + ')' : 'Review plan');
     var status = captureClosed
-      ? '<div class="ms-rxac-review-title">Proposal - not written yet</div><strong>' +
-        sum.count +
-        ' would sit with the people above.</strong> ' +
-        esc(gate.copy || C.REQUEST_WRITE_CAPTURE_COPY || '') +
-        ' Drag a patient onto another doctor to change who gets them.'
+      ? '<div class="ms-rxac-review-title">' +
+        esc((gatedCopy && gatedCopy.reviewHeadline) || 'This is a plan on this canvas only. Medicus has not changed.') +
+        '</div>' +
+        esc((gatedCopy && gatedCopy.reviewBody) || gate.copy || C.REQUEST_WRITE_CAPTURE_COPY || '') +
+        ' Drag a patient from one person onto another to change who gets them.'
       : blockReason
         ? '<strong>Cannot move these yet.</strong> ' + esc(blockReason)
         : sum.count
-          ? '<div class="ms-rxac-review-title">Proposal - not written yet</div><strong>' +
+          ? '<div class="ms-rxac-review-title">Proposal, not written yet</div><strong>' +
             sum.count +
-            ' would sit with the people above.</strong> Drag a patient onto another doctor to change who gets them. Review then write starts the write - you still confirm on the next step.'
+            ' would sit with the people above.</strong> Drag a patient from one person onto another to change who gets them. Review then write starts the write - you still confirm on the next step.'
           : 'Drag a patient into a doctor’s box. Medicus does not change until you confirm.';
     return (
       '<div class="ms-lac-confirmbar' +
@@ -1499,7 +1798,7 @@
       '<span class="ms-lac-confirmbar-note">' +
       status +
       '</span>' +
-      (_copyNote ? '<span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
+      (_copyNote ? ' <span class="ms-lac-hint">' + esc(_copyNote) + '</span>' : '') +
       '</div>' +
       '<div class="ms-lac-confirmbar-actions">' +
       (sum.count
@@ -1530,6 +1829,7 @@
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
       (stagedN ? ' ms-rxac-proposing' : '') +
+      (_confirmWrite ? ' ms-rxac-reviewing' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate ' +
@@ -1538,7 +1838,7 @@
       '<span class="ms-lac-header-counts">' +
       esc(counts) +
       '</span>' +
-      '<span class="ms-lac-header-note" title="Unallocated is the pile still sitting in this inbox. Split equally / Top up / Distribute equally propose moves among the named destinations. Drag a patient onto another folder to change one. Nothing is written until you confirm.">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among the current destinations.</span>' +
+      '<span class="ms-lac-header-note" title="Unallocated is the pile still sitting in this inbox. Split equally / Top up propose moves among the named destinations. Drag a patient onto another folder to change one. Nothing is written until you confirm.">Unallocated is the pile. Split equally, or drag a patient onto a doctor. Share this box splits only that doctor’s requests among the current destinations.</span>' +
       '<span class="ms-lac-hint" id="ms-lac-progress">' +
       esc(_overviewProgress) +
       '</span>' +
@@ -1680,22 +1980,21 @@
     var box = marqueeBox();
     var overlay = document.getElementById(OVERLAY_ID);
     if (box && overlay && box.width >= 8 && box.height >= 8) {
-      overlay.querySelectorAll('.ms-rxac-folder[data-col-kind="clinician"] .ms-rxac-folder-head').forEach(function (head) {
-        var r = head.getBoundingClientRect();
-        var hit = !(r.right < box.left || r.left > box.right || r.bottom < box.top || r.top > box.bottom);
-        if (!hit) return;
-        var person = personFromFolder(head);
-        if (person) people.push(person);
-      });
+      overlay
+        .querySelectorAll('.ms-rxac-folder[data-col-kind="clinician"] .ms-rxac-folder-head')
+        .forEach(function (head) {
+          var r = head.getBoundingClientRect();
+          var hit = !(r.right < box.left || r.left > box.right || r.bottom < box.top || r.top > box.bottom);
+          if (!hit) return;
+          var person = personFromFolder(head);
+          if (person) people.push(person);
+        });
     }
     _marquee = null;
     paintMarquee();
     if (!people.length) return;
     if (addPeopleToCustom(people)) {
-      _copyNote =
-        'New group of ' +
-        people.length +
-        ' - save as group to keep it, or Split equally to propose.';
+      _copyNote = 'New group of ' + people.length + ' - save as group to keep it, or Split equally to propose.';
       announce(_copyNote);
     }
     render();
@@ -1791,15 +2090,14 @@
         e.preventDefault();
         e.stopPropagation();
         if (_writing) return;
-        var applied = applyFn();
-        _selected = {};
-        _confirmWrite = null;
-        _copyNote =
-          applied && applied.ok
-            ? okNote(applied)
-            : (applied && applied.reason) || 'Could not split.';
-        announce(_copyNote);
-        render();
+        Promise.resolve(ensureDestStaffResolved()).then(function () {
+          var applied = applyFn();
+          _selected = {};
+          _confirmWrite = null;
+          _copyNote = applied && applied.ok ? okNote(applied) : (applied && applied.reason) || 'Could not split.';
+          announce(_copyNote);
+          render();
+        });
       });
     }
     bindPileAction('#ms-ags-split', applyPileSplit, function (applied) {
@@ -1807,18 +2105,16 @@
         'Split ' +
         applied.total +
         ' equally onto ' +
-        applied.doctors +
-        ' doctors working ' +
-        dayPhrase() +
+        destOntoPhrase(applied.doctors) +
         '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
-    bindPileAction('#ms-ags-topup', applyPileSplit, function (applied) {
+    bindPileAction('#ms-ags-topup', applyTopUp, function (applied) {
       return (
         'Topped up empty boxes with ' +
         applied.total +
-        ' among doctors working ' +
-        dayPhrase() +
+        ' among ' +
+        destOntoPhrase(applied.doctors) +
         '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
@@ -1827,9 +2123,7 @@
         'Distributed ' +
         applied.total +
         ' equally among ' +
-        applied.doctors +
-        ' doctors working ' +
-        dayPhrase() +
+        destOntoPhrase(applied.doctors) +
         '. Proposal - not written yet. Drag a patient onto another doctor to change who gets them.'
       );
     });
@@ -1839,7 +2133,7 @@
         e.preventDefault();
         e.stopPropagation();
         setDestSet({ kind: 'in-today' });
-        announce('Share out to people in ' + dayPhrase() + '.');
+        announce('Share out to people working ' + dayPhrase() + '.');
         render();
       });
     root.querySelectorAll('[data-ags-group]').forEach(function (btn) {
@@ -1850,7 +2144,8 @@
         if (!id) return;
         setDestSet({ kind: 'group', id: id });
         _showAllGroups = false;
-        announce('Share out to that group.');
+        var picked = destGroupName();
+        announce(picked ? 'Share out to ' + picked + '.' : 'Share out to that group.');
         render();
       });
     });
@@ -1862,6 +2157,7 @@
         _showAllGroups = !_showAllGroups;
         render();
       });
+    bindAllGroupsPanel(root);
     var saveBtn = root.querySelector('#ms-ags-save');
     if (saveBtn)
       saveBtn.addEventListener('click', function (e) {
@@ -1923,7 +2219,8 @@
       newGroup.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
-        _copyNote = 'Encircle people on the board, or drag a name onto New group.';
+        setDestSet({ kind: 'custom', members: [] });
+        _copyNote = "Drag a person's name onto New group, or draw a box around names on the board, then Save as group.";
         announce(_copyNote);
         render();
       });
@@ -2424,7 +2721,11 @@
         ' reassignment' +
         (n === 1 ? '' : 's') +
         (leftover
-          ? '. ' + leftover + ' destination' + (leftover === 1 ? '' : 's') + ' had no unique staff id and stayed unallocated'
+          ? '. ' +
+            leftover +
+            ' destination' +
+            (leftover === 1 ? '' : 's') +
+            ' had no unique staff id and stayed unallocated'
           : '') +
         '. The open list is the same queue with new assignees - reload Medicus if the grid still shows the old number.';
       announce(_copyNote);
@@ -2481,6 +2782,7 @@
     _destSetReady = false;
     _showAllGroups = false;
     _namingGroup = false;
+    _scheduleAutoPick = false;
     _personDrag = null;
     _marquee = null;
     var el = document.getElementById(OVERLAY_ID);
@@ -2514,6 +2816,7 @@
     _destSetReady = false;
     _showAllGroups = false;
     _namingGroup = false;
+    _scheduleAutoPick = false;
     _personDrag = null;
     _marquee = null;
     var el = document.getElementById(OVERLAY_ID);
@@ -2534,26 +2837,55 @@
   function ensureLauncher() {
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
+    var wrap = document.getElementById(LAUNCH_WRAP_ID);
+    var countEl = document.getElementById(INBOX_N_ID);
     if (!route) {
       if (launch) launch.remove();
+      if (countEl) countEl.remove();
+      if (wrap) wrap.remove();
       if (_open) closeOverlay();
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Share out this inbox…';
+    if (_inboxCountSlug && _inboxCountSlug !== route.slug) {
+      _inboxCount = 0;
+      _inboxCountSlug = '';
+    }
+    var n = currentInboxCount();
+    var launchLabel = C.requestLaunchLabel ? C.requestLaunchLabel(n) : 'Draft a split (nothing is sent)…';
+    var launchTitle = C.requestLaunchTitle ? C.requestLaunchTitle() : 'Nothing is written. Opens a planning board.';
+    var countLabel = C.requestInboxCountLabel ? C.requestInboxCountLabel(n) : n ? n + ' in this inbox' : '';
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = LAUNCH_WRAP_ID;
+      document.documentElement.appendChild(wrap);
+    }
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
       launch.id = LAUNCH_ID;
       launch.textContent = launchLabel;
+      launch.title = launchTitle;
       launch.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
         openOverlay();
       });
-      document.documentElement.appendChild(launch);
+      wrap.appendChild(launch);
     } else {
       launch.textContent = launchLabel;
+      launch.title = launchTitle;
+      if (launch.parentNode !== wrap) wrap.appendChild(launch);
+    }
+    if (countLabel) {
+      if (!countEl) {
+        countEl = document.createElement('span');
+        countEl.id = INBOX_N_ID;
+        wrap.insertBefore(countEl, wrap.firstChild);
+      }
+      countEl.textContent = countLabel;
+    } else if (countEl) {
+      countEl.remove();
     }
   }
 
@@ -2621,12 +2953,25 @@
   var _mo = new MutationObserver(function (records) {
     for (var i = 0; i < records.length; i++) {
       var t = records[i].target;
-      if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_ID))) return;
+      if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_WRAP_ID) || t.closest('#' + LAUNCH_ID)))
+        return;
     }
     ensureLauncher();
   });
   _mo.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('popstate', ensureLauncher);
+  window.addEventListener('ch-task-list-data', function (e) {
+    _bridgeCount++;
+    if (!_bridgeTimer) {
+      _bridgeTimer = setTimeout(function () {
+        _bridgeCount = 0;
+        _bridgeTimer = null;
+      }, 5000);
+    }
+    if (_bridgeCount > 10) return;
+    rememberInboxCount(e && e.detail);
+    ensureLauncher();
+  });
   setInterval(ensureLauncher, 1500);
   ensureLauncher();
 })();
