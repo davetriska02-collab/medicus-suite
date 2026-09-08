@@ -91,12 +91,12 @@
   border: 1px solid var(--accent-line);
 }
 
-/* ── occupied masthead + rail (treatment B, 2026-09-07) ─────────────────────
+/* ── occupied masthead (advisory, not a lock) ───────────────────────────────
    Prepended into <main> on a task overview when someone else is in the
    native Pusher presence channel (or the suite store, as fallback).
-   Amber triad: caution / duplicate-work, never clinical red. Advisory —
-   it warns, it never blocks. Rail is painted on the banner itself so we
-   never restyle the host Medicus <main>. */
+   Amber wash: duplicate-work caution, never clinical red. Advisory —
+   it warns, it never blocks. Hairline on the banner itself so we
+   never restyle the host Medicus <html> or <main>. */
 
 #ms-tp-banner {
   position: relative;
@@ -104,11 +104,9 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  padding: 8px 22px 8px 18px;
+  padding: 8px 16px;
   background: var(--amber-dim);
-  border: 0;
-  border-left: 4px solid var(--amber);
-  border-bottom: 1px solid var(--amber-line);
+  border: 1px solid var(--border);
   border-radius: 0;
   color: var(--text-1);
   font-size: 12px;
@@ -248,10 +246,10 @@
 
 .ms-tp-live {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--r-pill);
-  background: var(--amber);
+  background: var(--text-3);
   pointer-events: none;
 }
 
@@ -265,7 +263,7 @@
       box-shadow: 0 0 0 0 var(--amber-line);
     }
     50% {
-      box-shadow: 0 0 0 4px var(--amber-line);
+      box-shadow: 0 0 0 2px var(--amber-line);
     }
   }
 }
