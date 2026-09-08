@@ -36,10 +36,7 @@ const qof = require('./rules/qof-rules.json');
   const optionsHtml = fs.readFileSync(path.join(__dirname, 'options/options.html'), 'utf8');
 
   console.log('--- on-page control writes the same storage key ---');
-  check(
-    /id="sgSoftFlags"/.test(signingSrc),
-    'Signing Queue shell has #sgSoftFlags (on-page pack control)'
-  );
+  check(/id="sgSoftFlags"/.test(signingSrc), 'Signing Queue shell has #sgSoftFlags (on-page pack control)');
   check(
     /Show monitoring &(?:amp;)? QOF review flags/.test(signingSrc),
     'on-page label is the GP-facing "Show monitoring & QOF review flags"'
@@ -50,32 +47,23 @@ const qof = require('./rules/qof-rules.json');
   );
 
   console.log('\n--- live sync: Options write must wake an open Signing tab ---');
-  const onChangedBlock = signingSrc.match(/chrome\.storage\.onChanged[\s\S]{0,1200}/);
   check(
-    !!(onChangedBlock && /suite\.signing\.softFlags/.test(onChangedBlock[0])),
+    /onChanged\.addListener\(onSoftFlagsStorageChange\)/.test(signingSrc) &&
+      /SOFT_FLAGS_KEY = 'suite\.signing\.softFlags'/.test(signingSrc) &&
+      /function onSoftFlagsStorageChange/.test(signingSrc) &&
+      /changes\[SOFT_FLAGS_KEY\]/.test(signingSrc),
     'Signing Queue onChanged handler reads suite.signing.softFlags'
   );
-  check(
-    /onChanged\.removeListener/.test(signingSrc),
-    'Signing Queue removes the storage listener on cleanup'
-  );
-  const optionsOnChanged = optionsJs.includes("changes['suite.signing.softFlags']") ||
+  check(/onChanged\.removeListener/.test(signingSrc), 'Signing Queue removes the storage listener on cleanup');
+  const optionsOnChanged =
+    optionsJs.includes("changes['suite.signing.softFlags']") ||
     optionsJs.includes('changes["suite.signing.softFlags"]');
   check(optionsOnChanged, 'Options checkbox re-reads suite.signing.softFlags on storage change');
-  check(
-    /id="signingSoftFlags"/.test(optionsHtml),
-    'Options Suite checkbox is still present (same key)'
-  );
+  check(/id="signingSoftFlags"/.test(optionsHtml), 'Options Suite checkbox is still present (same key)');
 
   console.log('\n--- monitoring chips stay always-on ---');
-  check(
-    /verdict:\s*monitoringVerdict\(chips\)/.test(signingSrc),
-    'monitoringVerdict runs on every evaluated row'
-  );
-  check(
-    !/softFlags\s*\?\s*monitoringVerdict/.test(signingSrc),
-    'monitoringVerdict is not gated on softFlags'
-  );
+  check(/verdict:\s*monitoringVerdict\(chips\)/.test(signingSrc), 'monitoringVerdict runs on every evaluated row');
+  check(!/softFlags\s*\?\s*monitoringVerdict/.test(signingSrc), 'monitoringVerdict is not gated on softFlags');
 
   console.log('\n--- engine path: allow-listed QOF review badges when rules are loaded ---');
   const NOW = '2026-06-01T12:00:00Z';
@@ -85,14 +73,15 @@ const qof = require('./rules/qof-rules.json');
     patientContext: {},
   });
   const ast015 = (chips || []).find((c) => c && c.type === 'qof-indicator' && c.indicatorCode === 'AST015');
-  check(!!ast015 && ast015.status === 'overdue', 'evaluatePatient + qof-rules: AST015 overdue for long-standing asthma, no review');
+  check(
+    !!ast015 && ast015.status === 'overdue',
+    'evaluatePatient + qof-rules: AST015 overdue for long-standing asthma, no review'
+  );
   const qvOn = qofReviewVerdict(chips);
   check(
     qvOn.label === 'QOF review overdue — asthma',
     `qofReviewVerdict badges that chip (got ${JSON.stringify(qvOn.label)})`
   );
-  const qvOff = { level: null, items: [], label: '' };
-  check(qvOff.label === '', 'pack off keeps the QOF badge empty (signing.js gate)');
   check(monitoringVerdict(chips).level === null, 'AST015 chip does not leak into always-on monitoring chips');
 
   const dmChips = engine.evaluatePatient([], [{ name: 'HbA1c', value: '75', date: '2024-01-01' }], qof.rules, {

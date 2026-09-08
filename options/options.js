@@ -196,6 +196,11 @@ saveSuiteBtn?.addEventListener('click', async () => {
 signingSoftFlagsInput?.addEventListener('change', async () => {
   await chrome.storage.local.set({ 'suite.signing.softFlags': signingSoftFlagsInput.checked === true });
 });
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area && area !== 'local') return;
+  if (!signingSoftFlagsInput || !changes['suite.signing.softFlags']) return;
+  signingSoftFlagsInput.checked = changes['suite.signing.softFlags'].newValue === true;
+});
 
 // Guided tour replay — clears the seen-version marker (localStorage is shared
 // across extension pages, so the side panel sees the reset immediately and

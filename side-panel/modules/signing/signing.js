@@ -110,10 +110,12 @@ export async function init(el) {
 
   renderShell();
   _stopFresh = attachFreshnessTicker(container);
+  if (chrome.storage?.onChanged) chrome.storage.onChanged.addListener(onSoftFlagsStorageChange);
   await fetchAndRun();
 
   return () => {
     _abort = true;
+    if (chrome.storage?.onChanged) chrome.storage.onChanged.removeListener(onSoftFlagsStorageChange);
     if (_stopFresh) _stopFresh();
     container = null;
   };
@@ -258,8 +260,7 @@ async function runMonitoringPass(apiBase) {
           verdict: monitoringVerdict(chips),
           combo: combinationVerdict(chips),
           renal,
-          qof: state.softFlags ? qofReviewVerdict(chips) : { level: null, items: [], label: '' },
-          medicusReviewDue: state.softFlags ? medicusReviewDue(medications) : false,
+          ...softFlagVerdicts(chips, medications),
         };
         _verdictByUuid.set(patientUuid, entry);
         evaluations++;
@@ -388,16 +389,47 @@ async function loadRules() {
 }
 
 // Practice toggle — absent / anything other than true is OFF (default).
+const SOFT_FLAGS_KEY = 'suite.signing.softFlags';
+
 function loadSoftFlags() {
   return new Promise((resolve) => {
     try {
-      chrome.storage.local.get('suite.signing.softFlags', (r) => {
-        resolve(r['suite.signing.softFlags'] === true);
+      chrome.storage.local.get(SOFT_FLAGS_KEY, (r) => {
+        resolve(r[SOFT_FLAGS_KEY] === true);
       });
     } catch (_) {
       resolve(false);
     }
   });
+}
+
+function saveSoftFlags(on) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.set({ [SOFT_FLAGS_KEY]: on === true }, () => resolve());
+    } catch (_) {
+      resolve();
+    }
+  });
+}
+
+function softFlagVerdicts(chips, medications) {
+  if (!state.softFlags) {
+    return { qof: { level: null, items: [], label: '' }, medicusReviewDue: false };
+  }
+  return { qof: qofReviewVerdict(chips), medicusReviewDue: medicusReviewDue(medications) };
+}
+
+function onSoftFlagsStorageChange(changes, area) {
+  if (area && area !== 'local') return;
+  if (!container || !changes[SOFT_FLAGS_KEY]) return;
+  const next = changes[SOFT_FLAGS_KEY].newValue === true;
+  if (next === state.softFlags) return;
+  state.softFlags = next;
+  const box = container.querySelector('#sgSoftFlags');
+  if (box) box.checked = next;
+  _abort = true;
+  setTimeout(() => fetchAndRun(), 0);
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -432,6 +464,10 @@ function renderShell() {
           (tt) =>
             `<label class="sg-type-toggle"><input type="checkbox" data-type="${tt.key}" ${state.types[tt.key] ? 'checked' : ''}/> ${tt.label}</label>`
         ).join('')}
+        <label class="sg-type-toggle" title="When on, adds QOF review badges (asthma, COPD, heart failure, SMI, dementia) and a Flagged filter. Monitoring chips stay visible either way. Same setting as Options → Suite.">
+          <input type="checkbox" id="sgSoftFlags" ${state.softFlags ? 'checked' : ''}/>
+          Show monitoring &amp; QOF review flags
+        </label>
         <div id="sgFlagPills" class="sg-flag-pills"></div>
       </div>
 
@@ -448,13 +484,20 @@ function renderShell() {
     _abort = true; // stop any in-flight pass; fetchAndRun resets it
     setTimeout(() => fetchAndRun(), 0);
   });
-  container.querySelectorAll('.sg-type-toggle input').forEach((cb) => {
+  container.querySelectorAll('.sg-type-toggle input[data-type]').forEach((cb) => {
     cb.addEventListener('change', () => {
       state.types[cb.dataset.type] = cb.checked;
       saveUiState('signing', { types: state.types });
       _abort = true;
       setTimeout(() => fetchAndRun(), 0);
     });
+  });
+  container.querySelector('#sgSoftFlags')?.addEventListener('change', async (e) => {
+    const on = e.target.checked === true;
+    state.softFlags = on;
+    await saveSoftFlags(on);
+    _abort = true;
+    setTimeout(() => fetchAndRun(), 0);
   });
 }
 
@@ -484,6 +527,8 @@ function renderAll() {
       banner.textContent = '';
     }
   }
+  const softBox = container.querySelector('#sgSoftFlags');
+  if (softBox) softBox.checked = !!state.softFlags;
   const title = container.querySelector('#sgTitle');
   if (title) {
     const n = state.rows.length;
