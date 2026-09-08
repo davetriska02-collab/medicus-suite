@@ -146,6 +146,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.8 (8 Sep)** — Occupied/list strip hides you (Pusher myID / email / display name, not only staff UUID); occupancy look is a Suite table (colour, size, highlight) with click-the-alert on-the-fly changes; default fluoro yellow
 - **v3.261.7 (8 Sep)** — Occupied/list heading starts Note:; note wash not peach; queue shows 47 in this inbox from the task-list bridge
 - **v3.261.6 (8 Sep)** — Occupied/list heading starts Note:; request launcher shows the task-list count; dest-set footer names Morning triage when that set is on
 - **v3.261.5 (8 Sep)** — Queue title strip: named list occupancy from Medicus `presence-{site}-task-list-{slug}` replaces the host "GP is also working this list" widget (advisory, never a per-request occupant)

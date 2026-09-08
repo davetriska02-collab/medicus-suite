@@ -39,7 +39,7 @@
   // (sig compared equal to itself and the previous request's names stuck).
   // Idle sentinel: after leaving an overview, sig becomes 'idle' so the 2s
   // poll emits exactly one empty event, not an empty event forever.
-  function presenceEmitDecision(prevSig, taskUuid, members, live, selfExtras) {
+  function presenceEmitDecision(prevSig, taskUuid, members, live, selfExtras, selfId) {
     var prev = typeof prevSig === 'string' ? prevSig : '';
     var list = Array.isArray(members) ? members : [];
     var ids = [];
@@ -50,11 +50,14 @@
     ids.sort();
     var liveBit = live === false ? '0' : '1';
     var extras = typeof selfExtras === 'number' && isFinite(selfExtras) && selfExtras >= 1 ? Math.floor(selfExtras) : 0;
+    var sid = typeof selfId === 'string' ? selfId.toLowerCase() : '';
+    if (sid && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sid)) sid = '';
     if (!taskUuid) {
       return { sig: 'idle', emit: prev !== '' && prev !== 'idle' };
     }
     var sig = String(taskUuid).toLowerCase() + ':' + ids.join(',') + ':' + liveBit;
     if (extras >= 1) sig += ':x' + extras;
+    if (sid) sig += ':s' + sid;
     return { sig: sig, emit: sig !== prev };
   }
 
@@ -345,24 +348,27 @@
     return out;
   }
 
-  function emitNativePresence(taskUuid, members, live, selfExtras) {
+  function emitNativePresence(taskUuid, members, live, selfExtras, selfId) {
     var list = Array.isArray(members) ? members : [];
     var extras = typeof selfExtras === 'number' && isFinite(selfExtras) && selfExtras >= 1 ? Math.floor(selfExtras) : 0;
-    var d = presenceEmitDecision(lastPresenceSig, taskUuid, list, live, extras);
+    var sid = typeof selfId === 'string' && UUID_RE.test(selfId) ? selfId.toLowerCase() : '';
+    var d = presenceEmitDecision(lastPresenceSig, taskUuid, list, live, extras, sid);
     if (!d.emit) return;
     lastPresenceSig = d.sig;
     var detail = { taskUuid: taskUuid || '', members: list };
     if (live === false) detail.live = false;
     if (extras >= 1) detail.selfExtras = extras;
+    if (sid) detail.selfId = sid;
     try {
       window.dispatchEvent(new CustomEvent('ch-native-task-presence', { detail: detail }));
     } catch (_) {}
   }
 
-  function emitNativeListPresence(slug, members, live) {
+  function emitNativeListPresence(slug, members, live, selfId) {
     var list = Array.isArray(members) ? members : [];
     var prev = lastListPresenceSig;
-    var d = presenceEmitDecision(lastListPresenceSig, slug, list, live);
+    var sid = typeof selfId === 'string' && UUID_RE.test(selfId) ? selfId.toLowerCase() : '';
+    var d = presenceEmitDecision(lastListPresenceSig, slug, list, live, 0, sid);
     if (!d.emit) return;
     lastListPresenceSig = d.sig;
     var detailSlug = slug || '';
@@ -372,6 +378,7 @@
     }
     var detail = { slug: detailSlug, members: list };
     if (live === false) detail.live = false;
+    if (sid) detail.selfId = sid;
     try {
       window.dispatchEvent(new CustomEvent('ch-native-list-presence', { detail: detail }));
     } catch (_) {}
@@ -427,7 +434,11 @@
         if (UUID_RE.test(idp)) selfId = idp;
       } catch (_) {}
     }
-    return { members: members, selfExtras: presenceSelfExtras(rawIds, declared, selfId) };
+    return {
+      members: members,
+      selfExtras: presenceSelfExtras(rawIds, declared, selfId),
+      selfId: selfId ? String(selfId).toLowerCase() : '',
+    };
   }
 
   function unbindPresenceChannel() {
@@ -471,7 +482,7 @@
           return;
         }
         var got = collectPresenceMembers(ch);
-        emitNativePresence(liveUuid, got.members, true, got.selfExtras);
+        emitNativePresence(liveUuid, got.members, true, got.selfExtras, got.selfId);
       };
       var onSucceeded = function () {
         presenceSubErrored = false;
@@ -531,7 +542,7 @@
           return;
         }
         var got = collectPresenceMembers(ch);
-        emitNativeListPresence(liveSlug, got.members, true);
+        emitNativeListPresence(liveSlug, got.members, true, got.selfId);
       };
       var onSucceeded = function () {
         listPresenceSubErrored = false;
@@ -591,7 +602,7 @@
           if (presenceSubErrored) emitNativePresence(taskUuid, [], false);
           else {
             var pollGot = collectPresenceMembers(map[name]);
-            emitNativePresence(taskUuid, pollGot.members, true, pollGot.selfExtras);
+            emitNativePresence(taskUuid, pollGot.members, true, pollGot.selfExtras, pollGot.selfId);
           }
           break;
         }
@@ -631,7 +642,7 @@
           if (listPresenceSubErrored) emitNativeListPresence(slug, [], false);
           else {
             var pollGot = collectPresenceMembers(map[name]);
-            emitNativeListPresence(slug, pollGot.members, true);
+            emitNativeListPresence(slug, pollGot.members, true, pollGot.selfId);
           }
           break;
         }

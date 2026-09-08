@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.8] — 2026-09-08
+
+### Occupied strip — do not show yourself; practice-set look
+
+- List and request occupancy now drop **you**, even when Pusher `members.myID` is not the staff UUID stamped on the page. Matching is staff UUID, Pusher self id, login email, or your Options display name (folded). `david.triska` matches `Dr David Triska`. `sam.okonkwo` does not drop Samira Okonkwo.
+- Only-self after that filter hides the strip and restores the host "working this list" widget.
+- Occupancy look is a Suite setting (`suite.display.presenceLook`): colour, size, highlight, avatars, quiet clause, headline weight. Default is **fluoro yellow**, medium, fill + border. Options → Task Presence has the table and a live preview.
+- Click the live alert (or **Change look** / **Look**) to change those choices on the fly. Saved on this machine; does not clobber theme / text size / colourblind / zen.
+
 ## [v3.261.7] — 2026-09-08
 
 ### Occupied strip and allocation groups — note wash + inbox count
