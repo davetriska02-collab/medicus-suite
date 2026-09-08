@@ -2,10 +2,7 @@
    #ms-lac-overlay, #ms-wac-overlay, #ms-rxac-overlay and #ms-qac-overlay
    carry their own token block (panel.css :root is not available on Medicus
    pages) — values mirror the canon light column in
-   .claude/skills/ui-design/TOKENS.md. Chrome (scrim, elevated panel, mid
-   header / explainer / confirm bar) follows problem-nesting-canvas.css so
-   the allocate family reads as the same Suite canvas, not a fourth look.
-   The workbench stays full-bleed inside that chrome (not a capped modal). */
+   .claude/skills/ui-design/TOKENS.md. */
 #ms-qac-launch-wrap {
   position: fixed;
   top: 12px;
@@ -138,8 +135,6 @@
   clip: rect(0 0 0 0);
 }
 
-/* Shell is the problem-organiser scrim. The panel fills the remaining
-   workbench so 73-item sessions stay full-bleed, framed not capped. */
 .ms-lac-shell {
   position: absolute;
   inset: 0;

@@ -1,8 +1,4 @@
 /* global process, console, URL */
-// Headless renders of the Suite canvas family (problem organiser + allocate).
-// Usage: node scripts/canvas-chrome-shots.mjs [outDir]
-// Writes <view>.png into outDir (default /tmp/canvas-chrome).
-
 import { createServer } from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
