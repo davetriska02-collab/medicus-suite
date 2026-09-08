@@ -1,8 +1,9 @@
 # Medicus Suite — copy the gold folder onto this PC's local disk.
 #
-# Chrome and Edge drop an unpacked extension after a restart when it is loaded
-# from a network / mapped / Y: drive (the share is often not mounted yet when
-# the browser starts). Load unpacked from the local copy this script makes.
+# For PCs that drop a share-loaded unpacked extension after a restart (the
+# mapped drive is often not mounted yet when the browser starts). Copies the
+# gold folder onto this PC so you can Load unpacked from a local path.
+# Skip this machine if it already survives reboot on the share.
 #
 # Usage:
 #   .\copy-to-this-pc.ps1

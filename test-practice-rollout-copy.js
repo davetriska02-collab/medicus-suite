@@ -54,8 +54,12 @@ check(
   'options.html has a visible install-location warning (ppInstallWarn)'
 );
 check(
-  /Do not Load unpacked from a network/i.test(optionsHtml),
-  'options warning says not to Load unpacked from a network drive'
+  /If the suite vanishes after a restart/i.test(optionsHtml),
+  'options warning is about the drop-after-restart race, not a ban on shares'
+);
+check(
+  /already up as the browser starts|survives a reboot on the share/i.test(optionsHtml),
+  'options warning says a working share-load can stay'
 );
 check(
   optionsHtml.includes('copy-to-this-pc.cmd'),
@@ -78,12 +82,11 @@ check(
   'options page loads shared/gold-sync.js'
 );
 check(
-  /Load unpacked<\/strong>\s*<strong>once<\/strong>|Load unpacked\s+<strong>once<\/strong>/.test(optionsHtml) ||
-    optionsHtml.includes('Load unpacked') && optionsHtml.includes('once</strong> from'),
-  'options warning says Load unpacked is once, not every update'
+  /skip this if this PC already loads from the share/i.test(optionsHtml),
+  'auto-sync card is optional when the share-load already survives restart'
 );
 
-check(/local disk/i.test(readme) || /LOCALAPPDATA/i.test(readme), 'README install step requires a local disk');
+check(/LOCALAPPDATA/i.test(readme) || /practice share is fine/i.test(readme), 'README allows a share when it stays mounted');
 check(
   readme.includes('docs/PRACTICE-ROLLOUT.md'),
   'README links the practice rollout playbook'

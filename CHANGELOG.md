@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.6] — 2026-09-08
+
+### Share-load is valid when it stays up
+
+A working Load-unpacked from the practice share is not a bug. The drop
+after restart is a race (browser starts before the mapped drive is up),
+not a rule that shares are forbidden. Options, README and the rollout
+playbook now say: leave a PC that survives reboot on the share; use the
+local clone + gold sync only on PCs that drop.
+
 ## [v3.261.5] — 2026-09-08
 
 ### Automatic updates from the gold copy

@@ -22,16 +22,16 @@ honest limits — see [`docs/VISION.md`](docs/VISION.md).
 
 1. Download the latest `medicus-suite-vX.Y.Z.zip` from the
    [releases page](https://github.com/davetriska02-collab/medicus-suite/releases/latest).
-2. Unzip somewhere **permanent on this computer's local disk** (C: or
-   `%LOCALAPPDATA%\MedicusSuite`). Do **not** Load unpacked from a network,
-   mapped, Y:, or USB drive — Chrome and Edge drop the extension after a
-   restart when that folder is not already mounted. Practice-wide rollout
-   (gold copy on the share, local clone on each PC) is in
-   [`docs/PRACTICE-ROLLOUT.md`](docs/PRACTICE-ROLLOUT.md). The
-   `copy-to-this-pc.cmd` helper in the zip does the local copy.
+2. Unzip somewhere **permanent**. A practice share is fine if that drive is
+   already mounted when the browser starts (many surgery PCs live this way).
+   If the suite vanishes after a restart, that PC lost the race: copy to
+   `%LOCALAPPDATA%\MedicusSuite` with `copy-to-this-pc.cmd` and Load
+   unpacked from there. Playbook:
+   [`docs/PRACTICE-ROLLOUT.md`](docs/PRACTICE-ROLLOUT.md).
 3. Open `chrome://extensions` in Chrome (or `edge://extensions` in Edge).
 4. Switch on **Developer mode** (top right).
-5. Click **Load unpacked** and pick the **local** unzipped folder.
+5. Click **Load unpacked** and pick the unzipped folder (share or local
+   clone — see above).
 6. Pin the extension to the toolbar so the icon is visible.
 7. Open the extension Options page once: the practice code is auto-detected
    from any open Medicus tab. If you want to use the Triage Request Monitor,
@@ -43,10 +43,10 @@ From v1.3.1 the extension checks this repository once a day for new releases.
 When a newer version is published, a banner appears in the Options page with
 a link to the release page.
 
-**Practice gold copy:** drop the new zip on the share. Each PC that has
+**Practice gold copy:** drop the new zip on the share. PCs that Load
+unpacked from that share already see it. PCs on a local clone that have
 connected both folders (Options → Backup & Restore → Automatic updates)
-copies the files itself and reloads when idle. Nobody reopens
-`chrome://extensions` after the first Load unpacked. See
+copy the files and reload when idle. See
 [`docs/PRACTICE-ROLLOUT.md`](docs/PRACTICE-ROLLOUT.md).
 
 A lone local install can still replace the unzipped folder on disk and

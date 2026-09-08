@@ -2991,15 +2991,15 @@
               "
             >
               <strong style="display: block; color: var(--amber); margin-bottom: 4px"
-                >Do not Load unpacked from a network or Y: drive</strong
+                >If the suite vanishes after a restart</strong
               >
-              Chrome and Edge drop the suite after a restart if the folder is on a share — the drive is often not
-              mounted yet when the browser starts, so every chip and panel vanishes (not a settings glitch). A local
-              disk (C:, this PC's profile) is already there when the browser starts, which is why a home or surgery
-              local copy stays loaded. Keep a <strong>gold copy</strong> on the share. On each PC, Load unpacked
-              <strong>once</strong> from <code>%LOCALAPPDATA%\MedicusSuite</code> (run <code>copy-to-this-pc.cmd</code>
-              first), then connect both folders below. Later updates copy themselves — nobody reopens
-              <code>edge://extensions</code>. Export first if you are moving an existing install. Playbook:
+              Loading from the practice share is fine when that drive is already up as the browser starts — that is
+              why some PCs (including ones that live on the share all day) never drop it. Other PCs start Edge or
+              Chrome <em>before</em> Windows has mapped Y: / S:, so the folder looks missing for a few seconds and
+              the browser drops the unpacked extension. Same suite, different race. Those PCs should Load unpacked
+              from a local clone (<code>copy-to-this-pc.cmd</code> → <code>%LOCALAPPDATA%\MedicusSuite</code>) and
+              connect both folders below so later zips still copy themselves. If this PC already survives a reboot
+              on the share, leave it. Export first if you change the Load-unpacked path. Playbook:
               <code>docs/PRACTICE-ROLLOUT.md</code>.
             </div>
 
@@ -3011,9 +3011,11 @@
                 Automatic updates from the gold copy
               </div>
               <p style="margin: 0 0 10px; color: var(--text-2)">
-                One-time per PC. Pick the share (gold copy) and this PC's local folder. After that the suite copies
-                newer files on its own every 15 minutes and when the browser starts, then reloads when the PC is idle.
-                Staff do not Load unpacked again.
+                For PCs that Load unpacked from a <em>local</em> clone. Pick the share (gold copy) and this PC's
+                folder once. After that the suite copies newer files every 15 minutes and on browser start, then
+                reloads when idle — so those machines do not reopen <code>edge://extensions</code> on each zip.
+                Skip this if this PC already loads from the share and that survives a restart; that machine is
+                already reading the gold copy.
               </p>
               <div id="ppGoldSyncStatus" style="font-family: var(--mono); font-size: 11px; color: var(--text-3); margin-bottom: 10px">
                 checking&hellip;
@@ -3070,7 +3072,8 @@
                 <ol style="margin: 0 0 14px; padding-left: 20px">
                   <li>
                     Copy the entire Medicus Suite folder to a shared network location that every PC can open — for
-                    example <em>S:\Medicus Suite</em>. This is the gold copy, not the folder the browser loads.
+                    example <em>S:\Medicus Suite</em>. This is the gold copy. PCs whose share is up at browser start
+                    can Load unpacked from here; PCs that drop after a restart should use a local clone instead.
                   </li>
                   <li>
                     The practice manager needs <strong>write access</strong> to that folder. Everyone else only needs to
@@ -3098,14 +3101,15 @@
                   <li>
                     <strong>Edge (NHS default):</strong> type <code>edge://extensions</code>, turn on
                     <strong>Developer mode</strong>, click <strong>Load unpacked</strong>, and pick
-                    <code>%LOCALAPPDATA%\MedicusSuite</code> — a folder on this PC, never the share.
+                    <code>%LOCALAPPDATA%\MedicusSuite</code> — only on PCs that drop the share-loaded install after
+                    a restart. If this PC already keeps the suite on the share across reboot, skip the copy.
                   </li>
                   <li>
                     <strong>Chrome:</strong> the steps are identical at <code>chrome://extensions</code>.
                   </li>
                   <li>
-                    Confirm the toolbar icon is there, then <strong>Remove</strong> any older install whose source is
-                    the share / Y: / a <code>\\server</code> path.
+                    Confirm the toolbar icon is there. If you moved off a dropping share-load, <strong>Remove</strong>
+                    that older install so only the local one remains.
                   </li>
                   <li>
                     Repeat on every PC. Then connect both folders under <em>Automatic updates from the gold copy</em>
@@ -3167,11 +3171,11 @@
                 <strong style="display: block; margin-bottom: 6px">5. If something isn't working</strong>
                 <ul style="margin: 0; padding-left: 20px">
                   <li>
-                    <strong>Is this PC loading from the local disk?</strong> Open <code>edge://extensions</code>, find
-                    Medicus Suite, click <strong>Details</strong>, and look under <em>Source</em> or
-                    <em>Loaded from</em>. It must be a path on this PC (usually under
-                    <code>%LOCALAPPDATA%\MedicusSuite</code>), not a Y: / S: / <code>\\server</code> path. A network
-                    path is why the suite vanishes after a restart.
+                    <strong>Did this PC drop the suite after a restart?</strong> Open
+                    <code>edge://extensions</code>, find Medicus Suite, click <strong>Details</strong>, and look under
+                    <em>Source</em> or <em>Loaded from</em>. A share path that is not yet mapped at browser start is
+                    the usual cause — copy to <code>%LOCALAPPDATA%\MedicusSuite</code> on that PC. A share path that
+                    survives reboot can stay.
                   </li>
                   <li>
                     <strong>If a local install still vanishes after restart:</strong> that is IT policy, not the share.

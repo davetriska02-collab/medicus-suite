@@ -2,7 +2,7 @@
 setlocal
 rem Double-click this from the practice gold copy (the shared folder).
 rem It copies Medicus Suite onto this PC and prints the Load unpacked path.
-rem Do not Load unpacked from the share itself — Chrome and Edge drop it after a restart.
+rem Use this on PCs that drop the share-loaded install after a restart.
 
 set "SCRIPT=%~dp0copy-to-this-pc.ps1"
 if not exist "%SCRIPT%" (

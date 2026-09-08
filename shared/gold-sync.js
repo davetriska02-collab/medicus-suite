@@ -1,12 +1,13 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
 // Medicus Suite — gold-copy → local-clone sync
 //
-// Why this exists: Chrome/Edge drop an unpacked extension loaded from a
-// mapped share after a restart (the drive is often not mounted yet). The
-// suite must Load unpacked from a local folder. Updates still live on the
-// practice share (the gold copy). After each machine picks both folders
-// once, this module copies newer gold files onto the local clone so staff
-// never open chrome://extensions again.
+// Why this exists: some PCs Load unpacked from the practice share and that
+// is fine (the drive is up at browser start). Other PCs lose the race —
+// Edge/Chrome starts before Y: is mapped — and drop the unpacked extension.
+// Those machines Load unpacked from a local clone. Updates still live on
+// the gold copy. After each of *those* machines picks both folders once,
+// this module copies newer gold files onto the local clone so they never
+// open chrome://extensions again.
 //
 // Same shape as shared/presence-folder.js: pure helpers are node-testable;
 // handle persistence + FSA IO run in the service worker and the Options
