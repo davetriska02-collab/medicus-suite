@@ -60,6 +60,36 @@
     return rule.drug.match.some((m) => norm.includes(normaliseDrugString(m)));
   }
 
+  // PCIT-style "currently on this drug" gate for optional rule.drug.issuedWithinDays.
+  // Medicus parks every acute issued in the last 12 months in
+  // acuteMedicationsLastTwelveMonths — so a warfarin course last issued in
+  // December still looks current the following September, and Companion flags
+  // INR. Current repeats stay eligible even if last collection is old (they
+  // may simply be overdue to collect). "Prescribed elsewhere" stays eligible
+  // because anticoagulation-clinic issue dates are not on the GP record.
+  // Missing / unparseable lastIssueDate fails OPEN (keep the chip).
+  function isCurrentRepeatSource(source) {
+    const s = String(source || '');
+    return /repeat/i.test(s) && !/discontinu/i.test(s);
+  }
+
+  function isPrescribedElsewhereSource(source) {
+    return /elsewhere/i.test(String(source || ''));
+  }
+
+  function medMeetsIssueWindow(med, rule, now) {
+    const windowDays = rule && rule.drug ? rule.drug.issuedWithinDays : null;
+    if (windowDays == null || !Number.isFinite(windowDays) || windowDays <= 0) return true;
+    if (!med) return true;
+    if (isCurrentRepeatSource(med.source)) return true;
+    if (isPrescribedElsewhereSource(med.source)) return true;
+    const last = med.lastIssueDate || med.issueDate || null;
+    if (!last) return true;
+    const age = daysBetween(last, now);
+    if (age == null) return true;
+    return age <= windowDays;
+  }
+
   // Returns { matched, matchedTerm, excludedBy } — which match term hit, or
   // which exclude term suppressed the medication. Used only when tracing is
   // active (data._trace is set) so there is zero cost on the hot path.
@@ -1090,6 +1120,16 @@
     }
     if (matchedMeds.length === 0) {
       if (traceEntry) traceEntry.skipReason = 'no-drug-match';
+      return [];
+    }
+    // Issue-window filter AFTER name match so a stale acute warfarin is
+    // "not currently on the drug", not "no name match". Must run BEFORE
+    // VTM dedup: merging a current repeat with a stale acute and then
+    // applying the window to the merged row can drop a patient who is
+    // still on a current repeat.
+    matchedMeds = matchedMeds.filter((m) => medMeetsIssueWindow(m, rule, now));
+    if (matchedMeds.length === 0) {
+      if (traceEntry) traceEntry.skipReason = 'issue-window';
       return [];
     }
     // De-duplicate by underlying drug (vtmProductName) — the SAME live
@@ -3523,6 +3563,7 @@
     patientOnRegister,
     earliestRegisterCodedDate,
     evaluateDrugRule,
+    medMeetsIssueWindow,
     evaluateQofRegisterRule,
     evaluateQofIndicatorRule,
     evaluateDrugComboRule,

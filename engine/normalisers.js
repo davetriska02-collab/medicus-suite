@@ -111,14 +111,23 @@
         const name = m.description || m.vtmProductName || null;
         if (!name) return;
         // For repeat items, the start date is derived from medicationIssueHistory
-        // — never assume array order, take the EARLIEST issue.
+        // — never assume array order, take the EARLIEST issue. lastIssueDate is
+        // the LATEST of the same set: drug-monitoring rules with issuedWithinDays
+        // (e.g. warfarin-vka) use it to drop a stale acute that Medicus still
+        // parks in acuteMedicationsLastTwelveMonths after the course stopped.
+        // Computed HERE, before the medication-history first-ever overwrite
+        // below, so lastIssueDate never becomes 2013-when-they-first-started.
         let startDate = null;
+        let lastIssueDate = null;
         if (Array.isArray(m.medicationIssueHistory?.data) && m.medicationIssueHistory.data.length > 0) {
           const dates = m.medicationIssueHistory.data
             .map((i) => _issueHistoryDateToIso(i.startDate) || i.issueDate || i.date)
             .filter(Boolean)
             .sort();
-          if (dates.length) startDate = dates[0];
+          if (dates.length) {
+            startDate = dates[0];
+            lastIssueDate = dates[dates.length - 1];
+          }
         }
         // Fall back to a flat issueDate whenever the history array didn't yield a
         // usable date (missing entirely, OR present but its entries carried none
@@ -126,6 +135,9 @@
         // no start date just because one of two paths uses `else if`.
         if (!startDate && m.issueDate) {
           startDate = m.issueDate;
+        }
+        if (!lastIssueDate && m.issueDate) {
+          lastIssueDate = m.issueDate;
         }
         // Prefer the TRUE first-ever issue from medication-history when available —
         // medicationIssueHistory above is capped to a rolling ~12-month window
@@ -139,6 +151,7 @@
         out.push({
           name,
           startDate,
+          lastIssueDate,
           source: label,
           dosage: m.dosageInstructions || null,
           quantity: m.quantityAndUnit || null,

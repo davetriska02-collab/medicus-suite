@@ -165,12 +165,13 @@
         "label": "Warfarin without recent INR",
         "drug": {
           "match": ["warfarin", "marevan"],
-          "exclude": []
+          "exclude": [],
+          "issuedWithinDays": 180
         },
         "tests": [
           { "name": "INR", "match": ["inr","international normalised ratio","prothrombin time"], "intervalDays": 84, "dueSoonDays": 14 }
         ],
-        "notes": "PINCER #7. INR must be within therapeutic range for warfarin to be safe. Monitoring frequency: NHS SPS specifies 12 weeks (84 days) as the maximum gap for stable patients (BCSH guideline). Corrected from 90d to 84d 2026-07-11 (The Keeper, NHS SPS corroborated; primary PDF 403). 2026-08-18 (The Keeper): added brand Marevan — a brand-only warfarin script previously never fired PINCER #7. Other oral VKAs (acenocoumarol/Sinthrome, phenindione/Dindevan) are covered by the new drug-rules.json warfarin-vka monitoring rule rather than this PINCER-specific indicator.",
+        "notes": "PINCER #7. INR must be within therapeutic range for warfarin to be safe. Monitoring frequency: NHS SPS specifies 12 weeks (84 days) as the maximum gap for stable patients (BCSH guideline). Corrected from 90d to 84d 2026-07-11 (The Keeper, NHS SPS corroborated; primary PDF 403). 2026-08-18 (The Keeper): added brand Marevan — a brand-only warfarin script previously never fired PINCER #7. Other oral VKAs (acenocoumarol/Sinthrome, phenindione/Dindevan) are covered by the new drug-rules.json warfarin-vka monitoring rule rather than this PINCER-specific indicator. 2026-09-08: issuedWithinDays 180 so a stopped acute (off repeats, last issued months ago) does not keep the INR chip — same gate as warfarin-vka.",
         "source": "PINCER #7"
       }
     },
