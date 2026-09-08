@@ -5298,7 +5298,7 @@ initPdcTallySection({
           .join('');
         const noNames = people.length
           ? ''
-          : '<p class="section-desc" data-ag-no-names>No names yet on this computer. Open Plan a share-out of this inbox once on Medicus and the people will appear here.</p>';
+          : '<p class="section-desc" data-ag-no-names>No names yet on this computer. Open Draft a split of this inbox once on Medicus and the people will appear here.</p>';
         return (
           '<div class="card" data-ag-card="' +
           escAttr(p.id) +

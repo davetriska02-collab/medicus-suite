@@ -2787,8 +2787,8 @@
       return;
     }
     if (!_open) _route = route;
-    var launchLabel = 'Plan a share-out of this inbox…';
-    var launchTitle = 'Opens a planning board. Nothing is written to Medicus until Write is enabled and you confirm.';
+    var launchLabel = 'Draft a split of this inbox…';
+    var launchTitle = 'Nothing is written. Opens a planning board.';
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';

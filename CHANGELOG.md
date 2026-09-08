@@ -17,6 +17,7 @@ host widget with a compact named notice in the title row.
 - Avatars + pulse pip, 20px. Fail-closed: no self id, wrong slug, only-self,
   or `live: false` hides our strip and restores the host widget. Absence of
   the strip is not evidence nobody is on the list.
+- Request launcher: **Draft a split of this inbox…**. Title: “Nothing is written. Opens a planning board.”
 
 ## [v3.261.4] — 2026-09-08
 
