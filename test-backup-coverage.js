@@ -272,6 +272,17 @@ const ALLOWLIST = new Set([
   // error strings only, no patient data. Transient; not user config:
   'suite.updateCheck.status',
 
+  // Local bits detector (practice OS-sync) — last stamp compare only, not user
+  // config and not GitHub release metadata. Must not ride a suite backup:
+  'suite.localBits.diskVersion',
+  'suite.localBits.runningVersion',
+  'suite.localBits.status',
+  'suite.localBits.source',
+  'suite.localBits.practiceManaged',
+  'suite.localBits.checkedAt',
+  'suite.localBits.allowDowngrade',
+  'suite.localBits.error',
+
   // Legacy migration key — the bare 'config' key was the old triagelens.config
   // location. The triage IO migrates it on import; only read during migration.
   'config',
