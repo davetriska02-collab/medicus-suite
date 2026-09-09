@@ -1773,6 +1773,46 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes['health.contracts']) fetchAndRenderHealthStrip();
 });
 
+// ── Local bits strip (practice OS-sync — not GitHub, not Practice Profile) ────
+const localBitsStripEl = document.getElementById('localBitsStrip');
+
+function renderLocalBitsStrip(state) {
+  if (!localBitsStripEl || !window.LocalBits) return;
+  if (!window.LocalBits.isReloadAvailable(state)) {
+    localBitsStripEl.className = 'local-bits-strip local-bits-strip-hidden';
+    localBitsStripEl.innerHTML = '';
+    return;
+  }
+  localBitsStripEl.className = 'local-bits-strip local-bits-strip-ready';
+  localBitsStripEl.innerHTML = `
+    <span class="local-bits-strip-text">Suite files updated — Reload (v${escStrip(state.diskVersion)} on disk, running v${escStrip(state.runningVersion || '')}).</span>
+    <button type="button" class="local-bits-strip-reload">Reload</button>
+  `;
+  localBitsStripEl.querySelector('.local-bits-strip-reload')?.addEventListener('click', () => {
+    try {
+      chrome.runtime.reload();
+    } catch (_) {}
+  });
+}
+
+async function fetchAndRenderLocalBitsStrip() {
+  if (!localBitsStripEl || !window.LocalBits) return true;
+  try {
+    const state = await window.LocalBits.checkAndPersist();
+    renderLocalBitsStrip(state);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+fetchAndRenderLocalBitsStrip();
+chrome.storage.onChanged.addListener((changes) => {
+  if (Object.keys(changes).some((k) => k.startsWith('suite.localBits.'))) {
+    window.LocalBits?.getState().then(renderLocalBitsStrip).catch(() => {});
+  }
+});
+
 // ── Patient Alerts strip (global — visible on every module) ───────────────────
 // Shows the practice's own per-patient flags (patientAlerts.byPatient, owned by
 // the Patient Alerts tab) for the patient currently open in Medicus, so the

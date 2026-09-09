@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.16] — 2026-09-09
+
+### Practice bits: local Load unpacked + OS sync (path B)
+
+Pete’s reference share is **not** the install Source. Each PC Load unpacked
+from a **local** folder; Windows (robocopy / Task Scheduler) copies the
+reference tree onto that folder. The extension never writes package files,
+never opens a UNC path to patch itself, and never unpacks a zip.
+
+- **`shared/local-bits.js`** — compares the running `manifest.version` to
+  local stamps only (`suite-release.json`, helper `sync-status.json`, else
+  on-disk `manifest.json`) via `chrome.runtime.getURL`. Newer → `ready`.
+  Older → `older-ignored` (no silent downgrade unless the stamp sets
+  `allowDowngrade: true`). Unready Pete publish (`ready: false`) does not
+  fall through to a half-copied manifest.
+- Options + side panel: **Suite files updated — Reload** (`chrome.runtime.reload()`).
+  Idle polite reload kept for newer bits only.
+- GitHub Releases banner (`shared/update-checker.js`) is unchanged and
+  **hidden** when a practice stamp is present so staff are not sent to a
+  different zip than Pete’s tree. The Suite button is labelled
+  **Check GitHub releases**.
+- Practice Profile copy is **settings only**. Options setup guide is
+  Edge-first and no longer tells every PC to Load unpacked from the share.
+  Share-as-Source is documented as a legacy exception only.
+- IT kit: `docs/deploy/LOCAL-INSTALL-AND-SYNC.md`,
+  `tools/windows/Sync-MedicusSuite.ps1`, `Register-SyncTask.ps1`,
+  `suite-release.example.json`. Optional native-messaging stub under
+  `tools/windows/native-host/` (not in the shipped manifest).
+
 ## [v3.261.15] — 2026-09-09
 
 ### Practice features v2 — mute-able chrome packs on one board

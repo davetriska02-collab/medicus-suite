@@ -1295,7 +1295,49 @@
           <p class="suite-tagline">The clinical intelligence layer for Medicus</p>
           <p class="section-desc">Global settings shared across all modules. Changes take effect immediately.</p>
 
-          <!-- Update available banner (v1.4.2) — hidden by default; populated by JS from storage. -->
+          <!-- Local bits (practice OS-sync) — not GitHub. Hidden unless disk stamp is newer. -->
+          <div
+            id="localBitsBanner"
+            style="
+              display: none;
+              margin: 0 0 18px;
+              padding: 12px 14px;
+              background: var(--accent-dim);
+              border: 1px solid var(--accent);
+              border-radius: 8px;
+              font-size: 12px;
+              line-height: 1.5;
+            "
+          >
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+              <span
+                ><strong>Suite files updated — Reload.</strong>
+                Files on this PC are
+                <span id="localBitsBannerDisk" style="font-family: var(--mono)"></span>
+                (running
+                <span id="localBitsBannerRunning" style="font-family: var(--mono); color: var(--text-3)"></span>).
+                Settings (Practice Profile) are a separate channel.</span
+              >
+              <span style="flex: 1"></span>
+              <button class="primary" id="localBitsReloadBtn" style="padding: 4px 12px; font-size: 11px">Reload</button>
+            </div>
+            <div id="localBitsBannerNote" style="margin-top: 8px; font-size: 11px; color: var(--text-3)"></div>
+          </div>
+          <div
+            id="localBitsOlderNote"
+            style="
+              display: none;
+              margin: 0 0 18px;
+              padding: 10px 14px;
+              background: var(--bg-mid);
+              border: 1px solid var(--border);
+              border-radius: 8px;
+              font-size: 11px;
+              color: var(--text-3);
+            "
+          ></div>
+
+          <!-- GitHub Releases banner (v1.4.2) — hidden by default; not Pete's share. -->
           <div
             id="updateBanner"
             style="
@@ -1488,7 +1530,7 @@
           <div class="actions">
             <button class="primary" id="saveSuite">Save</button>
             <button class="ghost" id="testConnectionBtn">Test connection</button>
-            <button class="ghost" id="checkUpdateBtn">Check for updates</button>
+            <button class="ghost" id="checkUpdateBtn">Check GitHub releases</button>
             <span class="saved" id="suiteSaved">Saved ✓</span>
             <span id="testConnectionResult" style="font-family: var(--mono); font-size: 10px; margin-left: 4px"></span>
             <span id="checkUpdateResult" style="font-family: var(--mono); font-size: 10px; margin-left: 4px"></span>
@@ -3214,7 +3256,9 @@
               <div style="flex: 1">
                 <div style="font-weight: 600; font-size: 13px; color: var(--text-1)">Practice Profile</div>
                 <div style="font-size: 11px; color: var(--text-3); margin-top: 2px">
-                  Automatically sync default settings across every PC at your practice
+                  Settings only — not the extension files. Bits (new Suite versions) use a local folder + Windows copy;
+                  see the setup guide and
+                  <a href="../docs/deploy/LOCAL-INSTALL-AND-SYNC.md">LOCAL-INSTALL-AND-SYNC.md</a>.
                 </div>
               </div>
               <span
@@ -3406,7 +3450,7 @@
                   user-select: none;
                 "
               >
-                &#9654; How to set up shared-folder deployment
+                &#9654;                 How to set up the practice (local install + settings)
               </summary>
               <div
                 style="
@@ -3417,43 +3461,45 @@
                   border-top: 1px solid var(--border);
                 "
               >
-                <strong style="display: block; margin-bottom: 6px"
-                  >1. One-time: put the extension on your shared drive</strong
-                >
-                <ol style="margin: 0 0 14px; padding-left: 20px">
-                  <li>
-                    Copy the entire Medicus Suite extension folder to a shared network location that every PC at the
-                    practice can open — for example <em>S:\Medicus Suite\extension</em>.
-                  </li>
-                  <li>
-                    The practice manager needs <strong>write access</strong> to that folder. Everyone else only needs to
-                    be able to read from it.
-                  </li>
-                  <li>
-                    Make sure the folder contains <em>manifest.json</em> at its top level — that is the file Edge and
-                    Chrome use to recognise an extension.
-                  </li>
-                </ol>
+                <p style="margin: 0 0 14px">
+                  <strong>Two different jobs.</strong> Practice Profile pushes <em>settings</em>. It does not copy the
+                  extension files. New Suite versions (bits) are copied by Windows (robocopy / Task Scheduler) onto a
+                  <em>local</em> folder; each PC Load unpacked from that local folder. Full IT notes:
+                  <code>docs/deploy/LOCAL-INSTALL-AND-SYNC.md</code> and <code>tools/windows/</code>.
+                </p>
 
                 <strong style="display: block; margin-bottom: 6px"
-                  >2. Add the extension to each PC (about 2 minutes, once per PC)</strong
+                  >1. Recommended: each PC Load unpacked from a local folder</strong
                 >
                 <ol style="margin: 0 0 14px; padding-left: 20px">
                   <li>
-                    <strong>Edge (NHS default):</strong> Open Edge and type <code>edge://extensions</code> in the
-                    address bar, then press Enter. In the top-right corner, turn on the
-                    <strong>Developer mode</strong> toggle. Click <strong>Load unpacked</strong>. In the window that
-                    opens, navigate to the shared extension folder and click <strong>Select Folder</strong>.
+                    Pete (or IT) keeps a <em>reference</em> copy on the share — for example
+                    <em>\\PracticeShare\MedicusSuite\current</em> — with <code>suite-release.json</code> (<code>ready</code>
+                    true only when the tree is complete). Staff do not run the extension from that share.
                   </li>
                   <li>
-                    <strong>Chrome:</strong> The steps are identical — type <code>chrome://extensions</code> instead,
-                    then follow the same Developer mode → Load unpacked steps.
+                    On each PC, copy that tree to a <strong>local</strong> folder that never changes, e.g.
+                    <code>%LOCALAPPDATA%\MedicusSuite\extension</code>. Use
+                    <code>tools/windows/Sync-MedicusSuite.ps1</code> and register
+                    <code>Register-SyncTask.ps1</code> at logon (or an equivalent robocopy scheduled task).
                   </li>
                   <li>
-                    You should now see the Medicus Suite icon in the browser toolbar. Click it (or open the side panel)
-                    to confirm the extension is running.
+                    <strong>Edge (NHS default):</strong> Open Edge and type <code>edge://extensions</code>, turn on
+                    <strong>Developer mode</strong>, click <strong>Load unpacked</strong>, and pick the
+                    <strong>local</strong> folder — not the share. Details → Source must be a path on that PC.
                   </li>
-                  <li>Repeat on every PC that needs the extension. Each PC points to the same shared folder.</li>
+                  <li>
+                    <strong>Chrome:</strong> Same steps on <code>chrome://extensions</code>, same local folder.
+                  </li>
+                  <li>
+                    Repeat on every PC. Each PC Load unpacked from a folder on that PC. Never change that path later
+                    (unpacked ID follows the folder; a new path wipes settings).
+                  </li>
+                  <li>
+                    When the helper has copied a newer tree, Options and the side panel show
+                    <strong>Suite files updated — Reload</strong>. The extension does not write files and does not
+                    install itself from the share.
+                  </li>
                 </ol>
 
                 <strong style="display: block; margin-bottom: 6px"
@@ -3481,37 +3527,36 @@
                     </ul>
                   </li>
                   <li>
-                    Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — navigate
-                    to the shared extension folder and save the file there (replace the existing
-                    <em>practice-profile.json</em> if asked). After the first time, the extension remembers the location
-                    and publishing is a single click.
+                    Click <strong>Publish to shared folder</strong>. The first time, a file-save window opens — save
+                    <em>practice-profile.json</em> where the practice keeps settings (often next to the
+                    <em>reference</em> tree, or next to <em>manifest.json</em> on each local Source after the helper
+                    copies it). After the first time, the extension remembers the location and publishing is a single
+                    click. This file is settings only.
                   </li>
                 </ol>
 
                 <strong style="display: block; margin-bottom: 6px">4. What happens on everyone else's PC</strong>
                 <ol style="margin: 0 0 14px; padding-left: 20px">
                   <li>
-                    There is nothing for other staff to do. Each PC checks the shared folder roughly every 15 minutes
-                    while the browser is open, and also checks on every browser start.
+                    Settings: each PC re-reads <em>practice-profile.json</em> from <em>its Source folder</em> (the local
+                    install, or the share only if Source really is the share) about every 15 minutes and on browser
+                    start, and applies new <em>settings</em> quietly.
                   </li>
                   <li>
-                    When it finds a new version, it quietly applies the updated settings in the background. Staff do not
-                    need to restart their browser or do anything at all.
+                    Bits: new Suite files appear on a PC only after the Windows helper has copied the reference tree
+                    onto that PC's local folder. The extension then offers <strong>Reload</strong> (or reloads when
+                    idle). It does not copy from the share and does not change Source.
                   </li>
-                  <li>If the browser is closed, the changes will be picked up the next time it starts.</li>
-                  <li>
-                    New versions of the extension itself (when you update the files in the shared folder) install
-                    themselves automatically when the PC is next idle — no manual reinstall needed.
-                  </li>
+                  <li>If the browser is closed, settings apply on the next start; bits apply after the helper + Reload.</li>
                 </ol>
 
                 <strong style="display: block; margin-bottom: 6px">5. If something isn't working</strong>
                 <ul style="margin: 0; padding-left: 20px">
                   <li>
-                    <strong>Is the PC running the extension from the shared folder?</strong> Open
-                    <code>edge://extensions</code>, find Medicus Suite, click <strong>Details</strong>, and look under
-                    <em>Source</em> or <em>Loaded from</em>. It should show the shared folder path, not a local path on
-                    that PC.
+                    <strong>Where is Source?</strong> Open <code>edge://extensions</code>, find Medicus Suite, click
+                    <strong>Details</strong>, and look under <em>Source</em>. For the recommended install it is the
+                    <em>local</em> folder on that PC. “Load unpacked from the share” instructions apply only when Source
+                    is already the share (legacy, slow).
                   </li>
                   <li>
                     <strong>Is practice-profile.json in the right place?</strong> The file must sit in the same folder
@@ -3921,6 +3966,7 @@
     <script src="../shared/request-monitor.js"></script>
     <script src="../engine/triage-alert-engine.js"></script>
     <script src="../shared/update-checker.js"></script>
+    <script src="../shared/local-bits.js"></script>
     <script src="../shared/rule-currency.js"></script>
     <script src="../shared/presence-look.js"></script>
     <script src="../shared/display-prefs.js"></script>

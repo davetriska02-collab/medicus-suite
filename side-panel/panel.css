@@ -1458,6 +1458,44 @@ html[data-zen='1'] #rmStrip:not(.rm-strip-alerted-amber):not(.rm-strip-alerted-r
   background: var(--bg-hover);
 }
 
+/* Local bits (practice OS-sync). Ops, not clinical. Hidden unless disk stamp is newer. */
+.local-bits-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  min-height: 28px;
+}
+.local-bits-strip-hidden {
+  display: none;
+}
+.local-bits-strip-ready {
+  background: var(--accent-dim);
+  border-bottom-color: var(--accent);
+}
+.local-bits-strip-text {
+  color: var(--text-2);
+  flex: 1 1 auto;
+  line-height: 1.35;
+}
+.local-bits-strip-reload {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-1);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  padding: 2px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 /* ── Patient Alerts strip (global) ─────────────────────────────
    Per-patient practice flags (patientAlerts.byPatient) for the patient
    currently open in Medicus. Same band shape as .sub-rag-strip. */

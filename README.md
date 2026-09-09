@@ -20,10 +20,12 @@ honest limits — see [`docs/VISION.md`](docs/VISION.md).
 
 ## Installation
 
+**Single PC / home:**
+
 1. Download the latest `medicus-suite-vX.Y.Z.zip` from the
    [releases page](https://github.com/davetriska02-collab/medicus-suite/releases/latest).
-2. Unzip somewhere permanent on your computer.
-3. Open `chrome://extensions` in Chrome.
+2. Unzip somewhere permanent **on this computer** (not a network share).
+3. **Edge (NHS default):** open `edge://extensions`. Chrome: `chrome://extensions`.
 4. Switch on **Developer mode** (top right).
 5. Click **Load unpacked** and pick the unzipped folder.
 6. Pin the extension to the toolbar so the icon is visible.
@@ -31,13 +33,28 @@ honest limits — see [`docs/VISION.md`](docs/VISION.md).
    from any open Medicus tab. If you want to use the Triage Request Monitor,
    enable it there and paste in the assignee UUID.
 
+**Practice (Pete / IT):** each PC Load unpacked from a **local** folder (for
+example `%LOCALAPPDATA%\MedicusSuite\extension`). Pete drops the new unpack
+on a reference share; a Windows scheduled task / robocopy copies that tree
+onto the local folder. The extension does **not** copy files from the share.
+See [`docs/deploy/LOCAL-INSTALL-AND-SYNC.md`](docs/deploy/LOCAL-INSTALL-AND-SYNC.md)
+and `tools/windows/`.
+
+Practice Profile (Options → Backup & Restore) is **settings only**. It does
+not install Suite bits.
+
 ## Auto-update
 
-From v1.3.1 the extension checks this repository once a day for new releases.
-When a newer version is published, a banner appears in the Options page with
-a link to the release page. Download the new zip and replace the unzipped
-folder on disk, then click the refresh icon on the extension card in
-`chrome://extensions`.
+Two different banners — do not mix them up:
+
+- **Practice bits:** if the helper has copied a newer tree onto this PC’s
+  Source, Options and the side panel show **Suite files updated — Reload**.
+  One click calls `chrome.runtime.reload()`. No file writes from the extension.
+- **GitHub Releases** (v1.3.1): once a day the extension checks this
+  repository. On a machine *without* a practice `suite-release.json` stamp,
+  Options can show a link to the release zip. That is not Pete’s share.
+  Download-and-replace is still a human (or the Windows helper), not the
+  extension unpacking a zip.
 
 ## Cutting a release
 
