@@ -97,7 +97,7 @@ const GENERIC_ICONS = {
 // Options sections (ids match options.html sect-* / options.js deep-linking).
 const OPTIONS_SECTIONS = [
   ['suite', 'Suite', 'practice code feedback email global signing soft flags QOF review'],
-  ['practice-features', 'Practice features', 'signing soft flags QOF review packs'],
+  ['practice-features', 'Practice features', 'signing soft flags QOF review packs allocate canvases contacts routine-rx quick actions'],
   ['notifications', 'Notifications', 'alerts sounds desktop quiet clinic mode mute'],
   ['slots', 'Slot Counter', 'appointments'],
   ['capacity', 'Capacity Forecast', 'forecast'],

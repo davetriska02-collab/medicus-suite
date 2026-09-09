@@ -467,9 +467,13 @@ function renderShell() {
           (tt) =>
             `<label class="sg-type-toggle"><input type="checkbox" data-type="${tt.key}" ${state.types[tt.key] ? 'checked' : ''}/> ${tt.label}</label>`
         ).join('')}
-        <label class="sg-type-toggle" title="When on, adds QOF review badges (asthma, COPD, heart failure, SMI, dementia) and a Flagged filter. Monitoring chips stay visible either way. Same setting as Options → Suite and Options → Practice features.">
-          <input type="checkbox" id="sgSoftFlags" ${state.softFlags ? 'checked' : ''}/>
-          Show monitoring &amp; QOF review flags
+        <label class="sg-type-toggle sg-soft-toggle" title="QOF review badges + Flagged filter. Same key as Options → Practice features.">
+          <span class="suite-toggle">
+            <input type="checkbox" id="sgSoftFlags" role="switch" ${state.softFlags ? 'checked' : ''}/>
+            <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
+          </span>
+          QOF review flags
+          <span class="pf-armed">Armed</span>
         </label>
         <div id="sgFlagPills" class="sg-flag-pills"></div>
       </div>

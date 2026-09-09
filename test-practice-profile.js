@@ -926,6 +926,38 @@ function makeProfile(over = {}) {
   check(store['suite.practiceAcceptedAt'] === undefined,
     'central attestation does not write suite.practiceAcceptedAt either');
 
+  console.log('\n--- suite: chrome packs on the same allow-list (sticky-on + extras unread) ---');
+  reset();
+  const chromePacks = {
+    'ui.allocateCanvases': true,
+    'ui.contactsCanvas': true,
+    'ui.routineRxButton': true,
+    'ui.quickActionsWidget': true,
+    'ui.unknownPack': true,
+    practiceAcceptedAt: '2099-01-01T00:00:00Z',
+  };
+  await PP.applyProfile(makeProfile({
+    profileVersion: 'pf-chrome-1',
+    apply: { modules: { suite: 'replace' } },
+    envelope: { modules: { suite: chromePacks } },
+  }));
+  check(store['suite.ui.allocateCanvases'] === true, 'replace writes suite.ui.allocateCanvases');
+  check(store['suite.ui.contactsCanvas'] === true, 'replace writes suite.ui.contactsCanvas');
+  check(store['suite.ui.routineRxButton'] === true, 'replace writes suite.ui.routineRxButton');
+  check(store['suite.ui.quickActionsWidget'] === true, 'replace writes suite.ui.quickActionsWidget');
+  check(store['suite.ui.unknownPack'] === undefined, 'unknown ui.unknownPack ignored');
+  check(store['suite.practiceAcceptedAt'] === undefined, 'chrome-pack apply does not set practiceAcceptedAt');
+
+  reset();
+  store['suite.ui.allocateCanvases'] = true;
+  await PP.applyProfile(makeProfile({
+    profileVersion: 'pf-chrome-sticky',
+    apply: { modules: { suite: 'merge' } },
+    envelope: { modules: { suite: { 'ui.allocateCanvases': false } } },
+  }));
+  check(store['suite.ui.allocateCanvases'] === true,
+    'sticky-on merge: allocateCanvases local true survives incoming false');
+
   // ── Cleanup Code Preferences: tallies always max(), override follows mode ──
   console.log('\n--- problemDescriptionCleanup merge: tally reconciles via max(), never adds ---');
   reset();

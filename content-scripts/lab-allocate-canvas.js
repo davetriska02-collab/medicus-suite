@@ -24,6 +24,8 @@
 
   var OVERLAY_ID = 'ms-lac-overlay';
   var LAUNCH_ID = 'ms-lac-launch';
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.allocateCanvases) || 'suite.ui.allocateCanvases';
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
   var OVERVIEW_CAP = 120;
   var OVERVIEW_CONCURRENCY = 4;
 
@@ -2461,7 +2463,17 @@
     loadBoard();
   }
 
+  function muteAllocateChrome() {
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) launch.remove();
+    if (_open) closeOverlay();
+  }
+
   function ensureLauncher() {
+    if (!_packOn) {
+      muteAllocateChrome();
+      return;
+    }
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
     if (!route) {
@@ -2532,8 +2544,44 @@
     }
     ensureLauncher();
   });
-  _mo.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('popstate', ensureLauncher);
-  setInterval(ensureLauncher, 1500);
-  ensureLauncher();
+  var _launchTick = null;
+  var _launchBooted = false;
+
+  function startAllocateChrome() {
+    if (_launchBooted) {
+      ensureLauncher();
+      return;
+    }
+    _launchBooted = true;
+    _mo.observe(document.documentElement, { childList: true, subtree: true });
+    window.addEventListener('popstate', ensureLauncher);
+    _launchTick = setInterval(ensureLauncher, 1500);
+    ensureLauncher();
+  }
+
+  function stopAllocateChrome() {
+    if (_mo) _mo.disconnect();
+    window.removeEventListener('popstate', ensureLauncher);
+    if (_launchTick) {
+      clearInterval(_launchTick);
+      _launchTick = null;
+    }
+    _launchBooted = false;
+    muteAllocateChrome();
+  }
+
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        startAllocateChrome();
+      },
+      off: function () {
+        _packOn = false;
+        stopAllocateChrome();
+      },
+    });
+  } else {
+    startAllocateChrome();
+  }
 })();

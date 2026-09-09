@@ -31,10 +31,7 @@ const qof = require('./rules/qof-rules.json');
 
   console.log('--- on-page control writes the same storage key ---');
   check(/id="sgSoftFlags"/.test(signingSrc), 'Signing Queue shell has #sgSoftFlags (on-page pack control)');
-  check(
-    /Show monitoring &(?:amp;)? QOF review flags/.test(signingSrc),
-    'on-page label is the GP-facing "Show monitoring & QOF review flags"'
-  );
+  check(/QOF review flags/.test(signingSrc), 'on-page label stays the GP-facing QOF review flags');
   check(
     /chrome\.storage\.local\.set\(/.test(signingSrc) && /suite\.signing\.softFlags/.test(signingSrc),
     'on-page control writes suite.signing.softFlags'
@@ -51,26 +48,31 @@ const qof = require('./rules/qof-rules.json');
   check(/onChanged\.removeListener/.test(signingSrc), 'Signing Queue removes the storage listener on cleanup');
   const optionsOnChanged =
     optionsJs.includes("changes['suite.signing.softFlags']") ||
-    optionsJs.includes('changes["suite.signing.softFlags"]');
+    optionsJs.includes('changes["suite.signing.softFlags"]') ||
+    (/PRACTICE_PACK_TOGGLES/.test(optionsJs) && /changes\[spec\.key\]/.test(optionsJs));
   check(optionsOnChanged, 'Options checkbox re-reads suite.signing.softFlags on storage change');
-  check(/id="signingSoftFlags"/.test(optionsHtml), 'Options Suite checkbox is still present (same key)');
+  check(/id="signingSoftFlags"/.test(optionsHtml), 'Options Suite toggle is still present (same key)');
+  check(/suite-toggle/.test(optionsHtml) && /id="signingSoftFlags"/.test(optionsHtml),
+    'Options Suite softFlags uses the Suite CSS switch');
 
   console.log('\n--- third view: Options → Practice features, same key + onChanged ---');
   check(/id="pfSoftFlags"/.test(optionsHtml), 'Practice features card has #pfSoftFlags (third view of the same pack)');
   check(/data-section="practice-features"/.test(optionsHtml), 'Options nav has Practice features');
   check(/id="sect-practice-features"/.test(optionsHtml), 'Options has #sect-practice-features');
   check(
-    /Signing Queue: show overdue monitoring &(?:amp;)? QOF review flags/.test(optionsHtml) &&
-      (optionsHtml.match(/Signing Queue: show overdue monitoring &(?:amp;)? QOF review flags/g) || []).length >= 2,
+    /Signing Queue flags/.test(optionsHtml) &&
+      (optionsHtml.match(/Signing Queue flags/g) || []).length >= 2,
     'Practice features uses the same Signing soft-flags label as Suite'
   );
   check(
-    /bindSoftFlagsCheckbox\(pfSoftFlagsInput\)/.test(optionsJs) &&
-      /pfSoftFlagsInput/.test(optionsJs) &&
-      /changes\['suite\.signing\.softFlags'\]/.test(optionsJs) &&
-      /pfSoftFlagsInput\.checked = on/.test(optionsJs),
+    /bindPracticePackToggle/.test(optionsJs) &&
+      /suite\.signing\.softFlags/.test(optionsJs) &&
+      /pfSoftFlags/.test(optionsJs) &&
+      /PRACTICE_PACK_TOGGLES/.test(optionsJs),
     'Practice features writes and re-reads suite.signing.softFlags on storage change'
   );
+  check(/id="sgSoftFlags"/.test(signingSrc) && /suite-toggle/.test(signingSrc),
+    'Signing Queue softFlags uses the Suite CSS switch');
   check(
     /Never write false just because a checkbox is missing/.test(optionsJs) &&
       !/signingSoftFlagsInput \? signingSoftFlagsInput\.checked : false/.test(optionsJs),

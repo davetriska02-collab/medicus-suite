@@ -32,6 +32,9 @@
   if (window.__msContactsWidget) return;
   window.__msContactsWidget = true;
 
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.contactsCanvas) || 'suite.ui.contactsCanvas';
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -85,6 +88,7 @@
   }
 
   function injectWidget() {
+    if (!_packOn) return;
     if (document.getElementById('ms-contacts-widget')) return;
     const heading = findContactsHeading();
     if (!heading) return; // nothing to anchor to yet — a later mutation tick will retry
@@ -585,6 +589,10 @@
   }
 
   function scheduleInject() {
+    if (!_packOn) {
+      removeWidget();
+      return;
+    }
     if (_throttle) return;
     const pathChanged = location.pathname !== _lastPath;
     if (!pathChanged) {
@@ -620,21 +628,57 @@
   // close itself first.
   window.ContactsWidget = { openImport: () => doOpen() };
 
-  const _hub = window.__chObserverHub;
-  if (_hub && _hub.subscribe) {
-    _hub.subscribe(onMutations);
-  } else {
-    _obs = new MutationObserver(onMutations);
-    observeBody();
+  var _contactsBooted = false;
+  function onVisibility() {
+    if (!document.hidden) scheduleInject();
   }
 
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) scheduleInject();
-  });
+  function startContactsChrome() {
+    if (_contactsBooted) {
+      scheduleInject();
+      return;
+    }
+    _contactsBooted = true;
+    const _hub = window.__chObserverHub;
+    if (_hub && _hub.subscribe) {
+      _hub.subscribe(onMutations);
+    } else {
+      _obs = new MutationObserver(onMutations);
+      observeBody();
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', scheduleInject);
+    } else {
+      scheduleInject();
+    }
+  }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleInject);
+  function stopContactsChrome() {
+    const _hub = window.__chObserverHub;
+    if (_hub && _hub.unsubscribe) _hub.unsubscribe(onMutations);
+    if (_obs) {
+      _obs.disconnect();
+      _obs = null;
+    }
+    document.removeEventListener('visibilitychange', onVisibility);
+    document.removeEventListener('DOMContentLoaded', scheduleInject);
+    _contactsBooted = false;
+    removeWidget();
+  }
+
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        startContactsChrome();
+      },
+      off: function () {
+        _packOn = false;
+        stopContactsChrome();
+      },
+    });
   } else {
-    scheduleInject();
+    startContactsChrome();
   }
 })();

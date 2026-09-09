@@ -44,6 +44,8 @@
   var DC = window.DomContracts;
 
   var STORE_KEY = 'triagelens.quickActions';
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.quickActionsWidget) || 'suite.ui.quickActionsWidget';
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
 
   // ── Helpers (copied verbatim from content-scripts/task-inline.js:33-49 —
   //    these files are deliberately independent injections, not a shared module) ─
@@ -831,6 +833,7 @@
   }
 
   function injectWidget() {
+    if (!_packOn) return;
     if (!getTaskInfo()) return;
     var existing = document.getElementById('ms-qa-widget');
     if (existing && existing.isConnected) return;
@@ -908,6 +911,10 @@
   }
 
   function scheduleInject() {
+    if (!_packOn) {
+      removeWidget();
+      return;
+    }
     if (_throttle) return;
     var onTaskPage = !!getTaskInfo();
     var pathChanged = location.pathname !== _lastPath;
@@ -983,37 +990,74 @@
 
   // ── Boot (routine-rx-button.js:929-961 pattern) ───────────────────────────────
 
-  loadCfg().then(function () {
-    scheduleInject();
-
-    document.addEventListener('click', onDocClick, true);
-
-    var hub = window.__chObserverHub;
-    if (hub && hub.subscribe) {
-      hub.subscribe(onMutations);
-    } else {
-      _obs = new MutationObserver(onMutations);
-      observeBody();
+  function onQaVisibility() {
+    if (!document.hidden) scheduleInject();
+  }
+  function onQaCfgChange(changes, area) {
+    if (area === 'local' && changes[STORE_KEY]) {
+      loadCfg().then(rerender);
     }
+  }
+  var _qaBooted = false;
 
-    document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) scheduleInject();
-    });
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', scheduleInject);
-    } else {
+  function startQuickActionsChrome() {
+    if (_qaBooted) {
       scheduleInject();
+      return;
     }
+    _qaBooted = true;
+    loadCfg().then(function () {
+      if (!_packOn) return;
+      scheduleInject();
+      document.addEventListener('click', onDocClick, true);
+      var hub = window.__chObserverHub;
+      if (hub && hub.subscribe) {
+        hub.subscribe(onMutations);
+      } else {
+        _obs = new MutationObserver(onMutations);
+        observeBody();
+      }
+      document.addEventListener('visibilitychange', onQaVisibility);
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', scheduleInject);
+      } else {
+        scheduleInject();
+      }
+      if (chrome.storage && chrome.storage.onChanged) {
+        chrome.storage.onChanged.addListener(onQaCfgChange);
+      }
+    });
+  }
 
-    // The options page (or another tab's "+ name") edited the practice lists —
-    // reload and re-render so every open task picks the change up immediately.
-    if (chrome.storage && chrome.storage.onChanged) {
-      chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === 'local' && changes[STORE_KEY]) {
-          loadCfg().then(rerender);
-        }
-      });
+  function stopQuickActionsChrome() {
+    removeWidget();
+    document.removeEventListener('click', onDocClick, true);
+    document.removeEventListener('visibilitychange', onQaVisibility);
+    document.removeEventListener('DOMContentLoaded', scheduleInject);
+    var hub = window.__chObserverHub;
+    if (hub && hub.unsubscribe) hub.unsubscribe(onMutations);
+    if (_obs) {
+      _obs.disconnect();
+      _obs = null;
     }
-  });
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.removeListener(onQaCfgChange);
+    }
+    _qaBooted = false;
+  }
+
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        startQuickActionsChrome();
+      },
+      off: function () {
+        _packOn = false;
+        stopQuickActionsChrome();
+      },
+    });
+  } else {
+    startQuickActionsChrome();
+  }
 })();

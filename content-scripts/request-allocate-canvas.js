@@ -30,6 +30,8 @@
   var LAUNCH_ID = 'ms-qac-launch';
   var LAUNCH_WRAP_ID = 'ms-qac-launch-wrap';
   var INBOX_N_ID = 'ms-qac-inbox-n';
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.allocateCanvases) || 'suite.ui.allocateCanvases';
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
   var OVERVIEW_CAP = 120;
   var OVERVIEW_CONCURRENCY = 4;
 
@@ -2834,7 +2836,21 @@
     loadBoard();
   }
 
+  function muteAllocateChrome() {
+    var launch = document.getElementById(LAUNCH_ID);
+    var wrap = document.getElementById(LAUNCH_WRAP_ID);
+    var countEl = document.getElementById(INBOX_N_ID);
+    if (launch) launch.remove();
+    if (countEl) countEl.remove();
+    if (wrap) wrap.remove();
+    if (_open) closeOverlay();
+  }
+
   function ensureLauncher() {
+    if (!_packOn) {
+      muteAllocateChrome();
+      return;
+    }
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
     var wrap = document.getElementById(LAUNCH_WRAP_ID);
@@ -2958,9 +2974,7 @@
     }
     ensureLauncher();
   });
-  _mo.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('popstate', ensureLauncher);
-  window.addEventListener('ch-task-list-data', function (e) {
+  function onTaskListData(e) {
     _bridgeCount++;
     if (!_bridgeTimer) {
       _bridgeTimer = setTimeout(function () {
@@ -2971,7 +2985,48 @@
     if (_bridgeCount > 10) return;
     rememberInboxCount(e && e.detail);
     ensureLauncher();
-  });
-  setInterval(ensureLauncher, 1500);
-  ensureLauncher();
+  }
+
+  var _launchTick = null;
+  var _launchBooted = false;
+
+  function startAllocateChrome() {
+    if (_launchBooted) {
+      ensureLauncher();
+      return;
+    }
+    _launchBooted = true;
+    _mo.observe(document.documentElement, { childList: true, subtree: true });
+    window.addEventListener('popstate', ensureLauncher);
+    window.addEventListener('ch-task-list-data', onTaskListData);
+    _launchTick = setInterval(ensureLauncher, 1500);
+    ensureLauncher();
+  }
+
+  function stopAllocateChrome() {
+    if (_mo) _mo.disconnect();
+    window.removeEventListener('popstate', ensureLauncher);
+    window.removeEventListener('ch-task-list-data', onTaskListData);
+    if (_launchTick) {
+      clearInterval(_launchTick);
+      _launchTick = null;
+    }
+    _launchBooted = false;
+    muteAllocateChrome();
+  }
+
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        startAllocateChrome();
+      },
+      off: function () {
+        _packOn = false;
+        stopAllocateChrome();
+      },
+    });
+  } else {
+    startAllocateChrome();
+  }
 })();

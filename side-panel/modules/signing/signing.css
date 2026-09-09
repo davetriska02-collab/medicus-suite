@@ -41,6 +41,82 @@
   cursor: pointer;
 }
 
+/* Suite stealth switch — same tokens / borders as panel .dp-toggle */
+.suite-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.suite-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.suite-toggle-track {
+  width: 32px;
+  height: 18px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 9px;
+  position: relative;
+  transition:
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
+}
+.suite-toggle input:checked + .suite-toggle-track {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.suite-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-4);
+  border-radius: 50%;
+  transition:
+    transform var(--med) var(--ease),
+    background var(--fast) var(--ease);
+}
+.suite-toggle input:checked + .suite-toggle-track .suite-toggle-thumb {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+.suite-toggle input:focus-visible + .suite-toggle-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sg-soft-toggle {
+  gap: 8px;
+  padding: 4px 8px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  box-shadow: inset 3px 0 0 var(--border);
+}
+.sg-soft-toggle:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-mid));
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+  color: var(--text-1);
+}
+.sg-soft-toggle .pf-armed {
+  display: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.sg-soft-toggle:has(input:checked) .pf-armed {
+  display: inline;
+}
+
 .sg-list {
   display: flex;
   flex-direction: column;

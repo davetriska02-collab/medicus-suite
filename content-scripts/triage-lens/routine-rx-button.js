@@ -45,6 +45,8 @@
   // ---- config / storage --------------------------------------------------
 
   var STORE_KEY = 'triagelens.routineRx';
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.routineRxButton) || 'suite.ui.routineRxButton';
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
   // Machine-local audit ring buffer for this macro's writes (H-035 gap fix —
   // see recordAudit below). Same shape/cap convention as labfiling.auditLog /
   // triagelens.oir.auditLog: full detail here, a schema-compliant subset
@@ -1405,6 +1407,10 @@
   //      "More actions" beside it, not in a dialog) before (re)placing — so a
   //      stale cache can never show the button on the wrong screen.
   function ensureInjected() {
+    if (!_packOn) {
+      removeHost();
+      return;
+    }
     if (!host) return;
 
     // Freeze placement while the macro is running. Confirm lives on
@@ -1591,39 +1597,74 @@
     else onHostGo();
   }
 
-  loadCfg().then(function () {
-    buildUI();
-    requestConfirm = hostConfirm;
-    document.addEventListener('click', onDocHostClick, true);
-    ensureInjected();
-    // Skip batches that are entirely our own host inject/remove — they'd
-    // otherwise self-trigger a needless rescan.
-    var onBodyMutations = function (mutations) {
-      if (isOwnMutation(mutations)) return;
-      scheduleEnsure();
-    };
-    // Prefer the shared observer hub (one body observer for the whole injection
-    // surface); fall back to a private observer if it isn't present so the button
-    // still works on its own. Under the hub `mo` stays null, so insertHost's
-    // disconnect is a no-op and isOwnMutation alone guards self-triggering.
-    var hub = window.__chObserverHub;
-    if (hub && hub.subscribe) {
-      hub.subscribe(onBodyMutations);
-    } else {
-      mo = new MutationObserver(onBodyMutations);
-      mo.observe(document.body, { childList: true, subtree: true });
+  var onBodyMutations = function (mutations) {
+    if (isOwnMutation(mutations)) return;
+    scheduleEnsure();
+  };
+  function onRxVisibility() {
+    if (!document.hidden) scheduleEnsure();
+  }
+  function onRxCfgChange(changes, area) {
+    if (area === 'local' && changes[STORE_KEY]) {
+      loadCfg().then(renderButton);
     }
-    // When the tab is re-shown, re-check once (mutations that fired while hidden
-    // were skipped, so placement may be stale).
-    document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) scheduleEnsure();
+  }
+  var _rxBooted = false;
+
+  function startRoutineRxChrome() {
+    if (_rxBooted) {
+      ensureInjected();
+      return;
+    }
+    _rxBooted = true;
+    loadCfg().then(function () {
+      if (!_packOn) return;
+      buildUI();
+      requestConfirm = hostConfirm;
+      document.addEventListener('click', onDocHostClick, true);
+      ensureInjected();
+      var hub = window.__chObserverHub;
+      if (hub && hub.subscribe) {
+        hub.subscribe(onBodyMutations);
+      } else {
+        mo = new MutationObserver(onBodyMutations);
+        mo.observe(document.body, { childList: true, subtree: true });
+      }
+      document.addEventListener('visibilitychange', onRxVisibility);
+      if (chrome.storage && chrome.storage.onChanged) {
+        chrome.storage.onChanged.addListener(onRxCfgChange);
+      }
     });
-    if (chrome.storage && chrome.storage.onChanged) {
-      chrome.storage.onChanged.addListener(function (changes, area) {
-        if (area === 'local' && changes[STORE_KEY]) {
-          loadCfg().then(renderButton);
-        }
-      });
+  }
+
+  function stopRoutineRxChrome() {
+    removeHost();
+    document.removeEventListener('click', onDocHostClick, true);
+    document.removeEventListener('visibilitychange', onRxVisibility);
+    var hub = window.__chObserverHub;
+    if (hub && hub.unsubscribe) hub.unsubscribe(onBodyMutations);
+    if (mo) {
+      mo.disconnect();
+      mo = null;
     }
-  });
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.removeListener(onRxCfgChange);
+    }
+    _rxBooted = false;
+  }
+
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        startRoutineRxChrome();
+      },
+      off: function () {
+        _packOn = false;
+        stopRoutineRxChrome();
+      },
+    });
+  } else {
+    startRoutineRxChrome();
+  }
 })();

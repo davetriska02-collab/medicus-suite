@@ -979,17 +979,17 @@ const PracticeProfile = (() => {
       }
     }
 
-    // ── Suite: practiceCode + feedbackEmail + signing.softFlags (v2 new) ──────
+    // ── Suite: practiceCode + feedbackEmail + practice feature packs ──────────
     // NEVER push display, tabOrder, hiddenTabs, letterhead, practiceAcceptedAt,
     // attestations, waitingRoomThresholds, rollupAlwaysExpanded, txn.*, or
     // request-monitor from this allow-list (the user's tab choice is theirs
     // alone — see side-panel/tab-catalog.js). Those are personal preferences
     // or a separate clinical gate, not optional-pack config.
     //
-    // signing.softFlags is the dotted allow-list key so `suite.${key}` writes
-    // the one real storage key `suite.signing.softFlags`. Today's published
-    // envelopes emit the suiteExport alias `signingSoftFlags` — dual-read it
-    // so apply does not no-op on current profiles. Do NOT call suiteImport()
+    // Pack keys are dotted allow-list suffixes so `suite.${key}` writes the
+    // one real storage key (e.g. signing.softFlags → suite.signing.softFlags).
+    // Today's published envelopes emit suiteExport camelCase aliases — dual-read
+    // them so apply does not no-op on current profiles. Do NOT call suiteImport()
     // here (it would also write display / practiceAcceptedAt / etc.).
     const suiteModData =
       mods.suite ||
@@ -1027,27 +1027,65 @@ const PracticeProfile = (() => {
       try {
         const merge = modMap.get('suite') === 'merge';
         const toSet = {};
-        // Literal `signing.softFlags` so suite.${key} → suite.signing.softFlags.
+        // Literal dotted suffixes so suite.${key} → the one real storage key.
         // Never add practiceAcceptedAt here — Accept-for-practice stays a
-        // separate clinical gate (reception + alert library), not this pack.
-        const ALLOWED_SUITE_KEYS = ['practiceCode', 'feedbackEmail', 'signing.softFlags'];
+        // separate clinical gate (reception + alert library), not a pack.
+        const ALLOWED_SUITE_KEYS = [
+          'practiceCode',
+          'feedbackEmail',
+          'signing.softFlags',
+          'ui.allocateCanvases',
+          'ui.contactsCanvas',
+          'ui.routineRxButton',
+          'ui.quickActionsWidget',
+        ];
+        const BOOLEAN_PACK_KEYS = [
+          'signing.softFlags',
+          'ui.allocateCanvases',
+          'ui.contactsCanvas',
+          'ui.routineRxButton',
+          'ui.quickActionsWidget',
+        ];
+        const GRANDFATHER_PACK_KEYS = [
+          'ui.allocateCanvases',
+          'ui.contactsCanvas',
+          'ui.routineRxButton',
+          'ui.quickActionsWidget',
+        ];
+        const ENVELOPE_ALIASES = {
+          'signing.softFlags': 'signingSoftFlags',
+          'ui.allocateCanvases': 'allocateCanvases',
+          'ui.contactsCanvas': 'contactsCanvas',
+          'ui.routineRxButton': 'routineRxButton',
+          'ui.quickActionsWidget': 'quickActionsWidget',
+        };
 
         for (const key of ALLOWED_SUITE_KEYS) {
           let val = suiteModData[key];
           // Dual-read the envelope alias suiteExport() / Publish already emits.
-          if (val == null && key === 'signing.softFlags' && typeof suiteModData.signingSoftFlags === 'boolean') {
-            val = suiteModData.signingSoftFlags;
+          const alias = ENVELOPE_ALIASES[key];
+          if (val == null && alias && typeof suiteModData[alias] === 'boolean') {
+            val = suiteModData[alias];
           }
           if (val == null) continue;
           const storageKey = `suite.${key}`;
           if (merge) {
-            // Sticky-on: `!ex[storageKey]` treats local false as empty, so
-            // incoming true turns a clinician OFF back ON (intentional pack-push).
-            // Once local is true, merge will not write false. Do NOT switch this
-            // key to nullish (`== null`) — that would block practice ON over
-            // local OFF. Replace may write false.
+            // Sticky-on for boolean packs: incoming true turns a clinician OFF
+            // back ON (intentional pack-push). Merge never writes false.
+            // Grandfather chrome treats a missing key as already-on, so merge
+            // of false does not mute buttons that were always visible.
+            // practiceCode / feedbackEmail stay empty-local-takes-incoming.
+            // Replace may write false. Do NOT switch pack keys to nullish
+            // (`== null`) — that would block practice ON over local OFF.
             const ex = await chrome.storage.local.get(storageKey);
-            if (!ex[storageKey]) toSet[storageKey] = val;
+            if (BOOLEAN_PACK_KEYS.includes(key)) {
+              if (val !== true) continue;
+              const local = ex[storageKey];
+              const localOn = local === true || (GRANDFATHER_PACK_KEYS.includes(key) && local !== false);
+              if (!localOn) toSet[storageKey] = true;
+            } else if (!ex[storageKey]) {
+              toSet[storageKey] = val;
+            }
           } else {
             toSet[storageKey] = val;
           }

@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>Practice features board fixture</title>
+    <style>
+      :root {
+        --bg-deep: #050a14;
+        --bg-mid: #0b1424;
+        --bg-elev: #131e34;
+        --border: #1c2e4e;
+        --border-hi: #2a4060;
+        --accent: #5b8fc7;
+        --accent-dim: rgba(91, 143, 199, 0.14);
+        --accent-line: rgba(91, 143, 199, 0.35);
+        --text-1: #f1f5f9;
+        --text-2: #cfe1ff;
+        --text-3: #93a8c5;
+        --text-4: #5d7a9d;
+        --green: #4ade80;
+        --r-md: 6px;
+        --ease: cubic-bezier(0.2, 0, 0, 1);
+        --fast: 120ms;
+        --med: 200ms;
+        --mono: 'JetBrains Mono', 'Courier New', monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg-deep);
+        color: var(--text-1);
+        font-family: var(--sans);
+        font-size: 13px;
+      }
+      body {
+        padding: 32px 40px 48px;
+        max-width: 760px;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 14px;
+      }
+      .suite-toggle {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+      .suite-toggle input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .suite-toggle-track {
+        width: 32px;
+        height: 18px;
+        background: var(--bg-elev);
+        border: 1px solid var(--border-hi);
+        border-radius: 9px;
+        position: relative;
+      }
+      .suite-toggle input:checked + .suite-toggle-track {
+        background: var(--accent-dim);
+        border-color: var(--accent);
+      }
+      .suite-toggle-thumb {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        background: var(--text-4);
+        border-radius: 50%;
+      }
+      .suite-toggle input:checked + .suite-toggle-track .suite-toggle-thumb {
+        transform: translateX(14px);
+        background: var(--accent);
+      }
+      .pf-deck {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .pf-brief {
+        grid-column: 1 / -1;
+        padding: 8px 12px;
+        background: var(--bg-mid);
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        font-size: 11px;
+        color: var(--text-3);
+        line-height: 1.45;
+      }
+      .pf-station {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 44px;
+        padding: 8px 10px 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: var(--bg-mid);
+        cursor: pointer;
+        box-shadow: inset 3px 0 0 var(--border);
+      }
+      .pf-station:has(input:checked) {
+        background: color-mix(in srgb, var(--accent) 16%, var(--bg-mid));
+        border-color: var(--accent);
+        box-shadow: inset 4px 0 0 var(--accent);
+      }
+      .pf-station:has(input:checked) .pf-label {
+        color: var(--text-1);
+      }
+      .pf-armed {
+        display: none;
+        flex-shrink: 0;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--green);
+      }
+      .pf-station:has(input:checked) .pf-armed {
+        display: inline;
+      }
+      .pf-copy {
+        min-width: 0;
+        flex: 1;
+      }
+      .pf-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-2);
+        line-height: 1.25;
+      }
+      .pf-sub {
+        display: block;
+        margin-top: 2px;
+        font-size: 10px;
+        color: var(--text-4);
+        line-height: 1.3;
+      }
+    </style>
+  </head>
+  <body>
+    <section id="sect-practice-features">
+      <h1>Practice features</h1>
+      <div class="pf-deck">
+        <div class="pf-brief">
+          Accept for practice stays separate. Merge is sticky-on — practice OFF needs Suite replace.
+        </div>
+        <label class="pf-station" id="row-softFlags">
+          <span class="pf-copy">
+            <span class="pf-label">Signing Queue flags</span>
+            <span class="pf-sub">QOF review + Flagged</span>
+          </span>
+          <span class="pf-armed">Armed</span>
+          <span class="suite-toggle">
+            <input type="checkbox" id="pfSoftFlags" role="switch" />
+            <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="pf-station" id="row-allocateCanvases">
+          <span class="pf-copy">
+            <span class="pf-label">Allocate canvases</span>
+            <span class="pf-sub">Labs, Rx, requests, appointments</span>
+          </span>
+          <span class="pf-armed">Armed</span>
+          <span class="suite-toggle">
+            <input type="checkbox" id="pfAllocateCanvases" role="switch" checked />
+            <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="pf-station" id="row-contactsCanvas">
+          <span class="pf-copy">
+            <span class="pf-label">Contacts canvas</span>
+            <span class="pf-sub">Family tree + link</span>
+          </span>
+          <span class="pf-armed">Armed</span>
+          <span class="suite-toggle">
+            <input type="checkbox" id="pfContactsCanvas" role="switch" checked />
+            <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="pf-station" id="row-routineRxButton">
+          <span class="pf-copy">
+            <span class="pf-label">Routine-Rx button</span>
+            <span class="pf-sub">Injected task button</span>
+          </span>
+          <span class="pf-armed">Armed</span>
+          <span class="suite-toggle">
+            <input type="checkbox" id="pfRoutineRxButton" role="switch" checked />
+            <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label class="pf-station" id="row-quickActionsWidget">
+          <span class="pf-copy">
+            <span class="pf-label">Quick Actions</span>
+            <span class="pf-sub">Comment composer widget</span>
+          </span>
+          <span class="pf-armed">Armed</span>
+          <span class="suite-toggle">
+            <input type="checkbox" id="pfQuickActionsWidget" role="switch" checked />
+            <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
+          </span>
+        </label>
+      </div>
+    </section>
+  </body>
+</html>
