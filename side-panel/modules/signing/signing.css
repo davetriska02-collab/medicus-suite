@@ -104,6 +104,18 @@
   box-shadow: inset 4px 0 0 var(--accent);
   color: var(--text-1);
 }
+.sg-soft-toggle .pf-armed {
+  display: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.sg-soft-toggle:has(input:checked) .pf-armed {
+  display: inline;
+}
 
 .sg-list {
   display: flex;

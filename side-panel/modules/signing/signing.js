@@ -473,6 +473,7 @@ function renderShell() {
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
           </span>
           QOF review flags
+          <span class="pf-armed">Armed</span>
         </label>
         <div id="sgFlagPills" class="sg-flag-pills"></div>
       </div>

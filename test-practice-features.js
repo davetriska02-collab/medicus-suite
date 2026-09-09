@@ -334,6 +334,12 @@ const NEW_PACKS = [
   );
   check(/\.pf-station:has\(input:checked\)/.test(optionsHtml), 'armed station paints when the switch is on');
   check(/inset 4px 0 0 var\(--accent\)/.test(optionsHtml), 'armed station uses the Suite accent rail');
+  check(/class="pf-armed">Armed<\/span>/.test(optionsHtml), 'Armed status label sits on stations');
+  check(/\.pf-station:has\(input:checked\) \.pf-armed/.test(optionsHtml), 'Armed label shows when the switch is on');
+  check(/\.pf-armed \{\s*display: none;/.test(optionsHtml), 'Armed label is hidden when OFF');
+  check(/\.pf-armed \{[\s\S]*?color: var\(--green\)/.test(optionsHtml), 'Armed label uses Suite green status token');
+  check(/class="pf-armed">Armed<\/span>/.test(signingSrc), 'Signing softFlags mirror has the Armed label');
+  check(/\.sg-soft-toggle:has\(input:checked\) \.pf-armed/.test(signingCss), 'Signing Armed label gated on ON');
   check(/class="pf-deck"/.test(optionsHtml) && /class="pf-station"/.test(optionsHtml), 'board is a compact station deck');
   check(
     /PRACTICE_PACK_TOGGLES/.test(optionsJs) && /bindPracticePackToggle/.test(optionsJs),

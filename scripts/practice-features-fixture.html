@@ -17,10 +17,12 @@
         --text-2: #cfe1ff;
         --text-3: #93a8c5;
         --text-4: #5d7a9d;
+        --green: #4ade80;
         --r-md: 6px;
         --ease: cubic-bezier(0.2, 0, 0, 1);
         --fast: 120ms;
         --med: 200ms;
+        --mono: 'JetBrains Mono', 'Courier New', monospace;
         --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       * {
@@ -118,6 +120,19 @@
       .pf-station:has(input:checked) .pf-label {
         color: var(--text-1);
       }
+      .pf-armed {
+        display: none;
+        flex-shrink: 0;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--green);
+      }
+      .pf-station:has(input:checked) .pf-armed {
+        display: inline;
+      }
       .pf-copy {
         min-width: 0;
         flex: 1;
@@ -150,6 +165,7 @@
             <span class="pf-label">Signing Queue flags</span>
             <span class="pf-sub">QOF review + Flagged</span>
           </span>
+          <span class="pf-armed">Armed</span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfSoftFlags" role="switch" />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
@@ -160,6 +176,7 @@
             <span class="pf-label">Allocate canvases</span>
             <span class="pf-sub">Labs, Rx, requests, appointments</span>
           </span>
+          <span class="pf-armed">Armed</span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfAllocateCanvases" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
@@ -170,6 +187,7 @@
             <span class="pf-label">Contacts canvas</span>
             <span class="pf-sub">Family tree + link</span>
           </span>
+          <span class="pf-armed">Armed</span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfContactsCanvas" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
@@ -180,6 +198,7 @@
             <span class="pf-label">Routine-Rx button</span>
             <span class="pf-sub">Injected task button</span>
           </span>
+          <span class="pf-armed">Armed</span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfRoutineRxButton" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
@@ -190,6 +209,7 @@
             <span class="pf-label">Quick Actions</span>
             <span class="pf-sub">Comment composer widget</span>
           </span>
+          <span class="pf-armed">Armed</span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfQuickActionsWidget" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>

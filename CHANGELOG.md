@@ -41,9 +41,9 @@ new board rows use the Suite CSS stealth switch (same tokens/borders as
 `.dp-toggle`), not a native checkbox.
 
 The board is a compact 2-column flight deck: one briefing strip, then
-label + switch stations. Armed (ON) stations take a cooler accent rail and
-filled `--accent-dim` so they read at a glance; OFF stays muted. Suite and
-Signing softFlags mirrors use the same station chrome.
+label + switch stations. Armed (ON) stations show a green **Armed** status
+label plus the accent rail/fill; OFF hides the word and stays muted. Suite
+and Signing softFlags mirrors use the same station chrome.
 
 Review shots live in `docs/_preview/practice-features/` (regenerate with
 `node scripts/practice-features-shots.mjs`).
