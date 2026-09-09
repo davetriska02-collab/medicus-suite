@@ -2193,7 +2193,7 @@ function staffOptionHtml(o, sources) {
   const raw = o && o.label ? o.label : '';
   const presence = presenceForAssignee(raw, sources);
   const shown = SP ? SP.decorateAssigneeLabel(raw, presence) : raw;
-  const away = SP && SP.isAwayState(presence && presence.state);
+  const away = SP && SP.shouldWarnAbsence(presence);
   return `<option value="${escAttr(`${o.type}|${o.value}`)}"${away ? ' data-away="1"' : ''}>${escHtml(shown)}</option>`;
 }
 
@@ -2206,9 +2206,9 @@ function renderOpenTaskRows(tasks, sources) {
   return `<ul class="sent-task-open-list">${rows
     .map((t) => {
       const presence = t.assignedTo ? presenceForAssignee(t.assignedTo, sources) : null;
-      const away = SP && presence && SP.isAwayState(presence.state);
+      const away = SP && presence && SP.shouldWarnAbsence(presence);
       const flag = away
-        ? `<span class="sent-task-away" title="${escAttr(presence.label || t.assignedTo + ' is away')}">Away</span>`
+        ? `<span class="sent-task-away ms-lac-chip-flag" title="${escAttr(presence.label || '')}">Away</span>`
         : '';
       const who = t.assignedTo ? ` — ${escHtml(t.assignedTo)}` : '';
       const tag = t.isOverdue
@@ -2232,7 +2232,7 @@ function updateAssigneeAwayNote(slot, sources) {
   const opt = sel.selectedOptions && sel.selectedOptions[0];
   const label = opt ? opt.textContent.replace(/\s+—\s+Away\s*$/, '').trim() : '';
   const presence = label ? presenceForAssignee(label, sources) : null;
-  const warn = SP && presence ? SP.assigneeWarning(presence) : '';
+  const warn = SP && presence ? SP.absenceNote(presence) : '';
   note.hidden = !warn;
   note.textContent = warn;
 }
@@ -2315,7 +2315,7 @@ async function toggleCreateTaskForm() {
       <label class="sent-task-lbl">Assign to
         <select class="sent-task-assignee">${assigneeHtml}</select>
       </label>
-      <div class="sent-task-away-note" role="status" hidden></div>
+      <div class="sent-task-away-note ms-lac-col-absence" role="status" hidden></div>
       <label class="sent-task-lbl">Details
         <textarea class="sent-task-desc" rows="3" maxlength="2000">${escHtml(desc)}</textarea>
       </label>
@@ -2331,6 +2331,7 @@ async function toggleCreateTaskForm() {
   const descEl = slot.querySelector('.sent-task-desc');
   const createBtn = slot.querySelector('.sent-task-create');
   const updateEnabled = () => {
+    // Away is advisory only — never disable Create solely because they are out.
     createBtn.disabled = !(assigneeSel.value && descEl.value.trim());
     updateAssigneeAwayNote(slot, sources);
   };

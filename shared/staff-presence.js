@@ -1,14 +1,20 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — shared "who is away" wrapper.
+// Medicus Suite — Away / staff absence for task surfaces.
 //
-// One resolver: LabAllocateCore.presenceForName (rota leave + Medicus
-// absences + today's appointment book). Allocate canvases already paint
-// AWAY from this. Monitoring (Sentinel) and any other task surface must
-// call through here — do not add a second matching algorithm.
+// Away ≠ occupancy (who is on this request). Away is "this person is on
+// leave / has a Medicus absence" — the same signal allocate canvases
+// already paint. Occupancy chips and occupancy-look settings stay out.
 //
-// presence.enabled is the same opt-out as task-presence.js: on unless this
-// machine explicitly set it false. Opt-out hides the away chrome only; it
-// never mutes a clinical safety path.
+// One resolver: LabAllocateCore.presenceForName
+//   Medicus absences → rota leave → today’s appointment book
+//   states: away | away-pending | present | unknown | n/a
+// shouldWarnAbsence / absenceWarningCopy / matchStaffByName are re-exported
+// so callers do not copy-paste leave math.
+//
+// Data: READ rota.staff + rota.leave from chrome.storage.local; live
+// absences / book via LabAllocateCore.createClient (same as
+// lab-allocate-canvas.js loadRotaAbsences / loadMedicusPresence).
+// Never writes rota.*.
 //
 // Dual-mode: window.StaffPresence in the browser; module.exports in Node.
 
@@ -27,16 +33,6 @@
     throw new Error('StaffPresence needs LabAllocateCore');
   }
 
-  function isAwayState(state) {
-    return state === 'away' || state === 'away-pending';
-  }
-
-  // Same stance as task-presence resolvePresenceConfig: on unless opted out.
-  function isPresenceEnabled(storage) {
-    if (!storage || typeof storage !== 'object') return true;
-    return storage['presence.enabled'] !== false;
-  }
-
   function rotaSourcesFromStorage(got) {
     var src = got && typeof got === 'object' ? got : {};
     return {
@@ -45,9 +41,8 @@
     };
   }
 
-  function emptySources(enabled) {
+  function emptySources() {
     return {
-      enabled: enabled !== false,
       staffList: [],
       leaveList: [],
       absences: [],
@@ -58,10 +53,7 @@
 
   function sourcesFromParts(opts) {
     opts = opts || {};
-    var enabled = opts.enabled !== false;
-    if (!enabled) return emptySources(false);
     return {
-      enabled: true,
       staffList: Array.isArray(opts.staffList) ? opts.staffList : [],
       leaveList: Array.isArray(opts.leaveList) ? opts.leaveList : [],
       absences: Array.isArray(opts.absences) ? opts.absences : [],
@@ -74,44 +66,52 @@
     return loadLab().presenceForName(opts || {});
   }
 
+  function shouldWarnAbsence(absence) {
+    return loadLab().shouldWarnAbsence(absence);
+  }
+
+  function absenceWarningCopy(absence, count, clinicianName) {
+    return loadLab().absenceWarningCopy(absence, count, clinicianName);
+  }
+
+  function matchStaffByName(staffList, name) {
+    return loadLab().matchStaffByName(staffList, name);
+  }
+
+  function isTeamAssignee(name) {
+    return loadLab().isTeamAssignee(name);
+  }
+
+  // Teams are n/a. Empty name is n/a. Otherwise the allocate resolver —
+  // unknown is not present when there is no evidence.
   function lookup(name, sources) {
-    if (!sources || sources.enabled === false) {
-      return { state: 'n/a', reason: 'opted-out', label: '', source: '' };
-    }
     var who = typeof name === 'string' ? name.trim() : '';
     if (!who) return { state: 'n/a', reason: 'not-a-person', label: '', source: '' };
+    if (isTeamAssignee(who)) return { state: 'n/a', reason: 'team', label: '', source: '' };
+    var src = sources || emptySources();
     return presenceForName({
       name: who,
-      dateISO: sources.dateISO || undefined,
-      staffList: sources.staffList,
-      leaveList: sources.leaveList,
-      absences: sources.absences,
-      book: sources.book,
+      dateISO: src.dateISO || undefined,
+      staffList: src.staffList,
+      leaveList: src.leaveList,
+      absences: src.absences,
+      book: src.book,
     });
   }
 
   function decorateAssigneeLabel(label, presence) {
     var name = typeof label === 'string' ? label.trim() : '';
     if (!name) return '';
-    if (!isAwayState(presence && presence.state)) return name;
+    if (!shouldWarnAbsence(presence)) return name;
     return name + ' — Away';
   }
 
-  // Advisory only — never blocks create / assign. Allocate canvases warn
-  // the same way; the clinician still chooses.
-  function assigneeWarning(presence) {
-    if (!isAwayState(presence && presence.state)) return '';
-    var label = presence.label && String(presence.label).trim() ? String(presence.label).trim() : '';
-    if (presence.state === 'away-pending') {
-      return (
-        (label ? label + ' ' : '') +
-        'They may still be away — leave is requested, not yet approved. You can still create the task.'
-      );
-    }
-    return (
-      (label ? label + ' ' : '') +
-      'They will not see this today unless someone else picks it up. You can still create the task.'
-    );
+  // Allocate canvas paints abs.label in .ms-lac-col-absence
+  // ("{name} is on {leave type} until {date}"). Same sentence here.
+  // Advisory only — callers must not disable Create from this string.
+  function absenceNote(presence) {
+    if (!shouldWarnAbsence(presence)) return '';
+    return presence && presence.label ? String(presence.label) : '';
   }
 
   function pickTaskAssigneeName(task) {
@@ -148,9 +148,11 @@
     };
   }
 
+  // Read-only. Mirrors lab-allocate-canvas.js loadRotaAbsences (~348) then
+  // loadMedicusPresence (~359): storage GET, then fetchTodayBook +
+  // fetchStaffScheduleAbsences. Never chrome.storage.local.set.
   async function loadSources(opts) {
     opts = opts || {};
-    var enabled = true;
     var staffList = [];
     var leaveList = [];
     var absences = [];
@@ -159,16 +161,14 @@
 
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       try {
-        var got = await chrome.storage.local.get(['presence.enabled', 'rota.staff', 'rota.leave']);
-        enabled = isPresenceEnabled(got);
+        var got = await chrome.storage.local.get(['rota.staff', 'rota.leave']);
         var rota = rotaSourcesFromStorage(got);
         staffList = rota.staffList;
         leaveList = rota.leaveList;
       } catch (_) {
-        /* rota sources stay empty — lookup then returns unknown, not away */
+        /* empty lists → lookup returns unknown, never a fabricated present */
       }
     }
-    if (!enabled) return emptySources(false);
 
     if (opts.apiBase) {
       try {
@@ -180,12 +180,11 @@
         if (settled[0].status === 'fulfilled') book = settled[0].value;
         if (settled[1].status === 'fulfilled') absences = settled[1].value || [];
       } catch (_) {
-        /* Medicus book/absences are optional; rota leave still paints Away */
+        /* book/absences optional; rota leave still resolves Away */
       }
     }
 
     return sourcesFromParts({
-      enabled: true,
       staffList: staffList,
       leaveList: leaveList,
       absences: absences,
@@ -195,15 +194,17 @@
   }
 
   var api = {
-    isAwayState: isAwayState,
-    isPresenceEnabled: isPresenceEnabled,
     rotaSourcesFromStorage: rotaSourcesFromStorage,
     sourcesFromParts: sourcesFromParts,
     emptySources: emptySources,
     presenceForName: presenceForName,
+    shouldWarnAbsence: shouldWarnAbsence,
+    absenceWarningCopy: absenceWarningCopy,
+    matchStaffByName: matchStaffByName,
+    isTeamAssignee: isTeamAssignee,
     lookup: lookup,
     decorateAssigneeLabel: decorateAssigneeLabel,
-    assigneeWarning: assigneeWarning,
+    absenceNote: absenceNote,
     pickTaskAssigneeName: pickTaskAssigneeName,
     normaliseOpenTask: normaliseOpenTask,
     loadSources: loadSources,

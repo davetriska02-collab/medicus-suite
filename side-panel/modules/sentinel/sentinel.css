@@ -2470,7 +2470,10 @@
   font-size: 10px;
   color: var(--text-4);
 }
-.sent-task-away {
+/* Same tokens as content-scripts/lab-allocate-canvas.css .ms-lac-chip-flag /
+   .ms-lac-chip-away / .ms-lac-col-absence — Away ≠ occupancy chrome. */
+.sent-task-away,
+.sent-task-form .ms-lac-chip-flag {
   display: inline-block;
   margin-left: 5px;
   font-family: var(--mono);
@@ -2484,7 +2487,8 @@
   padding: 1px 5px;
   vertical-align: 1px;
 }
-.sent-task-away-note {
+.sent-task-away-note,
+.sent-task-form .ms-lac-col-absence {
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-2);

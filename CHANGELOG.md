@@ -10,17 +10,20 @@ The Monitoring tab (Sentinel) now shows the same **Away** signal allocate
 canvases already use, so a recall task is not assigned onto someone who is
 out without anyone noticing.
 
-- **Shared module reused:** `LabAllocateCore.presenceForName` via a thin
-  wrapper (`shared/staff-presence.js`). Rota leave, Medicus absences, and
-  today’s appointment book — not a second matcher.
+**Away ≠ Task Presence.** This is staff absence / on leave, not occupancy.
+Does not use `task-presence.js`, occupancy chips, or `suite.display.presenceLook`.
+
+- **Shared module reused:** `LabAllocateCore.presenceForName` (Medicus
+  absences → rota leave → today’s book) via `shared/staff-presence.js`.
+  `shouldWarnAbsence` / `absenceWarningCopy` / `matchStaffByName` are the
+  allocate exports — no second leave matcher.
 - Create Task staff options append **— Away**. Selecting one shows the
-  allocate-style advisory (`You can still create the task.`) and does not
-  block the write.
-- The same form lists the patient’s other open tasks (incomplete / snoozed,
-  same GET as the Companion HUD) with an amber **Away** chip on the
-  assignee. Chip safety paths are untouched.
-- `presence.enabled === false` (the existing Task Presence opt-out) hides
-  this chrome only. No new setting.
+  allocate sentence (`{name} is on {leave type} until {date}`). Teams stay
+  n/a. Create is never disabled because they are away.
+- The same form lists the patient’s other open tasks (incomplete / snoozed)
+  with the allocate amber **Away** chip on the assignee.
+- Reads `rota.staff` / `rota.leave` and `fetchStaffScheduleAbsences()`;
+  never writes `rota.*`. Unknown (no data) is not painted as present.
 
 ## [v3.261.16] — 2026-09-09
 

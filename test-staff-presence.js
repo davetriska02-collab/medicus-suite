@@ -1,8 +1,9 @@
-// Medicus Suite — staff-presence ("who is away") wrapper tests
+// Medicus Suite — Away / staff absence wrapper tests
 // Run with: node test-staff-presence.js
 //
-// Pins the shared wrapper that Monitoring (Sentinel) and allocate canvases
-// both use. LabAllocateCore.presenceForName stays the only matcher.
+// Away ≠ Task Presence. Pins that Monitoring reuses LabAllocateCore
+// (presenceForName / shouldWarnAbsence / absenceWarningCopy / matchStaffByName)
+// and never the occupancy stack.
 
 'use strict';
 
@@ -44,13 +45,7 @@ const leavePending = [
   },
 ];
 
-console.log('\n--- presence.enabled gate (same stance as task-presence) ---');
-check(SP.isPresenceEnabled({}) === true, 'missing key is ON');
-check(SP.isPresenceEnabled({ 'presence.enabled': true }) === true, 'explicit true is ON');
-check(SP.isPresenceEnabled({ 'presence.enabled': false }) === false, 'explicit false is opted out');
-check(SP.isPresenceEnabled(null) === true, 'null storage fails open to ON');
-
-console.log('\n--- rota sources from storage ---');
+console.log('\n--- rota sources (read-only keys) ---');
 const rota = SP.rotaSourcesFromStorage({
   'rota.staff': staff,
   'rota.leave': leaveAway,
@@ -60,9 +55,8 @@ check(rota.leaveList === leaveAway, 'leave list passed through');
 check(SP.rotaSourcesFromStorage(null).staffList.length === 0, 'null storage → empty staff');
 check(SP.rotaSourcesFromStorage({}).leaveList.length === 0, 'empty storage → empty leave');
 
-console.log('\n--- lookup reuses LabAllocateCore.presenceForName ---');
+console.log('\n--- lookup is LabAllocateCore.presenceForName ---');
 const sources = SP.sourcesFromParts({
-  enabled: true,
   staffList: staff,
   leaveList: leaveAway,
   dateISO: '2026-09-09',
@@ -76,42 +70,53 @@ const direct = C.presenceForName({
 });
 check(away.state === 'away', 'rota approved leave → away');
 check(away.state === direct.state, 'wrapper state matches LabAllocateCore');
-check(SP.isAwayState(away.state) === true, 'isAwayState true for away');
+check(away.label === direct.label, 'wrapper label matches LabAllocateCore');
+check(C.shouldWarnAbsence(away) === true, 'core shouldWarnAbsence true for away');
+check(SP.shouldWarnAbsence(away) === C.shouldWarnAbsence(away), 'shouldWarnAbsence is the core export');
 
 const pendingSrc = SP.sourcesFromParts({
-  enabled: true,
   staffList: staff,
   leaveList: leavePending,
   dateISO: '2026-09-09',
 });
 const pending = SP.lookup('Dr Natalie Azadian', pendingSrc);
 check(pending.state === 'away-pending', 'requested leave → away-pending');
-check(SP.isAwayState(pending.state) === true, 'isAwayState true for away-pending');
+check(SP.shouldWarnAbsence(pending) === true, 'shouldWarnAbsence true for away-pending');
 
-const present = SP.lookup(
-  'Dr Natalie Azadian',
-  SP.sourcesFromParts({ enabled: true, staffList: staff, leaveList: [] })
-);
-check(present.state !== 'away' && present.state !== 'away-pending', 'no leave → not away');
+const noLeave = SP.lookup('Dr Natalie Azadian', SP.sourcesFromParts({ staffList: staff, leaveList: [] }));
+check(noLeave.state !== 'away' && noLeave.state !== 'away-pending', 'no leave → not away');
+check(SP.shouldWarnAbsence(noLeave) === false, 'shouldWarnAbsence false when not away');
 
-const optedOut = SP.lookup(
-  'Dr Natalie Azadian',
-  SP.sourcesFromParts({ enabled: false, staffList: staff, leaveList: leaveAway })
-);
-check(optedOut.state === 'n/a' && optedOut.reason === 'opted-out', 'presence.enabled false hides away chrome');
-check(SP.isAwayState(optedOut.state) === false, 'opted-out is not an away state');
+console.log('\n--- unknown is not present ---');
+const unknown = SP.lookup('Dr Natalie Azadian', SP.sourcesFromParts({}));
+check(unknown.state === 'unknown', 'no rota / absences / book → unknown, not present');
+check(SP.shouldWarnAbsence(unknown) === false, 'unknown does not warn');
+check(SP.decorateAssigneeLabel('Dr Natalie Azadian', unknown) === 'Dr Natalie Azadian', 'unknown is not painted Away');
+check(SP.absenceNote(unknown) === '', 'unknown has no absence note');
 
-console.log('\n--- assignee label + advisory warning ---');
+console.log('\n--- teams are n/a ---');
+const team = SP.lookup('Triage Doctor', sources);
+check(team.state === 'n/a' && team.reason === 'team', 'team inbox is n/a');
+check(SP.isTeamAssignee('Triage Doctor') === C.isTeamAssignee('Triage Doctor'), 'isTeamAssignee is the core export');
+check(SP.shouldWarnAbsence(team) === false, 'teams do not warn');
+check(SP.decorateAssigneeLabel('Triage Doctor', team) === 'Triage Doctor', 'team label is not painted Away');
+
+console.log('\n--- matchStaffByName / absenceWarningCopy are core exports ---');
+check(SP.matchStaffByName(staff, 'Dr Natalie Azadian') === C.matchStaffByName(staff, 'Dr Natalie Azadian'),
+  'matchStaffByName is the core export');
+check(SP.matchStaffByName(staff, 'Dr Natalie Azadian').id === 'staff-azadian', 'matchStaffByName hits the rota row');
+const coreCopy = C.absenceWarningCopy(away, 1, 'Dr Natalie Azadian');
+check(SP.absenceWarningCopy(away, 1, 'Dr Natalie Azadian') === coreCopy, 'absenceWarningCopy is the core export');
+check(/is on /.test(away.label), 'presence.label is "{name} is on {leave type}…"');
+check(/until /.test(away.label), 'presence.label names the return date');
+
+console.log('\n--- assignee label + allocate absence note ---');
 check(SP.decorateAssigneeLabel('Dr Natalie Azadian', away) === 'Dr Natalie Azadian — Away', 'away suffix');
-check(SP.decorateAssigneeLabel('Dr Natalie Azadian', present) === 'Dr Natalie Azadian', 'present keeps the name');
+check(SP.decorateAssigneeLabel('Dr Natalie Azadian', noLeave) === 'Dr Natalie Azadian', 'not-away keeps the name');
 check(SP.decorateAssigneeLabel('  ', away) === '', 'blank label stays blank');
-const warn = SP.assigneeWarning(away);
-check(/still create the task/i.test(warn), 'away warning does not block create');
-check(/will not see this today/i.test(warn), 'away warning states they will not see it today');
-const pendingWarn = SP.assigneeWarning(pending);
-check(/requested, not yet approved/i.test(pendingWarn), 'pending warning names requested leave');
-check(SP.assigneeWarning(present) === '', 'no warning when not away');
-check(SP.assigneeWarning(optedOut) === '', 'no warning when opted out');
+check(SP.absenceNote(away) === away.label, 'note is the allocate abs.label sentence');
+check(SP.absenceNote(pending) === pending.label, 'pending note is abs.label');
+check(SP.absenceNote(noLeave) === '', 'no note when shouldWarnAbsence is false');
 
 console.log('\n--- open-task row normaliser ---');
 check(SP.pickTaskAssigneeName({ assignedTo: 'Dr Smith' }) === 'Dr Smith', 'string assignedTo');
@@ -130,18 +135,42 @@ check(row && row.assignedTo === 'Dr Natalie Azadian', 'assignedTo kept');
 check(row && row.dueDate === '', 'placeholder dueDate "-" dropped');
 check(row && row.isOverdue === true, 'isOverdue kept');
 
-console.log('\n--- Monitoring (Sentinel) reuses this module ---');
+console.log('\n--- Away ≠ Task Presence (source guard) ---');
+const wrap = fs.readFileSync(path.join(__dirname, 'shared/staff-presence.js'), 'utf8');
 const sent = fs.readFileSync(path.join(__dirname, 'side-panel/modules/sentinel/sentinel.js'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, 'side-panel/modules/sentinel/sentinel.css'), 'utf8');
+for (const [name, src] of [
+  ['staff-presence.js', wrap],
+  ['sentinel.js', sent],
+]) {
+  check(!/task-presence\.js/.test(src), `${name} does not load task-presence.js`);
+  check(!/ms-tp-chip/.test(src), `${name} does not use occupancy chips`);
+  check(!/presenceLook/.test(src), `${name} does not use suite.display.presenceLook`);
+  check(!/presence\.enabled/.test(src), `${name} does not read presence.enabled`);
+  check(!/['"]rota\.(staff|leave)['"]\s*:/.test(src), `${name} does not write rota.staff / rota.leave`);
+}
+check(!/function presenceForName\(/.test(sent), 'Sentinel does not invent a second presenceForName');
+check(!/leaveOnDate|absenceForName/.test(sent), 'Sentinel does not copy-paste leave math');
+check(/shouldWarnAbsence/.test(sent), 'Sentinel uses shouldWarnAbsence');
+check(/absenceNote/.test(sent), 'Sentinel paints the allocate absence note');
+check(/ms-lac-chip-flag/.test(sent), 'Away chip reuses the allocate flag class');
+check(/ms-lac-col-absence/.test(sent), 'note reuses the allocate absence class');
+check(/ms-lac-chip-flag/.test(css) && /ms-lac-col-absence/.test(css), 'sentinel.css mirrors allocate away tokens');
+check(
+  /createBtn\.disabled = !\(assigneeSel\.value && descEl\.value\.trim\(\)\)/.test(sent),
+  'Create is disabled only when assignee or details are empty — not because away'
+);
+check(!/createBtn\.disabled.*away|away.*createBtn\.disabled/.test(sent), 'no away-gated disable of Create');
+
+console.log('\n--- Monitoring (Sentinel) wiring ---');
 check(/staffPresenceApi\(\)/.test(sent), 'Sentinel calls staffPresenceApi()');
 check(/StaffPresence/.test(sent), 'Sentinel talks to window.StaffPresence');
 check(/decorateAssigneeLabel/.test(sent), 'assignee options use decorateAssigneeLabel');
 check(/normaliseOpenTask/.test(sent), 'open-task rows use normaliseOpenTask');
-check(/sent-task-away/.test(sent), 'open-task rows paint the Away chip');
-check(
-  /You can still create the task/.test(SP.assigneeWarning.toString()) || /assigneeWarning/.test(sent),
-  'create path keeps the advisory warning helper'
-);
-check(!/function presenceForName\(/.test(sent), 'Sentinel does not invent a second presenceForName');
+check(/fetchStaffScheduleAbsences/.test(wrap), 'loader uses allocate fetchStaffScheduleAbsences');
+check(/rota\.staff/.test(wrap) && /rota\.leave/.test(wrap), 'loader reads rota.staff + rota.leave');
+check(/get\(\['rota\.staff', 'rota\.leave'\]\)/.test(wrap), 'storage GET is rota keys only');
+check(!/chrome\.storage\.local\.set\(/.test(wrap), 'wrapper never calls chrome.storage.local.set');
 
 const panel = fs.readFileSync(path.join(__dirname, 'side-panel/panel.html'), 'utf8');
 const pop = fs.readFileSync(path.join(__dirname, 'pop-out/pop-out.html'), 'utf8');
