@@ -64,6 +64,7 @@ const {
   presenceSelfExtras,
   currentTaskListSlug,
   PRESENCE_LIST_CH_RE,
+  reauthorisePrescriptionIdFromUrl,
 } = require('./content-scripts/triage-lens/page-world.js');
 
 let passed = 0,
@@ -421,8 +422,7 @@ console.log('--- native Pusher presence: label / initials / sanitise ---');
 
   check(unknownColleagueLabel() === 'A colleague', 'fallback helper is A colleague, not Someone');
   check(
-    occupiedHeadline([{ label: 'Dr Priya Nair' }]) ===
-      'Note: Dr Priya Nair has this open. You can still work it.',
+    occupiedHeadline([{ label: 'Dr Priya Nair' }]) === 'Note: Dr Priya Nair has this open. You can still work it.',
     'single headline merges who + you can still work it'
   );
   check(
@@ -653,6 +653,20 @@ console.log('--- list channel parse + path: queue occupancy, never a request occ
     'overview is not a list'
   );
   check(
+    reauthorisePrescriptionIdFromUrl(
+      'https://e38a9f.api.england.medicus.health/clinical/data/prescription/re-authorise/0198c274-04da-731b-aa1a-cd5aced87444'
+    ) === '0198c274-04da-731b-aa1a-cd5aced87444',
+    'reauthorisePrescriptionIdFromUrl extracts the id from a real re-authorise API URL (HAR 120-reauthorise.har)'
+  );
+  check(
+    reauthorisePrescriptionIdFromUrl(
+      'https://e38a9f.api.england.medicus.health/clinical/data/prescription/overview/019879e8-e521-7014-a8d5-9ca319d9eda6'
+    ) === null,
+    'reauthorisePrescriptionIdFromUrl does not match the plain (non-re-authorise) prescription overview endpoint'
+  );
+  check(reauthorisePrescriptionIdFromUrl('') === null, 'reauthorisePrescriptionIdFromUrl on empty string -> null');
+  check(reauthorisePrescriptionIdFromUrl(null) === null, 'reauthorisePrescriptionIdFromUrl on null -> null');
+  check(
     parseTaskListPath('/560b6c/tasks/medical_patient_request_task/task-list').slug === 'medical_patient_request_task',
     'parseTaskListPath route shape'
   );
@@ -762,15 +776,21 @@ console.log('--- self filter: Pusher myID / name / email, not only staff UUID --
     'a different named colleague is kept'
   );
   check(
-    memberLooksLikeSelf({ id: UUID_B, info: { displayName: 'Samira Okonkwo' } }, presenceSelfKeys(UUID_ME, {
-      email: 'sam.okonkwo@nhs.net',
-    })) === false,
+    memberLooksLikeSelf(
+      { id: UUID_B, info: { displayName: 'Samira Okonkwo' } },
+      presenceSelfKeys(UUID_ME, {
+        email: 'sam.okonkwo@nhs.net',
+      })
+    ) === false,
     'sam.okonkwo does not drop Samira Okonkwo'
   );
   check(
-    memberLooksLikeSelf({ id: UUID_B, info: { displayName: 'Dr David Triska' } }, presenceSelfKeys(UUID_ME, {
-      email: 'd.triska@nhs.net',
-    })) === true,
+    memberLooksLikeSelf(
+      { id: UUID_B, info: { displayName: 'Dr David Triska' } },
+      presenceSelfKeys(UUID_ME, {
+        email: 'd.triska@nhs.net',
+      })
+    ) === true,
     'd.triska matches David Triska via last name + single-letter first'
   );
 
@@ -945,19 +965,10 @@ console.log('--- occupied masthead defaults to fluoro look vars, not peach ---')
   const path = require('path');
   const css = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.css'), 'utf8');
   check(/--ms-tp-wash:\s*#fff44a/.test(css), 'default wash is fluoro yellow');
-  check(
-    /#ms-tp-banner\s*\{[^}]*background:\s*var\(--ms-tp-wash\)/.test(css),
-    'banner uses the look wash token'
-  );
+  check(/#ms-tp-banner\s*\{[^}]*background:\s*var\(--ms-tp-wash\)/.test(css), 'banner uses the look wash token');
   check(!/#ms-tp-banner\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css), 'banner is not peach/amber');
-  check(
-    /#ms-tp-list\s*\{[^}]*background:\s*var\(--ms-tp-wash\)/.test(css),
-    'list pill uses the look wash token'
-  );
-  check(
-    !/#ms-tp-list\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css),
-    'list pill is not peach/amber'
-  );
+  check(/#ms-tp-list\s*\{[^}]*background:\s*var\(--ms-tp-wash\)/.test(css), 'list pill uses the look wash token');
+  check(!/#ms-tp-list\s*\{[^}]*background:\s*var\(--amber-dim\)/.test(css), 'list pill is not peach/amber');
   check(/#ms-tp-look\s*\{/.test(css), 'click-the-strip look popover is styled');
 }
 

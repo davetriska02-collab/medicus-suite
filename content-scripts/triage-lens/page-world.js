@@ -28,6 +28,21 @@
 // can parse a patientId out of. Only the URL is read (the patientId is IN
 // the path); the response body is never touched for this.
 //
+// It also notes the prescriptionId of whichever prescription-authorisation
+// form is currently open, for repeat-prescribing-pills.js (2026-09-10):
+// the re-authorise/modify popup is a MODAL, not a route — confirmed live
+// (Nick's own console capture, location.href stayed on the underlying
+// care-record URL the whole time the popup was open) — so, unlike the
+// Medication tab / task-overview screens, there is no URL to read a
+// prescriptionId out of at all. Any request to
+// /clinical/data/prescription/re-authorise/{id} stamps that id onto
+// 'data-ch-reauth-prescription' (value 'id|timestamp'), same DOM-attribute
+// pattern as the Clinical Summary patient note above. The isolated content
+// script combines this with its own DOM search for the "Expected days
+// supply" label to decide whether the modal is CURRENTLY open (the stamp
+// alone can't tell — it's the last-seen id, which lingers after the modal
+// closes) — see repeat-prescribing-pills.js's own comment.
+//
 // It reads responses only; it never blocks, rewrites, or sends anything. No
 // patient data leaves the browser.
 
@@ -108,6 +123,16 @@
     return m && m[1] ? m[1] : '';
   }
 
+  // Prescription re-authorise/modify popup — see the file header's
+  // "prescriptionId of whichever ... form is currently open" note. Pure —
+  // extracted so it's testable from Node without a DOM, same discipline as
+  // currentTaskListSlug above.
+  var REAUTH_FORM_RE = /\/clinical\/data\/prescription\/re-authorise\/([0-9a-f-]+)/i;
+  function reauthorisePrescriptionIdFromUrl(u) {
+    var m = String(u || '').match(REAUTH_FORM_RE);
+    return m ? m[1] : null;
+  }
+
   // Node tests require this file for the helper only. MAIN-world behaviour is
   // unchanged: chrome content scripts have no `module`, so we fall through.
   if (typeof module !== 'undefined' && module.exports) {
@@ -116,6 +141,7 @@
       presenceSelfExtras: presenceSelfExtras,
       currentTaskListSlug: currentTaskListSlug,
       PRESENCE_LIST_CH_RE: PRESENCE_LIST_CH_RE,
+      reauthorisePrescriptionIdFromUrl: reauthorisePrescriptionIdFromUrl,
     };
     return;
   }
@@ -139,6 +165,16 @@
     if (!m) return;
     try {
       document.documentElement.setAttribute('data-ch-summary-patient', m[1].toLowerCase() + '|' + Date.now());
+    } catch (_) {}
+  }
+
+  // ---- Prescription re-authorise/modify popup note (see header) ----
+  // Same pattern as noteSummaryPatient above, for repeat-prescribing-pills.js.
+  function noteReauthorisePrescription(u) {
+    var id = reauthorisePrescriptionIdFromUrl(u);
+    if (!id) return;
+    try {
+      document.documentElement.setAttribute('data-ch-reauth-prescription', id + '|' + Date.now());
     } catch (_) {}
   }
 
@@ -205,6 +241,7 @@
       try {
         var u = typeof url === 'string' ? url : (url && url.url) || '';
         noteSummaryPatient(u);
+        noteReauthorisePrescription(u);
         if (TL_RE.test(u)) {
           p.then(function (r) {
             try {
@@ -238,6 +275,7 @@
       var xhr = this;
       var u = xhr.__chUrl || '';
       noteSummaryPatient(u);
+      noteReauthorisePrescription(u);
       if (TL_RE.test(u)) {
         xhr.addEventListener('load', function () {
           try {
