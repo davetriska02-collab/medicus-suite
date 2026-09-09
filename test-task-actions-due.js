@@ -161,14 +161,12 @@ console.log('\n--- no completion / all-clear claim ---');
 console.log('\n--- Upcoming: outstanding investigations wiring ---');
 check(
   manifest.indexOf('shared/outstanding-investigations.js') > -1 &&
-    manifest.indexOf('shared/outstanding-investigations.js') < manifest.indexOf('content-scripts/task-actions-panel.js'),
+    manifest.indexOf('shared/outstanding-investigations.js') <
+      manifest.indexOf('content-scripts/task-actions-panel.js'),
   'outstanding-investigations.js is injected before task-actions-panel.js'
 );
 check(/apiFetchPatientJournal/.test(panel), 'panel fetches the patient journal for outstanding investigations');
-check(
-  /MsOutstandingInvestigations/.test(panel),
-  'parsing is delegated to the shared module, not duplicated inline'
-);
+check(/MsOutstandingInvestigations/.test(panel), 'parsing is delegated to the shared module, not duplicated inline');
 check(/Outstanding investigations/.test(panel), 'clinic Upcoming section has the Outstanding investigations heading');
 check(/No outstanding investigations\./.test(panel), 'empty state is named, not blank');
 check(
@@ -203,6 +201,128 @@ check(
   'sub-list headings are wired to toggle + rerender, same pattern as the top-level section chevrons'
 );
 
+console.log('\n--- Outstanding investigations: weekday abbreviation (2026-09-11) ---');
+check(
+  /const WEEKDAY_ABBR = \['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'\];/.test(panel),
+  'weekday abbreviations disambiguate Tuesday/Thursday and Saturday/Sunday, not just single letters'
+);
+check(
+  /function weekdayAbbr/.test(panel) && /Date\.parse\(dateStr\)/.test(panel),
+  'reuses Date.parse on the same requestedDate string outstandingInvestigationRequests() already sorts by'
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function weekdayAbbr'), panel.indexOf('function renderInvestigationRow'));
+    return /if \(Number\.isNaN\(ms\)\) return ''/.test(fn);
+  })(),
+  'an unparseable/missing date returns empty string, never NaN painted into the row'
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function renderInvestigationRow'), panel.indexOf('function renderRecGroup'));
+    return /const weekday = weekdayAbbr\(inv\.requestedDate\);/.test(fn) && /weekday \? weekday \+ ' ' : ''/.test(fn);
+  })(),
+  'renderInvestigationRow prefixes the date with the weekday abbreviation when one is available'
+);
+check(
+  (() => {
+    // Scoped elsewhere in the file (appts/links/tasks) never call
+    // weekdayAbbr — Nick's own request was "just for outstanding
+    // investigation results".
+    const apptFn = panel.slice(panel.indexOf('function renderApptRow'), panel.indexOf('function renderLinkRow'));
+    const linkFn = panel.slice(panel.indexOf('function renderLinkRow'), panel.indexOf('function weekdayAbbr'));
+    const taskFn = panel.slice(panel.indexOf('function renderTaskRow'), panel.indexOf('function renderRecordBody'));
+    return !/weekdayAbbr/.test(apptFn) && !/weekdayAbbr/.test(linkFn) && !/weekdayAbbr/.test(taskFn);
+  })(),
+  'appointments/links/tasks rows are untouched — the weekday is investigations-only, as asked'
+);
+
+console.log('\n--- Companion: investigation-results task pages get record section first (2026-09-11) ---');
+check(
+  /function isInvestigationResultTask/.test(panel) &&
+    /INVESTIGATION_REPORT_TASK_TYPE = 'review-investigation-report'/.test(panel) &&
+    /info\.typeSlug === INVESTIGATION_REPORT_TASK_TYPE/.test(panel),
+  'matches the exact confirmed typeSlug (review-investigation-report), not a broader speculative pattern'
+);
+check(
+  /const recordFirst = showRecord && isInvestigationResultTask\(\);/.test(panel),
+  'buildHtml() computes whether the record section should render before What’s due'
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function buildHtml'), panel.indexOf('function dueDegradedHtml'));
+    const recordFirstIdx = fn.indexOf("recordFirst ? recordSectionHtml() : ''");
+    const dueIdx = fn.indexOf('shows.due ? dueSectionHtml()');
+    return recordFirstIdx > -1 && dueIdx > -1 && recordFirstIdx < dueIdx;
+  })(),
+  "the record-first slot renders BEFORE the What's due section in buildHtml()'s markup order"
+);
+check(
+  /showRecord && !recordFirst \? recordSectionHtml\(\) : ''/.test(panel),
+  'the record section still renders in its original spot on every other page, never duplicated'
+);
+check(
+  /const investigationsGroup = renderRecGroup\('investigations', 'Outstanding investigations', investigationsHtml\);/.test(
+    panel
+  ),
+  'the investigations group is built once and reused for either ordering, not duplicated per branch'
+);
+check(
+  /isInvestigationResultTask\(\)\s*\?\s*investigationsGroup \+ otherGroups\s*:\s*otherGroups \+ investigationsGroup/.test(
+    panel
+  ),
+  'within the record section, Outstanding investigations sorts first on investigation-results pages, last everywhere else (unchanged order)'
+);
+check(
+  (() => {
+    // Root cause found after Nick reported "nothing showing at all":
+    // ordering alone did nothing, because loadPatientRecord's Stage-1
+    // classifyPatientRequest() only ever recognises a communication-thread
+    // overview shape (data.communicationThreadTaskType) — a
+    // review-investigation-report task's overview is a different shape
+    // entirely and was always falling through to applicable = false.
+    const fn = panel.slice(
+      panel.indexOf('async function loadPatientRecord'),
+      panel.indexOf('async function doOpenBooking')
+    );
+    return (
+      /if \(ctx\.typeSlug === INVESTIGATION_REPORT_TASK_TYPE\)/.test(fn) &&
+      /invOverview\.data && invOverview\.data\.patient && invOverview\.data\.patient\.id/.test(fn) &&
+      fn.indexOf('INVESTIGATION_REPORT_TASK_TYPE') < fn.indexOf('classifyPatientRequest(overview)')
+    );
+  })(),
+  'review-investigation-report tasks get their own applicable/patientId path (HAR 122-open-investigation.har: data.patient.id), bypassing the communication-thread-only classifier entirely'
+);
+check(
+  (() => {
+    const fn = panel.slice(
+      panel.indexOf('async function loadPatientRecord'),
+      panel.indexOf('async function doOpenBooking')
+    );
+    const start = fn.indexOf('if (ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE)');
+    const stage1Idx = fn.indexOf('// Stage 1');
+    const invBranch = fn.slice(start, stage1Idx);
+    return /fetchAppointmentsAndLinks\(st, patientId, ctx\.taskUuid\)/.test(invBranch);
+  })(),
+  "the investigation-report task itself is excluded from its own Open tasks list, same as the communication-thread path's ctx.taskUuid exclusion"
+);
+check(
+  (() => {
+    // Second root cause, found after "still not showing" even with the
+    // classification-shape fix above in place: runInject() is the trigger
+    // that decides whether loadPatientRecord() is called AT ALL — it only
+    // fired for isCommunicationThreadSlug(ctx.typeSlug), so the earlier fix
+    // was genuinely dead code, never reached for this typeSlug at all.
+    const fn = panel.slice(panel.indexOf('function runInject'), panel.indexOf('const _hub = window.__chObserverHub'));
+    return (
+      /isCommunicationThreadSlug\(ctx\.typeSlug\) \|\| ctx\.typeSlug === INVESTIGATION_REPORT_TASK_TYPE/.test(fn) &&
+      fn.indexOf('(isCommunicationThreadSlug(ctx.typeSlug) || ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE)') <
+        fn.indexOf('loadPatientRecord(ctx)')
+    );
+  })(),
+  "runInject()'s own trigger for loadPatientRecord() also recognises review-investigation-report — the actual reason nothing showed, one layer above the classification fix"
+);
+
 console.log('\n--- Booking-link rows: lozenge, no colour, type first ---');
 check(
   /function dateOnlyFromCreated/.test(panel) && /str\.indexOf\(','\)/.test(panel),
@@ -210,7 +330,7 @@ check(
 );
 check(
   /function bookingLinkTypeName/.test(panel) && /v !== '-'/.test(panel),
-  "Medicus's \"-\" not-set placeholder is treated as unset, not displayed literally (the procedure-link bug)"
+  'Medicus\'s "-" not-set placeholder is treated as unset, not displayed literally (the procedure-link bug)'
 );
 check(
   (() => {
@@ -237,7 +357,10 @@ check(
   /statuses\[\]', 'incomplete'/.test(panel) && /statuses\[\]', 'snoozed'/.test(panel),
   'requests only incomplete + snoozed (scheduled for later) — completed/discarded excluded server-side'
 );
-check(!/statuses\[\]', 'completed'/.test(panel) && !/statuses\[\]', 'cancelled'/.test(panel), 'never requests completed or discarded tasks');
+check(
+  !/statuses\[\]', 'completed'/.test(panel) && !/statuses\[\]', 'cancelled'/.test(panel),
+  'never requests completed or discarded tasks'
+);
 check(
   /function taskUuidFromOverviewUrl/.test(panel) && /excludeTaskUuid/.test(panel),
   'the task the clinician is already viewing is excluded from its own open-tasks list'
@@ -257,7 +380,10 @@ check(
   })(),
   'open tasks render as the same single-line pill as booking links, for consistency'
 );
-check(/ms-tap-rec-status-overdue/.test(panel) && /ms-tap-rec-status-overdue/.test(css), 'overdue tasks get a named pill, styled in CSS');
+check(
+  /ms-tap-rec-status-overdue/.test(panel) && /ms-tap-rec-status-overdue/.test(css),
+  'overdue tasks get a named pill, styled in CSS'
+);
 check(/No open tasks\./.test(panel), 'empty state is named, not blank');
 check(
   (() => {
