@@ -1,5 +1,8 @@
 # Practice install: local Source + OS sync (path B)
 
+Printable one-pager for Pete: [`PETE-LOCAL-INSTALL-GUIDE.pdf`](PETE-LOCAL-INSTALL-GUIDE.pdf)
+(HTML source: [`PETE-LOCAL-INSTALL-GUIDE.html`](PETE-LOCAL-INSTALL-GUIDE.html)).
+
 Edge-first. Windows. Pete packs; practice IT (or Pete) schedules the copy. **The extension never copies its own files and never reads a UNC path to patch itself.**
 
 | Channel | What it is | What it is not |
