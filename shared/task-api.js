@@ -58,6 +58,20 @@ export async function fetchTaskCreateForm(apiBase, patientId) {
   return { teams, staff, priorities: priorities.length ? priorities : [{ value: 0, label: 'Normal' }] };
 }
 
+// Open tasks for this patient — incomplete + snoozed only, matching the
+// Companion HUD (content-scripts/task-actions-panel.js apiFetchOpenTasks)
+// and Medicus's own Tasks tab. Completed/cancelled are excluded server-side.
+export async function fetchOpenPatientTasks(apiBase, patientId) {
+  if (!apiBase || !patientId) throw new Error('Missing practice or patient id');
+  const qs = new URLSearchParams();
+  qs.append('statuses[]', 'incomplete');
+  qs.append('statuses[]', 'snoozed');
+  const data = await apiFetch(
+    `${apiBase}/clinical/data/patient-record/task-list/${encodeURIComponent(patientId)}?${qs}`
+  );
+  return Array.isArray(data.tasks) ? data.tasks : [];
+}
+
 // Create a general task. assignee is "type|value" (the encoding the form options
 // use); description is the task body; priority is the numeric priority value.
 // Returns the API response. Throws on any non-OK status (caller surfaces it).
