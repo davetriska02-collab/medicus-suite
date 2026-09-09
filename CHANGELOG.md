@@ -2,9 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.262.0] — 2026-09-11
+## [v3.261.18] — 2026-09-09
 
 ### Repeat-prescribing authorisation pills
+
+Patch on 3.261 so the hazard-log CSO-gap gate (HARD_FAIL at 60 minors /
+3.262) does not trip. Not a new minor.
 
 A small "Fixed"/"Unclear"/"Until review date" pill, plus a days-supply
 figure, on every screen a repeat prescription's authorisation type and
