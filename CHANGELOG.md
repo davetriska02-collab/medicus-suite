@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.17] — 2026-09-09
+
+### Monitoring tasks — who is away
+
+The Monitoring tab (Sentinel) now shows the same **Away** signal allocate
+canvases already use, so a recall task is not assigned onto someone who is
+out without anyone noticing.
+
+**Away ≠ Task Presence.** This is staff absence / on leave, not occupancy.
+Does not use `task-presence.js`, occupancy chips, or `suite.display.presenceLook`.
+
+- **Shared module reused:** `LabAllocateCore.presenceForName` (Medicus
+  absences → rota leave → today’s book) via `shared/staff-presence.js`.
+  `shouldWarnAbsence` / `absenceWarningCopy` / `matchStaffByName` are the
+  allocate exports — no second leave matcher.
+- Create Task staff options append **— Away**. Selecting one shows the
+  allocate sentence (`{name} is on {leave type} until {date}`). Teams stay
+  n/a. Create is never disabled because they are away.
+- The same form lists the patient’s other open tasks (incomplete / snoozed)
+  with the allocate amber **Away** chip on the assignee.
+- Reads `rota.staff` / `rota.leave` and `fetchStaffScheduleAbsences()`;
+  never writes `rota.*`. Unknown (no data) is not painted as present.
+
 ## [v3.261.16] — 2026-09-09
 
 ### Practice bits: local Load unpacked + OS sync (path B)

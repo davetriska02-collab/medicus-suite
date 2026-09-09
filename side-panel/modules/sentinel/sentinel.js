@@ -8,7 +8,7 @@ import { STATUS_RANK, buildAdminSummaryText, isChipActionNeeded } from './sentin
 import { buildChipActions, buildPatientActions } from '../shared/action-packs.js';
 import { buildBrief } from './brief-core.js';
 import { buildPassport } from './passport-core.js';
-import { fetchTaskCreateForm, createGeneralTask } from '../../../shared/task-api.js';
+import { fetchTaskCreateForm, createGeneralTask, fetchOpenPatientTasks } from '../../../shared/task-api.js';
 import { buildRecallDescription, isActionNeeded } from '../sweep/sweep-core.js';
 import { buildCoverageView } from './coverage-core.js';
 import { startTour } from '../../tour/tour.js';
@@ -2178,6 +2178,65 @@ function scaffoldHtml() {
 
 let _sentTaskFormCache = null; // assignee/priority options are practice-wide
 
+function staffPresenceApi() {
+  return (typeof window !== 'undefined' && window.StaffPresence) || null;
+}
+
+function presenceForAssignee(label, sources) {
+  const SP = staffPresenceApi();
+  if (!SP) return { state: 'n/a', reason: 'no-module', label: '' };
+  return SP.lookup(label, sources);
+}
+
+function staffOptionHtml(o, sources) {
+  const SP = staffPresenceApi();
+  const raw = o && o.label ? o.label : '';
+  const presence = presenceForAssignee(raw, sources);
+  const shown = SP ? SP.decorateAssigneeLabel(raw, presence) : raw;
+  const away = SP && SP.shouldWarnAbsence(presence);
+  return `<option value="${escAttr(`${o.type}|${o.value}`)}"${away ? ' data-away="1"' : ''}>${escHtml(shown)}</option>`;
+}
+
+function renderOpenTaskRows(tasks, sources) {
+  const SP = staffPresenceApi();
+  const rows = (Array.isArray(tasks) ? tasks : []).map((t) => (SP ? SP.normaliseOpenTask(t) : null)).filter(Boolean);
+  if (!rows.length) {
+    return `<div class="sent-task-open-empty">No other open tasks for this patient.</div>`;
+  }
+  return `<ul class="sent-task-open-list">${rows
+    .map((t) => {
+      const presence = t.assignedTo ? presenceForAssignee(t.assignedTo, sources) : null;
+      const away = SP && presence && SP.shouldWarnAbsence(presence);
+      const flag = away
+        ? `<span class="sent-task-away ms-lac-chip-flag" title="${escAttr(presence.label || '')}">Away</span>`
+        : '';
+      const who = t.assignedTo ? ` — ${escHtml(t.assignedTo)}` : '';
+      const tag = t.isOverdue
+        ? '<span class="sent-task-open-overdue">Overdue</span>'
+        : t.dueDate
+          ? `<span class="sent-task-open-due">${escHtml(t.dueDate)}</span>`
+          : '';
+      return `<li class="sent-task-open-row${away ? ' sent-task-open-row--away' : ''}">
+        <span class="sent-task-open-text">${escHtml(t.taskType)}${who}${flag}</span>
+        ${tag}
+      </li>`;
+    })
+    .join('')}</ul>`;
+}
+
+function updateAssigneeAwayNote(slot, sources) {
+  const SP = staffPresenceApi();
+  const note = slot.querySelector('.sent-task-away-note');
+  const sel = slot.querySelector('.sent-task-assignee');
+  if (!note || !sel) return;
+  const opt = sel.selectedOptions && sel.selectedOptions[0];
+  const label = opt ? opt.textContent.replace(/\s+—\s+Away\s*$/, '').trim() : '';
+  const presence = label ? presenceForAssignee(label, sources) : null;
+  const warn = SP && presence ? SP.absenceNote(presence) : '';
+  note.hidden = !warn;
+  note.textContent = warn;
+}
+
 async function toggleCreateTaskForm() {
   const slot = container?.querySelector('#sentTaskSlot');
   if (!slot) return;
@@ -2208,6 +2267,10 @@ async function toggleCreateTaskForm() {
   }
   const apiBase = `https://${code}.api.england.medicus.health`;
 
+  const SP = staffPresenceApi();
+  const presenceP = SP ? SP.loadSources({ apiBase }) : Promise.resolve(null);
+  const openTasksP = fetchOpenPatientTasks(apiBase, patientId).catch(() => null);
+
   let form;
   try {
     if (!_sentTaskFormCache) _sentTaskFormCache = await fetchTaskCreateForm(apiBase, patientId);
@@ -2218,14 +2281,16 @@ async function toggleCreateTaskForm() {
     return;
   }
 
+  const [sources, openTasks] = await Promise.all([presenceP, openTasksP]);
+
   const actionChips = (_renderCtx?.chips || []).filter((c) => c && isActionNeeded(c.status));
   const desc = buildRecallDescription(actionChips, 'Monitoring');
-  const opt = (o) => `<option value="${escAttr(`${o.type}|${o.value}`)}">${escHtml(o.label)}</option>`;
+  const teamOpt = (o) => `<option value="${escAttr(`${o.type}|${o.value}`)}">${escHtml(o.label)}</option>`;
   let assigneeHtml = '<option value="">— select —</option>';
   if (form.teams && form.teams.length)
-    assigneeHtml += `<optgroup label="Teams">${form.teams.map(opt).join('')}</optgroup>`;
+    assigneeHtml += `<optgroup label="Teams">${form.teams.map(teamOpt).join('')}</optgroup>`;
   if (form.staff && form.staff.length)
-    assigneeHtml += `<optgroup label="Staff">${form.staff.map(opt).join('')}</optgroup>`;
+    assigneeHtml += `<optgroup label="Staff">${form.staff.map((o) => staffOptionHtml(o, sources)).join('')}</optgroup>`;
   const priorityHtml =
     form.priorities && form.priorities.length > 1
       ? `<label class="sent-task-lbl">Priority
@@ -2235,12 +2300,22 @@ async function toggleCreateTaskForm() {
          </label>`
       : '';
 
+  const openTasksHtml =
+    openTasks === null
+      ? `<div class="sent-task-open-empty">Couldn&rsquo;t load open tasks.</div>`
+      : renderOpenTaskRows(openTasks, sources);
+
   slot.innerHTML = `
     <div class="sent-task-form">
       <div class="sent-task-for">Task for <strong>${escHtml(patientName)}</strong> — check this is who you mean before creating.</div>
+      <div class="sent-task-open">
+        <div class="sent-task-open-head">Open tasks</div>
+        ${openTasksHtml}
+      </div>
       <label class="sent-task-lbl">Assign to
         <select class="sent-task-assignee">${assigneeHtml}</select>
       </label>
+      <div class="sent-task-away-note ms-lac-col-absence" role="status" hidden></div>
       <label class="sent-task-lbl">Details
         <textarea class="sent-task-desc" rows="3" maxlength="2000">${escHtml(desc)}</textarea>
       </label>
@@ -2256,7 +2331,9 @@ async function toggleCreateTaskForm() {
   const descEl = slot.querySelector('.sent-task-desc');
   const createBtn = slot.querySelector('.sent-task-create');
   const updateEnabled = () => {
+    // Away is advisory only — never disable Create solely because they are out.
     createBtn.disabled = !(assigneeSel.value && descEl.value.trim());
+    updateAssigneeAwayNote(slot, sources);
   };
   assigneeSel.addEventListener('change', updateEnabled);
   descEl.addEventListener('input', updateEnabled);

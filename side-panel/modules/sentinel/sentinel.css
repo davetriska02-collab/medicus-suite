@@ -2409,3 +2409,94 @@
   border: 1px solid var(--border);
   border-radius: var(--r-md);
 }
+
+/* Open tasks + Away — same amber flag tokens as allocate-canvas AWAY chips.
+   Advisory only; never replaces a monitoring chip and never blocks create. */
+.sent-task-open {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.sent-task-open-head {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.sent-task-open-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sent-task-open-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+.sent-task-open-row--away {
+  color: var(--text-3);
+}
+.sent-task-open-text {
+  min-width: 0;
+}
+.sent-task-open-empty {
+  font-size: 11px;
+  color: var(--text-4);
+}
+.sent-task-open-overdue {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--red);
+  background: var(--red-dim);
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+}
+.sent-task-open-due {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-4);
+}
+/* Same tokens as content-scripts/lab-allocate-canvas.css .ms-lac-chip-flag /
+   .ms-lac-chip-away / .ms-lac-col-absence — Away ≠ occupancy chrome. */
+.sent-task-away,
+.sent-task-form .ms-lac-chip-flag {
+  display: inline-block;
+  margin-left: 5px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  vertical-align: 1px;
+}
+.sent-task-away-note,
+.sent-task-form .ms-lac-col-absence {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-sm);
+  padding: 4px 6px;
+}
+.sent-task-away-note[hidden] {
+  display: none;
+}
