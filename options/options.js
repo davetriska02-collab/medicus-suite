@@ -111,6 +111,21 @@ const letterheadPracticeInput = document.getElementById('letterheadPractice');
 const letterheadClinicianInput = document.getElementById('letterheadClinician');
 const signingSoftFlagsInput = document.getElementById('signingSoftFlags');
 const pfSoftFlagsInput = document.getElementById('pfSoftFlags');
+const PRACTICE_PACK_TOGGLES = [
+  { key: 'suite.signing.softFlags', ids: ['signingSoftFlags', 'pfSoftFlags'], grandfather: false },
+  { key: 'suite.ui.allocateCanvases', ids: ['pfAllocateCanvases'], grandfather: true },
+  { key: 'suite.ui.contactsCanvas', ids: ['pfContactsCanvas'], grandfather: true },
+  { key: 'suite.ui.routineRxButton', ids: ['pfRoutineRxButton'], grandfather: true },
+  { key: 'suite.ui.quickActionsWidget', ids: ['pfQuickActionsWidget'], grandfather: true },
+];
+function packToggleEls(spec) {
+  return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);
+}
+function setPackToggleChecked(spec, on) {
+  packToggleEls(spec).forEach((el) => {
+    el.checked = on === true;
+  });
+}
 const saveSuiteBtn = document.getElementById('saveSuite');
 const suiteSaved = document.getElementById('suiteSaved');
 const codeDetectedRow = document.getElementById('codeDetectedRow');
@@ -144,15 +159,18 @@ const testConnectionResult = document.getElementById('testConnectionResult');
         if (letterheadClinicianInput) letterheadClinicianInput.value = lh.clinicianName || '';
       });
     }
-    const softFlagBoxes = [signingSoftFlagsInput, pfSoftFlagsInput].filter(Boolean);
-    if (softFlagBoxes.length) {
-      chrome.storage.local.get(['suite.signing.softFlags'], (res) => {
-        const on = res['suite.signing.softFlags'] === true;
-        softFlagBoxes.forEach((el) => {
-          el.checked = on;
-        });
-      });
+    const PP = typeof PracticePacks !== 'undefined' ? PracticePacks : null;
+    if (PP && typeof PP.materializeGrandfather === 'function') {
+      await PP.materializeGrandfather();
     }
+    const packKeys = PRACTICE_PACK_TOGGLES.map((spec) => spec.key);
+    chrome.storage.local.get(packKeys, (res) => {
+      PRACTICE_PACK_TOGGLES.forEach((spec) => {
+        const stored = res[spec.key];
+        const on = PP ? PP.isEnabled(spec.key, stored) : stored === true || (spec.grandfather && stored !== false);
+        setPackToggleChecked(spec, on);
+      });
+    });
     // Try to auto-detect from open Medicus tab
     let detected = null;
     try {
@@ -202,19 +220,23 @@ saveSuiteBtn?.addEventListener('click', async () => {
   }
 });
 
-function bindSoftFlagsCheckbox(el) {
+function bindPracticePackToggle(el, key) {
   el?.addEventListener('change', async () => {
-    await chrome.storage.local.set({ 'suite.signing.softFlags': el.checked === true });
+    await chrome.storage.local.set({ [key]: el.checked === true });
   });
 }
-bindSoftFlagsCheckbox(signingSoftFlagsInput);
-bindSoftFlagsCheckbox(pfSoftFlagsInput);
+PRACTICE_PACK_TOGGLES.forEach((spec) => {
+  packToggleEls(spec).forEach((el) => bindPracticePackToggle(el, spec.key));
+});
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area && area !== 'local') return;
-  if (!changes['suite.signing.softFlags']) return;
-  const on = changes['suite.signing.softFlags'].newValue === true;
-  if (signingSoftFlagsInput) signingSoftFlagsInput.checked = on;
-  if (pfSoftFlagsInput) pfSoftFlagsInput.checked = on;
+  const PP = typeof PracticePacks !== 'undefined' ? PracticePacks : null;
+  PRACTICE_PACK_TOGGLES.forEach((spec) => {
+    if (!changes[spec.key]) return;
+    const stored = changes[spec.key].newValue;
+    const on = PP ? PP.isEnabled(spec.key, stored) : stored === true;
+    setPackToggleChecked(spec, on);
+  });
 });
 
 // Guided tour replay — clears the seen-version marker (localStorage is shared

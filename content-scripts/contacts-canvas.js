@@ -36,6 +36,9 @@
 (function () {
   if (window.ContactsCanvas) return; // re-entry guard
 
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.contactsCanvas) || 'suite.ui.contactsCanvas';
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
+
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -4777,6 +4780,7 @@
   // (already-pruned-if-stale) persisted session is left inert in storage rather than surfacing a
   // confusing banner on an unrelated patient's record.
   async function checkResumableFamilySession() {
+    if (!_packOn) return;
     const persisted = await loadPersistedFamilySession();
     if (!persisted) return;
     // Async resolver: document-filing / task-overview pages have no patient
@@ -4791,6 +4795,7 @@
   // ── Open / close ──────────────────────────────────────────────────────────────────────────────
 
   function open(opts) {
+    if (!_packOn) return;
     if (document.getElementById('ms-contacts-canvas-overlay')) return;
     cs = blankCanvasState();
     if (opts && opts.resumeSession) {
@@ -4945,5 +4950,18 @@
 
   window.ContactsCanvas = { open, close };
 
-  checkResumableFamilySession();
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        checkResumableFamilySession();
+      },
+      off: function () {
+        _packOn = false;
+        closeOverlay();
+      },
+    });
+  } else {
+    checkResumableFamilySession();
+  }
 })();

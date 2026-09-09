@@ -2,6 +2,44 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.15] — 2026-09-09
+
+### Practice features v2 — mute-able chrome packs on one board
+
+Options → **Practice features** is the practice board for optional chrome.
+Signing soft flags stay on the same key (`suite.signing.softFlags`) and keep
+their Suite + Signing mirrors. Four new packs, one boolean key each:
+
+- `suite.ui.allocateCanvases` — appointment organise + lab / workflow / Rx /
+  request allocate launchers
+- `suite.ui.contactsCanvas` — contacts canvas + link button
+- `suite.ui.routineRxButton` — injected routine-Rx **button** only (not the
+  `triagelens.routineRx` team-list bag)
+- `suite.ui.quickActionsWidget` — Quick Actions **widget** only (not phrase
+  lists)
+
+Mute is a runtime gate: injectors read the pack key and no-op (no DOM, no
+listeners). MV3 `content_scripts` stay registered. This never claims the
+whole extension is off. Page-world, fetch/normalisers/rules, patient-alerts,
+sentinel safety, reception Accept, queue chips, detail verdict, hiddenTabs,
+leaflets, presence opt-out, and lab-file are not on this board.
+
+**Upgrade-day grandfather.** Those four chrome surfaces are always-on today.
+A missing key is treated as ON at runtime so buttons do not vanish on
+upgrade. The first visit to Options writes an explicit `true`; after that
+the board can turn a pack off. `softFlags` is unchanged (missing === OFF).
+A practice that wants a pack off practice-wide must publish Suite in
+**replace** mode — merge is sticky-on.
+
+Accept for practice stays a separate clinical gate. Packs never write
+`practiceAcceptedAt`; Accept never enables a pack. New keys join
+`ALLOWED_SUITE_KEYS` only (unknown ignored). applyProfile still does not
+call `suiteImport()`.
+
+All three softFlags UIs (Suite, Practice features, Signing Queue) and the
+new board rows use the Suite CSS stealth switch (same tokens/borders as
+`.dp-toggle`), not a native checkbox.
+
 ## [v3.261.14] — 2026-09-08
 
 ### Drop #378 canvas-chrome review shots

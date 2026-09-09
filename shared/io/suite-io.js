@@ -21,6 +21,10 @@ const SUITE_KEYS = [
   'suite.letterhead',
   'suite.practiceProfile.attestations',
   'suite.signing.softFlags',
+  'suite.ui.allocateCanvases',
+  'suite.ui.contactsCanvas',
+  'suite.ui.routineRxButton',
+  'suite.ui.quickActionsWidget',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -56,6 +60,13 @@ async function suiteExport() {
     // Signing Queue soft-flag pack (QOF-review badges + Flagged filter).
     // Default OFF — absent/null exports as null; only explicit true enables.
     signingSoftFlags: r['suite.signing.softFlags'] ?? null,
+    // Practice feature packs (same keys as Options → Practice features).
+    // Absent/null exports as null. Runtime grandfather for the four chrome
+    // packs is NOT an export default — only an explicit boolean travels.
+    allocateCanvases: r['suite.ui.allocateCanvases'] ?? null,
+    contactsCanvas: r['suite.ui.contactsCanvas'] ?? null,
+    routineRxButton: r['suite.ui.routineRxButton'] ?? null,
+    quickActionsWidget: r['suite.ui.quickActionsWidget'] ?? null,
   };
 }
 
@@ -148,6 +159,19 @@ async function suiteImport(data) {
       throw new Error('suite.signing.softFlags must be a boolean.');
     }
     toSet['suite.signing.softFlags'] = data.signingSoftFlags;
+  }
+  const packAliases = [
+    ['allocateCanvases', 'suite.ui.allocateCanvases'],
+    ['contactsCanvas', 'suite.ui.contactsCanvas'],
+    ['routineRxButton', 'suite.ui.routineRxButton'],
+    ['quickActionsWidget', 'suite.ui.quickActionsWidget'],
+  ];
+  for (const [alias, storageKey] of packAliases) {
+    if (data[alias] == null) continue;
+    if (typeof data[alias] !== 'boolean') {
+      throw new Error(`${storageKey} must be a boolean.`);
+    }
+    toSet[storageKey] = data[alias];
   }
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);

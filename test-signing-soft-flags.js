@@ -51,9 +51,12 @@ const qof = require('./rules/qof-rules.json');
   check(/onChanged\.removeListener/.test(signingSrc), 'Signing Queue removes the storage listener on cleanup');
   const optionsOnChanged =
     optionsJs.includes("changes['suite.signing.softFlags']") ||
-    optionsJs.includes('changes["suite.signing.softFlags"]');
+    optionsJs.includes('changes["suite.signing.softFlags"]') ||
+    (/PRACTICE_PACK_TOGGLES/.test(optionsJs) && /changes\[spec\.key\]/.test(optionsJs));
   check(optionsOnChanged, 'Options checkbox re-reads suite.signing.softFlags on storage change');
-  check(/id="signingSoftFlags"/.test(optionsHtml), 'Options Suite checkbox is still present (same key)');
+  check(/id="signingSoftFlags"/.test(optionsHtml), 'Options Suite toggle is still present (same key)');
+  check(/suite-toggle/.test(optionsHtml) && /id="signingSoftFlags"/.test(optionsHtml),
+    'Options Suite softFlags uses the Suite CSS switch');
 
   console.log('\n--- third view: Options → Practice features, same key + onChanged ---');
   check(/id="pfSoftFlags"/.test(optionsHtml), 'Practice features card has #pfSoftFlags (third view of the same pack)');
@@ -65,12 +68,14 @@ const qof = require('./rules/qof-rules.json');
     'Practice features uses the same Signing soft-flags label as Suite'
   );
   check(
-    /bindSoftFlagsCheckbox\(pfSoftFlagsInput\)/.test(optionsJs) &&
-      /pfSoftFlagsInput/.test(optionsJs) &&
-      /changes\['suite\.signing\.softFlags'\]/.test(optionsJs) &&
-      /pfSoftFlagsInput\.checked = on/.test(optionsJs),
+    /bindPracticePackToggle/.test(optionsJs) &&
+      /suite\.signing\.softFlags/.test(optionsJs) &&
+      /pfSoftFlags/.test(optionsJs) &&
+      /PRACTICE_PACK_TOGGLES/.test(optionsJs),
     'Practice features writes and re-reads suite.signing.softFlags on storage change'
   );
+  check(/id="sgSoftFlags"/.test(signingSrc) && /suite-toggle/.test(signingSrc),
+    'Signing Queue softFlags uses the Suite CSS switch');
   check(
     /Never write false just because a checkbox is missing/.test(optionsJs) &&
       !/signingSoftFlagsInput \? signingSoftFlagsInput\.checked : false/.test(optionsJs),

@@ -41,6 +41,59 @@
   cursor: pointer;
 }
 
+/* Suite stealth switch — same tokens / borders as panel .dp-toggle */
+.suite-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.suite-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.suite-toggle-track {
+  width: 32px;
+  height: 18px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: 9px;
+  position: relative;
+  transition:
+    background var(--med) var(--ease),
+    border-color var(--med) var(--ease);
+}
+.suite-toggle input:checked + .suite-toggle-track {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.suite-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-4);
+  border-radius: 50%;
+  transition:
+    transform var(--med) var(--ease),
+    background var(--fast) var(--ease);
+}
+.suite-toggle input:checked + .suite-toggle-track .suite-toggle-thumb {
+  transform: translateX(14px);
+  background: var(--accent);
+}
+.suite-toggle input:focus-visible + .suite-toggle-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.sg-soft-toggle {
+  gap: 8px;
+}
+
 .sg-list {
   display: flex;
   flex-direction: column;

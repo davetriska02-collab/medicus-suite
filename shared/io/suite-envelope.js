@@ -542,8 +542,20 @@ function previewEnvelope(envelope) {
         'WARNING: Carries practice acceptance — importing switches ON reception capture pathways and the Sentinel alert library on THIS install.'
       );
     }
-    if (mods.suite.signingSoftFlags === true) {
+    if (mods.suite.signingSoftFlags === true || mods.suite['signing.softFlags'] === true) {
       lines.push('Signing Queue: overdue monitoring & QOF review flags ON');
+    }
+    if (mods.suite.allocateCanvases === true || mods.suite['ui.allocateCanvases'] === true) {
+      lines.push('Allocate / organise canvases ON');
+    }
+    if (mods.suite.contactsCanvas === true || mods.suite['ui.contactsCanvas'] === true) {
+      lines.push('Contacts canvas ON');
+    }
+    if (mods.suite.routineRxButton === true || mods.suite['ui.routineRxButton'] === true) {
+      lines.push('Routine-Rx button ON');
+    }
+    if (mods.suite.quickActionsWidget === true || mods.suite['ui.quickActionsWidget'] === true) {
+      lines.push('Quick Actions widget ON');
     }
   }
 
