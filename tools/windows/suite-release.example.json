@@ -1,0 +1,9 @@
+{
+  "format": "medicus-suite-release",
+  "version": "3.261.16",
+  "ready": true,
+  "allowDowngrade": false,
+  "sha256": "",
+  "fileCount": 0,
+  "notes": "Pete: copy to suite-release.json in the reference current\\ folder. Set ready false while copying, true when the tree is complete. allowDowngrade must stay false unless you are deliberately rolling back."
+}

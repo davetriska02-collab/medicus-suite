@@ -3554,7 +3554,17 @@ initPdcTallySection({
       const available =
         state.latestVersion && installed && window.UpdateChecker.isNewer(state.latestVersion, installed);
 
-      if (!available) {
+      // Practice-managed bits (suite-release.json / sync-status.json on Source):
+      // do not send staff to a different GitHub zip than Pete's tree.
+      let practiceManaged = false;
+      try {
+        if (window.LocalBits) {
+          const bits = await window.LocalBits.getState();
+          practiceManaged = !!bits.practiceManaged;
+        }
+      } catch (_) {}
+
+      if (!available || practiceManaged) {
         banner.style.display = 'none';
         return;
       }
@@ -3569,7 +3579,8 @@ initPdcTallySection({
 
     // Re-render whenever the stored update state changes
     chrome.storage.onChanged.addListener((changes) => {
-      if (Object.keys(changes).some((k) => k.startsWith('suite.update.'))) render();
+      if (Object.keys(changes).some((k) => k.startsWith('suite.update.') || k.startsWith('suite.localBits.')))
+        render();
     });
 
     // Buttons
@@ -3591,6 +3602,64 @@ initPdcTallySection({
     });
   } catch (e) {
     console.warn('[Update banner init]', e.message);
+  }
+})();
+
+// ── Local bits banner (practice OS-sync — not GitHub) ─────────────────────────
+
+(async function initLocalBitsBanner() {
+  try {
+    if (!window.LocalBits) return;
+    const banner = document.getElementById('localBitsBanner');
+    const older = document.getElementById('localBitsOlderNote');
+    if (!banner) return;
+
+    async function render(state) {
+      const st = state || (await window.LocalBits.getState());
+      const diskEl = document.getElementById('localBitsBannerDisk');
+      const runEl = document.getElementById('localBitsBannerRunning');
+      const noteEl = document.getElementById('localBitsBannerNote');
+      if (window.LocalBits.isReloadAvailable(st)) {
+        banner.style.display = 'block';
+        if (diskEl) diskEl.textContent = 'v' + st.diskVersion;
+        if (runEl) runEl.textContent = 'v' + (st.runningVersion || window.LocalBits.getInstalledVersion());
+        if (noteEl) {
+          noteEl.textContent =
+            'The Windows helper already copied files onto this PC. Reload applies them. The extension does not write files.';
+        }
+      } else {
+        banner.style.display = 'none';
+      }
+      if (older) {
+        if (st.status === 'older-ignored') {
+          older.style.display = 'block';
+          older.textContent =
+            'Reference / disk stamp v' +
+            st.diskVersion +
+            ' is older than running v' +
+            st.runningVersion +
+            ' — not applying (no silent downgrade).';
+        } else {
+          older.style.display = 'none';
+        }
+      }
+    }
+
+    window.LocalBits.checkAndPersist().then(render).catch(() => render());
+
+    chrome.storage.onChanged.addListener((changes) => {
+      if (Object.keys(changes).some((k) => k.startsWith('suite.localBits.'))) render();
+    });
+
+    document.getElementById('localBitsReloadBtn')?.addEventListener('click', () => {
+      try {
+        chrome.runtime.reload();
+      } catch (e) {
+        console.warn('[Local bits reload]', e && e.message);
+      }
+    });
+  } catch (e) {
+    console.warn('[Local bits banner init]', e.message);
   }
 })();
 

@@ -22,6 +22,7 @@ chrome.runtime.onInstalled.addListener(() => {
 try {
   importScripts('shared/request-monitor.js');
   importScripts('shared/update-checker.js');
+  importScripts('shared/local-bits.js');
   importScripts('shared/popout-manager.js');
   importScripts('shared/io/practice-profile.js');
 } catch (e) {
@@ -622,10 +623,10 @@ async function _schedulePpAlarm() {
 }
 
 // ── Code-update watcher ───────────────────────────────────────────────────────
-// Compares manifest.json on disk against the running manifest. When a new
-// version is detected, reloads politely: immediately if the machine is idle or
-// locked, or deferred to the next alarm cycle if the user is active. After 8
-// consecutive deferrals, shows a single notification and keeps deferring.
+// LocalBits compares stamps on THIS Source (not a UNC, not GitHub) to the
+// running manifest. Newer → persist suite.localBits.* (Options/panel banner)
+// and reload politely when idle/locked. Older stamps never reload. After 8
+// consecutive deferrals, one notification; the Reload button is always available.
 //
 // Notification deduplication is stored in meta.updateNotifiedVersions inside
 // suite.practiceProfile so no extra storage key is needed.
@@ -633,46 +634,60 @@ async function _schedulePpAlarm() {
 let _pendingUpdateVersion = null; // version waiting for an idle window
 let _updateDeferCount = 0; // consecutive alarm cycles the user was active
 
+// Pinned by test-service-worker.js; LocalBits uses the same X.Y.Z shape.
 const _VERSION_RE = /^\d+\.\d+\.\d+$/;
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id) return;
+  if (!msg || msg.action !== 'localBits:reload') return;
+  // UI already verified status === ready. reload() only re-reads Source.
+  try {
+    chrome.runtime.reload();
+  } catch (e) {
+    sendResponse({ ok: false, error: String((e && e.message) || e) });
+  }
+});
 
 async function _checkForCodeUpdate() {
   try {
-    let diskManifest;
-    try {
-      const resp = await fetch(chrome.runtime.getURL('manifest.json'), { cache: 'no-store' });
-      // On a shared network drive the file may be mid-copy — any error = skip silently
-      if (!resp.ok) return;
-      diskManifest = await resp.json();
-    } catch (_) {
-      return; // mid-copy or parse error — skip this cycle
-    }
-
-    const diskVersion = diskManifest?.version;
-    if (!diskVersion || !_VERSION_RE.test(diskVersion)) return;
-
-    const runningVersion = chrome.runtime.getManifest().version;
-    if (diskVersion === runningVersion) {
-      // Back to same version (e.g. admin reverted the update) — reset state
-      _pendingUpdateVersion = null;
-      _updateDeferCount = 0;
+    // LocalBits reads only chrome-extension:// stamps on THIS Source
+    // (suite-release.json / sync-status.json / manifest.json). It does not
+    // copy files and does not open a share. Older stamps → no reload.
+    let result;
+    if (self.LocalBits && typeof self.LocalBits.checkAndPersist === 'function') {
+      result = await self.LocalBits.checkAndPersist();
+    } else {
       return;
     }
 
-    // Check profile hasn't disabled auto-reload
+    if (
+      !result ||
+      result.status !== 'ready' ||
+      !result.shouldReload ||
+      !result.diskVersion ||
+      !_VERSION_RE.test(result.diskVersion)
+    ) {
+      if (result && (result.status === 'current' || result.status === 'older-ignored' || result.status === 'not-ready')) {
+        _pendingUpdateVersion = null;
+        _updateDeferCount = 0;
+      }
+      return;
+    }
+
+    // Check profile hasn't disabled auto-reload (banner still shows; user can click)
     try {
       const profile = await self.PracticeProfile?.fetchProfile();
       if (profile?.apply?.autoReloadOnNewVersion === false) return;
     } catch (_) {}
 
-    // Never reload twice for the same version
-    if (_pendingUpdateVersion === diskVersion) {
+    if (_pendingUpdateVersion === result.diskVersion) {
       // Already know about this version — check idle state
     } else {
-      _pendingUpdateVersion = diskVersion;
+      _pendingUpdateVersion = result.diskVersion;
       _updateDeferCount = 0;
     }
 
-    await _attemptPoliteReload(diskVersion);
+    await _attemptPoliteReload(result.diskVersion);
   } catch (e) {
     console.warn('[Suite] code-update check failed:', e.message);
   }

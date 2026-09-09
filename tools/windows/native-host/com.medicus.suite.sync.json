@@ -1,0 +1,7 @@
+{
+  "name": "com.medicus.suite.sync",
+  "description": "Optional Medicus Suite copy-complete probe. Does not write extension files.",
+  "path": "C:\\replace\\with\\absolute\\path\\to\\MedicusSuiteNativeHost.cmd",
+  "type": "stdio",
+  "allowed_origins": ["chrome-extension://REPLACE_WITH_UNPACKED_ID/"]
+}
