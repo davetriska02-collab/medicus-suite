@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.17] — 2026-09-09
+
+### Pete printable setup guide (local install)
+
+Two-page PDF for Pete Milton: unpack to the share, first Edge PC, Reload banner,
+troubleshooting. `docs/deploy/PETE-LOCAL-INSTALL-GUIDE.pdf` (HTML source beside it).
+Does not change runtime behaviour.
+
 ## [v3.261.16] — 2026-09-09
 
 ### Practice bits: local Load unpacked + OS sync (path B)

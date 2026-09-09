@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Medicus Suite — Pete’s setup guide (local install)</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 12mm 14mm 14mm 14mm;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        color: #1a1a1a;
+        font: 10pt/1.35 'Segoe UI', Calibri, Arial, sans-serif;
+      }
+      h1 {
+        font-size: 16pt;
+        line-height: 1.15;
+        margin: 0 0 2pt;
+      }
+      .sub {
+        color: #444;
+        font-size: 9pt;
+        margin: 0 0 8pt;
+      }
+      h2 {
+        font-size: 11.5pt;
+        margin: 10pt 0 4pt;
+        padding-bottom: 1pt;
+        border-bottom: 1.25pt solid #1a1a1a;
+        page-break-after: avoid;
+      }
+      p,
+      ol,
+      ul {
+        margin: 0 0 6pt;
+      }
+      ol,
+      ul {
+        padding-left: 1.2em;
+      }
+      li {
+        margin: 0 0 3.5pt;
+        page-break-inside: avoid;
+      }
+      .box {
+        border: 1pt solid #222;
+        padding: 5pt 8pt;
+        margin: 4pt 0 6pt;
+        page-break-inside: avoid;
+      }
+      .box strong {
+        display: block;
+        margin-bottom: 2pt;
+      }
+      code,
+      .path {
+        font-family: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+        font-size: 8.6pt;
+        background: #f3f3f3;
+        padding: 0 2pt;
+      }
+      .cmd {
+        font-family: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+        font-size: 8pt;
+        background: #f3f3f3;
+        display: block;
+        padding: 5pt 7pt;
+        margin: 4pt 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9pt;
+        margin: 0 0 6pt;
+      }
+      th,
+      td {
+        border: 0.6pt solid #444;
+        padding: 3.5pt 6pt;
+        vertical-align: top;
+        text-align: left;
+      }
+      th {
+        background: #eee;
+        width: 30%;
+      }
+      .note {
+        font-size: 9pt;
+        color: #333;
+      }
+      footer {
+        margin-top: 8pt;
+        font-size: 8pt;
+        color: #555;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Medicus Suite — setup guide for Pete</h1>
+    <p class="sub">
+      Local install on each PC. Shared folder is only the drop-box. Microsoft Edge (NHS default). One
+      practice packager + first end-user PC. September 2026.
+    </p>
+
+    <h2>1. What this solves</h2>
+    <p>
+      Running Suite from the shared drive is slow, and staff hate clicking Reload unpacked after every
+      update. The fix: each PC keeps a <strong>copy on its own disk</strong>. You drop a new version
+      in the shared folder. A small Windows task copies it across at logon. Suite then shows
+      <strong>Suite files updated — Reload</strong>. The extension never copies files itself and
+      never installs itself from the share.
+    </p>
+
+    <h2>2. Pete — publish a new Suite version</h2>
+    <p class="note">
+      Use your real share path everywhere you see <span class="path">S:\MedicusSuite</span> (or
+      <span class="path">\\Server\MedicusSuite</span>). Create <span class="path">incoming</span> and
+      <span class="path">current</span> once. Always publish into <span class="path">current</span> —
+      never a folder named after the version.
+    </p>
+    <ol>
+      <li>
+        Unpack the new zip into <span class="path">S:\MedicusSuite\incoming</span>. You should see
+        <span class="path">manifest.json</span> in that folder, not inside another folder.
+      </li>
+      <li>
+        Copy <span class="path">tools\windows\suite-release.example.json</span> from the zip to
+        <span class="path">S:\MedicusSuite\incoming\suite-release.json</span>.
+      </li>
+      <li>
+        Open <span class="path">suite-release.json</span> in Notepad. Set
+        <span class="path">"version"</span> to the same number as in
+        <span class="path">manifest.json</span> (for example <span class="path">3.261.16</span>). Set
+        <span class="path">"ready"</span> to <span class="path">false</span> while you are still
+        copying. Leave <span class="path">"allowDowngrade"</span> as <span class="path">false</span>.
+      </li>
+      <li>
+        When every file is in place, change <span class="path">"ready"</span> to
+        <span class="path">true</span> and save.
+      </li>
+      <li>
+        Swap the folders: rename <span class="path">current</span> to
+        <span class="path">current-old</span>, rename <span class="path">incoming</span> to
+        <span class="path">current</span>, then make a new empty
+        <span class="path">incoming</span> for next time. Delete
+        <span class="path">current-old</span> when you are happy.
+      </li>
+      <li>Do <strong>not</strong> ask anyone to Load unpacked from the share.</li>
+    </ol>
+
+    <h2>3. First PC — one-time setup</h2>
+    <p class="note">
+      Put the two scripts from the zip on the share (for example
+      <span class="path">S:\MedicusSuite\tools\windows\</span>). PowerShell is fine. Do this on one
+      machine first and check it works before rolling out.
+    </p>
+    <ol>
+      <li>Close Edge (and Chrome if it is open) on this PC.</li>
+      <li>
+        Right-click Start → Windows PowerShell. Type these two lines (change the share path if needed)
+        and press Enter after each. That creates a logon task named
+        <strong>MedicusSuite-LocalSync</strong>.
+        <span class="cmd">cd S:\MedicusSuite\tools\windows
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Register-SyncTask.ps1 -Reference "S:\MedicusSuite\current"</span>
+      </li>
+      <li>
+        In the same window, run the copy once now so the local folder exists before you open Edge.
+        You want <span class="path">%LOCALAPPDATA%\MedicusSuite\extension</span> containing
+        <span class="path">manifest.json</span>.
+        <span class="cmd">powershell -NoProfile -ExecutionPolicy Bypass -File .\Sync-MedicusSuite.ps1 -Reference "S:\MedicusSuite\current"</span>
+      </li>
+      <li>
+        Open <strong>Edge</strong>. Type <span class="path">edge://extensions</span> in the address
+        bar and press Enter.
+      </li>
+      <li>
+        Turn on <strong>Developer mode</strong> (top right). Click <strong>Load unpacked</strong>.
+        In File Explorer’s address bar paste
+        <span class="path">%LOCALAPPDATA%\MedicusSuite\extension</span>, then Select Folder.
+      </li>
+      <li>
+        On the Suite card click <strong>Details</strong>. <em>Source</em> / <em>Loaded from</em> must
+        be that local path — not a path starting with <span class="path">\\</span> and not
+        <span class="path">S:\</span>.
+      </li>
+      <li>
+        Pin the Suite icon. Open Options once. Repeat steps 1–6 on each other PC. Never Load unpacked
+        from a different folder later — that makes Suite forget its settings.
+      </li>
+    </ol>
+
+    <h2>4. What users see after you publish</h2>
+    <p>
+      Next logon (Edge closed) the PC copies the new files. Users see
+      <strong>Suite files updated — Reload</strong> in Options and at the top of the side panel.
+      They click <strong>Reload</strong>. They do not open <span class="path">edge://extensions</span>
+      and they do not download a GitHub zip.
+    </p>
+
+    <h2>5. If it does not copy or does not update</h2>
+    <table>
+      <tr>
+        <th>What you see</th>
+        <th>What to do</th>
+      </tr>
+      <tr>
+        <td>Share is down / laptop at home</td>
+        <td>Leave it. The last local copy keeps working. The task tries again next logon.</td>
+      </tr>
+      <tr>
+        <td>Edge (or Chrome) is still open</td>
+        <td>
+          The copy will not replace the live folder (avoids a half-updated Suite). Close the browser
+          and run the Sync script again, or wait for the next logon.
+        </td>
+      </tr>
+      <tr>
+        <td><span class="path">ready</span> is still <span class="path">false</span></td>
+        <td>You have not finished publishing. PCs will not copy. Set it to <span class="path">true</span> and swap to <span class="path">current</span>.</td>
+      </tr>
+      <tr>
+        <td>Details shows the share, not the local folder</td>
+        <td>
+          This PC is on the old slow setup. Remove the extension and Load unpacked again from
+          <span class="path">%LOCALAPPDATA%\MedicusSuite\extension</span>.
+        </td>
+      </tr>
+      <tr>
+        <td>No Reload banner</td>
+        <td>
+          Same version already, share down, Edge was open at logon, or
+          <span class="path">ready</span> was false. Check the local
+          <span class="path">manifest.json</span> version against yours.
+        </td>
+      </tr>
+      <tr>
+        <td>Suite “forgot” everyone</td>
+        <td>Someone loaded a different folder. Load unpacked from the original local path again.</td>
+      </tr>
+    </table>
+
+    <h2>6. What this is not</h2>
+    <div class="box">
+      <strong>Practice Profile is settings, not a new Suite version.</strong>
+      Options → Backup &amp; Restore → Practice Profile pushes practice rules and defaults. It does
+      not copy extension files. A new zip is bits: you publish to the share, Windows copies, users
+      click Reload. Do not mix the two. Do not use the GitHub “View release” banner for practice
+      machines.
+    </div>
+
+    <footer>
+      Medicus Suite v3.261.17 · Printable guide for Pete Milton · Technical notes:
+      docs/deploy/LOCAL-INSTALL-AND-SYNC.md · Scripts: tools/windows/
+    </footer>
+  </body>
+</html>
