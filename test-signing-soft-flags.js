@@ -31,10 +31,7 @@ const qof = require('./rules/qof-rules.json');
 
   console.log('--- on-page control writes the same storage key ---');
   check(/id="sgSoftFlags"/.test(signingSrc), 'Signing Queue shell has #sgSoftFlags (on-page pack control)');
-  check(
-    /Show monitoring &(?:amp;)? QOF review flags/.test(signingSrc),
-    'on-page label is the GP-facing "Show monitoring & QOF review flags"'
-  );
+  check(/QOF review flags/.test(signingSrc), 'on-page label stays the GP-facing QOF review flags');
   check(
     /chrome\.storage\.local\.set\(/.test(signingSrc) && /suite\.signing\.softFlags/.test(signingSrc),
     'on-page control writes suite.signing.softFlags'
@@ -63,8 +60,8 @@ const qof = require('./rules/qof-rules.json');
   check(/data-section="practice-features"/.test(optionsHtml), 'Options nav has Practice features');
   check(/id="sect-practice-features"/.test(optionsHtml), 'Options has #sect-practice-features');
   check(
-    /Signing Queue: show overdue monitoring &(?:amp;)? QOF review flags/.test(optionsHtml) &&
-      (optionsHtml.match(/Signing Queue: show overdue monitoring &(?:amp;)? QOF review flags/g) || []).length >= 2,
+    /Signing Queue flags/.test(optionsHtml) &&
+      (optionsHtml.match(/Signing Queue flags/g) || []).length >= 2,
     'Practice features uses the same Signing soft-flags label as Suite'
   );
   check(

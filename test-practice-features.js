@@ -324,13 +324,17 @@ const NEW_PACKS = [
     /\.suite-toggle-track/.test(optionsHtml) && /\.suite-toggle-track/.test(signingCss),
     'Suite + Signing share the stealth-switch track tokens'
   );
+  check(/sg-soft-toggle:has\(input:checked\)/.test(signingCss), 'Signing armed colour matches the board station');
   check(/role="switch"/.test(optionsHtml) && /role="switch"/.test(signingSrc), 'switches expose role=switch');
   check(/Accept for practice stays separate/.test(optionsHtml), 'Accept copy sits above the fold on the board');
-  check(/sticky-on/.test(optionsHtml), 'every pack documents sticky-on');
+  check(/sticky-on/.test(optionsHtml) && /Suite replace/.test(optionsHtml), 'one briefing strip documents sticky-on + replace');
   check(
-    (optionsHtml.match(/Accept for practice does not enable this pack/g) || []).length >= 5,
-    'every pack help says Accept does not enable it'
+    (optionsHtml.match(/Accept for practice does not enable this pack/g) || []).length === 0,
+    'pack stations do not repeat the Accept essay'
   );
+  check(/\.pf-station:has\(input:checked\)/.test(optionsHtml), 'armed station paints when the switch is on');
+  check(/inset 4px 0 0 var\(--accent\)/.test(optionsHtml), 'armed station uses the Suite accent rail');
+  check(/class="pf-deck"/.test(optionsHtml) && /class="pf-station"/.test(optionsHtml), 'board is a compact station deck');
   check(
     /PRACTICE_PACK_TOGGLES/.test(optionsJs) && /bindPracticePackToggle/.test(optionsJs),
     'Options binds each pack toggle to its storage key'
@@ -397,11 +401,11 @@ const NEW_PACKS = [
   });
 
   console.log('\n--- no dual doors / no config-bag reuse ---');
+  const rxSrc = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/routine-rx-button.js'), 'utf8');
   check(
-    !/triagelens\.routineRx/.test(optionsHtml) || /does not touch/.test(optionsHtml),
+    /suite\.ui\.routineRxButton/.test(rxSrc) && /triagelens\.routineRx/.test(rxSrc),
     'routine-Rx pack is the button inject, not the config bag'
   );
-  check(/triagelens\.routineRx/.test(optionsHtml), 'help names the config bag it does not mute');
   const qaSrc = fs.readFileSync(path.join(__dirname, 'content-scripts/reception-quick-actions.js'), 'utf8');
   check(
     /suite\.ui\.quickActionsWidget/.test(qaSrc) && /triagelens\.quickActions/.test(qaSrc),

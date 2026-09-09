@@ -92,6 +92,17 @@
 }
 .sg-soft-toggle {
   gap: 8px;
+  padding: 4px 8px 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-mid);
+  box-shadow: inset 3px 0 0 var(--border);
+}
+.sg-soft-toggle:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-mid));
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+  color: var(--text-1);
 }
 
 .sg-list {

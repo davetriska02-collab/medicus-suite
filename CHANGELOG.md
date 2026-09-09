@@ -40,8 +40,13 @@ All three softFlags UIs (Suite, Practice features, Signing Queue) and the
 new board rows use the Suite CSS stealth switch (same tokens/borders as
 `.dp-toggle`), not a native checkbox.
 
-Review shots of the dark board live in `docs/_preview/practice-features/`
-(regenerate with `node scripts/practice-features-shots.mjs`).
+The board is a compact 2-column flight deck: one briefing strip, then
+label + switch stations. Armed (ON) stations take a cooler accent rail and
+filled `--accent-dim` so they read at a glance; OFF stays muted. Suite and
+Signing softFlags mirrors use the same station chrome.
+
+Review shots live in `docs/_preview/practice-features/` (regenerate with
+`node scripts/practice-features-shots.mjs`).
 
 ## [v3.261.14] — 2026-09-08
 

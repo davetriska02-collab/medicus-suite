@@ -8,24 +8,20 @@
         --bg-deep: #050a14;
         --bg-mid: #0b1424;
         --bg-elev: #131e34;
-        --bg-hover: #1a2a44;
         --border: #1c2e4e;
         --border-hi: #2a4060;
         --accent: #5b8fc7;
-        --accent-hover: #7eaad6;
         --accent-dim: rgba(91, 143, 199, 0.14);
         --accent-line: rgba(91, 143, 199, 0.35);
         --text-1: #f1f5f9;
         --text-2: #cfe1ff;
         --text-3: #93a8c5;
         --text-4: #5d7a9d;
-        --text-5: #3d5070;
         --r-md: 6px;
         --ease: cubic-bezier(0.2, 0, 0, 1);
         --fast: 120ms;
         --med: 200ms;
         --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
       }
       * {
         box-sizing: border-box;
@@ -45,27 +41,7 @@
       h1 {
         font-size: 18px;
         font-weight: 600;
-        margin: 0 0 4px;
-      }
-      .section-desc {
-        font-size: 12px;
-        color: var(--text-4);
-        margin: 0 0 28px;
-        line-height: 1.5;
-      }
-      .field-label {
-        display: block;
-        font-size: 11px;
-        color: var(--text-3);
-        font-weight: 600;
-        margin: 0;
-      }
-      .field-help {
-        display: block;
-        font-size: 11px;
-        color: var(--text-4);
-        margin-top: 4px;
-        line-height: 1.5;
+        margin: 0 0 14px;
       }
       .suite-toggle {
         position: relative;
@@ -105,160 +81,114 @@
         transform: translateX(14px);
         background: var(--accent);
       }
-      .pf-board {
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        overflow: hidden;
-        margin-bottom: 24px;
+      .pf-deck {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
       }
-      .pf-accept-note {
-        padding: 12px 16px;
+      .pf-brief {
+        grid-column: 1 / -1;
+        padding: 8px 12px;
         background: var(--bg-mid);
-        border-bottom: 1px solid var(--border);
-        font-size: 12px;
-        color: var(--text-2);
-        line-height: 1.5;
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        font-size: 11px;
+        color: var(--text-3);
+        line-height: 1.45;
       }
-      .pf-row {
+      .pf-station {
+        position: relative;
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
-        gap: 16px;
-        padding: 14px 16px;
-        border-bottom: 1px solid var(--border);
+        gap: 10px;
+        min-height: 44px;
+        padding: 8px 10px 8px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        background: var(--bg-mid);
         cursor: pointer;
+        box-shadow: inset 3px 0 0 var(--border);
       }
-      .pf-row:last-child {
-        border-bottom: none;
+      .pf-station:has(input:checked) {
+        background: color-mix(in srgb, var(--accent) 16%, var(--bg-mid));
+        border-color: var(--accent);
+        box-shadow: inset 4px 0 0 var(--accent);
       }
-      .pf-row .suite-toggle {
-        margin-top: 2px;
+      .pf-station:has(input:checked) .pf-label {
+        color: var(--text-1);
       }
       .pf-copy {
         min-width: 0;
         flex: 1;
       }
-      code {
-        font-family: var(--mono);
+      .pf-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-2);
+        line-height: 1.25;
+      }
+      .pf-sub {
+        display: block;
+        margin-top: 2px;
         font-size: 10px;
-        color: var(--text-3);
+        color: var(--text-4);
+        line-height: 1.3;
       }
     </style>
   </head>
   <body>
     <section id="sect-practice-features">
       <h1>Practice features</h1>
-      <p class="section-desc">
-        Optional chrome the practice can mute or publish. This board is <strong>not</strong> Clinical Safety
-        <strong>Accept for practice</strong> (reception capture + alert library). Packs never set Accept, and
-        Accept never enables a pack. Toggling here writes this machine only — publish from Backup &amp;
-        Restore when the practice should have it.
-      </p>
-
-      <div class="pf-board">
-        <div class="pf-accept-note">
-          <strong>Accept for practice stays separate.</strong> That switch lives under Clinical Safety and
-          unlocks reception capture + the alert library. Nothing on this board writes
-          <code>practiceAcceptedAt</code>, and ticking Accept never turns a pack on.
+      <div class="pf-deck">
+        <div class="pf-brief">
+          Accept for practice stays separate. Merge is sticky-on — practice OFF needs Suite replace.
         </div>
-
-        <label class="pf-row" id="row-softFlags">
+        <label class="pf-station" id="row-softFlags">
           <span class="pf-copy">
-            <span class="field-label">Signing Queue: show overdue monitoring &amp; QOF review flags</span>
-            <span class="field-help">
-              Off by default. Same toggle as Options → Suite and the Signing Queue page. When on, the Signing
-              Queue adds a look-twice badge for a short list of <strong>review codes we can see</strong>
-              (asthma, COPD, heart failure, SMI, dementia) and a <strong>Flagged</strong> filter that includes
-              overdue monitoring, those review badges, and unread / unread-error rows. Existing monitoring
-              chips stay visible either way. This is not a QOF claim and never blocks Medicus Approve.
-            </span>
-            <span class="field-help" style="margin-top: 8px">
-              Merge is <strong>sticky-on</strong>: a published profile that turns this on will turn it on for
-              clinicians who had it off. Once a machine has it on, merge will not turn it off. A practice that
-              wants the pack <strong>off</strong> practice-wide must publish Suite in
-              <strong>replace</strong> mode. Accept for practice does not enable this pack.
-            </span>
+            <span class="pf-label">Signing Queue flags</span>
+            <span class="pf-sub">QOF review + Flagged</span>
           </span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfSoftFlags" role="switch" />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
           </span>
         </label>
-
-        <label class="pf-row" id="row-allocateCanvases">
+        <label class="pf-station" id="row-allocateCanvases">
           <span class="pf-copy">
-            <span class="field-label">Allocate / organise canvases</span>
-            <span class="field-help">
-              Injected launchers for appointment organise plus lab, workflow, prescription and request
-              allocate canvases. Off mutes the buttons and canvases (no DOM, no listeners). Does not
-              unregister the extension or stop Medicus’s own allocate screens.
-            </span>
-            <span class="field-help" style="margin-top: 8px">
-              Merge is <strong>sticky-on</strong>: a published profile that turns this on will turn it on for
-              clinicians who had it off. Once a machine has it on, merge will not turn it off. A practice that
-              wants the pack <strong>off</strong> practice-wide must publish Suite in
-              <strong>replace</strong> mode. Accept for practice does not enable this pack.
-            </span>
+            <span class="pf-label">Allocate canvases</span>
+            <span class="pf-sub">Labs, Rx, requests, appointments</span>
           </span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfAllocateCanvases" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
           </span>
         </label>
-
-        <label class="pf-row" id="row-contactsCanvas">
+        <label class="pf-station" id="row-contactsCanvas">
           <span class="pf-copy">
-            <span class="field-label">Contacts canvas + link button</span>
-            <span class="field-help">
-              The in-page contacts canvas and its “Manage this patient’s contacts” entry button. Off mutes
-              that chrome only — contact APIs and matching stay loaded.
-            </span>
-            <span class="field-help" style="margin-top: 8px">
-              Merge is <strong>sticky-on</strong>: a published profile that turns this on will turn it on for
-              clinicians who had it off. Once a machine has it on, merge will not turn it off. A practice that
-              wants the pack <strong>off</strong> practice-wide must publish Suite in
-              <strong>replace</strong> mode. Accept for practice does not enable this pack.
-            </span>
+            <span class="pf-label">Contacts canvas</span>
+            <span class="pf-sub">Family tree + link</span>
           </span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfContactsCanvas" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
           </span>
         </label>
-
-        <label class="pf-row" id="row-routineRxButton">
+        <label class="pf-station" id="row-routineRxButton">
           <span class="pf-copy">
-            <span class="field-label">Routine-Rx button</span>
-            <span class="field-help">
-              The injected one-click “send to routine list” button on a prescription-request task. Off hides
-              that button only — it does not touch the <code>triagelens.routineRx</code> team-list config.
-            </span>
-            <span class="field-help" style="margin-top: 8px">
-              Merge is <strong>sticky-on</strong>: a published profile that turns this on will turn it on for
-              clinicians who had it off. Once a machine has it on, merge will not turn it off. A practice that
-              wants the pack <strong>off</strong> practice-wide must publish Suite in
-              <strong>replace</strong> mode. Accept for practice does not enable this pack.
-            </span>
+            <span class="pf-label">Routine-Rx button</span>
+            <span class="pf-sub">Injected task button</span>
           </span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfRoutineRxButton" role="switch" checked />
             <span class="suite-toggle-track" aria-hidden="true"><span class="suite-toggle-thumb"></span></span>
           </span>
         </label>
-
-        <label class="pf-row" id="row-quickActionsWidget">
+        <label class="pf-station" id="row-quickActionsWidget">
           <span class="pf-copy">
-            <span class="field-label">Quick Actions widget</span>
-            <span class="field-help">
-              The GP → reception composer injected above a task’s Internal comment. Off mutes the widget only
-              — phrase lists and Options editors stay as they are.
-            </span>
-            <span class="field-help" style="margin-top: 8px">
-              Merge is <strong>sticky-on</strong>: a published profile that turns this on will turn it on for
-              clinicians who had it off. Once a machine has it on, merge will not turn it off. A practice that
-              wants the pack <strong>off</strong> practice-wide must publish Suite in
-              <strong>replace</strong> mode. Accept for practice does not enable this pack.
-            </span>
+            <span class="pf-label">Quick Actions</span>
+            <span class="pf-sub">Comment composer widget</span>
           </span>
           <span class="suite-toggle">
             <input type="checkbox" id="pfQuickActionsWidget" role="switch" checked />
