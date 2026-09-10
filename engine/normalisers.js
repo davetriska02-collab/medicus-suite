@@ -201,6 +201,18 @@
     const active = [],
       past = [];
     const hasOnsetDateFor = (id) => (onsetIndex && id && onsetIndex.has(id) ? onsetIndex.get(id) : null);
+    // problem-listing exposes problemCode: { conceptId, description, descriptionId }.
+    // Keep the IDs — QOF and vaccine eligibility match on them via itemCodeHits.
+    // Do not invent fields: only what the listing already carries.
+    const listingCode = (p) => {
+      const pc = p && p.problemCode;
+      const rawConcept = pc && pc.conceptId;
+      const rawDesc = pc && pc.descriptionId;
+      return {
+        conceptId: rawConcept != null && rawConcept !== '' ? String(rawConcept) : null,
+        descriptionId: rawDesc != null && rawDesc !== '' ? String(rawDesc) : null,
+      };
+    };
     listing.activeProblems
       .filter((p) => !p.isMarkedAsIncorrect)
       .forEach((p) => {
@@ -213,6 +225,7 @@
           significance: p.significance || null,
           source: 'API:problem-listing',
           id: p.id || null,
+          ...listingCode(p),
         };
         if (p.hasEnded) {
           past.push({ ...rec, status: 'past' });
@@ -235,6 +248,7 @@
             source: 'API:problem-listing',
             id: p.id || null,
             status: 'past',
+            ...listingCode(p),
           });
         });
     }

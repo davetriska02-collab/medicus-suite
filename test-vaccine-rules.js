@@ -485,6 +485,121 @@ console.log('\n--- shingles severely immunosuppressed 18+ (vax-shingles-immuno, 
   );
 }
 
+// ── Flu carer eligibility (Witley / Karen Edwards, 2026-09-10) ──────────────
+// Match terms: the SNOMED preferred phrase "patient themselves providing care"
+// only — NOT a bare "carer" stem. Bare "carer" would false-positive on
+// "carer needs assessment", "carer review", "has a carer", etc.
+// Code match: SNOMED CT concept 224484003 and Egton 4928511000006113, via
+// itemCodeHits (conceptId / problemCode.conceptId). Either path is enough.
+console.log('\n--- flu carer eligibility ---');
+{
+  const carerClause = (fluRule.eligibility.anyOf || []).find((c) => c.label === 'Carer (provides care)');
+  assert(!!carerClause, 'vax-flu has a Carer (provides care) eligibility clause');
+  assert(
+    Array.isArray(carerClause?.match) && carerClause.match.includes('patient themselves providing care'),
+    'carer match term is the specific SNOMED phrase, not a bare "carer" stem'
+  );
+  assert(
+    !carerClause.match.some((t) => t.toLowerCase() === 'carer'),
+    'carer clause does not include a bare "carer" stem (false-positive guard)'
+  );
+  assert(
+    Array.isArray(carerClause?.snomed) &&
+      carerClause.snomed.includes('224484003') &&
+      carerClause.snomed.includes('4928511000006113'),
+    'carer clause lists both SNOMED 224484003 and Egton 4928511000006113'
+  );
+  assert(
+    /care home residents are not detected/i.test(fluRule.notes) && !/carers and care home/i.test(fluRule.notes),
+    'vax-flu notes no longer claim carers are undetected; care-home residents still noted'
+  );
+
+  const IN_CAMPAIGN = '2025-10-15';
+  const adult = () => baseData(40); // under 65, not otherwise flu-eligible
+
+  // (a) label phrase alone matches
+  {
+    const data = {
+      ...adult(),
+      problems: [{ label: 'Patient themselves providing care', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: label phrase alone → chip');
+    assert(chips[0]?.status === 'vax_due', `flu carer: label phrase → vax_due (got: ${chips[0]?.status})`);
+    assert(
+      chips[0]?.eligibilityReason === 'Carer (provides care)',
+      `flu carer: eligibilityReason is Carer (provides care) (got: ${chips[0]?.eligibilityReason})`
+    );
+  }
+
+  // (b) conceptId 224484003 alone matches with a non-matching label
+  {
+    const data = {
+      ...adult(),
+      problems: [{ label: 'Social support arrangement', conceptId: '224484003', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: SNOMED 224484003 alone (unrelated label) → chip');
+    assert(chips[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: conceptId 224484003 → carer clause');
+  }
+
+  // (c) Egton id 4928511000006113 matches (as conceptId — Medicus stores Egton IDs there)
+  {
+    const data = {
+      ...adult(),
+      problems: [{ label: 'Social support arrangement', conceptId: '4928511000006113', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: Egton 4928511000006113 → chip');
+    assert(chips[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: Egton id → carer clause');
+  }
+
+  // Egton id via nested problemCode.conceptId (itemCodeHits also reads that)
+  {
+    const data = {
+      ...adult(),
+      problems: [
+        {
+          label: 'Social support arrangement',
+          problemCode: { conceptId: '4928511000006113' },
+          status: 'active',
+        },
+      ],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: Egton id on problemCode.conceptId → chip');
+  }
+
+  // (d) unrelated "carer needs" / "carer review" labels do NOT false-positive
+  {
+    const needs = {
+      ...adult(),
+      problems: [{ label: 'Carer needs assessment', status: 'active' }],
+    };
+    const review = {
+      ...adult(),
+      problems: [{ label: 'Carer review', status: 'active' }],
+    };
+    const hasCarer = {
+      ...adult(),
+      problems: [{ label: 'Has a carer', status: 'active' }],
+    };
+    assert(engine.evaluateVaccineRule(fluRule, needs, IN_CAMPAIGN).length === 0, 'flu carer: "Carer needs assessment" does NOT match');
+    assert(engine.evaluateVaccineRule(fluRule, review, IN_CAMPAIGN).length === 0, 'flu carer: "Carer review" does NOT match');
+    assert(engine.evaluateVaccineRule(fluRule, hasCarer, IN_CAMPAIGN).length === 0, 'flu carer: "Has a carer" does NOT match');
+  }
+
+  // Inactive coded carer is skipped
+  {
+    const data = {
+      ...adult(),
+      problems: [{ label: 'Patient themselves providing care', conceptId: '224484003', status: 'inactive' }],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 0, 'flu carer: inactive problem is skipped even with matching code + label');
+  }
+}
+
 // ── Schema: source and notes required on new rules ───────────────────────────
 console.log('\n--- new vaccine rules have non-empty source and notes ---');
 [ppv23Rule, shinglesRule, rsvRule, pneumoRiskRule, shinglesImmunoRule].forEach((r) => {

@@ -3319,7 +3319,14 @@
         if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
         if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
         const terms = clause.match || [];
-        const hit = (data.problems || []).find((p) => p.status !== 'inactive' && matchesAnyTerm(p.label, terms));
+        // Text match OR SNOMED/Egton hit (itemCodeHits). Code-only problems
+        // (conceptId present, label not in match[]) used to be invisible —
+        // that is how coded carers never fired vax-flu.
+        const hit = (data.problems || []).find((p) => {
+          if (p.status === 'inactive') return false;
+          const textHit = terms.length > 0 && matchesAnyTerm(p.label, terms);
+          return textHit || itemCodeHits(p, clause.snomed);
+        });
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
       }
 

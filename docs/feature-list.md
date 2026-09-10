@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.21
+**Version:** v3.261.22
 **Generated:** 2026-09-10
 
 ## What it is
@@ -148,6 +148,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.22 (10 Sep)** — Flu chip recognises coded carers (SNOMED 224484003 / Egton 4928511000006113 Patient themselves providing care)
 - **v3.261.21 (10 Sep)** — CSO re-freeze + audit quick wins: listing-URL cap, book observers route-gated, practice-code import guard, Options probe HTML escaped; frozen safety docs match the pruned surface
 - **v3.261.20 (10 Sep)** — QA polish: Slots shows taken as well as free; diary pills match; Trends/Forecast/Monitoring icons distinct; living docs drop Visualiser/Condor claims
 - **v3.261.19 (10 Sep)** — Appointment-book tally: injected booked/free button on the diary, same type toggles as Slot Counter

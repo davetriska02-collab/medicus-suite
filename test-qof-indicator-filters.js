@@ -805,6 +805,51 @@ console.log('\n--- buildOnsetDateIndex / normaliseProblemsAll: hasOnsetDate join
   );
 }
 
+// ── problem-listing conceptId / descriptionId plumbing (flu carer / QOF codes) ─
+console.log('\n--- normaliseProblemsAll: conceptId and descriptionId from problemCode ---');
+{
+  const listing = {
+    activeProblems: [
+      {
+        id: 'carer',
+        problemCodeDescription: 'Patient themselves providing care',
+        dateToDisplay: '2024-01-01',
+        problemCode: { conceptId: '224484003', description: 'Patient themselves providing care', descriptionId: '337525019' },
+      },
+      {
+        id: 'egton',
+        problemCodeDescription: 'Patient themselves providing care',
+        dateToDisplay: '2024-02-01',
+        problemCode: { conceptId: 4928511000006113, description: 'Patient themselves providing care', descriptionId: null },
+      },
+      {
+        id: 'plain',
+        problemCodeDescription: 'Asthma',
+        dateToDisplay: '2024-03-01',
+      },
+    ],
+    inactiveProblems: [
+      {
+        id: 'past-carer',
+        problemCodeDescription: 'Patient themselves providing care',
+        dateToDisplay: '2020-01-01',
+        problemCode: { conceptId: '224484003', descriptionId: '337525019' },
+      },
+    ],
+  };
+  const { active, past } = normalisers.normaliseProblemsAll(listing, null);
+  const carer = active.find((p) => p.id === 'carer');
+  const egton = active.find((p) => p.id === 'egton');
+  const plain = active.find((p) => p.id === 'plain');
+  const pastCarer = past.find((p) => p.id === 'past-carer');
+  check(carer.conceptId === '224484003', 'active problem keeps problemCode.conceptId as string');
+  check(carer.descriptionId === '337525019', 'active problem keeps problemCode.descriptionId as string');
+  check(egton.conceptId === '4928511000006113', 'numeric Egton conceptId is stringified');
+  check(egton.descriptionId === null, 'null descriptionId stays null (not invented, not "null" string)');
+  check(plain.conceptId === null && plain.descriptionId === null, 'missing problemCode → conceptId/descriptionId null');
+  check(pastCarer && pastCarer.conceptId === '224484003' && pastCarer.descriptionId === '337525019', 'inactiveProblems also keep conceptId + descriptionId');
+}
+
 // ── earliestRegisterCodedDate: prioritise a confirmed onset date over an
 // unconfirmed (but chronologically earlier) fallback date ───────────────────
 console.log('\n--- earliestRegisterCodedDate: onset-date prioritisation ---');
