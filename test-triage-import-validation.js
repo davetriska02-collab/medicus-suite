@@ -83,11 +83,13 @@ console.log('\nPart 2: options.js validateTriageRule / validateImportedConfig');
 
 const optsSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'options.js'), 'utf8');
 
-const fieldsBlockMatch = optsSrc.match(/const FIELDS = \[[\s\S]*?\n  \];\n  const PAGES = \[[\s\S]*?\n  \];/);
+const fieldsBlockMatch = optsSrc.match(
+  /const FIELDS = \[[\s\S]*?\r?\n  \];\r?\n  const PAGES = \[[\s\S]*?\r?\n  \];/
+);
 check(!!fieldsBlockMatch, 'FIELDS/PAGES block found in options.js');
 
 const validatorsBlockMatch = optsSrc.match(
-  /const ALLOWED_KINDS = [\s\S]*?const validateImportedConfig = \(parsed, currentConfig\) => \{[\s\S]*?\n  \};/
+  /const ALLOWED_KINDS = [\s\S]*?const validateImportedConfig = \(parsed, currentConfig\) => \{[\s\S]*?\r?\n  \};/
 );
 check(!!validatorsBlockMatch, 'validator block (ALLOWED_* … validateImportedConfig) found in options.js');
 

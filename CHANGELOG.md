@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.23] — 2026-09-10
+
+### Maintenance — prune leftovers, journal UUID, allocate observers
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **Journal discovery** no longer stores a live patient UUID URL in
+  `suite.discoveredJournalUrl`. Templates only; the raw key is cleared.
+- **Lab / Rx / workflow / request allocate canvases** match Organise:
+  private MutationObserver and 1.5s tick only on their route; SPA entry
+  via the shared DOM hub / popstate.
+- **Living copy:** `SECURITY-AUDIT.md` closes NF6/F6 (PDF.js gone);
+  accessibility statement drops the Visualiser; CSN §5 item 5 and §6
+  items 12–13 no longer claim a PDF surface.
+- **Windows:** `test-triage-import-validation.js` accepts CRLF so local
+  `npm test` matches Ubuntu CI.
+
 ## [v3.261.22] — 2026-09-10
 
 ### Flu eligibility: recognise coded carers

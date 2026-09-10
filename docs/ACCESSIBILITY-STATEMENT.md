@@ -1,9 +1,9 @@
 # Medicus Suite — Accessibility Statement
 
 **Document reference:** MS-DOC-A11Y-001
-**Product version:** 3.84.2
-**Document version:** 1.0 (DRAFT — pending sign-off)
-**Date:** 2026-06-14
+**Product version:** 3.261.23
+**Document version:** 1.1 (DRAFT — pending sign-off)
+**Date:** 2026-06-14; Visualiser removed from scope 2026-09-10
 **Manufacturer:** Graysbrook Ltd
 **Contact:** Dr Dave Triska — dave@graysbrook.co.uk
 
@@ -14,8 +14,9 @@
 This statement applies to the user-facing surfaces of the Medicus Suite Chrome
 extension: the side panel (`side-panel/`), the floating pop-out window
 (`pop-out/`), the options/settings pages (`options/`, `sentinel-options/`), and
-the full-tab Patient Record Visualiser. It does **not** cover the Medicus EPR web
+the Note display board (`board/`). It does **not** cover the Medicus EPR web
 application itself, which is a separate product owned by Medicus Health Ltd.
+The Patient Record Visualiser was removed at v3.255.0 and is out of scope.
 
 ## Compliance status
 
@@ -60,8 +61,9 @@ WCAG 2.1 AA. They are disclosed transparently and tracked for remediation:
 4. **Automated and assistive-tech testing:** no recorded axe-core / Lighthouse
    run, and no screen-reader (NVDA/VoiceOver) or keyboard-only walkthrough of each
    module has yet been carried out.
-5. **Visualiser charts (WCAG 1.1.1):** Chart.js / D3 visualisations may need text
-   alternatives or data-table equivalents for non-visual users.
+5. **Visualiser charts (WCAG 1.1.1) — n/a.** Chart.js / D3 shipped only in the
+   Visualiser, which was removed at v3.255.0. Note board and Trends charts are
+   a separate surface and have not yet been audited for text alternatives.
 
 ## How we tested
 

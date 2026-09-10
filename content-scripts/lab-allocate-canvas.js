@@ -2545,29 +2545,63 @@
     ensureLauncher();
   });
   var _launchTick = null;
+  var _routeTick = null;
   var _launchBooted = false;
+  var _heavyOn = false;
+  var _unsubHub = null;
 
-  function startAllocateChrome() {
-    if (_launchBooted) {
-      ensureLauncher();
-      return;
+  function startHeavyChrome() {
+    if (!_heavyOn) {
+      _heavyOn = true;
+      _mo.observe(document.documentElement, { childList: true, subtree: true });
+      _launchTick = setInterval(ensureLauncher, 1500);
     }
-    _launchBooted = true;
-    _mo.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('popstate', ensureLauncher);
-    _launchTick = setInterval(ensureLauncher, 1500);
     ensureLauncher();
   }
 
-  function stopAllocateChrome() {
+  function stopHeavyChrome() {
     if (_mo) _mo.disconnect();
-    window.removeEventListener('popstate', ensureLauncher);
     if (_launchTick) {
       clearInterval(_launchTick);
       _launchTick = null;
     }
-    _launchBooted = false;
+    _heavyOn = false;
     muteAllocateChrome();
+  }
+
+  function onRoutePulse() {
+    if (!_packOn) return;
+    if (currentRoute()) startHeavyChrome();
+    else stopHeavyChrome();
+  }
+
+  function startAllocateChrome() {
+    if (_launchBooted) {
+      onRoutePulse();
+      return;
+    }
+    _launchBooted = true;
+    window.addEventListener('popstate', onRoutePulse);
+    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
+      _unsubHub = window.__chObserverHub.subscribe(onRoutePulse);
+    } else if (!_routeTick) {
+      _routeTick = setInterval(onRoutePulse, 1500);
+    }
+    onRoutePulse();
+  }
+
+  function stopAllocateChrome() {
+    window.removeEventListener('popstate', onRoutePulse);
+    if (_unsubHub) {
+      _unsubHub();
+      _unsubHub = null;
+    }
+    if (_routeTick) {
+      clearInterval(_routeTick);
+      _routeTick = null;
+    }
+    stopHeavyChrome();
+    _launchBooted = false;
   }
 
   if (window.PracticePacks && window.PracticePacks.bindInjector) {
