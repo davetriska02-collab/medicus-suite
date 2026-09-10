@@ -505,6 +505,11 @@ console.log('\n--- UI retired: Bulk remove/merge trigger is not injected ---');
     /if \(UI_RETIRED\) return/.test(src) && /if \(!UI_RETIRED\) \{/.test(src),
     'injectTrigger and the observer boot are skipped while retired'
   );
+  const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
+  check(
+    !manifest.includes('content-scripts/problem-bulk-end.js'),
+    'retired Bulk remove is not injected on every Medicus page'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

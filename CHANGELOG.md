@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.28] — 2026-09-10
+
+### Drop retired Bulk remove inject; cap staff harvest
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **Retired Bulk remove** (`problem-bulk-end.js`) stays in git for Node
+  tests and W10 inventory; it is no longer a content script on every page.
+- **Lab/request staff harvest** matches Rx/workflow: 12 overview GETs, not
+  120. Who-ordered enrich on labs stays capped at 120.
+
 ## [v3.261.27] — 2026-09-10
 
 ### Faster injectors, fewer off-route timers
