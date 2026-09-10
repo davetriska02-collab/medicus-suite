@@ -27,4 +27,21 @@ assert(
 );
 assert(/function onRoutePulse\(/.test(organise), 'organise route-gates via onRoutePulse');
 
+const allocateFiles = [
+  'content-scripts/lab-allocate-canvas.js',
+  'content-scripts/rx-allocate-canvas.js',
+  'content-scripts/workflow-allocate-canvas.js',
+  'content-scripts/request-allocate-canvas.js',
+];
+for (const f of allocateFiles) {
+  const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
+  assert(/function stopHeavyChrome\(/.test(src), `${f} defines stopHeavyChrome`);
+  assert(/function startHeavyChrome\(/.test(src), `${f} defines startHeavyChrome`);
+  assert(
+    /if \(currentRoute\(\)\) startHeavyChrome\(\);\s*else stopHeavyChrome\(\);/.test(src),
+    `${f} calls stopHeavyChrome when !route`
+  );
+  assert(/__chObserverHub/.test(src), `${f} subscribes to the shared DOM hub`);
+}
+
 console.log('test-appointment-book-chrome: ok');

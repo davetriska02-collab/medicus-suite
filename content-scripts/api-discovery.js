@@ -117,7 +117,7 @@ function storeJournalUrl(url) {
     // are read/written in ONE batched round-trip instead of up to four
     // racing read-modify-write pairs.
     const CAP = 50;
-    chrome.storage.local.get([ALL_JOURNAL_TEMPLATES_KEY, JOURNAL_TEMPLATE_KEY, JOURNAL_KEY], (r) => {
+    chrome.storage.local.get([ALL_JOURNAL_TEMPLATES_KEY, JOURNAL_TEMPLATE_KEY], (r) => {
       const toSet = {};
       if (template) {
         const existing = r[ALL_JOURNAL_TEMPLATES_KEY] || [];
@@ -128,14 +128,14 @@ function storeJournalUrl(url) {
           toSet[JOURNAL_TEMPLATE_KEY] = template;
         }
       }
-      if (isBetterJournalGuess(pathname, r[JOURNAL_KEY])) {
-        toSet[JOURNAL_KEY] = clean;
-      }
+      // Do not persist the raw UUID URL (JOURNAL_KEY). A live patient id in
+      // chrome.storage.local is the same leak the template list was built to
+      // close. Duplicate-checker reads the template.
       if (Object.keys(toSet).length) chrome.storage.local.set(toSet);
     });
-    // The raw-URL surface (ALL_JOURNAL_URLS_KEY) is deliberately no longer
-    // accumulated; clear any legacy grow-forever value once.
-    chrome.storage.local.remove(ALL_JOURNAL_URLS_KEY);
+    // Raw-URL surfaces (list + single) are deliberately no longer accumulated;
+    // clear any legacy grow-forever / UUID value once.
+    chrome.storage.local.remove([ALL_JOURNAL_URLS_KEY, JOURNAL_KEY]);
   } catch (e) {
     /* ignore */
   }
