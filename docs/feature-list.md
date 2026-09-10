@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.28
+**Version:** v3.261.29
 **Generated:** 2026-09-10
 
 ## What it is
@@ -148,6 +148,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.29 (10 Sep)** — Tidy widgets route-gated; allocate harvest aborts on close; injector runtime loads before every consumer
 - **v3.261.28 (10 Sep)** — Retired Bulk remove not injected; lab/request staff harvest cap 12
 - **v3.261.27 (10 Sep)** — Injector runtime: start once, throttled place; allergy/nesting 5s timers only on care-record/task-overview; tally listeners tear down off-book
 - **v3.261.26 (10 Sep)** — Organise Finalise counts a write only when the post-write book shows cancel-gone, the patient on the dest slot, or the new duration

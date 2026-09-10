@@ -1340,39 +1340,87 @@
     });
   }
 
-  var _hub = window.__chObserverHub;
-  if (_hub && _hub.subscribe) {
-    _hub.subscribe(onMutations);
-  } else {
-    _obs = new MutationObserver(onMutations);
-    observeBody();
+  var _hubUnsub = null;
+  var _scanInterval = null;
+  var _visHandler = null;
+  var _resizeHandler = null;
+
+  function docCodesOnRoute(pathname) {
+    var m = String(pathname || '').match(/\/tasks\/data\/([^/]+)\/overview\//i);
+    return !!(m && String(m[1]).toLowerCase() === 'document');
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) scheduleInject();
-  });
-
-  window.addEventListener('resize', function () {
-    var w = document.getElementById(WIDGET_ID);
-    if (w) placePanel(w);
-  });
-
-  // Defensive backstop beyond the mutation observer. Confirmed live
-  // 2026-08-14: switching to view a different in-task section (existing
-  // problems / medication) and back can wipe the widget's DOM node without
-  // the observer's own filter reliably catching the swap in time to
-  // re-trigger — this widget is also persistent-by-design (visible even at
-  // zero entries, unlike the collapsed-by-default sibling widgets), so a
-  // clinician is more likely to have it on screen through exactly that
-  // kind of in-task navigation. scheduleInject() already no-ops cheaply
-  // when nothing's changed, so polling it is safe.
-  setInterval(function () {
-    if (!document.hidden) scheduleInject();
-  }, 2000);
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleInject);
-  } else {
+  function startHeavyChrome() {
+    if (_scanInterval) return;
+    var hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      _hubUnsub = hub.subscribe(onMutations);
+    } else {
+      _obs = new MutationObserver(onMutations);
+      observeBody();
+    }
+    _visHandler = function () {
+      if (!document.hidden) scheduleInject();
+    };
+    document.addEventListener('visibilitychange', _visHandler);
+    _resizeHandler = function () {
+      var w = document.getElementById(WIDGET_ID);
+      if (w) placePanel(w);
+    };
+    window.addEventListener('resize', _resizeHandler);
+    // Defensive backstop beyond the mutation observer. Confirmed live
+    // 2026-08-14: switching to view a different in-task section (existing
+    // problems / medication) and back can wipe the widget's DOM node without
+    // the observer's own filter reliably catching the swap in time to
+    // re-trigger. On-route only — InjectorRuntime stops this interval off
+    // the document-task overview.
+    _scanInterval = setInterval(function () {
+      if (!document.hidden) scheduleInject();
+    }, 2000);
     scheduleInject();
+  }
+
+  function stopHeavyChrome() {
+    if (_hubUnsub) {
+      try {
+        _hubUnsub();
+      } catch (_) {}
+      _hubUnsub = null;
+    }
+    if (_obs) {
+      _obs.disconnect();
+      _obs = null;
+    }
+    if (_scanInterval) {
+      clearInterval(_scanInterval);
+      _scanInterval = null;
+    }
+    if (_visHandler) {
+      document.removeEventListener('visibilitychange', _visHandler);
+      _visHandler = null;
+    }
+    if (_resizeHandler) {
+      window.removeEventListener('resize', _resizeHandler);
+      _resizeHandler = null;
+    }
+    if (_throttle) {
+      clearTimeout(_throttle);
+      _throttle = null;
+    }
+    removeWidget();
+    if (s.taskUuid) s = blankState();
+  }
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('document-codes', {
+      match: function (pathname) {
+        return docCodesOnRoute(pathname);
+      },
+      start: startHeavyChrome,
+      stop: stopHeavyChrome,
+    });
+  } else {
+    startHeavyChrome();
   }
 })();

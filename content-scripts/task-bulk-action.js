@@ -944,37 +944,79 @@
       }, 400);
     }
 
-    var _hub = window.__chObserverHub;
-    if (_hub && _hub.subscribe) {
-      _hub.subscribe(function (mutations) {
-        if (isOwnMutation(mutations)) return;
-        scheduleCheck();
-      });
-    } else {
-      var _obs = new MutationObserver(function (mutations) {
-        if (isOwnMutation(mutations)) return;
-        scheduleCheck();
-      });
-      _obs.observe(document.body, { childList: true, subtree: true });
+    var _hubUnsub = null;
+    var _ownObs = null;
+    var _scanInterval = null;
+    var _visHandler = null;
+
+    function startHeavyChrome() {
+      if (_scanInterval) return;
+      var hub = window.__chObserverHub;
+      if (hub && hub.subscribe) {
+        _hubUnsub = hub.subscribe(function (mutations) {
+          if (isOwnMutation(mutations)) return;
+          scheduleCheck();
+        });
+      } else if (document.body) {
+        _ownObs = new MutationObserver(function (mutations) {
+          if (isOwnMutation(mutations)) return;
+          scheduleCheck();
+        });
+        _ownObs.observe(document.body, { childList: true, subtree: true });
+      }
+      _visHandler = function () {
+        if (!document.hidden) scheduleCheck();
+      };
+      document.addEventListener('visibilitychange', _visHandler);
+      window.addEventListener('resize', capOpenPanel);
+      _scanInterval = setInterval(function () {
+        if (!document.hidden) scheduleCheck();
+      }, 2000);
+      scheduleCheck();
+    }
+
+    function stopHeavyChrome() {
+      if (_hubUnsub) {
+        try {
+          _hubUnsub();
+        } catch (_) {}
+        _hubUnsub = null;
+      }
+      if (_ownObs) {
+        _ownObs.disconnect();
+        _ownObs = null;
+      }
+      if (_scanInterval) {
+        clearInterval(_scanInterval);
+        _scanInterval = null;
+      }
+      if (_visHandler) {
+        document.removeEventListener('visibilitychange', _visHandler);
+        _visHandler = null;
+      }
+      window.removeEventListener('resize', capOpenPanel);
+      if (_throttle) {
+        clearTimeout(_throttle);
+        _throttle = null;
+      }
+      removeWidget();
+      _onMatchingPage = false;
     }
 
     document.addEventListener('click', onDocWidgetClick, true);
     document.addEventListener('change', onDocWidgetChange, true);
 
-    document.addEventListener('visibilitychange', function () {
-      if (!document.hidden) scheduleCheck();
-    });
-
-    window.addEventListener('resize', capOpenPanel);
-
-    setInterval(function () {
-      if (!document.hidden) scheduleCheck();
-    }, 2000);
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', scheduleCheck);
+    var Runtime = window.InjectorRuntime;
+    if (Runtime && typeof Runtime.register === 'function') {
+      Runtime.register('task-bulk-' + config.id, {
+        match: function (pathname) {
+          return !!parseQueuePagePath(pathname, config.taskListSlug);
+        },
+        start: startHeavyChrome,
+        stop: stopHeavyChrome,
+      });
     } else {
-      scheduleCheck();
+      startHeavyChrome();
     }
   }
 

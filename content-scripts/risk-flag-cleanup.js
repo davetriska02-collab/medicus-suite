@@ -209,14 +209,43 @@
     }, 100);
   }
 
-  if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
-    window.__chObserverHub.subscribe(queueRender);
-  } else {
-    setInterval(queueRender, 2000); // fallback if the hub failed to load before us
+  function patientBannerOnScreen() {
+    try {
+      return !!document.querySelector(HOST_SELECTOR);
+    } catch (_) {
+      return false;
+    }
   }
-  window.addEventListener('popstate', queueRender);
-  window.addEventListener('hashchange', queueRender);
-  queueRender();
+
+  function startHeavyChrome() {
+    queueRender();
+  }
+
+  function stopHeavyChrome() {
+    if (_panelState) closePanel();
+    removePill();
+  }
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('risk-flag-cleanup', {
+      match: function () {
+        return patientBannerOnScreen();
+      },
+      start: startHeavyChrome,
+      place: queueRender,
+      stop: stopHeavyChrome,
+    });
+  } else {
+    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
+      window.__chObserverHub.subscribe(queueRender);
+    } else {
+      setInterval(queueRender, 2000);
+    }
+    window.addEventListener('popstate', queueRender);
+    window.addEventListener('hashchange', queueRender);
+    queueRender();
+  }
 
   // ==============================================================================
   // Panel: discovery + review + confirm + write

@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.29] — 2026-09-10
+
+### Route-gate remaining tidy widgets; abort allocate harvest
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **Injector runtime loads first.** `shared/injector-runtime.js` sits with
+  the observer hub, before every consumer. Problem-nesting (and the rest of
+  the tidy widgets) can actually register; in 3.261.27 nesting ran
+  `startHeavyChrome()` immediately because it parsed before the runtime.
+- **Off-route timers stop.** Document-codes, document-file, problem
+  description cleanup, Bulk acknowledge/discard, patient-alerts banner,
+  risk-flag pill, and repeat-prescribing pills start only on their page
+  and tear down when you leave.
+- **Allocate harvest aborts on close.** Overlay close bumps `_boardGen` so
+  in-flight staff/overview GETs stop instead of continuing after the
+  canvas is gone.
+- **practice-packs.js** is parsed once (HUD batch). Write-canvas already
+  shares that world.
+
 ## [v3.261.28] — 2026-09-10
 
 ### Drop retired Bulk remove inject; cap staff harvest

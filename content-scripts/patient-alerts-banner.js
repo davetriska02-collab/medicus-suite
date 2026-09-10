@@ -182,14 +182,41 @@
     /* storage unavailable — banner simply stays absent */
   }
 
-  if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
-    window.__chObserverHub.subscribe(function () {
-      queueRender();
+  function patientBannerOnScreen() {
+    try {
+      return !!document.querySelector(HOST_SELECTOR);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function startHeavyChrome() {
+    queueRender();
+  }
+
+  function stopHeavyChrome() {
+    removeBanner();
+  }
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('patient-alerts-banner', {
+      match: function () {
+        return patientBannerOnScreen();
+      },
+      start: startHeavyChrome,
+      place: queueRender,
+      stop: stopHeavyChrome,
     });
   } else {
-    // Fallback: low-frequency poll if the hub failed to load before us.
-    setInterval(queueRender, 2000);
+    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
+      window.__chObserverHub.subscribe(function () {
+        queueRender();
+      });
+    } else {
+      setInterval(queueRender, 2000);
+    }
+    window.addEventListener('popstate', queueRender);
+    window.addEventListener('hashchange', queueRender);
   }
-  window.addEventListener('popstate', queueRender);
-  window.addEventListener('hashchange', queueRender);
 })();

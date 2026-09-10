@@ -217,6 +217,8 @@ console.log('\n--- Engine source lock: a widened scope must be VISIBLE, but sele
     'the warning is applied only after the load generation check (stale fetch cannot pollute the next page entry)'
   );
   check(src.includes('_scopeWarning = null'), 'removeWidget resets the warning with the rest of the state');
+  check(src.includes("register('task-bulk-' + config.id"), 'each bulk widget registers with InjectorRuntime');
+  check(/function stopHeavyChrome\(/.test(src), 'leaving the queue page tears the widget down');
 }
 
 console.log('\n--- Privacy Officer Alerts instantiation: confirmed contract regression lock ---');
