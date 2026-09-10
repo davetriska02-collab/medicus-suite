@@ -281,8 +281,12 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/parseRequestQueueRoute/.test(canvas), 'canvas owns the request route');
   check(
-    /if \(!_open\) _route = route/.test(canvas),
+    /if \(!_open && !_writing\) _route = route/.test(canvas),
     'open overlay pins _route so ensureLauncher cannot clobber search'
+  );
+  check(
+    /fetchRequestMergedTaskList\(pin\.apiBase/.test(canvas),
+    'Write confirm GET snapshots the route, not live _route'
   );
   check(!/\b(Done|Sent|Allocated|Submitted|Filed|Replied)\b/.test(canvas), 'canvas copy has no completion verbs');
   check(/ms-rxac-reviewing/.test(canvas), 'review-open puts a reviewing class on the panel');

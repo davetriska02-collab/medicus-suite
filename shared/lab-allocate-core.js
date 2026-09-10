@@ -754,6 +754,30 @@
     return next;
   }
 
+  function unstageIds(draft, ids) {
+    var next = cloneDraft(draft);
+    (Array.isArray(ids) ? ids : []).forEach(function (id) {
+      if (id) delete next.moves[id];
+    });
+    return next;
+  }
+
+  function batchTaskIds(batches) {
+    var ids = [];
+    (Array.isArray(batches) ? batches : []).forEach(function (b) {
+      (b && b.taskIds ? b.taskIds : []).forEach(function (id) {
+        if (id) ids.push(id);
+      });
+    });
+    return ids;
+  }
+
+  function waitMs(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
   function visualColumnKey(row, draft, aliases) {
     var staged = draft && draft.moves && draft.moves[row.id];
     if (staged) return remapClinicianKey(staged, aliases);
@@ -2389,6 +2413,7 @@
   function createClient(apiBase, deps) {
     deps = deps || {};
     var fetchImpl = deps.fetchImpl;
+    var WC = Object.prototype.hasOwnProperty.call(deps, 'WriteCore') ? deps.WriteCore : WriteCore;
     if (!apiBase) throw new Error('lab-allocate: apiBase required');
 
     function url(path) {
@@ -2528,10 +2553,21 @@
 
     async function commitAllocations(opts) {
       opts = opts || {};
+      if (!WC || typeof WC.diffWantedVsLanded !== 'function') {
+        return {
+          ok: false,
+          reason: 'WriteCore missing — nothing was written. Reload the extension.',
+          written: 0,
+          posted: 0,
+          vanished: [],
+          refused: [],
+          allWritten: false,
+        };
+      }
       var taskList = opts.taskList;
       var slug = opts.slug;
       var gate = canWriteAllocations({ taskList: taskList, slug: slug });
-      if (!gate.ok) return { ok: false, reason: gate.reason, written: 0, vanished: [], refused: [] };
+      if (!gate.ok) return { ok: false, reason: gate.reason, written: 0, posted: 0, vanished: [], refused: [] };
       var plan = planBulkReassign(opts.rows, opts.draft, taskList, opts.directory, slug, opts.teamDirectory);
       if (!plan.ok || !plan.batches.length) {
         return {
@@ -2651,38 +2687,52 @@
         }
         if (!posted) failedBatches.push(batch);
       }
-      var wantedIds = [];
-      writtenBatches.forEach(function (b) {
-        (b.taskIds || []).forEach(function (id) {
-          wantedIds.push(id);
-        });
-      });
+      var wantedIds = batchTaskIds(plan.batches);
+      var postedIds = batchTaskIds(writtenBatches);
       var landedList = [];
-      if (written) {
+      var confirmError = false;
+      async function readLanded() {
+        var confirm = opts.fetchList ? await opts.fetchList() : await fetchTaskList(slug, opts.search);
+        return allocationsLanded(confirm && confirm.rows, writtenBatches);
+      }
+      if (postedIds.length) {
         try {
-          var confirm = opts.fetchList ? await opts.fetchList() : await fetchTaskList(slug, opts.search);
-          landedList = allocationsLanded(confirm && confirm.rows, writtenBatches);
+          landedList = await readLanded();
         } catch (_) {
+          confirmError = true;
           landedList = [];
         }
+        var postedOutcome = WC.diffWantedVsLanded(postedIds, landedList);
+        if (!postedOutcome.allWritten) {
+          var retryMs = typeof opts.confirmRetryMs === 'number' ? opts.confirmRetryMs : 400;
+          if (retryMs > 0) await waitMs(retryMs);
+          try {
+            landedList = await readLanded();
+            confirmError = false;
+          } catch (_) {
+            confirmError = true;
+          }
+        }
       }
-      var outcome = WriteCore
-        ? WriteCore.diffWantedVsLanded(wantedIds, landedList)
-        : {
-            wanted: wantedIds.length,
-            written: written,
-            failed: Math.max(0, wantedIds.length - written),
-            allWritten: failedBatches.length === 0 && written === wantedIds.length,
-            failedIds: [],
-          };
+      var outcome = WC.diffWantedVsLanded(wantedIds, landedList);
+      var failedIdSet = Object.create(null);
+      (outcome.failedIds || []).forEach(function (id) {
+        failedIdSet[id] = true;
+      });
+      var landedIds = wantedIds.filter(function (id) {
+        return !failedIdSet[id];
+      });
 
       if (!written && failedBatches.length) {
         return {
           ok: false,
           written: 0,
+          posted: 0,
           failed: outcome.failed || wantedIds.length,
           failedIds: outcome.failedIds || wantedIds,
+          landedIds: [],
           allWritten: false,
+          wanted: outcome.wanted,
           writtenBatches: [],
           failedBatch: failedBatches[0],
           refused: plan.refused || [],
@@ -2690,34 +2740,48 @@
         };
       }
       if (failedBatches.length || !outcome.allWritten) {
+        var reason;
+        if (confirmError && outcome.written === 0 && postedIds.length) {
+          reason =
+            'Medicus accepted the reassignment POST but the queue could not be re-read. Check Medicus before staging again.';
+        } else if (outcome.written > 0) {
+          reason =
+            'Medicus accepted ' +
+            outcome.written +
+            ' reassignment' +
+            (outcome.written === 1 ? '' : 's') +
+            '. The rest were not confirmed on the queue' +
+            (lastStatus ? ': ' + lastStatus : '') +
+            '. Check the queue.';
+        } else {
+          reason =
+            'The reassignment POST settled but the queue does not show the new assignee' +
+            (lastStatus ? ' (' + lastStatus + ')' : '') +
+            '. Check Medicus before staging again.';
+        }
         return {
           ok: false,
           partial: outcome.written > 0,
           written: outcome.written,
+          posted: postedIds.length,
           failed: outcome.failed,
           failedIds: outcome.failedIds,
+          landedIds: landedIds,
           allWritten: false,
           wanted: outcome.wanted,
           writtenBatches: writtenBatches,
           failedBatch: failedBatches[0],
           refused: plan.refused || [],
-          reason:
-            outcome.written > 0
-              ? 'Medicus accepted ' +
-                outcome.written +
-                ' reassignment' +
-                (outcome.written === 1 ? '' : 's') +
-                '. The rest were not confirmed on the queue' +
-                (lastStatus ? ': ' + lastStatus : '') +
-                '. Check the queue.'
-              : 'The reassignment POST settled but the queue does not show the new assignee. Check Medicus before staging again.',
+          reason: reason,
         };
       }
       return {
         ok: true,
         written: outcome.written,
+        posted: postedIds.length,
         failed: 0,
         failedIds: [],
+        landedIds: landedIds,
         allWritten: true,
         wanted: outcome.wanted,
         writtenBatches: writtenBatches,
@@ -3091,6 +3155,7 @@
     addTeamColumn: addTeamColumn,
     stageMove: stageMove,
     stageMoves: stageMoves,
+    unstageIds: unstageIds,
     buildBoard: buildBoard,
     buildWorkspace: buildWorkspace,
     draftSummary: draftSummary,

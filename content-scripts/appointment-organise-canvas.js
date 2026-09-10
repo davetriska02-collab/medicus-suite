@@ -823,7 +823,7 @@
     _pending = null;
     announce(
       (WriteCore && WriteCore.finaliseConfirmCopy(outcome, 'actions')) ||
-        'Written to Medicus. Review staged is empty because that action already went.'
+        outcome.written + ' written, ' + (outcome.failed || 0) + ' failed — check the book'
     );
     render();
   }
@@ -1157,16 +1157,22 @@
 
   function closeOverlay() {
     if (_writing) return;
+    teardownOverlay();
+  }
+
+  function teardownOverlay() {
+    var el = document.getElementById(OVERLAY_ID);
+    if (el) el.remove();
     _open = false;
     _pending = null;
+    if (_writing) return;
     _draft = C.emptyDraft();
     _board = null;
     _openRoute = null;
-    var el = document.getElementById(OVERLAY_ID);
-    if (el) el.remove();
   }
 
   function openOverlay() {
+    if (_writing) return;
     _route = currentRoute();
     if (!_route) return;
     // Pin the book identity NOW: ensureLauncher keeps overwriting _route while
@@ -1215,7 +1221,7 @@
   function muteAllocateChrome() {
     var launch = document.getElementById(LAUNCH_ID);
     if (launch) launch.remove();
-    if (_open) closeOverlay();
+    teardownOverlay();
   }
 
   function ensureLauncher() {
@@ -1227,7 +1233,7 @@
     var launch = document.getElementById(LAUNCH_ID);
     if (!route) {
       if (launch) launch.remove();
-      if (_open) closeOverlay();
+      teardownOverlay();
       return;
     }
     _route = route;

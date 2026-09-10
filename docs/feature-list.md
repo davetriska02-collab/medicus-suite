@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.24
+**Version:** v3.261.25
 **Generated:** 2026-09-10
 
 ## What it is
@@ -148,6 +148,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.25 (10 Sep)** — Allocate write confirm: fail closed without WriteCore, retry stale GET, unstage landed (including team dests), pin Rx/request confirm route; Organise stop tears down the overlay mid-write
 - **v3.261.24 (10 Sep)** — Injector runtime (route → start/stop) for book/allocate canvases; allocate writes confirm landed assignee via WriteCore
 - **v3.261.23 (10 Sep)** — Maintenance: no raw journal UUID in storage; allocate canvases hub/route-gated; SECURITY-AUDIT NF6 closed; Visualiser dropped from accessibility + CSN DOES list; Windows CRLF test regex
 - **v3.261.22 (10 Sep)** — Flu chip recognises coded carers (SNOMED 224484003 / Egton 4928511000006113 Patient themselves providing care)

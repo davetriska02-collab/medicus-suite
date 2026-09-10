@@ -226,6 +226,7 @@
     addColumn: Lab.addColumn,
     stageMove: Lab.stageMove,
     stageMoves: Lab.stageMoves,
+    unstageIds: Lab.unstageIds,
     draftSummary: Lab.draftSummary,
     homeColumnKey: Lab.homeColumnKey,
     placementReason: Lab.placementReason,

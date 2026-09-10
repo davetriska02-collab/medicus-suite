@@ -667,9 +667,10 @@ console.log('\n--- canvas + manifest + css source locks ---');
     'Write vanish-check re-GETs inbox plus already-sitting work (distribute equally)'
   );
   check(
-    /if \(!_open\) _route = route/.test(canvas),
+    /if \(!_open && !_writing\) _route = route/.test(canvas),
     'open overlay pins _route so ensureLauncher cannot clobber search'
   );
+  check(/pin\.apiBase/.test(canvas) && /fetchRxMergedTaskList\(pin\.apiBase/.test(canvas), 'Write confirm GET snapshots the route, not live _route');
   check(
     /reload Medicus if the grid still shows the old number/.test(canvas),
     'after Write the canvas says the open-list count may not drop'
