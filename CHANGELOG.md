@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.22] — 2026-09-10
+
+### Flu eligibility: recognise coded carers
+
+Witley (Karen Edwards, Care Co-ordinator): patients coded as carers were
+invisible to the flu vaccine chip. `vax-flu` had no carer clause, and
+`matchVaccineEligibility` text-matched problem labels only — it never
+read SNOMED/Egton IDs. `normaliseProblemsAll` also dropped
+`problemCode.conceptId` from problem-listing.
+
+- **Normaliser:** keep `conceptId` and `descriptionId` from
+  `problemCode` on each normalised problem (string; null if absent).
+- **Engine:** problem-kind vaccine eligibility now hits on label match
+  **or** `itemCodeHits` against `clause.snomed`. Inactive still skipped;
+  sex/age gates unchanged.
+- **Rule:** `vax-flu` eligibility clause `Carer (provides care)` —
+  match phrase `patient themselves providing care` (not a bare "carer"
+  stem) plus SNOMED `224484003` and Egton `4928511000006113`. Care-home
+  residents remain undetected.
+
 ## [v3.261.21] — 2026-09-10
 
 ### CSO re-freeze + audit quick wins
