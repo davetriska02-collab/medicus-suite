@@ -30,6 +30,8 @@ const SUITE_KEYS = [
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
 const TAB_ID_RE = /^[a-z0-9][a-z0-9-]{0,40}$/i;
 const SUITE_ISO_DATETIME_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+// keep in sync with SITE_CODE_RE in shared/practice-code.js
+const PRACTICE_CODE_RE = /^[a-f0-9]{4,8}$/i;
 
 async function suiteExport() {
   const r = await chrome.storage.local.get(SUITE_KEYS);
@@ -81,7 +83,11 @@ async function suiteImport(data) {
   }
   if (data.practiceCode != null) {
     if (typeof data.practiceCode !== 'string') throw new Error('suite.practiceCode must be a string.');
-    toSet['suite.practiceCode'] = data.practiceCode;
+    const code = data.practiceCode.trim();
+    if (!PRACTICE_CODE_RE.test(code)) {
+      throw new Error('suite.practiceCode must be 4–8 hex characters.');
+    }
+    toSet['suite.practiceCode'] = code;
   }
   if (data.feedbackEmail != null) {
     if (typeof data.feedbackEmail !== 'string') throw new Error('suite.feedbackEmail must be a string.');

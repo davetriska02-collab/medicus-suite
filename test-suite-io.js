@@ -657,6 +657,20 @@ console.log('\n--- applyWithRollback rollback ---');
     },
   };
 
+  await suiteIo.suiteImport({ practiceCode: 'a3f2b1' });
+  assert(suiteStore['suite.practiceCode'] === 'a3f2b1', 'suiteImport: writes valid hex practiceCode');
+  let pcErr = null;
+  try {
+    await suiteIo.suiteImport({ practiceCode: 'x"><img>' });
+  } catch (e) {
+    pcErr = e.message;
+  }
+  assert(pcErr && /hex/i.test(pcErr), 'suiteImport: rejects XSS practiceCode');
+  assert(
+    suiteStore['suite.practiceCode'] === 'a3f2b1',
+    'suiteImport: rejected practiceCode leaves prior value untouched'
+  );
+
   // Round-trip: import a tab order, then export it back unchanged.
   const order = ['referrals', 'sweep', 'slots'];
   await suiteIo.suiteImport({ tabOrder: order });
