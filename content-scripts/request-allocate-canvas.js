@@ -32,7 +32,7 @@
   var INBOX_N_ID = 'ms-qac-inbox-n';
   var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.allocateCanvases) || 'suite.ui.allocateCanvases';
   var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
-  var OVERVIEW_CAP = 120;
+  var STAFF_HARVEST_CAP = 12;
   var OVERVIEW_CONCURRENCY = 4;
 
   function esc(s) {
@@ -335,7 +335,7 @@
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
-    if (withUrl.length > OVERVIEW_CAP) withUrl = withUrl.slice(0, OVERVIEW_CAP);
+    if (withUrl.length > STAFF_HARVEST_CAP) withUrl = withUrl.slice(0, STAFF_HARVEST_CAP);
     var patientId = '';
     (rows || []).forEach(function (r) {
       if (!patientId && r && r.patientId) patientId = r.patientId;

@@ -242,7 +242,7 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/function applyPileSplit[\s\S]{0,500}planEvenSplit/.test(canvas), 'request Split equally binds planEvenSplit');
   check(/function applyTopUp[\s\S]{0,500}planTopUp/.test(canvas), 'request Top up binds planTopUp');
   check(
-    /OVERVIEW_CAP/.test(canvas) && /OVERVIEW_CONCURRENCY/.test(canvas),
+    /STAFF_HARVEST_CAP/.test(canvas) && /OVERVIEW_CONCURRENCY/.test(canvas),
     'staff harvest uses the bounded overview pool'
   );
   check(/ms-ags-marquee/.test(canvas), 'people can be encircled into a group');

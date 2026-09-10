@@ -291,7 +291,7 @@ console.log('\n--- manifest.json wiring ---');
 {
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
   const medicusBlock = manifest.content_scripts.find(
-    (b) => Array.isArray(b.js) && b.js.some((f) => f.includes('problem-bulk-end.js'))
+    (b) => Array.isArray(b.js) && b.js.some((f) => f.includes('task-bulk-action.js'))
   );
   check(!!medicusBlock, 'found the medicus.health content-scripts block that other record-tidy widgets share');
   const js = medicusBlock.js;
