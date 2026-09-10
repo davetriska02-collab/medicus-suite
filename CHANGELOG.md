@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.26] — 2026-09-10
+
+### Organise post-board identity
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **Finalise.** After each cancel / move / stretch POST, re-GET the book.
+  A write counts only when `actionLandedOnBoard` is true: cancel-gone (or
+  cancelled row dropped), patient on the dest diary+start, or same slot at
+  the new duration. Staged items stay staged until that check passes.
+  A 200 that leaves the book unchanged is not success.
+- **Pin.** Re-check `assertUnmoved` before every item. `assertUnmoved` is
+  fail-closed if a pinned field is missing on live. The returned board
+  date must match the opened day.
+- **Tests.** Ghost cancel / move / stretch against `parseBoard` fixtures.
+  Canvas source-lock: no `writtenCount` landed list.
+
 ## [v3.261.25] — 2026-09-10
 
 ### Allocate confirm stitch (red-team)

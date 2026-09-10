@@ -79,9 +79,15 @@
   // Book/site/patient pin: refuse a write if the live identity moved.
   function assertUnmoved(pinned, live) {
     if (!pinned || !live) return false;
-    if (pinned.apiBase && live.apiBase && String(pinned.apiBase) !== String(live.apiBase)) return false;
-    if (pinned.date && live.date && String(pinned.date) !== String(live.date)) return false;
-    if (pinned.patientId && live.patientId && String(pinned.patientId) !== String(live.patientId)) return false;
+    if (pinned.apiBase) {
+      if (!live.apiBase || String(pinned.apiBase) !== String(live.apiBase)) return false;
+    }
+    if (pinned.date) {
+      if (!live.date || String(pinned.date) !== String(live.date)) return false;
+    }
+    if (pinned.patientId) {
+      if (!live.patientId || String(pinned.patientId) !== String(live.patientId)) return false;
+    }
     return true;
   }
 
