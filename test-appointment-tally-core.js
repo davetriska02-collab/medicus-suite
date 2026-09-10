@@ -271,6 +271,11 @@ console.log('\n--- source lock: injected widget ---');
   const organiseIdx = manifest.indexOf('shared/appointment-organise-core.js');
   check(organiseIdx !== -1 && organiseIdx < widgetIdx, 'organise core loads before the tally widget (parseBookRoute)');
   check(coreIdx !== -1 && coreIdx < widgetIdx, 'tally core loads before the tally widget');
+
+  const slotsSrc = fs.readFileSync(path.join(__dirname, 'side-panel', 'modules', 'slots', 'slots.js'), 'utf8');
+  check(slotsSrc.includes('bookedByType'), 'Slots tab also counts taken/booked');
+  check(slotsSrc.includes('unassignedDiaries'), 'Slots tab includes unassigned diaries');
+  check(slotsSrc.includes('slots-taken-line'), 'Slots hero renders a taken line');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

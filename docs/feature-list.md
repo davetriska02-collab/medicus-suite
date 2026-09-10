@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.19
+**Version:** v3.261.20
 **Generated:** 2026-09-10
 
 ## What it is
@@ -10,8 +10,8 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 ## At a glance
 
 - 20 side-panel tabs covering morning workflow, monitoring, capacity/demand, reception, referrals, staff rota, the Note display board and reference material (two of those tabs open a full-tab tool)
-- 3 full-tab tools reached from the panel or from Medicus's own pages (Duplicate Problem Checker, Rota Manager, Note display board)
-- around 15 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, appointment-book tally)
+- 4 full-tab tools reached from the panel or from Medicus's own pages (Duplicate Problem Checker, Rota Manager, Note display board, Contacts Management)
+- around 16 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, appointment-book tally, repeat-authorisation pills)
 - 8 rule types in the clinical alert engine
 - 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules (16 register + 66 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
 
@@ -21,8 +21,8 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 One morning screen: a headline sentence plus waiting-room count, triage queue load, today's demand, today's available slots, and the last pre-clinic sweep status.
 
 ### Slot Counter — v2.2
-Available appointment slots by type for any date, read live from Medicus's scheduling data.
-- Slot counts by type with configurable alert thresholds; CSV export
+Taken and free appointment counts by type for any date, read live from Medicus's scheduling data. The appointment book itself also carries an injected booked/free tally with the same type toggles.
+- Free remaining (with AM/PM) plus taken on this day's book; configurable alert thresholds; CSV export
 - "First available appointment" lookup with one-click booking handoff
 - Typable appointment-type filter on the booking picker
 - "Next working day" skips weekends and bank holidays for the practice's chosen nation (bundled GOV.UK calendar, England & Wales / Scotland / Northern Ireland)
@@ -141,12 +141,14 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 - **Practice Profile** — shared-folder managed deployment so rules, thresholds and pathways can be published once and picked up across every machine in the practice
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
+- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags)
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
 - **Diagnostics** — Event Ledger (machine-local record of what the suite has flagged), Suite health (self-diagnosis of the extension's own data pipeline), and Debug, collapsed into one Settings page
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.20 (10 Sep)** — QA polish: Slots shows taken as well as free; diary pills match; Trends/Forecast/Monitoring icons distinct; living docs drop Visualiser/Condor claims
 - **v3.261.19 (10 Sep)** — Appointment-book tally: injected booked/free button on the diary, same type toggles as Slot Counter
 - **v3.261.8 (8 Sep)** — Occupied/list strip hides you (Pusher myID / email / display name, not only staff UUID); occupancy look is a Suite table (colour, size, highlight) with click-the-alert on-the-fly changes; default fluoro yellow
 - **v3.261.7 (8 Sep)** — Occupied/list heading starts Note:; note wash not peach; queue shows 47 in this inbox from the task-list bridge

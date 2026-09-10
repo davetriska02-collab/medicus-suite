@@ -9,10 +9,13 @@
   --accent: #2563eb;
   --red: #dc2626;
   --r-md: 6px;
-  --r-lg: 10px;
+  --r-lg: 8px;
   --r-pill: 999px;
+  --shadow-2: 0 4px 14px rgba(15, 23, 42, 0.12);
   position: fixed;
-  z-index: 2147482989;
+  top: 12px;
+  right: 320px;
+  z-index: 2147482990;
   font:
     600 12px/1.2 -apple-system,
     BlinkMacSystemFont,
@@ -32,7 +35,7 @@
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
   border-radius: var(--r-pill);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--shadow-2);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -40,7 +43,12 @@
 #ms-apt-tally .ms-apt-tally-btn:hover,
 #ms-apt-tally .ms-apt-tally-btn[aria-expanded='true'] {
   border-color: var(--accent);
-  color: var(--accent);
+  background: #eff4fd;
+}
+
+#ms-apt-tally .ms-apt-tally-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 #ms-apt-tally .ms-apt-tally-label {
@@ -58,7 +66,7 @@
   color: var(--text-1);
   border: 1px solid var(--border-hi);
   border-radius: var(--r-lg);
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.28);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
   padding: 10px 12px 12px;
   font-weight: 400;
   z-index: 1;
@@ -163,7 +171,7 @@
 }
 
 #ms-apt-tally .ms-apt-tally-n.free {
-  color: var(--accent);
+  color: var(--text-1);
 }
 
 #ms-apt-tally .ms-apt-tally-total {

@@ -72,8 +72,6 @@ This re-renders `brand/app-icon.png` and `icons/icon-16/48/128.png`.
 - Side-panel nav
 - Pop-out titlebar
 - Options sidebar
-- About panel (mark + name + tagline)
-- Visualiser drop screen
 - Chrome extension icons (`icons/*.png`)
 
 ## Don't
@@ -83,5 +81,3 @@ This re-renders `brand/app-icon.png` and `icons/icon-16/48/128.png`.
 - Don't stretch the bezel or change its corner-radius ratio.
 - Don't bring the brand cyan into the clinical UI as an accent — it stays in the
   brand register; the live UI reserves colour for clinical status.
-- Don't re-theme the visualiser palette to the panel palette — only the mark is
-  shared; the visualiser keeps its NHS palette (see `CLAUDE.md`).

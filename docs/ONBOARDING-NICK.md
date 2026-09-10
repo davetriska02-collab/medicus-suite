@@ -90,7 +90,7 @@ Don't start with the hard problem. Warm up:
 1. Open a session (Route A) on the repo.
 2. Ask: *"Give me a tour of this codebase — what does this extension do and how
    is it laid out?"*
-3. Ask: *"What does the patient record visualiser do and where does it live?"*
+3. Ask: *"What does the Record tab do and where does it live?"*
 4. Ask it to make a trivial, safe change (e.g. fix a typo in a doc), commit it
    to a branch, and open a pull request. Watch the whole flow happen. Then
    close the PR without merging.
@@ -113,8 +113,7 @@ from **degraded codes** (codes that lost fidelity in transfer).
 
 **Where this lives in the code:**
 - Record parsing/extraction logic is in `engine/` (the extractors and
-  normalisers) and the patient record visualiser (`visualiser-core.html` +
-  `side-panel/modules/record/`).
+  normalisers) and the live Record tab (`side-panel/modules/record/`).
 - "Two entries that are identical except for a shifted date" is a
   **duplicate-detection rule**: walk the record, group entries that match on
   everything-except-date, flag the suspected duplicates.
