@@ -13,12 +13,15 @@
 (function (global) {
   var injectors = [];
   var started = Object.create(null);
+  var lastPlaceAt = Object.create(null);
   var booted = false;
   var unsubHub = null;
   var routeTick = null;
+  var visHandler = null;
   var testPath = '';
   var testSearch = '';
   var useTestLocation = false;
+  var PLACE_MS = 250;
 
   function loc() {
     if (useTestLocation) return { pathname: testPath, search: testSearch };
@@ -47,12 +50,14 @@
     if (existing) {
       existing.match = hooks.match;
       existing.start = hooks.start;
+      existing.place = hooks.place;
       existing.stop = hooks.stop;
     } else {
       injectors.push({
         id: id,
         match: hooks.match,
         start: hooks.start,
+        place: hooks.place,
         stop: hooks.stop,
       });
     }
@@ -69,16 +74,27 @@
         on = false;
       }
       if (on) {
-        started[inj.id] = true;
-        if (typeof inj.start === 'function') {
+        if (!started[inj.id]) {
           try {
-            inj.start();
+            if (typeof inj.start === 'function') inj.start();
+            started[inj.id] = true;
           } catch (_) {
-            /* isolate */
+            /* retry next sync */
+          }
+        } else if (typeof inj.place === 'function') {
+          var now = Date.now();
+          if (now - (lastPlaceAt[inj.id] || 0) >= PLACE_MS) {
+            lastPlaceAt[inj.id] = now;
+            try {
+              inj.place();
+            } catch (_) {
+              /* isolate */
+            }
           }
         }
       } else if (started[inj.id]) {
         started[inj.id] = false;
+        lastPlaceAt[inj.id] = 0;
         if (typeof inj.stop === 'function') {
           try {
             inj.stop();
@@ -103,6 +119,12 @@
       } else if (typeof setInterval === 'function') {
         routeTick = setInterval(sync, 1500);
       }
+      if (typeof document !== 'undefined') {
+        visHandler = function () {
+          if (!document.hidden) sync();
+        };
+        document.addEventListener('visibilitychange', visHandler);
+      }
     }
     sync();
   }
@@ -119,7 +141,11 @@
     });
     injectors = [];
     started = Object.create(null);
+    lastPlaceAt = Object.create(null);
     booted = false;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('popstate', sync);
+    }
     if (unsubHub) {
       try {
         unsubHub();
@@ -131,6 +157,10 @@
     if (routeTick) {
       clearInterval(routeTick);
       routeTick = null;
+    }
+    if (visHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', visHandler);
+      visHandler = null;
     }
     clearTestLocation();
   }

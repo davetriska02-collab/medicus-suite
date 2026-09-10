@@ -20,8 +20,21 @@ for (const [f, id] of Object.entries(files)) {
   assert(/InjectorRuntime/.test(src), `${f} uses InjectorRuntime`);
   assert(src.includes("register('" + id + "'") || src.includes('register("' + id + '"'), `${f} registers as ${id}`);
   assert(/function stopHeavyChrome\(|function stopBookChrome\(/.test(src), `${f} has a stop hook`);
+  assert(/place:\s*(ensureLauncher|tick)/.test(src), `${f} has a throttled place hook`);
   assert(!/__chObserverHub/.test(src), `${f} does not subscribe to the hub itself`);
   assert(!/already went/.test(src), `${f} does not claim the write already went`);
+}
+{
+  const extra = {
+    'content-scripts/allergy-cleanup.js': 'allergy-cleanup',
+    'content-scripts/problem-nesting.js': 'problem-nesting',
+  };
+  for (const [f, id] of Object.entries(extra)) {
+    const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
+    assert(src.includes("register('" + id + "'"), `${f} registers as ${id}`);
+    assert(/function stopHeavyChrome\(/.test(src), `${f} has a stop hook`);
+    assert(/parseCareRecordPath/.test(src) && /parseTaskOverviewPath/.test(src), `${f} route-gates to care-record / task overview`);
+  }
 }
 {
   const organise = fs.readFileSync(path.join(__dirname, 'content-scripts/appointment-organise-canvas.js'), 'utf8');

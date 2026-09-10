@@ -1824,32 +1824,73 @@
     return true;
   }
 
-  var _hub = window.__chObserverHub;
-  if (_hub && _hub.subscribe) {
-    _hub.subscribe(function (mutations) {
-      if (_isOwnMutation(mutations)) return;
-      scheduleScan();
-    });
-  } else {
-    var _obs = new MutationObserver(function (mutations) {
-      if (_isOwnMutation(mutations)) return;
-      scheduleScan();
-    });
-    _obs.observe(document.body, { childList: true, subtree: true });
+  var _hubUnsub = null;
+  var _ownObs = null;
+  var _scanInterval = null;
+  var _visHandler = null;
+
+  function nestingOnRoute() {
+    return !!(parseCareRecordPath(location.pathname) || parseTaskOverviewPath(location.pathname));
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) scheduleScan();
-  });
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleScan);
-  } else {
+  function startHeavyChrome() {
+    if (_scanInterval) return;
+    var hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      _hubUnsub = hub.subscribe(function (mutations) {
+        if (_isOwnMutation(mutations)) return;
+        scheduleScan();
+      });
+    } else if (document.body) {
+      _ownObs = new MutationObserver(function (mutations) {
+        if (_isOwnMutation(mutations)) return;
+        scheduleScan();
+      });
+      _ownObs.observe(document.body, { childList: true, subtree: true });
+    }
+    _visHandler = function () {
+      if (!document.hidden) scheduleScan();
+    };
+    document.addEventListener('visibilitychange', _visHandler);
     scheduleScan();
+    _scanInterval = setInterval(function () {
+      if (!document.hidden) scheduleScan();
+    }, 5000);
   }
 
-  // Safety-net periodic rescan — same rationale as allergy-cleanup.js's.
-  setInterval(function () {
-    if (!document.hidden) scheduleScan();
-  }, 5000);
+  function stopHeavyChrome() {
+    if (_hubUnsub) {
+      try {
+        _hubUnsub();
+      } catch (_) {}
+      _hubUnsub = null;
+    }
+    if (_ownObs) {
+      _ownObs.disconnect();
+      _ownObs = null;
+    }
+    if (_scanInterval) {
+      clearInterval(_scanInterval);
+      _scanInterval = null;
+    }
+    if (_visHandler) {
+      document.removeEventListener('visibilitychange', _visHandler);
+      _visHandler = null;
+    }
+    var widget = document.getElementById('ms-pn-widget');
+    if (widget) widget.remove();
+  }
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('problem-nesting', {
+      match: function () {
+        return nestingOnRoute();
+      },
+      start: startHeavyChrome,
+      stop: stopHeavyChrome,
+    });
+  } else {
+    startHeavyChrome();
+  }
 })();
