@@ -335,11 +335,11 @@ console.log('\n--- canvas + manifest source locks ---');
   // A part-written batch leaves the board claiming work Medicus already took.
   // The failure path must re-read before it tells anyone to check the queue.
   check(
-    /result\.written > 0[\s\S]{0,200}?await loadBoard\(\)/.test(canvas),
-    'a partly-written batch re-reads the queue instead of leaving stale staged tiles'
+    /\(result\.written > 0 \|\| result\.posted > 0\)/.test(canvas),
+    'a settled POST re-reads the queue even when confirm GET landed none'
   );
   check(
-    /await loadBoard\(\);\s*_error = failReason;/.test(canvas),
+    /await loadBoard\(\);[\s\S]{0,280}?\n\s*_error = failReason;/.test(canvas),
     'the partial-write reason survives that reload — loadBoard clears _error'
   );
   check(!/\.click\(\)/.test(canvas), 'canvas does not synthesise Medicus clicks');
@@ -1544,6 +1544,9 @@ async function testClient() {
     seqWritten.partial === true && seqWritten.written === 1,
     'a later dest failing still keeps the dests already written'
   );
+  check(seqWritten.ok === false, 'mixed 2xx+5xx is not ok');
+  check(seqWritten.wanted === 2 && seqWritten.failed === 1, 'wanted is every planned id, including the dest that 5xx’d');
+  check(seqWritten.posted === 1, 'posted counts only the 2xx dest');
   check(
     seqPosts.some(function (p) {
       return p.assigneeId === idA;
@@ -1589,11 +1592,119 @@ async function testClient() {
     rows: [row],
     taskList: out.taskList,
     directory: dir,
+    confirmRetryMs: 0,
   });
   check(
-    ghost.ok === false && ghost.written === 0,
+    ghost.ok === false && ghost.written === 0 && ghost.posted === 1,
     'POST 200 that does not change assignedId is not a write success'
   );
+
+  const noCorePosts = [];
+  const noCore = C.createClient('https://e38a9f.api.england.medicus.health', {
+    WriteCore: null,
+    fetchImpl: async function (url, opts) {
+      if (/bulk-reassign/.test(url)) {
+        noCorePosts.push(url);
+        return {
+          ok: true,
+          status: 200,
+          text: async function () {
+            return JSON.stringify({ ok: true });
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify({
+            taskList: 'envelope-token',
+            tasks: [
+              {
+                id: uuid(1),
+                patientName: 'A',
+                assignedTo: 'Investigation Reports',
+              },
+            ],
+          });
+        },
+      };
+    },
+  });
+  const noCoreOut = await noCore.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(
+    noCoreOut.ok === false && noCoreOut.written === 0 && /WriteCore missing/.test(noCoreOut.reason),
+    'WriteCore missing fails closed and does not count a POST'
+  );
+  check(noCorePosts.length === 0, 'WriteCore missing does not POST');
+
+  let lagListGets = 0;
+  let lagPosts = 0;
+  const lagClient = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      if (/bulk-reassign/.test(url)) {
+        lagPosts++;
+        return {
+          ok: true,
+          status: 200,
+          text: async function () {
+            return JSON.stringify({ ok: true });
+          },
+        };
+      }
+      if (/task-list/.test(url)) {
+        lagListGets++;
+        const landed = lagPosts > 0 && lagListGets >= 3;
+        return {
+          ok: true,
+          status: 200,
+          text: async function () {
+            return JSON.stringify({
+              taskList: 'envelope-token',
+              tasks: [
+                {
+                  id: uuid(1),
+                  patientName: 'A',
+                  assignedTo: landed ? 'Dr Natalie Azadian' : 'Investigation Reports',
+                  assignedId: landed ? uuid(21) : undefined,
+                  requestedBy: 'AZADIAN N',
+                },
+              ],
+            });
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify({ ok: true });
+        },
+      };
+    },
+  });
+  const lag = await lagClient.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+    confirmRetryMs: 0,
+  });
+  check(lag.ok === true && lag.written === 1, 'stale first confirm GET then landed retry is success');
+  check(lagListGets >= 3, 'confirm GET is retried once after a miss');
+
+  const dropped = C.unstageIds(
+    C.stageMove(C.emptyDraft(), uuid(1), C.clinicianColumnKey('Dr Natalie Azadian')),
+    [uuid(1)]
+  );
+  check(!dropped.moves[uuid(1)], 'unstageIds drops landed moves so team dests are not re-sent');
 
   const staffFormCalls = [];
   const staffClient = C.createClient('https://e38a9f.api.england.medicus.health', {

@@ -1230,8 +1230,11 @@
         // staged, so the count says work is pending that Medicus already
         // took. Re-read before telling the clinician to check the queue —
         // loadBoard() clears _error, so restore the message after it.
-        if (result && result.written > 0) {
+        if (result && (result.written > 0 || result.posted > 0)) {
           await loadBoard();
+          if (result.landedIds && result.landedIds.length && C.unstageIds) {
+            _draft = C.unstageIds(_draft, result.landedIds);
+          }
           _error = failReason;
           render();
           return;
@@ -1288,7 +1291,6 @@
     _expandedChip = '';
     _confirmClose = false;
     _confirmWrite = null;
-    _writing = false;
     _taskList = undefined;
     _staffDir = C.harvestStaffDirectory([], null);
     _teamDir = C.harvestTeamDirectory([], null);
@@ -1300,6 +1302,7 @@
   }
 
   function openOverlay() {
+    if (_writing) return;
     _route = currentRoute();
     if (!_route) return;
     _open = true;
@@ -1350,7 +1353,7 @@
       if (_open) closeOverlay();
       return;
     }
-    _route = route;
+    if (!_writing) _route = route;
     var launchLabel = route.kind === 'document' ? 'Allocate documents on canvas…' : 'Allocate on canvas…';
     if (!launch) {
       launch = document.createElement('button');

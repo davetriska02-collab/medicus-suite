@@ -503,6 +503,7 @@
     addTeamColumn: Lab.addTeamColumn,
     stageMove: Lab.stageMove,
     stageMoves: Lab.stageMoves,
+    unstageIds: Lab.unstageIds,
     draftSummary: Lab.draftSummary,
     homeColumnKey: Lab.homeColumnKey,
     normaliseTaskRow: Lab.normaliseTaskRow,

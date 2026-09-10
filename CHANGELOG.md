@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.25] — 2026-09-10
+
+### Allocate confirm stitch (red-team)
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **WriteCore missing fails closed.** `commitAllocations` does not POST if WriteCore is absent. Manifest order `write-core.js` before `lab-allocate-core.js` is test-locked. A ghost 200 is still not success.
+- **Confirm GET.** One retry when the first re-GET does not show the new `assignedId`. `posted` is the 2xx count; canvases `loadBoard` when `written > 0 || posted > 0`. `wantedIds` is the full plan, not only 2xx batches. Landed ids (including team dests) are unstaged so they are not re-sent.
+- **Rx/request** snapshot `{ apiBase, slug, search }` into `fetchList` so a mid-write SPA nav cannot retarget the confirm GET.
+- **Organise.** `stop()` force-removes the overlay even while Finalise is in flight. Confirm copy no longer says the write “already went”. Organise still counts throw-free POSTs — 3.261.24 did not add a post-board identity check.
+
 ## [v3.261.24] — 2026-09-10
 
 ### Injector runtime + WriteCore on allocate

@@ -2677,16 +2677,21 @@
     _error = null;
     render();
     try {
-      var result = await client().commitAllocations({
+      var pin = {
+        apiBase: _route && _route.apiBase,
         slug: _route && _route.slug,
         search: _route && _route.search,
+      };
+      var result = await client().commitAllocations({
+        slug: pin.slug,
+        search: pin.search,
         draft: _draft,
         rows: _rows,
         taskList: _taskList,
         directory: _staffDir,
         teamDirectory: _teamDir,
         fetchList: function () {
-          return C.fetchRequestMergedTaskList(_route.apiBase, _route.slug, _route.search, {
+          return C.fetchRequestMergedTaskList(pin.apiBase, pin.slug, pin.search, {
             requireSitting: true,
           });
         },
@@ -2701,8 +2706,11 @@
         // staged, so the count says work is pending that Medicus already
         // took. Re-read before telling the clinician to check the queue -
         // loadBoard() clears _error, so restore the message after it.
-        if (result && result.written > 0) {
+        if (result && (result.written > 0 || result.posted > 0)) {
           await loadBoard({ skipSplit: true });
+          if (result.landedIds && result.landedIds.length && C.unstageIds) {
+            _draft = C.unstageIds(_draft, result.landedIds);
+          }
           _error = failReason;
           _writing = false;
           render();
@@ -2773,7 +2781,6 @@
     _openDests = {};
     _confirmClose = false;
     _confirmWrite = null;
-    _writing = false;
     _taskList = undefined;
     _staffDir = C.harvestStaffDirectory([], null);
     _teamDir = C.harvestTeamDirectory([], null);
@@ -2794,6 +2801,7 @@
   }
 
   function openOverlay() {
+    if (_writing) return;
     _route = currentRoute();
     if (!_route) return;
     _open = true;
@@ -2862,7 +2870,7 @@
       if (_open) closeOverlay();
       return;
     }
-    if (!_open) _route = route;
+    if (!_open && !_writing) _route = route;
     if (_inboxCountSlug && _inboxCountSlug !== route.slug) {
       _inboxCount = 0;
       _inboxCountSlug = '';
