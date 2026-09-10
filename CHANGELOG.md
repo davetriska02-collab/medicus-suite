@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.20] — 2026-09-10
+
+### QA polish — taken counts, matching diary pills, honest copy
+
+Patch on 3.261 so the hazard-log CSO-gap gate does not trip.
+
+A multi-agent pass after the appointment-book tally merge. Slot Counter
+only showed free remaining; the diary tally showed booked + free. Those
+two surfaces now agree, and a handful of leftover Visualiser/Condor
+claims in living docs are gone.
+
+- **Slots tab** shows **taken on this day’s book** next to free remaining
+  (same type toggles). Fully booked types still appear in the list.
+  Unassigned diaries and cancelled sessions match the diary tally.
+  Type ticks on the book are not overwritten by stale Slots UI state.
+  A fast date change on the book no longer paints yesterday’s counts.
+- **Diary pills** (tally + Organise) share height, hover wash, parking
+  CSS, and a focus ring — they no longer flash as two different buttons.
+- **Nav icons:** Monitoring is a pulse (not a star); Forecast is capacity
+  bars (not the same sparkline as Trends). Options uses `icons/icon-48.png`
+  instead of downsampling the 512px brand raster.
+- **Copy:** Trends `?` help described practice figures — it is the open
+  patient’s charts. README, VISION, Onboarding, brand guide, and
+  feature-list no longer sell the removed PDF visualiser / Condor tab.
+
+Frozen CSO documents (INTENDED-PURPOSE, CLINICAL-SAFETY-NOTICE, HAZARD-LOG,
+SOUP) still mention those pruned surfaces; they need a CSO re-freeze, not
+a silent edit.
+
 ## [v3.261.19] — 2026-09-10
 
 ### Appointment-book tally

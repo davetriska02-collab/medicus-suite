@@ -56,13 +56,13 @@ export const TAB_HELP = {
   },
   trends: {
     title: 'Trends',
-    what: 'How key practice figures have moved over time, shown as charts.',
-    firstStep: 'Pick a measure and time window to see the trend line.',
+    what: 'Charts of the open patient’s blood pressure, kidneys, anticoagulant CrCl, HbA1c, cholesterol and weight.',
+    firstStep: 'Open a patient in Medicus, then pick a measure to see the trend.',
   },
   reception: {
     title: 'Reception',
-    what: 'Quick-reference pathways to help reception direct patient requests to the right place.',
-    firstStep: 'Search or browse for the request type to see the suggested pathway.',
+    what: 'Front-desk tools: guided call capture, patient status, and gated appointment booking.',
+    firstStep: 'Open a patient, or search a request type for the call script.',
   },
   signing: {
     title: 'Signing',

@@ -19,7 +19,7 @@ the core EPR job well — modern UI, integration, the fundamentals — but like 
 EPR it is a *general* system. The deep, opinionated, power-user intelligence that a
 working GP wants on top of the record (capacity forecasting, proactive per-patient
 safety monitoring, free-text triage red-flagging, reception decision support,
-operational dashboards, an offline record visualiser) is not something any vendor
+operational dashboards, a live record snapshot) is not something any vendor
 ships out of the box, and historically clinicians have waited years for it to
 arrive through the slow channels of vendor roadmaps, procurement, and integration
 politics.
@@ -71,6 +71,8 @@ OptimiseRx, APEX, GP Automate, Accurx) from primary sources:
 > operations, and an offline record visualiser **in one tool**; every commercial
 > competitor owns exactly one of those columns.
 
+*(Gauntlet 2026-06-11. The PDF visualiser was removed in v3.255; the live Record tab is the replacement snapshot.)*
+
 Three capabilities appear to be genuine white space — not matched by any of the seven
 competitors reviewed:
 
@@ -116,9 +118,9 @@ code-verified capability.
 | Investigation-results queue severity triage | Lab flags shown | ✅ Per-row chips: urgent, N-abnormal, under-prioritised, unmatched; can escalate never suppress lab flags |
 | Reception-facing red-flag decision support | — | ✅ Guided capture pathways with 999/duty escalation; ship disabled pending practice sign-off |
 | Pre-clinic population sweep (today's book, worst-first) | — | ✅ Sweep — monitoring rules across today's appointments before clinic |
-| Demand / capacity / operations dashboards | Basic scheduling views | ✅ Slots, Capacity Forecast, Condor (8 metrics), Submissions, Activity, Referrals |
+| Demand / capacity / operations dashboards | Basic scheduling views | ✅ Slots (taken + free), Capacity Forecast, Note (ops board), Submissions, Activity, Referrals |
 | Longitudinal observation trends with clinical context | Values in record | ✅ Trends — sparklines, KDIGO grid, age/register-derived BP targets |
-| Offline EPR-export record visualiser | — | ✅ Local PDF analysis: continuity indices, eFI, PINCER flags, trends, swim-lane timeline |
+| Live patient snapshot in the panel | Values in the record | ✅ Record — problems, meds, results, safety chips from the open patient (the PDF visualiser was removed in v3.255) |
 | Practice knowledge base / reference | General docs | ✅ Searchable, practice-owned, categorised reference base |
 | Recall loop management (invite → book → re-test) | Recall tooling | ⚠️ Not yet — stops at chip + Action Pack |
 | Writes back to the record | ✅ System of record | ⚠️ Bounded, user-initiated, confirmed overlay of Medicus's own endpoints — Medicus remains the system of record |

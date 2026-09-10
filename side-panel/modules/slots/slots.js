@@ -170,12 +170,12 @@ export async function init(el) {
     API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
   }
 
-  // Restore persisted view state (expanded staff rows, showExcluded flag)
-  // hiddenTypes is already covered by slots.hiddenTypes in chrome.storage;
-  // expanded and showExcluded are lightweight ephemeral UI state.
+  // Restore persisted view state (expanded staff rows, showExcluded flag).
+  // slots.hiddenTypes is the live source of truth (the appointment-book tally
+  // writes that key). Do not let a stale suite.uiState.slots copy clobber it.
   const savedUi = await loadUiState('slots');
   if (savedUi) {
-    if (Array.isArray(savedUi.hiddenTypes))
+    if (!stored['slots.hiddenTypes'] && Array.isArray(savedUi.hiddenTypes))
       state.hiddenTypes = new Set(savedUi.hiddenTypes.filter((t) => typeof t === 'string'));
     if (typeof savedUi.showExcluded === 'boolean') state.showExcluded = savedUi.showExcluded;
     if (Array.isArray(savedUi.expanded))
@@ -327,47 +327,73 @@ function emptyAmPm() {
   return { am: 0, pm: 0 };
 }
 
+function isCancelledAppointment(entry) {
+  const st = String(entry?.displayStatus?.value || '').toLowerCase();
+  if (st === 'cancelled') return true;
+  const a = entry?.appointmentStatus || {};
+  return !!(a.isCancelled || String(a.value || '').toLowerCase() === 'cancelled');
+}
+
+function countEntry(entry, isToday, now, byType, staffByType, staffTotal, total, bookedByType, bookedTotal) {
+  const kind = entry?.diaryEntryType?.value;
+  const type = entry?.appointmentType?.name || 'Unknown';
+  const bucket = bucketOf(entry);
+  if (kind === 'appointment') {
+    if (isCancelledAppointment(entry)) return;
+    if (!bookedByType[type]) bookedByType[type] = emptyAmPm();
+    bookedByType[type][bucket]++;
+    bookedTotal[bucket]++;
+    return;
+  }
+  if (kind !== 'slot') return;
+  // Time filter for today: skip slots whose start is in the past
+  if (isToday && entry.startDateTime) {
+    const slotTime = new Date(entry.startDateTime);
+    if (slotTime < now) return;
+  }
+  if (!byType[type]) byType[type] = emptyAmPm();
+  if (!staffByType[type]) staffByType[type] = emptyAmPm();
+  byType[type][bucket]++;
+  staffByType[type][bucket]++;
+  staffTotal[bucket]++;
+  total[bucket]++;
+}
+
 function aggregate(raw, forDate) {
   const byType = {};
+  const bookedByType = {};
   const byStaff = [];
   const total = emptyAmPm();
+  const bookedTotal = emptyAmPm();
 
   // For today, filter to slots that haven't started yet
   const isToday = forDate === todayISO();
   const now = new Date();
 
-  (raw.staffSchedules || []).forEach((staff) => {
+  function walkStaff(name, sessions) {
     const staffTotal = emptyAmPm();
     const staffByType = {};
-
-    (staff.schedule || []).forEach((session) => {
+    (sessions || []).forEach((session) => {
+      if (session?.scheduleType === 'unavailability-period') return;
+      if (session?.summary?.status?.isCancelled) return;
       (session.entries || []).forEach((entry) => {
-        if (entry.diaryEntryType?.value !== 'slot') return;
-
-        // Time filter for today: skip slots whose start is in the past
-        if (isToday && entry.startDateTime) {
-          const slotTime = new Date(entry.startDateTime);
-          if (slotTime < now) return;
-        }
-
-        const type = entry.appointmentType?.name || 'Unknown';
-        const bucket = bucketOf(entry);
-        if (!byType[type]) byType[type] = emptyAmPm();
-        if (!staffByType[type]) staffByType[type] = emptyAmPm();
-        byType[type][bucket]++;
-        staffByType[type][bucket]++;
-        staffTotal[bucket]++;
-        total[bucket]++;
+        countEntry(entry, isToday, now, byType, staffByType, staffTotal, total, bookedByType, bookedTotal);
       });
     });
-
-    if (staffTotal.am + staffTotal.pm > 0) {
-      byStaff.push({ name: staff.name || 'Unknown', total: staffTotal, byType: staffByType });
+    if (staffTotal.am + staffTotal.pm > 0 || Object.keys(staffByType).length > 0) {
+      byStaff.push({ name: name || 'Unknown', total: staffTotal, byType: staffByType });
     }
+  }
+
+  (raw.staffSchedules || []).forEach((staff) => {
+    walkStaff(staff.name || 'Unknown', staff.schedule);
   });
+  if (raw.unassignedDiaries && raw.unassignedDiaries.length) {
+    walkStaff('Unassigned', raw.unassignedDiaries);
+  }
 
   byStaff.sort((a, b) => a.name.localeCompare(b.name));
-  return { total, byType, byStaff, isToday };
+  return { total, byType, bookedByType, bookedTotal, byStaff, isToday };
 }
 
 function sumAmPm(o) {
@@ -503,12 +529,14 @@ function renderHeader() {
 function renderHeroCard(visible, visibleSum) {
   const d = state.data;
   // Suppress hero card when there are no sessions at all (empty state, Decision F)
-  if (!d || Object.keys(d.byType).length === 0) return '';
+  if (!d || (Object.keys(d.byType).length === 0 && Object.keys(d.bookedByType || {}).length === 0)) return '';
 
   const isToday = d.isToday;
   const level = overallAlertLevel(d.byType);
   const labelCls = visibleSum === 0 ? ' zero' : level ? ` ${level}` : '';
   const cardCls = level ? ` slots-hero-card--${level}` : '';
+  const bookedVisible = visibleTotal(d.bookedByType || {}, state.hiddenTypes);
+  const bookedSum = sumAmPm(bookedVisible);
 
   return `
     <div class="slots-hero-card${cardCls}">
@@ -516,6 +544,7 @@ function renderHeroCard(visible, visibleSum) {
         <div class="slots-count-hero">${visibleSum.toLocaleString('en-GB')}</div>
         <div class="slots-hero-right">
           <div class="slots-count-label${labelCls}">${isToday ? 'Free slots remaining today' : 'Free slots available'}</div>
+          <div class="slots-taken-line">${bookedSum.toLocaleString('en-GB')} taken on this day\u2019s book</div>
           <div class="slots-ampm-split">
             <span class="ampm-chip ampm-am"><span class="ampm-tag">AM</span><span class="ampm-num">${visible.am.toLocaleString('en-GB')}</span></span>
             <span class="ampm-chip ampm-pm"><span class="ampm-tag">PM</span><span class="ampm-num">${visible.pm.toLocaleString('en-GB')}</span></span>
@@ -683,7 +712,10 @@ function renderSkeleton() {
 }
 
 function renderData(d, visible, visibleSum) {
-  if (!d.byType || Object.keys(d.byType).length === 0) {
+  if (
+    (!d.byType || Object.keys(d.byType).length === 0) &&
+    (!d.bookedByType || Object.keys(d.bookedByType).length === 0)
+  ) {
     // Designed empty state (Decision F) — hero is already suppressed by renderHeroCard
     return `
       <div class="slots-empty-state">
@@ -694,7 +726,10 @@ function renderData(d, visible, visibleSum) {
     `;
   }
 
-  const entries = Object.entries(d.byType).sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]));
+  const typeNames = new Set([...Object.keys(d.byType || {}), ...Object.keys(d.bookedByType || {})]);
+  const entries = [...typeNames]
+    .map((t) => [t, d.byType[t] || emptyAmPm()])
+    .sort((a, b) => sumAmPm(b[1]) - sumAmPm(a[1]) || a[0].localeCompare(b[0]));
   const ticked = entries.filter(([t]) => !state.hiddenTypes.has(t));
   const unticked = entries.filter(([t]) => state.hiddenTypes.has(t));
   const showExcluded = state.showExcluded || false;

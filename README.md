@@ -5,11 +5,10 @@
 # Medicus Suite
 
 Chrome extension toolkit for GP practices using the Medicus clinical system.
-Bundles slot counter, capacity forecast, submissions tracker, clinical
-monitoring (Sentinel), activity report, referrals tracker, trend charts,
-reception pathways, pre-clinic sweep, practice knowledge base, triage lens,
-and triage request monitor into one extension that reads the user's
-logged-in Medicus session.
+A side panel plus in-page overlays on the live Medicus session: Slot Counter
+(taken and free), capacity forecast, clinical monitoring, triage red-flags,
+reception tools, pre-clinic sweep, Record, Note display board, rota, and
+the rest of the tabs listed in [`docs/feature-list.md`](docs/feature-list.md).
 
 Built by Dr Dave Triska (Witley & Milford Surgery). Not affiliated with
 Medicus the company.

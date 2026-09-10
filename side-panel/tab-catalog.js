@@ -16,9 +16,13 @@
 
 export const TAB_CATALOG = [
   { id: 'today', name: 'Today', blurb: 'Your morning at a glance — waiting room, demand, slots, sweep.' },
-  { id: 'slots', name: 'Slots', blurb: 'Live bookable-slot counts by appointment type.' },
+  { id: 'slots', name: 'Slots', blurb: 'Taken and free appointment counts by type for any date.' },
   { id: 'sentinel', name: 'Monitoring', blurb: 'Per-patient alerts: drug monitoring, QOF and vaccines.' },
-  { id: 'trends', name: 'Trends', blurb: 'Charts of the open patient’s BP, renal function, anticoagulant CrCl, HbA1c and weight.' },
+  {
+    id: 'trends',
+    name: 'Trends',
+    blurb: 'Charts of the open patient’s BP, renal function, anticoagulant CrCl, HbA1c and weight.',
+  },
   { id: 'capacity', name: 'Forecast', blurb: 'Calendar of future appointment capacity against your minimums.' },
   { id: 'submissions', name: 'Submissions', blurb: 'Incoming task volumes by type, with demand thresholds.' },
   { id: 'activity', name: 'Activity', blurb: 'Staff activity report over a date range.' },
