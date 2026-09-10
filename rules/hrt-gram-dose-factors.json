@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "description": "Grams-per-dose conversion factors for HRT/testosterone gel and cream products issued by weight (quantityAndUnit in grams) but dosed by a discrete applicator count (pumps/actuations/applications) in free-text dosageInstruction -- a genuinely different shape from tablets/capsules/patches, where the issued quantity IS already the same discrete unit the dose is written in. `match` is a case-insensitive regex tried against the item's product/description text; `gramsPerDose` is pack size (g) / doses per pack, i.e. how many grams ONE pump/application actually delivers. Source: Nick's own practice HRT-prescribing spreadsheet (\"HRT prescribing checker.xlsx\", supplied 2026-09-09), which already carries this exact packSize/packDoses model per product -- cross-checked against real API data for the first entry (see its own note). Only products with reasonably firm evidence are listed; do not add a product here on the strength of the spreadsheet's own hardcoded 'grams per pump' figure alone if it looks inconsistent with the SPC, ask first.",
+  "products": [
+    {
+      "match": "estradiol.*0\\.06%.*gel",
+      "displayName": "Estradiol 0.06% gel (Oestrogel)",
+      "doseUnit": "pump",
+      "gramsPerDose": 1.25,
+      "note": "80g pack, 64 actuations/pack (spreadsheet's own lookup row) -> 1.25g/actuation. Matches the product's real-world metered-dose pump (1.25g gel = 750 micrograms estradiol per actuation), which lines up with the exact product name confirmed live in HAR 117-HRT-gel.har: 'Estradiol 0.06% transdermal gel (750microgram per actuation)'. Medicus's own expectedEndDate on that same item did not land on the same day-count as this computes -- left as a labelled estimate only (daysClause), never asserted over a reported figure, same discipline as the patch/tablet cases."
+    },
+    {
+      "match": "testogel",
+      "displayName": "Testogel 16.2mg/g gel",
+      "doseUnit": "pump",
+      "gramsPerDose": 1.25,
+      "note": "88g pack (spreadsheet comment: '88 is pack size'), 1.25g/actuation -- this figure is the spreadsheet's own direct input (not itself derived from a pack-size/doses-per-pack division there), so treat as slightly less independently verified than the Estradiol/Oestrogel entry above until cross-checked against a real Testogel HAR capture."
+    },
+    {
+      "match": "estriol.*0\\.01%.*vaginal cream",
+      "displayName": "Estriol 0.01% vaginal cream",
+      "doseUnit": "application",
+      "gramsPerDose": 0.5,
+      "note": "15g tube, 30 applications/tube (spreadsheet comment: '15g = 30 doses') -> 0.5g/application. Not yet cross-checked against a real HAR capture for this product specifically."
+    },
+    {
+      "match": "estriol.*1\\s*mg\\/g.*vaginal cream",
+      "displayName": "Estriol 1mg/g vaginal cream with applicator",
+      "doseUnit": "application",
+      "gramsPerDose": 0.5,
+      "note": "Same 15g tube / 30 applications-per-tube (0.5g/application) as the '0.01%' entry above -- Nick confirmed this is the actual product name/strength this practice prescribes (2026-09-09), given as its own separate entry (different match text: '1mg/g'/'with applicator' vs '0.01%') rather than replacing the existing one, since it's not yet confirmed whether these are the same real product under two different spreadsheet/BNF names or two genuinely distinct ones -- worth a live HAR capture to settle. On a typical twice-weekly maintenance dose, a single 15g tube works out to 15g / 0.5g-per-application / (2/7 per day) = 105 days, matching the figure Nick quoted from the same spreadsheet calculator. CONFIRMED LIVE 2026-09-10 (HAR 118-oestrogen-gel.har): a real item for this exact product, quantityAndUnit '15 gram', dosageInstruction 'TWICE WEEKLY LONG TERM' -- note this real dosage text carries NO 'application'/'pump' word at all (unlike every other product on this list so far), which is what motivated shared/repeat-authorisation.js's gelDosesPerDay() to assume one dose per administration when no count word is present, specifically for this gram-based path -- see that function's own comment for the full reasoning."
+    }
+  ]
+}

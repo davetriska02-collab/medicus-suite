@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.261.17",
+  "version": "3.261.18",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -127,6 +127,8 @@
         "content-scripts/allergy-cleanup-canvas.js",
         "shared/risk-flag-cleanup-core.js",
         "content-scripts/risk-flag-cleanup.js",
+        "shared/repeat-authorisation.js",
+        "content-scripts/repeat-prescribing-pills.js",
         "shared/presence-look.js",
         "content-scripts/task-presence.js",
         "content-scripts/task-bulk-action.js",
@@ -184,6 +186,7 @@
         "rules/allergy-junk-codes.json",
         "rules/allergy-substance-conversion.json",
         "rules/problem-nesting-overrides.json",
+        "rules/hrt-gram-dose-factors.json",
         "shared/booking-core.js",
         "side-panel/modules/sentinel/passport.html"
       ],

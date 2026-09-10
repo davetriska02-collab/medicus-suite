@@ -2,6 +2,43 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.18] — 2026-09-09
+
+### Repeat-prescribing authorisation pills
+
+Patch on 3.261 so the hazard-log CSO-gap gate (HARD_FAIL at 60 minors /
+3.262) does not trip. Not a new minor.
+
+A small "Fixed"/"Unclear"/"Until review date" pill, plus a days-supply
+figure, on every screen a repeat prescription's authorisation type and
+days-supply matter — helping a practice identify and migrate items still
+on a fixed-number-of-issues basis onto "until medication review date".
+
+- **Three screens:** the Medication tab, prescription-request task
+  overviews, and — hardest to reach, since it's a modal with no URL of its
+  own — the individual re-authorise/modify popup. That last screen carries
+  a direct `authorisationMethod` field (not inferred from ambiguous status
+  text like the other two), so it's the one place the pill can positively
+  assert "Until review date" rather than falling back to "Unclear".
+- **Days-supply cross-check:** independently recomputes quantity ÷
+  confident daily dose and flags a genuine disagreement against Medicus's
+  own reported figure — deliberately fails closed on anything ambiguous
+  (PRN wording, dose ranges, an unrecognised unit). Covers tablets,
+  capsules, patches, and — new this release — inhaler doses/puffs (1
+  puff = 1 dose, no lookup needed) and gram-issued HRT gels/creams via a
+  new product-specific factor table, `rules/hrt-gram-dose-factors.json`.
+- **Same-batch outlier flag:** once every item's own days-supply is known,
+  flags whichever drug disagrees with the rest of the same reauthorisation
+  batch — on the task-overview screen, across a batch of drugs; on the
+  re-authorise-form screen, against the patient's whole current repeat
+  list, catching Medicus's own quantity auto-adjust silently drifting one
+  drug onto a different interval than the rest.
+- `shared/repeat-authorisation.js` (new), `content-scripts/repeat-prescribing-pills.js`
+  (new), `rules/hrt-gram-dose-factors.json` (new). Extends
+  `content-scripts/triage-lens/page-world.js`'s existing MAIN-world
+  network-observation pattern to learn the re-authorise popup's
+  prescription id, since the popup never changes the page URL.
+
 ## [v3.261.17] — 2026-09-09
 
 ### Monitoring tasks — who is away
