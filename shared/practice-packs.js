@@ -21,9 +21,16 @@
     contactsCanvas: 'suite.ui.contactsCanvas',
     routineRxButton: 'suite.ui.routineRxButton',
     quickActionsWidget: 'suite.ui.quickActionsWidget',
+    focusAlerts: 'suite.ui.focusAlerts',
   };
 
-  const GRANDFATHER_KEYS = [KEYS.allocateCanvases, KEYS.contactsCanvas, KEYS.routineRxButton, KEYS.quickActionsWidget];
+  const GRANDFATHER_KEYS = [
+    KEYS.allocateCanvases,
+    KEYS.contactsCanvas,
+    KEYS.routineRxButton,
+    KEYS.quickActionsWidget,
+    KEYS.focusAlerts,
+  ];
 
   const ALL_PACK_KEYS = [KEYS.softFlags].concat(GRANDFATHER_KEYS);
 
@@ -33,6 +40,7 @@
     'ui.contactsCanvas': 'contactsCanvas',
     'ui.routineRxButton': 'routineRxButton',
     'ui.quickActionsWidget': 'quickActionsWidget',
+    'ui.focusAlerts': 'focusAlerts',
   };
 
   const _raw = Object.create(null);

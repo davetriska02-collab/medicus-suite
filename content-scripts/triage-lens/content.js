@@ -6307,6 +6307,26 @@
   let _queueFocusAlertsOn = false; // OFF by default (plan item 1.2)
   let _queueStatusBarRafPending = false;
 
+  // Practice-features gate for the WHOLE queue status bar (counts + jump
+  // button + Focus-alerts button together) — Nick's own request, 2026-09-10,
+  // corrected the same day after a live test showed a practice that doesn't
+  // want this bar at all needs the ENTIRE thing gone, not just the one
+  // button (the original build only hid the button, leaving the counts/jump
+  // readout behind — wrong scope). Grandfathered ON (shared/practice-packs.js)
+  // since the bar has always shipped enabled — a missing/undecided key must
+  // not silently remove chrome an existing install already has.
+  // shared/practice-packs.js MUST load BEFORE this file in manifest.json's
+  // content_scripts array (fixed 2026-09-10, was the other way round): the
+  // synchronous init line just below runs at top-level script-parse time,
+  // not lazily — if window.PracticePacks isn't defined yet at that exact
+  // moment, _focusAlertsPackOn is permanently stuck at its `true` fallback.
+  // Wired via bindInjector (full start/stop lifecycle), same as every other
+  // whole-widget pack (routineRxButton, quickActionsWidget, allocateCanvases)
+  // — not the bespoke read()/watch() pair the first build used.
+  const FOCUS_ALERTS_PACK_KEY =
+    (window.PracticePacks && window.PracticePacks.KEYS.focusAlerts) || 'suite.ui.focusAlerts';
+  let _focusAlertsPackOn = !window.PracticePacks || window.PracticePacks.peek(FOCUS_ALERTS_PACK_KEY);
+
   // Shared jump-to-alert mechanics (item 1.2's button AND item 4.6's 'n' key
   // both call this — factored out so there is exactly one implementation of
   // "find the next red/amber row, scroll to it, flash it"). Pure-ish: reads
@@ -6598,7 +6618,7 @@
   };
 
   const renderQueueStatusBar = () => {
-    if (!PREF('queueStatusBar', true)) {
+    if (!PREF('queueStatusBar', true) || !_focusAlertsPackOn) {
       removeQueueStatusBar();
       return;
     }
@@ -6667,6 +6687,28 @@
       renderQueueStatusBar();
     });
   };
+
+  // Full start/stop lifecycle for the whole status bar (see
+  // FOCUS_ALERTS_PACK_KEY's own comment above). off() also forces dimming
+  // back off and clears the body class if it was active — the toggle that
+  // would otherwise turn it back off is about to disappear along with the
+  // rest of the bar, so nothing must be left silently stuck dimmed.
+  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(FOCUS_ALERTS_PACK_KEY, {
+      on: () => {
+        _focusAlertsPackOn = true;
+        updateQueueStatusBar();
+      },
+      off: () => {
+        _focusAlertsPackOn = false;
+        if (_queueFocusAlertsOn) {
+          _queueFocusAlertsOn = false;
+          applyQueueFocusClass();
+        }
+        removeQueueStatusBar();
+      },
+    });
+  }
 
   // Rolling rate-limit for result fetches: max 90 fetches per 60s window.
   let _resultFetchCount = 0;
