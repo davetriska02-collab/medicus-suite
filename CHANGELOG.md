@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.19] — 2026-09-10
+
+### Appointment-book tally
+
+Patch on 3.261 so the hazard-log CSO-gap gate (HARD_FAIL at 60 minors /
+3.262) does not trip. Not a new minor.
+
+A single injected button on the Medicus appointment book: how many of
+this day's appointments are booked, how many slots are still free, and
+a total of the types you have ticked.
+
+- **Same type toggles as Slot Counter.** Checking or unchecking a type
+  writes `slots.hiddenTypes`, so the tally and the Slots tab stay in
+  lock-step.
+- **Same book.** `GET /scheduling/data/appointment-book/embedded-overview`
+  for the date on the appointment-book URL. Free slots skip start times
+  already in the past when that date is today (the Slots remaining-today
+  rule). Booked counts every non-cancelled appointment on the day.
+- **Read-only.** No write path. Sits to the left of **Organise on
+  canvas…** (or Open Actions when that pack is muted).
+
+`shared/appointment-tally-core.js` (new), `content-scripts/appointment-tally.js`
+(new), `content-scripts/appointment-tally.css` (new). Tests:
+`test-appointment-tally-core.js`.
+
 ## [v3.261.18] — 2026-09-09
 
 ### Repeat-prescribing authorisation pills
