@@ -15,7 +15,9 @@ claims in living docs are gone.
 
 - **Slots tab** shows **taken on this day’s book** next to free remaining
   (same type toggles). Fully booked types still appear in the list.
-  Unassigned diaries are included.
+  Unassigned diaries and cancelled sessions match the diary tally.
+  Type ticks on the book are not overwritten by stale Slots UI state.
+  A fast date change on the book no longer paints yesterday’s counts.
 - **Diary pills** (tally + Organise) share height, hover wash, parking
   CSS, and a focus ring — they no longer flash as two different buttons.
 - **Nav icons:** Monitoring is a pulse (not a star); Forecast is capacity

@@ -8,11 +8,10 @@
 
 (function () {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  if (window.__msAppointmentTally) return;
-  window.__msAppointmentTally = true;
-
   var T = window.AppointmentTallyCore;
   if (!T) return;
+  if (window.__msAppointmentTally) return;
+  window.__msAppointmentTally = true;
 
   var HOST_ID = 'ms-apt-tally';
   var HIDDEN_KEY = 'slots.hiddenTypes';
@@ -28,6 +27,7 @@
   var _routeKey = '';
   var _fetchedAt = 0;
   var _inFlight = null;
+  var _inFlightKey = '';
   var _poll = null;
   var _mo = null;
   var _painting = false;
@@ -314,7 +314,7 @@
       render();
       return Promise.resolve();
     }
-    if (_inFlight && !bypassCache) return _inFlight;
+    if (_inFlight && !bypassCache && _inFlightKey === key) return _inFlight;
     _loading = true;
     render();
     var url =
@@ -331,17 +331,24 @@
         return resp.json();
       })
       .then(function (raw) {
+        if (key !== _routeKey) return;
         applyTally(raw, route.date);
       })
       .catch(function (err) {
+        if (key !== _routeKey) return;
         _error = err && err.message ? err.message : 'Could not read the appointment book.';
       })
       .then(function () {
+        if (_inFlight === p) {
+          _inFlight = null;
+          _inFlightKey = '';
+        }
+        if (key !== _routeKey) return;
         _loading = false;
-        _inFlight = null;
         render();
       });
     _inFlight = p;
+    _inFlightKey = key;
     return p;
   }
 

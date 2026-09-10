@@ -276,6 +276,12 @@ console.log('\n--- source lock: injected widget ---');
   check(slotsSrc.includes('bookedByType'), 'Slots tab also counts taken/booked');
   check(slotsSrc.includes('unassignedDiaries'), 'Slots tab includes unassigned diaries');
   check(slotsSrc.includes('slots-taken-line'), 'Slots hero renders a taken line');
+  check(
+    slotsSrc.includes("!stored['slots.hiddenTypes']"),
+    'Slots init does not let stale uiState clobber slots.hiddenTypes'
+  );
+  check(slotsSrc.includes('isCancelled'), 'Slots aggregate skips cancelled sessions like the tally');
+  check(js.includes('_inFlightKey'), 'tally load is keyed so a late fetch cannot paint the previous date');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

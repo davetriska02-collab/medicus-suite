@@ -170,12 +170,12 @@ export async function init(el) {
     API_BASE = `https://${SITE_ID}.api.england.medicus.health`;
   }
 
-  // Restore persisted view state (expanded staff rows, showExcluded flag)
-  // hiddenTypes is already covered by slots.hiddenTypes in chrome.storage;
-  // expanded and showExcluded are lightweight ephemeral UI state.
+  // Restore persisted view state (expanded staff rows, showExcluded flag).
+  // slots.hiddenTypes is the live source of truth (the appointment-book tally
+  // writes that key). Do not let a stale suite.uiState.slots copy clobber it.
   const savedUi = await loadUiState('slots');
   if (savedUi) {
-    if (Array.isArray(savedUi.hiddenTypes))
+    if (!stored['slots.hiddenTypes'] && Array.isArray(savedUi.hiddenTypes))
       state.hiddenTypes = new Set(savedUi.hiddenTypes.filter((t) => typeof t === 'string'));
     if (typeof savedUi.showExcluded === 'boolean') state.showExcluded = savedUi.showExcluded;
     if (Array.isArray(savedUi.expanded))
@@ -375,6 +375,7 @@ function aggregate(raw, forDate) {
     const staffByType = {};
     (sessions || []).forEach((session) => {
       if (session?.scheduleType === 'unavailability-period') return;
+      if (session?.summary?.status?.isCancelled) return;
       (session.entries || []).forEach((entry) => {
         countEntry(entry, isToday, now, byType, staffByType, staffTotal, total, bookedByType, bookedTotal);
       });
