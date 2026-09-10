@@ -385,11 +385,35 @@
     }
   }
 
+  var _listening = false;
+
+  function addBookListeners() {
+    if (_listening) return;
+    _listening = true;
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(onStorage);
+    }
+    document.addEventListener('mousedown', onDocClick, true);
+    document.addEventListener('keydown', onKey, true);
+  }
+
+  function removeBookListeners() {
+    if (!_listening) return;
+    _listening = false;
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.removeListener(onStorage);
+    }
+    document.removeEventListener('mousedown', onDocClick, true);
+    document.removeEventListener('keydown', onKey, true);
+  }
+
   function startBookChrome() {
+    addBookListeners();
     tick();
   }
 
   function stopBookChrome() {
+    removeBookListeners();
     removeHost();
   }
 
@@ -402,11 +426,6 @@
     } catch (_) {
       /* storage unavailable */
     }
-    if (chrome.storage && chrome.storage.onChanged) {
-      chrome.storage.onChanged.addListener(onStorage);
-    }
-    document.addEventListener('mousedown', onDocClick, true);
-    document.addEventListener('keydown', onKey, true);
     var Runtime = window.InjectorRuntime;
     if (Runtime && typeof Runtime.register === 'function') {
       Runtime.register('appointment-tally', {
@@ -414,6 +433,7 @@
           return !!currentRoute();
         },
         start: startBookChrome,
+        place: tick,
         stop: stopBookChrome,
       });
     } else {

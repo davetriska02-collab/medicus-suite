@@ -24,6 +24,9 @@ runtime.register('book', {
   start: function () {
     log.push('start');
   },
+  place: function () {
+    log.push('place');
+  },
   stop: function () {
     log.push('stop');
   },
@@ -43,8 +46,14 @@ runtime.sync();
 check(
   log.filter(function (x) {
     return x === 'start';
-  }).length >= 2,
-  'already-on start is re-entered (placement)'
+  }).length === 1,
+  'already-on does not re-call start'
+);
+check(
+  log.filter(function (x) {
+    return x === 'place';
+  }).length >= 1,
+  'already-on calls place'
 );
 
 runtime.setLocation('/abc/care-record/uuid', '');
@@ -63,6 +72,30 @@ check(
 
 runtime.resetForTest();
 check(runtime.isStarted('book') === false, 'resetForTest clears started');
+
+const log2 = [];
+runtime.register('plain', {
+  match: function () {
+    return true;
+  },
+  start: function () {
+    log2.push('start');
+  },
+  stop: function () {
+    log2.push('stop');
+  },
+});
+runtime.setLocation('/x', '');
+runtime.boot();
+runtime.sync();
+check(
+  log2.filter(function (x) {
+    return x === 'start';
+  }).length === 1,
+  'injector without place is not re-started while on-route'
+);
+
+runtime.resetForTest();
 
 console.log('test-injector-runtime: ' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);

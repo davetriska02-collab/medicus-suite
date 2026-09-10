@@ -3224,6 +3224,7 @@
         return !!_packOn && !!currentRoute();
       },
       start: startHeavyChrome,
+      place: ensureLauncher,
       stop: stopHeavyChrome,
     });
     if (window.PracticePacks && window.PracticePacks.bindInjector) {

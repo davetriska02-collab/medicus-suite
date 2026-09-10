@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.27] — 2026-09-10
+
+### Faster injectors, fewer off-route timers
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **Injector runtime.** `start()` runs once on route entry. Already-on
+  injectors call optional `place()` at most every 250ms instead of every
+  hub frame. `visibilitychange` re-syncs. `resetForTest` removes `popstate`.
+- **Tally.** Capture click/key/storage listeners attach in `start` and
+  detach in `stop`.
+- **Allergy + problem-nesting.** 5s rescan + hub subscribe only on
+  care-record and task-overview. Off those routes the trigger widget is
+  removed and the interval is cleared.
+- **Contacts batch** no longer re-parses `practice-packs.js` (already
+  loaded by the HUD or canvas batch).
+
 ## [v3.261.26] — 2026-09-10
 
 ### Organise post-board identity

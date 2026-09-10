@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.26
+**Version:** v3.261.27
 **Generated:** 2026-09-10
 
 ## What it is
@@ -148,6 +148,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.27 (10 Sep)** — Injector runtime: start once, throttled place; allergy/nesting 5s timers only on care-record/task-overview; tally listeners tear down off-book
 - **v3.261.26 (10 Sep)** — Organise Finalise counts a write only when the post-write book shows cancel-gone, the patient on the dest slot, or the new duration
 - **v3.261.25 (10 Sep)** — Allocate write confirm: fail closed without WriteCore, retry stale GET, unstage landed (including team dests), pin Rx/request confirm route; Organise stop tears down the overlay mid-write
 - **v3.261.24 (10 Sep)** — Injector runtime (route → start/stop) for book/allocate canvases; allocate writes confirm landed assignee via WriteCore
