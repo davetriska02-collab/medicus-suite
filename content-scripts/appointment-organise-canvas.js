@@ -729,11 +729,22 @@
     render();
     var api = client();
     var failed = null;
-    var writtenCount = 0;
+    var landed = [];
     try {
       for (var i = 0; i < included.length; i++) {
         var item = included[i];
+        var liveNow = currentRoute();
+        var hopMoved =
+          WriteCore && typeof WriteCore.assertUnmoved === 'function'
+            ? !WriteCore.assertUnmoved(_openRoute, liveNow)
+            : !_openRoute || !liveNow || liveNow.apiBase !== _openRoute.apiBase || liveNow.date !== _openRoute.date;
+        if (hopMoved) {
+          failed =
+            'The Medicus book has moved to a different day or site — remaining stay staged.';
+          break;
+        }
         var appt = C.findAppointment(_board, item.id);
+        var mv = item.kind === 'move' ? _draft.moves[item.id] : null;
         try {
           if (item.kind === 'cancel') {
             await api.commitCancel({
@@ -749,16 +760,13 @@
                 versionId: appt && appt.versionId,
               },
             });
-            _draft = C.unstageCancel(_draft, item.id);
           } else if (item.kind === 'move') {
-            var mv = _draft.moves[item.id];
             await api.commitMove({
               date: _openRoute.date,
               appointment: appt,
               target: Object.assign({}, mv, { notify: !!item.notify }),
               pinned: { apiBase: _openRoute.apiBase },
             });
-            _draft = C.unstageMove(_draft, item.id);
           } else if (item.kind === 'stretch') {
             await api.commitStretch({
               date: _openRoute.date,
@@ -766,10 +774,29 @@
               newDuration: item.duration,
               pinned: { apiBase: _openRoute.apiBase },
             });
-            _draft = C.unstageStretch(_draft, item.id);
           }
-          writtenCount++;
           _board = await api.fetchBoard(_openRoute.date);
+          if (!C.boardMatchesPin(_board, _openRoute)) {
+            failed =
+              'The book Medicus returned is a different day than the one this canvas opened — remaining stay staged.';
+            break;
+          }
+          var onBook = C.actionLandedOnBoard(_board, item, {
+            patientId: appt && appt.patientId,
+            target: mv,
+            diaryId: appt && appt.diaryId,
+            startDateTime: appt && appt.startDateTime,
+            duration: item.duration,
+          });
+          if (!onBook) {
+            failed =
+              'Medicus accepted the request but the book does not show that action. Check the diary before staging again.';
+            break;
+          }
+          if (item.kind === 'cancel') _draft = C.unstageCancel(_draft, item.id);
+          else if (item.kind === 'move') _draft = C.unstageMove(_draft, item.id);
+          else if (item.kind === 'stretch') _draft = C.unstageStretch(_draft, item.id);
+          landed.push({ id: item.id });
         } catch (err) {
           failed = (err && err.message) || 'Write failed.';
           // A stretch that cancelled but could not rebook is NOT still staged:
@@ -791,18 +818,14 @@
     var wantIds = included.map(function (item) {
       return item.id;
     });
-    var landed = [];
-    for (var li = 0; li < writtenCount && li < included.length; li++) {
-      landed.push({ id: included[li].id });
-    }
     var outcome =
       WriteCore && typeof WriteCore.diffWantedVsLanded === 'function'
         ? WriteCore.diffWantedVsLanded(wantIds, landed)
         : {
             wanted: wantIds.length,
-            written: writtenCount,
-            failed: failed ? wantIds.length - writtenCount : 0,
-            allWritten: !failed,
+            written: landed.length,
+            failed: Math.max(0, wantIds.length - landed.length),
+            allWritten: !failed && landed.length === wantIds.length,
           };
     if (failed) {
       _pending = {

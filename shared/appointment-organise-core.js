@@ -353,6 +353,71 @@
     return null;
   }
 
+  function instantKey(s) {
+    return String(s || '')
+      .replace('T', ' ')
+      .replace(/\.\d+Z?$/, '')
+      .slice(0, 19);
+  }
+
+  function sameInstant(a, b) {
+    var ka = instantKey(a);
+    var kb = instantKey(b);
+    return !!ka && ka === kb;
+  }
+
+  function findByPatientSlot(board, patientId, diaryId, startDateTime) {
+    if (!patientId || !diaryId || !startDateTime) return null;
+    var list = allAppointments(board);
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      if (a.patientId === patientId && a.diaryId === diaryId && sameInstant(a.startDateTime, startDateTime)) {
+        return a;
+      }
+    }
+    return null;
+  }
+
+  // Success is what the post-write book shows, not a throw-free POST.
+  // Cancel: the source id is gone (parseBoard already drops cancelled rows).
+  // Move: the patient sits on the dest diary+start, and the source id is not
+  // still on a different slot.
+  // Stretch: the patient is on the same diary+start at the new duration.
+  function actionLandedOnBoard(board, item, ctx) {
+    ctx = ctx || {};
+    item = item || {};
+    var kind = item.kind;
+    var sourceId = item.id || ctx.sourceId;
+    if (kind === 'cancel') {
+      return !findAppointment(board, sourceId);
+    }
+    if (kind === 'move') {
+      var target = ctx.target || {};
+      var atDest = findByPatientSlot(board, ctx.patientId, target.diaryId, target.startDateTime);
+      if (!atDest) return false;
+      var old = findAppointment(board, sourceId);
+      if (old && (old.diaryId !== target.diaryId || !sameInstant(old.startDateTime, target.startDateTime))) {
+        return false;
+      }
+      return true;
+    }
+    if (kind === 'stretch') {
+      var wantDur = Number(item.duration != null ? item.duration : ctx.duration);
+      if (!wantDur) return false;
+      var live =
+        findAppointment(board, sourceId) ||
+        findByPatientSlot(board, ctx.patientId, ctx.diaryId, ctx.startDateTime);
+      return !!(live && Number(live.duration) === wantDur);
+    }
+    return false;
+  }
+
+  function boardMatchesPin(board, pinned) {
+    if (!pinned || !pinned.date) return false;
+    if (!board || !board.date) return false;
+    return String(board.date) === String(pinned.date);
+  }
+
   function emptyDraft() {
     return { cancelIds: [], cancels: {}, moveIds: [], moves: {}, stretchIds: [], stretches: {} };
   }
@@ -1950,6 +2015,8 @@
     filterBoardColumns: filterBoardColumns,
     allAppointments: allAppointments,
     findAppointment: findAppointment,
+    actionLandedOnBoard: actionLandedOnBoard,
+    boardMatchesPin: boardMatchesPin,
     isCancelled: isCancelled,
     isArrived: isArrived,
     isLocked: isLocked,

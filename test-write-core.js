@@ -114,6 +114,11 @@ check(
   'site change is moved'
 );
 check(!assertUnmoved(null, { apiBase: 'https://a.x' }), 'null pin is moved');
+check(
+  !assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://a.x' }),
+  'missing live date is moved (fail-closed)'
+);
+check(!assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, {}), 'empty live is moved');
 
 console.log('--- finaliseConfirmCopy: pinned strings ---');
 check(

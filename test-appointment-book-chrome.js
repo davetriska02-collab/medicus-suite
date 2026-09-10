@@ -27,6 +27,8 @@ for (const [f, id] of Object.entries(files)) {
   const organise = fs.readFileSync(path.join(__dirname, 'content-scripts/appointment-organise-canvas.js'), 'utf8');
   assert(/function teardownOverlay\(/.test(organise), 'organise has teardownOverlay');
   assert(/function muteAllocateChrome\([\s\S]*?teardownOverlay\(\)/.test(organise), 'organise mute force-removes the overlay');
+  assert(/actionLandedOnBoard/.test(organise), 'organise Finalise confirms on the post-write board');
+  assert(!/li < writtenCount/.test(organise), 'organise does not treat throw-free POSTs as landed');
 }
 
 const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');

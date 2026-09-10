@@ -2113,6 +2113,102 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     );
   }
 
+  console.log('=== 8. actionLandedOnBoard — success is the post-write book ===');
+  {
+    const board = core.parseBoard(sampleRaw());
+    check(core.boardMatchesPin(board, { date: '2026-08-16' }), 'board date matches the pin');
+    check(!core.boardMatchesPin(board, { date: '2026-08-17' }), 'board date mismatch is not the opened day');
+    check(!core.boardMatchesPin({ columns: [] }, { date: '2026-08-16' }), 'missing board.date fails closed');
+    check(
+      !core.actionLandedOnBoard(board, { kind: 'cancel', id: mouse.id }),
+      'cancel is not landed while the appointment is still on the book'
+    );
+    const gone = JSON.parse(JSON.stringify(sampleRaw()));
+    gone.staffSchedules[0].schedule[0].entries = [];
+    check(
+      core.actionLandedOnBoard(core.parseBoard(gone), { kind: 'cancel', id: mouse.id }),
+      'cancel is landed when the appointment is gone'
+    );
+    const cancelled = JSON.parse(JSON.stringify(sampleRaw()));
+    cancelled.staffSchedules[0].schedule[0].entries[0].appointmentStatus.isCancelled = true;
+    cancelled.staffSchedules[0].schedule[0].entries[0].displayStatus.value = 'cancelled';
+    check(
+      core.actionLandedOnBoard(core.parseBoard(cancelled), { kind: 'cancel', id: mouse.id }),
+      'cancel is landed when the remaining row is cancelled (parseBoard drops it)'
+    );
+
+    const dest = { diaryId: otherDiary, startDateTime: '2026-08-16 11:00:00' };
+    check(
+      !core.actionLandedOnBoard(board, { kind: 'move', id: mouse.id }, { patientId: mouse.patientId, target: dest }),
+      'ghost move is not landed while the patient is still on the source slot'
+    );
+    const moved = JSON.parse(JSON.stringify(sampleRaw()));
+    moved.staffSchedules[0].schedule[0].entries = [];
+    moved.unassignedDiaries[0].entries = [
+      {
+        id: 'new-move-id',
+        versionId: 'v-new',
+        patient: { id: mouse.patientId, name: mouse.patientName },
+        diaryEntryType: { value: 'appointment' },
+        appointmentType: { id: mouse.appointmentTypeId, name: 'GP Appointment' },
+        startDateTime: dest.startDateTime,
+        endDateTime: '2026-08-16 12:00:00',
+        duration: 60,
+        displayStatus: { value: 'booked' },
+        appointmentStatus: { value: 'pending', isCancelled: false },
+      },
+    ];
+    check(
+      core.actionLandedOnBoard(core.parseBoard(moved), { kind: 'move', id: mouse.id }, {
+        patientId: mouse.patientId,
+        target: dest,
+      }),
+      'move is landed when the patient sits on the dest slot and the source id is gone'
+    );
+
+    const stretchBoard = core.parseBoard(sampleStretchRaw(false));
+    check(
+      !core.actionLandedOnBoard(
+        stretchBoard,
+        { kind: 'stretch', id: stretchMouse.id, duration: 30 },
+        {
+          patientId: stretchMouse.patientId,
+          diaryId: stretchMouse.diaryId,
+          startDateTime: stretchMouse.startDateTime,
+        }
+      ),
+      'ghost stretch is not landed while duration is still 15'
+    );
+    const stretched = sampleStretchRaw(false);
+    stretched.unassignedDiaries[0].entries = stretched.unassignedDiaries[0].entries
+      .map(function (e) {
+        if (e.id === stretchMouse.id) {
+          return Object.assign({}, e, {
+            id: 'new-stretch-id',
+            duration: 30,
+            endDateTime: '2026-08-16 14:30:00',
+          });
+        }
+        if (e.diaryEntryType && e.diaryEntryType.value === 'slot' && e.startDateTime === '2026-08-16 14:15:00') {
+          return null;
+        }
+        return e;
+      })
+      .filter(Boolean);
+    check(
+      core.actionLandedOnBoard(
+        core.parseBoard(stretched),
+        { kind: 'stretch', id: stretchMouse.id, duration: 30 },
+        {
+          patientId: stretchMouse.patientId,
+          diaryId: stretchMouse.diaryId,
+          startDateTime: stretchMouse.startDateTime,
+        }
+      ),
+      'stretch is landed when the patient is on the same slot at the new duration'
+    );
+  }
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   if (failed) process.exitCode = 1;
 })().catch((err) => {
