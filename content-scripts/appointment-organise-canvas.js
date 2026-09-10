@@ -708,7 +708,12 @@
     // The book this canvas was opened on is the ONLY book it may write to. If
     // the SPA moved to another day or site underneath, refuse before anything.
     var live = currentRoute();
-    if (!_openRoute || !live || live.apiBase !== _openRoute.apiBase || live.date !== _openRoute.date) {
+    var WriteCore = window.WriteCore;
+    var moved =
+      WriteCore && typeof WriteCore.assertUnmoved === 'function'
+        ? !WriteCore.assertUnmoved(_openRoute, live)
+        : !_openRoute || !live || live.apiBase !== _openRoute.apiBase || live.date !== _openRoute.date;
+    if (moved) {
       _pending = {
         kind: 'finalise',
         summary: summary,
@@ -783,6 +788,22 @@
     } finally {
       _writing = false;
     }
+    var wantIds = included.map(function (item) {
+      return item.id;
+    });
+    var landed = [];
+    for (var li = 0; li < writtenCount && li < included.length; li++) {
+      landed.push({ id: included[li].id });
+    }
+    var outcome =
+      WriteCore && typeof WriteCore.diffWantedVsLanded === 'function'
+        ? WriteCore.diffWantedVsLanded(wantIds, landed)
+        : {
+            wanted: wantIds.length,
+            written: writtenCount,
+            failed: failed ? wantIds.length - writtenCount : 0,
+            allWritten: !failed,
+          };
     if (failed) {
       _pending = {
         kind: 'finalise',
@@ -791,16 +812,19 @@
         error:
           failed +
           ' — ' +
-          writtenCount +
+          outcome.written +
           ' earlier ticked action' +
-          (writtenCount === 1 ? ' was' : 's were') +
+          (outcome.written === 1 ? ' was' : 's were') +
           ' written; anything still listed above is still staged, not written.',
       };
       render();
       return;
     }
     _pending = null;
-    announce('Written to Medicus. Review staged is empty because that action already went.');
+    announce(
+      (WriteCore && WriteCore.finaliseConfirmCopy(outcome, 'actions')) ||
+        'Written to Medicus. Review staged is empty because that action already went.'
+    );
     render();
   }
 
@@ -1233,85 +1257,49 @@
     true
   );
 
-  var _mo = new MutationObserver(function (records) {
-    for (var i = 0; i < records.length; i++) {
-      var t = records[i].target;
-      if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_ID))) return;
-    }
-    ensureLauncher();
-  });
-  var _launchTick = null;
-  var _routeTick = null;
-  var _launchBooted = false;
-  var _heavyOn = false;
-  var _unsubHub = null;
-
   function startHeavyChrome() {
-    if (!_heavyOn) {
-      _heavyOn = true;
-      _mo.observe(document.documentElement, { childList: true, subtree: true });
-      _launchTick = setInterval(ensureLauncher, 1500);
-    }
     ensureLauncher();
   }
 
   function stopHeavyChrome() {
-    if (_mo) _mo.disconnect();
-    if (_launchTick) {
-      clearInterval(_launchTick);
-      _launchTick = null;
-    }
-    _heavyOn = false;
     muteAllocateChrome();
   }
 
-  function onRoutePulse() {
-    if (!_packOn) return;
-    if (currentRoute()) startHeavyChrome();
-    else stopHeavyChrome();
-  }
-
-  function startAllocateChrome() {
-    if (_launchBooted) {
-      onRoutePulse();
-      return;
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('appointment-organise', {
+      match: function () {
+        return !!_packOn && !!currentRoute();
+      },
+      start: startHeavyChrome,
+      stop: stopHeavyChrome,
+    });
+    if (window.PracticePacks && window.PracticePacks.bindInjector) {
+      window.PracticePacks.bindInjector(PACK_KEY, {
+        on: function () {
+          _packOn = true;
+          Runtime.sync();
+        },
+        off: function () {
+          _packOn = false;
+          Runtime.sync();
+        },
+      });
+    } else {
+      Runtime.sync();
     }
-    _launchBooted = true;
-    window.addEventListener('popstate', onRoutePulse);
-    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
-      _unsubHub = window.__chObserverHub.subscribe(onRoutePulse);
-    } else if (!_routeTick) {
-      _routeTick = setInterval(onRoutePulse, 1500);
-    }
-    onRoutePulse();
-  }
-
-  function stopAllocateChrome() {
-    window.removeEventListener('popstate', onRoutePulse);
-    if (_unsubHub) {
-      _unsubHub();
-      _unsubHub = null;
-    }
-    if (_routeTick) {
-      clearInterval(_routeTick);
-      _routeTick = null;
-    }
-    stopHeavyChrome();
-    _launchBooted = false;
-  }
-
-  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+  } else if (window.PracticePacks && window.PracticePacks.bindInjector) {
     window.PracticePacks.bindInjector(PACK_KEY, {
       on: function () {
         _packOn = true;
-        startAllocateChrome();
+        startHeavyChrome();
       },
       off: function () {
         _packOn = false;
-        stopAllocateChrome();
+        stopHeavyChrome();
       },
     });
   } else {
-    startAllocateChrome();
+    startHeavyChrome();
   }
 })();

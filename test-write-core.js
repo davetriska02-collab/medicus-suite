@@ -4,7 +4,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const { landedIds, diffWantedVsLanded, diffFinaliseOutcome, finaliseConfirmCopy } = require('./shared/write-core.js');
+const {
+  landedIds,
+  diffWantedVsLanded,
+  diffFinaliseOutcome,
+  assertUnmoved,
+  finaliseConfirmCopy,
+} = require('./shared/write-core.js');
 
 let passed = 0,
   failed = 0;
@@ -96,6 +102,18 @@ console.log('--- diffFinaliseOutcome: parity with allergy-canvas cases ---');
   const nullSafe = diffFinaliseOutcome(['j1'], null, null, null);
   check(nullSafe.failed === 1 && nullSafe.failedEnds[0] === 'j1', 'null lists never throw');
 }
+
+console.log('--- assertUnmoved ---');
+check(assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://a.x', date: '2026-09-10' }), 'same book pin is unmoved');
+check(
+  !assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://a.x', date: '2026-09-11' }),
+  'date change is moved'
+);
+check(
+  !assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://b.x', date: '2026-09-10' }),
+  'site change is moved'
+);
+check(!assertUnmoved(null, { apiBase: 'https://a.x' }), 'null pin is moved');
 
 console.log('--- finaliseConfirmCopy: pinned strings ---');
 check(

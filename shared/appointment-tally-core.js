@@ -212,6 +212,10 @@
     return booked + ' booked · ' + free + ' free';
   }
 
+  function shouldApplyFetch(inFlightKey, currentKey) {
+    return !!inFlightKey && inFlightKey === currentKey;
+  }
+
   var api = {
     todayISO: todayISO,
     emptyCounts: emptyCounts,
@@ -223,6 +227,7 @@
     applyHidden: applyHidden,
     sortedTypeEntries: sortedTypeEntries,
     buttonLabel: buttonLabel,
+    shouldApplyFetch: shouldApplyFetch,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

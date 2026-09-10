@@ -28,8 +28,6 @@
   var _fetchedAt = 0;
   var _inFlight = null;
   var _inFlightKey = '';
-  var _poll = null;
-  var _mo = null;
   var _painting = false;
 
   function esc(s) {
@@ -331,11 +329,11 @@
         return resp.json();
       })
       .then(function (raw) {
-        if (key !== _routeKey) return;
+        if (!T.shouldApplyFetch(key, _routeKey)) return;
         applyTally(raw, route.date);
       })
       .catch(function (err) {
-        if (key !== _routeKey) return;
+        if (!T.shouldApplyFetch(key, _routeKey)) return;
         _error = err && err.message ? err.message : 'Could not read the appointment book.';
       })
       .then(function () {
@@ -343,7 +341,7 @@
           _inFlight = null;
           _inFlightKey = '';
         }
-        if (key !== _routeKey) return;
+        if (!T.shouldApplyFetch(key, _routeKey)) return;
         _loading = false;
         render();
       });
@@ -387,44 +385,12 @@
     }
   }
 
-  var _chromeOn = false;
-  var _unsubHub = null;
-  var _routeTick = null;
-
   function startBookChrome() {
-    if (_chromeOn) {
-      tick();
-      return;
-    }
-    _chromeOn = true;
-    _mo = new MutationObserver(function (records) {
-      for (var i = 0; i < records.length; i++) {
-        var t = records[i].target;
-        if (t && t.closest && t.closest('#' + HOST_ID)) return;
-      }
-      tick();
-    });
-    _mo.observe(document.documentElement, { childList: true, subtree: true });
-    _poll = setInterval(tick, 1500);
     tick();
   }
 
   function stopBookChrome() {
-    if (_mo) {
-      _mo.disconnect();
-      _mo = null;
-    }
-    if (_poll) {
-      clearInterval(_poll);
-      _poll = null;
-    }
-    _chromeOn = false;
     removeHost();
-  }
-
-  function syncBookChrome() {
-    if (currentRoute()) startBookChrome();
-    else stopBookChrome();
   }
 
   function boot() {
@@ -432,23 +398,27 @@
       chrome.storage.local.get(HIDDEN_KEY, function (r) {
         var v = r && r[HIDDEN_KEY];
         _hidden = new Set(Array.isArray(v) ? v : []);
-        syncBookChrome();
       });
     } catch (_) {
-      syncBookChrome();
+      /* storage unavailable */
     }
     if (chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener(onStorage);
     }
     document.addEventListener('mousedown', onDocClick, true);
     document.addEventListener('keydown', onKey, true);
-    window.addEventListener('popstate', syncBookChrome);
-    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
-      _unsubHub = window.__chObserverHub.subscribe(syncBookChrome);
+    var Runtime = window.InjectorRuntime;
+    if (Runtime && typeof Runtime.register === 'function') {
+      Runtime.register('appointment-tally', {
+        match: function () {
+          return !!currentRoute();
+        },
+        start: startBookChrome,
+        stop: stopBookChrome,
+      });
     } else {
-      _routeTick = setInterval(syncBookChrome, 1500);
+      startBookChrome();
     }
-    syncBookChrome();
   }
 
   boot();

@@ -36,6 +36,19 @@
 'use strict';
 
 (function (global) {
+  function loadWriteCore() {
+    if (typeof require === 'function') {
+      try {
+        return require('./write-core.js');
+      } catch (_) {
+        /* browser path below */
+      }
+    }
+    if (global && global.WriteCore) return global.WriteCore;
+    return null;
+  }
+
+  var WriteCore = loadWriteCore();
   var UNALLOCATED = 'unallocated';
   var POOL = 'pool';
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2354,6 +2367,25 @@
     );
   }
 
+  // After a 2xx bulk-reassign, success is only rows whose assignedId now
+  // matches the batch assignee. A POST that settled without throwing is not
+  // enough (WriteCore / H-043 class).
+  function allocationsLanded(rows, writtenBatches) {
+    var byId = Object.create(null);
+    (Array.isArray(rows) ? rows : []).forEach(function (r) {
+      if (r && r.id) byId[r.id] = r;
+    });
+    var landed = [];
+    (Array.isArray(writtenBatches) ? writtenBatches : []).forEach(function (batch) {
+      var want = pickUuid(batch && batch.assigneeId);
+      (batch && batch.taskIds ? batch.taskIds : []).forEach(function (id) {
+        var row = byId[id];
+        if (want && row && pickUuid(row.assignedId) === want) landed.push({ id: id });
+      });
+    });
+    return landed;
+  }
+
   function createClient(apiBase, deps) {
     deps = deps || {};
     var fetchImpl = deps.fetchImpl;
@@ -2619,37 +2651,75 @@
         }
         if (!posted) failedBatches.push(batch);
       }
+      var wantedIds = [];
+      writtenBatches.forEach(function (b) {
+        (b.taskIds || []).forEach(function (id) {
+          wantedIds.push(id);
+        });
+      });
+      var landedList = [];
+      if (written) {
+        try {
+          var confirm = opts.fetchList ? await opts.fetchList() : await fetchTaskList(slug, opts.search);
+          landedList = allocationsLanded(confirm && confirm.rows, writtenBatches);
+        } catch (_) {
+          landedList = [];
+        }
+      }
+      var outcome = WriteCore
+        ? WriteCore.diffWantedVsLanded(wantedIds, landedList)
+        : {
+            wanted: wantedIds.length,
+            written: written,
+            failed: Math.max(0, wantedIds.length - written),
+            allWritten: failedBatches.length === 0 && written === wantedIds.length,
+            failedIds: [],
+          };
+
       if (!written && failedBatches.length) {
         return {
           ok: false,
           written: 0,
+          failed: outcome.failed || wantedIds.length,
+          failedIds: outcome.failedIds || wantedIds,
+          allWritten: false,
           writtenBatches: [],
           failedBatch: failedBatches[0],
           refused: plan.refused || [],
           reason: 'Medicus refused the reassignment (' + lastStatus + '). Nothing was written.',
         };
       }
-      if (failedBatches.length) {
+      if (failedBatches.length || !outcome.allWritten) {
         return {
           ok: false,
-          partial: true,
-          written: written,
+          partial: outcome.written > 0,
+          written: outcome.written,
+          failed: outcome.failed,
+          failedIds: outcome.failedIds,
+          allWritten: false,
+          wanted: outcome.wanted,
           writtenBatches: writtenBatches,
           failedBatch: failedBatches[0],
           refused: plan.refused || [],
           reason:
-            'Medicus accepted ' +
-            written +
-            ' reassignment' +
-            (written === 1 ? '' : 's') +
-            '. The rest were not written: ' +
-            lastStatus +
-            '. Check the queue.',
+            outcome.written > 0
+              ? 'Medicus accepted ' +
+                outcome.written +
+                ' reassignment' +
+                (outcome.written === 1 ? '' : 's') +
+                '. The rest were not confirmed on the queue' +
+                (lastStatus ? ': ' + lastStatus : '') +
+                '. Check the queue.'
+              : 'The reassignment POST settled but the queue does not show the new assignee. Check Medicus before staging again.',
         };
       }
       return {
         ok: true,
-        written: written,
+        written: outcome.written,
+        failed: 0,
+        failedIds: [],
+        allWritten: true,
+        wanted: outcome.wanted,
         writtenBatches: writtenBatches,
         refused: plan.refused || [],
       };
@@ -3074,6 +3144,7 @@
     absenceOnDate: absenceOnDate,
     presenceForName: presenceForName,
     createClient: createClient,
+    allocationsLanded: allocationsLanded,
     isSplitDest: isSplitDest,
     destNamesPhrase: destNamesPhrase,
     planEvenSplit: planEvenSplit,
