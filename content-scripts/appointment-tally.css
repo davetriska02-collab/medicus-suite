@@ -1,0 +1,207 @@
+/* Injected appointment-book tally. Tokens match the organise-canvas light canon. */
+#ms-apt-tally {
+  --bg-elev: #ffffff;
+  --border: #cbd5e1;
+  --border-hi: #94a3b8;
+  --text-1: #0f172a;
+  --text-2: #1e3a5f;
+  --text-3: #475569;
+  --accent: #2563eb;
+  --red: #dc2626;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-pill: 999px;
+  position: fixed;
+  z-index: 2147482989;
+  font:
+    600 12px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+#ms-apt-tally .ms-apt-tally-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  height: 28px;
+  box-sizing: border-box;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-pill);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#ms-apt-tally .ms-apt-tally-btn:hover,
+#ms-apt-tally .ms-apt-tally-btn[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#ms-apt-tally .ms-apt-tally-label {
+  font-variant-numeric: tabular-nums;
+}
+
+#ms-apt-tally .ms-apt-tally-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 320px;
+  max-height: min(70vh, 480px);
+  overflow: auto;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.28);
+  padding: 10px 12px 12px;
+  font-weight: 400;
+  z-index: 1;
+}
+
+#ms-apt-tally .ms-apt-tally-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+#ms-apt-tally .ms-apt-tally-title {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-apt-tally .ms-apt-tally-refresh {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+#ms-apt-tally .ms-apt-tally-hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+#ms-apt-tally .ms-apt-tally-msg {
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 8px 0;
+}
+
+#ms-apt-tally .ms-apt-tally-msg.is-error {
+  color: var(--red);
+}
+
+#ms-apt-tally .ms-apt-tally-cols,
+#ms-apt-tally .ms-apt-tally-row,
+#ms-apt-tally .ms-apt-tally-total {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 52px 44px;
+  gap: 6px;
+  align-items: center;
+}
+
+#ms-apt-tally .ms-apt-tally-cols {
+  font-size: 10px;
+  color: var(--text-3);
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+#ms-apt-tally .ms-apt-tally-cols span:nth-child(3),
+#ms-apt-tally .ms-apt-tally-cols span:nth-child(4) {
+  text-align: right;
+}
+
+#ms-apt-tally .ms-apt-tally-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 4px 0;
+}
+
+#ms-apt-tally .ms-apt-tally-row {
+  margin: 0;
+  padding: 3px 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#ms-apt-tally .ms-apt-tally-row.is-excluded {
+  opacity: 0.45;
+}
+
+#ms-apt-tally .ms-apt-tally-toggle {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+#ms-apt-tally .ms-apt-tally-type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+#ms-apt-tally .ms-apt-tally-n {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-1);
+}
+
+#ms-apt-tally .ms-apt-tally-n.free {
+  color: var(--accent);
+}
+
+#ms-apt-tally .ms-apt-tally-total {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+#ms-apt-tally .ms-apt-tally-all {
+  grid-column: 1 / -1;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+#ms-apt-tally .ms-apt-tally-excluded {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  color: var(--text-3);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+#ms-apt-tally .ms-apt-tally-excluded-list {
+  opacity: 0.95;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ms-apt-tally .ms-apt-tally-btn,
+  #ms-apt-tally .ms-apt-tally-panel {
+    transition: none;
+  }
+}
