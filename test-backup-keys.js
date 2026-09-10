@@ -61,6 +61,12 @@ function reset() { for (const k of Object.keys(store)) delete store[k]; }
   try { await suiteImport({ practiceCode: 12345 }); } catch (_) { threw = true; }
   check(threw, 'rejects non-string practiceCode');
   threw = false;
+  try { await suiteImport({ practiceCode: 'x"><img>' }); } catch (_) { threw = true; }
+  check(threw, 'rejects XSS / non-hex practiceCode');
+  threw = false;
+  try { await suiteImport({ practiceCode: '../../etc' }); } catch (_) { threw = true; }
+  check(threw, 'rejects path-traversal practiceCode');
+  threw = false;
   try { await suiteImport({ display: [1, 2] }); } catch (_) { threw = true; }
   check(threw, 'rejects non-object display');
 

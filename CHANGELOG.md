@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.21] — 2026-09-10
+
+### CSO re-freeze + audit quick wins
+
+Patch on 3.261. CSO signed the pruned-surface re-freeze in session so the
+hazard-log 60-minor HARD_FAIL clock resets; 3.262 will not trip it.
+
+Four S-effort items from the 2026-09-10 repo audit, plus the frozen-doc
+re-freeze that audit called for.
+
+- **Cap** `suite.discoveredAllPatientUrls` at 50 (same slice as journal
+  templates).
+- **Route-gate** the appointment-book tally and Organise observers: off the
+  book route the MutationObserver is disconnected and the 1.5s interval is
+  cleared. SPA entry still wakes via the shared DOM hub / popstate.
+- **Validate** `suite.practiceCode` on backup import (`/^[a-f0-9]{4,8}$/i`).
+- **Escape** Options diagnostics probe `innerHTML` (`escHtml` on url, error,
+  resolved code).
+- **CSO re-freeze:** SOUP 1.12 is JetBrains Mono only; H-013/H-014/H-015/
+  H-017/H-033 retired; H-016 and H-022 retargeted; INTENDED-PURPOSE v3.261.21
+  drops the Visualiser from current purpose; CSN current-surface box.
+  `last_cso_review_version` moves to 3.261.21.
+
+`docs/REPO-AUDIT-2026-09-10.md` filed as the audit record.
+
 ## [v3.261.20] — 2026-09-10
 
 ### QA polish — taken counts, matching diary pills, honest copy

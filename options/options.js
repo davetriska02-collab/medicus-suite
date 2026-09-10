@@ -2492,10 +2492,10 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
 
   const { code, source } = await window.PracticeCode.resolve();
   const lines = [];
-  lines.push(`Resolved code: ${code || '(none)'} (${source || 'no source'})`);
+  lines.push(`Resolved code: ${escHtml(code || '(none)')} (${escHtml(source || 'no source')})`);
   if (!code) {
     lines.push('Cannot probe without a practice code. Open a Medicus tab or set one in Suite.');
-    results.innerHTML = lines.map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`).join('');
+    results.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');
     return;
   }
 
@@ -2515,7 +2515,7 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
     },
   ];
 
-  results.innerHTML = lines.map((l) => `<div>${l.replace(/</g, '&lt;')}</div>`).join('');
+  results.innerHTML = lines.map((l) => `<div>${l}</div>`).join('');
   for (const p of probes) {
     const t0 = Date.now();
     let line;
@@ -2523,9 +2523,9 @@ document.getElementById('debugProbeBtn')?.addEventListener('click', async () => 
       const r = await fetch(p.url, { credentials: 'include' });
       const dur = Date.now() - t0;
       const colour = r.ok ? '#4ade80' : '#f87171';
-      line = `<div style="color:${colour}"><strong>${p.name}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${p.url}</span></div>`;
+      line = `<div style="color:${colour}"><strong>${escHtml(p.name)}:</strong> ${r.status} (${dur}ms) <span style="color:var(--text-4); font-size:10px">${escHtml(p.url)}</span></div>`;
     } catch (e) {
-      line = `<div style="color:#f87171"><strong>${p.name}:</strong> network error: ${e.message}</div>`;
+      line = `<div style="color:#f87171"><strong>${escHtml(p.name)}:</strong> network error: ${escHtml(e.message)}</div>`;
     }
     results.innerHTML += line;
   }

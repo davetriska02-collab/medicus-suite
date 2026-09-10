@@ -387,24 +387,16 @@
     }
   }
 
-  function boot() {
-    try {
-      chrome.storage.local.get(HIDDEN_KEY, function (r) {
-        var v = r && r[HIDDEN_KEY];
-        _hidden = new Set(Array.isArray(v) ? v : []);
-        ensureHost();
-        load(false);
-      });
-    } catch (_) {
-      ensureHost();
-      load(false);
+  var _chromeOn = false;
+  var _unsubHub = null;
+  var _routeTick = null;
+
+  function startBookChrome() {
+    if (_chromeOn) {
+      tick();
+      return;
     }
-    if (chrome.storage && chrome.storage.onChanged) {
-      chrome.storage.onChanged.addListener(onStorage);
-    }
-    document.addEventListener('mousedown', onDocClick, true);
-    document.addEventListener('keydown', onKey, true);
-    window.addEventListener('popstate', tick);
+    _chromeOn = true;
     _mo = new MutationObserver(function (records) {
       for (var i = 0; i < records.length; i++) {
         var t = records[i].target;
@@ -415,6 +407,48 @@
     _mo.observe(document.documentElement, { childList: true, subtree: true });
     _poll = setInterval(tick, 1500);
     tick();
+  }
+
+  function stopBookChrome() {
+    if (_mo) {
+      _mo.disconnect();
+      _mo = null;
+    }
+    if (_poll) {
+      clearInterval(_poll);
+      _poll = null;
+    }
+    _chromeOn = false;
+    removeHost();
+  }
+
+  function syncBookChrome() {
+    if (currentRoute()) startBookChrome();
+    else stopBookChrome();
+  }
+
+  function boot() {
+    try {
+      chrome.storage.local.get(HIDDEN_KEY, function (r) {
+        var v = r && r[HIDDEN_KEY];
+        _hidden = new Set(Array.isArray(v) ? v : []);
+        syncBookChrome();
+      });
+    } catch (_) {
+      syncBookChrome();
+    }
+    if (chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener(onStorage);
+    }
+    document.addEventListener('mousedown', onDocClick, true);
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('popstate', syncBookChrome);
+    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
+      _unsubHub = window.__chObserverHub.subscribe(syncBookChrome);
+    } else {
+      _routeTick = setInterval(syncBookChrome, 1500);
+    }
+    syncBookChrome();
   }
 
   boot();

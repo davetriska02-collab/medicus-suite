@@ -94,6 +94,7 @@ console.log('--- source guard: no quote-unsafe escHtml in attribute context ---'
     // New privileged renderer of user/practice/LLM-imported strings (v3.205.0)
     // — in the guard so the v3.203.0 escHtml-in-attribute class can't re-enter.
     'side-panel/modules/phrases/phrases.js',
+    'options/options.js',
   ];
   for (const f of files) {
     const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
@@ -120,6 +121,29 @@ console.log('--- escAttr coverage ---');
       `${f}: defines an escAttr that escapes the double-quote`
     );
   }
+  {
+    const src = fs.readFileSync(path.join(__dirname, 'side-panel/modules/slots/slots.js'), 'utf8');
+    check(
+      /function escHtml/.test(src) && src.includes('.replace(/"/g, \'&quot;\')'),
+      'slots.js escHtml quote-escapes (used in attributes)'
+    );
+  }
+}
+
+console.log('--- options diagnostics probe escapes url and error ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'options/options.js'), 'utf8');
+  const probe = src.match(/debugProbeBtn[\s\S]*?debugProbeResults[\s\S]*?\n\}\);/);
+  check(!!probe, 'debug probe handler found');
+  check(probe && probe[0].includes('escHtml(p.url)'), 'probe line escapes p.url with escHtml');
+  check(
+    probe && probe[0].includes('escHtml(e.message)'),
+    'probe error line escapes e.message with escHtml'
+  );
+  check(
+    probe && !probe[0].includes('${p.url}') && !probe[0].includes('${e.message}'),
+    'probe does not interpolate raw p.url / e.message into innerHTML'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

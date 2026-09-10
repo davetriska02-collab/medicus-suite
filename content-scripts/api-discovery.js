@@ -166,11 +166,16 @@ function storeUrl(url) {
       chrome.storage.local.set({ [STORAGE_KEY]: clean });
     }
 
-    // Also accumulate all distinct patient-related URLs for inspection
+    // Also accumulate all distinct patient-related URLs for inspection.
+    // Cap matches the journal-template list (v3.173.2 / audit M6): without it
+    // the array grew one entry per listing-shaped URL forever.
+    const CAP = 50;
     chrome.storage.local.get(ALL_URLS_KEY, (r) => {
       const existing = r[ALL_URLS_KEY] || [];
       if (!existing.includes(clean)) {
-        chrome.storage.local.set({ [ALL_URLS_KEY]: [...existing, clean] });
+        chrome.storage.local.set({ [ALL_URLS_KEY]: [...existing, clean].slice(-CAP) });
+      } else if (existing.length > CAP) {
+        chrome.storage.local.set({ [ALL_URLS_KEY]: existing.slice(-CAP) });
       }
     });
   } catch (e) {
