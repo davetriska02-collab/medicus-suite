@@ -64,6 +64,7 @@
   var _confirmClose = false;
   var _confirmWrite = null;
   var _writing = false;
+  var _boardGen = 0;
   var _taskList = undefined;
   var _staffDir = C.harvestStaffDirectory([], null);
   var _teamDir = C.harvestTeamDirectory([], null);
@@ -332,6 +333,7 @@
   // document/workflow overviews do not carry who-ordered. Staff UUIDs still
   // come from harvestStaffFromOverviews + the create-task form.
   async function harvestStaffFromOverviews(rows) {
+    var gen = _boardGen;
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
@@ -344,9 +346,11 @@
     var i = 0;
     async function worker() {
       while (i < withUrl.length) {
+        if (gen !== _boardGen) return;
         var idx = i++;
         try {
           var payload = await cli.fetchOverview(withUrl[idx].overviewURL);
+          if (gen !== _boardGen) return;
           absorbDirectories(null, payload);
           if (!patientId && C.pickPatientIdFromPayload) patientId = C.pickPatientIdFromPayload(payload);
         } catch (_) {
@@ -360,6 +364,7 @@
       for (var w = 0; w < n; w++) workers.push(worker());
       await Promise.all(workers);
     }
+    if (gen !== _boardGen) return;
     if (!patientId) return;
     try {
       var form = await cli.fetchAssigneeStaff(patientId);
@@ -396,12 +401,14 @@
 
   async function loadBoard(opts) {
     opts = opts || {};
+    var gen = _boardGen;
     var keepDraft = opts.skipSplit ? _draft || C.emptyDraft() : null;
     _loading = true;
     _error = null;
     render();
     try {
       await loadAllocationGroups();
+      if (gen !== _boardGen) return;
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
       var inboxP = C.fetchRequestTaskList(_route.apiBase, _route.slug, _route.search);
       var sittingP = C.fetchRequestTaskList(_route.apiBase, _route.slug, '').catch(function () {
@@ -409,6 +416,7 @@
       });
       var out = await inboxP;
       var sitting = await sittingP;
+      if (gen !== _boardGen) return;
       _rows = C.mergeInboxAndSitting(
         out.rows || [],
         (sitting && sitting.rows) || [],
@@ -425,20 +433,25 @@
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
       await presenceP;
+      if (gen !== _boardGen) return;
       harvestStaffFromBook(_book);
       await harvestStaffFromOverviews(_rows);
+      if (gen !== _boardGen) return;
       persistStaffCache();
       _draft = keepDraft
         ? C.ensureWorkingTodayColumns(keepDraft, currentDestinations())
         : C.replaceDestColumns(C.emptyDraft(), currentDestinations());
       if (!opts.skipSplit) _splitDefaulted = false;
     } catch (err) {
+      if (gen !== _boardGen) return;
       _error = err && err.message ? err.message : 'Could not read this request queue.';
       _rows = [];
     } finally {
-      _loading = false;
-      _overviewProgress = '';
-      render();
+      if (gen === _boardGen) {
+        _loading = false;
+        _overviewProgress = '';
+        render();
+      }
     }
   }
 
@@ -2769,6 +2782,7 @@
   }
 
   function closeOverlay() {
+    _boardGen++;
     _open = false;
     _rows = [];
     _draft = C.emptyDraft();

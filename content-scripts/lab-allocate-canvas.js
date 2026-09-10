@@ -59,6 +59,7 @@
   var _confirmClose = false;
   var _confirmWrite = null;
   var _writing = false;
+  var _boardGen = 0;
   var _taskList = undefined;
   var _staffDir = C.harvestStaffDirectory([], null);
   var _teamDir = C.harvestTeamDirectory([], null);
@@ -213,6 +214,7 @@
   }
 
   async function enrichRequesters(rows) {
+    var gen = _boardGen;
     var pending = rows.filter(function (r) {
       return r && r.overviewURL && !r.requester;
     });
@@ -223,10 +225,12 @@
     var done = 0;
     async function worker() {
       while (i < pending.length) {
+        if (gen !== _boardGen) return;
         var idx = i++;
         var row = pending[idx];
         try {
           var payload = await cli.fetchOverview(row.overviewURL);
+          if (gen !== _boardGen) return;
           absorbDirectories(null, payload);
           var hint = C.pickRequesterFromOverview(payload);
           if (hint) C.applyRequester(row, hint);
@@ -248,6 +252,7 @@
   // UUIDs and the button silently did nothing. Always read a few overviews
   // for the staff directory, even when who ordered is already known.
   async function harvestStaffFromOverviews(rows) {
+    var gen = _boardGen;
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
@@ -260,9 +265,11 @@
     var i = 0;
     async function worker() {
       while (i < withUrl.length) {
+        if (gen !== _boardGen) return;
         var idx = i++;
         try {
           var payload = await cli.fetchOverview(withUrl[idx].overviewURL);
+          if (gen !== _boardGen) return;
           absorbDirectories(null, payload);
           if (!patientId) patientId = C.pickPatientIdFromPayload(payload);
         } catch (_) {
@@ -276,6 +283,7 @@
       for (var w = 0; w < n; w++) workers.push(worker());
       await Promise.all(workers);
     }
+    if (gen !== _boardGen) return;
     if (!patientId) return;
     try {
       var form = await cli.fetchAssigneeStaff(patientId);
@@ -311,13 +319,16 @@
   }
 
   async function loadBoard() {
+    var gen = _boardGen;
     _loading = true;
     _error = null;
     render();
     try {
       await loadGroupsState();
+      if (gen !== _boardGen) return;
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
       var out = await client().fetchTaskList(_route.slug, _route.search);
+      if (gen !== _boardGen) return;
       _rows = out.rows || [];
       _route.slug = out.slug || _route.slug;
       if (out.search != null) _route.search = out.search;
@@ -326,19 +337,25 @@
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
       render();
       await presenceP;
+      if (gen !== _boardGen) return;
       harvestStaffFromBook(_book);
       render();
       await harvestStaffFromOverviews(_rows);
+      if (gen !== _boardGen) return;
       await enrichRequesters(_rows);
+      if (gen !== _boardGen) return;
       persistStaffCache();
       pinDestColumns();
     } catch (err) {
+      if (gen !== _boardGen) return;
       _error = err && err.message ? err.message : 'Could not read the results queue.';
       _rows = [];
     } finally {
-      _loading = false;
-      _overviewProgress = '';
-      render();
+      if (gen === _boardGen) {
+        _loading = false;
+        _overviewProgress = '';
+        render();
+      }
     }
   }
 
@@ -2386,6 +2403,7 @@
   }
 
   function closeOverlay() {
+    _boardGen++;
     _open = false;
     _rows = [];
     _draft = C.emptyDraft();

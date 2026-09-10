@@ -1058,12 +1058,39 @@
     }, 150);
   }
 
-  if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
-    window.__chObserverHub.subscribe(queueRefresh);
-  } else {
-    setInterval(queueRefresh, 3000); // fallback if the hub failed to load before us
+  function pillsOnRoute(pathname, search) {
+    var href = String(pathname || '') + String(search || '');
+    return MEDICATION_TAB_RE.test(href) || PRESCRIPTION_REQUEST_RE.test(href);
   }
-  window.addEventListener('popstate', queueRefresh);
-  window.addEventListener('hashchange', queueRefresh);
-  queueRefresh();
+
+  function startHeavyChrome() {
+    queueRefresh();
+  }
+
+  function stopHeavyChrome() {
+    removeAllPills();
+    _items = null;
+    _cacheKey = null;
+  }
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('repeat-prescribing-pills', {
+      match: function (pathname, search) {
+        return pillsOnRoute(pathname, search);
+      },
+      start: startHeavyChrome,
+      place: queueRefresh,
+      stop: stopHeavyChrome,
+    });
+  } else {
+    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
+      window.__chObserverHub.subscribe(queueRefresh);
+    } else {
+      setInterval(queueRefresh, 3000);
+    }
+    window.addEventListener('popstate', queueRefresh);
+    window.addEventListener('hashchange', queueRefresh);
+    queueRefresh();
+  }
 })();

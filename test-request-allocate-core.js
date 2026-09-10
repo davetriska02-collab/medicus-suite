@@ -245,6 +245,7 @@ console.log('\n--- canvas + manifest source locks ---');
     /STAFF_HARVEST_CAP/.test(canvas) && /OVERVIEW_CONCURRENCY/.test(canvas),
     'staff harvest uses the bounded overview pool'
   );
+  check(/gen !== _boardGen/.test(canvas), 'overview harvest stops when the overlay is closed');
   check(/ms-ags-marquee/.test(canvas), 'people can be encircled into a group');
   check(/lastUsedBySurface\.request/.test(canvas), 'last-used dest set is the request surface');
   check(/allocationGroups\.staffCache/.test(canvas), 'harvested staff is saved for Options');

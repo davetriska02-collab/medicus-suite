@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.261.28",
+  "version": "3.261.29",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -41,6 +41,7 @@
       "js": [
         "shared/dom-contracts.js",
         "content-scripts/dom-observer-hub.js",
+        "shared/injector-runtime.js",
         "shared/contract-canary.js",
         "content-scripts/pusher-relay.js",
         "engine/extractors/patient-context.js",
@@ -95,7 +96,6 @@
         "shared/companion-role.js",
         "shared/outstanding-investigations.js",
         "content-scripts/task-actions-panel.js",
-        "shared/practice-packs.js",
         "shared/quick-actions-core.js",
         "content-scripts/reception-quick-actions.js",
         "content-scripts/document-file-inline.js",
@@ -109,7 +109,6 @@
         "content-scripts/problem-description-cleanup.js",
         "content-scripts/problem-nesting.js",
         "content-scripts/problem-nesting-canvas.js",
-        "shared/injector-runtime.js",
         "shared/write-core.js",
         "shared/appointment-organise-core.js",
         "content-scripts/appointment-organise-canvas.js",

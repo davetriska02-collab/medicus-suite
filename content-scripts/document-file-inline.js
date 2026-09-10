@@ -1535,26 +1535,64 @@
     });
   }
 
-  // Kicked off at boot, fire-and-forget — a local extension resource fetch,
-  // not a Medicus call, so this overlaps with the clinician reading the task
-  // before ever opening the widget rather than adding latency to doOpen().
-  ensureDocumentTypesLoaded();
+  var _hubUnsub = null;
+  var _visHandler = null;
 
-  var _hub = window.__chObserverHub;
-  if (_hub && _hub.subscribe) {
-    _hub.subscribe(onMutations);
-  } else {
-    _obs = new MutationObserver(onMutations);
-    observeBody();
+  function fileInlineOnRoute(pathname) {
+    return /\/tasks\/data\/[^/]+\/overview\//i.test(String(pathname || ''));
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) scheduleInject();
-  });
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', scheduleInject);
-  } else {
+  function startHeavyChrome() {
+    if (_hubUnsub || _obs) return;
+    // Local extension resource fetch, not a Medicus call — overlaps with
+    // the clinician reading the task rather than adding latency to doOpen().
+    ensureDocumentTypesLoaded();
+    var hub = window.__chObserverHub;
+    if (hub && hub.subscribe) {
+      _hubUnsub = hub.subscribe(onMutations);
+    } else {
+      _obs = new MutationObserver(onMutations);
+      observeBody();
+    }
+    _visHandler = function () {
+      if (!document.hidden) scheduleInject();
+    };
+    document.addEventListener('visibilitychange', _visHandler);
     scheduleInject();
+  }
+
+  function stopHeavyChrome() {
+    if (_hubUnsub) {
+      try {
+        _hubUnsub();
+      } catch (_) {}
+      _hubUnsub = null;
+    }
+    if (_obs) {
+      _obs.disconnect();
+      _obs = null;
+    }
+    if (_visHandler) {
+      document.removeEventListener('visibilitychange', _visHandler);
+      _visHandler = null;
+    }
+    if (_throttle) {
+      clearTimeout(_throttle);
+      _throttle = null;
+    }
+    removeWidget();
+  }
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('document-file-inline', {
+      match: function (pathname) {
+        return fileInlineOnRoute(pathname);
+      },
+      start: startHeavyChrome,
+      stop: stopHeavyChrome,
+    });
+  } else {
+    startHeavyChrome();
   }
 })();

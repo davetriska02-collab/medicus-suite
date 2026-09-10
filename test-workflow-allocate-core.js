@@ -193,6 +193,7 @@ console.log('\n--- write stays on the lab client ---');
   check(!/pickRequesterFromOverview/.test(canvas), 'canvas does not walk lab requestedBy fields');
   check(/decorateWorkflowRow/.test(canvas), 'rows are decorated after the task-list GET');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are still harvested from a few overviews');
+  check(/gen !== _boardGen/.test(canvas), 'overview harvest stops when the overlay is closed');
   check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
   check(/Allocate documents on canvas/.test(canvas), 'document launcher names documents');
   check(/Allocate on canvas/.test(canvas), 'generic workflow launcher is Allocate on canvas');

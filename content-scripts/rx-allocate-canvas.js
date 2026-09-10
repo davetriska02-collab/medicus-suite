@@ -56,6 +56,7 @@
   var _confirmClose = false;
   var _confirmWrite = null;
   var _writing = false;
+  var _boardGen = 0;
   var _taskList = undefined;
   var _staffDir = C.harvestStaffDirectory([], null);
   var _teamDir = C.harvestTeamDirectory([], null);
@@ -293,6 +294,7 @@
   // document/workflow overviews do not carry who-ordered. Staff UUIDs still
   // come from harvestStaffFromOverviews + the create-task form.
   async function harvestStaffFromOverviews(rows) {
+    var gen = _boardGen;
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
@@ -302,14 +304,17 @@
       if (!patientId && r && r.patientId) patientId = r.patientId;
     });
     for (var i = 0; i < cap; i++) {
+      if (gen !== _boardGen) return;
       try {
         var payload = await client().fetchOverview(withUrl[i].overviewURL);
+        if (gen !== _boardGen) return;
         absorbDirectories(null, payload);
         if (!patientId) patientId = C.pickPatientIdFromPayload(payload);
       } catch (_) {
         /* try the next overview */
       }
     }
+    if (gen !== _boardGen) return;
     if (!patientId) return;
     try {
       var form = await client().fetchAssigneeStaff(patientId);
@@ -326,12 +331,14 @@
 
   async function loadBoard(opts) {
     opts = opts || {};
+    var gen = _boardGen;
     var keepDraft = opts.skipSplit ? _draft || C.emptyDraft() : null;
     _loading = true;
     _error = null;
     render();
     try {
       await loadAgState({ applyDefault: !_agLoaded });
+      if (gen !== _boardGen) return;
       _agLoaded = true;
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
       var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
@@ -340,6 +347,7 @@
       });
       var out = await inboxP;
       var sitting = await sittingP;
+      if (gen !== _boardGen) return;
       _rows = C.mergeInboxAndSitting(out.rows || [], (sitting && sitting.rows) || [], _route.search);
       _route.slug = out.slug || _route.slug;
       if (out.search) _route.search = out.search;
@@ -348,18 +356,23 @@
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
       render();
       await presenceP;
+      if (gen !== _boardGen) return;
       harvestStaffFromBook(_book);
       await harvestStaffFromOverviews(_rows);
+      if (gen !== _boardGen) return;
       persistStaffCache();
       _draft = C.ensureWorkingTodayColumns(keepDraft || C.emptyDraft(), splitDestinations());
       if (!opts.skipSplit) _splitDefaulted = false;
     } catch (err) {
+      if (gen !== _boardGen) return;
       _error = err && err.message ? err.message : 'Could not read this prescription queue.';
       _rows = [];
     } finally {
-      _loading = false;
-      _overviewProgress = '';
-      render();
+      if (gen === _boardGen) {
+        _loading = false;
+        _overviewProgress = '';
+        render();
+      }
     }
   }
 
@@ -2914,6 +2927,7 @@
   }
 
   function closeOverlay() {
+    _boardGen++;
     _open = false;
     _rows = [];
     _draft = C.emptyDraft();

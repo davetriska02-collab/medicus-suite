@@ -500,6 +500,7 @@ console.log('\n--- write stays on the lab client ---');
   check(/applyDefaultEvenSplit/.test(canvas), 'even split is applied when you ask for it');
   check(/applyPileSplit/.test(canvas) && /planTopUp/.test(canvas), 'new unallocated work can top up empty boxes');
   check(/function applyPileSplit[\s\S]{0,500}planEvenSplit/.test(canvas), 'Split equally binds planEvenSplit');
+  check(/gen !== _boardGen/.test(canvas), 'overview harvest stops when the overlay is closed');
   check(/function applyTopUp[\s\S]{0,500}planTopUp/.test(canvas), 'Top up binds planTopUp');
   check(/applyLevel/.test(canvas) && /planLevel/.test(canvas), 'distribute equally levels sitting plus new work');
   check(/unallocatedNotStaged/.test(canvas), 'staged unallocated tiles leave the split pile');

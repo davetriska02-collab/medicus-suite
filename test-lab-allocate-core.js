@@ -368,6 +368,7 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
+  check(/gen !== _boardGen/.test(canvas), 'overview harvest stops when the overlay is closed');
   check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
   check(!/list\.length >= 8/.test(canvas), 'overview harvest does not stop at eight staff ids');
   check(
