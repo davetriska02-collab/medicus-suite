@@ -1244,11 +1244,9 @@
       _draft = C.emptyDraft();
       _confirmWrite = null;
       _copyNote =
-        'Medicus accepted ' +
-        n +
-        ' reassignment' +
-        (n === 1 ? '' : 's') +
-        '. Check the queue — this canvas is a working copy.';
+        (window.WriteCore && window.WriteCore.finaliseConfirmCopy(result, 'reassignments')) ||
+        'Medicus accepted ' + n + ' reassignment' + (n === 1 ? '' : 's');
+      _copyNote += '. Check the queue — this canvas is a working copy.';
       _writing = false;
       announce(_copyNote);
       await loadBoard();
@@ -1406,85 +1404,49 @@
     true
   );
 
-  var _mo = new MutationObserver(function (records) {
-    for (var i = 0; i < records.length; i++) {
-      var t = records[i].target;
-      if (t && t.closest && (t.closest('#' + OVERLAY_ID) || t.closest('#' + LAUNCH_ID))) return;
-    }
-    ensureLauncher();
-  });
-  var _launchTick = null;
-  var _routeTick = null;
-  var _launchBooted = false;
-  var _heavyOn = false;
-  var _unsubHub = null;
-
   function startHeavyChrome() {
-    if (!_heavyOn) {
-      _heavyOn = true;
-      _mo.observe(document.documentElement, { childList: true, subtree: true });
-      _launchTick = setInterval(ensureLauncher, 1500);
-    }
     ensureLauncher();
   }
 
   function stopHeavyChrome() {
-    if (_mo) _mo.disconnect();
-    if (_launchTick) {
-      clearInterval(_launchTick);
-      _launchTick = null;
-    }
-    _heavyOn = false;
     muteAllocateChrome();
   }
 
-  function onRoutePulse() {
-    if (!_packOn) return;
-    if (currentRoute()) startHeavyChrome();
-    else stopHeavyChrome();
-  }
-
-  function startAllocateChrome() {
-    if (_launchBooted) {
-      onRoutePulse();
-      return;
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('workflow-allocate', {
+      match: function () {
+        return !!_packOn && !!currentRoute();
+      },
+      start: startHeavyChrome,
+      stop: stopHeavyChrome,
+    });
+    if (window.PracticePacks && window.PracticePacks.bindInjector) {
+      window.PracticePacks.bindInjector(PACK_KEY, {
+        on: function () {
+          _packOn = true;
+          Runtime.sync();
+        },
+        off: function () {
+          _packOn = false;
+          Runtime.sync();
+        },
+      });
+    } else {
+      Runtime.sync();
     }
-    _launchBooted = true;
-    window.addEventListener('popstate', onRoutePulse);
-    if (window.__chObserverHub && typeof window.__chObserverHub.subscribe === 'function') {
-      _unsubHub = window.__chObserverHub.subscribe(onRoutePulse);
-    } else if (!_routeTick) {
-      _routeTick = setInterval(onRoutePulse, 1500);
-    }
-    onRoutePulse();
-  }
-
-  function stopAllocateChrome() {
-    window.removeEventListener('popstate', onRoutePulse);
-    if (_unsubHub) {
-      _unsubHub();
-      _unsubHub = null;
-    }
-    if (_routeTick) {
-      clearInterval(_routeTick);
-      _routeTick = null;
-    }
-    stopHeavyChrome();
-    _launchBooted = false;
-  }
-
-  if (window.PracticePacks && window.PracticePacks.bindInjector) {
+  } else if (window.PracticePacks && window.PracticePacks.bindInjector) {
     window.PracticePacks.bindInjector(PACK_KEY, {
       on: function () {
         _packOn = true;
-        startAllocateChrome();
+        startHeavyChrome();
       },
       off: function () {
         _packOn = false;
-        stopAllocateChrome();
+        stopHeavyChrome();
       },
     });
   } else {
-    startAllocateChrome();
+    startHeavyChrome();
   }
 })();

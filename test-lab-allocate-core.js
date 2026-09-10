@@ -1212,6 +1212,8 @@ async function testClient() {
         bodies.push(JSON.parse(opts.body || '{}'));
         body = { ok: true };
       } else if (/task-list/.test(url)) {
+        const last = bodies[bodies.length - 1];
+        const landed = !taskListGone && last && last.assigneeId && Array.isArray(last.taskIds);
         body = {
           taskList: 'envelope-token',
           tasks: taskListGone
@@ -1220,7 +1222,8 @@ async function testClient() {
                 {
                   id: uuid(1),
                   patientName: 'A',
-                  assignedTo: 'Investigation Reports',
+                  assignedTo: landed ? 'Dr Natalie Azadian' : 'Investigation Reports',
+                  assignedId: landed ? last.assigneeId : undefined,
                   requestedBy: 'AZADIAN N',
                   overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(1),
                 },
@@ -1330,6 +1333,7 @@ async function testClient() {
   );
 
   const calls404 = [];
+  let last404Body = null;
   const client404 = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async function (url, opts) {
       calls404.push({ url: url, method: opts.method });
@@ -1343,14 +1347,19 @@ async function testClient() {
         };
       }
       var body404 = { ok: true };
+      if (/bulk-reassign/.test(url)) {
+        last404Body = JSON.parse(opts.body || '{}');
+      }
       if (/\/tasks\/data\/.+\/task-list/.test(url)) {
+        const landed = last404Body && last404Body.assigneeId;
         body404 = {
           taskList: 'envelope-token',
           tasks: [
             {
               id: uuid(1),
               patientName: 'A',
-              assignedTo: 'Investigation Reports',
+              assignedTo: landed ? 'Dr Natalie Azadian' : 'Investigation Reports',
+              assignedId: landed ? last404Body.assigneeId : undefined,
               requestedBy: 'AZADIAN N',
             },
           ],
@@ -1386,6 +1395,7 @@ async function testClient() {
   );
 
   const calls404lit = [];
+  let lastLitBody = null;
   const client404lit = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async function (url, opts) {
       calls404lit.push({ url: url, method: opts.method });
@@ -1399,14 +1409,19 @@ async function testClient() {
         };
       }
       var bodyLit = { ok: true };
+      if (/bulk-reassign/.test(url)) {
+        lastLitBody = JSON.parse(opts.body || '{}');
+      }
       if (/\/tasks\/data\/.+\/task-list/.test(url)) {
+        const landed = lastLitBody && lastLitBody.assigneeId;
         bodyLit = {
           taskList: 'envelope-token',
           tasks: [
             {
               id: uuid(1),
               patientName: 'A',
-              assignedTo: 'Investigation Reports',
+              assignedTo: landed ? 'Dr Natalie Azadian' : 'Investigation Reports',
+              assignedId: landed ? lastLitBody.assigneeId : undefined,
               requestedBy: 'AZADIAN N',
             },
           ],
@@ -1467,6 +1482,7 @@ async function testClient() {
   seqDraft = C.stageMove(seqDraft, rowA.id, C.clinicianColumnKey('Dr Natalie Azadian'));
   seqDraft = C.stageMove(seqDraft, rowB.id, C.clinicianColumnKey('Dr David Triska'));
   const seqPosts = [];
+  const seqLanded = {};
   const seqClient = C.createClient('https://e38a9f.api.england.medicus.health', {
     fetchImpl: async function (url, opts) {
       if (/bulk-reassign/.test(url)) {
@@ -1481,6 +1497,9 @@ async function testClient() {
             },
           };
         }
+        (payload.taskIds || []).forEach(function (id) {
+          seqLanded[id] = payload.assigneeId;
+        });
         return {
           ok: true,
           status: 200,
@@ -1496,8 +1515,18 @@ async function testClient() {
           return JSON.stringify({
             taskList: 'envelope-token',
             tasks: [
-              { id: rowA.id, patientName: 'A', assignedTo: 'Investigation Reports' },
-              { id: rowB.id, patientName: 'B', assignedTo: 'Investigation Reports' },
+              {
+                id: rowA.id,
+                patientName: 'A',
+                assignedTo: seqLanded[rowA.id] ? 'Dr Natalie Azadian' : 'Investigation Reports',
+                assignedId: seqLanded[rowA.id],
+              },
+              {
+                id: rowB.id,
+                patientName: 'B',
+                assignedTo: seqLanded[rowB.id] ? 'Dr David Triska' : 'Investigation Reports',
+                assignedId: seqLanded[rowB.id],
+              },
             ],
           });
         },
@@ -1523,6 +1552,47 @@ async function testClient() {
         return p.assigneeId === idB;
       }),
     'Write still POSTs the remaining dest after one dest fails'
+  );
+
+  const ghostClient = C.createClient('https://e38a9f.api.england.medicus.health', {
+    fetchImpl: async function (url, opts) {
+      if (/bulk-reassign/.test(url)) {
+        return {
+          ok: true,
+          status: 200,
+          text: async function () {
+            return JSON.stringify({ ok: true });
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async function () {
+          return JSON.stringify({
+            taskList: 'envelope-token',
+            tasks: [
+              {
+                id: uuid(1),
+                patientName: 'A',
+                assignedTo: 'Investigation Reports',
+              },
+            ],
+          });
+        },
+      };
+    },
+  });
+  const ghost = await ghostClient.commitAllocations({
+    slug: 'review-investigation-report',
+    draft: draft,
+    rows: [row],
+    taskList: out.taskList,
+    directory: dir,
+  });
+  check(
+    ghost.ok === false && ghost.written === 0,
+    'POST 200 that does not change assignedId is not a write success'
   );
 
   const staffFormCalls = [];

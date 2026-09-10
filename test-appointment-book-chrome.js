@@ -1,47 +1,33 @@
-// Source lock: appointment-book tally and organise observers only run on
-// the book route. Off-book they disconnect the MutationObserver, clear the
-// 1.5s placement interval, and remove the host.
+// Source lock: book/allocate injectors register with InjectorRuntime instead
+// of each keeping a documentElement MutationObserver + 1.5s tick.
 'use strict';
 
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 
-const tally = fs.readFileSync(path.join(__dirname, 'content-scripts/appointment-tally.js'), 'utf8');
-assert(/function stopBookChrome\(/.test(tally), 'tally defines stopBookChrome');
-assert(/function startBookChrome\(/.test(tally), 'tally defines startBookChrome');
-assert(/function syncBookChrome\(/.test(tally), 'tally defines syncBookChrome');
-assert(
-  /if \(currentRoute\(\)\) startBookChrome\(\);\s*else stopBookChrome\(\);/.test(tally),
-  'tally calls stopBookChrome when !route'
-);
-assert(/_mo\.disconnect\(\)/.test(tally), 'tally disconnects its observer off-book');
-assert(/clearInterval\(_poll\)/.test(tally), 'tally clears the 1.5s interval off-book');
+const files = {
+  'content-scripts/appointment-tally.js': 'appointment-tally',
+  'content-scripts/appointment-organise-canvas.js': 'appointment-organise',
+  'content-scripts/lab-allocate-canvas.js': 'lab-allocate',
+  'content-scripts/rx-allocate-canvas.js': 'rx-allocate',
+  'content-scripts/workflow-allocate-canvas.js': 'workflow-allocate',
+  'content-scripts/request-allocate-canvas.js': 'request-allocate',
+};
 
-const organise = fs.readFileSync(path.join(__dirname, 'content-scripts/appointment-organise-canvas.js'), 'utf8');
-assert(/function stopHeavyChrome\(/.test(organise), 'organise defines stopHeavyChrome');
-assert(/function startHeavyChrome\(/.test(organise), 'organise defines startHeavyChrome');
-assert(
-  /if \(currentRoute\(\)\) startHeavyChrome\(\);\s*else stopHeavyChrome\(\);/.test(organise),
-  'organise calls stopHeavyChrome when !route'
-);
-assert(/function onRoutePulse\(/.test(organise), 'organise route-gates via onRoutePulse');
-
-const allocateFiles = [
-  'content-scripts/lab-allocate-canvas.js',
-  'content-scripts/rx-allocate-canvas.js',
-  'content-scripts/workflow-allocate-canvas.js',
-  'content-scripts/request-allocate-canvas.js',
-];
-for (const f of allocateFiles) {
+for (const [f, id] of Object.entries(files)) {
   const src = fs.readFileSync(path.join(__dirname, f), 'utf8');
-  assert(/function stopHeavyChrome\(/.test(src), `${f} defines stopHeavyChrome`);
-  assert(/function startHeavyChrome\(/.test(src), `${f} defines startHeavyChrome`);
-  assert(
-    /if \(currentRoute\(\)\) startHeavyChrome\(\);\s*else stopHeavyChrome\(\);/.test(src),
-    `${f} calls stopHeavyChrome when !route`
-  );
-  assert(/__chObserverHub/.test(src), `${f} subscribes to the shared DOM hub`);
+  assert(/InjectorRuntime/.test(src), `${f} uses InjectorRuntime`);
+  assert(src.includes("register('" + id + "'") || src.includes('register("' + id + '"'), `${f} registers as ${id}`);
+  assert(/function stopHeavyChrome\(|function stopBookChrome\(/.test(src), `${f} has a stop hook`);
+  assert(!/__chObserverHub/.test(src), `${f} does not subscribe to the hub itself`);
 }
+
+const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
+assert(manifest.includes('shared/injector-runtime.js'), 'manifest loads injector-runtime.js');
+assert(manifest.includes('shared/write-core.js'), 'manifest loads write-core.js');
+const runtimeIdx = manifest.indexOf('shared/injector-runtime.js');
+const tallyIdx = manifest.indexOf('content-scripts/appointment-tally.js');
+assert(runtimeIdx !== -1 && runtimeIdx < tallyIdx, 'injector-runtime loads before tally');
 
 console.log('test-appointment-book-chrome: ok');

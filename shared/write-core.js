@@ -76,6 +76,15 @@
   // Confirm copy for a Finalise (or any write) outcome. Never claims
   // completion on a partial — canvases must not invent their own success
   // sentence.
+  // Book/site/patient pin: refuse a write if the live identity moved.
+  function assertUnmoved(pinned, live) {
+    if (!pinned || !live) return false;
+    if (pinned.apiBase && live.apiBase && String(pinned.apiBase) !== String(live.apiBase)) return false;
+    if (pinned.date && live.date && String(pinned.date) !== String(live.date)) return false;
+    if (pinned.patientId && live.patientId && String(pinned.patientId) !== String(live.patientId)) return false;
+    return true;
+  }
+
   function finaliseConfirmCopy(outcome, noun) {
     var o = outcome || {};
     var wanted = typeof o.wanted === 'number' ? o.wanted : 0;
@@ -91,6 +100,7 @@
     landedIds: landedIds,
     diffWantedVsLanded: diffWantedVsLanded,
     diffFinaliseOutcome: diffFinaliseOutcome,
+    assertUnmoved: assertUnmoved,
     finaliseConfirmCopy: finaliseConfirmCopy,
   };
 

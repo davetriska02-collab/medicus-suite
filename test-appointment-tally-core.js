@@ -282,6 +282,15 @@ console.log('\n--- source lock: injected widget ---');
   );
   check(slotsSrc.includes('isCancelled'), 'Slots aggregate skips cancelled sessions like the tally');
   check(js.includes('_inFlightKey'), 'tally load is keyed so a late fetch cannot paint the previous date');
+  check(js.includes('shouldApplyFetch'), 'tally load uses shouldApplyFetch so a stale in-flight date is discarded');
+  check(core.shouldApplyFetch('a|2026-09-10', 'a|2026-09-10') === true, 'matching in-flight key applies');
+  check(core.shouldApplyFetch('a|2026-09-10', 'a|2026-09-11') === false, 'date B in flight does not apply date A');
+  check(core.shouldApplyFetch('', 'a|2026-09-10') === false, 'empty in-flight key does not apply');
+  check(manifest.includes('shared/injector-runtime.js'), 'injector runtime is in the manifest');
+  check(
+    manifest.indexOf('shared/injector-runtime.js') < widgetIdx,
+    'injector runtime loads before the tally widget'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

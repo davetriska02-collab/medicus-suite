@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.24] — 2026-09-10
+
+### Injector runtime + WriteCore on allocate
+
+Patch on 3.261. Does not move `last_cso_review_version`.
+
+- **Injector runtime.** One boot table (`shared/injector-runtime.js`):
+  canvases register `{ match, start, stop }`. The shared DOM hub (or a
+  1.5s fallback) is the only navigation observer. Tally, Organise, lab,
+  Rx, workflow and request allocate no longer keep a private
+  `documentElement` MutationObserver off-route.
+- **WriteCore on allocate.** `commitAllocations` re-reads the queue after
+  POST and counts a write only when `assignedId` matches the batch
+  assignee. A 200 that does not move the row is not success. Organise
+  Finalise uses `assertUnmoved` + `diffWantedVsLanded` +
+  `finaliseConfirmCopy`.
+- **Tests.** Date-A-in-flight / date-B is `shouldApplyFetch` in
+  `appointment-tally-core.js`. Injector runtime start/stop is executable
+  in Node.
+
 ## [v3.261.23] — 2026-09-10
 
 ### Maintenance — prune leftovers, journal UUID, allocate observers
