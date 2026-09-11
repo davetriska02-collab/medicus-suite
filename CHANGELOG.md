@@ -21,7 +21,10 @@ without it silently kept the batch date.
   `issue-history` | `issue-date`.
 - `postInitiationDays` evaluates only against `medication-history`. Missing or
   failed VTM join is `no_data` — architecturally incapable of a false
-  "started, never rechecked" alert.
+  "started, never rechecked" alert. The later "recently initiated" rewrite
+  (which used any `startDate` to flip `no_data`) no longer touches
+  post-initiation rows, or an untrusted batch date could have relabelled
+  the gated `no_data` as a recent start.
 - Shipped tests restored on `ace-arb` (21d) and `thiazide-diuretic-ue` (28d).
 - `test-ace-arb-postinit.js` drives the real history join: join succeeds →
   can fire; no `vtmProductName` → must not fire on the batch date; established

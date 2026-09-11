@@ -1299,7 +1299,10 @@
         const minInterval = Math.min(...rule.tests.map((t) => t.intervalDays || 365));
         if (daysSinceStart != null && daysSinceStart < minInterval / 2) {
           testEvaluations.forEach((te) => {
-            if (te.status === 'no_data') {
+            // Post-initiation rows have their own recently_initiated window,
+            // and only on a trusted clinical start. Do not rewrite an
+            // untrusted post-init no_data into "recently started".
+            if (te.status === 'no_data' && !te.postInitiation) {
               te.status = 'recently_initiated';
               suppressedNoData = true;
             }
