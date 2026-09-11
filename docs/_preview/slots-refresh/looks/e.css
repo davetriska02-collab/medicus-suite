@@ -1,0 +1,284 @@
+/* Option E — Paper ledger. Physical appointment book. Tasteful wildcard. */
+
+:root {
+  --bg-deep: #f3ead6;
+  --bg-mid: #ebe1c8;
+  --bg-elev: #f8f1de;
+  --bg-hover: #e7dcc0;
+  --border: #c9b892;
+  --border-hi: #8b7355;
+  --text-1: #1c140c;
+  --text-2: #2a1d12;
+  --text-3: #5a4630;
+  --text-4: #6e573c;
+  --text-5: #7d6748;
+  --accent: #1f3d5a;
+  --accent-hover: #163047;
+  --accent-dim: rgba(31, 61, 90, 0.08);
+  --accent-line: rgba(31, 61, 90, 0.35);
+  --green: #1f3d5a;
+  --green-dim: rgba(31, 61, 90, 0.08);
+  --green-line: rgba(31, 61, 90, 0.3);
+  --amber: #9a3412;
+  --amber-dim: #f3e0c4;
+  --amber-line: #9a3412;
+  --red: #8b1e1e;
+  --red-dim: #f0d6c8;
+  --red-line: #8b1e1e;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
+  --r-pill: 0;
+  --shadow-1: none;
+  --shadow-2: none;
+  --sans: Georgia, 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+html,
+body,
+.panel-frame,
+.suite-content {
+  background: #f3ead6;
+}
+
+.suite-nav {
+  background: #1f3d5a;
+  border-bottom: 3px solid #8b1e1e;
+  height: 46px;
+}
+
+.nav-tab {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #d7c9a6;
+  border: none;
+}
+
+.nav-tab.active {
+  background: transparent;
+  color: #f8f1de;
+  border: none;
+  box-shadow: inset 0 -3px 0 #f3ead6;
+}
+
+.nav-tab svg,
+.icon-btn {
+  color: #d7c9a6;
+}
+
+.icon-btn:hover {
+  color: #f8f1de;
+  background: transparent;
+}
+
+.module-wrap {
+  padding: 18px 16px 28px;
+}
+
+.mod-eyebrow {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 15px;
+  font-weight: 700;
+  font-style: italic;
+  color: #1f3d5a;
+  letter-spacing: 0;
+}
+
+.date-presets {
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #c9b892;
+}
+
+.preset-btn,
+.date-input,
+.ghost-btn {
+  border-radius: 0;
+  background: #f8f1de;
+  border: 1px solid #8b7355;
+  color: #2a1d12;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.preset-btn.active {
+  background: #1f3d5a;
+  border-color: #1f3d5a;
+  color: #f8f1de;
+}
+
+.slots-alert-ribbon {
+  border-radius: 0;
+  border: 2px solid #9a3412;
+  background: #f3e0c4;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+}
+
+.slots-hero-card {
+  background: #f8f1de;
+  border: none;
+  border-top: 3px double #1f3d5a;
+  border-bottom: 3px double #1f3d5a;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 14px 4px 12px;
+}
+
+.slots-hero-card--amber {
+  background: #f8f1de;
+  border-color: #1f3d5a;
+}
+
+.slots-count-hero {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 64px;
+  font-weight: 700;
+  color: #1c140c;
+  letter-spacing: -0.03em;
+}
+
+.slots-count-label {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 400;
+  color: #1f3d5a;
+}
+
+.slots-count-label.amber {
+  color: #9a3412;
+}
+
+.ampm-chip {
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  border-right: 1px solid #c9b892;
+  padding: 0 10px 0 0;
+}
+
+.ampm-tag {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.ampm-num {
+  font-size: 15px;
+  color: #1c140c;
+}
+
+.ampm-am .ampm-num,
+.ampm-pm .ampm-num {
+  color: #1c140c;
+}
+
+.slots-pill-row {
+  border-top: 1px dashed #c9b892;
+}
+
+.slot-pill {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dotted #8b7355;
+  border-radius: 0;
+  padding: 2px 0;
+}
+
+.slot-pill-dot {
+  border-radius: 0;
+  width: 6px;
+  height: 6px;
+  background: #1f3d5a;
+}
+
+.slot-pill.pill-amber {
+  background: transparent;
+  border-color: transparent;
+  border-bottom: 2px solid #9a3412;
+}
+
+.slot-pill.pill-amber .slot-pill-dot {
+  background: #9a3412;
+}
+
+.slot-pill-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12px;
+}
+
+.section-label,
+.slot-types-summary {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+  border-bottom: 1px solid #1f3d5a;
+  color: #1f3d5a;
+}
+
+.slot-row,
+.staff-toggle {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #d7c9a6;
+  border-radius: 0;
+  padding: 6px 2px;
+}
+
+.slot-share,
+.staff-share {
+  background: rgba(31, 61, 90, 0.06);
+}
+
+.staff-split {
+  height: 2px;
+}
+
+.staff-split .split-am {
+  background: #8b7355;
+  opacity: 0.7;
+}
+
+.staff-split .split-pm {
+  background: #1f3d5a;
+  opacity: 0.7;
+}
+
+.slot-type,
+.staff-name {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12px;
+  color: #1c140c;
+}
+
+.slot-count-total,
+.staff-count {
+  color: #1f3d5a;
+  font-weight: 700;
+}
+
+.staff-detail {
+  background: #ebe1c8;
+  border: none;
+  border-bottom: 1px solid #d7c9a6;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+.fa-toggle-row,
+.bk-toggle-row {
+  background: transparent;
+  border: none;
+  border-top: 1px solid #1f3d5a;
+  border-bottom: 1px solid #1f3d5a;
+  border-radius: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 700;
+  color: #1f3d5a;
+}
+
+.foot {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  letter-spacing: 0;
+}
