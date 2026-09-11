@@ -1,11 +1,14 @@
-// Medicus Suite — ACE-I/ARB post-initiation U&E rule tests
+// Medicus Suite — post-initiation U&E engine + shipped-rule retirement tests
 // Run with: node test-ace-arb-postinit.js
 //
-// Verifies the NICE NG136 post-initiation U&E check on the real `ace-arb` rule
-// (rules/drug-rules.json), evaluated through the real engine. The new engine
-// `postInitiationDays` mechanism makes a MISSING U&E after starting an ACE-I/ARB
-// actionable, while never crying wolf on an established patient whose start date
-// is not visible. A fixed `now` keeps every age deterministic.
+// The shipped `ace-arb` / `thiazide-diuretic-ue` rules no longer carry a
+// post-initiation U&E test (CSO product decision 2026-09-11): Medicus start
+// dates are often the current authorisation batch, so the check fired on
+// patients established for years. Annual U&E (and BP) remain.
+//
+// The engine `postInitiationDays` mechanism is still covered here against a
+// synthetic rule, so a future re-enable has working arithmetic. A fixed `now`
+// keeps every age deterministic.
 
 'use strict';
 const path = require('path');
@@ -14,7 +17,37 @@ const normalisers = require('./engine/normalisers.js');
 const chipRenderer = require('./shared/chip-renderer.js');
 const drugRules = require(path.join(__dirname, 'rules', 'drug-rules.json'));
 
-const aceArb = (drugRules.rules || []).find((r) => r.id === 'ace-arb');
+const shippedAceArb = (drugRules.rules || []).find((r) => r.id === 'ace-arb');
+const shippedThiazide = (drugRules.rules || []).find((r) => r.id === 'thiazide-diuretic-ue');
+
+// Synthetic copy of the retired ace-arb post-init test — engine coverage only.
+const aceArb = {
+  type: 'drug-monitoring',
+  enabled: true,
+  id: 'ace-arb',
+  drugClass: 'ACE inhibitor / ARB',
+  drug: { match: ['ramipril'] },
+  tests: [
+    {
+      name: 'U&E',
+      match: ['u&e', 'urea and electrolytes', 'renal profile'],
+      intervalDays: 365,
+      dueSoonDays: 30,
+    },
+    {
+      name: 'BP',
+      match: ['blood pressure', 'bp'],
+      intervalDays: 365,
+      dueSoonDays: 30,
+    },
+    {
+      name: 'U&E (within ~2 weeks of starting)',
+      match: ['u&e', 'urea and electrolytes', 'renal profile'],
+      postInitiationDays: 21,
+      postInitiationDueSoonDays: 14,
+    },
+  ],
+};
 const NOW = '2026-06-29T12:00:00';
 
 let passed = 0,
@@ -46,12 +79,51 @@ function bp(date) {
   return { name: 'Blood pressure', date, value: '128/78' };
 }
 
-console.log('\n--- rule wiring ---');
-check(!!aceArb, 'ace-arb rule exists in drug-rules.json');
-check(
-  (aceArb.tests || []).some((t) => t.postInitiationDays != null),
-  'ace-arb carries a post-initiation U&E test'
-);
+console.log('\n--- shipped rules no longer carry post-initiation U&E ---');
+check(!!shippedAceArb, 'ace-arb rule exists in drug-rules.json');
+check(!!shippedThiazide, 'thiazide-diuretic-ue rule exists in drug-rules.json');
+{
+  const shippedWithPostInit = (drugRules.rules || []).filter((r) =>
+    (r.tests || []).some((t) => t.postInitiationDays != null)
+  );
+  check(
+    shippedWithPostInit.length === 0,
+    `no shipped rule carries postInitiationDays (got ${shippedWithPostInit.map((r) => r.id).join(', ') || 'none'})`
+  );
+}
+
+// The live failure mode: batch-scoped startDate looks recent, last U&E predates
+// that fake start, annual interval is still in date. Previously the retired
+// post-init row went overdue and cluttered Monitoring.
+console.log('\n--- established ACE-I patient with batch-scoped start → no false post-init alert ---');
+{
+  const chips = engine.evaluatePatient(
+    [{ name: 'Ramipril 5mg capsules', startDate: '2025-09-16' }],
+    [ue('2025-08-01'), bp('2025-08-01')],
+    [shippedAceArb],
+    { now: NOW }
+  );
+  const chip = chips.find((c) => c.ruleId === 'ace-arb');
+  const postInit = chip ? (chip.tests || []).find((t) => t.postInitiation === true) : null;
+  check(!!chip, 'shipped ace-arb still fires an annual monitoring chip');
+  check(!postInit, 'shipped ace-arb has no post-initiation test row');
+  check(chip.status === 'in_date', `annual U&E/BP stay in_date (got ${chip && chip.status})`);
+}
+
+console.log('\n--- established thiazide patient with batch-scoped start → no false post-init alert ---');
+{
+  const chips = engine.evaluatePatient(
+    [{ name: 'Indapamide 2.5mg tablets', startDate: '2025-09-16' }],
+    [ue('2025-08-01')],
+    [shippedThiazide],
+    { now: NOW }
+  );
+  const chip = chips.find((c) => c.ruleId === 'thiazide-diuretic-ue');
+  const postInit = chip ? (chip.tests || []).find((t) => t.postInitiation === true) : null;
+  check(!!chip, 'shipped thiazide-diuretic-ue still fires an annual monitoring chip');
+  check(!postInit, 'shipped thiazide-diuretic-ue has no post-initiation test row');
+  check(chip.status === 'in_date', `annual U&E stays in_date (got ${chip && chip.status})`);
+}
 
 // 1. Recently started (10d ago), no U&E since → within grace → not actionable.
 console.log('\n--- started 10 days ago, no U&E → recently_initiated (neutral) ---');

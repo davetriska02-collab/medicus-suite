@@ -94,10 +94,13 @@ console.log('\n--- same VTM, mismatched startDates → keep longer name AND earl
     matching[0] && matching[0].drugName === 'Ramipril 5mg capsules',
     `kept the more detailed name (got ${matching[0] && matching[0].drugName})`
   );
-  const postInit = matching[0] && (matching[0].tests || []).find((t) => t.postInitiation === true);
+  const drugFact =
+    matching[0] &&
+    matching[0].evidence &&
+    (matching[0].evidence.facts || []).find((f) => f.label === 'Drug matched');
   check(
-    postInit && postInit.startDate === '2013-10-04',
-    `post-init check uses the earliest startDate, not the batch-scoped 2025 date (got ${postInit && postInit.startDate})`
+    drugFact && drugFact.date === '2013-10-04',
+    `merged chip keeps the earliest startDate, not the batch-scoped 2025 date (got ${drugFact && drugFact.date})`
   );
 }
 
