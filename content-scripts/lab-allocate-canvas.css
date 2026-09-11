@@ -7,11 +7,19 @@
 #ms-rxac-launch-wrap {
   position: fixed;
   top: 12px;
-  right: 16px;
   z-index: 2147482990;
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+#ms-qac-launch-wrap {
+  right: 16px;
+}
+
+/* Sit left of Medicus's own Sign control on prescription task-lists. */
+#ms-rxac-launch-wrap {
+  right: 180px;
 }
 
 #ms-qac-inbox-n {

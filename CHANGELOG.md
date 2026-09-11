@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.36] — 2026-09-11
+
+### Prescription list launchers sit left of Sign
+
+Share out / Check for overdue monitoring sit at `right: 180px` so they no
+longer cover Medicus's own Sign control.
+
 ## [v3.261.35] — 2026-09-11
 
 ### Check for overdue monitoring on prescription lists
