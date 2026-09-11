@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.35
+**Version:** v3.261.36
 **Generated:** 2026-09-10
 
 ## What it is
@@ -148,6 +148,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.36 (11 Sep)** — Prescription list Share out / overdue-monitoring buttons sit left of Sign
 - **v3.261.35 (11 Sep)** — Prescription lists: Check for overdue monitoring next to Share out; Monitoring/QOF buttons on flagged requests
 - **v3.261.34 (11 Sep)** — Prescriptions canvas: per-request item counts vs regimen totals, overdue reauthorising line, 1–5 complexity score
 - **v3.261.33 (11 Sep)** — Practice features: Focus alerts toggle for the queue status bar

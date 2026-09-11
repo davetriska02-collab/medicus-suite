@@ -78,6 +78,11 @@ console.log('--- canvas / scan source locks ---');
   const scan = fs.readFileSync(path.join(__dirname, 'content-scripts/rx-overdue-scan.js'), 'utf8');
   const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
   check(/ms-rxac-launch-wrap/.test(canvas), 'share-out launcher lives in a wrap next to the overdue button');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts/lab-allocate-canvas.css'), 'utf8');
+  check(
+    /#ms-rxac-launch-wrap \{[\s\S]{0,80}right:\s*180px/.test(css),
+    'Rx launchers sit left of Medicus Sign (right: 180px)'
+  );
   check(/register\('rx-overdue-scan'/.test(scan), 'overdue scan registers with InjectorRuntime');
   check(/parseRxQueueRoute/.test(scan), 'overdue scan is gated to Rx task-lists');
   check(/Check for overdue monitoring/.test(scan), 'button copy matches the idle label');
