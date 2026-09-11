@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.37] — 2026-09-11
+
+### Slots auto-refresh while the board is open
+
+The Slot Counter tab no longer sits on a stale fetch until the clinician hits
+Refresh. While the module is mounted it quietly refetches the appointment-book
+overview every **60 seconds**.
+
+- **60s** matches Today "Slots Today" and Submissions' today-mode poll — slot
+  counts move on a clinic-minute scale, and the overview payload is heavier
+  than a waiting-room ping.
+- Hidden document: the interval is paused (`document.hidden` /
+  `visibilityState`); becoming visible kicks one gated tick. Switching away
+  from the Slots tab still cancels the timer on unmount.
+- Quiet ticks skip the loading skeleton, restore scroll after a real change,
+  and patch only the freshness stamp when counts are unchanged. A failed quiet
+  tick keeps the last good board. Editing a field (or organising pills /
+  confirming a booking) skips that tick so focus is not stolen.
+- Manual Refresh, date presets, and the date picker still use the loud path.
+  Pusher `suite:slots:refresh` uses the same quiet path.
+
 ## [v3.261.36] — 2026-09-11
 
 ### Prescription list launchers sit left of Sign

@@ -1,8 +1,14 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Medicus Suite — Slot Counter module v2.2
+// Medicus Suite — Slot Counter module v2.3
 // API-based replacement for the DOM-scraping slot counter.
 // Endpoint: GET https://{siteId}.api.england.medicus.health/scheduling/data/appointment-book/embedded-overview
 // Available slots: entries where diaryEntryType.value === 'slot'
+//
+// Auto-refresh: while this module is mounted, quietly refetch on POLL_MS (same
+// cadence as Today "Slots Today" and Submissions today-mode). Paused when the
+// document is hidden; cancelled on unmount. Manual refresh and date changes
+// still use the loud path (skeleton). Quiet ticks skip the skeleton, keep
+// scroll, and skip entirely while the user is editing a field.
 
 'use strict';
 
@@ -143,6 +149,12 @@ function updateAlertRule(id, patch) {
 let container = null;
 let _inFlight = false;
 let _firstAvail = null; // createFirstAvailablePanel() instance, or null
+let pollTimer = null;
+
+// Same 60s cadence as Today "Slots Today" (DEMAND_POLL_MS) and Submissions'
+// today-mode poll — slot counts move on a clinic-minute scale, and the
+// appointment-book overview payload is heavier than a waiting-room ping.
+const POLL_MS = 60 * 1000;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -190,6 +202,8 @@ export async function init(el) {
 
   render();
   fetchAndRender();
+  pollTimer = setInterval(onSlotsPoll, POLL_MS);
+  document.addEventListener('visibilitychange', onSlotsVisibility);
   const stopFresh = attachFreshnessTicker(container);
 
   // First-available "Book" pressed while THIS module is mounted: claim the
@@ -222,6 +236,11 @@ export async function init(el) {
 
   // Return cleanup
   return () => {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+    document.removeEventListener('visibilitychange', onSlotsVisibility);
     document.removeEventListener('suite:slots:refresh', onRefresh);
     document.removeEventListener('suite:first-avail:book', onFirstAvailBook);
     chrome.storage.onChanged.removeListener(onStorageChange);
@@ -235,9 +254,75 @@ export async function init(el) {
   };
 }
 
+function onSlotsPoll() {
+  if (!container) return;
+  if (document.hidden || document.visibilityState !== 'visible') return;
+  if (isSlotsUiBusy()) return;
+  fetchAndRender({ quiet: true });
+}
+
+function onSlotsVisibility() {
+  if (document.hidden || document.visibilityState !== 'visible') return;
+  onSlotsPoll();
+}
+
 function onRefresh() {
   if (!container) return;
-  fetchAndRender();
+  if (isSlotsUiBusy()) return;
+  fetchAndRender({ quiet: true });
+}
+
+// Skip a quiet redraw while the clinician is mid-edit — a full innerHTML
+// rebuild would steal focus from the date picker, type filter, alert editor,
+// or booking reason. The next tick (or a manual refresh) catches up.
+function isSlotsUiBusy() {
+  if (!container) return false;
+  if (state.organisePills) return true;
+  if (state.bk.confirming) return true;
+  const el = document.activeElement;
+  if (!el || !container.contains(el)) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'select' || tag === 'textarea') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+function captureScroll() {
+  const roots = [];
+  if (container) roots.push(container);
+  const parent = container?.parentElement;
+  if (parent && parent !== container) roots.push(parent);
+  return roots.map((el) => ({ el, top: el.scrollTop }));
+}
+
+function restoreScroll(saved) {
+  for (const { el, top } of saved || []) {
+    if (el) el.scrollTop = top;
+  }
+}
+
+function slotsDataFingerprint(d) {
+  if (!d) return '';
+  return JSON.stringify({
+    total: d.total,
+    bookedTotal: d.bookedTotal,
+    byType: d.byType,
+    bookedByType: d.bookedByType,
+    byStaff: d.byStaff,
+  });
+}
+
+function patchFreshness() {
+  if (!container || !state.lastFetched) return;
+  const foot = container.querySelector('.foot');
+  if (foot) foot.innerHTML = freshnessHtml(state.lastFetched);
+  const asat = container.querySelector('.slots-hero-asat');
+  if (asat) {
+    asat.textContent = `practice-wide · as at ${state.lastFetched.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+  }
 }
 
 function onStorageChange(changes) {
@@ -263,11 +348,13 @@ function onStorageChange(changes) {
 
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
-async function fetchAndRender() {
+async function fetchAndRender(opts = {}) {
+  const quiet = opts.quiet === true;
   if (!container) return;
   if (_inFlight) return;
   _inFlight = true;
-  const refreshBtn = container.querySelector('#refreshSlots');
+  const silent = quiet && !!state.data;
+  const refreshBtn = silent ? null : container.querySelector('#refreshSlots');
   if (refreshBtn) refreshBtn.disabled = true;
   try {
     // Re-resolve practice code on every fetch (auto-detect from tab if available)
@@ -284,9 +371,12 @@ async function fetchAndRender() {
       render();
       return;
     }
-    state.loading = true;
-    state.error = null;
-    render();
+    const prevFp = silent ? slotsDataFingerprint(state.data) : null;
+    if (!silent) {
+      state.loading = true;
+      state.error = null;
+      render();
+    }
 
     try {
       const url = `${API_BASE}/scheduling/data/appointment-book/embedded-overview?date=${state.date}&filterByUsualLocation=false`;
@@ -297,15 +387,28 @@ async function fetchAndRender() {
         throw new Error(`API error ${resp.status}`);
       }
       const raw = await resp.json();
-      state.data = aggregate(raw, state.date);
+      const next = aggregate(raw, state.date);
+      const nextFp = slotsDataFingerprint(next);
+      state.data = next;
       state.lastFetched = new Date();
       state.error = null;
+      state.loading = false;
+      if (silent && prevFp === nextFp) {
+        patchFreshness();
+        return;
+      }
     } catch (err) {
+      state.loading = false;
+      // Quiet ticks keep the last good board up rather than flashing a banner
+      // over counts the clinician is still reading. Manual refresh still surfaces
+      // the error.
+      if (silent) return;
       state.error = err.message;
     }
 
-    state.loading = false;
+    const savedScroll = silent ? captureScroll() : null;
     render();
+    if (silent) restoreScroll(savedScroll);
   } finally {
     _inFlight = false;
     if (refreshBtn) refreshBtn.disabled = false;
