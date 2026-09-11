@@ -2,6 +2,37 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.39] — 2026-09-11
+
+### Provenance-gated restore of post-initiation U&E
+
+ACE-I/ARB and thiazide "U&E within ~2 weeks of starting" is back (NICE NG136 /
+CKS initiation recheck), but it can only fire when the start date is the true
+first-ever issue from the prescribing-history join.
+
+#403 withdrew the row because Medicus batch-scoped start dates (~12 months)
+were flagging patients established for years. That withdrawal was correct for
+the false-positive class. The residual gap: tests had constructed meds by hand
+and skipped `normaliseMedications`, so they never proved the #343 history join
+insufficient. The join is still keyed on `vtmProductName`; a regimen item
+without it silently kept the batch date.
+
+- `normaliseMedications` now stamps `startDateSource`: `medication-history` |
+  `issue-history` | `issue-date`.
+- `postInitiationDays` evaluates only against `medication-history`. Missing or
+  failed VTM join is `no_data` — architecturally incapable of a false
+  "started, never rechecked" alert. The later "recently initiated" rewrite
+  (which used any `startDate` to flip `no_data`) no longer touches
+  post-initiation rows, or an untrusted batch date could have relabelled
+  the gated `no_data` as a recent start.
+- Shipped tests restored on `ace-arb` (21d) and `thiazide-diuretic-ue` (28d).
+- `test-ace-arb-postinit.js` drives the real history join: join succeeds →
+  can fire; no `vtmProductName` → must not fire on the batch date; established
+  patient with a true old start → `in_date`. Hand-built bypass fixtures are
+  locked as unable to fire (the #403 process gap).
+
+H-002 / H-003. Does not move `last_cso_review_version`.
+
 ## [v3.261.38] — 2026-09-11
 
 ### Dropped the "U&E 2 weeks after starting" monitoring row
