@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.36
+**Version:** v3.261.37
 **Generated:** 2026-09-10
 
 ## What it is
@@ -20,9 +20,10 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 ### Today — v1.0
 One morning screen: a headline sentence plus waiting-room count, triage queue load, today's demand, today's available slots, and the last pre-clinic sweep status.
 
-### Slot Counter — v2.2
+### Slot Counter — v2.3
 Taken and free appointment counts by type for any date, read live from Medicus's scheduling data. The appointment book itself also carries an injected booked/free tally with the same type toggles.
 - Free remaining (with AM/PM) plus taken on this day's book; configurable alert thresholds; CSV export
+- Auto-refresh every 60s while the tab is open (paused when hidden; no skeleton flicker)
 - "First available appointment" lookup with one-click booking handoff
 - Typable appointment-type filter on the booking picker
 - "Next working day" skips weekends and bank holidays for the practice's chosen nation (bundled GOV.UK calendar, England & Wales / Scotland / Northern Ireland)
@@ -148,6 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.37 (11 Sep)** — Slots auto-refreshes every 60s while open (paused when hidden)
 - **v3.261.36 (11 Sep)** — Prescription list Share out / overdue-monitoring buttons sit left of Sign
 - **v3.261.35 (11 Sep)** — Prescription lists: Check for overdue monitoring next to Share out; Monitoring/QOF buttons on flagged requests
 - **v3.261.34 (11 Sep)** — Prescriptions canvas: per-request item counts vs regimen totals, overdue reauthorising line, 1–5 complexity score
