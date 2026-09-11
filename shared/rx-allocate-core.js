@@ -451,7 +451,130 @@
     };
   }
 
+  // ---- Per-request medication summary (2026-09-10) ----
+  // Pure counting/formatting for the "Request for 3/6 repeats, 1 acute,
+  // 0/2 batches. 3/5 repeats overdue for reauthorising." tile sub-line.
+  // Fetch orchestration (concurrency, caching, on-screen priority) stays in
+  // content-scripts/rx-allocate-canvas.js — this is just the shape math,
+  // kept here so it's require()-able from tests like the rest of this file.
+
+  // data.prescriptionRequestItemsByType has 5 confirmed sibling buckets
+  // (HAR-confirmed live against a real 148-row inbox, 2026-09-10):
+  // repeatWithAnAuthorisedIssue + repeatPrescribingWithNoIssues (both
+  // "repeat" — split only by whether an issue is currently outstanding),
+  // acutePrescriptions, repeatDispensing, variableRepeat.
+  function itemCountsFromOverviewPayload(payload, resolvedPatientId) {
+    var byType = payload && payload.data && payload.data.prescriptionRequestItemsByType;
+    function bucketLen(key) {
+      var b = byType && byType[key];
+      return Array.isArray(b && b.items) ? b.items.length : 0;
+    }
+    return {
+      repeat: bucketLen('repeatWithAnAuthorisedIssue') + bucketLen('repeatPrescribingWithNoIssues'),
+      acute: bucketLen('acutePrescriptions'),
+      repeatDispensing: bucketLen('repeatDispensing'),
+      variableRepeat: bucketLen('variableRepeat'),
+      resolvedPatientId: resolvedPatientId || '',
+    };
+  }
+
+  // Scope confirmed with Nick (2026-09-10): only the three repeat-type
+  // buckets — isOverDue on acute/OTC/prescribed-elsewhere is out of scope
+  // (acute items structurally can't carry a reauthorisation-overdue flag —
+  // confirmed live on a real patient's medication list).
+  var RX_REPEAT_TYPE_BUCKETS = [
+    ['currentRepeatPrescribingMedications', 'repeatTotal'],
+    ['currentVariableRepeatMedications', 'variableRepeatTotal'],
+    ['currentRepeatDispensingMedications', 'repeatDispensingTotal'],
+  ];
+
+  function regimenTotalsFromPayload(regimen) {
+    var totals = { repeatTotal: 0, variableRepeatTotal: 0, repeatDispensingTotal: 0, overdueCount: 0, overdueTotal: 0 };
+    RX_REPEAT_TYPE_BUCKETS.forEach(function (pair) {
+      var arr = regimen && regimen[pair[0]];
+      if (!Array.isArray(arr)) return;
+      totals[pair[1]] = arr.length;
+      totals.overdueTotal += arr.length;
+      arr.forEach(function (m) {
+        if (m && m.isOverDue) totals.overdueCount++;
+      });
+    });
+    return totals;
+  }
+
+  // requested/total, e.g. "3/6 repeats" — with no regimen total loaded yet
+  // (Pass B hasn't resolved this patient), falls back to a bare requested
+  // count ("3 repeats") rather than blocking on the slow fetch. Returns ''
+  // for a type with zero requested items (omitted from the line entirely).
+  function fractionOrCount(requested, total, label) {
+    if (!requested) return '';
+    var text = total == null ? String(requested) : requested + '/' + total;
+    return text + ' ' + label;
+  }
+
+  // "Request for 3/6 repeats, 1 acute, 0/2 batches. 3/5 repeats overdue for
+  // reauthorising." — Nick's own confirmed format, 2026-09-10. Acute is a
+  // bare count (no total, confirmed) since it's out of scope for the
+  // reauthorisation-overdue concept entirely. The overdue sentence only
+  // appears once `totals` is non-null AND has at least one repeat-type
+  // medication — plain text, no markup (caller HTML-escapes/wraps it).
+  function rxMonitoringLine(counts, totals) {
+    if (!counts) return '';
+    var parts = [];
+    var repeatPart = fractionOrCount(counts.repeat, totals ? totals.repeatTotal : null, 'repeats');
+    if (repeatPart) parts.push(repeatPart);
+    if (counts.acute) parts.push(counts.acute + ' acute');
+    var dispensingPart = fractionOrCount(counts.repeatDispensing, totals ? totals.repeatDispensingTotal : null, 'batches');
+    if (dispensingPart) parts.push(dispensingPart);
+    var variablePart = fractionOrCount(
+      counts.variableRepeat,
+      totals ? totals.variableRepeatTotal : null,
+      'variable repeat'
+    );
+    if (variablePart) parts.push(variablePart);
+    if (!parts.length) return '';
+    var sentence = 'Request for ' + parts.join(', ') + '.';
+    if (totals && totals.overdueTotal > 0) {
+      sentence += ' ' + totals.overdueCount + '/' + totals.overdueTotal + ' repeats overdue for reauthorising.';
+    }
+    return sentence;
+  }
+
+  // 1 (least complex) to 5 (most complex) — Nick's request, 2026-09-10:
+  // "more items in the request should increase it". Originally also
+  // weighted in medicationsTotal (the patient's background repeat-type
+  // med count) at 3x-vs-1x, but Nick dropped that the same day: "the
+  // number needing reauthorised is less useful" — issuing work scales
+  // with how many items THIS request contains, not with how many meds
+  // happen to be sitting on the patient's file. The regimen totals /
+  // overdue-for-reauthorising figures stay visible as extra info in
+  // rxMonitoringLine's own sentence — just no longer feed the score.
+  // Only needs counts (Pass A, ~10s for a whole pool) now, not totals
+  // (Pass B, ~70s) — resolves far sooner than it used to as a result.
+  // Thresholds: even steps of 2 (Nick, 2026-09-10) — 1-2 items -> level 1,
+  // 3-4 -> 2, 5-6 -> 3, 7-8 -> 4, 9+ -> 5.
+  var COMPLEXITY_THRESHOLDS = [2, 4, 6, 8]; // upper bound (inclusive) for levels 1-4; above the last -> 5
+
+  function complexityScore(counts) {
+    if (!counts) return null;
+    var requestedItemsTotal = counts.repeat + counts.acute + counts.repeatDispensing + counts.variableRepeat;
+    var raw = requestedItemsTotal;
+    var level = 5;
+    for (var i = 0; i < COMPLEXITY_THRESHOLDS.length; i++) {
+      if (raw <= COMPLEXITY_THRESHOLDS[i]) {
+        level = i + 1;
+        break;
+      }
+    }
+    return { level: level, requestedItemsTotal: requestedItemsTotal, raw: raw };
+  }
+
   var api = {
+    itemCountsFromOverviewPayload: itemCountsFromOverviewPayload,
+    regimenTotalsFromPayload: regimenTotalsFromPayload,
+    fractionOrCount: fractionOrCount,
+    rxMonitoringLine: rxMonitoringLine,
+    complexityScore: complexityScore,
     isNonRoutineRxQueueSlug: isNonRoutineRxQueueSlug,
     isRoutineRxQueueSlug: isRoutineRxQueueSlug,
     isRxQueueSlug: isRxQueueSlug,

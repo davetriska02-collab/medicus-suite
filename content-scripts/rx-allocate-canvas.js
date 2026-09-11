@@ -80,6 +80,14 @@
   var _lastSkipped = [];
   var _peopleDragKeys = null;
   var _marquee = null;
+  // task id -> { repeat, acute, repeatDispensing, variableRepeat, resolvedPatientId }
+  // — from each row's own overview (data.prescriptionRequestItemsByType).
+  var _rxItemCounts = {};
+  // patientId -> { repeatTotal, repeatDispensingTotal, variableRepeatTotal,
+  // overdueCount, overdueTotal } — from medication-regimen, one fetch per
+  // unique patient, lazy/on-screen-first (see loadRxMonitoringTotals).
+  var _rxRegimenTotals = {};
+  var _rxMonitoringRenderPending = false;
 
   function fieldIsOpen(key) {
     return _expandedChip === key || !!_openDests[key];
@@ -290,38 +298,189 @@
     if (node) node.textContent = _overviewProgress;
   }
 
+  // ---- Shared fetch safety (Pass A + Pass B below) ----
+  // Neither shared/lab-allocate-core.js's getJson/fetchOverview nor
+  // engine/api-client.js's SentinelApiClient carries a hang-safe timeout
+  // for these two passes' own concurrency — wrap every fetch so a stalled
+  // request can't stall a whole worker slot forever.
+  var RX_FETCH_CONCURRENCY = 5;
+  var RX_FETCH_TIMEOUT_MS = 8000;
+  var RX_CIRCUIT_BREAKER_MAX = 10;
+
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () {
+        reject(new Error('timeout after ' + ms + 'ms'));
+      }, ms);
+      promise.then(
+        function (v) {
+          clearTimeout(t);
+          resolve(v);
+        },
+        function (e) {
+          clearTimeout(t);
+          reject(e);
+        }
+      );
+    });
+  }
+
+  // Stops the whole pass after too many fetches in a row fail — protects
+  // against hammering a genuinely down endpoint rather than quietly
+  // retrying 140+ more times.
+  function makeCircuitBreaker(maxConsecutiveFails) {
+    var consecutiveFails = 0;
+    var tripped = false;
+    return {
+      isTripped: function () {
+        return tripped;
+      },
+      recordSuccess: function () {
+        consecutiveFails = 0;
+      },
+      recordFailure: function () {
+        consecutiveFails++;
+        if (consecutiveFails >= maxConsecutiveFails) tripped = true;
+      },
+    };
+  }
+
+  function runWorkerPool(items, concurrency, worker) {
+    var idx = 0;
+    function next() {
+      if (idx >= items.length) return Promise.resolve();
+      var i = idx++;
+      return Promise.resolve(worker(items[i], i)).then(next);
+    }
+    var lanes = [];
+    for (var l = 0; l < Math.min(concurrency, items.length); l++) lanes.push(next());
+    return Promise.all(lanes);
+  }
+
   // Lab enrichRequesters (requestedBy walker) is deliberately skipped —
   // document/workflow overviews do not carry who-ordered. Staff UUIDs still
   // come from harvestStaffFromOverviews + the create-task form.
+  //
+  // Pass A (item counts + staff harvest): every row's own overview, fetched
+  // CONCURRENCY=5 (was a sequential for-loop capped at 12 — that cap only
+  // ever existed to bound the staff-harvest side effect's own runtime; a
+  // live 148-row timing test (2026-09-10) proved the full pool fetches in
+  // ~10s at this concurrency with zero errors, so it now runs for every
+  // row and doubles as the source for _rxItemCounts). Cancellation uses the
+  // same _boardGen the rest of loadBoard already checks — a closed/reopened
+  // overlay abandons this pass rather than writing stale results into a
+  // fresh board.
   async function harvestStaffFromOverviews(rows) {
     var gen = _boardGen;
     var withUrl = (rows || []).filter(function (r) {
       return r && r.overviewURL;
     });
-    var cap = Math.min(withUrl.length, 12);
     var patientId = '';
     (rows || []).forEach(function (r) {
       if (!patientId && r && r.patientId) patientId = r.patientId;
     });
-    for (var i = 0; i < cap; i++) {
-      if (gen !== _boardGen) return;
+    var breaker = makeCircuitBreaker(RX_CIRCUIT_BREAKER_MAX);
+    await runWorkerPool(withUrl, RX_FETCH_CONCURRENCY, async function (row) {
+      if (breaker.isTripped() || gen !== _boardGen) return;
       try {
-        var payload = await client().fetchOverview(withUrl[i].overviewURL);
+        var payload = await withTimeout(client().fetchOverview(row.overviewURL), RX_FETCH_TIMEOUT_MS);
         if (gen !== _boardGen) return;
+        breaker.recordSuccess();
         absorbDirectories(null, payload);
-        if (!patientId) patientId = C.pickPatientIdFromPayload(payload);
+        var resolvedPid = row.patientId || C.pickPatientIdFromPayload(payload);
+        if (!patientId && resolvedPid) patientId = resolvedPid;
+        _rxItemCounts[row.id] = C.itemCountsFromOverviewPayload(payload, resolvedPid);
       } catch (_) {
+        breaker.recordFailure();
         /* try the next overview */
       }
-    }
+    });
     if (gen !== _boardGen) return;
     if (!patientId) return;
     try {
       var form = await client().fetchAssigneeStaff(patientId);
+      if (gen !== _boardGen) return;
       absorbDirectories(null, form);
     } catch (_) {
       /* create-task form is a bonus directory, not required to stage */
     }
+  }
+
+  // Pass B (medication-regimen totals + overdue): lazy, kicked off once
+  // Pass A has resolved every row's item counts + patientId, one fetch per
+  // UNIQUE patient (dedup — a live test showed ~1:1 task:patient, but never
+  // assume that), on-screen tiles first so the visible part of the pool
+  // fills in before the off-screen rest. Not awaited by loadBoard() — this
+  // is the slow pass (~70s for a 148-row inbox, live-timed 2026-09-10) and
+  // must not block the board becoming usable.
+  function onScreenTaskIds() {
+    var container = document.getElementById(OVERLAY_ID);
+    var onScreen = {};
+    if (!container) return onScreen;
+    var contRect = container.getBoundingClientRect();
+    container.querySelectorAll('.ms-lac-tile[data-task-id]').forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.bottom > contRect.top && r.top < contRect.bottom) {
+        onScreen[el.getAttribute('data-task-id')] = true;
+      }
+    });
+    return onScreen;
+  }
+
+  function scheduleMonitoringRender() {
+    if (_rxMonitoringRenderPending) return;
+    _rxMonitoringRenderPending = true;
+    var raf =
+      typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : function (fn) {
+            setTimeout(fn, 0);
+          };
+    raf(function () {
+      _rxMonitoringRenderPending = false;
+      render();
+    });
+  }
+
+  async function loadRxMonitoringTotals(gen) {
+    var Api = window.SentinelApiClient;
+    if (!Api || typeof Api.fetchMedicationRegimen !== 'function') return;
+    var byPatient = {}; // patientId -> [taskId, ...]
+    Object.keys(_rxItemCounts).forEach(function (taskId) {
+      var pid = _rxItemCounts[taskId].resolvedPatientId;
+      if (!pid) return;
+      if (!byPatient[pid]) byPatient[pid] = [];
+      byPatient[pid].push(taskId);
+    });
+    var patientIds = Object.keys(byPatient).filter(function (pid) {
+      return !_rxRegimenTotals[pid];
+    });
+    if (!patientIds.length) return;
+    var onScreen = onScreenTaskIds();
+    patientIds.sort(function (a, b) {
+      var aOn = byPatient[a].some(function (t) {
+        return onScreen[t];
+      });
+      var bOn = byPatient[b].some(function (t) {
+        return onScreen[t];
+      });
+      if (aOn === bOn) return 0;
+      return aOn ? -1 : 1;
+    });
+    var apiBase = _route.apiBase;
+    var breaker = makeCircuitBreaker(RX_CIRCUIT_BREAKER_MAX);
+    await runWorkerPool(patientIds, RX_FETCH_CONCURRENCY, async function (pid) {
+      if (breaker.isTripped() || gen !== _boardGen) return;
+      try {
+        var regimen = await withTimeout(Api.fetchMedicationRegimen(apiBase, pid), RX_FETCH_TIMEOUT_MS);
+        breaker.recordSuccess();
+        if (gen !== _boardGen) return; // a newer board load has since started — discard
+        _rxRegimenTotals[pid] = C.regimenTotalsFromPayload(regimen);
+        scheduleMonitoringRender();
+      } catch (_) {
+        breaker.recordFailure();
+      }
+    });
   }
 
   function harvestStaffFromBook(book) {
@@ -333,6 +492,8 @@
     opts = opts || {};
     var gen = _boardGen;
     var keepDraft = opts.skipSplit ? _draft || C.emptyDraft() : null;
+    _rxItemCounts = {};
+    _rxRegimenTotals = {};
     _loading = true;
     _error = null;
     render();
@@ -361,6 +522,10 @@
       await harvestStaffFromOverviews(_rows);
       if (gen !== _boardGen) return;
       persistStaffCache();
+      // Fire-and-forget: the slow (~70s/148 rows) regimen pass must not
+      // block the board from becoming usable. It self-guards against a
+      // later loadBoard()/closeOverlay() call via the _boardGen check.
+      loadRxMonitoringTotals(gen);
       _draft = C.ensureWorkingTodayColumns(keepDraft || C.emptyDraft(), splitDestinations());
       if (!opts.skipSplit) _splitDefaulted = false;
     } catch (err) {
@@ -471,6 +636,65 @@
     });
   }
 
+  function rxCountsAndTotalsFor(taskId) {
+    var counts = _rxItemCounts[taskId];
+    if (!counts) return { counts: null, totals: null };
+    var totals = counts.resolvedPatientId ? _rxRegimenTotals[counts.resolvedPatientId] : null;
+    return { counts: counts, totals: totals };
+  }
+
+  // 1-5, green (least complex) to amber (most complex) — driven purely by
+  // how many items THIS request contains (Nick, 2026-09-10: "the number
+  // needing reauthorised is less useful" — dropped medicationsTotal from
+  // the score; the regimen totals stay visible in rxMonitoringLine's own
+  // sentence as extra info, just don't feed the score any more). Only
+  // needs counts (Pass A), so it resolves as soon as that pass does —
+  // null (rendered as nothing) only while that's still in flight. title
+  // carries the raw number so the badge is never an opaque unexplained
+  // digit.
+  function rxComplexityBadgeHtml(counts) {
+    var score = C.complexityScore(counts);
+    if (!score) return '';
+    var title =
+      'Complexity ' +
+      score.level +
+      '/5 — ' +
+      score.requestedItemsTotal +
+      ' item' +
+      (score.requestedItemsTotal === 1 ? '' : 's') +
+      ' requested';
+    return (
+      '<span class="ms-lac-tile-complexity ms-lac-tile-complexity-' +
+      score.level +
+      '" title="' +
+      esc(title) +
+      '">' +
+      score.level +
+      '</span>'
+    );
+  }
+
+  // "Request for 3/6 repeats, 1 acute, 0/2 batches. 3/5 repeats overdue for
+  // reauthorising." — Nick's own confirmed format, 2026-09-10. The sentence
+  // itself is built by shared/rx-allocate-core.js's rxMonitoringLine (pure,
+  // require()-able from tests); this just resolves this tile's counts/
+  // totals out of the module caches and wraps the result (plus the
+  // complexity badge) for the DOM.
+  function rxMonitoringLineHtml(taskId) {
+    var ct = rxCountsAndTotalsFor(taskId);
+    if (!ct.counts) return '';
+    var sentence = C.rxMonitoringLine(ct.counts, ct.totals);
+    var badge = rxComplexityBadgeHtml(ct.counts);
+    if (!sentence && !badge) return '';
+    return (
+      '<div class="ms-lac-tile-monitoring">' +
+      (sentence ? esc(sentence) : '') +
+      (sentence && badge ? ' ' : '') +
+      badge +
+      '</div>'
+    );
+  }
+
   // One-line row. Group headers carry the registered GP; the row only
   // repeats it in the unknown pile, where it varies per row.
   function tileHtml(tile, opts) {
@@ -510,6 +734,7 @@
       '</span>' +
       assignedPerson +
       whoLine +
+      rxMonitoringLineHtml(tile.id) +
       '</div>'
     );
   }
@@ -1618,6 +1843,37 @@
     return plan;
   }
 
+  // Sum of the complexity level (1-5 each) across every tile currently
+  // sitting/staged in this doctor's box — Nick's request, 2026-09-10: "a
+  // total of those complexity scores next to each clinician's name",
+  // labelled "Complexity" (Nick's follow-up the same day) so the number
+  // reads as self-explanatory next to the doctor's name rather than
+  // depending on the hover title. Only needs Pass A (item counts, not the
+  // slow regimen totals — see complexityScore's own comment), so every
+  // tile's score is available as soon as it's rendered at all.
+  function rxColumnComplexityHtml(tiles) {
+    var sum = 0;
+    var any = false;
+    (tiles || []).forEach(function (t) {
+      if (!t) return;
+      var score = C.complexityScore(_rxItemCounts[t.id]);
+      if (!score) return;
+      sum += score.level;
+      any = true;
+    });
+    if (!any) return '';
+    return (
+      '<span class="ms-rxac-folder-complexity" title="Total complexity ' +
+      sum +
+      '">' +
+      '<span class="ms-rxac-folder-complexity-label">Complexity</span>' +
+      '<span class="ms-rxac-folder-complexity-value">' +
+      esc(String(sum)) +
+      '</span>' +
+      '</span>'
+    );
+  }
+
   function folderHtml(col, opts) {
     opts = opts || {};
     var inbox = !!opts.inbox;
@@ -1706,6 +1962,7 @@
       '<span class="ms-rxac-folder-name">' +
       esc(name) +
       '</span>' +
+      (inbox ? '' : rxColumnComplexityHtml(col.tiles)) +
       '</div>' +
       countHtml +
       '<div class="ms-rxac-folder-meta">' +
@@ -2930,6 +3187,8 @@
     _boardGen++;
     _open = false;
     _rows = [];
+    _rxItemCounts = {};
+    _rxRegimenTotals = {};
     _draft = C.emptyDraft();
     _selected = {};
     _lastSelectId = '';

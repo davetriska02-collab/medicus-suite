@@ -777,6 +777,154 @@ console.log('\n--- canvas + manifest + css source locks ---');
     'merged write re-GET still treats the inbox rows as the pile'
   );
 
+  // ---- Per-request medication summary (2026-09-10) ----
+  console.log('\n--- itemCountsFromOverviewPayload: prescriptionRequestItemsByType bucket summing ---');
+  {
+    const payload = {
+      data: {
+        prescriptionRequestItemsByType: {
+          repeatWithAnAuthorisedIssue: { items: [{ product: 'A' }, { product: 'B' }] },
+          repeatPrescribingWithNoIssues: { items: [{ product: 'C' }] },
+          acutePrescriptions: { items: [{ product: 'D' }] },
+          repeatDispensing: { items: [{ product: 'E' }, { product: 'F' }] },
+          variableRepeat: { items: [] },
+        },
+      },
+    };
+    const counts = C.itemCountsFromOverviewPayload(payload, 'pt-1');
+    check(counts.repeat === 3, 'repeat = repeatWithAnAuthorisedIssue + repeatPrescribingWithNoIssues (got ' + counts.repeat + ')');
+    check(counts.acute === 1, 'acute reads the acutePrescriptions bucket (HAR-confirmed live, 2026-09-10)');
+    check(counts.repeatDispensing === 2, 'repeatDispensing reads its own bucket');
+    check(counts.variableRepeat === 0, 'an empty bucket counts as 0, not omitted');
+    check(counts.resolvedPatientId === 'pt-1', 'resolvedPatientId passes through');
+  }
+  {
+    const counts = C.itemCountsFromOverviewPayload({}, '');
+    check(
+      counts.repeat === 0 && counts.acute === 0 && counts.repeatDispensing === 0 && counts.variableRepeat === 0,
+      'missing prescriptionRequestItemsByType entirely -> all zero counts, no throw'
+    );
+    check(counts.resolvedPatientId === '', 'no patientId resolved falls back to empty string, not null/undefined');
+  }
+
+  console.log('\n--- regimenTotalsFromPayload: repeat-type-only scope + isOverDue tally ---');
+  {
+    const regimen = {
+      currentRepeatPrescribingMedications: [{ isOverDue: true }, { isOverDue: false }, { isOverDue: true }],
+      currentVariableRepeatMedications: [{ isOverDue: false }],
+      currentRepeatDispensingMedications: [{ isOverDue: true }],
+      // Confirmed out of scope with Nick (2026-09-10) — must NOT be summed
+      // into overdueTotal/overdueCount even though isOverDue is present:
+      acuteMedicationsLastTwelveMonths: [{ isOverDue: true }, { isOverDue: true }],
+      overTheCounterMedicationStatements: [{ isOverDue: true }],
+    };
+    const totals = C.regimenTotalsFromPayload(regimen);
+    check(totals.repeatTotal === 3, 'repeatTotal is currentRepeatPrescribingMedications.length');
+    check(totals.variableRepeatTotal === 1, 'variableRepeatTotal is currentVariableRepeatMedications.length');
+    check(totals.repeatDispensingTotal === 1, 'repeatDispensingTotal is currentRepeatDispensingMedications.length');
+    check(totals.overdueTotal === 5, 'overdueTotal = 3+1+1 repeat-type meds, acute/OTC excluded (got ' + totals.overdueTotal + ')');
+    check(totals.overdueCount === 3, 'overdueCount = isOverDue:true across repeat-type meds ONLY, acute/OTC excluded (got ' + totals.overdueCount + ')');
+  }
+  {
+    const totals = C.regimenTotalsFromPayload({});
+    check(
+      totals.repeatTotal === 0 && totals.overdueTotal === 0 && totals.overdueCount === 0,
+      'missing regimen buckets entirely -> all zero, no throw'
+    );
+  }
+
+  console.log('\n--- fractionOrCount ---');
+  check(C.fractionOrCount(0, 6, 'repeats') === '', 'zero requested -> omitted entirely, even with a known total');
+  check(C.fractionOrCount(3, null, 'repeats') === '3 repeats', 'no total yet (Pass B unresolved) -> bare requested count');
+  check(C.fractionOrCount(3, 6, 'repeats') === '3/6 repeats', 'total known -> requested/total fraction');
+  check(C.fractionOrCount(0, null, 'batches') === '', 'zero requested, no total either -> still omitted');
+
+  console.log("\n--- rxMonitoringLine: Nick's confirmed tile-sentence format ---");
+  check(C.rxMonitoringLine(null, null) === '', 'no item counts yet (Pass A unresolved) -> empty, no placeholder text');
+  check(
+    C.rxMonitoringLine({ repeat: 0, acute: 0, repeatDispensing: 0, variableRepeat: 0 }, null) === '',
+    'a request with none of the four tracked types -> empty line, not "Request for ."'
+  );
+  check(
+    C.rxMonitoringLine({ repeat: 3, acute: 1, repeatDispensing: 0, variableRepeat: 0 }, null) ===
+      'Request for 3 repeats, 1 acute.',
+    "Pass B not yet resolved for this patient -> bare counts, zero segments (batches) omitted, no trailing overdue sentence"
+  );
+  check(
+    C.rxMonitoringLine(
+      { repeat: 3, acute: 1, repeatDispensing: 0, variableRepeat: 0 },
+      { repeatTotal: 6, repeatDispensingTotal: 2, variableRepeatTotal: 0, overdueCount: 3, overdueTotal: 5 }
+    ) === 'Request for 3/6 repeats, 1 acute. 3/5 repeats overdue for reauthorising.',
+    "Nick's own example format, minus the zero-requested batches segment (0 requested -> omitted even though the total is known)"
+  );
+  check(
+    C.rxMonitoringLine(
+      { repeat: 3, acute: 1, repeatDispensing: 0, variableRepeat: 0 },
+      { repeatTotal: 6, repeatDispensingTotal: 2, variableRepeatTotal: 0, overdueCount: 0, overdueTotal: 0 }
+    ) === 'Request for 3/6 repeats, 1 acute.',
+    'totals resolved but this patient has zero repeat-type meds at all -> no overdue sentence appended'
+  );
+  check(
+    C.rxMonitoringLine(
+      { repeat: 0, acute: 1, repeatDispensing: 0, variableRepeat: 0 },
+      { repeatTotal: 6, repeatDispensingTotal: 2, variableRepeatTotal: 0, overdueCount: 3, overdueTotal: 5 }
+    ) === 'Request for 1 acute. 3/5 repeats overdue for reauthorising.',
+    'acute NEVER gets a "/total" fraction, even once totals are known (confirmed with Nick, 2026-09-10)'
+  );
+  check(
+    C.rxMonitoringLine(
+      { repeat: 0, acute: 0, repeatDispensing: 2, variableRepeat: 1 },
+      { repeatTotal: 6, repeatDispensingTotal: 2, variableRepeatTotal: 4, overdueCount: 0, overdueTotal: 6 }
+    ) === 'Request for 2/2 batches, 1/4 variable repeat. 0/6 repeats overdue for reauthorising.',
+    'batches and variable repeat both get fractions like repeats; a genuine 0/6 overdue tally still renders (only omitted when overdueTotal is 0)'
+  );
+
+  console.log('\n--- complexityScore: 1 (least) to 5 (most), green-to-amber, requested-items-only 2026-09-10 ---');
+  check(C.complexityScore(null) === null, 'no item counts yet -> null, not a guessed level');
+  check(
+    (() => {
+      const sixRequested = C.complexityScore({ repeat: 6, acute: 0, repeatDispensing: 0, variableRepeat: 0 });
+      const threeRequested = C.complexityScore({ repeat: 3, acute: 0, repeatDispensing: 0, variableRepeat: 0 });
+      return sixRequested.level > threeRequested.level;
+    })(),
+    "Nick's own motivating example still holds structurally: 6 requested items outscores 3"
+  );
+  {
+    // raw = requestedItemsTotal alone. Even steps of 2 (inclusive upper
+    // end of each level): 2 / 4 / 6 / 8, then 5 for anything above.
+    const cases = [
+      [0, 1],
+      [1, 1],
+      [2, 1],
+      [3, 2],
+      [4, 2],
+      [5, 3],
+      [6, 3],
+      [7, 4],
+      [8, 4],
+      [9, 5],
+      [30, 5], // way over -> still level 5, never higher
+    ];
+    cases.forEach(([requested, expectedLevel]) => {
+      const counts = { repeat: requested, acute: 0, repeatDispensing: 0, variableRepeat: 0 };
+      const score = C.complexityScore(counts);
+      check(
+        score && score.level === expectedLevel,
+        `requested=${requested} -> level ${expectedLevel} (got ${score && score.level})`
+      );
+    });
+  }
+  {
+    const counts = { repeat: 2, acute: 1, repeatDispensing: 1, variableRepeat: 0 };
+    const score = C.complexityScore(counts);
+    check(
+      score.requestedItemsTotal === 4,
+      'requestedItemsTotal sums all four requested-item counts (2+1+1+0=4, got ' + score.requestedItemsTotal + ')'
+    );
+    check(score.raw === 4, 'raw is just requestedItemsTotal now (got ' + score.raw + ')');
+    check(!('medicationsTotal' in score), 'medicationsTotal is no longer part of the returned score object at all');
+  }
+
   if (failed) {
     console.error('\n' + failed + ' failed, ' + passed + ' passed');
     process.exit(1);

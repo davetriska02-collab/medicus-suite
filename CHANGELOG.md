@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.34] — 2026-09-11
+
+### Prescriptions allocation canvas: per-request medication summary + complexity score
+
+Each request tile on the prescription-request allocation canvas now shows
+a second line: how many items are being requested, broken down by type
+against the patient's current totals, plus a 1-5 complexity score.
+
+- **Item counts** — `data.prescriptionRequestItemsByType` on each row's
+  own task overview, HAR-confirmed to carry 5 sibling buckets:
+  `repeatWithAnAuthorisedIssue` + `repeatPrescribingWithNoIssues` (both
+  "repeat"), `acutePrescriptions`, `repeatDispensing`, `variableRepeat`.
+  Fetched concurrently (5 at a time) for the whole pool — ~10s for a
+  148-row inbox, live-timed, zero errors.
+- **Regimen totals + overdue** — `medication-regimen`'s repeat-type
+  buckets, one fetch per unique patient, lazy/on-screen-first in the
+  background (~70s for the whole inbox, too slow to block the board).
+  Shows e.g. "3/6 repeats, 1 acute, 0/2 batches. 3/5 repeats overdue for
+  reauthorising" — `isOverDue` means the current authorised supply has run
+  out, not a clinical review date (confirmed live against a real patient).
+- **Complexity score (1-5, green to amber)** — driven by requested-item
+  count alone (even steps of 2: 1-2→1 … 9+→5); medication-regimen totals
+  were tried as a factor and deliberately dropped — issuing work scales
+  with what's actually being requested, not with the patient's background
+  med count. Summed per clinician, labelled "Complexity" next to their
+  name.
+- Pure counting/formatting logic lives in `shared/rx-allocate-core.js`
+  (`itemCountsFromOverviewPayload`, `regimenTotalsFromPayload`,
+  `rxMonitoringLine`, `complexityScore`) — fetch orchestration
+  (concurrency, timeout, circuit breaker, `_boardGen` cancellation) in
+  `content-scripts/rx-allocate-canvas.js`.
+
 ## [v3.261.33] — 2026-09-11
 
 ### Practice features: Focus alerts toggle

@@ -793,6 +793,60 @@
   padding-left: 22px;
 }
 
+/* Prescription-request-specific: requested-item counts + overdue-reauth
+   summary (rx-allocate-canvas.js's rxMonitoringLineHtml). Lab/workflow/
+   request canvases have no repeats/acute/batches concept, so this is
+   scoped to the rx overlay only rather than joining .ms-lac-tile-who.
+   Deliberately NOT flex:0 0 100% (that forces its own line, per Nick's
+   correction 2026-09-10) — a normal flex item on .ms-lac-tile's own
+   flex-wrap:wrap row, so it sits on the same line as name/status/tokens
+   when there's room and only wraps if there genuinely isn't. */
+#ms-rxac-overlay .ms-lac-tile-monitoring {
+  font-size: 10.5px;
+  color: var(--text-3);
+  white-space: normal;
+}
+
+/* Complexity 1-5 badge (rxComplexityBadgeHtml) — green (least complex) to
+   amber (most complex), Nick's request 2026-09-10. Solid background (not
+   the usual --X-dim wash) since this needs to read at a glance as a
+   colour-coded signal, not a subtle tint. 5-step linear interpolation
+   between --green (#16a34a) and --amber (#b45309) in RGB space. */
+#ms-rxac-overlay .ms-lac-tile-complexity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: var(--r-pill);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+}
+
+#ms-rxac-overlay .ms-lac-tile-complexity-1 {
+  background: #16a34a;
+}
+
+#ms-rxac-overlay .ms-lac-tile-complexity-2 {
+  background: #3e8f3a;
+}
+
+#ms-rxac-overlay .ms-lac-tile-complexity-3 {
+  background: #657b2a;
+}
+
+#ms-rxac-overlay .ms-lac-tile-complexity-4 {
+  background: #8d6719;
+}
+
+#ms-rxac-overlay .ms-lac-tile-complexity-5 {
+  background: #b45309;
+}
+
 .ms-lac-tile-picked {
   background: var(--accent-dim);
   border-bottom-color: var(--accent-line);
@@ -1532,6 +1586,42 @@
   font-weight: 500;
   color: var(--text-3);
   line-height: 1.3;
+}
+
+/* Sum of this doctor's tiles' complexity levels (rxColumnComplexityHtml) —
+   next to their name, per Nick's request 2026-09-10, with its own visible
+   "Complexity" label (Nick's follow-up the same day) so the number reads
+   as self-explanatory rather than depending on the hover title. Not
+   colour-graded like the per-tile badge (an open-ended sum isn't itself a
+   1-5 level) — a plain muted pill. flex:0 0 auto so it never shrinks/
+   truncates when the doctor's name itself is long. */
+#ms-rxac-overlay .ms-rxac-folder-complexity {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  color: var(--text-3);
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 5px;
+  line-height: 1.4;
+}
+
+#ms-rxac-overlay .ms-rxac-folder-complexity-label {
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+}
+
+#ms-rxac-overlay .ms-rxac-folder-complexity-value {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-2);
 }
 
 #ms-rxac-overlay .ms-rxac-count-proposed {
