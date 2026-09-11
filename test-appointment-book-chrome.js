@@ -34,6 +34,7 @@ for (const [f, id] of Object.entries(files)) {
     'content-scripts/patient-alerts-banner.js': 'patient-alerts-banner',
     'content-scripts/risk-flag-cleanup.js': 'risk-flag-cleanup',
     'content-scripts/repeat-prescribing-pills.js': 'repeat-prescribing-pills',
+    'content-scripts/rx-overdue-scan.js': 'rx-overdue-scan',
   };
   for (const [f, id] of Object.entries(extra)) {
     const src = fs.readFileSync(path.join(__dirname, f), 'utf8');

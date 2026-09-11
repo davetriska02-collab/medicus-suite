@@ -3,7 +3,8 @@
    carry their own token block (panel.css :root is not available on Medicus
    pages) — values mirror the canon light column in
    .claude/skills/ui-design/TOKENS.md. */
-#ms-qac-launch-wrap {
+#ms-qac-launch-wrap,
+#ms-rxac-launch-wrap {
   position: fixed;
   top: 12px;
   right: 16px;
@@ -27,11 +28,114 @@
   border-radius: 999px;
 }
 
-#ms-qac-launch-wrap #ms-qac-launch {
+#ms-qac-launch-wrap #ms-qac-launch,
+#ms-rxac-launch-wrap #ms-rxac-launch,
+#ms-rxac-launch-wrap #ms-rx-od-btn {
   position: static;
   top: auto;
   right: auto;
   z-index: auto;
+}
+
+#ms-rx-od-btn {
+  padding: 6px 12px;
+  font:
+    600 12px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: #1e3a5f;
+  background: #fff;
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+  cursor: pointer;
+}
+
+#ms-rx-od-btn:hover {
+  border-color: #2563eb;
+  background: #eff4fd;
+}
+
+#ms-rx-od-btn:disabled {
+  cursor: progress;
+  opacity: 0.85;
+}
+
+#ms-rx-od-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.ms-rx-od {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.ms-rx-od-inline {
+  margin-left: 6px;
+}
+
+.ms-rx-od-btn {
+  padding: 1px 7px;
+  border-radius: 10px;
+  font:
+    500 10.5px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  border: 1px solid rgba(184, 38, 46, 0.25);
+  background: #fbe6e7;
+  color: #b8262e;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-rx-od-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+#ms-rx-od-pop {
+  position: absolute;
+  z-index: 2147483000;
+  max-width: 320px;
+  padding: 10px 12px;
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #94a3b8;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+  font:
+    400 12px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+.ms-rx-od-pop-h {
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+
+.ms-rx-od-pop-list {
+  margin: 0 0 8px;
+  padding-left: 16px;
+}
+
+.ms-rx-od-pop-note {
+  margin: 0;
+  color: #475569;
+  font-size: 11px;
 }
 
 #ms-lac-launch,
