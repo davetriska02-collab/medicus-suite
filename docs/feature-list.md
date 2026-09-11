@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.38
-**Generated:** 2026-09-10
+**Version:** v3.261.39
+**Generated:** 2026-09-11
 
 ## What it is
 
@@ -149,6 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.39 (11 Sep)** — Restored ACE-I/ARB and thiazide post-initiation U&E, gated on a true medication-history start (batch dates cannot fire)
 - **v3.261.38 (11 Sep)** — Dropped ACE-I/ARB and thiazide "U&E 2 weeks after starting" (false alerts on long-term patients)
 - **v3.261.37 (11 Sep)** — Slots auto-refreshes every 60s while open (paused when hidden)
 - **v3.261.36 (11 Sep)** — Prescription list Share out / overdue-monitoring buttons sit left of Sign
