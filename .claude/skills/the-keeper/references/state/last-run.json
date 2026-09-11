@@ -1,35 +1,33 @@
 {
-  "runDate": "2026-08-28",
-  "previousRunDate": "2026-08-18",
-  "manifestVersion": "3.243.9",
+  "runDate": "2026-09-05",
+  "previousRunDate": "2026-08-28",
+  "manifestVersion": "3.258.0",
   "csoSignedOff": {
     "date": null,
     "by": null,
-    "scope": "2026-08-28 QOF audit not yet reviewed by the CSO — held in the working tree pending the user's commit decision (substantial other uncommitted session work is batched alongside it)."
+    "scope": "2026-09-05 run: source-gap only — no rule changes applied. Outstanding CSO items below."
   },
   "ruleFileLastUpdated": {
     "rules/drug-rules.json": "2026-08-18",
     "rules/qof-rules.json": "2026-08-28",
-    "rules/vaccine-rules.json": "2026-08-18",
-    "rules/alert-library.json": "2026-08-18",
-    "rules/reception-pathways.json": "2026-08-18",
+    "rules/vaccine-rules.json": "2026-08-29",
+    "rules/alert-library.json": "2026-08-22",
+    "rules/reception-pathways.json": "2026-08-23",
     "engine/acb-scores.js": "2026-07-25",
     "engine/stopp-start.js": "2026-07-25",
     "engine/rules-engine.js": "2026-08-28"
   },
-  "sourcesChecked": [
-    "https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf (2026-08-28 — fetched and read in full, 82 pages; this IS the current base guidance, updated in place 13 July 2026, not a separate delta document)",
-    "https://support.primarycareit.co.uk/portal/en-gb/kb/articles/quality-outcomes-framework-qof-kpi-index (2026-08-28 — secondary corroboration only)"
-  ],
+  "sourcesChecked": [],
   "heldForNextRun": [
+    {
+      "id": "vax-rsv-age-2026",
+      "description": "RSV eligibility: search result suggests age threshold changed from 75+ to 80+ in April 2026 JCVI advice. CSO to verify against current UKHSA RSV HCP letter. URGENT — RSV autumn season started 1 Sept 2026 (now live). Current rule flags 75+ which may over-flag 75-79 year olds. Weakens_safety if narrowed. Cannot verify: sources blocked by proxy.",
+      "heldSince": "2026-08-29",
+      "urgencyNote": "SEASON LIVE since 1 Sept 2026 — CSO manual verification needed this week"
+    },
     {
       "id": "medreview-biperiden",
       "description": "biperiden (Akineton) possibly missing from ACB_TABLE at score 3 — needs acbcalc.com verification. UK-licensed anticholinergic antiparkinson drug, same class as procyclidine/orphenadrine/trihexyphenidyl already in table. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
-      "heldSince": "2026-08-29"
-    },
-    {
-      "id": "vax-rsv-age-2026",
-      "description": "RSV eligibility: search result suggests age threshold changed from 75+ to 80+ in April 2026 JCVI advice. CSO to verify against current UKHSA RSV HCP letter before 2026 autumn season (effective 1 Sept 2026). Current rule flags 75+ which may over-flag if threshold raised. Weakens_safety if narrowed. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
       "heldSince": "2026-08-29"
     },
     {
@@ -44,7 +42,7 @@
     },
     {
       "id": "medreview-scan",
-      "description": "MEDREVIEW scanner hung. ACB / STOPP / visualiser PINCER tables still unchecked this cycle. Standing CSO verification of ACB/STOPP starter set still outstanding.",
+      "description": "MEDREVIEW scanner hung 2026-08-17; sources blocked 2026-08-29 and 2026-09-05. ACB / STOPP / visualiser PINCER tables still unchecked. Standing CSO verification of ACB/STOPP starter set outstanding from v3.51.0.",
       "heldSince": "2026-08-17"
     },
     {
@@ -60,47 +58,48 @@
     }
   ],
   "sourceGaps": [
-    "2026-08-29 source-gap run (PR #346): all authoritative UK clinical guidance hosts were blocked by the egress proxy (bnf.nice.org.uk, gov.uk DSU/UKHSA/JCVI, sps.nhs.uk, nice.org.uk, cks.nice.org.uk, england.nhs.uk, acbcalc.com, nottingham.ac.uk/primis). No rule changes applied that run; its two new holds (medreview-biperiden, vax-rsv-age-2026) are carried here. Note the PRN02356 PDF WAS fetched and read in full on the 2026-08-28 run recorded above."
+    "2026-09-05 source-gap run (THIRD consecutive proxy-blocked run): bnf.nice.org.uk, gov.uk DSU/UKHSA/JCVI, sps.nhs.uk, nice.org.uk, cks.nice.org.uk, england.nhs.uk, acbcalc.com, nottingham.ac.uk/primis all returned 403 via the egress proxy. No rule changes applied. No scanners dispatched — all sources blocked, so scanner output would be unverifiable. Proxy status endpoint confirmed proxy is enabled and running (no relay failures logged) but selective CONNECT filtering is blocking clinical guidance hosts.",
+    "2026-08-29 source-gap run (PR #346): same proxy blockage — all authoritative UK clinical guidance hosts blocked. No rule changes applied; two new holds surfaced (medreview-biperiden, vax-rsv-age-2026).",
+    "2026-08-28 run: PRN02356 PDF was fetched and read in full (82 pages). Full QOF audit completed."
   ],
-  "changesAppliedThisRun": [
+  "changesAppliedThisRun": [],
+  "changesAppliedPreviousRuns": [
     {
       "id": "qof-ast-rename",
       "rag": "Amber",
-      "description": "AST012->AST014, AST007->AST015 ID rename (thresholds/points unchanged) — resolves the qof-ast-id-rename hold from 2026-08-17",
+      "description": "AST012->AST014, AST007->AST015 ID rename (thresholds/points unchanged)",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ast015-never-recorded",
       "rag": "Red",
-      "description": "AST015 treatNeverRecordedAsOverdue — never-recorded review now shows overdue, not no_data, for a long-standing register member",
+      "description": "AST015 treatNeverRecordedAsOverdue — never-recorded review now shows overdue, not no_data",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ndh",
       "rag": "Amber",
-      "description": "Added NDH register + NDH003 indicator (non-diabetic hyperglycaemia / prior GDM), 20pts — resolves the qof-ndh hold from 2026-08-17",
+      "description": "Added NDH register + NDH003 indicator (non-diabetic hyperglycaemia / prior GDM), 20pts",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ob004-005-enable",
       "rag": "Amber",
-      "description": "Enabled OB004/OB005 (values confirmed byte-exact against primary source), completed OB005 brand list (ozempic/rybelsus/xenical/victoza) — resolves the ob004-qof hold from 2026-07-25",
+      "description": "Enabled OB004/OB005 (values confirmed byte-exact against primary source), completed OB005 brand list",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ckd002-003-relabel",
       "rag": "Red",
-      "description": "CKD002/CKD003 confirmed NOT real QOF 26/27 codes (absent from the full primary guidance) — relabelled to CKD-BP/CKD-RASI, category:safety-monitoring, points/thresholds removed. Underlying checks kept firing unchanged. Resolves the qof-ckd002-003-disable hold from 2026-08-17",
+      "description": "CKD002/CKD003 confirmed NOT real QOF 26/27 codes — relabelled to CKD-BP/CKD-RASI, safety-monitoring",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-full-audit-confirmed",
       "rag": "Green",
-      "description": "Every other enabled QOF indicator's points/thresholds cross-checked against the full primary guidance — no further drift found",
+      "description": "Every enabled QOF indicator's points/thresholds cross-checked against full PRN02356 primary guidance",
       "appliedDate": "2026-08-28"
-    }
-  ],
-  "changesAppliedPreviousRuns": [
+    },
     {
       "id": "drug-001",
       "rag": "Red",
@@ -140,7 +139,7 @@
     {
       "id": "vax-001",
       "rag": "Red",
-      "description": "RSV 65-74 COPD + immunosuppression eligibility encoded (effective 1 Sept 2026; no bare asthma)",
+      "description": "RSV 65-74 COPD + immunosuppression eligibility encoded (effective 1 Sept 2026)",
       "appliedDate": "2026-08-18"
     },
     {
@@ -175,10 +174,10 @@
     }
   ],
   "actionableForCSO": [
-    "RSV eligibility age threshold: check current UKHSA RSV HCP letter — is eligibility now 80+ (not 75+) from April 2026? Season starts 1 Sept 2026.",
+    "URGENT — RSV SEASON LIVE: The RSV autumn vaccination programme started 1 Sept 2026. The rule currently flags age 75+, but a search result from April 2026 suggested JCVI raised the threshold to 80+. Check the current UKHSA RSV HCP operational letter (gov.uk) manually — if the threshold is now 80+, the engine is over-flagging 75-79 year olds. Cannot be verified or changed without proxy access to external sources.",
+    "fever-adult pathway: PENDING CSO SIGN-OFF (added 2026-08-22, shipped DISABLED).",
     "digoxin-renal-monitoring: rule ready (enabled:false). CSO to decide activation.",
-    "fever-adult pathway: PENDING CSO SIGN-OFF.",
     "biperiden (Akineton): verify on ACBcalc.com — if score 3, can be added to ACB_TABLE next run.",
-    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0."
+    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0 — three consecutive source-gap runs."
   ]
 }
