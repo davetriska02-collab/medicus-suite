@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.32] — 2026-09-11
+
+### Companion: investigation-result review tasks
+
+The "Open appts, links, tasks & investigations" section of the Companion
+widget never appeared at all on an investigation-result review task
+(`review-investigation-report`) — two separate, layered bugs, both fixed:
+its own applicability check only recognised a communication-thread task
+shape, and the trigger that calls that check in the first place never
+even fired for this task type. On these pages specifically, the section
+now also renders above "What's due" (rather than below it) with
+"Outstanding investigations" sorted first within it, since that's what
+the clinician is there to act on — every other task/record page keeps the
+existing order unchanged.
+
+- Each outstanding investigation row now also shows a weekday
+  abbreviation alongside its requested date (e.g. "M 24 Aug 2026"),
+  making it easier to judge how long ago a request was made without doing
+  the maths — investigation rows only, no other list changed.
+- `content-scripts/task-actions-panel.js`.
+
 ## [v3.261.29] — 2026-09-10
 
 ### Route-gate remaining tidy widgets; abort allocate harvest

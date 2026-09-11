@@ -133,6 +133,26 @@
     return { siteId: ctx.siteId, typeSlug: ctx.typeSlug, taskUuid: ctx.taskUuid };
   }
 
+  // Exact typeSlug, confirmed live 2026-09-11 (Nick's own URL:
+  // /tasks/data/review-investigation-report/overview/{id}). Deliberately
+  // an exact match, not a broader pattern — a first attempt reused
+  // triage-lens/lab-file-button.js's own FILING_URL_RE intent (typeSlug
+  // containing investigation/result/report), which Nick correctly flagged
+  // as unverified/speculative ("not sure where/whether that
+  // investigation/results/report slug exists") and asked to be narrowed
+  // to just this one confirmed slug. On these pages specifically, the
+  // record section (appointments/links/tasks/investigations) is what the
+  // clinician is actually there to act on, so it's surfaced ABOVE "What's
+  // due" instead of below it, and "Outstanding investigations" sorts
+  // first within it instead of last. Every other task/record page —
+  // including viewing an old report from within the journal, which is
+  // never this task type — keeps the original order.
+  const INVESTIGATION_REPORT_TASK_TYPE = 'review-investigation-report';
+  function isInvestigationResultTask() {
+    const info = getTaskInfo();
+    return !!(info && info.typeSlug === INVESTIGATION_REPORT_TASK_TYPE);
+  }
+
   function pageKey() {
     const ctx = getPageContext();
     return ctx ? ctx.pageKey : null;
@@ -1003,14 +1023,19 @@
     if (s.collapsed) return outerHeaderHtml();
     const shows = currentShows();
     const showRecord = shows.record && s.rec.applicable === true;
+    // See isInvestigationResultTask's own comment: on those pages the
+    // record section moves above "What's due" instead of its usual spot
+    // below pulse/slots/desk.
+    const recordFirst = showRecord && isInvestigationResultTask();
     return (
       outerHeaderHtml() +
       '<div class="ms-tap-body">' +
+      (recordFirst ? recordSectionHtml() : '') +
       (shows.due ? dueSectionHtml() : '') +
       (shows.desk ? deskSectionHtml() : '') +
       (shows.slots ? slotsGlanceHtml() : '') +
       (shows.pulse ? pulseSectionHtml() : '') +
-      (showRecord ? recordSectionHtml() : '') +
+      (showRecord && !recordFirst ? recordSectionHtml() : '') +
       (shows.book ? bookingSectionHtml() : '') +
       (shows.task ? taskSectionHtml() : '') +
       chromeFooterHtml() +
@@ -1523,6 +1548,21 @@
     );
   }
 
+  // Nick's own request, 2026-09-11, investigation rows ONLY (not
+  // appointments/links/tasks): a leading weekday abbreviation alongside
+  // the date, since "24 Aug 2026" alone doesn't say how long ago that
+  // was in working days. Reuses inv.requestedDate as-is — it's already
+  // proven Date.parse-able (outstandingInvestigationRequests() sorts by
+  // it the same way). Returns '' (never throws/NaN-paints) for a missing
+  // or unparseable date.
+  const WEEKDAY_ABBR = ['Su', 'M', 'Tu', 'W', 'Th', 'F', 'Sa'];
+  function weekdayAbbr(dateStr) {
+    if (!dateStr) return '';
+    const ms = Date.parse(dateStr);
+    if (Number.isNaN(ms)) return '';
+    return WEEKDAY_ABBR[new Date(ms).getDay()];
+  }
+
   // No due date exists on an investigation request — "requested DATE by
   // WHO" is the only useful context, same idea as a booking link's "Sent
   // DATE". Item names are Medicus's own free-text description strings, not
@@ -1530,11 +1570,13 @@
   function renderInvestigationRow(inv) {
     const itemsText = inv.items.length ? inv.items.join(', ') : 'Investigation';
     const by = inv.requestedBy ? ' by ' + esc(inv.requestedBy) : '';
+    const weekday = weekdayAbbr(inv.requestedDate);
+    const dateText = (weekday ? weekday + ' ' : '') + (inv.requestedDate || '');
     return (
       '<li class="ms-tap-rec-row">' +
       '<div class="ms-tap-rec-row-top">' +
       '<span class="ms-tap-rec-when">' +
-      esc(inv.requestedDate || '') +
+      esc(dateText) +
       by +
       '</span>' +
       '</div>' +
@@ -1630,14 +1672,17 @@
       (rec.tasks.length
         ? '<ul class="ms-tap-rec-list">' + rec.tasks.map(renderTaskRow).join('') + '</ul>'
         : '<div class="ms-tap-rec-empty">No open tasks.</div>');
-    return (
-      '<div class="ms-tap-section-body">' +
+    const investigationsGroup = renderRecGroup('investigations', 'Outstanding investigations', investigationsHtml);
+    const otherGroups =
       renderRecGroup('appts', 'Future appointments', apptsHtml) +
       renderRecGroup('links', 'Unused booking links', linksHtml) +
-      renderRecGroup('tasks', 'Open tasks', tasksHtml) +
-      renderRecGroup('investigations', 'Outstanding investigations', investigationsHtml) +
-      '</div>'
-    );
+      renderRecGroup('tasks', 'Open tasks', tasksHtml);
+    // See isInvestigationResultTask's own comment: investigations sorts
+    // first on those pages, last everywhere else (unchanged order).
+    const groupsHtml = isInvestigationResultTask()
+      ? investigationsGroup + otherGroups
+      : otherGroups + investigationsGroup;
+    return '<div class="ms-tap-section-body">' + groupsHtml + '</div>';
   }
 
   function recordSectionHtml() {
@@ -2261,6 +2306,50 @@
       st.error = null;
       st.applicable = true;
       await fetchAppointmentsAndLinks(st, ctx.patientId);
+      if (st === s.rec) {
+        st.loadedForTask = ctx.pageKey;
+        rerender();
+      }
+      return;
+    }
+
+    // review-investigation-report tasks (2026-09-11, HAR
+    // 122-open-investigation.har): a completely different overview shape
+    // from communication-thread — classifyPatientRequest below expects
+    // data.communicationThreadTaskType, which doesn't exist here, so these
+    // tasks were always falling through to "not triage" and st.applicable
+    // stayed false, meaning the record section never showed at all here,
+    // regardless of the display-order fix that prompted this investigation
+    // in the first place. patientId lives at data.patient.id instead
+    // (confirmed against every other patient-scoped call in the same HAR
+    // — patient-banner, medication-regimen, clinical-summary, journal —
+    // all keyed by that same id). No triage classification needed at
+    // all — a review-investigation-report task already has a real patient
+    // by definition, so it's always applicable once the overview loads.
+    if (ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE) {
+      rec.checking = true;
+      rec.error = null;
+      rerender();
+      let invOverview;
+      try {
+        invOverview = await apiFetchTaskOverview(ctx.typeSlug, ctx.taskUuid);
+      } catch (_) {
+        if (st === s.rec) {
+          st.checking = false;
+          rerender();
+        }
+        return;
+      }
+      if (st !== s.rec) return;
+      const patientId = (invOverview.data && invOverview.data.patient && invOverview.data.patient.id) || null;
+      st.checking = false;
+      st.applicable = !!patientId;
+      if (!patientId) {
+        st.loadedForTask = ctx.pageKey;
+        rerender();
+        return;
+      }
+      await fetchAppointmentsAndLinks(st, patientId, ctx.taskUuid);
       if (st === s.rec) {
         st.loadedForTask = ctx.pageKey;
         rerender();
@@ -3008,9 +3097,17 @@
     if (currentShows().due && s.due.loadedForTask !== ctx.pageKey && !s.due.resolving) {
       loadWhatsDue(ctx);
     }
+    // review-investigation-report added 2026-09-11 — this is the trigger
+    // that decides whether loadPatientRecord() even gets CALLED at all.
+    // The classification-shape fix inside loadPatientRecord (see its own
+    // comment) was dead code without this: the gate here never invoked
+    // the function for this typeSlug in the first place, so nothing
+    // inside it could ever run. Found only after "still not showing"
+    // following that first fix — a real lesson that a fix two layers deep
+    // needs its caller checked too, not just the function itself.
     if (
       ctx.kind === 'task' &&
-      isCommunicationThreadSlug(ctx.typeSlug) &&
+      (isCommunicationThreadSlug(ctx.typeSlug) || ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE) &&
       s.rec.loadedForTask !== ctx.pageKey &&
       !s.rec.checking &&
       !s.rec.loading
