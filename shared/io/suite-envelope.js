@@ -557,6 +557,9 @@ function previewEnvelope(envelope) {
     if (mods.suite.quickActionsWidget === true || mods.suite['ui.quickActionsWidget'] === true) {
       lines.push('Quick Actions widget ON');
     }
+    if (mods.suite.focusAlerts === true || mods.suite['ui.focusAlerts'] === true) {
+      lines.push('Focus alerts (queue) ON');
+    }
   }
 
   return lines;

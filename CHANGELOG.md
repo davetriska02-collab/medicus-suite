@@ -2,6 +2,28 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.33] — 2026-09-11
+
+### Practice features: Focus alerts toggle
+
+Options → Practice features gains a "Focus alerts" toggle for the Triage
+Lens queue status bar (the "N red · N amber · N clear" readout, jump
+button, and Focus-alerts dimming button together) — a practice that
+doesn't want it can hide the whole thing.
+
+- New pack `suite.ui.focusAlerts` in `shared/practice-packs.js`,
+  grandfathered ON (the bar has always shipped enabled).
+- `content-scripts/triage-lens/content.js` gates the whole bar behind the
+  pack via `bindInjector` — the same full start/stop lifecycle every other
+  whole-widget pack uses, not a bespoke read/watch flag.
+- **Fixed a real load-order bug found while building this**:
+  `shared/practice-packs.js` must load before `content.js` in
+  `manifest.json`'s content_scripts array — its `window.PracticePacks`
+  init runs synchronously at parse time, not lazily, so the wrong order
+  left the toggle permanently stuck at its grandfathered-on default.
+- Full backup-convention coverage: `shared/io/suite-io.js`,
+  `shared/io/suite-envelope.js`, `shared/io/practice-profile.js`.
+
 ## [v3.261.32] — 2026-09-11
 
 ### Companion: investigation-result review tasks

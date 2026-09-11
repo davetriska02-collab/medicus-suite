@@ -25,6 +25,7 @@ const SUITE_KEYS = [
   'suite.ui.contactsCanvas',
   'suite.ui.routineRxButton',
   'suite.ui.quickActionsWidget',
+  'suite.ui.focusAlerts',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -69,6 +70,7 @@ async function suiteExport() {
     contactsCanvas: r['suite.ui.contactsCanvas'] ?? null,
     routineRxButton: r['suite.ui.routineRxButton'] ?? null,
     quickActionsWidget: r['suite.ui.quickActionsWidget'] ?? null,
+    focusAlerts: r['suite.ui.focusAlerts'] ?? null,
   };
 }
 
@@ -171,6 +173,7 @@ async function suiteImport(data) {
     ['contactsCanvas', 'suite.ui.contactsCanvas'],
     ['routineRxButton', 'suite.ui.routineRxButton'],
     ['quickActionsWidget', 'suite.ui.quickActionsWidget'],
+    ['focusAlerts', 'suite.ui.focusAlerts'],
   ];
   for (const [alias, storageKey] of packAliases) {
     if (data[alias] == null) continue;

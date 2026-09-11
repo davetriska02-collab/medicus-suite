@@ -114,6 +114,7 @@ const NEW_PACKS = [
   { suffix: 'ui.contactsCanvas', key: 'suite.ui.contactsCanvas', alias: 'contactsCanvas' },
   { suffix: 'ui.routineRxButton', key: 'suite.ui.routineRxButton', alias: 'routineRxButton' },
   { suffix: 'ui.quickActionsWidget', key: 'suite.ui.quickActionsWidget', alias: 'quickActionsWidget' },
+  { suffix: 'ui.focusAlerts', key: 'suite.ui.focusAlerts', alias: 'focusAlerts' },
 ];
 
 (async () => {
@@ -275,6 +276,7 @@ const NEW_PACKS = [
   check(/'ui\.contactsCanvas'/.test(allowList), 'allow-list includes ui.contactsCanvas');
   check(/'ui\.routineRxButton'/.test(allowList), 'allow-list includes ui.routineRxButton');
   check(/'ui\.quickActionsWidget'/.test(allowList), 'allow-list includes ui.quickActionsWidget');
+  check(/'ui\.focusAlerts'/.test(allowList), 'allow-list includes ui.focusAlerts');
   check(!/practiceAcceptedAt/.test(allowList), 'practiceAcceptedAt is not on the pack allow-list');
   check(!/hiddenTabs/.test(allowList), 'hiddenTabs is not on the pack allow-list');
 
@@ -316,6 +318,7 @@ const NEW_PACKS = [
   check(/id="pfContactsCanvas"/.test(optionsHtml), 'contacts pack lives on the practice board');
   check(/id="pfRoutineRxButton"/.test(optionsHtml), 'routine-Rx pack lives on the practice board');
   check(/id="pfQuickActionsWidget"/.test(optionsHtml), 'quick-actions pack lives on the practice board');
+  check(/id="pfFocusAlerts"/.test(optionsHtml), 'focus-alerts pack lives on the practice board');
   check(/id="signingSoftFlags"/.test(optionsHtml), 'Suite still mirrors softFlags (same key)');
   check(/id="sgSoftFlags"/.test(signingSrc), 'Signing Queue still mirrors softFlags (same key)');
   check(!/id="signingAllocateCanvases"/.test(optionsHtml), 'new packs are not mirrored on Suite');
@@ -355,6 +358,7 @@ const NEW_PACKS = [
       !/contactsCanvas/.test(acceptFn[0]) &&
       !/routineRxButton/.test(acceptFn[0]) &&
       !/quickActionsWidget/.test(acceptFn[0]) &&
+      !/focusAlerts/.test(acceptFn[0]) &&
       !/signing\.softFlags/.test(acceptFn[0]),
     'tick Accept does not write any pack key'
   );
@@ -375,9 +379,30 @@ const NEW_PACKS = [
     ['content-scripts/contacts-link-button.js', 'suite.ui.contactsCanvas', 'removeWidget'],
     ['content-scripts/triage-lens/routine-rx-button.js', 'suite.ui.routineRxButton', 'removeHost'],
     ['content-scripts/reception-quick-actions.js', 'suite.ui.quickActionsWidget', 'removeWidget'],
+    ['content-scripts/triage-lens/content.js', 'suite.ui.focusAlerts', 'removeQueueStatusBar'],
   ];
   const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
   check(/shared\/practice-packs\.js/.test(manifest), 'practice-packs.js is in the manifest');
+
+  // Regression (2026-09-10): content.js's own window.PracticePacks init +
+  // .read()/.watch() wiring for the Focus-alerts pack run synchronously at
+  // top-level script-parse time, NOT lazily — if practice-packs.js hasn't
+  // run yet at that exact moment, the toggle silently never takes effect
+  // (found live: turning it off in Options did nothing, even after a full
+  // browser restart). manifest.json content_scripts execute in array order,
+  // so practice-packs.js must be listed BEFORE content.js in every group
+  // that carries both.
+  const manifestJson = JSON.parse(manifest);
+  manifestJson.content_scripts.forEach((group, gi) => {
+    const js = group.js || [];
+    const packsIdx = js.indexOf('shared/practice-packs.js');
+    const contentIdx = js.indexOf('content-scripts/triage-lens/content.js');
+    if (packsIdx === -1 || contentIdx === -1) return;
+    check(
+      packsIdx < contentIdx,
+      `manifest content_scripts group ${gi}: shared/practice-packs.js loads before content.js (its window.PracticePacks init/wiring runs synchronously at parse time)`
+    );
+  });
   injectors.forEach(([file, key, mute]) => {
     const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
     check(src.includes(key), `${file} reads ${key}`);
@@ -416,6 +441,39 @@ const NEW_PACKS = [
   check(
     /suite\.ui\.quickActionsWidget/.test(qaSrc) && /triagelens\.quickActions/.test(qaSrc),
     'quick-actions widget pack is a separate key from the phrase list'
+  );
+
+  console.log('\n--- Focus alerts: whole status bar gate (corrected 2026-09-10 from button-only) ---');
+  // Covered generically by the `injectors` loop above (key present, uses
+  // bindInjector, tears down with removeQueueStatusBar). These checks pin
+  // the pack-specific details the generic loop can't see: the OFF path
+  // removes the WHOLE bar (not just the Focus-alerts button — that was the
+  // first build's bug, caught live: toggling off in Options left the counts
+  // + jump button visible), and forces dimming back off with it.
+  const tlSrc = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/content.js'), 'utf8');
+  check(
+    /FOCUS_ALERTS_PACK_KEY/.test(tlSrc) && /_focusAlertsPackOn/.test(tlSrc),
+    'content.js tracks the pack state separately from the session-local dimming toggle'
+  );
+  check(
+    /if \(!PREF\('queueStatusBar', true\) \|\| !_focusAlertsPackOn\) \{\s*removeQueueStatusBar\(\);\s*return;/.test(
+      tlSrc
+    ),
+    'the pack gates the WHOLE bar via the same early-return as the pre-existing queueStatusBar PREF — not just the Focus-alerts button'
+  );
+  check(
+    !/focusBtn\.hidden/.test(tlSrc),
+    "no separate button-level hide remains — the bar-level gate above is the only thing controlling the button's visibility now"
+  );
+  check(
+    /off: \(\) => \{[\s\S]*?_focusAlertsPackOn = false;[\s\S]*?if \(_queueFocusAlertsOn\) \{[\s\S]*?_queueFocusAlertsOn = false;[\s\S]*?applyQueueFocusClass\(\);[\s\S]*?\}[\s\S]*?removeQueueStatusBar\(\);[\s\S]*?\},/.test(
+      tlSrc
+    ),
+    'turning the pack off forces dimming back off (clearing the body class) before tearing the bar down — never leaves rows stuck dimmed with no visible control'
+  );
+  check(
+    /window\.PracticePacks\.bindInjector\(FOCUS_ALERTS_PACK_KEY/.test(tlSrc),
+    'wired via bindInjector — the same full start/stop lifecycle as every other whole-widget pack, not a bespoke read/watch pair'
   );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

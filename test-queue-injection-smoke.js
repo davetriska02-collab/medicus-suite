@@ -503,6 +503,15 @@ const parts = [
     /let _queueStatusJumpPos = null;[\s\S]*?let _queueStatusBarRafPending = false;/,
     '_queueStatus* module state'
   ),
+  // Focus-alerts practice-features pack gate (2026-09-10) — window.PracticePacks
+  // is intentionally absent from the sandbox (not stubbed below), same as any
+  // other real-browser page where practice-packs.js failed to load: both
+  // FOCUS_ALERTS_PACK_KEY's ternary and _focusAlertsPackOn's `!window.PracticePacks
+  // || ...` short-circuit to the safe always-on default without throwing.
+  extract(
+    /const FOCUS_ALERTS_PACK_KEY =[\s\S]*?let _focusAlertsPackOn = !window\.PracticePacks \|\| window\.PracticePacks\.peek\(FOCUS_ALERTS_PACK_KEY\);/,
+    'FOCUS_ALERTS_PACK_KEY / _focusAlertsPackOn'
+  ),
   extract(/const onQueueStatusJumpClick = \(\) => \{[\s\S]*?\n {2}\};/, 'onQueueStatusJumpClick'),
   extract(/const onQueueStatusFocusClick = \(e\) => \{[\s\S]*?\n {2}\};/, 'onQueueStatusFocusClick'),
   extract(/const ensureQueueStatusBarEl = \(\) => \{[\s\S]*?\n {2}\};/, 'ensureQueueStatusBarEl'),
@@ -1871,6 +1880,20 @@ if (sandbox) {
       'a freshly (re)created bar syncs its focus button to the still-ON session-local toggle state'
     );
     sandbox.onQueueStatusFocusClick({ currentTarget: focusBtn2 }); // leave state OFF for later layers
+
+    // ---- practice-packs gate (Nick's request, 2026-09-10; corrected same
+    // day to cover the WHOLE bar, not just this button): with no
+    // window.PracticePacks (this harness's default sandbox), _focusAlertsPackOn
+    // stays at its grandfathered-ON fallback for the process lifetime — the
+    // real bindInjector on/off lifecycle only runs behind `window.PracticePacks
+    // && window.PracticePacks.bindInjector`, which is deliberately not stubbed
+    // here (this harness tests injection mechanics, not the pack plumbing
+    // itself — that's covered by source-pattern checks in
+    // test-practice-features.js, matching every other bindInjector-gated
+    // pack in this codebase). This just confirms the default-ON fallback
+    // leaves the whole bar intact.
+    check(!!bar2, 'default sandbox (no window.PracticePacks): the status bar still renders — grandfathered ON');
+    check(!focusBtn2.hidden, 'and the focus button within it is visible');
   }
 
   // ============================================================

@@ -117,6 +117,7 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.contactsCanvas', ids: ['pfContactsCanvas'], grandfather: true },
   { key: 'suite.ui.routineRxButton', ids: ['pfRoutineRxButton'], grandfather: true },
   { key: 'suite.ui.quickActionsWidget', ids: ['pfQuickActionsWidget'], grandfather: true },
+  { key: 'suite.ui.focusAlerts', ids: ['pfFocusAlerts'], grandfather: true },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);
