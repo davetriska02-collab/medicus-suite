@@ -7854,7 +7854,7 @@
           if (!cl) return false;
           // ch-q-pa included (audit M2): each patient-flag chip injection used
           // to read as a real grid mutation and trigger a full refresh cycle.
-          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pending') || cl.contains('ch-q-repeat') || cl.contains('ch-q-carry') || cl.contains('ch-q-pulse') || cl.contains('ch-q-why') || cl.contains('ch-q-act') || cl.contains('ch-q-pulse-float'))) return false;
+          if (!(cl.contains('ch-q-result') || cl.contains('ch-q-mon') || cl.contains('ch-queue-chips') || cl.contains('ch-chip') || cl.contains('ch-q-pa') || cl.contains('ch-q-pending') || cl.contains('ch-q-repeat') || cl.contains('ch-q-carry') || cl.contains('ch-q-pulse') || cl.contains('ch-q-why') || cl.contains('ch-q-act') || cl.contains('ch-q-pulse-float') || cl.contains('ms-rx-od') || cl.contains('ms-rx-od-btn'))) return false;
         }
       }
     }

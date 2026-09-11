@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.35] — 2026-09-11
+
+### Check for overdue monitoring on prescription lists
+
+On the routine and non-routine prescription task-lists (the standard
+Medicus list, not the share-out canvas) a **Check for overdue monitoring**
+button sits next to **Share out this inbox…**. Clicking it scans the open
+inbox with the Sentinel engine (drug-monitoring + QOF) and injects a
+Monitoring and/or QOF button next to each request that has an overdue
+finding.
+
+- Opt-in: nothing is fetched until the clinician clicks.
+- Same fail-closed engine as the record HUD. A missing button is not an
+  all-clear.
+- Fetch pattern matches the Rx canvas harvest (concurrency, timeout,
+  circuit breaker, abort on leave). Unique patients are fetched once.
+- Does not write. Does not enable the old always-on queue monitoring chips.
+
 ## [v3.261.34] — 2026-09-11
 
 ### Prescriptions allocation canvas: per-request medication summary + complexity score

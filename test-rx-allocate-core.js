@@ -582,6 +582,7 @@ console.log('\n--- write stays on the lab client ---');
   check(/ms-rxac-day-tomorrow/.test(canvas), 'Tomorrow shortcut is on the canvas');
   check(/Working day/.test(canvas) && /ms-rxac-day-today/.test(canvas), 'date picker copy says it defaults to today');
   check(/Share out this inbox/.test(canvas), 'launcher names the inbox, not a canvas');
+  check(/ms-rxac-launch-wrap/.test(canvas), 'share-out launcher shares a wrap with Check for overdue monitoring');
   check(/ms-rxac-folder-body/.test(canvas), 'folder patient lists are always visible');
   check(/ms-rxac-overlay/.test(canvas) && /ms-rxac-launch/.test(canvas), 'overlay and launcher use rxac ids');
   check(/ms-rxac-folder/.test(canvas) && /ms-rxac-folders/.test(canvas), 'board is a grid of clinician folders');

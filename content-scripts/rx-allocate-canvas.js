@@ -24,6 +24,7 @@
 
   var OVERLAY_ID = 'ms-rxac-overlay';
   var LAUNCH_ID = 'ms-rxac-launch';
+  var LAUNCH_WRAP_ID = 'ms-rxac-launch-wrap';
   var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.allocateCanvases) || 'suite.ui.allocateCanvases';
   var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
 
@@ -3275,6 +3276,8 @@
   function muteAllocateChrome() {
     var launch = document.getElementById(LAUNCH_ID);
     if (launch) launch.remove();
+    var wrap = document.getElementById(LAUNCH_WRAP_ID);
+    if (wrap && !document.getElementById('ms-rx-od-btn')) wrap.remove();
     if (_open) closeOverlay();
   }
 
@@ -3285,13 +3288,20 @@
     }
     var route = currentRoute();
     var launch = document.getElementById(LAUNCH_ID);
+    var wrap = document.getElementById(LAUNCH_WRAP_ID);
     if (!route) {
       if (launch) launch.remove();
+      if (wrap && !document.getElementById('ms-rx-od-btn')) wrap.remove();
       if (_open) closeOverlay();
       return;
     }
     if (!_open && !_writing) _route = route;
     var launchLabel = 'Share out this inbox…';
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = LAUNCH_WRAP_ID;
+      document.documentElement.appendChild(wrap);
+    }
     if (!launch) {
       launch = document.createElement('button');
       launch.type = 'button';
@@ -3302,9 +3312,10 @@
         e.stopPropagation();
         openOverlay();
       });
-      document.documentElement.appendChild(launch);
+      wrap.insertBefore(launch, wrap.firstChild);
     } else {
       launch.textContent = launchLabel;
+      if (launch.parentNode !== wrap) wrap.insertBefore(launch, wrap.firstChild);
     }
   }
 
