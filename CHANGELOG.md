@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.38] — 2026-09-11
+
+### Dropped the "U&E 2 weeks after starting" monitoring row
+
+The post-initiation U&E check on ACE-I/ARB and thiazide cards is gone. It was
+firing for patients who had been on the drug for years and cluttering the
+Monitoring tab.
+
+Medicus often exposes the current authorisation-batch start (~12 months), not
+the clinical start. A last U&E from before that batch window then looked like
+"started, never rechecked" even when annual monitoring was in date.
+
+- Removed from `ace-arb` and `thiazide-diuretic-ue` in `rules/drug-rules.json`.
+- Annual U&E (and BP on ACE-I/ARB) unchanged.
+- NICE NG136 / CKS initiation recheck stays in the rule notes, not enforced.
+- Engine `postInitiationDays` mechanism kept; tests cover it on a synthetic
+  rule and assert no shipped rule carries it.
+
 ## [v3.261.37] — 2026-09-11
 
 ### Slots auto-refresh while the board is open
