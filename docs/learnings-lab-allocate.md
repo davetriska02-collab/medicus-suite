@@ -100,6 +100,9 @@ screen; we do not yet have a queue-level API for that card.
 - **Current `assignedTo`** when it is a team inbox.
 - **Task `status`** until a results-queue capture shows it is actually a
   clinician list (the request-queue capture says it is not).
+- **Task-list `requestedBy` and `investigationReport.requester.practitionerName`**
+  — the lab/org name on the report header (live 2026-09-12: `TRISKA` /
+  ODS `H81031` while every OIR row was `Dr Emma Nicholls`).
 
 Auto-placement on the canvas is **requester evidence only**. Everything
 else stays in Unallocated or the current inbox column.
@@ -166,7 +169,14 @@ Overview notes from the same capture:
 
 - `investigationReport.requester` is
   `{ organisationName, organisationOdsCode, departmentName, practitionerName }`
-  — the **lab/org**, not the GP. Task-list `requestedBy` wins.
+  — the **lab/org**, not the GP. Live 2026-09-12: `practitionerName` "TRISKA"
+  with `organisationOdsCode` "H81031" (practice ODS), `organisationName` null.
+  Task-list `requestedBy` is the same string. Neither is who ordered.
+- `outstandingInvestigationRequestOptions` is an array of
+  `{ label, value }` — `label` is the OIR card line
+  `XR Chest (Dr Emma Nicholls • 08 Sep 2026, 15:58)`; `value` is the
+  investigation-request UUID. This is who ordered. Parse with
+  `parseRequestLabel`. Mixed labels on one report → claim nobody.
 - `assigneeOptions: { teams, staff }` — harvest staff `{id,name}` /
   `{value,label}` for the directory. Live write (v3.243.4) also saw
   Vue-wrapped `{ value: { id, name }, label }` and id→name maps on
@@ -185,9 +195,10 @@ The canvas is one **Investigation reports** pool, grouped by who
 requested the test, plus small **clinician chips** on the right. Every
 row on this queue starts in the pool — including rows whose
 `assignedTo` is the inbox name "Investigation Reports" (that is not a
-person). Drag or multi-select onto a chip. Who requested is read from
-the task-list `requestedBy` field when present; overview fetch is the
-fallback.
+person). Drag or multi-select onto a chip. Who requested is read from overview
+`outstandingInvestigationRequestOptions[].label` (OIR card). The
+task-list `requestedBy` column is the lab practitionerName and is
+overridden once the overview returns.
 
 Same-requester tiles group under one header and drag as a set. The drag
 ghost names who ordered them. That only works when requester evidence
@@ -299,5 +310,8 @@ a parsed absence record or this machine’s rota leave list — never from
 - `scripts/staff-scheduling-capture.js` — live Staff scheduling scoping
   (fetch + XHR samples; re-reads embedded-overview and staff-schedule).
 - `scripts/lab-requester-capture.js` — live Requested By / report-page scoping.
+- `scripts/lab-requester-truth-capture.js` — walk a mismatch example: OIR
+  card tags on the open result, investigation-request tags, and this
+  task's list `requestedBy` (what the canvas groups by) in one dump.
 - `test-lab-allocate-core.js` — placement rules, no-write lock, GET-only client,
   captured today-book shape.

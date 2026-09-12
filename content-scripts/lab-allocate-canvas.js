@@ -52,6 +52,8 @@
   var _ignoreClickAfterDrag = false;
   var _copyNote = '';
   var _overviewProgress = '';
+  var _overviewDone = 0;
+  var _overviewTotal = 0;
   var _rota = { staff: [], leave: [], loaded: false };
   var _book = null;
   var _absences = [];
@@ -79,6 +81,7 @@
   var _scheduleAutoPick = false;
   var _dragFieldKey = '';
   var _marquee = null;
+  var _sendToNotIn = false;
 
   function calendarToday() {
     return C.todayISO();
@@ -207,19 +210,116 @@
     render();
   }
 
-  function setProgress(text) {
+  function setProgress(text, done, total) {
     _overviewProgress = text || '';
-    var node = document.getElementById('ms-lac-progress');
-    if (node) node.textContent = _overviewProgress;
+    if (typeof done === 'number') _overviewDone = done;
+    if (typeof total === 'number') _overviewTotal = total;
+    if (!_overviewProgress) {
+      _overviewDone = 0;
+      _overviewTotal = 0;
+    }
+    paintReorgBanner();
+  }
+
+  function reorgIsWhoOrdered() {
+    return /who ordered|grouped by/i.test(_overviewProgress || '');
+  }
+
+  function reorgPct() {
+    if (!_overviewTotal) return _overviewProgress ? 8 : 0;
+    return Math.max(0, Math.min(100, Math.round((_overviewDone / _overviewTotal) * 100)));
+  }
+
+  function paintReorgBanner() {
+    var banner = document.getElementById('ms-lac-reorg');
+    var live = document.getElementById('ms-lac-progress');
+    if (live) live.textContent = _overviewProgress;
+    var panel = document.querySelector('#' + OVERLAY_ID + ' .ms-lac-panel');
+    if (panel) {
+      if (_overviewProgress) panel.classList.add('ms-lac-panel-reorg');
+      else panel.classList.remove('ms-lac-panel-reorg');
+    }
+    if (!banner) return;
+    var on = !!_overviewProgress;
+    banner.hidden = !on;
+    banner.setAttribute('aria-hidden', on ? 'false' : 'true');
+    var title = banner.querySelector('.ms-lac-reorg-title');
+    var sub = banner.querySelector('.ms-lac-reorg-sub');
+    var fill = banner.querySelector('.ms-lac-reorg-fill');
+    var count = banner.querySelector('.ms-lac-reorg-count');
+    var meter = banner.querySelector('.ms-lac-reorg-meter');
+    if (title) title.textContent = _overviewProgress;
+    if (sub) {
+      sub.textContent = reorgIsWhoOrdered()
+        ? 'The list names the lab. Reading unallocated results, then grouping the pile by the GP on the request.'
+        : '';
+    }
+    var pct = reorgPct();
+    if (fill) fill.style.width = pct + '%';
+    if (meter) {
+      meter.setAttribute('aria-valuenow', String(pct));
+      meter.setAttribute('aria-valuetext', _overviewProgress || '');
+    }
+    if (count) {
+      count.textContent = _overviewTotal ? _overviewDone + ' of ' + _overviewTotal + ' results' : '';
+    }
+    banner.classList.toggle('ms-lac-reorg-settled', /grouped by who ordered/i.test(_overviewProgress));
+  }
+
+  function reorgBannerHtml() {
+    var on = !!_overviewProgress;
+    var pct = reorgPct();
+    var who = reorgIsWhoOrdered();
+    var settled = /grouped by who ordered/i.test(_overviewProgress);
+    return (
+      '<div class="ms-lac-reorg' +
+      (settled ? ' ms-lac-reorg-settled' : '') +
+      '" id="ms-lac-reorg"' +
+      (on ? '' : ' hidden') +
+      ' aria-hidden="' +
+      (on ? 'false' : 'true') +
+      '" role="status">' +
+      (who
+        ? '<div class="ms-lac-reorg-stage" aria-hidden="true">' +
+          '<span class="ms-lac-reorg-card">Result</span>' +
+          '<span class="ms-lac-reorg-card">Result</span>' +
+          '<span class="ms-lac-reorg-card">Result</span>' +
+          '<span class="ms-lac-reorg-arrow">→</span>' +
+          '<span class="ms-lac-reorg-pile">Who ordered</span>' +
+          '</div>'
+        : '') +
+      '<div class="ms-lac-reorg-copy">' +
+      '<strong class="ms-lac-reorg-title">' +
+      esc(_overviewProgress || 'Finding who ordered these…') +
+      '</strong>' +
+      '<span class="ms-lac-reorg-sub">' +
+      (who
+        ? 'The list names the lab. Reading unallocated results, then grouping the pile by the GP on the request.'
+        : '') +
+      '</span>' +
+      '<div class="ms-lac-reorg-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' +
+      pct +
+      '"><div class="ms-lac-reorg-fill" style="width:' +
+      pct +
+      '%"></div></div>' +
+      '<span class="ms-lac-reorg-count">' +
+      (_overviewTotal ? _overviewDone + ' of ' + _overviewTotal + ' results' : '') +
+      '</span>' +
+      '</div></div>'
+    );
   }
 
   async function enrichRequesters(rows) {
     var gen = _boardGen;
+    // Only unallocated results. Task-list Requested By is the lab name, so
+    // inbox rows still need the overview; already-assigned people do not.
     var pending = rows.filter(function (r) {
-      return r && r.overviewURL && !r.requester;
+      return C.needsRequesterOverview(r);
     });
     if (pending.length > OVERVIEW_CAP) pending = pending.slice(0, OVERVIEW_CAP);
     if (!pending.length) return;
+    setProgress('Finding who ordered these…', 0, pending.length);
+    announce('Finding who ordered these results. The pile will regroup.');
     var cli = client();
     var i = 0;
     var done = 0;
@@ -235,22 +335,26 @@
           var hint = C.pickRequesterFromOverview(payload);
           if (hint) C.applyRequester(row, hint);
         } catch (_) {
-          /* fail closed: leave in the unknown pile */
+          /* leave the list Requested By; do not invent a name */
         }
         done++;
-        setProgress('Reading who ordered… ' + done + '/' + pending.length);
+        setProgress('Finding who ordered these…', done, pending.length);
       }
     }
     var workers = [];
     for (var w = 0; w < OVERVIEW_CONCURRENCY; w++) workers.push(worker());
     await Promise.all(workers);
-    setProgress('');
+    if (gen !== _boardGen) return;
+    setProgress('Grouped by who ordered', pending.length, pending.length);
+    announce('The pile is now grouped by who ordered.');
+    await new Promise(function (resolve) {
+      setTimeout(resolve, 720);
+    });
   }
 
-  // Requested By on the task-list means enrichRequesters skips overviews —
-  // and that used to skip assigneeOptions.staff too, so the write had no
-  // UUIDs and the button silently did nothing. Always read a few overviews
-  // for the staff directory, even when who ordered is already known.
+  // Staff UUIDs still come from a short overview harvest (and the today-book)
+  // so Write is not silent when Requested By is already on the list. Who
+  // ordered is a separate full-queue enrich: OIR labels override the list.
   async function harvestStaffFromOverviews(rows) {
     var gen = _boardGen;
     var withUrl = (rows || []).filter(function (r) {
@@ -707,19 +811,43 @@
     );
   }
 
+  function nextWorkDate() {
+    return C.nextWorkingDayISO(calendarToday());
+  }
+
+  function offerDayPhrase() {
+    return C.nextWorkingDayPhrase(workDate(), calendarToday());
+  }
+
   function workingDayHtml() {
     var phrase = dayPhrase();
     var cal = calendarToday();
     var picked = workDate();
+    var nwd = nextWorkDate();
     var people = inDayPeople();
     var bookWord = phrase === 'today' ? 'today’s book' : 'the ' + phrase + ' book';
     var summary = people.length
       ? people.length + (people.length === 1 ? ' person has a session on ' : ' people have a session on ') + bookWord
       : 'No sessions on the book for ' + phrase;
+    var closedNote = '';
+    if (!C.isWorkingDayISO(cal) && picked === nwd) {
+      closedNote =
+        'Today is ' +
+        C.weekdayName(cal) +
+        (C.isBankHolidayISO(cal) ? ' (bank holiday)' : '') +
+        '. Using the next working day — ' +
+        C.nextWorkingDayPhrase(nwd, cal) +
+        '.';
+    }
+    var nwdLabel = nwd === C.addDaysISO(cal, 1) ? 'Tomorrow' : 'Next working day';
+    var nwdTitle =
+      'Use the appointment book for ' +
+      C.nextWorkingDayPhrase(nwd, cal) +
+      ' — skips weekends and bank holidays.';
     return (
       '<div class="ms-lac-daybar">' +
       '<div class="ms-lac-split-day">' +
-      '<label class="ms-lac-split-day-label" for="ms-lac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
+      '<label class="ms-lac-split-day-label" for="ms-lac-day" title="The appointment book for this date decides who is in. Defaults to today on a working day, otherwise the next working day.">Working day</label>' +
       '<input type="date" id="ms-lac-day" value="' +
       esc(picked) +
       '" aria-label="Working day for who is in" title="The appointment book for this date decides who is in.">' +
@@ -727,11 +855,16 @@
       (picked === cal ? ' ms-lac-split-day-on' : '') +
       '" id="ms-lac-day-today" title="Use today’s appointment book.">Today</button>' +
       '<button type="button" class="ms-lac-ghost' +
-      (picked === C.addDaysISO(cal, 1) ? ' ms-lac-split-day-on' : '') +
-      '" id="ms-lac-day-tomorrow" title="Use tomorrow’s appointment book — for allocating the night before.">Tomorrow</button>' +
+      (picked === nwd ? ' ms-lac-split-day-on' : '') +
+      '" id="ms-lac-day-nwd" title="' +
+      esc(nwdTitle) +
+      '">' +
+      esc(nwdLabel) +
+      '</button>' +
       '</div>' +
       '<span class="ms-lac-daybar-summary">' +
-      esc(summary) +
+      esc(closedNote || summary) +
+      (closedNote && summary ? ' ' + esc(summary) : '') +
       '</span>' +
       '</div>'
     );
@@ -945,6 +1078,21 @@
       dayPhrase: dayPhrase(),
       emptyDestReason: 'Pick Working today, a group, or encircle people.',
     };
+  }
+
+  function applySendToWhoOrdered() {
+    var plan = C.planSendToRequester(tilesForPlan(), inDayPeople(), {
+      includeNotIn: _sendToNotIn,
+      dayPhrase: offerDayPhrase(),
+      aliases: C.buildClinicianAliases(_rows, _draft),
+    });
+    if (!plan.ok) return plan;
+    var dests = (plan.sent || []).map(function (m) {
+      return { key: m.toKey, name: m.toName, staffId: m.staffId };
+    });
+    _draft = C.applySendToRequester(C.ensureDestColumns(_draft || C.emptyDraft(), dests), plan);
+    _selected = {};
+    return plan;
   }
 
   function applyPileSplit() {
@@ -1353,8 +1501,21 @@
     } else if (!dests.length) {
       actions = '<span class="ms-lac-split-note">Pick Working today, a group, or encircle people.</span>';
     } else if (poolN && !haveWork) {
+      var onto = offerDayPhrase();
+      var splitLabel =
+        workDate() === calendarToday()
+          ? 'Split equally'
+          : 'Share equally onto people working ' + onto;
+      var splitTitle =
+        'Split the unallocated pile evenly onto people with a session on ' +
+        onto +
+        '. Proposal only, nothing is written until you confirm.';
       actions =
-        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-split" title="Split the unallocated pile evenly. Proposal only, nothing is written until you confirm.">Split equally</button>';
+        '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-split" title="' +
+        esc(splitTitle) +
+        '">' +
+        esc(splitLabel) +
+        '</button>';
     } else if (poolN && haveWork) {
       actions =
         '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-topup" title="Give leftover unallocated reports to whoever currently has least. Does not move sitting work. Proposal only.">Top up empty boxes</button>' +
@@ -1382,7 +1543,65 @@
         esc(dist || stagedN + ' reports would sit with ' + dests.length + ' people.') +
         ' <span class="ms-rxac-drag-hint">Drag a patient from one person onto another to change who gets them.</span></div>'
       : '';
-    return strip + naming + allGroupsHtml() + '<div class="ms-ags-actions">' + actions + '</div>' + proposal;
+    var sendAliases = C.buildClinicianAliases(_rows, _draft);
+    var sendSafe = C.planSendToRequester(tilesForPlan(), inDayPeople(), {
+      includeNotIn: false,
+      aliases: sendAliases,
+    });
+    var sendPlan = _sendToNotIn
+      ? C.planSendToRequester(tilesForPlan(), inDayPeople(), { includeNotIn: true, aliases: sendAliases })
+      : sendSafe;
+    var sendOffer = '';
+    if (poolN && sendPlan && (sendSafe.sent.length || sendSafe.skippedNotIn.length || sendSafe.skippedUnknown.length)) {
+      var day = offerDayPhrase();
+      var inN = sendSafe.sent.length;
+      var notInN = sendSafe.skippedNotIn.length;
+      var unknownN = sendSafe.skippedUnknown.length;
+      var willSend = sendPlan.sent.length;
+      var sendLabel = willSend > 0 ? 'Send ' + willSend + ' to who ordered' : 'Nobody who ordered is in';
+      var lead =
+        inN > 0
+          ? inN +
+            ' unallocated result' +
+            (inN === 1 ? '' : 's') +
+            ' can go to the requester — they have a session on ' +
+            day +
+            '.'
+          : 'Nobody who ordered these is on the book for ' + day + '.';
+      var rest = [];
+      if (notInN)
+        rest.push(
+          notInN +
+            (notInN === 1 ? ' stays' : ' stay') +
+            ' in the pile unless you tick the box below.'
+        );
+      if (unknownN)
+        rest.push(unknownN + (unknownN === 1 ? ' has' : ' have') + ' no known requester yet.');
+      sendOffer =
+        '<div class="ms-lac-nwd-offer" role="status">' +
+        '<strong>Send to who ordered if they are working ' +
+        esc(day) +
+        '?</strong> ' +
+        esc(lead) +
+        (rest.length ? ' ' + esc(rest.join(' ')) : '') +
+        ' Proposal only — nothing is written until you confirm.' +
+        (notInN
+          ? '<label class="ms-lac-send-not-in"><input type="checkbox" id="ms-lac-send-not-in"' +
+            (_sendToNotIn ? ' checked' : '') +
+            '> Also send ' +
+            notInN +
+            ' to people who are not in on ' +
+            esc(day) +
+            '</label>'
+          : '') +
+        (willSend
+          ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-lac-send-who" title="Stage each unallocated result onto the GP who ordered it, only if they have a session that day unless you turned on the not-in toggle. Proposal only.">' +
+            esc(sendLabel) +
+            '</button>'
+          : '') +
+        '</div>';
+    }
+    return strip + naming + allGroupsHtml() + sendOffer + '<div class="ms-ags-actions">' + actions + '</div>' + proposal;
   }
 
   function clinicianFieldsInRect(rect) {
@@ -1699,6 +1918,7 @@
     return (
       '<div class="ms-lac-panel' +
       (_writing ? ' ms-lac-panel-writing' : '') +
+      (_overviewProgress ? ' ms-lac-panel-reorg' : '') +
       '" role="dialog" aria-modal="true" aria-labelledby="ms-lac-title">' +
       '<div class="ms-lac-header">' +
       '<h2 class="ms-lac-title" id="ms-lac-title">Allocate incoming labs</h2>' +
@@ -1706,11 +1926,12 @@
       esc(counts) +
       '</span>' +
       '<span class="ms-lac-header-note">Unallocated on the left. Click a report, or a clinician heading for the lot. Ctrl-click to add more. Drag onto a field — or click the field. Writing happens only when you confirm.</span>' +
-      '<span class="ms-lac-hint" id="ms-lac-progress">' +
+      '<span id="ms-lac-progress" hidden>' +
       esc(_overviewProgress) +
       '</span>' +
       '<button type="button" class="ms-lac-close" id="ms-lac-close">Close</button>' +
       '</div>' +
+      reorgBannerHtml() +
       selectionBarHtml() +
       '<div class="ms-lac-body"><div class="ms-lac-board" id="ms-lac-board">' +
       (_loading && !_rows.length ? '<div class="ms-lac-msg">Reading the results queue…</div>' : boardHtml()) +
@@ -1794,10 +2015,11 @@
       dayToday.addEventListener('click', function () {
         setWorkDate(calendarToday());
       });
-    var dayTomorrow = root.querySelector('#ms-lac-day-tomorrow');
-    if (dayTomorrow)
-      dayTomorrow.addEventListener('click', function () {
-        setWorkDate(C.addDaysISO(calendarToday(), 1));
+    var dayNwd = root.querySelector('#ms-lac-day-nwd');
+    if (dayNwd)
+      dayNwd.addEventListener('click', function () {
+        setDestKind('in-today', '');
+        setWorkDate(nextWorkDate());
       });
     var inTodayBtn = root.querySelector('#ms-ags-in-today');
     if (inTodayBtn)
@@ -1891,6 +2113,30 @@
         });
       });
     }
+    var sendNotIn = root.querySelector('#ms-lac-send-not-in');
+    if (sendNotIn)
+      sendNotIn.addEventListener('change', function () {
+        _sendToNotIn = !!sendNotIn.checked;
+        render();
+      });
+    bindPileAction('#ms-lac-send-who', applySendToWhoOrdered, function (applied) {
+      var inN = applied.sentIn != null ? applied.sentIn : applied.sent.length;
+      var notInN = (applied.skippedNotIn || []).length;
+      var extra = applied.sentNotIn ? ' Including ' + applied.sentNotIn + ' whose requester is not in.' : '';
+      var left = notInN
+        ? ' ' + notInN + ' stayed in the pile — those requesters are not in.'
+        : '';
+      return (
+        'Staged ' +
+        inN +
+        ' onto who ordered (working ' +
+        offerDayPhrase() +
+        ').' +
+        extra +
+        left +
+        ' Proposal, not written yet.'
+      );
+    });
     bindPileAction('#ms-lac-split', applyPileSplit, function (applied) {
       return (
         'Split ' +
@@ -2428,6 +2674,7 @@
     _agsDestReady = false;
     _namingGroup = false;
     _scheduleAutoPick = false;
+    _sendToNotIn = false;
     _dragFieldKey = '';
     clearMarquee();
     var el = document.getElementById(OVERLAY_ID);
@@ -2455,7 +2702,7 @@
     _copyNote = '';
     _error = null;
     _collapsed = {};
-    _workDate = calendarToday();
+    _workDate = C.defaultWorkDateISO(calendarToday());
     _destKind = 'in-today';
     _destGroupId = '';
     _customMembers = [];
@@ -2464,6 +2711,7 @@
     _agsDestReady = false;
     _namingGroup = false;
     _scheduleAutoPick = false;
+    _sendToNotIn = false;
     _dragFieldKey = '';
     var el = document.getElementById(OVERLAY_ID);
     if (!el) {
