@@ -2,6 +2,111 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.45] — 2026-09-12
+
+### Lab allocation canvas — current OIR requester, not last year’s completed one
+
+A FIT/faeces result ordered by Jessica Foreman (Sep 2026, still outstanding)
+also listed Dr Whitaker’s completed PSA/MSU from May 2025 on the same OIR
+card. Canvas treated that as mixed requesters and wiped the name, so
+send-to-who-ordered said it could not match — while the result clearly
+showed Foreman.
+
+Who ordered is now scoped to outstanding-request labels dated near this
+report (else the most recent cluster). A completed request from another
+GP last year does not clear the tile.
+
+## [v3.261.44] — 2026-09-12
+
+### Lab allocation canvas — only read unallocated results for who ordered
+
+Opening the canvas no longer GETs every result overview. Who-ordered is
+only needed on the unallocated pile (inbox / team). Labs already sitting
+with a named person are skipped. A short staff-directory harvest is
+unchanged.
+
+## [v3.261.43] — 2026-09-12
+
+### Lab allocation canvas — do not wipe who ordered on a messy OIR card
+
+Canvas reported “no known requester” on results where the review screen
+clearly named the GP. Two extract misses:
+
+- OIR labels that use a hyphen or a date with no `•` were not parsed, so
+  the tile stayed unknown.
+- One odd row among several same-GP requests counted as mixed and
+  **cleared** the requester.
+
+Parser now splits on hyphen/date as well as the bullet. A clear majority
+GP on the outstanding-request list is kept.
+
+## [v3.261.42] — 2026-09-12
+
+### Lab allocation canvas — send to who ordered, only if they are in
+
+Auto-allocate is not an even split across everyone working that day. It
+stages each unallocated result onto the **GP who ordered it**, and only
+when that person has a session on the picked working day (next working
+day on a weekend).
+
+- **Send N to who ordered** — proposal only.
+- Requesters who are not on that day’s book stay in the pile.
+- **Also send to people who are not in** is an explicit opt-in, off by
+  default.
+
+## [v3.261.41] — 2026-09-12
+
+### Lab allocation canvas — next working day, not calendar tomorrow
+
+On a Saturday the old **Tomorrow** shortcut pointed at Sunday’s empty
+appointment book, so there was nobody to share onto.
+
+- **Next working day** skips weekends and England & Wales bank holidays
+  (Sat 12 Sep → Mon 14 Sep; Friday before Spring BH → the Tuesday after).
+- If today is closed, the canvas opens on that next working day instead of
+  today.
+- Unallocated work on that day gets an offer: **Share equally onto people
+  working Monday 14 Sep** (same even-split as before — proposal only).
+
+## [v3.261.40] — 2026-09-12
+
+### Lab allocation canvas — obvious “who ordered” pass
+
+Finding who ordered used to be an 11px muted hint in the header. Easy to
+miss, so the pile looked wrong until it quietly regrouped.
+
+- Full-width banner under the header: **Finding who ordered these…** with
+  count (`12 of 74 results`) and a progress bar.
+- Three result cards deal into a **Who ordered** pile so it is obvious the
+  board is reorganising. The pile itself is dimmed until that finishes.
+- Settles as **Grouped by who ordered**, then the board redraws.
+- Reduced-motion: no card animation; the bar and copy stay.
+
+## [v3.261.39] — 2026-09-12
+
+### Lab allocation canvas groups by the OIR requester, not the list
+
+The Investigation Results **Requested By** column (and the result header
+"Requested by TRISKA at unknown organisation") is the lab/org
+`practitionerName`, not the GP who ordered the test. Live 2026-09-12: a
+chest X-ray listed as TRISKA had seven Outstanding Investigation Requests
+all labelled `Dr Emma Nicholls`.
+
+The canvas used to trust that list column and skip the result overview
+whenever it was present, so the unallocated pile grouped under the wrong
+person.
+
+- Who ordered is now `outstandingInvestigationRequestOptions[].label`
+  (`Panel (Dr Name • date)`), parsed with the existing OIR label reader.
+- That overrides task-list `requestedBy`. The lab/org requester object is
+  still skipped.
+- Mixed OIR requesters on one report claim nobody rather than the first
+  name.
+- Overview enrich always runs (cap unchanged). A failed fetch leaves the
+  list value; it does not invent a name.
+
+H-064 control (g)/(k). No write-path change.
+
 ## [v3.261.38] — 2026-09-11
 
 ### Dropped the "U&E 2 weeks after starting" monitoring row

@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.38
+**Version:** v3.261.45
 **Generated:** 2026-09-10
 
 ## What it is
@@ -101,7 +101,7 @@ Companion tab for the full-tab **Note** display board (waiting-room TV or staff-
 These run directly on live Medicus pages, on top of Medicus's own UI:
 
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue
-- **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who requested them, with clinician fields to drag reports onto; Split equally / Top up / Distribute equally among In today (nurses included) or a saved allocation group; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
+- **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who ordered them (Outstanding Investigation Request labels on the result, not the list Requested By column), with clinician fields to drag reports onto; Split equally / Top up / Distribute equally among In today (nurses included) or a saved allocation group; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
 - **Workflow allocation canvas** — the same workbench on inbound-document queues and any task-list with a workflow view, grouped by registered GP; confirming writes the same bulk-reassign (it does not file the document)
 - **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only) and Distribute equally (rebalances sitting plus new work) among In today, a saved allocation group, or people encircled on the canvas; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
 - **Patient-request canvas** — the same workbench on homepage medical and admin patient-request inboxes. Staging and even-split work; Write stays blocked until a dummy-patient capture of bulk-reassign on those slugs. Does not complete, file, or reply.
@@ -149,6 +149,13 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.45 (12 Sep)** — Lab allocation canvas: who-ordered uses current OIR dates, not completed requests from another GP
+- **v3.261.44 (12 Sep)** — Lab allocation canvas: who-ordered overview only for unallocated results
+- **v3.261.43 (12 Sep)** — Lab allocation canvas: keep majority OIR requester; parse hyphen/date labels
+- **v3.261.42 (12 Sep)** — Lab allocation canvas: send to who ordered if they are working that day; not-in is an opt-in toggle
+- **v3.261.41 (12 Sep)** — Lab allocation canvas: Next working day (skip weekend/BH) and share-equally onto people working that day
+- **v3.261.40 (12 Sep)** — Lab allocation canvas: full-width “finding who ordered / reorganising the pile” banner while overviews load
+- **v3.261.39 (12 Sep)** — Lab allocation canvas groups by OIR requester (Dr on the request tags), not the list Requested By / lab practitionerName
 - **v3.261.38 (11 Sep)** — Dropped ACE-I/ARB and thiazide "U&E 2 weeks after starting" (false alerts on long-term patients)
 - **v3.261.37 (11 Sep)** — Slots auto-refreshes every 60s while open (paused when hidden)
 - **v3.261.36 (11 Sep)** — Prescription list Share out / overdue-monitoring buttons sit left of Sign
