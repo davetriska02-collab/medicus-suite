@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.47] — 2026-09-14
+
+### COVID Sentinel chips — open the 2026/27 window on 1 Sep
+
+Eligible COVID patients (age 75+, care home, immunosuppressed) were
+silent on 14 Sep 2026: the season still started 1 Oct, so the engine
+rolled back to 2025-10-01 / 2026-03-31 and suppressed as
+out-of-campaign. Opening `vax-covid` on 1 Sep (flu-style) makes
+14 Sep evaluate the **2026/27** window (`2026-09-01` → `2027-03-31`).
+Last autumn's jab no longer counts as this season's GIVEN. Eligibility
+`anyOf` is unchanged. Summer (e.g. June) stays suppressed. NHS
+appointments still typically start 1 Oct.
+
 ## [v3.261.46] — 2026-09-14
 
 ### Vaccine immuno chips — do not fire on otic / local-route steroids

@@ -49,6 +49,7 @@ function baseData(age, dob) {
 
 // Fetch rules from file.
 const fluRule = vaxRules.rules.find((r) => r.id === 'vax-flu');
+const covidRule = vaxRules.rules.find((r) => r.id === 'vax-covid');
 const ppv23Rule = vaxRules.rules.find((r) => r.id === 'vax-pneumo-ppv23');
 const shinglesRule = vaxRules.rules.find((r) => r.id === 'vax-shingles');
 const rsvRule = vaxRules.rules.find((r) => r.id === 'vax-rsv');
@@ -57,6 +58,12 @@ const shinglesImmunoRule = vaxRules.rules.find((r) => r.id === 'vax-shingles-imm
 
 // ── Rule presence checks ───────────────────────────────────────────────────────
 console.log('\n--- rule presence ---');
+assert(!!covidRule, 'vax-covid rule found');
+assert(covidRule?.enabled === true, 'vax-covid enabled');
+assert(
+  covidRule?.season?.startMonth === 9 && covidRule?.season?.startDay === 1,
+  `vax-covid season opens 1 Sep (got startMonth=${covidRule?.season?.startMonth} startDay=${covidRule?.season?.startDay})`
+);
 assert(!!ppv23Rule, 'vax-pneumo-ppv23 rule found');
 assert(!!shinglesRule, 'vax-shingles rule found');
 assert(!!rsvRule, 'vax-rsv rule found');
@@ -752,6 +759,84 @@ console.log('\n--- flu carer eligibility ---');
     };
     const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
     assert(chips.length === 0, 'flu carer: inactive problem is skipped even with matching code + label');
+  }
+}
+
+// ── COVID autumn 2026/27 early open (1 Sep, not 1 Oct) ──────────────────────
+// Opening startMonth/startDay to 1 Sep means 14 Sep 2026 evaluates the 2026/27
+// window (2026-09-01 → 2027-03-31), not the expired 2025/26 window. Eligibility
+// is unchanged. Summer out-of-campaign suppress remains.
+console.log('\n--- COVID 2026/27 early-open (vax-covid from 1 Sep) ---');
+{
+  const SEP14 = '2026-09-14';
+  const JUN15 = '2026-06-15';
+  const OCT15 = '2026-10-15';
+
+  assert(
+    /alerting opens 1 Sep/i.test(covidRule.notes || ''),
+    'vax-covid notes say autumn 2026/27 alerting opens 1 Sep'
+  );
+
+  // 1. 14 Sep 2026, age 75+, no COVID given → vax_due (must fire)
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(75), SEP14);
+    assert(chips.length === 1, 'COVID: 2026-09-14 age 75+ no given → chip');
+    assert(chips[0]?.status === 'vax_due', `COVID: 2026-09-14 age 75+ → vax_due (got: ${chips[0]?.status})`);
+    assert(
+      chips[0]?.seasonStartIso === '2026-09-01',
+      `COVID: 2026-09-14 seasonStartIso is 2026-09-01 not 2025-10-01 (got: ${chips[0]?.seasonStartIso})`
+    );
+    assert(chips[0]?.seasonLabel === '2026/27', `COVID: 2026-09-14 seasonLabel 2026/27 (got: ${chips[0]?.seasonLabel})`);
+    assert(chips[0]?.eligibilityReason === 'Age 75+', `COVID: 2026-09-14 eligibility is Age 75+ (got: ${chips[0]?.eligibilityReason})`);
+  }
+
+  // 2. 14 Sep 2026, age 40, not immuno/care home → no chip
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(40), SEP14);
+    assert(chips.length === 0, 'COVID: 2026-09-14 age 40 not immuno/care-home → no chip');
+  }
+
+  // 3. 14 Sep 2026, age 75+, COVID given 2025-11-01 → still vax_due
+  //    (last season does not satisfy 2026/27)
+  {
+    const data = {
+      ...baseData(75),
+      problems: [{ label: 'COVID-19 vaccination given', codedDate: '2025-11-01', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(covidRule, data, SEP14);
+    assert(chips.length === 1, 'COVID: 2026-09-14 age 75+ given 2025-11-01 → chip');
+    assert(
+      chips[0]?.status === 'vax_due',
+      `COVID: last-season 2025-11-01 jab does not satisfy 2026/27 → vax_due (got: ${chips[0]?.status})`
+    );
+  }
+
+  // 4. 14 Sep 2026, age 75+, COVID given 2026-09-05 → vax_given
+  {
+    const data = {
+      ...baseData(75),
+      problems: [{ label: 'COVID-19 vaccination given', codedDate: '2026-09-05', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(covidRule, data, SEP14);
+    assert(chips.length === 1, 'COVID: 2026-09-14 age 75+ given 2026-09-05 → chip');
+    assert(chips[0]?.status === 'vax_given', `COVID: given 2026-09-05 in 2026/27 window → vax_given (got: ${chips[0]?.status})`);
+  }
+
+  // 5. 15 Jun 2026, age 75+ → still out-of-campaign / no chip
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(75), JUN15);
+    assert(chips.length === 0, 'COVID: 2026-06-15 age 75+ → no chip (summer suppress remains)');
+  }
+
+  // 6. 15 Oct 2026, age 75+ → still vax_due as before
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(75), OCT15);
+    assert(chips.length === 1, 'COVID: 2026-10-15 age 75+ no given → chip');
+    assert(chips[0]?.status === 'vax_due', `COVID: 2026-10-15 age 75+ → vax_due (got: ${chips[0]?.status})`);
+    assert(
+      chips[0]?.seasonStartIso === '2026-09-01',
+      `COVID: 2026-10-15 still uses 2026-09-01 window (got: ${chips[0]?.seasonStartIso})`
+    );
   }
 }
 
