@@ -1888,8 +1888,10 @@
       '">' +
       esc(summary) +
       '</span>' +
+      '<div class="ms-rxac-split-actions">' +
       actions +
       usualOffer.button +
+      '</div>' +
       '</div>' +
       destLine +
       proposal +

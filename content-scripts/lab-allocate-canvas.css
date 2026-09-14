@@ -1514,6 +1514,18 @@
   gap: 6px 10px;
 }
 
+#ms-rxac-overlay .ms-rxac-split-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-left: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-split-actions .ms-rxac-split-go {
+  margin-left: 0;
+}
+
 #ms-rxac-overlay .ms-lac-split .ms-lac-confirm-btn,
 #ms-rxac-overlay .ms-lac-split .ms-lac-ghost {
   width: auto;
