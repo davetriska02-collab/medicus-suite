@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.46] — 2026-09-14
+
+### Vaccine immuno chips — do not fire on otic / local-route steroids
+
+Age 31 with only **Ciprofloxacin + Dexamethasone ear drops** was flagged
+Flu DUE and Pneumococcal clinical-risk ONE-OFF for “Immunosuppressive
+medication”. The match stems (`dexamethasone` / `prednisolone`) stay;
+the exclude list now also drops otic, ophthalmic, inhaled, nasal,
+nebulised, cutaneous and other local-route markers. Oral / IV tablets,
+capsules, solution and infusion still fire. Same pattern as #351
+(topical tacrolimus); that PR’s ointment/cream/protopic exclude did not
+cover ear drops.
+
+Bare `gel` is omitted so a “gelatin capsules” string would still count
+as systemic; ophthalmic gels use `eye gel`. Bare `drops` is omitted so
+oral drops still fire.
+
 ## [v3.261.45] — 2026-09-12
 
 ### Lab allocation canvas — current OIR requester, not last year’s completed one

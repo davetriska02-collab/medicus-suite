@@ -408,6 +408,161 @@ assert(!!dmRegRule, 'DM register rule found in qof-rules.json (register clause d
   assert(chips.length === 1, 'pneumo-risk: age 40 + IV tacrolimus infusion → chip (still systemic immunosuppression)');
 }
 
+// ── Local-route steroid / immuno excludes (otic dexamethasone false-positive) ─
+// #351 excluded ointment/cream/protopic (topical tacrolimus) but left otic,
+// ophthalmic, inhaled and other local-route markers unmatched. Age 31 +
+// Ciprofloxacin + Dexamethasone ear drops was firing flu + pneumo-risk immuno
+// chips. Bare "gel" is intentionally omitted (would substring-match "gelatin"
+// capsules); "eye gel" covers ophthalmic gels. Bare "drops" is omitted so
+// oral dexamethasone drops still fire.
+console.log('\n--- local-route immuno excludes (otic dexamethasone, #351 follow-up) ---');
+
+const LOCAL_ROUTE_EXCLUDES = [
+  'ointment',
+  'cream',
+  'protopic',
+  'ear drop',
+  'ear drops',
+  'eardrop',
+  'eardrops',
+  'otic',
+  'eye drop',
+  'eye drops',
+  'eyedrop',
+  'eyedrops',
+  'eye gel',
+  'ophthalm',
+  'intravitreal',
+  'nasal',
+  'inhal',
+  'nebul',
+  'cutaneous',
+  'topical',
+  'shampoo',
+  'lotion',
+  'foam',
+  'spray',
+];
+const FLU_IN_CAMPAIGN = '2025-10-15';
+
+function immunoMedicationClauses() {
+  return vaxRules.rules.flatMap((r) =>
+    (r.eligibility?.anyOf || [])
+      .filter((c) => c.kind === 'medication')
+      .map((c) => ({ ruleId: r.id, clause: c }))
+  );
+}
+
+{
+  const immunoClauses = immunoMedicationClauses().filter(({ clause }) =>
+    (clause.match || []).some((t) =>
+      ['prednisolone', 'dexamethasone', 'tacrolimus'].includes(String(t).toLowerCase())
+    )
+  );
+  assert(immunoClauses.length >= 5, `found ${immunoClauses.length} vaccine immuno medication clauses (flu/covid/pneumo/shingles/rsv)`);
+  immunoClauses.forEach(({ ruleId, clause }) => {
+    const missing = LOCAL_ROUTE_EXCLUDES.filter((t) => !(clause.exclude || []).includes(t));
+    assert(
+      missing.length === 0,
+      `${ruleId} "${clause.label}" exclude lists local-route markers (missing: ${missing.join(', ') || 'none'})`
+    );
+    assert(
+      (clause.match || []).some((t) => String(t).toLowerCase() === 'tacrolimus') ||
+        (clause.match || []).some((t) => ['prednisolone', 'dexamethasone'].includes(String(t).toLowerCase())),
+      `${ruleId}: match list still includes an immuno steroid / tacrolimus stem`
+    );
+  });
+}
+
+{
+  const fluDex = (fluRule.eligibility.anyOf || []).find((c) => c.label === 'Immunosuppressive medication');
+  const pneumoDex = (pneumoRiskRule.eligibility.anyOf || []).find((c) =>
+    /immunosuppressive medication/i.test(c.label || '')
+  );
+  assert(
+    (fluDex?.match || []).includes('dexamethasone') && (fluDex?.match || []).includes('prednisolone'),
+    'vax-flu still matches dexamethasone / prednisolone (systemic stems kept)'
+  );
+  assert(
+    (pneumoDex?.match || []).includes('dexamethasone') && (pneumoDex?.match || []).includes('prednisolone'),
+    'vax-pneumo-risk-u65 still matches dexamethasone / prednisolone (systemic stems kept)'
+  );
+}
+
+function chipsForMed(rule, age, medName, now) {
+  const data = { ...baseData(age), medications: [{ name: medName }] };
+  return engine.evaluateVaccineRule(rule, data, now);
+}
+
+// Field report: age 31 + Ciprofloxacin + Dexamethasone ear drops (prescribed elsewhere).
+{
+  const flu = chipsForMed(fluRule, 31, 'Ciprofloxacin + Dexamethasone ear drops', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Ciprofloxacin + Dexamethasone ear drops', NOW);
+  assert(flu.length === 0, 'flu: age 31 + Ciprofloxacin + Dexamethasone ear drops → NO chip');
+  assert(pneumo.length === 0, 'pneumo-risk: age 31 + Ciprofloxacin + Dexamethasone ear drops → NO chip');
+}
+{
+  const flu = chipsForMed(fluRule, 31, 'Dexamethasone 0.1% ear drops', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 0.1% ear drops', NOW);
+  assert(flu.length === 0, 'flu: age 31 + Dexamethasone 0.1% ear drops → NO chip');
+  assert(pneumo.length === 0, 'pneumo-risk: age 31 + Dexamethasone 0.1% ear drops → NO chip');
+}
+
+// Systemic oral/IV must still fire.
+{
+  const flu = chipsForMed(fluRule, 31, 'Dexamethasone 2mg tablets', FLU_IN_CAMPAIGN);
+  assert(flu.length === 1, 'flu: age 31 + Dexamethasone 2mg tablets → chip');
+  assert(flu[0]?.status === 'vax_due', 'flu: age 31 + Dexamethasone 2mg tablets → vax_due');
+  assert(
+    /immunosuppressive medication/i.test(flu[0]?.eligibilityReason || ''),
+    `flu: dexamethasone tablets fire via immuno clause (got: ${flu[0]?.eligibilityReason})`
+  );
+}
+{
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 2mg tablets', NOW);
+  assert(pneumo.length === 1, 'pneumo-risk: age 31 + Dexamethasone 2mg tablets → chip');
+  assert(
+    /immunosuppressive medication/i.test(pneumo[0]?.eligibilityReason || ''),
+    `pneumo-risk: dexamethasone tablets fire via immuno clause (got: ${pneumo[0]?.eligibilityReason})`
+  );
+}
+{
+  const flu = chipsForMed(fluRule, 40, 'Prednisolone 5mg tablets', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 40, 'Prednisolone 5mg tablets', NOW);
+  assert(flu.length === 1, 'flu: age 40 + Prednisolone 5mg tablets → chip');
+  assert(pneumo.length === 1, 'pneumo-risk: age 40 + Prednisolone 5mg tablets → chip');
+}
+{
+  const flu = chipsForMed(fluRule, 31, 'Dexamethasone 2mg/5ml oral solution', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 3.3mg/1ml solution for infusion', NOW);
+  assert(flu.length === 1, 'flu: age 31 + dexamethasone oral solution → chip (systemic)');
+  assert(pneumo.length === 1, 'pneumo-risk: age 31 + dexamethasone infusion → chip (systemic)');
+}
+
+// #351 topical tacrolimus regression — still excluded on flu as well as pneumo.
+{
+  const fluOintment = chipsForMed(fluRule, 40, 'Tacrolimus 0.1% ointment', FLU_IN_CAMPAIGN);
+  const fluCream = chipsForMed(fluRule, 40, 'Tacrolimus 0.1% cream', FLU_IN_CAMPAIGN);
+  const fluProtopic = chipsForMed(fluRule, 40, 'Protopic 0.03% ointment', FLU_IN_CAMPAIGN);
+  assert(fluOintment.length === 0, 'flu: age 40 + topical tacrolimus ointment → NO chip (#351)');
+  assert(fluCream.length === 0, 'flu: age 40 + tacrolimus cream special → NO chip (#351)');
+  assert(fluProtopic.length === 0, 'flu: age 40 + Protopic ointment → NO chip (#351)');
+}
+
+// Optional local-route variants: eye drops / inhaler / nasal spray.
+{
+  const fluEye = chipsForMed(fluRule, 31, 'Dexamethasone 0.1% eye drops', FLU_IN_CAMPAIGN);
+  const pneumoEye = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 0.1% eye drops', NOW);
+  const fluInhaler = chipsForMed(fluRule, 40, 'Prednisolone 5mg inhaler', FLU_IN_CAMPAIGN);
+  const pneumoInhaler = chipsForMed(pneumoRiskRule, 40, 'Prednisolone 5mg inhaler', NOW);
+  const fluNasal = chipsForMed(fluRule, 31, 'Dexamethasone 0.11% nasal spray', FLU_IN_CAMPAIGN);
+  assert(fluEye.length === 0, 'flu: age 31 + Dexamethasone 0.1% eye drops → NO chip');
+  assert(pneumoEye.length === 0, 'pneumo-risk: age 31 + Dexamethasone 0.1% eye drops → NO chip');
+  assert(fluInhaler.length === 0, 'flu: age 40 + Prednisolone inhaler → NO chip');
+  assert(pneumoInhaler.length === 0, 'pneumo-risk: age 40 + Prednisolone inhaler → NO chip');
+  assert(fluNasal.length === 0, 'flu: age 31 + Dexamethasone nasal spray → NO chip');
+}
+
 // Infant PCV13 record must NOT suppress a 40-year-old asplenic's due status
 // ('pneumococcal conjugate vaccin' deliberately absent from this rule's given list).
 {
