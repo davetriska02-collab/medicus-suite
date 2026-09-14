@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.50] — 2026-09-14
+
+### Prescription-request canvas — usual-GP send stays with allocate peers
+
+Follow-up to v3.261.49. **Send N to usual GP** could wrap onto its own
+left-aligned row, away from Top up / Distribute equally. Those three
+now share one right-aligned `.ms-rxac-split-actions` cluster. Weight
+unchanged: usual-GP is still the quieter outlined peer, not primary.
+
 ## [v3.261.49] — 2026-09-14
 
 ### Prescription-request canvas — usual-GP send is not a featured CTA
