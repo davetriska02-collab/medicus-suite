@@ -836,6 +836,8 @@ console.log('\n--- canvas + manifest + css source locks ---');
   );
   check(!/ms-lac-primary[^>]*id="ms-rxac-send-usual"/.test(canvas), 'usual-GP send is not a primary CTA');
   check(/actions \+\s*usualOffer\.button/.test(canvas), 'usual-GP send sits in the split-row action cluster');
+  check(/ms-rxac-split-actions/.test(canvas), 'usual-GP send stays with Top up / Distribute equally');
+  check(/#ms-rxac-overlay \.ms-rxac-split-actions/.test(css), 'allocate peers share one action cluster');
   check(/id="ms-rxac-send-not-in"/.test(canvas), 'not-in usual-GP toggle is session state on the overlay');
   check(/_sendToUsualGpNotIn/.test(canvas), 'not-in usual-GP box is not a storage key');
   check(/Send .* to usual GP/.test(canvas), 'primary control is Send N to usual GP');
