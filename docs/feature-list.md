@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.45
-**Generated:** 2026-09-10
+**Version:** v3.261.48
+**Generated:** 2026-09-14
 
 ## What it is
 
@@ -103,7 +103,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Triage queue overlay** — age/status decoration chips, drug-monitoring and result-triage chips, and keyword-based red-flag detection with linked actions, on both the main triage queue and the investigation-results queue
 - **Lab allocation canvas** — on the investigation-results queue, an unallocated inbox pile grouped by who ordered them (Outstanding Investigation Request labels on the result, not the list Requested By column), with clinician fields to drag reports onto; Split equally / Top up / Distribute equally among In today (nurses included) or a saved allocation group; staging is local, confirming writes Medicus's own bulk-reassign (who the task sits with — it does not file the result)
 - **Workflow allocation canvas** — the same workbench on inbound-document queues and any task-list with a workflow view, grouped by registered GP; confirming writes the same bulk-reassign (it does not file the document)
-- **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only) and Distribute equally (rebalances sitting plus new work) among In today, a saved allocation group, or people encircled on the canvas; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
+- **Prescription-request canvas** — the same workbench on the routine and non-routine prescription-request queues, with Split equally / Top up (unallocated only), Distribute equally (rebalances sitting plus new work), and **Send N to usual GP** (unallocated rows whose named GP is a unique in-day staff member; not-in is an opt-in on that action only) among In today, a saved allocation group, or people encircled on the canvas; confirming writes the same bulk-reassign (it does not issue, sign, or file the prescription)
 - **Patient-request canvas** — the same workbench on homepage medical and admin patient-request inboxes. Staging and even-split work; Write stays blocked until a dummy-patient capture of bulk-reassign on those slugs. Does not complete, file, or reply.
 - **Companion (inline booking, tasks, and monitoring)** — a floating role-toggled box (Clinic / Reception / Triage / Nursing) on patient and task pages carrying appointment-booking and create-task panels plus a read-only "What's due" pocket of Sentinel chips for the page's patient. For Clinic, an "Open appts, links, tasks & investigations" section (also on care-record pages, not just triage tasks) lists future appointments, unused booking links, the patient's other open tasks (incomplete or scheduled for later; the task currently being viewed is excluded), and outstanding investigation requests (no result back yet — not confirmation the request reached the lab); each list collapses independently. Opt-in on every Medicus screen; resize, minimise, or pop in to an edge tab
 - **Document handling** — one-click filing of a patient-submitted attachment as a clinical document, and a checklist that turns a document's coded journal entries into new Problems
@@ -149,6 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.48 (14 Sep)** — Prescription-request canvas: Send N to usual GP if they are working that day; not-in is an opt-in on that action only
 - **v3.261.45 (12 Sep)** — Lab allocation canvas: who-ordered uses current OIR dates, not completed requests from another GP
 - **v3.261.44 (12 Sep)** — Lab allocation canvas: who-ordered overview only for unallocated results
 - **v3.261.43 (12 Sep)** — Lab allocation canvas: keep majority OIR requester; parse hyphen/date labels

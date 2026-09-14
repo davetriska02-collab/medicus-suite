@@ -5,7 +5,8 @@
 // confirm / bulk-reassign pattern on the routine and non-routine
 // prescription-request task-lists. The large left box is UNALLOCATED
 // requests, grouped by registered GP when that is on the row. Named GP
-// is a grouping caption, never auto-placement. Split equally / Top up /
+// is a grouping caption, never auto-placement. Send-to-usual-GP is a
+// user-initiated stage of unallocated rows only. Split equally / Top up /
 // Distribute equally stage locally — they do not write. Does not issue,
 // sign, or file a prescription.
 //
@@ -78,6 +79,8 @@
   var _agLoaded = false;
   var _namingGroup = false;
   var _scheduleAutoPick = false;
+  var _sendToUsualGpNotIn = false;
+  var _lastUsualGpPlan = null;
   var _lastSkipped = [];
   var _peopleDragKeys = null;
   var _marquee = null;
@@ -789,6 +792,11 @@
       '">' +
       esc(pickLabel) +
       '</button>' +
+      (group.known
+        ? '<button type="button" class="ms-lac-ghost ms-rxac-send-group" data-usual-gp-ids="' +
+          idsAttr +
+          '" draggable="false" title="Stage this usual-GP pile onto that clinician if they are working the picked day. Proposal only.">Send this pile to usual GP</button>'
+        : '') +
       '<button type="button" class="ms-lac-group-toggle" data-toggle-key="' +
       esc(group.key) +
       '" aria-expanded="' +
@@ -1513,6 +1521,7 @@
     _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
     _splitDefaulted = true;
     _selected = {};
+    _lastUsualGpPlan = null;
     openDestsFromPlan(plan);
     return plan;
   }
@@ -1530,6 +1539,7 @@
     _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
     _splitDefaulted = true;
     _selected = {};
+    _lastUsualGpPlan = null;
     openDestsFromPlan(plan);
     return plan;
   }
@@ -1557,7 +1567,30 @@
     _draft = C.applyEvenSplit(next, plan);
     _splitDefaulted = true;
     _selected = {};
+    _lastUsualGpPlan = null;
     openDestsFromPlan(plan);
+    return plan;
+  }
+
+  function usualGpPlanOpts(includeNotIn) {
+    return {
+      includeNotIn: !!includeNotIn,
+      directory: _staffDir,
+    };
+  }
+
+  function applySendToUsualGp(tiles) {
+    var plan = C.planSendToUsualGp(tiles || tilesForPlan(), inTodayPeople(), usualGpPlanOpts(_sendToUsualGpNotIn));
+    if (!plan.ok) return plan;
+    var dests = (plan.sent || []).map(function (m) {
+      return { key: m.toKey, name: m.toName, staffId: m.staffId };
+    });
+    _draft = C.applySendToUsualGp(C.ensureWorkingTodayColumns(_draft || C.emptyDraft(), dests), plan);
+    _selected = {};
+    _lastUsualGpPlan = plan;
+    (plan.sent || []).forEach(function (m) {
+      if (m && m.toKey) _openDests[m.toKey] = true;
+    });
     return plan;
   }
 
@@ -1669,6 +1702,54 @@
     );
   }
 
+  function usualGpOfferHtml() {
+    var poolN = visibleUnallocatedCount();
+    var tiles = tilesForPlan();
+    var people = inTodayPeople();
+    var sendSafe = C.planSendToUsualGp(tiles, people, usualGpPlanOpts(false));
+    var sendPlan = _sendToUsualGpNotIn ? C.planSendToUsualGp(tiles, people, usualGpPlanOpts(true)) : sendSafe;
+    if (
+      !poolN ||
+      !sendPlan ||
+      !(
+        sendSafe.sent.length ||
+        sendSafe.skippedNotIn.length ||
+        sendSafe.skippedUnknown.length ||
+        sendSafe.skippedAmbiguous.length
+      )
+    ) {
+      return '';
+    }
+    var day = dayPhrase();
+    var willSend = sendPlan.sent.length;
+    var sendLabel = willSend > 0 ? 'Send ' + willSend + ' to usual GP' : 'Nobody’s usual GP is in';
+    var preview = C.usualGpPreviewCopy(sendSafe, day);
+    var notInN = sendSafe.skippedNotIn.length;
+    return (
+      '<div class="ms-lac-nwd-offer" role="status">' +
+      '<strong>Send to usual GP if they are working ' +
+      esc(day) +
+      '?</strong> ' +
+      esc(preview) +
+      ' Proposal only — nothing is written until you confirm.' +
+      (notInN
+        ? '<label class="ms-lac-send-not-in"><input type="checkbox" id="ms-rxac-send-not-in"' +
+          (_sendToUsualGpNotIn ? ' checked' : '') +
+          '> Also send ' +
+          notInN +
+          ' to usual GPs who are not in on ' +
+          esc(day) +
+          '</label>'
+        : '') +
+      (willSend
+        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-rxac-send-usual" title="Stage each unallocated request onto the patient’s usual GP, only if they have a session that day unless you turned on the not-in toggle. Proposal only.">' +
+          esc(sendLabel) +
+          '</button>'
+        : '') +
+      '</div>'
+    );
+  }
+
   function evenSplitHtml() {
     var dests = splitDestinations();
     var phrase = dayPhrase();
@@ -1773,10 +1854,11 @@
             })
           )
         : '';
+    var usualPhrase = _lastUsualGpPlan && C.usualGpDestPhrase ? C.usualGpDestPhrase(_lastUsualGpPlan) : '';
     var proposal = stagedN
       ? '<div class="ms-rxac-proposal" role="status">' +
         '<strong>Proposal, not written yet.</strong> ' +
-        esc(dist || stagedN + ' prescriptions would sit with ' + dests.length + ' people.') +
+        esc(usualPhrase || dist || stagedN + ' prescriptions would sit with ' + dests.length + ' people.') +
         ' <span class="ms-rxac-drag-hint">Drag a patient from one person onto another to change who gets them.</span>' +
         '</div>'
       : '';
@@ -1787,6 +1869,7 @@
       strip +
       naming +
       allPanel +
+      usualGpOfferHtml() +
       '<div class="ms-rxac-split-row">' +
       '<label class="ms-lac-split-day-label" for="ms-rxac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
       '<input type="date" id="ms-rxac-day" value="' +
@@ -2466,6 +2549,65 @@
         render();
       });
     }
+    var sendNotIn = root.querySelector('#ms-rxac-send-not-in');
+    if (sendNotIn)
+      sendNotIn.addEventListener('change', function () {
+        _sendToUsualGpNotIn = !!sendNotIn.checked;
+        render();
+      });
+    bindPileAction(
+      '#ms-rxac-send-usual',
+      function () {
+        return applySendToUsualGp(tilesForPlan());
+      },
+      function (applied) {
+        var inN = applied.sentIn != null ? applied.sentIn : (applied.sent || []).length;
+        var notInN = (applied.skippedNotIn || []).length;
+        var ambN = (applied.skippedAmbiguous || []).length;
+        var extra = applied.sentNotIn ? ' Including ' + applied.sentNotIn + ' whose usual GP is not in.' : '';
+        var left = notInN ? ' ' + notInN + ' stayed in the pile — those usual GPs are not in.' : '';
+        var amb = ambN ? ' ' + ambN + ' stayed — two staff match that name.' : '';
+        return (
+          'Staged ' +
+          inN +
+          ' onto their usual GP (working ' +
+          dayPhrase() +
+          ').' +
+          extra +
+          left +
+          amb +
+          ' Proposal, not written yet.'
+        );
+      }
+    );
+    root.querySelectorAll('.ms-rxac-send-group').forEach(function (btn) {
+      btn.addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+      });
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_writing) return;
+        var ids = parseIdList(btn.getAttribute('data-usual-gp-ids'));
+        var want = {};
+        ids.forEach(function (id) {
+          want[id] = true;
+        });
+        var tiles = tilesForPlan().filter(function (t) {
+          return t && t.id && want[t.id];
+        });
+        var applied = applySendToUsualGp(tiles);
+        _confirmWrite = null;
+        _copyNote =
+          applied && applied.ok
+            ? 'Staged ' +
+              (applied.sentIn != null ? applied.sentIn : (applied.sent || []).length) +
+              ' from this pile onto their usual GP. Proposal, not written yet.'
+            : (applied && applied.reason) || 'Could not stage this pile.';
+        announce(_copyNote);
+        render();
+      });
+    });
     bindPileAction('#ms-rxac-split', applyPileSplit, function (applied) {
       return (
         'Split ' +
@@ -2693,6 +2835,7 @@
         _openDests = {};
         _expandedChip = '';
         _copyNote = '';
+        _lastUsualGpPlan = null;
         _pendingAbsence = null;
         announce('Proposals cleared. Doctor boxes show what already sits with them. The queue itself is unchanged.');
         render();
@@ -2833,7 +2976,9 @@
         if (
           e.target &&
           e.target.closest &&
-          (e.target.closest('.ms-lac-group-toggle') || e.target.closest('.ms-lac-group-pick'))
+          (e.target.closest('.ms-lac-group-toggle') ||
+            e.target.closest('.ms-lac-group-pick') ||
+            e.target.closest('.ms-rxac-send-group'))
         ) {
           return;
         }
@@ -3215,6 +3360,8 @@
     _agLoaded = false;
     _namingGroup = false;
     _scheduleAutoPick = false;
+    _sendToUsualGpNotIn = false;
+    _lastUsualGpPlan = null;
     _lastSkipped = [];
     _peopleDragKeys = null;
     _marquee = null;
@@ -3255,6 +3402,8 @@
     _agLoaded = false;
     _namingGroup = false;
     _scheduleAutoPick = false;
+    _sendToUsualGpNotIn = false;
+    _lastUsualGpPlan = null;
     _lastSkipped = [];
     _peopleDragKeys = null;
     _marquee = null;

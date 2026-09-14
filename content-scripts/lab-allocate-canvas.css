@@ -1335,7 +1335,8 @@
   background: var(--accent-dim);
 }
 
-#ms-lac-overlay .ms-lac-nwd-offer {
+#ms-lac-overlay .ms-lac-nwd-offer,
+#ms-rxac-overlay .ms-lac-nwd-offer {
   margin: 0 18px 10px;
   padding: 12px 14px;
   background: var(--accent-dim);
@@ -1346,14 +1347,16 @@
   color: var(--text-1);
 }
 
-#ms-lac-overlay .ms-lac-nwd-offer strong {
+#ms-lac-overlay .ms-lac-nwd-offer strong,
+#ms-rxac-overlay .ms-lac-nwd-offer strong {
   display: block;
   margin-bottom: 4px;
   font-size: 14px;
   font-weight: 650;
 }
 
-#ms-lac-overlay .ms-lac-send-not-in {
+#ms-lac-overlay .ms-lac-send-not-in,
+#ms-rxac-overlay .ms-lac-send-not-in {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1364,12 +1367,21 @@
   cursor: pointer;
 }
 
-#ms-lac-overlay .ms-lac-send-not-in input {
+#ms-lac-overlay .ms-lac-send-not-in input,
+#ms-rxac-overlay .ms-lac-send-not-in input {
   margin-top: 3px;
 }
 
-#ms-lac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn {
+#ms-lac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn,
+#ms-rxac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn {
   margin-top: 10px;
+}
+
+#ms-rxac-overlay .ms-rxac-send-group {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
 }
 
 #ms-lac-overlay .ms-lac-daybar {

@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.48] — 2026-09-14
+
+### Prescription-request canvas — send N to usual GP
+
+Geoff Mayer (Cranleigh) can already allocate incoming work to teams or
+named people. He cannot send medication requests to the patient’s usual
+GP in one click.
+
+**Send N to usual GP** is another distribute path on the routine and
+non-routine prescription-request canvas — the same shape as lab
+**Send N to who ordered**. It stages only. Opening the canvas still
+does not move anything (H-068).
+
+- Preview, before click: will-send / not-in / no usual GP / ambiguous name.
+- Prefers `namedGpId`. Never the requester. Colliding names stay in the pile.
+- Usual GPs who are not in stay unless that action’s not-in box is ticked.
+- Drag / Split equally / Top up still work on leftovers.
+- Admin↔Medical type change is not in this release (impossible on the captured API).
+
 ## [v3.261.47] — 2026-09-14
 
 ### COVID Sentinel chips — open the 2026/27 window on 1 Sep

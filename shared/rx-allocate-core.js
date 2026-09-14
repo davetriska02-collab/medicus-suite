@@ -4,8 +4,10 @@
 // Sibling of lab-allocate-core / workflow-allocate-core. Same stage →
 // confirm → bulk-reassign write (W23 via LabAllocateCore.createClient) on
 // the non-routine prescription-request task-list. Named GP is a grouping
-// caption, never auto-placement. Even-split among doctors with a session
-// on today’s appointment book is local staging only — it does not write.
+// caption, never auto-placement. Send-to-usual-GP is user-initiated
+// staging of unallocated rows only — opening the canvas does not move
+// anything. Even-split among doctors with a session on today’s
+// appointment book is local staging only — it does not write.
 // This file does not POST — the lab client owns the write.
 //
 // Dual-mode: module.exports for Node tests, window.RxAllocateCore in the
@@ -294,11 +296,7 @@
     (board && board.columns ? board.columns : []).forEach(function (col) {
       lines.push(col.title + ' (' + col.count + ')');
       (col.tiles || []).forEach(function (t) {
-        var hint = t.requester
-          ? ' · grouped as ' + t.requester
-          : t.namedGp
-            ? ' · usual GP ' + t.namedGp
-            : '';
+        var hint = t.requester ? ' · grouped as ' + t.requester : t.namedGp ? ' · usual GP ' + t.namedGp : '';
         var staged = t.staged ? ' · staged on this canvas only' : '';
         lines.push('  - ' + (t.patientName || 'Unknown') + (t.summary ? ' · ' + t.summary : '') + hint + staged);
       });
@@ -524,7 +522,11 @@
     var repeatPart = fractionOrCount(counts.repeat, totals ? totals.repeatTotal : null, 'repeats');
     if (repeatPart) parts.push(repeatPart);
     if (counts.acute) parts.push(counts.acute + ' acute');
-    var dispensingPart = fractionOrCount(counts.repeatDispensing, totals ? totals.repeatDispensingTotal : null, 'batches');
+    var dispensingPart = fractionOrCount(
+      counts.repeatDispensing,
+      totals ? totals.repeatDispensingTotal : null,
+      'batches'
+    );
     if (dispensingPart) parts.push(dispensingPart);
     var variablePart = fractionOrCount(
       counts.variableRepeat,
@@ -569,6 +571,300 @@
     return { level: level, requestedItemsTotal: requestedItemsTotal, raw: raw };
   }
 
+  var STAFF_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  function staffUuid(v) {
+    var s = String(v || '').trim();
+    return STAFF_UUID_RE.test(s) ? s : '';
+  }
+
+  function directoryRecordById(directory, id) {
+    var want = staffUuid(id);
+    if (!want || !directory) return null;
+    if (directory.byId && directory.byId[want]) return directory.byId[want];
+    var keys = directory.byId ? Object.keys(directory.byId) : [];
+    var lower = want.toLowerCase();
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() === lower) return directory.byId[keys[i]];
+    }
+    return null;
+  }
+
+  function uniqueNameMatches(name, people, nameOf, idOf) {
+    var hits = [];
+    var seen = {};
+    (Array.isArray(people) ? people : []).forEach(function (p) {
+      if (!p) return;
+      var n = nameOf(p);
+      if (!n) return;
+      if (!Lab.sameClinician(n, name)) return;
+      var id = staffUuid(idOf(p)) || String(n).toLowerCase();
+      if (seen[id]) return;
+      seen[id] = true;
+      hits.push(p);
+    });
+    return hits;
+  }
+
+  function inDayByStaffId(staffId, inDayPeople) {
+    var want = staffUuid(staffId);
+    if (!want) return null;
+    var list = Array.isArray(inDayPeople) ? inDayPeople : [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && staffUuid(list[i].staffId) && staffUuid(list[i].staffId).toLowerCase() === want.toLowerCase()) {
+        return list[i];
+      }
+    }
+    return null;
+  }
+
+  function usualGpDestMove(tileId, person, fallbackName, staffId, notIn) {
+    var name = (person && person.name) || fallbackName || '';
+    var key = (person && person.key) || Lab.clinicianColumnKey(name);
+    if (!key || key === Lab.UNALLOCATED || key === Lab.POOL) return null;
+    return {
+      id: tileId,
+      toKey: key,
+      toName: name,
+      staffId: staffUuid((person && (person.staffId || person.id)) || staffId),
+      notIn: !!notIn,
+    };
+  }
+
+  function usualGpDisplayName(name, directory, staffId) {
+    var n = String(name || '').trim();
+    if (n) return n;
+    var rec = directoryRecordById(directory, staffId);
+    return rec && rec.name ? rec.name : '';
+  }
+
+  // Stage unallocated Rx onto the patient's usual / named GP, only when
+  // that person is on the picked day's book. includeNotIn is an explicit
+  // opt-in to also stage onto usual GPs who are not in that day.
+  // Sibling of lab planSendToRequester — do not reuse that function:
+  // requester on an Rx row is not the usual GP.
+  function planSendToUsualGp(tiles, inDayPeople, opts) {
+    opts = opts || {};
+    var includeNotIn = !!opts.includeNotIn;
+    var directory = opts.directory || { byId: {}, list: [] };
+    var dirList = Array.isArray(directory.list) ? directory.list : [];
+    var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      return t && t.id && isRxUnallocated(t);
+    });
+    var sent = [];
+    var skippedUnknown = [];
+    var skippedNotIn = [];
+    var skippedAmbiguous = [];
+
+    function pushUnknown(tile, extra) {
+      skippedUnknown.push(Object.assign({ id: tile.id }, extra || {}));
+    }
+    function pushNotIn(tile, extra) {
+      skippedNotIn.push(Object.assign({ id: tile.id }, extra || {}));
+    }
+    function pushAmbiguous(tile, extra) {
+      skippedAmbiguous.push(Object.assign({ id: tile.id }, extra || {}));
+    }
+
+    pool.forEach(function (tile) {
+      var id = staffUuid(tile.namedGpId);
+      var name = String(tile.namedGp || '').trim();
+      if (!id && !name) {
+        pushUnknown(tile);
+        return;
+      }
+      if (name && Lab.isTeamAssignee(name)) {
+        pushUnknown(tile, { namedGp: name, team: true });
+        return;
+      }
+
+      if (id) {
+        var byId = inDayByStaffId(id, inDayPeople);
+        if (byId) {
+          var moveId = usualGpDestMove(tile.id, byId, name, id, false);
+          if (moveId) sent.push(moveId);
+          else pushUnknown(tile, { namedGpId: id });
+          return;
+        }
+        var inDayNameHits = name
+          ? uniqueNameMatches(
+              name,
+              inDayPeople,
+              function (p) {
+                return p.name;
+              },
+              function (p) {
+                return p.staffId;
+              }
+            )
+          : [];
+        if (inDayNameHits.length === 1) {
+          var moveName = usualGpDestMove(tile.id, inDayNameHits[0], name, id, false);
+          if (moveName) {
+            moveName.staffId = id;
+            sent.push(moveName);
+          } else pushUnknown(tile, { namedGp: name, namedGpId: id });
+          return;
+        }
+        if (includeNotIn) {
+          var destName = usualGpDisplayName(name, directory, id);
+          var moveNotIn = usualGpDestMove(tile.id, null, destName, id, true);
+          if (moveNotIn) sent.push(moveNotIn);
+          else pushUnknown(tile, { namedGpId: id });
+          return;
+        }
+        pushNotIn(tile, { namedGp: name || destNameFromId(id), namedGpId: id });
+        return;
+      }
+
+      var dayHits = uniqueNameMatches(
+        name,
+        inDayPeople,
+        function (p) {
+          return p.name;
+        },
+        function (p) {
+          return p.staffId;
+        }
+      );
+      var dirHits = uniqueNameMatches(
+        name,
+        dirList,
+        function (p) {
+          return p.name;
+        },
+        function (p) {
+          return p.id;
+        }
+      );
+      if (dayHits.length > 1 || dirHits.length > 1) {
+        pushAmbiguous(tile, { namedGp: name });
+        return;
+      }
+      if (dayHits.length === 1) {
+        var moveDay = usualGpDestMove(tile.id, dayHits[0], name, dayHits[0].staffId, false);
+        if (moveDay) sent.push(moveDay);
+        else pushUnknown(tile, { namedGp: name });
+        return;
+      }
+      if (includeNotIn) {
+        var staffId = dirHits.length === 1 ? dirHits[0].id : '';
+        var dest = dirHits.length === 1 ? dirHits[0].name : name;
+        var moveOff = usualGpDestMove(tile.id, null, dest, staffId, true);
+        if (moveOff) sent.push(moveOff);
+        else pushUnknown(tile, { namedGp: name });
+        return;
+      }
+      pushNotIn(tile, { namedGp: name });
+    });
+
+    function destNameFromId(staffId) {
+      return usualGpDisplayName('', directory, staffId);
+    }
+
+    var reason = '';
+    if (!sent.length) {
+      if (skippedAmbiguous.length && !skippedNotIn.length && !skippedUnknown.length) {
+        reason = 'Two staff match that usual GP name — left in the pile.';
+      } else if (skippedNotIn.length && !includeNotIn) {
+        reason =
+          'Usual GP is not on the book for that day. Leave them in the pile, or turn on send-to-usual-GPs-who-are-not-in.';
+      } else if (
+        skippedUnknown.length &&
+        !pool.filter(function (t) {
+          return t && t.namedGp;
+        }).length
+      ) {
+        reason = 'No unallocated requests with a usual GP to send.';
+      } else {
+        reason = 'Nothing to send to usual GP.';
+      }
+    }
+    return {
+      ok: sent.length > 0,
+      sent: sent,
+      sentIn: sent.filter(function (m) {
+        return !m.notIn;
+      }).length,
+      sentNotIn: sent.filter(function (m) {
+        return m.notIn;
+      }).length,
+      skippedUnknown: skippedUnknown,
+      skippedNotIn: skippedNotIn,
+      skippedAmbiguous: skippedAmbiguous,
+      includeNotIn: includeNotIn,
+      total: pool.length,
+      reason: reason,
+    };
+  }
+
+  function applySendToUsualGp(draft, plan) {
+    var next = draft || Lab.emptyDraft();
+    if (!plan || !plan.ok) return next;
+    (plan.sent || []).forEach(function (move) {
+      if (!move || !move.id || !move.toKey) return;
+      next = Lab.addColumn(next, move.toName, move.staffId);
+      next = Lab.stageMove(next, move.id, move.toKey);
+    });
+    return next;
+  }
+
+  function usualGpPreviewCopy(safePlan, dayPhrase) {
+    var plan = safePlan || {};
+    var inN = Array.isArray(plan.sent) ? plan.sent.length : 0;
+    var notInN = Array.isArray(plan.skippedNotIn) ? plan.skippedNotIn.length : 0;
+    var unknownN = Array.isArray(plan.skippedUnknown) ? plan.skippedUnknown.length : 0;
+    var ambN = Array.isArray(plan.skippedAmbiguous) ? plan.skippedAmbiguous.length : 0;
+    var day = dayPhrase || 'that day';
+    var parts = [];
+    if (inN) {
+      parts.push(inN + ' can go to their usual GP (session that day).');
+    } else {
+      parts.push('Nobody’s usual GP is on the book for ' + day + '.');
+    }
+    if (notInN) {
+      parts.push(notInN + (notInN === 1 ? ' stays' : ' stay') + ' in the pile — those GPs are not in.');
+    }
+    if (unknownN) {
+      parts.push(unknownN + (unknownN === 1 ? ' has' : ' have') + ' no usual GP on the request.');
+    }
+    if (ambN) {
+      parts.push(ambN + (ambN === 1 ? ' stays' : ' stay') + ' — two staff match that name.');
+    }
+    return parts.join(' ');
+  }
+
+  function usualGpDestPhrase(plan) {
+    var sent = plan && Array.isArray(plan.sent) ? plan.sent : [];
+    if (!sent.length) return '';
+    var bags = [];
+    var index = {};
+    sent.forEach(function (m) {
+      if (!m || !m.toName) return;
+      var key = m.toKey || Lab.clinicianColumnKey(m.toName);
+      if (!index[key]) {
+        index[key] = { name: m.toName, count: 0 };
+        bags.push(index[key]);
+      }
+      index[key].count += 1;
+      if (String(m.toName).length > String(index[key].name).length) index[key].name = m.toName;
+    });
+    bags.sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      var na = Lab.displayClinicianName(a.name).toLowerCase();
+      var nb = Lab.displayClinicianName(b.name).toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
+    });
+    var n = sent.length;
+    var noun = n === 1 ? 'prescription' : 'prescriptions';
+    var bits = bags.map(function (b) {
+      return b.count + ' with ' + Lab.displayClinicianName(b.name);
+    });
+    return n + ' ' + noun + ' would sit with their usual GP: ' + bits.join(', ') + '.';
+  }
+
   var api = {
     itemCountsFromOverviewPayload: itemCountsFromOverviewPayload,
     regimenTotalsFromPayload: regimenTotalsFromPayload,
@@ -601,6 +897,10 @@
     workingTodayDoctors: workingTodayDoctors,
     destNamesPhrase: destNamesPhrase,
     planEvenSplit: planEvenSplit,
+    planSendToUsualGp: planSendToUsualGp,
+    applySendToUsualGp: applySendToUsualGp,
+    usualGpPreviewCopy: usualGpPreviewCopy,
+    usualGpDestPhrase: usualGpDestPhrase,
     planTopUp: planTopUp,
     planLevel: planLevel,
     unallocatedNotStaged: unallocatedNotStaged,
