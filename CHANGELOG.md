@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.49] — 2026-09-14
+
+### Prescription-request canvas — usual-GP send is not a featured CTA
+
+Dave: **Send N to usual GP** was louder than Split equally / Top up /
+Distribute equally — a blue accent panel plus a primary button, as if
+it were the main action.
+
+It is another distribute path. The preview is supporting copy (no
+accent wash). The button sits in the split-row cluster at the same
+weight as **Distribute equally** (`ms-lac-confirm-btn`, not primary).
+Behaviour unchanged: `planSendToUsualGp`, preview, not-in checkbox,
+H-068. Lab **Send N to who ordered** is untouched.
+
 ## [v3.261.48] — 2026-09-14
 
 ### Prescription-request canvas — send N to usual GP

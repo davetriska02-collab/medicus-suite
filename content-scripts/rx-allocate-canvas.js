@@ -1702,7 +1702,7 @@
     );
   }
 
-  function usualGpOfferHtml() {
+  function usualGpOfferParts() {
     var poolN = visibleUnallocatedCount();
     var tiles = tilesForPlan();
     var people = inTodayPeople();
@@ -1718,36 +1718,37 @@
         sendSafe.skippedAmbiguous.length
       )
     ) {
-      return '';
+      return { preview: '', button: '' };
     }
     var day = dayPhrase();
     var willSend = sendPlan.sent.length;
     var sendLabel = willSend > 0 ? 'Send ' + willSend + ' to usual GP' : 'Nobody’s usual GP is in';
     var preview = C.usualGpPreviewCopy(sendSafe, day);
     var notInN = sendSafe.skippedNotIn.length;
-    return (
-      '<div class="ms-lac-nwd-offer" role="status">' +
-      '<strong>Send to usual GP if they are working ' +
-      esc(day) +
-      '?</strong> ' +
-      esc(preview) +
-      ' Proposal only — nothing is written until you confirm.' +
-      (notInN
-        ? '<label class="ms-lac-send-not-in"><input type="checkbox" id="ms-rxac-send-not-in"' +
-          (_sendToUsualGpNotIn ? ' checked' : '') +
-          '> Also send ' +
-          notInN +
-          ' to usual GPs who are not in on ' +
-          esc(day) +
-          '</label>'
-        : '') +
-      (willSend
-        ? '<button type="button" class="ms-lac-confirm-btn ms-lac-primary" id="ms-rxac-send-usual" title="Stage each unallocated request onto the patient’s usual GP, only if they have a session that day unless you turned on the not-in toggle. Proposal only.">' +
+    return {
+      preview:
+        '<div class="ms-lac-nwd-offer" role="status">' +
+        '<strong>Send to usual GP if they are working ' +
+        esc(day) +
+        '?</strong> ' +
+        esc(preview) +
+        ' Proposal only — nothing is written until you confirm.' +
+        (notInN
+          ? '<label class="ms-lac-send-not-in"><input type="checkbox" id="ms-rxac-send-not-in"' +
+            (_sendToUsualGpNotIn ? ' checked' : '') +
+            '> Also send ' +
+            notInN +
+            ' to usual GPs who are not in on ' +
+            esc(day) +
+            '</label>'
+          : '') +
+        '</div>',
+      button: willSend
+        ? '<button type="button" class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-send-usual" title="Stage each unallocated request onto the patient’s usual GP, only if they have a session that day unless you turned on the not-in toggle. Proposal only.">' +
           esc(sendLabel) +
           '</button>'
-        : '') +
-      '</div>'
-    );
+        : '',
+    };
   }
 
   function evenSplitHtml() {
@@ -1855,6 +1856,7 @@
           )
         : '';
     var usualPhrase = _lastUsualGpPlan && C.usualGpDestPhrase ? C.usualGpDestPhrase(_lastUsualGpPlan) : '';
+    var usualOffer = usualGpOfferParts();
     var proposal = stagedN
       ? '<div class="ms-rxac-proposal" role="status">' +
         '<strong>Proposal, not written yet.</strong> ' +
@@ -1869,7 +1871,7 @@
       strip +
       naming +
       allPanel +
-      usualGpOfferHtml() +
+      usualOffer.preview +
       '<div class="ms-rxac-split-row">' +
       '<label class="ms-lac-split-day-label" for="ms-rxac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
       '<input type="date" id="ms-rxac-day" value="' +
@@ -1887,6 +1889,7 @@
       esc(summary) +
       '</span>' +
       actions +
+      usualOffer.button +
       '</div>' +
       destLine +
       proposal +

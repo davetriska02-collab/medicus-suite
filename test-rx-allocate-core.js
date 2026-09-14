@@ -779,6 +779,14 @@ console.log('\n--- canvas + manifest + css source locks ---');
   );
   check(/#ms-rxac-overlay \.ms-rxac-split-go/.test(css), 'split equally is sized as the primary action');
   check(/#ms-rxac-overlay \.ms-lac-nwd-offer/.test(css), 'usual-GP offer strip is painted on the rx overlay');
+  check(
+    /#ms-rxac-overlay \.ms-lac-nwd-offer[\s\S]{0,220}background:\s*transparent/.test(css),
+    'usual-GP preview is supporting copy, not an accent callout'
+  );
+  check(
+    !/#ms-lac-overlay \.ms-lac-nwd-offer,\s*#ms-rxac-overlay \.ms-lac-nwd-offer/.test(css),
+    'lab send strip and rx usual-GP preview do not share the hero panel'
+  );
   check(/#ms-rxac-overlay \.ms-rxac-count-pop/.test(css), 'proposed dest counts are a pop number');
   check(/#ms-rxac-overlay \.ms-rxac-review-dock/.test(css), 'review docks inside the panel');
   check(
@@ -822,11 +830,17 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(/planSendToUsualGp/.test(canvas), 'send-to-usual-GP uses the Rx planner');
   check(!/planSendToRequester/.test(canvas), 'rx canvas does not call the lab requester planner');
   check(/id="ms-rxac-send-usual"/.test(canvas), 'send-to-usual-GP is a named button');
+  check(
+    /class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-send-usual"/.test(canvas),
+    'usual-GP send matches Distribute equally, not Split equally'
+  );
+  check(!/ms-lac-primary[^>]*id="ms-rxac-send-usual"/.test(canvas), 'usual-GP send is not a primary CTA');
+  check(/actions \+\s*usualOffer\.button/.test(canvas), 'usual-GP send sits in the split-row action cluster');
   check(/id="ms-rxac-send-not-in"/.test(canvas), 'not-in usual-GP toggle is session state on the overlay');
   check(/_sendToUsualGpNotIn/.test(canvas), 'not-in usual-GP box is not a storage key');
   check(/Send .* to usual GP/.test(canvas), 'primary control is Send N to usual GP');
   check(/Send this pile to usual GP/.test(canvas), 'per-group send is on a usual-GP pile header');
-  check(/ms-lac-nwd-offer/.test(canvas), 'usual-GP offer uses the same chrome as the lab send strip');
+  check(/ms-lac-nwd-offer/.test(canvas), 'usual-GP preview stays on the overlay as supporting copy');
   check(
     !/chrome\.storage/.test(canvas) || !/_sendToUsualGpNotIn[\s\S]{0,80}chrome\.storage/.test(canvas),
     'not-in usual-GP is not persisted'

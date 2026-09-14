@@ -1335,8 +1335,7 @@
   background: var(--accent-dim);
 }
 
-#ms-lac-overlay .ms-lac-nwd-offer,
-#ms-rxac-overlay .ms-lac-nwd-offer {
+#ms-lac-overlay .ms-lac-nwd-offer {
   margin: 0 18px 10px;
   padding: 12px 14px;
   background: var(--accent-dim);
@@ -1347,16 +1346,14 @@
   color: var(--text-1);
 }
 
-#ms-lac-overlay .ms-lac-nwd-offer strong,
-#ms-rxac-overlay .ms-lac-nwd-offer strong {
+#ms-lac-overlay .ms-lac-nwd-offer strong {
   display: block;
   margin-bottom: 4px;
   font-size: 14px;
   font-weight: 650;
 }
 
-#ms-lac-overlay .ms-lac-send-not-in,
-#ms-rxac-overlay .ms-lac-send-not-in {
+#ms-lac-overlay .ms-lac-send-not-in {
   display: flex;
   align-items: flex-start;
   gap: 8px;
@@ -1367,14 +1364,49 @@
   cursor: pointer;
 }
 
-#ms-lac-overlay .ms-lac-send-not-in input,
-#ms-rxac-overlay .ms-lac-send-not-in input {
+#ms-lac-overlay .ms-lac-send-not-in input {
   margin-top: 3px;
 }
 
-#ms-lac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn,
-#ms-rxac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn {
+#ms-lac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn {
   margin-top: 10px;
+}
+
+/* Rx usual-GP send is another distribute path, not a featured CTA.
+   Preview is supporting copy; the button sits with Split / Top up /
+   Distribute equally at the quieter (non-primary) weight. */
+#ms-rxac-overlay .ms-lac-nwd-offer {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+#ms-rxac-overlay .ms-lac-nwd-offer strong {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in input {
+  margin-top: 2px;
 }
 
 #ms-rxac-overlay .ms-rxac-send-group {

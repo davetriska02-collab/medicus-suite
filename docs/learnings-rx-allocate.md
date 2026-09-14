@@ -45,7 +45,11 @@ task-list bulk-reassign. They do not share a page.
   never `requester`. Unique staff UUID preferred; colliding names and
   team-inbox labels stay in the pile; not-in usual GPs stay unless that
   action’s checkbox is ticked (session state, not a storage key). Do
-  not call lab `planSendToRequester` from this canvas.
+  not call lab `planSendToRequester` from this canvas. The control is
+  another distribute path, not a featured CTA: preview is supporting
+  copy (no accent panel); the button sits in the split-row cluster at
+  the same weight as **Distribute equally** (`ms-rxac-action`, not
+  `ms-lac-primary`).
 - Even-split among doctors working today **ignores named GP** and does
   not rebalance already-sitting work. Only the unallocated Non-Routine
   Prescription Requests pile (Unassigned / that inbox name). Requests
