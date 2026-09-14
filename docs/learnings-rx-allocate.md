@@ -38,13 +38,26 @@ task-list bulk-reassign. They do not share a page.
 ## Placement / grouping
 
 - `homeColumnKey` stays assignment-only. Named GP is **never** auto-placement.
+  Opening the canvas does not move a tile onto a usual GP (H-068).
 - Pool groups by requester if present, else registered GP.
+- **Send N to usual GP** (`planSendToUsualGp`) is a user-initiated
+  stage of **unallocated** rows only. It uses `namedGp` / `namedGpId`,
+  never `requester`. Unique staff UUID preferred; colliding names and
+  team-inbox labels stay in the pile; not-in usual GPs stay unless that
+  action’s checkbox is ticked (session state, not a storage key). Do
+  not call lab `planSendToRequester` from this canvas. The control is
+  another distribute path, not a featured CTA: preview is supporting
+  copy (no accent panel); the button sits in the split-row cluster at
+  the same weight as **Distribute equally** (`ms-rxac-action`, not
+  `ms-lac-primary`).
 - Even-split among doctors working today **ignores named GP** and does
   not rebalance already-sitting work. Only the unallocated Non-Routine
   Prescription Requests pile (Unassigned / that inbox name). Requests
   already sitting with a GP stay on that field and are not in the split
   counts. The bare task-list GET returns the whole open list of that
   type — do not even-split the ones that already have a person assignee.
+  After a usual-GP send, Split equally / Top up still apply to whatever
+  is left in Unallocated.
 
 ## Even split
 

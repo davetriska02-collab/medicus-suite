@@ -1372,6 +1372,50 @@
   margin-top: 10px;
 }
 
+/* Rx usual-GP send is another distribute path, not a featured CTA.
+   Preview is supporting copy; the button sits with Split / Top up /
+   Distribute equally at the quieter (non-primary) weight. */
+#ms-rxac-overlay .ms-lac-nwd-offer {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+#ms-rxac-overlay .ms-lac-nwd-offer strong {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in input {
+  margin-top: 2px;
+}
+
+#ms-rxac-overlay .ms-rxac-send-group {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
 #ms-lac-overlay .ms-lac-daybar {
   display: flex;
   flex-direction: column;
