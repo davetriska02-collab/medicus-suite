@@ -110,6 +110,7 @@ const OPTIONS_SECTIONS = [
   ['safety', 'Clinical Safety', 'hazard disclaimer'],
   ['diagnostics', 'Diagnostics', 'event ledger suite health debug api log'],
   ['backup', 'Backup & Restore', 'export import suite backup'],
+  ['stackchan', 'StackChan', 'desk robot face presence stackchan avatar'],
 ];
 
 // Build the command list from the live DOM + static registry.

@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.262.0] — 2026-09-15
+
+### StackChan desk presence — Suite talks to a real robot
+
+Dave's M5Stack StackChan can now react to live Suite events on the practice
+LAN. Not a slide: flashable firmware, Options Test face, and at least one
+real hook (Sentinel chip colour) that changes the face.
+
+- **Firmware** (`firmware/stackchan/`): ESP32-S3 / CoreS3 HTTP listener.
+  Commands `idle / calm / alert / wait / done / celebrate / listen` → face,
+  RGB halo, optional pan/tilt. `GET /health` returns version + uptime.
+  Camera and mics are compile-time off (`#error` if you flip the flags) and
+  never initialised. Unknown command → idle. Wi-Fi via `secrets.h` (example
+  only — never commit an SSID). Optional MQTT env, unused by Suite v1.
+- **Suite bridge** (`shared/stackchan-bridge.js`): maps Sentinel statuses,
+  Request Monitor `freshByBucket` keys, and Companion role to a command.
+  POST body is `{ v, cmd, event, severity, ts }` only — no names, NHS
+  numbers, chip labels, or free text. Fire-and-forget from the service
+  worker with a short timeout; never blocks Medicus.
+- **Options → StackChan**: enable (default off), base URL, optional token,
+  quiet-mode respect, per-hook toggles, Ping /health, Test face buttons.
+  LAN origin is requested via `optional_host_permissions`.
+- **Docs:** `docs/STACKCHAN.md` (unbox → flash → prove). Shortlist for the
+  Emile pitch: `docs/medicus-avatar-shortlist.md`.
+
 ## [v3.261.50] — 2026-09-14
 
 ### Prescription-request canvas — usual-GP send stays with allocate peers

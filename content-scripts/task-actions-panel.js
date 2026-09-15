@@ -2206,6 +2206,15 @@
     s.slots.loadedForPage = null;
     maybeLoadGlances();
     rerender();
+    // Desk robot: role enum only (clinic / reception / triage / nursing).
+    try {
+      const p = chrome.runtime.sendMessage({
+        type: 'stackchan:event',
+        source: 'companion.role',
+        role: _role,
+      });
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (_) {}
   }
 
   document.addEventListener('ms-sentinel-snapshot', function () {

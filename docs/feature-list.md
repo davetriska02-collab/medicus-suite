@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.50
-**Generated:** 2026-09-14
+**Version:** v3.262.0
+**Generated:** 2026-09-15
 
 ## What it is
 
@@ -116,6 +116,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
+- **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
@@ -152,6 +153,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **v3.261.50 (14 Sep)** — Prescription-request canvas: usual-GP send stays in the allocate action cluster
 - **v3.261.49 (14 Sep)** — Prescription-request canvas: Send N to usual GP is a peer of Distribute equally, not a featured CTA
 - **v3.261.48 (14 Sep)** — Prescription-request canvas: Send N to usual GP if they are working that day; not-in is an opt-in on that action only
+- **v3.262.0 (15 Sep)** — StackChan desk-robot presence: LAN HTTP face commands from Sentinel / Request Monitor / Companion; firmware camera+mic off; Options Test face
 - **v3.261.45 (12 Sep)** — Lab allocation canvas: who-ordered uses current OIR dates, not completed requests from another GP
 - **v3.261.44 (12 Sep)** — Lab allocation canvas: who-ordered overview only for unallocated results
 - **v3.261.43 (12 Sep)** — Lab allocation canvas: keep majority OIR requester; parse hyphen/date labels
