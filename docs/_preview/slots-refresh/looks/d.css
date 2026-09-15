@@ -1,0 +1,206 @@
+/* Option D — Clinical dark. Readable at a glance. Not neon. Not gimmick. */
+
+html[data-theme='dark'] {
+  --bg-deep: #0b1016;
+  --bg-mid: #121821;
+  --bg-elev: #171e28;
+  --bg-hover: #1e2733;
+  --border: #2a3544;
+  --border-hi: #3d4b5e;
+  --text-1: #f4f7fb;
+  --text-2: #d7e0ea;
+  --text-3: #9aabbd;
+  --text-4: #7f91a4;
+  --text-5: #6b7d90;
+  --accent: #7eb0d6;
+  --accent-hover: #9bc4e3;
+  --accent-dim: rgba(126, 176, 214, 0.12);
+  --accent-line: rgba(126, 176, 214, 0.4);
+  --green: #5ee0a0;
+  --green-dim: rgba(94, 224, 160, 0.12);
+  --green-line: rgba(94, 224, 160, 0.38);
+  --amber: #ffc857;
+  --amber-dim: rgba(255, 200, 87, 0.14);
+  --amber-line: rgba(255, 200, 87, 0.5);
+  --red: #ff7a7a;
+  --red-dim: rgba(255, 122, 122, 0.14);
+  --red-line: rgba(255, 122, 122, 0.45);
+  --r-sm: 3px;
+  --r-md: 5px;
+  --r-lg: 6px;
+  --shadow-1: none;
+  --shadow-2: none;
+}
+
+html,
+body,
+.panel-frame,
+.suite-content {
+  background: #0b1016;
+  color: #f4f7fb;
+}
+
+.suite-nav {
+  background: #0e141c;
+  border-bottom: 1px solid #2a3544;
+}
+
+.nav-tab {
+  color: #7f91a4;
+}
+
+.nav-tab.active {
+  background: rgba(126, 176, 214, 0.12);
+  color: #f4f7fb;
+  border-color: rgba(126, 176, 214, 0.4);
+}
+
+.module-wrap {
+  padding: 14px 12px 20px;
+}
+
+.mod-eyebrow {
+  color: #9aabbd;
+  font-weight: 650;
+}
+
+.preset-btn {
+  background: #171e28;
+  border-color: #2a3544;
+  color: #9aabbd;
+}
+
+.preset-btn.active {
+  background: #1e2a38;
+  border-color: #7eb0d6;
+  color: #f4f7fb;
+}
+
+.date-input,
+.ghost-btn {
+  background: #171e28;
+  border-color: #3d4b5e;
+  color: #d7e0ea;
+}
+
+.slots-alert-ribbon-amber {
+  background: rgba(255, 200, 87, 0.14);
+  border-color: #ffc857;
+  color: #ffc857;
+}
+
+.slots-hero-card {
+  background: #171e28;
+  border-color: #2a3544;
+  box-shadow: none;
+}
+
+.slots-hero-card--amber {
+  background: rgba(255, 200, 87, 0.1);
+  border-color: #ffc857;
+}
+
+.slots-count-hero {
+  color: #ffffff;
+  font-size: 52px;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+.slots-count-label.amber {
+  color: #ffc857;
+}
+
+.ampm-chip {
+  background: #121821;
+  border-color: #2a3544;
+}
+
+.ampm-am .ampm-num {
+  color: #ffc857;
+}
+
+.ampm-pm .ampm-num {
+  color: #7eb0d6;
+}
+
+.slots-hero-asat {
+  color: #7f91a4;
+}
+
+.slot-pill {
+  background: #121821;
+  border-color: #2a3544;
+}
+
+.slot-pill-name {
+  color: #d7e0ea;
+}
+
+.slot-pill-num {
+  color: #ffffff;
+}
+
+.slot-pill.pill-amber {
+  background: rgba(255, 200, 87, 0.12);
+  border-color: #ffc857;
+}
+
+.slot-pill.pill-amber .slot-pill-num {
+  color: #ffc857;
+}
+
+.section-label,
+.slot-types-summary {
+  color: #d7e0ea;
+  border-bottom-color: #2a3544;
+}
+
+.slot-row,
+.staff-toggle {
+  background: #171e28;
+  border-color: #2a3544;
+}
+
+.slot-type,
+.staff-name {
+  color: #f4f7fb;
+}
+
+.slot-count-total,
+.staff-count {
+  color: #5ee0a0;
+}
+
+.staff-detail {
+  background: #121821;
+  border-color: #2a3544;
+}
+
+.fa-toggle-row,
+.bk-toggle-row {
+  background: #171e28;
+  border-color: #2a3544;
+  color: #d7e0ea;
+}
+
+.fa-toggle-badge {
+  background: #121821;
+  border-color: #2a3544;
+  color: #9aabbd;
+}
+
+.foot,
+.freshness-stamp {
+  color: #7f91a4;
+}
+
+.staff-split .split-am {
+  background: #3d4b5e;
+  opacity: 0.9;
+}
+
+.staff-split .split-pm {
+  background: #7eb0d6;
+  opacity: 0.75;
+}

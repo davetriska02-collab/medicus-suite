@@ -1,0 +1,191 @@
+/* Option C — Soft modern. Rounded cards, warm neutrals, gentler colour. */
+
+:root {
+  --bg-deep: #f6f3ee;
+  --bg-mid: #efeae2;
+  --bg-elev: #fffdf9;
+  --bg-hover: #efe8dc;
+  --border: #e4d9c8;
+  --border-hi: #cbbba3;
+  --text-1: #2a241c;
+  --text-2: #3d3429;
+  --text-3: #6b5e4e;
+  --text-4: #7d705f;
+  --text-5: #8f8271;
+  --accent: #3d6b6a;
+  --accent-hover: #2f5554;
+  --accent-dim: rgba(61, 107, 106, 0.1);
+  --accent-line: rgba(61, 107, 106, 0.28);
+  --green: #3d6b4a;
+  --green-dim: rgba(61, 107, 74, 0.1);
+  --green-line: rgba(61, 107, 74, 0.28);
+  --amber: #b45309;
+  --amber-dim: #fff4e5;
+  --amber-line: rgba(180, 83, 9, 0.35);
+  --red: #c2410c;
+  --red-dim: #ffefe8;
+  --red-line: rgba(194, 65, 12, 0.32);
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(42, 36, 28, 0.04), 0 8px 20px rgba(42, 36, 28, 0.05);
+  --shadow-2: 0 10px 28px rgba(42, 36, 28, 0.08);
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+html,
+body,
+.panel-frame,
+.suite-content {
+  background: #f6f3ee;
+}
+
+.suite-nav {
+  height: 48px;
+  background: #fffdf9;
+  border-bottom: 1px solid #e4d9c8;
+  padding: 0 12px;
+}
+
+.nav-tab {
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+.nav-tab.active {
+  background: #e7f0ef;
+  color: #2f5554;
+  border-color: transparent;
+}
+
+.module-wrap {
+  padding: 18px 14px 28px;
+}
+
+.mod-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.date-presets {
+  gap: 5px;
+  margin-bottom: 14px;
+  flex-wrap: nowrap;
+}
+
+.preset-btn,
+.date-input,
+.ghost-btn {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: #fffdf9;
+  border-color: #e4d9c8;
+}
+
+.preset-btn.active {
+  background: #3d6b6a;
+  border-color: #3d6b6a;
+  color: #fffdf9;
+}
+
+.slots-alert-ribbon {
+  border-radius: 16px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-family: var(--sans);
+}
+
+.slots-hero-card {
+  border-radius: 22px;
+  padding: 16px 16px 14px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow-1);
+}
+
+.slots-count-hero {
+  font-size: 48px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+}
+
+.slots-count-label {
+  font-weight: 600;
+}
+
+.ampm-chip {
+  border-radius: 999px;
+  background: #fffdf9;
+  padding: 5px 10px;
+}
+
+.slots-pill-row {
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top-color: #efeae2;
+}
+
+.slot-pill {
+  border-radius: 999px;
+  padding: 5px 11px 5px 9px;
+  background: #fffdf9;
+  box-shadow: 0 1px 0 rgba(42, 36, 28, 0.04);
+}
+
+.slot-pill.pill-amber {
+  box-shadow: none;
+}
+
+.slots-section {
+  margin-bottom: 18px;
+}
+
+.section-label,
+.slot-types-summary {
+  border-bottom: none;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.slot-list,
+.staff-list {
+  gap: 8px;
+}
+
+.slot-row,
+.staff-toggle {
+  border-radius: 14px;
+  padding: 9px 12px;
+  box-shadow: 0 1px 0 rgba(42, 36, 28, 0.03);
+}
+
+.staff-row {
+  border-radius: 14px;
+}
+
+.staff-detail {
+  border-radius: 0 0 14px 14px;
+  background: #faf6ef;
+  padding: 6px 12px 10px 28px;
+}
+
+.fa-toggle-row,
+.bk-toggle-row {
+  border-radius: 16px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.foot {
+  color: var(--text-4);
+}
