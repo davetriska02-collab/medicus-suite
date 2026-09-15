@@ -1274,6 +1274,7 @@
         <button class="nav-item" data-section="sentinel">Monitoring</button>
         <button class="nav-item" data-section="txn">API Integration</button>
         <button class="nav-item" data-section="presence">Task Presence</button>
+        <button class="nav-item" data-section="stackchan">StackChan</button>
         <button class="nav-item" data-section="queue">Queue rules</button>
         <button class="nav-item" data-section="labfiling">Lab Filing</button>
         <button class="nav-item" data-section="reception">Reception</button>
@@ -2149,6 +2150,88 @@
               line-height: 1.5;
             "
           ></span>
+        </section>
+
+        <!-- StackChan desk robot (LAN presence — default OFF, no PHI on the wire) -->
+        <section class="opt-section" id="sect-stackchan">
+          <h1>StackChan <span class="module-badge">desk robot</span></h1>
+          <p class="section-desc">
+            Optional bodily presence on the desk. Suite POSTs a face command
+            (<code>idle / calm / alert / wait / done / celebrate / listen</code>)
+            to an M5Stack StackChan on the practice LAN. Default
+            <strong>off</strong>. The payload is a severity enum and an opaque
+            event code — never a name, NHS number, chip label, or free text.
+          </p>
+          <p class="section-desc" style="color: var(--amber)">
+            Information governance: the kit has a camera and mics. Firmware
+            ships with both <strong>disabled and uninitialised</strong>. Tape
+            over the lens. Reception / back office first; consulting room only
+            after IG. Flash notes:
+            <code>docs/STACKCHAN.md</code>.
+          </p>
+
+          <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="scEnabled" />
+              <span class="field-label" style="margin: 0">Enable StackChan bridge</span>
+            </label>
+            <span class="field-help">Off until you flip this. Test face still works so you can prove the robot before going live.</span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="scBaseUrl">Robot base URL</label>
+            <input type="text" id="scBaseUrl" placeholder="http://192.168.1.80" autocomplete="off" />
+            <span class="field-help">
+              Same LAN as this PC. After flash, the face shows the IP. mDNS
+              <code>http://stackchan.local</code> also works if your network allows it.
+            </span>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="scToken">Shared token (optional)</label>
+            <input type="password" id="scToken" placeholder="same as STACKCHAN_TOKEN in secrets.h" autocomplete="off" />
+            <span class="field-help">Sent as <code>X-StackChan-Token</code>. Leave blank if the firmware token is empty.</span>
+          </div>
+
+          <div class="field">
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
+              <input type="checkbox" id="scRespectQuiet" checked />
+              <span style="font-size: 12px">Respect quiet / clinic mode (don't move the robot while notifications are muted)</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Event hooks</span>
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 6px">
+              <input type="checkbox" id="scHookSentinel" checked />
+              <span style="font-size: 12px">Sentinel chip severity (red → alert, amber → wait, green → calm, none → idle)</span>
+            </label>
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 6px">
+              <input type="checkbox" id="scHookRm" checked />
+              <span style="font-size: 12px">Request Monitor new work (medical new → alert, else listen)</span>
+            </label>
+            <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer; margin-top: 6px">
+              <input type="checkbox" id="scHookCompanion" checked />
+              <span style="font-size: 12px">Companion HUD role change (clinic idle, reception listen, triage wait, nursing calm)</span>
+            </label>
+          </div>
+
+          <div class="actions" style="margin-top: 14px">
+            <button class="primary" id="saveStackchan">Save robot settings</button>
+            <button class="ghost" id="scHealthBtn">Ping /health</button>
+            <span class="saved" id="scSaved">Saved ✓</span>
+          </div>
+          <p id="scStatus" style="font-family: var(--mono); font-size: 11px; margin-top: 8px; min-height: 16px; color: var(--text-3)"></p>
+
+          <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 6px">Test face</h2>
+            <p class="section-desc" style="margin-bottom: 12px">
+              Hits <code>POST /cmd</code> on the robot. Does not send patient data.
+              Works even when the bridge is still off — prove the unit tonight before you enable live events.
+            </p>
+            <div id="scTestFaces" style="display: flex; flex-wrap: wrap; gap: 8px"></div>
+            <p id="scTestResult" style="font-family: var(--mono); font-size: 11px; margin-top: 10px; min-height: 16px; color: var(--text-3)"></p>
+          </div>
         </section>
 
         <!-- Task presence section (advisory "someone is on this request") -->
@@ -3869,6 +3952,14 @@
                   <input type="file" class="mod-file-input" data-mod="board" accept=".json" style="display: none" />
                 </div>
               </div>
+              <div class="module-export-card">
+                <div class="mec-name">StackChan</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="stackchan">Export</button>
+                  <button class="ghost" data-mod-import="stackchan">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="stackchan" accept=".json" style="display: none" />
+                </div>
+              </div>
             </div>
           </div>
 
@@ -3973,6 +4064,8 @@
     <script src="../shared/io/knowledge-sync.js"></script>
     <script src="../shared/io/rota-io.js"></script>
     <script src="../shared/io/board-io.js"></script>
+    <script src="../shared/stackchan-bridge.js"></script>
+    <script src="../shared/io/stackchan-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>
     <script src="../shared/practice-code.js"></script>
     <script src="../shared/practice-packs.js"></script>

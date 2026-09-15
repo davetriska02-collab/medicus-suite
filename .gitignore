@@ -41,3 +41,7 @@ design-system/dist/
 .design-sync/learnings/
 .design-sync/node_modules
 presence-config.json
+
+# StackChan device secrets (copy firmware/stackchan/secrets.h.example)
+firmware/stackchan/secrets.h
+firmware/stackchan/.pio/

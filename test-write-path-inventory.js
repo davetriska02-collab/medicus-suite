@@ -114,6 +114,8 @@ const ALLOWLIST = {
     'optional Transactional API proxy POST; read-only for patient data — the transport THROWS on isWrite before any network call (enforced, regression-guarded by test-txn-modules.js). Not a Medicus session write surface.',
   'content-scripts/task-presence.js':
     'Supabase task_presence upsert/heartbeat/cleanup (POST/DELETE), not a Medicus clinical write; payload carries no patient identifiers (verified 2026-08-22 audit).',
+  'shared/stackchan-bridge.js':
+    'optional StackChan desk-robot LAN POST (default off); body is {v,cmd,event,severity,ts} only — no patient identifiers, not a Medicus session write. Firmware rejects unknown cmds to idle; camera/mic stay off.',
 };
 
 // Computed-method false positives / blessed exceptions, named per file.

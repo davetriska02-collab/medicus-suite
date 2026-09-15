@@ -695,6 +695,23 @@
     try {
       document.dispatchEvent(new CustomEvent('ms-sentinel-snapshot'));
     } catch (_) {}
+    // Desk robot: statuses only (overdue / due_soon / …). Never names, NHS
+    // numbers, drug labels, or chip objects — the SW maps colour → face.
+    try {
+      const snap = _lastSnapshot;
+      const unavailable = !!(snap && snap.unavailable);
+      const statuses =
+        !unavailable && Array.isArray(snap && snap.chips)
+          ? snap.chips.map((c) => c && c.status).filter(Boolean)
+          : [];
+      const q = chrome.runtime.sendMessage({
+        type: 'stackchan:event',
+        source: 'sentinel',
+        unavailable,
+        statuses,
+      });
+      if (q && typeof q.catch === 'function') q.catch(() => {});
+    } catch (_) {}
   }
 
   // Assess extraction drift and update the per-view baseline in storage.
