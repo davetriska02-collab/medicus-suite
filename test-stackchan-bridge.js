@@ -135,7 +135,9 @@ console.log('\n--- payload builder (no PHI) ---');
     severity: 'red',
     ts: 1700000000000,
     patientName: 'Jane Doe',
-    nhsNumber: '943 476 5919',
+    // 943 476 5911 is Modulus-11 INVALID (same fixture as test-patient-alerts-core.js).
+    // The payload test only needs a 10-digit lookalike to prove it never ships.
+    nhsNumber: '943 476 5911',
     label: 'lithium overdue',
     chips: [{ drugName: 'lithium' }],
   });

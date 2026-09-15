@@ -2,6 +2,15 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.262.1] — 2026-09-15
+
+### StackChan PHI test uses a checksum-invalid NHS lookalike
+
+`test-stackchan-bridge.js` still feeds a 10-digit string into `buildPayload` to
+prove names / NHS / drug text never reach the robot. The fixture is now
+`943 476 5911` (Modulus-11 invalid, same as patient-alerts tests) so the
+committed-patient-data guard stays tight. No allowlist hole.
+
 ## [v3.262.0] — 2026-09-15
 
 ### StackChan desk presence — Suite talks to a real robot
