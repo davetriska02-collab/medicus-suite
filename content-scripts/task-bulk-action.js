@@ -246,6 +246,7 @@
     return asQueryPlan(plan);
   }
 
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
