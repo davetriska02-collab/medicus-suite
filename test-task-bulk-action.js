@@ -28,7 +28,19 @@ const {
   canSubmit,
   buildActionPayload,
   normaliseListQuery,
+  stripSearch,
+  searchHasListFilters,
+  asQueryPlan,
 } = require('./content-scripts/task-bulk-action.js');
+const {
+  privacyOfficerQueryPlan,
+  searchHasListFilters: poSearchHasListFilters,
+  PO_HOMEPAGE_QS,
+  PO_PENDING_QS,
+  PO_WORKFLOW_QS,
+  PO_SHARED_WARNING,
+  PO_ALL_STAFF_WARNING,
+} = require('./content-scripts/privacy-officer-bulk-acknowledge.js');
 
 let passed = 0,
   failed = 0;
@@ -121,6 +133,9 @@ console.log('\n--- extractTaskArray / taskIdFromRow: envelopes and id aliases --
   check(extractTaskArray({ tasks: [{ id: 'a' }] })[0].id === 'a', 'top-level tasks[] (confirmed capture shape)');
   check(extractTaskArray({ data: { tasks: [{ id: 'b' }] } })[0].id === 'b', 'nested data.tasks[]');
   check(extractTaskArray({ data: [{ id: 'c' }] })[0].id === 'c', 'data as a bare array');
+  check(extractTaskArray({ items: [{ id: 'd' }] })[0].id === 'd', 'items envelope (lab-allocate sibling)');
+  check(extractTaskArray({ taskList: [{ id: 'e' }] })[0].id === 'e', 'taskList array envelope');
+  check(extractTaskArray({ taskList: { tasks: [{ id: 'f' }] } })[0].id === 'f', 'taskList.tasks envelope');
   check(extractTaskArray(null).length === 0, 'null body -> [], never throws');
   check(extractTaskArray({ foo: 1 }).length === 0, 'unknown envelope -> [], never throws');
   check(taskIdFromRow({ id: 'x' }) === 'x', 'id is preferred');
@@ -164,7 +179,77 @@ console.log('\n--- normaliseListQuery: string vs { qs, scopeWarning } resolution
   check(empty.qs === '' && empty.scopeWarning === null, 'null input degrades to an empty query, never throws');
 }
 
-console.log('\n--- Engine source lock: delegated clicks cannot POST outside the confirm step; re-inserted widget repaints ---');
+console.log('\n--- stripSearch / searchHasListFilters: page URL vs invented inbox ---');
+{
+  check(stripSearch('?a=1') === 'a=1', 'strips a leading question mark');
+  check(stripSearch('a=1') === 'a=1', 'bare query is unchanged');
+  check(stripSearch(null) === '', 'null search -> empty string, never throws');
+  check(searchHasListFilters('?viewContext=workflow') === true, 'viewContext is a list filter');
+  check(searchHasListFilters('?statuses%5B%5D=pending') === true, 'encoded statuses[] is a list filter');
+  check(searchHasListFilters('?statuses[]=pending') === true, 'decoded statuses[] is a list filter');
+  check(searchHasListFilters('?masterAssignee=abc') === true, 'masterAssignee is a list filter');
+  check(searchHasListFilters('') === false, 'empty search has no list filters');
+  check(searchHasListFilters('?foo=bar') === false, 'unrelated params are not treated as list filters');
+  check(poSearchHasListFilters('?viewContext=homepage') === true, 'PO helper agrees with the engine helper');
+}
+
+console.log('\n--- asQueryPlan: one query or an ordered, de-duped plan ---');
+{
+  const one = asQueryPlan('a=1');
+  check(one.length === 1 && one[0].qs === 'a=1' && one[0].scopeWarning === null, 'plain string -> one-step plan');
+  const obj = asQueryPlan({ qs: 'a=1', scopeWarning: 'wider' });
+  check(obj.length === 1 && obj[0].scopeWarning === 'wider', 'object shape is a one-step plan');
+  const many = asQueryPlan(['a=1', { qs: 'b=2', scopeWarning: 'w' }, 'a=1']);
+  check(many.length === 2, 'duplicate qs is dropped');
+  check(many[0].qs === 'a=1' && many[1].qs === 'b=2', 'order of first-seen queries is kept');
+  const encodedDup = asQueryPlan(['statuses%5B%5D=pending', 'statuses[]=pending']);
+  check(encodedDup.length === 1, 'encoded and decoded statuses[] count as the same step');
+}
+
+console.log('\n--- privacyOfficerQueryPlan: page filters first; homepage+assignee cannot be the only try ---');
+{
+  const staff = '0198ef96-6a17-71e4-8354-78de2b371ef3';
+  const dave = privacyOfficerQueryPlan('', staff);
+  check(
+    dave[0].qs === PO_HOMEPAGE_QS + '&masterAssignee=' + staff,
+    'empty page URL still tries the historical homepage+assignee first'
+  );
+  check(
+    dave.some((q) => q.qs === PO_PENDING_QS && q.scopeWarning === PO_SHARED_WARNING),
+    'Dave-live path: empty homepage inbox is followed by unscoped pending (the shared queue)'
+  );
+  check(
+    dave.some((q) => q.qs === PO_HOMEPAGE_QS && q.scopeWarning === PO_SHARED_WARNING),
+    'unscoped homepage is still in the plan after a scoped miss'
+  );
+  check(
+    dave.some((q) => q.qs === PO_WORKFLOW_QS),
+    'workflow viewContext is a last-resort sibling-queue shape'
+  );
+  check(
+    dave.findIndex((q) => q.qs === PO_PENDING_QS) > dave.findIndex((q) => q.qs.indexOf('masterAssignee=') !== -1),
+    'the shared-queue fallback is AFTER the scoped inbox, never instead of it'
+  );
+
+  const page = privacyOfficerQueryPlan('?viewContext=workflow&statuses%5B%5D=pending', staff);
+  check(page[0].qs === 'viewContext=workflow&statuses%5B%5D=pending', 'page filters win when the URL already has them');
+  check(page[0].scopeWarning === null, 'the page query is not labelled as a widened fallback');
+
+  const nick = privacyOfficerQueryPlan('', null);
+  check(
+    !nick.some((q) => /masterAssignee=/.test(q.qs)),
+    'no staff stamp -> no invented masterAssignee (the 2026-08-20 unscoped path)'
+  );
+  check(
+    nick.some((q) => q.qs === PO_HOMEPAGE_QS && q.scopeWarning === PO_ALL_STAFF_WARNING),
+    'no staff stamp -> unscoped homepage still carries the ALL-staff warning'
+  );
+  check(nick[0].qs === PO_PENDING_QS, 'no page filters and no stamp -> shared pending is first, not a 5s wait');
+}
+
+console.log(
+  '\n--- Engine source lock: delegated clicks cannot POST outside the confirm step; re-inserted widget repaints ---'
+);
 {
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
   check(
@@ -184,7 +269,9 @@ console.log('\n--- Engine source lock: delegated clicks cannot POST outside the 
     'render() paints our own node even while Vue has it detached'
   );
   check(
-    /var wasConnected = document\.contains\(_widgetEl\);[\s\S]{0,900}?if \(!wasConnected && document\.contains\(_widgetEl\)\) \{\s*_widgetEl\.innerHTML = buildHtml\(\);/.test(src),
+    /var wasConnected = document\.contains\(_widgetEl\);[\s\S]{0,900}?if \(!wasConnected && document\.contains\(_widgetEl\)\) \{\s*_widgetEl\.innerHTML = buildHtml\(\);/.test(
+      src
+    ),
     'injectTrigger repaints a node it re-inserts after Vue stripped it'
   );
 }
@@ -229,7 +316,16 @@ console.log('\n--- Privacy Officer Alerts instantiation: confirmed contract regr
     src.includes("actionPath: '/tasks/patient-privacy-officer/complete'"),
     'confirmed acknowledge endpoint present'
   );
-  check(src.includes('statuses%5B%5D=pending&viewContext=homepage'), 'confirmed list query present');
+  check(src.includes('statuses%5B%5D=pending&viewContext=homepage'), 'confirmed homepage list query still in the plan');
+  check(
+    src.includes("statuses%5B%5D=pending'"),
+    'shared-queue pending query is present without an invented viewContext'
+  );
+  check(src.includes('viewContext=workflow'), 'workflow viewContext is a last-resort sibling-queue shape');
+  check(
+    src.includes('privacyOfficerQueryPlan(location.search'),
+    'the live fetch uses this page’s search, not only the 2026-08-08 capture'
+  );
   check(src.includes('data-ch-staff'), 'reads the live staff-identity stamp rather than a hardcoded assignee UUID');
   check(!/masterAssignee=0[0-9a-f-]{30,}/.test(src), 'no hardcoded staff UUID baked into the source');
   check(src.includes('scopeWarning:'), 'the unscoped fallback carries a scopeWarning — never a silent widening');
@@ -237,9 +333,16 @@ console.log('\n--- Privacy Officer Alerts instantiation: confirmed contract regr
     src.includes('ALL staff'),
     'the warning states the consequence (whose alerts are on screen), not just the mechanism'
   );
-  check(/waited < 5000/.test(src), 'waits for the identity stamp before falling back to an unscoped fetch');
+  check(
+    !/waited < 5000/.test(src),
+    'no 5s stamp wait — empty fallback is the control, not a delay that still ends on homepage+assignee'
+  );
   check(src.includes('selectAllAllowed: true'), 'select-all enabled per the 2026-08-08 decision');
   check(src.includes("verbGerund: 'Acknowledging'"), 'explicit correct gerund spelling, not derived from verb + "ing"');
+  check(
+    src.includes('never Medicus') || src.includes('not the table checkboxes') || /AG-Grid header checkbox/.test(src),
+    'header records that Medicus table ticks are not Suite’s selected-task set'
+  );
 }
 
 console.log('\n--- EPS Cancellation Failures instantiation: confirmed contract regression lock ---');
@@ -312,7 +415,10 @@ console.log('\n--- Widget persistence: Vue strip must re-inject, not be treated 
     src.includes('_onMatchingPage && !liveWidget()'),
     'a missing LIVE widget on a matching page is not classified as an own-write (clones do not count)'
   );
-  check(/setInterval\(function \(\) \{[\s\S]*?scheduleCheck\(\);[\s\S]*?\}, 2000\)/.test(src), 'polls to re-inject if Vue stripped the panel');
+  check(
+    /setInterval\(function \(\) \{[\s\S]*?scheduleCheck\(\);[\s\S]*?\}, 2000\)/.test(src),
+    'polls to re-inject if Vue stripped the panel'
+  );
   check(src.includes('document.body.insertBefore'), 'falls back to document.body if the grid is not mounted yet');
 }
 
@@ -329,7 +435,10 @@ console.log('\n--- Widget clicks: document capture so Vue clones are not dead bu
     'checkbox change binds on document capture'
   );
   check(/function sweepCloneWidgets\(/.test(src), 'sweepCloneWidgets drops Vue lookalikes that share the widget id');
-  check(/function runWidgetAction\(/.test(src), 'actions are dispatched from the delegated handler, not per-node bindEvents');
+  check(
+    /function runWidgetAction\(/.test(src),
+    'actions are dispatched from the delegated handler, not per-node bindEvents'
+  );
   check(!/function bindEvents\(/.test(src), 'per-node bindEvents is gone — it is what Vue clones leave behind');
   check(
     src.includes('isNativeTickTarget') && /if \(isNativeTickTarget\(t\)\) return;/.test(src),
@@ -349,9 +458,59 @@ console.log('\n--- Open panel stays in the viewport (Review/Confirm not below th
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
   check(/function capOpenPanel\(/.test(src), 'capOpenPanel measures remaining viewport');
   check(/body\.style\.height = max/.test(src), 'a long list gets an explicit height so the footer is not clipped');
-  check(/ms-tba-footer/.test(src) && /\.ms-tba-footer \{/.test(css), 'Review/Confirm live in a footer outside the scrolling list');
-  check(/Review and /.test(src) && /config\.verb\.toLowerCase\(\)/.test(src), 'the mass-action button names the verb (acknowledge / discard)');
+  check(
+    /ms-tba-footer/.test(src) && /\.ms-tba-footer \{/.test(css),
+    'Review/Confirm live in a footer outside the scrolling list'
+  );
+  check(
+    /Review and /.test(src) && /config\.verb\.toLowerCase\(\)/.test(src),
+    'the mass-action button names the verb (acknowledge / discard)'
+  );
   check(/\.ms-tba-scroll \{[\s\S]*?overflow-y: auto/.test(css), 'the row list scrolls, not the whole page');
+}
+
+console.log('\n--- Empty Suite list is honest, never a silent no-op ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.css'), 'utf8');
+  check(/function asQueryPlan\(/.test(src), 'asQueryPlan walks an ordered list of fetches');
+  check(
+    /for \(var i = 0; i < plan\.length; i\+\+\)/.test(src) && /if \(tasks\.length\) return lastEmpty/.test(src),
+    'fetchTaskList keeps the first non-empty plan step and does not stop on an empty homepage inbox'
+  );
+  check(
+    /if \(_loadState === 'idle'\) load\(\);/.test(src),
+    'matching page prefetches so empty state is visible without a click'
+  );
+  check(
+    src.includes('emptyExplanationHtml') && src.includes('not the table checkboxes'),
+    'empty copy says Medicus table ticks are not Suite’s selection'
+  );
+  check(
+    src.includes('The table above currently has rows that Suite’s list fetch did not return'),
+    'empty copy names the grid-vs-fetch mismatch when the bridge saw rows'
+  );
+  check(
+    /if \(!_open\) return header \+ statusOrErrorHtml\(\);/.test(src),
+    'closed pill still shows the empty / error / loading status — not header-only'
+  );
+  check(
+    src.includes('ms-tba-toggle-empty') && /aria-disabled/.test(src),
+    'empty control is marked empty / aria-disabled so it does not look like a live action'
+  );
+  check(
+    /aria-disabled/.test(src) && !/if \(btn\.getAttribute\('aria-disabled'\)/.test(src),
+    'aria-disabled is visual only — click still opens the explanation (not a swallowed no-op)'
+  );
+  check(
+    src.includes("addEventListener('ch-task-list-data', onTaskListData)"),
+    'engine listens for the page task-list bridge to explain a grid-vs-fetch miss'
+  );
+  check(
+    src.includes('Never used as task ids') || src.includes('never task ids for a write'),
+    'bridge rows are count-only — not a write-path id source'
+  );
+  check(/\.ms-tba-toggle-empty/.test(css) && /\.ms-tba-status/.test(css), 'empty toggle and status have dedicated CSS');
 }
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);

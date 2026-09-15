@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.51] — 2026-09-15
+
+### Privacy Officer bulk-acknowledge — empty homepage inbox is not “no alerts”
+
+Dave, live: on the Privacy Officer Alerts task-list he ticked Medicus’s
+**Patient** header checkbox and clicked Suite’s **Bulk acknowledge?**.
+Nothing useful happened. The screenshot is the widget’s own italic
+*No pending privacy officer alerts.* above a selected grid — the click
+did open, the fetch had already returned `[]`.
+
+Root cause: the widget’s GET was still the 2026-08-08 homepage capture
+(`statuses[]=pending&viewContext=homepage&masterAssignee={data-ch-staff}`).
+That is a **personal inbox**, not the dedicated alerts queue. A working
+staff stamp (Dave) makes that GET empty while Medicus’s table is full.
+Nick’s privacy-officer role never got the stamp, so the unscoped
+fallback was the only path that worked — a working stamp was the
+regression. Medicus’s header checkbox is also not Suite’s selected-task
+set (H6: AG-Grid `row-index` is not a task id).
+
+- Query plan, first non-empty response wins: this page’s own
+  `location.search` filters, then the historical homepage+assignee
+  capture, then unscoped `statuses[]=pending`, unscoped homepage, and
+  `viewContext=workflow`. Wider steps keep the existing review warning.
+- Prefetch on page match. An empty Suite list is visible without a
+  click; the pill looks disabled and the status says table ticks are
+  not used. If the task-list bridge saw rows Suite did not, that
+  mismatch is named. Retry stays on the empty/error states.
+- Confirm is still the two-step `{ taskId }` POST to
+  `/tasks/patient-privacy-officer/complete`.
+
 ## [v3.261.50] — 2026-09-14
 
 ### Prescription-request canvas — usual-GP send stays with allocate peers
