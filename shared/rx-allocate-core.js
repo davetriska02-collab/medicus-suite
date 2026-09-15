@@ -34,6 +34,7 @@
   var PRESCRIPTION_SLUG_RE = /prescription/i;
   var EXCLUDE_SLUG_RE = /eps|cancellation|privacy|officer/i;
   var ROUTINE_ONLY_SLUG_RE = /prescription_request_task_routine|prescription-request-task-routine/i;
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var NOT_A_DOCTOR_RE =
     /\b(nurse|nursing|hca|phlebotom|reception|secretar|dispenser|pharmacist|paramedic|hcs\s?w|healthcare assistant|health care assistant)\b/i;
   var DOCTOR_HINT_RE = /\b(dr|doctor|gp|partner|locum|salaried|registrar|consultant|gpst)\b/i;
@@ -112,7 +113,121 @@
       try {
         v = decodeURIComponent(v);
       } catch (_) {}
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return v;
+      if (UUID_RE.test(v)) return v;
+    }
+    return '';
+  }
+
+  function sameStaffId(a, b) {
+    var left = String(a || '').toLowerCase();
+    var right = String(b || '').toLowerCase();
+    return !!(left && right && UUID_RE.test(left) && UUID_RE.test(right) && left === right);
+  }
+
+  function dropQueryKeys(search, keys) {
+    var qs = queryStringForRxList(search);
+    if (!qs) return '';
+    var drop = {};
+    (Array.isArray(keys) ? keys : []).forEach(function (k) {
+      if (k) drop[String(k).toLowerCase()] = true;
+    });
+    var kept = qs
+      .replace(/^\?/, '')
+      .split('&')
+      .filter(function (part) {
+        if (!part) return false;
+        var k = part.split('=')[0];
+        try {
+          k = decodeURIComponent(k);
+        } catch (_) {}
+        return !drop[String(k).toLowerCase()];
+      });
+    return kept.length ? '?' + kept.join('&') : '';
+  }
+
+  // Page location.search is the routine inbox box when masterAssignee is
+  // that box's UUID. The same query is a personal homepage slice when the
+  // UUID is the signed-in staff stamp (#413 class) — that GET is [] or a
+  // couple of "mine" rows while the Medicus grid still shows the shared
+  // pile. Walk widest-after-untrusted: skip the staff-stamp assignee, then
+  // drop homepage, then the captured statuses, then bare GET (Signing's
+  // open list). First non-empty wins.
+  function rxListQueryPlan(search, opts) {
+    var pageQs = queryStringForRxList(search);
+    var staffId = opts && opts.staffId ? String(opts.staffId) : '';
+    var pageAssignee = inboxAssigneeId(pageQs);
+    var assigneeIsStaff = sameStaffId(pageAssignee, staffId);
+    var seen = {};
+    var plan = [];
+    function add(qs) {
+      var q = qs == null || qs === '' ? '' : queryStringForRxList(qs);
+      if (Object.prototype.hasOwnProperty.call(seen, q)) return;
+      seen[q] = true;
+      plan.push(q);
+    }
+    if (pageQs && !assigneeIsStaff) add(pageQs);
+    if (pageQs) add(dropQueryKeys(pageQs, ['masterAssignee']));
+    if (pageQs) add(dropQueryKeys(pageQs, ['masterAssignee', 'viewContext']));
+    add('?statuses[]=pending-review');
+    add('?statuses[]=pending');
+    add('');
+    if (pageQs && assigneeIsStaff) add(pageQs);
+    return plan;
+  }
+
+  // Bridged ch-task-list-data is untrusted. Count / id-hint only — never
+  // treat the rows as write targets. Used when the page GET is empty so
+  // we can name "grid has work, Suite does not" and stamp already-fetched
+  // rows that the visible table included.
+  function inboxCountFromTaskListBridge(detail, expectedSlug) {
+    if (!detail || typeof detail !== 'object') return 0;
+    if (!Array.isArray(detail.rows)) return 0;
+    var slug = String(detail.taskTypeSlug || '').trim();
+    if (!slug || !isRxQueueSlug(slug)) return 0;
+    if (expectedSlug && slug !== String(expectedSlug)) return 0;
+    var n = detail.rows.length;
+    if (!isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }
+
+  function visiblePileIdsFromTaskListBridge(detail, expectedSlug) {
+    var out = {};
+    if (!inboxCountFromTaskListBridge(detail, expectedSlug)) return out;
+    detail.rows.forEach(function (row) {
+      var id = row && (row.taskUuid || row.id);
+      if (typeof id === 'string' && UUID_RE.test(id)) out[id.toLowerCase()] = true;
+    });
+    return out;
+  }
+
+  function rxEmptyPileReason(opts) {
+    opts = opts || {};
+    var rows = Number(opts.rowCount) || 0;
+    var pile = Number(opts.unallocatedCount) || 0;
+    var dests = Number(opts.destCount) || 0;
+    var bridge = Number(opts.bridgeCount) || 0;
+    var day = opts.dayPhrase || 'that day';
+    if (dests <= 0 && pile > 0) {
+      return (
+        'No doctors working ' +
+        day +
+        ' to share onto. The pile is still there — pick another working day, a group, or add a doctor.'
+      );
+    }
+    if (rows <= 0 && bridge > 0) {
+      return (
+        'The Medicus table has ' +
+        bridge +
+        ' row' +
+        (bridge === 1 ? '' : 's') +
+        '. Suite’s list is empty — the page filter is not this inbox.'
+      );
+    }
+    if (rows <= 0) {
+      return 'No open requests on this queue. If the grid still shows rows, reload the list, then open again.';
+    }
+    if (pile <= 0) {
+      return 'No unallocated requests in this inbox — they already sit with people. Split / Top up / usual-GP send need the Unallocated pile.';
     }
     return '';
   }
@@ -131,22 +246,36 @@
     return next;
   }
 
-  // Inbox GET (page masterAssignee) is the box to share out. Bare GET of
+  function visibleIdHit(visibleIds, id) {
+    if (!visibleIds || !id) return false;
+    return !!visibleIds[String(id).toLowerCase()];
+  }
+
+  function stampInboxRow(row) {
+    row.rxInboxPile = true;
+    row.rxInboxAssignedTo = row.assignedTo || '';
+    row.assignedTo = 'Unassigned';
+    return row;
+  }
+
+  // Inbox GET (winning query) is the box to share out. Bare GET of
   // the same slug is everyone already sitting with a GP. Folders need both.
-  function mergeInboxAndSitting(inboxRows, sittingRows, search) {
-    var inbox = markInboxRows(inboxRows, search);
+  // Stamp with the search that actually produced rows — a leftover
+  // homepage/staff masterAssignee must not restamp the bare pile as
+  // sitting GP work (person-shaped inbox names).
+  function mergeInboxAndSitting(inboxRows, sittingRows, search, opts) {
+    var inbox = markInboxRows(inboxRows, search, opts);
     var seen = {};
     inbox.forEach(function (r) {
       if (r && r.id) seen[r.id] = true;
     });
+    var visibleIds = opts && opts.visibleIds;
     var sitting = [];
     (Array.isArray(sittingRows) ? sittingRows : []).forEach(function (raw) {
       var row = decorateRxRow(raw);
       if (!row || !row.id || seen[row.id]) return;
-      if (isRxUnallocated(row)) {
-        row.rxInboxPile = true;
-        row.rxInboxAssignedTo = row.assignedTo || '';
-        row.assignedTo = 'Unassigned';
+      if (isRxUnallocated(row) || visibleIdHit(visibleIds, row.id)) {
+        stampInboxRow(row);
         inbox.push(row);
         seen[row.id] = true;
         return;
@@ -157,22 +286,25 @@
     return inbox.concat(sitting);
   }
 
-  // The page filter is the box to work. Those rows are assigned to the
-  // inbox UUID (often a person-shaped name on assignedTo), which made
-  // homeColumnKey treat the whole pile as already sitting with a GP.
+  // The winning inbox filter is the box to work. Those rows are assigned
+  // to the inbox UUID (often a person-shaped name on assignedTo), which
+  // made homeColumnKey treat the whole pile as already sitting with a GP.
   // Stamp them Unassigned so they stay in the unallocated list.
-  function markInboxRows(rows, search) {
+  // When the page filter was not this box, visibleIds (from the grid's
+  // own GET) can hint which already-fetched rows are the pile.
+  function markInboxRows(rows, search, opts) {
     var inboxId = inboxAssigneeId(search);
+    var visibleIds = opts && opts.visibleIds;
     return (Array.isArray(rows) ? rows : [])
       .map(function (row) {
         var next = decorateRxRow(row);
         if (!next) return next;
-        if (!inboxId) return next;
         var assignedId = String(next.assignedId || '').toLowerCase();
-        if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
-        next.rxInboxPile = true;
-        next.rxInboxAssignedTo = next.assignedTo || '';
-        next.assignedTo = 'Unassigned';
+        if (inboxId) {
+          if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
+          return stampInboxRow(next);
+        }
+        if (visibleIdHit(visibleIds, next.id)) return stampInboxRow(next);
         return next;
       })
       .filter(Boolean);
@@ -414,37 +546,44 @@
   }
 
   // Live routine inbox (2026-08-31): statuses[]=pending-review, homepage,
-  // masterAssignee=<inbox uuid>. That filtered GET is the box on the page.
-  // Bare GET returns every open task of the type, including already
-  // allocated to GPs. Prefer the page query; fall back to bare GET only
-  // if the inbox filter comes back empty.
+  // masterAssignee=<inbox uuid>. That filtered GET is the box on the page
+  // when the UUID is the box, not the signed-in staff stamp. Homepage +
+  // staff empties or personal-slices the dedicated non-routine queue
+  // while the grid is full (#413 class; Dave 2026-09-15). Walk
+  // rxListQueryPlan; first non-empty wins; a thrown step is skipped.
   async function fetchRxTaskList(apiBase, slug, search, deps) {
     var client = Lab.createClient(apiBase, deps);
-    var pageQs = queryStringForRxList(search);
-    var filtered = null;
-    if (pageQs) {
-      filtered = await client.fetchTaskList(slug, pageQs, { keepMasterAssignee: true });
-      if (filtered && filtered.rows && filtered.rows.length) return filtered;
+    if (deps && deps.bareOnly) {
+      return client.fetchTaskList(slug, '');
     }
-    var openPile = await client.fetchTaskList(slug, '');
-    if (openPile && openPile.rows && openPile.rows.length) return openPile;
-    return filtered || openPile;
+    var plan = rxListQueryPlan(search, deps);
+    var last = { rows: [], slug: slug, search: '', taskList: undefined, body: null };
+    for (var i = 0; i < plan.length; i++) {
+      try {
+        var got = await client.fetchTaskList(slug, plan[i], { keepMasterAssignee: true });
+        if (got) last = got;
+        if (got && got.rows && got.rows.length) return got;
+      } catch (_) {}
+    }
+    return last;
   }
 
   // Write vanish-check needs every staged id, including already-sitting
-  // GP work that Distribute equally rebalances. The page-inbox GET is
-  // only the pile; the bare GET is sitting work. Same merge as loadBoard.
+  // GP work that Distribute equally rebalances. The winning inbox GET is
+  // the pile; the bare GET is sitting work. Stamp with the winning
+  // search, not the leftover page filter that just failed.
   async function fetchRxMergedTaskList(apiBase, slug, search, deps) {
     var inbox = await fetchRxTaskList(apiBase, slug, search, deps);
     var sitting = { rows: [], slug: '', taskList: undefined, body: null };
     try {
-      sitting = await fetchRxTaskList(apiBase, slug, '', deps);
+      sitting = await fetchRxTaskList(apiBase, slug, '', Object.assign({}, deps || {}, { bareOnly: true }));
     } catch (_) {}
+    var stampSearch = inbox && inbox.search != null ? inbox.search : '';
     return {
-      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], search),
+      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], stampSearch, deps),
       slug: inbox.slug || sitting.slug || slug,
       taskList: inbox.taskList || sitting.taskList,
-      search: inbox.search || search || '',
+      search: stampSearch,
       body: inbox.body || sitting.body,
     };
   }
@@ -571,11 +710,9 @@
     return { level: level, requestedItemsTotal: requestedItemsTotal, raw: raw };
   }
 
-  var STAFF_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
   function staffUuid(v) {
     var s = String(v || '').trim();
-    return STAFF_UUID_RE.test(s) ? s : '';
+    return UUID_RE.test(s) ? s : '';
   }
 
   function directoryRecordById(directory, id) {
@@ -875,6 +1012,11 @@
     isRoutineRxQueueSlug: isRoutineRxQueueSlug,
     isRxQueueSlug: isRxQueueSlug,
     queryStringForRxList: queryStringForRxList,
+    dropQueryKeys: dropQueryKeys,
+    rxListQueryPlan: rxListQueryPlan,
+    inboxCountFromTaskListBridge: inboxCountFromTaskListBridge,
+    visiblePileIdsFromTaskListBridge: visiblePileIdsFromTaskListBridge,
+    rxEmptyPileReason: rxEmptyPileReason,
     parseRxQueueRoute: parseRxQueueRoute,
     decorateRxRow: decorateRxRow,
     markInboxRows: markInboxRows,

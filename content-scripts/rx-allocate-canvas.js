@@ -84,6 +84,9 @@
   var _lastSkipped = [];
   var _peopleDragKeys = null;
   var _marquee = null;
+  var _bridgeCount = 0;
+  var _visiblePileIds = {};
+  var _bridgeOn = false;
   // task id -> { repeat, acute, repeatDispensing, variableRepeat, resolvedPatientId }
   // — from each row's own overview (data.prescriptionRequestItemsByType).
   var _rxItemCounts = {};
@@ -228,6 +231,57 @@
       if (e.clientY < rect.top + edge) scroller.scrollTop -= step;
       else if (e.clientY > rect.bottom - edge) scroller.scrollTop += step;
     }
+  }
+
+  function currentStaffId() {
+    try {
+      var raw = document.documentElement.getAttribute('data-ch-staff');
+      if (!raw) return '';
+      var bar = raw.indexOf('|');
+      var id = (bar >= 0 ? raw.slice(0, bar) : raw).trim();
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function onTaskListData(e) {
+    var route = currentRoute() || _route;
+    if (!route || !C.inboxCountFromTaskListBridge) return;
+    var detail = e && e.detail;
+    var n = C.inboxCountFromTaskListBridge(detail, route.slug);
+    if (!n) return;
+    _bridgeCount = n;
+    _visiblePileIds = C.visiblePileIdsFromTaskListBridge ? C.visiblePileIdsFromTaskListBridge(detail, route.slug) : {};
+  }
+
+  function inboxFetchOpts(extra) {
+    return Object.assign(
+      {
+        staffId: currentStaffId(),
+      },
+      extra || {}
+    );
+  }
+
+  function mergeOptsFor(stampSearch) {
+    var opts = {};
+    if (!C.inboxAssigneeId(stampSearch) && _visiblePileIds && Object.keys(_visiblePileIds).length) {
+      opts.visibleIds = _visiblePileIds;
+    }
+    return opts;
+  }
+
+  function pileReason() {
+    return C.rxEmptyPileReason
+      ? C.rxEmptyPileReason({
+          rowCount: _rows.length,
+          unallocatedCount: visibleUnallocatedCount(),
+          destCount: splitDestinations().length,
+          bridgeCount: _bridgeCount,
+          dayPhrase: dayPhrase(),
+        })
+      : '';
   }
 
   function currentRoute() {
@@ -506,16 +560,24 @@
       if (gen !== _boardGen) return;
       _agLoaded = true;
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
-      var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
-      var sittingP = C.fetchRxTaskList(_route.apiBase, _route.slug, '').catch(function () {
-        return { rows: [] };
-      });
+      var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search, inboxFetchOpts());
+      var sittingP = C.fetchRxTaskList(_route.apiBase, _route.slug, '', inboxFetchOpts({ bareOnly: true })).catch(
+        function () {
+          return { rows: [] };
+        }
+      );
       var out = await inboxP;
       var sitting = await sittingP;
       if (gen !== _boardGen) return;
-      _rows = C.mergeInboxAndSitting(out.rows || [], (sitting && sitting.rows) || [], _route.search);
+      var stampSearch = out && out.search != null ? out.search : '';
+      _rows = C.mergeInboxAndSitting(
+        out.rows || [],
+        (sitting && sitting.rows) || [],
+        stampSearch,
+        mergeOptsFor(stampSearch)
+      );
       _route.slug = out.slug || _route.slug;
-      if (out.search) _route.search = out.search;
+      _route.search = stampSearch;
       _taskList = out.taskList;
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
@@ -954,20 +1016,31 @@
   }
 
   function emptyPoolHtml() {
+    var destN = splitDestinations().length;
+    var title = !_rows.length
+      ? _bridgeCount
+        ? 'Suite’s list is empty — the table is not'
+        : 'No open requests on this queue'
+      : destN
+        ? 'Inbox is on the right — not saved yet'
+        : 'Requests are here — no doctors to share onto';
+    var sub =
+      pileReason() ||
+      (_rows.length
+        ? 'Doctors working ' +
+          dayPhrase() +
+          ' are on the right. Open a name to see who, or drag to move. Medicus does not change until you confirm.'
+        : 'If the grid on this page still shows rows, reload the list, then open again.');
     return (
       '<div class="ms-lac-empty">' +
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
       '<div class="ms-lac-empty-title">' +
-      (_rows.length ? 'Inbox is on the right — not saved yet' : 'No open requests on this queue') +
+      esc(title) +
       '</div>' +
       '<div class="ms-lac-empty-sub">' +
-      (_rows.length
-        ? 'Doctors working ' +
-          dayPhrase() +
-          ' are on the right. Open a name to see who, or drag to move. Medicus does not change until you confirm.'
-        : 'If the grid on this page still shows rows, reload the list, then open again.') +
+      esc(sub) +
       '</div>' +
       '</div>'
     );
@@ -1516,6 +1589,9 @@
     var plan = C.planEvenSplit(tilesForPlan(), dests, { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
+      if (plan.reason && /Nothing unallocated/.test(plan.reason)) {
+        plan.reason = pileReason() || plan.reason;
+      }
       return plan;
     }
     _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
@@ -1534,6 +1610,9 @@
     var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
+      if (plan.reason && /Nothing unallocated/.test(plan.reason)) {
+        plan.reason = pileReason() || plan.reason;
+      }
       return plan;
     }
     _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
@@ -1562,7 +1641,12 @@
         return true;
       });
     var plan = C.planLevel(tiles, dests, { dayPhrase: dayPhrase() });
-    if (!plan.ok) return plan;
+    if (!plan.ok) {
+      if (plan.reason && /Nothing to distribute/.test(plan.reason)) {
+        plan.reason = pileReason() || plan.reason;
+      }
+      return plan;
+    }
     var next = C.ensureWorkingTodayColumns(C.emptyDraft(), dests);
     _draft = C.applyEvenSplit(next, plan);
     _splitDefaulted = true;
@@ -1581,7 +1665,10 @@
 
   function applySendToUsualGp(tiles) {
     var plan = C.planSendToUsualGp(tiles || tilesForPlan(), inTodayPeople(), usualGpPlanOpts(_sendToUsualGpNotIn));
-    if (!plan.ok) return plan;
+    if (!plan.ok) {
+      if (!visibleUnallocatedCount()) plan.reason = pileReason() || plan.reason;
+      return plan;
+    }
     var dests = (plan.sent || []).map(function (m) {
       return { key: m.toKey, name: m.toName, staffId: m.staffId };
     });
@@ -1817,9 +1904,12 @@
       var emptyBook = _destKind === 'in-today' && inTodayPeople().length === 0;
       actions =
         '<span class="ms-lac-split-note">' +
-        (emptyBook
-          ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
-          : 'Pick Working today, a group, or encircle people. Or pick another day, or add a doctor or team.') +
+        esc(
+          pileReason() ||
+            (emptyBook
+              ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
+              : 'Pick Working today, a group, or encircle people. Or pick another day, or add a doctor or team.')
+        ) +
         '</span>';
     } else if (poolN && !haveWork) {
       actions =
@@ -1841,7 +1931,12 @@
         '">Distribute equally</button>';
     } else {
       actions =
-        '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among the current destinations.</span>';
+        '<span class="ms-lac-split-note">' +
+        esc(
+          pileReason() ||
+            'Inbox is clear. Share this box on a doctor splits only that doctor’s requests among the current destinations.'
+        ) +
+        '</span>';
     }
     var naming = _namingGroup && Strip && typeof Strip.saveGroupRowHtml === 'function' ? Strip.saveGroupRowHtml() : '';
     var dist =
@@ -3261,7 +3356,7 @@
         directory: _staffDir,
         teamDirectory: _teamDir,
         fetchList: function () {
-          return C.fetchRxMergedTaskList(pin.apiBase, pin.slug, pin.search);
+          return C.fetchRxMergedTaskList(pin.apiBase, pin.slug, pin.search, inboxFetchOpts());
         },
       });
       if (!result || !result.ok) {
@@ -3648,10 +3743,20 @@
   );
 
   function startHeavyChrome() {
+    if (!_bridgeOn) {
+      _bridgeOn = true;
+      window.addEventListener('ch-task-list-data', onTaskListData);
+    }
     ensureLauncher();
   }
 
   function stopHeavyChrome() {
+    if (_bridgeOn) {
+      window.removeEventListener('ch-task-list-data', onTaskListData);
+      _bridgeOn = false;
+    }
+    _bridgeCount = 0;
+    _visiblePileIds = {};
     muteAllocateChrome();
   }
 

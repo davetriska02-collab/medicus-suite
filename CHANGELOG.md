@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.53] — 2026-09-15
+
+### Prescription-request canvas — non-routine inbox is not a homepage staff GET
+
+Dave: **Share out this inbox** on non-routine prescriptions treated the
+pile as empty (Split / Top up / Distribute equally / usual-GP send)
+while Medicus’s table still had work.
+
+#414 called this path PASS because it uses `location.search`. That is
+the leftover filter. The dedicated queue often still has
+`viewContext=homepage&masterAssignee=<data-ch-staff>` — the same class
+as Privacy Officer #413. A working staff stamp returns `[]` or a
+personal slice; a 4xx aborted `loadBoard` and wiped the board. When
+the page filter was empty, merge still stamped with that failed
+assignee, so person-shaped inbox names looked like sitting GP work.
+
+`fetchRxTaskList` now walks a query plan: skip the assignee when it is
+the staff stamp, then drop assignee / homepage, then `pending-review` /
+`pending`, then the bare open list. First non-empty wins; thrown steps
+are skipped. Stamp / merge use the winning search only. The grid’s
+`ch-task-list-data` ids are a classify-only hint when the winning GET
+has no inbox UUID. Copy names “no doctors working today” vs “no
+requests in the pile” vs “the table has rows and Suite’s list is
+empty”. Usual-GP send (#410/#411) is unchanged except that it sees
+the recovered Unallocated pile. Independent of #413/#414 (those PRs
+do not touch this path).
+
 ## [v3.261.50] — 2026-09-14
 
 ### Prescription-request canvas — usual-GP send stays with allocate peers
