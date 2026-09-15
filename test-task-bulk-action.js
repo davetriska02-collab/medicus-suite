@@ -31,6 +31,7 @@ const {
   stripSearch,
   searchHasListFilters,
   asQueryPlan,
+  pageFiltersFirstPlan,
 } = require('./content-scripts/task-bulk-action.js');
 const {
   privacyOfficerQueryPlan,
@@ -41,6 +42,13 @@ const {
   PO_SHARED_WARNING,
   PO_ALL_STAFF_WARNING,
 } = require('./content-scripts/privacy-officer-bulk-acknowledge.js');
+const {
+  epsCancellationQueryPlan,
+  EPS_WORKFLOW_QS,
+  EPS_STATUSES_QS,
+  EPS_HOMEPAGE_QS,
+  EPS_WIDE_WARNING,
+} = require('./content-scripts/eps-cancellation-bulk-discard.js');
 
 let passed = 0,
   failed = 0;
@@ -247,6 +255,72 @@ console.log('\n--- privacyOfficerQueryPlan: page filters first; homepage+assigne
   check(nick[0].qs === PO_PENDING_QS, 'no page filters and no stamp -> shared pending is first, not a 5s wait');
 }
 
+console.log('\n--- pageFiltersFirstPlan: dedicated-queue URL wins over a frozen capture ---');
+{
+  const capture = { qs: 'statuses%5B%5D=incomplete&viewContext=workflow', scopeWarning: null };
+  const wide = { qs: 'statuses%5B%5D=incomplete', scopeWarning: 'wider' };
+  const empty = pageFiltersFirstPlan('', [capture, wide]);
+  check(empty[0].qs === capture.qs, 'no page filters -> historical capture is first');
+  check(empty[1].scopeWarning === 'wider', 'later fallbacks keep their warning');
+
+  const page = pageFiltersFirstPlan('?viewContext=workflow&statuses%5B%5D=incomplete', [capture, wide]);
+  check(
+    page[0].qs === 'viewContext=workflow&statuses%5B%5D=incomplete',
+    'page location.search is tried before the frozen capture'
+  );
+  check(page[0].scopeWarning === null, 'the page query is not labelled as a widened fallback');
+  check(
+    page.some((q) => q.qs === capture.qs),
+    'the historical capture stays as a fallback after the page query'
+  );
+
+  const stampWouldEmpty = pageFiltersFirstPlan('?viewContext=workflow&statuses%5B%5D=incomplete', [
+    { qs: 'statuses%5B%5D=pending&viewContext=homepage&masterAssignee=dave-stamp', scopeWarning: null },
+    capture,
+  ]);
+  check(
+    stampWouldEmpty[0].qs.indexOf('masterAssignee=') === -1,
+    'a working staff stamp on a frozen homepage capture is not the first try when the page already has filters'
+  );
+}
+
+console.log('\n--- epsCancellationQueryPlan: page filters first; never invent a staff stamp ---');
+{
+  const empty = epsCancellationQueryPlan('');
+  check(empty[0].qs === EPS_WORKFLOW_QS, 'no page filters -> historical workflow capture is first');
+  check(
+    empty.some((q) => q.qs === EPS_STATUSES_QS && q.scopeWarning === EPS_WIDE_WARNING),
+    'both-statuses without invented viewContext is a warned fallback'
+  );
+  check(
+    empty.some((q) => q.qs === EPS_HOMEPAGE_QS && q.scopeWarning === EPS_WIDE_WARNING),
+    'homepage sibling shape is a last-resort fallback, not the first try'
+  );
+  check(
+    !empty.some((q) => /masterAssignee=/.test(q.qs)),
+    'EPS plan never invents masterAssignee — a working data-ch-staff stamp must not empty this queue'
+  );
+
+  const page = epsCancellationQueryPlan(
+    '?statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=workflow'
+  );
+  check(
+    page[0].qs === 'statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=workflow',
+    'page filters that match the dedicated EPS grid win'
+  );
+  check(page[0].scopeWarning === null, 'the page query is not labelled as a widened fallback');
+
+  const otherView = epsCancellationQueryPlan('?viewContext=homepage&statuses%5B%5D=incomplete');
+  check(
+    otherView[0].qs === 'viewContext=homepage&statuses%5B%5D=incomplete',
+    'a dedicated page with different filters is tried before the 2026-08-08 workflow capture'
+  );
+  check(
+    otherView.findIndex((q) => q.qs === EPS_WORKFLOW_QS) > 0,
+    'the frozen workflow capture is still in the plan after the page query'
+  );
+}
+
 console.log(
   '\n--- Engine source lock: delegated clicks cannot POST outside the confirm step; re-inserted widget repaints ---'
 );
@@ -355,12 +429,18 @@ console.log('\n--- EPS Cancellation Failures instantiation: confirmed contract r
   );
   check(
     src.includes('statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=workflow'),
-    'confirmed list query present, including BOTH statuses'
+    'confirmed workflow list query still in the plan, including BOTH statuses'
   );
-  const listQueryLine = src.match(/listQueryString:\s*'[^']*'/);
   check(
-    !!listQueryLine && !listQueryLine[0].includes('masterAssignee'),
-    'the actual list query value has no assignee scoping — the confirmed EPS query never had one'
+    src.includes('epsCancellationQueryPlan(location.search'),
+    'the live fetch uses this page’s search, not only the 2026-08-08 capture'
+  );
+  check(!/masterAssignee=/.test(src), 'source does not bake a masterAssignee query');
+  check(!/getAttribute\(['"]data-ch-staff['"]\)/.test(src), 'does not read the staff-identity stamp');
+  check(src.includes('scopeWarning:'), 'wider fallbacks carry a scopeWarning — never a silent widening');
+  check(
+    /AG-Grid header checkbox/.test(src),
+    'header records that Medicus table ticks are not Suite’s selected-task set'
   );
   check(src.includes('selectAllAllowed: true'), 'select-all enabled per the 2026-08-08 decision');
   check(
@@ -474,6 +554,7 @@ console.log('\n--- Empty Suite list is honest, never a silent no-op ---');
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-bulk-action.css'), 'utf8');
   check(/function asQueryPlan\(/.test(src), 'asQueryPlan walks an ordered list of fetches');
+  check(/function pageFiltersFirstPlan\(/.test(src), 'pageFiltersFirstPlan is the shared page-filters-first helper');
   check(
     /for \(var i = 0; i < plan\.length; i\+\+\)/.test(src) && /if \(tasks\.length\) return lastEmpty/.test(src),
     'fetchTaskList keeps the first non-empty plan step and does not stop on an empty homepage inbox'

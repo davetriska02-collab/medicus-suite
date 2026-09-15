@@ -230,6 +230,22 @@
     return out;
   }
 
+  // Shared doctrine for any widget that used to ship a frozen task-list
+  // capture: this page's own filters first, then the historical queries.
+  // First non-empty response wins in fetchTaskList. Do not invent a
+  // masterAssignee from data-ch-staff here — that is a personal inbox
+  // and empties the dedicated queue (Privacy Officer, Dave, 2026-09-15).
+  function pageFiltersFirstPlan(pageSearch, fallbacks) {
+    var plan = [];
+    var pageQs = stripSearch(pageSearch);
+    if (searchHasListFilters(pageQs)) {
+      plan.push({ qs: pageQs, scopeWarning: null });
+    }
+    var extra = Array.isArray(fallbacks) ? fallbacks : fallbacks != null ? [fallbacks] : [];
+    for (var i = 0; i < extra.length; i++) plan.push(extra[i]);
+    return asQueryPlan(plan);
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -244,6 +260,7 @@
       stripSearch: stripSearch,
       searchHasListFilters: searchHasListFilters,
       asQueryPlan: asQueryPlan,
+      pageFiltersFirstPlan: pageFiltersFirstPlan,
     };
   }
 
@@ -356,12 +373,11 @@
     }
 
     async function fetchTaskList() {
-      // listQueryString may be a static string (EPS — no assignee scoping,
-      // matches its confirmed workflow-view query) or a possibly-async
-      // function evaluated fresh at fetch time (Privacy Officer — a plan
-      // that prefers this page's own filters, then the historical
-      // homepage+assignee capture, then an unscoped pending list). Each
-      // entry may be { qs, scopeWarning } — see asQueryPlan.
+      // listQueryString may be a static string or a possibly-async
+      // function evaluated fresh at fetch time. Privacy Officer and EPS
+      // both return a plan: this page's own filters first, then the
+      // historical capture, then unscoped fallbacks. Each entry may be
+      // { qs, scopeWarning } — see asQueryPlan / pageFiltersFirstPlan.
       var resolved =
         typeof config.listQueryString === 'function' ? await config.listQueryString() : config.listQueryString;
       var plan = asQueryPlan(resolved);
@@ -1197,5 +1213,10 @@
     }
   }
 
-  window.TaskBulkAction = { create: create };
+  window.TaskBulkAction = {
+    create: create,
+    pageFiltersFirstPlan: pageFiltersFirstPlan,
+    stripSearch: stripSearch,
+    searchHasListFilters: searchHasListFilters,
+  };
 })();

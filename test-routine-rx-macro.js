@@ -141,6 +141,18 @@ check(
   'source lock W8: no method POST in routine-rx-button.js'
 );
 check(
+  !/viewContext=homepage/.test(SRC) && !/masterAssignee/.test(SRC) && !/data-ch-staff/.test(SRC),
+  'source lock W8: not the Privacy Officer frozen homepage+staff-stamp GET (Dave 2026-09-15)'
+);
+check(
+  !/\/tasks\/data\/[^'"\s]+\/task-list/.test(SRC),
+  'source lock W8: does not GET a task-list — it drives the overview DOM'
+);
+check(
+  /makes NO network calls/.test(SRC),
+  'source lock W8: header still states this file makes no network calls'
+);
+check(
   /function radioControl\(/.test(SRC) && /activateRadio\(/.test(SRC),
   'source lock: Vue radio walk-up helpers exist (step 1 must not click a nested span)'
 );
