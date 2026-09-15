@@ -37,16 +37,26 @@
 //   still didn't resolve, so it is just as much a discard candidate as
 //   `incomplete`. Both are selectable/discardable the same way.
 //
-// CONFIRMED CONTRACT (live captures, 2026-08-08):
+// CONFIRMED CONTRACT (live captures, 2026-08-08, plus the 2026-09-15
+// Privacy Officer empty-list lesson):
 //   GET  /tasks/data/eps_subsequent_cancellation_task/task-list
-//        ?statuses[]=incomplete&statuses[]=pharmacy-contacted&viewContext=workflow
+//        ?{this page's own filters, else a short fallback plan}
 //        → { tasks: [{ id, patientName, dateOfBirth, medicationName,
 //            namedGp, status, statusText, assignedTo, ... }] }
-//        No assignee scoping on this query (unlike Privacy Officer's
-//        homepage view) — confirmed live to return tasks across MULTIPLE
-//        different assignees, matching its "workflow" (shared team queue)
-//        view rather than a personal one. Do not add a masterAssignee param
-//        here; it was never part of the confirmed query.
+//        The 2026-08-08 capture used
+//        `statuses[]=incomplete&statuses[]=pharmacy-contacted&viewContext=workflow`.
+//        That is a shared workflow queue, not a personal inbox — do NOT add
+//        a masterAssignee from data-ch-staff. A working staff stamp on the
+//        Privacy Officer twin emptied the dedicated grid; inventing one
+//        here would be the same class of bug.
+//        Query plan (first non-empty response wins):
+//          1. this page's location.search, when it already has statuses /
+//             viewContext / masterAssignee — same filters as the grid
+//          2. the historical workflow capture (both statuses)
+//          3. both statuses, no invented viewContext
+//          4. both statuses + viewContext=homepage (sibling inbox shape)
+//        Steps 3–4 carry a scopeWarning — a WARNING to review, not a
+//        block. Select-all stays available.
 //   POST /tasks/eps-prescription-order-item/cancellation/mark-as-no-longer-needed
 //        body: { taskId } → 200 {} (assumed — "copy as fetch" doesn't
 //        capture response bodies; low risk, the widget only needs
@@ -58,6 +68,10 @@
 //        Privacy Officer's "same slug for overview and action" pattern
 //        would have been wrong here.
 //
+// Suite's checklist is its OWN fetch, keyed by task UUID — never Medicus's
+// AG-Grid header checkbox (H6 sort-canary: a client-side column sort
+// reassigns row-index to a different task). The empty state must say so.
+//
 // select-all IS enabled here (Nick's call, 2026-08-08, extended from Privacy
 // Officer Alerts to this task type too) — discarding is an administrative
 // give-up-on-EPS action, not a clinical record change.
@@ -65,6 +79,51 @@
 'use strict';
 
 (function () {
+  var EPS_WORKFLOW_QS = 'statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=workflow';
+  var EPS_STATUSES_QS = 'statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted';
+  var EPS_HOMEPAGE_QS = 'statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=homepage';
+  var EPS_WIDE_WARNING =
+    'This list is every incomplete / pharmacy-contacted EPS cancellation on this queue, not a personal inbox. ' +
+    'Review before confirming — discarding has no bulk undo.';
+
+  function stripSearch(search) {
+    var raw = String(search == null ? '' : search);
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    return raw;
+  }
+
+  function searchHasListFilters(search) {
+    var qs = stripSearch(search);
+    if (!qs) return false;
+    return /(?:^|&)(statuses(?:%5B%5D|\[\])?|viewContext|masterAssignee)=/i.test(qs);
+  }
+
+  // Ordered fetches. The engine keeps the first response that has rows.
+  // Never invent a masterAssignee from data-ch-staff — that is a personal
+  // inbox and is how the Privacy Officer twin emptied a full dedicated grid.
+  function epsCancellationQueryPlan(pageSearch) {
+    var plan = [];
+    var pageQs = stripSearch(pageSearch);
+    if (searchHasListFilters(pageQs)) {
+      plan.push({ qs: pageQs, scopeWarning: null });
+    }
+    plan.push({ qs: EPS_WORKFLOW_QS, scopeWarning: null });
+    plan.push({ qs: EPS_STATUSES_QS, scopeWarning: EPS_WIDE_WARNING });
+    plan.push({ qs: EPS_HOMEPAGE_QS, scopeWarning: EPS_WIDE_WARNING });
+    return plan;
+  }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      epsCancellationQueryPlan: epsCancellationQueryPlan,
+      searchHasListFilters: searchHasListFilters,
+      EPS_WORKFLOW_QS: EPS_WORKFLOW_QS,
+      EPS_STATUSES_QS: EPS_STATUSES_QS,
+      EPS_HOMEPAGE_QS: EPS_HOMEPAGE_QS,
+      EPS_WIDE_WARNING: EPS_WIDE_WARNING,
+    };
+  }
+
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   if (!window.TaskBulkAction) return;
 
@@ -75,7 +134,9 @@
     verbGerund: 'Discarding',
     verbedAdjective: 'discarded',
     taskListSlug: 'eps_subsequent_cancellation_task',
-    listQueryString: 'statuses%5B%5D=incomplete&statuses%5B%5D=pharmacy-contacted&viewContext=workflow',
+    listQueryString: function () {
+      return epsCancellationQueryPlan(location.search);
+    },
     actionPath: '/tasks/eps-prescription-order-item/cancellation/mark-as-no-longer-needed',
     itemNounSingular: 'EPS cancellation task',
     itemNounPlural: 'EPS cancellation tasks',

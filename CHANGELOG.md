@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.52] — 2026-09-15
+
+### Bulk widgets — same empty-list class as Privacy Officer, swept
+
+Dave asked for a sweep after the Privacy Officer **Bulk acknowledge?**
+no-op (v3.261.51 / PR #413). The proven failure: a frozen
+`viewContext=homepage&masterAssignee={data-ch-staff}` GET on a
+dedicated queue page. A working staff stamp returns `[]` while
+Medicus’s grid is full. Nick never got the stamp, so the unscoped
+fallback “worked”.
+
+Audit (investigate; discard hunches that do not hold):
+
+| Surface | Verdict |
+|---|---|
+| Send to routine (W8, `routine-rx-button.js`) | **PASS — not a twin.** Overview DOM macro. No task-list GET, no staff stamp, no table ticks as Suite selection. |
+| Privacy Officer bulk-ack (W21) | Already fixed in v3.261.51. Not regressed. |
+| EPS **Bulk discard?** (W21) | **Twin of the frozen-query half.** Capture ignored this page’s filters. No staff stamp (and must never gain one). |
+| Rx / lab / request / workflow allocate (W23) | **PASS.** Already use `location.search`. Inbox `masterAssignee` is the box on the page, not the staff stamp. |
+| Request Monitor / Today / Condor / Submissions | **PASS.** Date-range or configured-inbox polls, not mounted on a dedicated queue they can empty. |
+
+EPS now uses the same doctrine: this page’s `location.search` first,
+then the 2026-08-08 workflow capture, then unscoped fallbacks with a
+visible warning. Honest empty (from the shared engine) stays. Do not
+treat Medicus header-checkbox ticks as Suite’s selected-task set.
+
 ## [v3.261.51] — 2026-09-15
 
 ### Privacy Officer bulk-acknowledge — empty homepage inbox is not “no alerts”
