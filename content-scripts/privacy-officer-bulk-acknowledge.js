@@ -6,34 +6,41 @@
 // checkboxes; why one ledger event per batch with patientRef null; the
 // two-step confirm gate).
 //
-// CONFIRMED CONTRACT (live captures, 2026-08-08):
+// CONFIRMED CONTRACT (live captures, 2026-08-08, plus the 2026-09-15 empty-
+// list failure):
 //   GET  /tasks/data/patient_privacy_officer_alert_task/task-list
-//        ?statuses[]=pending&viewContext=homepage&masterAssignee={staffId}
+//        ?{this page's own filters, else a short fallback plan}
 //        → { tasks: [{ id, patientName, dateOfBirth, namedGp, accessType,
 //            accessTypeLabel, accessedBy, accessedOn, status, ... }] }
-//        `masterAssignee` scopes this to the CURRENT user's own homepage
-//        queue (confirmed live with a specific staff id) — never hardcode a
-//        UUID here, since that would only ever work for the one account it
-//        was captured from. Read fresh at fetch time from the same
-//        'data-ch-staff' documentElement stamp task-presence.js already
-//        uses (page-world.js: 'staffUuid|email', from the page's own Pusher
-//        channel names — never guessed, never typed per-machine). If the
-//        stamp isn't there yet (a click within the first second or two of
-//        page load, before page-world.js's staff-identity poll resolves),
-//        the fetch WAITS for it — up to ~5s — before falling back to an
-//        unscoped fetch. The fallback keeps the widget usable, but it must
-//        never look identical to the scoped case: an unscoped list includes
-//        OTHER staff's pending alerts, so acknowledging it could misattribute
-//        a compliance action. So the fallback carries a scopeWarning the
-//        engine renders as a banner on the select AND confirm steps — a
-//        WARNING to review before confirming, not a block. It used to also
-//        withhold select-all for that load; softened 2026-08-20 (Nick's
-//        explicit request — the identity-stamp resolution never succeeds for
-//        his privacy-officer role, so the fallback was ALWAYS active and
-//        select-all was ALWAYS unavailable, permanently blocking a
-//        legitimate bulk action rather than occasionally warning about one).
+//        The 2026-08-08 capture used
+//        `statuses[]=pending&viewContext=homepage&masterAssignee={staffId}`.
+//        That is the CURRENT user's homepage inbox — a different list from
+//        the dedicated Privacy Officer Alerts task-list page. When the
+//        `data-ch-staff` stamp is present, that scoped GET returns [] while
+//        Medicus's own grid is full (Dave, live, 2026-09-15: italic
+//        "No pending privacy officer alerts." above a checked Patient
+//        header). The identity stamp often fails for a privacy-officer
+//        role (Nick, 2026-08-20), which accidentally made the unscoped
+//        fallback the only working path. A working stamp is therefore a
+//        regression, not a fix.
+//        Query plan (first non-empty response wins):
+//          1. this page's location.search, when it already has statuses /
+//             viewContext / masterAssignee — same filters as the grid
+//          2. the historical homepage+assignee capture, if the stamp is
+//             already present (no 5s wait — empty fallback is the control)
+//          3. `statuses[]=pending` (shared queue, no invented viewContext)
+//          4. unscoped homepage
+//          5. `statuses[]=pending&viewContext=workflow` (sibling queues
+//             on a dedicated task-list use this view)
+//        Steps 3–5 carry a scopeWarning — a WARNING to review, not a
+//        block. Select-all stays available (softened 2026-08-20).
 //   POST /tasks/patient-privacy-officer/complete
 //        body: { taskId } → 200 {}
+//
+// Suite's checklist is its OWN fetch, keyed by task UUID — never Medicus's
+// AG-Grid header checkbox (H6 sort-canary: a client-side column sort
+// reassigns row-index to a different task). The empty state must say so;
+// a silent no-op after the clinician ticked the table is the reported bug.
 //
 // select-all IS enabled here (unlike problem-bulk-end.js's deliberate none):
 // acknowledging a privacy-access-review flag is an audit/compliance action,
@@ -42,6 +49,63 @@
 'use strict';
 
 (function () {
+  var PO_HOMEPAGE_QS = 'statuses%5B%5D=pending&viewContext=homepage';
+  var PO_PENDING_QS = 'statuses%5B%5D=pending';
+  var PO_WORKFLOW_QS = 'statuses%5B%5D=pending&viewContext=workflow';
+  var PO_SHARED_WARNING =
+    'This list is every pending privacy officer alert on this queue, not a personal inbox. ' +
+    'Review before confirming — acknowledging someone else’s alert has no bulk undo.';
+  var PO_ALL_STAFF_WARNING =
+    'Could not confirm which alerts are yours — this list shows pending alerts for ALL staff, ' +
+    'not just you. Review the list before confirming — acknowledging someone else’s alert has ' +
+    'no bulk undo — or close and reopen this panel to try scoping it to you again.';
+
+  function stripSearch(search) {
+    var raw = String(search == null ? '' : search);
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    return raw;
+  }
+
+  function searchHasListFilters(search) {
+    var qs = stripSearch(search);
+    if (!qs) return false;
+    return /(?:^|&)(statuses(?:%5B%5D|\[\])?|viewContext|masterAssignee)=/i.test(qs);
+  }
+
+  // Ordered fetches. The engine keeps the first response that has rows.
+  function privacyOfficerQueryPlan(pageSearch, staffId) {
+    var plan = [];
+    var pageQs = stripSearch(pageSearch);
+    if (searchHasListFilters(pageQs)) {
+      plan.push({ qs: pageQs, scopeWarning: null });
+    }
+    if (staffId) {
+      plan.push({
+        qs: PO_HOMEPAGE_QS + '&masterAssignee=' + encodeURIComponent(staffId),
+        scopeWarning: null,
+      });
+    }
+    plan.push({ qs: PO_PENDING_QS, scopeWarning: PO_SHARED_WARNING });
+    plan.push({
+      qs: PO_HOMEPAGE_QS,
+      scopeWarning: staffId ? PO_SHARED_WARNING : PO_ALL_STAFF_WARNING,
+    });
+    plan.push({ qs: PO_WORKFLOW_QS, scopeWarning: PO_SHARED_WARNING });
+    return plan;
+  }
+
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      privacyOfficerQueryPlan: privacyOfficerQueryPlan,
+      searchHasListFilters: searchHasListFilters,
+      PO_HOMEPAGE_QS: PO_HOMEPAGE_QS,
+      PO_PENDING_QS: PO_PENDING_QS,
+      PO_WORKFLOW_QS: PO_WORKFLOW_QS,
+      PO_SHARED_WARNING: PO_SHARED_WARNING,
+      PO_ALL_STAFF_WARNING: PO_ALL_STAFF_WARNING,
+    };
+  }
+
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   if (!window.TaskBulkAction) return;
 
@@ -69,32 +133,8 @@
     verbGerund: 'Acknowledging',
     verbedAdjective: 'acknowledged',
     taskListSlug: 'patient_privacy_officer_alert_task',
-    listQueryString: async function () {
-      // The stamp can lag page load by a second or two (page-world.js's
-      // staff-identity poll) — wait for it rather than instantly widening
-      // the fetch, so the common early-click case still gets a correctly
-      // scoped "just mine" list.
-      var staffId = currentStaffId();
-      for (var waited = 0; !staffId && waited < 5000; waited += 250) {
-        await new Promise(function (resolve) {
-          setTimeout(resolve, 250);
-        });
-        staffId = currentStaffId();
-      }
-      var qs = 'statuses%5B%5D=pending&viewContext=homepage';
-      if (staffId) return qs + '&masterAssignee=' + encodeURIComponent(staffId);
-      // Unscoped fallback — MUST be visibly different from the scoped case;
-      // see this file's header. Consequence first, mechanism second. No
-      // longer withholds select-all (2026-08-20, softened at Nick's request
-      // — see task-bulk-action.js's own SOFTENED comment) — this is now a
-      // warning to review before confirming, not a block.
-      return {
-        qs: qs,
-        scopeWarning:
-          'Could not confirm which alerts are yours — this list shows pending alerts for ALL staff, ' +
-          'not just you. Review the list before confirming — acknowledging someone else’s alert has ' +
-          'no bulk undo — or close and reopen this panel to try scoping it to you again.',
-      };
+    listQueryString: function () {
+      return privacyOfficerQueryPlan(location.search, currentStaffId());
     },
     actionPath: '/tasks/patient-privacy-officer/complete',
     itemNounSingular: 'privacy officer alert',

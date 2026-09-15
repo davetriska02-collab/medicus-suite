@@ -43,6 +43,29 @@ input[class*='ms-tba-']:focus-visible {
   background: #e5e7eb;
 }
 
+/* Empty Suite list — still a button (click expands the explanation) but
+   must not look like a live action. Dave's report: the pill stayed
+   clickable while the fetch had already returned []. */
+.ms-tba-toggle-empty,
+.ms-tba-toggle[aria-disabled='true'] {
+  opacity: 0.6;
+  cursor: default;
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.ms-tba-toggle-empty:hover,
+.ms-tba-toggle[aria-disabled='true']:hover {
+  background: #f9fafb;
+}
+
+.ms-tba-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
 .ms-tba-body {
   margin-top: 6px;
   padding: 10px 12px;
