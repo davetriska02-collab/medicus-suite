@@ -2,6 +2,47 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.55] — 2026-09-16
+
+### Contacts canvas — patient-name quality checks (detect + fix)
+
+New section on the contacts canvas flags five PDS-driven name-quality issues on
+the hub patient's own record, each with a targeted fix — detection confirmed
+via HAR 124-persdetails.har, every write endpoint confirmed via a second HAR
+session (125-editpreferredname.har through 128-deleteformername.har).
+
+- **Redundant preferred name** — a preferred name equal to the official FIRST
+  name specifically, never a middle name ("Arthur" for "John Arthur Smith" is
+  a genuine entry, since Medicus only shows first + last by default). "Clear
+  preferred name" one-click fix.
+- **Placeholder birth name** — official name is literally "Baby"/"Infant" plus
+  a surname, the known PDS pattern that repeatedly overwrites a child's real
+  name. Every former-name entry on record is listed as a candidate; "Use as
+  current name" adopts one, gated behind a native `confirm()` naming the exact
+  resulting text. A middle-name conflict between the current record and the
+  chosen former name (e.g. current "Dave" vs a former entry's "D") is caught
+  before the write and resolved by explicit choice, defaulted to the
+  longer/more complete value — never silently taken from the former entry.
+- **Split first name** — a two-word given name with no middle name recorded
+  (e.g. "John Arthur" as one field), which can stop the patient logging in
+  since the patient-facing site expects the split Medicus itself produces.
+  One-click mechanical split.
+- **Weird capitalisation** — any of title/first/middle/last name in all-caps
+  ("MR Andrew Smith", "Mr ANDREW Smith") — a GP2GP/PDS import artifact.
+  Suffix excluded (Roman numerals/post-nominal letters are legitimately
+  all-caps). One-click re-case; "Mc" is handled specially (McDonald), "Mac"
+  is deliberately left alone (too many real spelling variants to guess).
+- **Former name is just a shorter copy** — a former-name entry that is purely
+  an abbreviated version of the current name: same word count, every word
+  identical or a strict same-position prefix (e.g. "Test D Test" against
+  current "Test Dave Test"). One-click delete, no confirm dialog — it never
+  touches the current, displayed name.
+
+Every write re-checks patient identity immediately before firing, re-fetches
+from Medicus afterward rather than patching local state, and joins the
+shared in-flight guard the canvas's other writes already use. See
+`docs/HAZARD-LOG.md` **H-072** (PENDING CSO REVIEW).
+
 ## [v3.261.54] — 2026-09-16
 
 ### Companion — general-task pages get the record section (Clinic only)

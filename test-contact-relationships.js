@@ -933,6 +933,350 @@ console.log('15: isLikelyDuplicateEmail / findDuplicateEmailGroups / chooseEmail
   check(CR.chooseEmailToKeep(null) === -1, 'is defensive against null');
 }
 
+console.log('16: isRedundantPreferredName / findPlaceholderNameToken / checkPatientNameQuality');
+{
+  check(
+    CR.isRedundantPreferredName('Test', 'Test') === true,
+    'preferredGivenName equal to the FIRST name is flagged — Nick\'s own screenshot example'
+  );
+  check(
+    CR.isRedundantPreferredName('Test', 'test') === true,
+    'the comparison is case-insensitive'
+  );
+  check(
+    CR.isRedundantPreferredName('John', 'Arthur') === false,
+    'Nick\'s own correction, 2026-09-16: preferredGivenName equal to a MIDDLE name is NOT flagged — "John Arthur Smith" going by "Arthur" is a genuine preferred-name entry (Medicus only shows first + last by default), and this check now only ever sees the confirmed given (first) name, never the middle name'
+  );
+  check(
+    CR.isRedundantPreferredName('John', 'Johnny') === false,
+    'a preferred name that is merely SIMILAR to the first name is not flagged — exact match only, no fuzzy guessing'
+  );
+  check(
+    CR.isRedundantPreferredName('John', '') === false,
+    'an empty preferred name is never flagged — nothing to compare'
+  );
+  check(
+    CR.isRedundantPreferredName('', 'Test') === false,
+    'an empty given name is never flagged — nothing to compare'
+  );
+  check(
+    CR.isRedundantPreferredName(null, null) === false,
+    'is defensive against missing values'
+  );
+
+  check(
+    CR.findPlaceholderNameToken('Baby Smith') === 'Baby',
+    '"Baby" as a standalone word is caught'
+  );
+  check(
+    CR.findPlaceholderNameToken('INFANT Jones') === 'INFANT',
+    '"Infant" is matched case-insensitively, and the actual casing found is returned'
+  );
+  check(
+    CR.findPlaceholderNameToken('Mr Baby-Faced Jones') === null,
+    '"Baby-Faced" is one hyphenated token, not the standalone word "Baby" — no match (deliberately narrow, Nick\'s own choice)'
+  );
+  check(
+    CR.findPlaceholderNameToken('Mrs Babatunde Jones') === null,
+    '"Babatunde" merely CONTAINS "baby"-like letters but is not the whole word — never a substring match'
+  );
+  check(CR.findPlaceholderNameToken('Ms Test Test') === null, 'an ordinary name is never flagged');
+  check(CR.findPlaceholderNameToken('') === null, 'an empty name is never flagged');
+  check(CR.findPlaceholderNameToken(null) === null, 'is defensive against a missing value');
+
+  const redundantOnly = CR.checkPatientNameQuality(
+    { fullOfficialName: 'Ms Test Test', preferredGivenName: 'Test', formerNames: [] },
+    { givenName: 'Test', middleNames: '' }
+  );
+  check(
+    redundantOnly.length === 1 && redundantOnly[0].type === 'redundant-preferred-name',
+    'checkPatientNameQuality fires the redundant-preferred-name issue for Test/Test, confirmed via HAR 124-persdetails.har'
+  );
+  check(
+    CR.checkPatientNameQuality({ fullOfficialName: 'Ms Test Test', preferredGivenName: 'Test', formerNames: [] })
+      .length === 0,
+    'the redundant-preferred-name issue never fires when officialNameFields is omitted — skipped, not approximated from fullOfficialName, since that string cannot tell a first-name match from a middle-name match apart'
+  );
+  check(
+    CR.checkPatientNameQuality(
+      { fullOfficialName: 'Mr John Arthur Smith', preferredGivenName: 'Arthur', formerNames: [] },
+      { givenName: 'John', middleNames: 'Arthur' }
+    ).length === 0,
+    'a preferred name matching the MIDDLE name (not the first name) never fires the issue, even with officialNameFields supplied — Nick\'s own correction'
+  );
+
+  const placeholderWithFormer = CR.checkPatientNameQuality({
+    fullOfficialName: 'Baby Smith',
+    preferredGivenName: null,
+    formerNames: [{ nameId: 'nid-1', formerNameType: 'Maiden name', name: 'Jane Doe' }],
+  });
+  check(
+    placeholderWithFormer.length === 1 &&
+      placeholderWithFormer[0].type === 'placeholder-birth-name' &&
+      Array.isArray(placeholderWithFormer[0].formerNames) &&
+      placeholderWithFormer[0].formerNames[0].nameId === 'nid-1' &&
+      placeholderWithFormer[0].formerNames[0].name === 'Jane Doe',
+    'checkPatientNameQuality surfaces every former name on record as a candidate to check (with its nameId, needed to adopt it), regardless of formerNameType — it does not guess which one is right'
+  );
+
+  const placeholderNoFormer = CR.checkPatientNameQuality({
+    fullOfficialName: 'Infant Jones',
+    preferredGivenName: null,
+    formerNames: [],
+  });
+  check(
+    placeholderNoFormer.length === 1 && placeholderNoFormer[0].formerNames.length === 0,
+    'checkPatientNameQuality still flags a placeholder name with no former names on record — the UI is responsible for saying so, not this function inventing one'
+  );
+
+  const bothIssues = CR.checkPatientNameQuality(
+    { fullOfficialName: 'Baby Baby', preferredGivenName: 'Baby', formerNames: [] },
+    { givenName: 'Baby', middleNames: '' }
+  );
+  check(
+    bothIssues.length === 2,
+    'both issues can fire on the same record — a placeholder FIRST name that also happens to equal the preferred name'
+  );
+
+  check(
+    CR.checkPatientNameQuality({}).length === 0,
+    'a normal record with nothing set produces no issues'
+  );
+  check(CR.checkPatientNameQuality(null).length === 0, 'is defensive against a missing section');
+
+  // isSplitFirstName / checkPatientNameQuality's third issue — confirmed via HAR
+  // 126-editgivenname.har's getEditOfficialName shape ({givenName, middleNames} as separated
+  // fields, not derivable from fullOfficialName alone).
+  check(
+    CR.isSplitFirstName('John Arthur', '') === true,
+    "Nick's own example: a two-word given name with no middle name recorded"
+  );
+  check(CR.isSplitFirstName('John Arthur', null) === true, 'null middleNames is treated the same as empty');
+  check(
+    CR.isSplitFirstName('John Arthur', 'Robert') === false,
+    'a middle name is already recorded — not the mis-split pattern, even though givenName still has two words'
+  );
+  check(CR.isSplitFirstName('John', '') === false, 'a genuine single-word given name is never flagged');
+  check(
+    CR.isSplitFirstName('Mary Jane', '   ') === true,
+    'whitespace-only middleNames counts as empty, same as a genuine two-word first name would be flagged (a real false positive this narrow check accepts — a human still has to judge it)'
+  );
+  check(CR.isSplitFirstName('', '') === false, 'an empty given name is never flagged');
+  check(CR.isSplitFirstName(null, null) === false, 'is defensive against missing values');
+
+  const splitNameIssue = CR.checkPatientNameQuality(
+    { fullOfficialName: 'Mr John Arthur Smith', preferredGivenName: null, formerNames: [] },
+    { givenName: 'John Arthur', middleNames: '' }
+  );
+  check(
+    splitNameIssue.length === 1 &&
+      splitNameIssue[0].type === 'split-first-name' &&
+      splitNameIssue[0].suggestedGivenName === 'John' &&
+      splitNameIssue[0].suggestedMiddleNames === 'Arthur',
+    'checkPatientNameQuality fires the split-first-name issue with a mechanical (first word / rest) suggested split when officialNameFields is passed'
+  );
+  check(
+    CR.checkPatientNameQuality({ fullOfficialName: 'Mr John Arthur Smith', preferredGivenName: null, formerNames: [] })
+      .length === 0,
+    'the split-first-name issue never fires when officialNameFields is omitted — fullOfficialName alone cannot tell a genuine two-word first name from a mis-split'
+  );
+  check(
+    CR.checkPatientNameQuality(
+      { fullOfficialName: 'Mr John Arthur Smith', preferredGivenName: null, formerNames: [] },
+      { givenName: 'John Arthur', middleNames: 'Robert' }
+    ).length === 0,
+    'no issue when a middle name is already recorded, even with officialNameFields supplied'
+  );
+
+  const capsIssue = CR.checkPatientNameQuality(
+    { fullOfficialName: 'MR Andrew Smith', preferredGivenName: null, formerNames: [] },
+    { prefix: 'MR', givenName: 'Andrew', middleNames: '', familyName: 'Smith' }
+  );
+  check(
+    capsIssue.length === 1 && capsIssue[0].type === 'weird-capitalisation' && capsIssue[0].fields[0].key === 'prefix',
+    "checkPatientNameQuality fires weird-capitalisation for \"MR Andrew Smith\", confirmed via Nick's own example"
+  );
+  check(
+    CR.checkPatientNameQuality(
+      { fullOfficialName: 'Mr Andrew Smith', preferredGivenName: null, formerNames: [] },
+      { prefix: 'Mr', givenName: 'Andrew', middleNames: '', familyName: 'Smith' }
+    ).length === 0,
+    'no weird-capitalisation issue for a normally-cased name'
+  );
+  check(
+    CR.checkPatientNameQuality({ fullOfficialName: 'MR Andrew Smith', preferredGivenName: null, formerNames: [] })
+      .length === 0,
+    'weird-capitalisation never fires when officialNameFields is omitted'
+  );
+
+  const shorterIssue = CR.checkPatientNameQuality({
+    fullOfficialName: 'Ms Test Dave Test',
+    preferredGivenName: null,
+    formerNames: [
+      { nameId: 'nid-2', formerNameType: 'Previous name', name: 'Ms Test D Test' },
+      { nameId: 'nid-3', formerNameType: 'Maiden name', name: 'Ms Different Surname' },
+    ],
+  });
+  check(
+    shorterIssue.length === 1 &&
+      shorterIssue[0].type === 'former-name-shorter-version' &&
+      shorterIssue[0].formerNames.length === 1 &&
+      shorterIssue[0].formerNames[0].nameId === 'nid-2',
+    "checkPatientNameQuality fires former-name-shorter-version ONLY for the entry that really is a shorter copy, confirmed via Nick's own example — a genuinely different former name (a different surname) is left alone"
+  );
+  check(
+    CR.checkPatientNameQuality({
+      fullOfficialName: 'Ms Test Dave Test',
+      preferredGivenName: null,
+      formerNames: [{ nameId: 'nid-2', formerNameType: 'Previous name', name: 'Ms Test D Test' }],
+    }).find((i) => i.type === 'former-name-shorter-version'),
+    'the former-name-shorter-version check runs with NO officialNameFields at all — it never needed the extra fetch'
+  );
+}
+
+console.log('17: resolveMiddleNamesConflict / formatOfficialName');
+{
+  const noConflict = CR.resolveMiddleNamesConflict('Dave', 'Dave');
+  check(
+    noConflict.conflict === false && noConflict.options.length === 0,
+    'identical middle names (even with different casing/whitespace normalised) are not a conflict'
+  );
+  check(
+    CR.resolveMiddleNamesConflict(' Dave ', 'dave').conflict === false,
+    'the compare is case- and whitespace-insensitive'
+  );
+  check(
+    CR.resolveMiddleNamesConflict('', '').conflict === false,
+    'both blank is not a conflict'
+  );
+
+  const daveVsD = CR.resolveMiddleNamesConflict('Dave', 'D');
+  check(
+    daveVsD.conflict === true &&
+      daveVsD.defaultChoice === 'current' &&
+      daveVsD.options.find((o) => o.key === 'current').value === 'Dave' &&
+      daveVsD.options.find((o) => o.key === 'former').value === 'D',
+    "Nick's own live-test example: current \"Dave\" vs former \"D\" is a conflict, defaults to keeping the longer/more complete current value, not silently taking the former entry's"
+  );
+
+  const blankVsD = CR.resolveMiddleNamesConflict('', 'D');
+  check(
+    blankVsD.conflict === true && blankVsD.defaultChoice === 'former',
+    'no current middle name at all vs a former "D" is still a conflict, but here the former value is the more complete one and becomes the default — adopting it is an improvement, not a regression'
+  );
+
+  const tie = CR.resolveMiddleNamesConflict('Ann', 'Amy');
+  check(
+    tie.conflict === true && tie.defaultChoice === 'current',
+    'equal-length genuinely different values are a conflict; a length tie defaults to the current value (the least disruptive default)'
+  );
+
+  check(
+    CR.formatOfficialName({ prefix: 'Ms', givenName: 'Test', middleNames: 'Dave', familyName: 'Test', suffix: null }) ===
+      'Ms Test Dave Test',
+    'formatOfficialName reproduces Medicus\'s own concatenation, confirmed via HAR 126-editgivenname.har'
+  );
+  check(
+    CR.formatOfficialName({ prefix: 'Ms', givenName: 'Test', middleNames: '', familyName: 'Test', suffix: null }) ===
+      'Ms Test Test',
+    'a blank middleNames is skipped, not rendered as an extra space'
+  );
+  check(CR.formatOfficialName({}) === '', 'is defensive against a fully missing object');
+  check(CR.formatOfficialName(null) === '', 'is defensive against a missing object');
+}
+
+console.log('18: isAllCapsWord / titleCaseNameWord / findWeirdCapitalisationFields');
+{
+  check(CR.isAllCapsWord('MR') === true, '"MR" (the exact title example) is all-caps');
+  check(CR.isAllCapsWord('ANDREW') === true, '"ANDREW" (the exact given-name example) is all-caps');
+  check(CR.isAllCapsWord('Andrew') === false, 'a normally-cased word is not flagged');
+  check(CR.isAllCapsWord('D') === false, 'a single-letter initial is never flagged — no wrong case to have');
+  check(CR.isAllCapsWord('SMITH-JONES') === true, 'a hyphenated word is checked as a whole, on its letters only');
+  check(CR.isAllCapsWord('') === false, 'an empty word is never flagged');
+  check(CR.isAllCapsWord(null) === false, 'is defensive against a missing value');
+
+  check(CR.titleCaseNameWord('ANDREW') === 'Andrew', 'a plain all-caps word is title-cased');
+  check(CR.titleCaseNameWord('MR') === 'Mr', 'a title is title-cased the same way as any other word');
+  check(
+    CR.titleCaseNameWord('MCDONALD') === 'McDonald',
+    '"Mc" is special-cased — the letter right after it is capitalised too'
+  );
+  check(
+    CR.titleCaseNameWord('MACDONALD') === 'Macdonald',
+    '"Mac" is deliberately NOT special-cased the same way — real spellings vary (Mack/Macy/Macdonald/MacDonald), so this returns the still-valid "Macdonald" rather than guessing "MacDonald"'
+  );
+  check(CR.titleCaseNameWord("O'BRIEN") === "O'Brien", 'the letter after an apostrophe is capitalised too');
+  check(CR.titleCaseNameWord('SMITH-JONES') === 'Smith-Jones', 'the letter after a hyphen is capitalised too');
+  check(CR.titleCaseNameWord('') === '', 'an empty word returns empty');
+
+  check(
+    CR.findWeirdCapitalisationFields({ prefix: 'MR', givenName: 'Andrew', middleNames: '', familyName: 'Smith' })
+      .length === 1 &&
+      CR.findWeirdCapitalisationFields({ prefix: 'MR', givenName: 'Andrew', middleNames: '', familyName: 'Smith' })[0]
+        .key === 'prefix',
+    '"MR Andrew Smith" flags only the title field, confirmed via Nick\'s own example'
+  );
+  check(
+    (() => {
+      const r = CR.findWeirdCapitalisationFields({
+        prefix: 'Mr',
+        givenName: 'ANDREW',
+        middleNames: '',
+        familyName: 'Smith',
+      });
+      return r.length === 1 && r[0].key === 'givenName' && r[0].suggested === 'Andrew';
+    })(),
+    '"Mr ANDREW Smith" flags only the given-name field, confirmed via Nick\'s own example'
+  );
+  check(
+    CR.findWeirdCapitalisationFields({ prefix: 'Mr', givenName: 'Andrew', middleNames: '', familyName: 'Smith' })
+      .length === 0,
+    'a normally-cased name has nothing flagged'
+  );
+  check(
+    CR.findWeirdCapitalisationFields({
+      prefix: 'Mr',
+      givenName: 'Andrew',
+      middleNames: '',
+      familyName: 'Smith',
+      suffix: 'III',
+    }).length === 0,
+    'suffix is never checked — a Roman numeral or post-nominal letters are legitimately all-caps'
+  );
+  check(CR.findWeirdCapitalisationFields({}).length === 0, 'is defensive against an empty object');
+  check(CR.findWeirdCapitalisationFields(null).length === 0, 'is defensive against a missing object');
+}
+
+console.log('19: isShorterVersionOfName');
+{
+  check(
+    CR.isShorterVersionOfName('Ms Test D Test', 'Ms Test Dave Test') === true,
+    "Nick's own example: \"Test D Test\" is just a shorter version of \"Test Dave Test\""
+  );
+  check(
+    CR.isShorterVersionOfName('Ms Test Dave Test', 'Ms Test Dave Test') === false,
+    'a byte-for-byte identical name is not reported as "shorter" — nothing is actually shorter'
+  );
+  check(
+    CR.isShorterVersionOfName('Ms Test Test', 'Ms Test Dave Test') === false,
+    'a genuinely different word COUNT (a missing middle name entirely) is never flagged — that is a real difference, not a shortening'
+  );
+  check(
+    CR.isShorterVersionOfName('Ms Jane Dave Test', 'Ms Test Dave Test') === false,
+    'a same-position word that is NOT a prefix of the current one (a real different name) is never flagged'
+  );
+  check(
+    CR.isShorterVersionOfName('Mr Test Dave Test', 'Ms Test Dave Test') === false,
+    'a same-length but non-prefix mismatch (here the title) is never flagged'
+  );
+  check(
+    CR.isShorterVersionOfName('Ms T Dave Test', 'Ms Test Dave Test') === true,
+    'the shortening can be in any word position, not only the middle name'
+  );
+  check(CR.isShorterVersionOfName('', 'Ms Test Dave Test') === false, 'an empty former name is never flagged');
+  check(CR.isShorterVersionOfName(null, null) === false, 'is defensive against missing values');
+}
+
 // ============================================================
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

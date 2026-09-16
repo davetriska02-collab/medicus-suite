@@ -203,6 +203,11 @@
       duplicateEmailGroups: [], // [[i, j, ...], ...] — ContactRelationships.findDuplicateEmailGroups(indexEmails)
       duplicateEmailDeleting: new Set(), // emailAddressIds currently being deleted
       duplicateEmailError: null,
+      nameQualityIssues: [], // ContactRelationships.checkPatientNameQuality(indexPatientDetails.patientDetailsSection, indexOfficialName)
+      indexOfficialName: null, // ContactsApi.getEditOfficialName(indexPatientId) -> {prefix, givenName, middleNames, familyName, suffix} — separated fields, needed for the split-first-name check and reused (prefix/familyName/suffix) when applying any of the three name fixes
+      nameFixesInFlight: new Set(), // issue-type keys currently mid-write: 'redundant-preferred-name', 'split-first-name', or `placeholder-birth-name:${nameId}` (one per candidate former name)
+      nameFixError: null,
+      middleNameChoice: null, // { nameId, former, options: [{key,value}], chosen } — set by beginPlaceholderAdopt when the former name's middleNames conflicts with the current official middleNames; the write waits for confirmMiddleNameChoice()
       flagUpdating: new Set(), // `${cardId}:${flagKind}` currently mid-write — same Set-not-single-value reasoning as phoneDeleting
       reciprocalDowngrading: new Set(), // cardIds currently mid-write for removeCardFromTree's reciprocal-relationship downgrade
       tree: null, // window.ContactTree instance — LOCKED edges only, pre-placed from linkedCards; see file header
@@ -283,7 +288,8 @@
       cs.flagUpdating.size ||
       cs.reciprocalDowngrading.size ||
       cs.addressMerging.size ||
-      cs.wrongTypePhoneFixing.size
+      cs.wrongTypePhoneFixing.size ||
+      cs.nameFixesInFlight.size
     );
   }
 
@@ -560,6 +566,24 @@
       });
       const indexAge = candidateAgeFromDob(details.patientDetailsSection && details.patientDetailsSection.dateOfBirth);
       st.indexAge = indexAge; // stashed on state too — cardHtml's sharedContactInfoDetailHtml needs it for the "ages side by side" hint
+
+      // Name-quality checks (2026-09-16 request) — see ContactRelationships.checkPatientNameQuality's
+      // own header comment. getEditOfficialName is a small bounded extra fetch (hub patient only,
+      // same "correctness is worth one more small call" reasoning as getEditAddress above) — its
+      // separated givenName/middleNames fields are what makes the split-first-name check possible
+      // at all, and are reused unchanged (prefix/familyName/suffix) by every one of the three fixes
+      // below. A failure here just means that one check doesn't run — never breaks the rest of the
+      // canvas.
+      try {
+        st.indexOfficialName = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+      } catch (_) {
+        st.indexOfficialName = null;
+      }
+      if (st !== cs) return;
+      st.nameQualityIssues = window.ContactRelationships.checkPatientNameQuality(
+        details.patientDetailsSection,
+        st.indexOfficialName
+      );
 
       // Step 1.10 — NOK / copy-correspondence gaps (hub patient only, per the user's own scoping),
       // and per-card badges for both flags (added once drag-to-flag was built). Copy-correspondence
@@ -2424,6 +2448,118 @@
     `;
   }
 
+  // renderMiddleNameChoice — inline picker shown in place of the "Use as current name" button for
+  // one candidate, once beginPlaceholderAdopt has found the current and former middleNames
+  // genuinely differ (ContactRelationships.resolveMiddleNamesConflict). Both values are shown
+  // verbatim with a radio each, defaulted to the longer/more complete one — never silently
+  // resolved by this code (see resolveMiddleNamesConflict's own comment for why).
+  function renderMiddleNameChoice(choice) {
+    const rows = choice.options
+      .map(
+        (o) => `
+          <label class="ms-cv-dupaddr-line">
+            <input type="radio" name="ms-cv-middlename-choice" class="ms-cv-middlename-choice-radio"
+                   data-choice-key="${esc(o.key)}" ${choice.chosen === o.key ? 'checked' : ''}/>
+            ${o.key === 'current' ? 'Keep current' : 'Use former'} middle name: "${esc(o.value || '(none)')}"
+          </label>
+        `
+      )
+      .join('');
+    return `
+      <div class="ms-cv-dupaddr-group ms-cv-middlename-picker">
+        <div>The middle name on the former name you picked doesn't match the current record — which should the patient end up with?</div>
+        ${rows}
+        <div>
+          <button class="ms-ct-btn-ghost ms-cv-middlename-choice-confirm">Confirm</button>
+          <button class="ms-ct-btn-ghost ms-cv-middlename-choice-cancel">Cancel</button>
+        </div>
+      </div>
+    `;
+  }
+
+  // renderNameQualityWarning — each issue gets its own "Fix" action now that the write endpoints
+  // are confirmed (see fixRedundantPreferredName/fixSplitFirstName/beginPlaceholderAdopt's own
+  // comments). A former-name candidate is offered as a question with a button per option, not a
+  // single default action — this code has no confidence which one (if any) is the right name, so
+  // it never picks for the user.
+  function renderNameQualityWarning() {
+    if (!cs.nameQualityIssues.length) return '';
+    const lines = cs.nameQualityIssues
+      .map((issue) => {
+        if (issue.type === 'redundant-preferred-name') {
+          const fixing = cs.nameFixesInFlight.has('redundant-preferred-name');
+          return `
+            <div class="ms-cv-dupaddr-line">
+              ${esc(issue.detail)}
+              <button class="ms-ct-btn-ghost ms-cv-namequality-fix-preferred" ${fixing ? 'disabled' : ''}>${fixing ? 'Clearing…' : 'Clear preferred name'}</button>
+            </div>
+          `;
+        }
+        if (issue.type === 'split-first-name') {
+          const fixing = cs.nameFixesInFlight.has('split-first-name');
+          return `
+            <div class="ms-cv-dupaddr-line">
+              ${esc(issue.detail)}
+              <button class="ms-ct-btn-ghost ms-cv-namequality-fix-split" ${fixing ? 'disabled' : ''}>${fixing ? 'Splitting…' : `Split into "${esc(issue.suggestedGivenName)}" / "${esc(issue.suggestedMiddleNames)}"`}</button>
+            </div>
+          `;
+        }
+        if (issue.type === 'placeholder-birth-name') {
+          const rows = issue.formerNames.length
+            ? issue.formerNames
+                .map((f) => {
+                  if (cs.middleNameChoice && cs.middleNameChoice.nameId === f.nameId) {
+                    return renderMiddleNameChoice(cs.middleNameChoice);
+                  }
+                  const fixKey = `placeholder-birth-name:${f.nameId}`;
+                  const fixing = cs.nameFixesInFlight.has(fixKey);
+                  return `
+                    <div class="ms-cv-dupaddr-line">
+                      ${esc(f.name)}
+                      <button class="ms-ct-btn-ghost ms-cv-namequality-fix-placeholder" data-name-id="${esc(f.nameId)}" ${fixing ? 'disabled' : ''}>${fixing ? 'Setting…' : 'Use as current name'}</button>
+                    </div>
+                  `;
+                })
+                .join('')
+            : `<div>No former name is on record to suggest a replacement — check with the family directly.</div>`;
+          return `<div>${esc(issue.detail)}</div>${rows}`;
+        }
+        if (issue.type === 'weird-capitalisation') {
+          const fixing = cs.nameFixesInFlight.has('weird-capitalisation');
+          const preview = issue.fields.map((f) => `${f.label}: "${f.suggested}"`).join(', ');
+          return `
+            <div class="ms-cv-dupaddr-line">
+              ${esc(issue.detail)}
+              <button class="ms-ct-btn-ghost ms-cv-namequality-fix-caps" ${fixing ? 'disabled' : ''}>${fixing ? 'Fixing…' : `Fix capitalisation → ${esc(preview)}`}</button>
+            </div>
+          `;
+        }
+        if (issue.type === 'former-name-shorter-version') {
+          const rows = issue.formerNames
+            .map((f) => {
+              const fixKey = `former-name-shorter:${f.nameId}`;
+              const deleting = cs.nameFixesInFlight.has(fixKey);
+              return `
+                <div class="ms-cv-dupaddr-line">
+                  ${esc(f.name)}
+                  <button class="ms-ct-btn-ghost ms-cv-namequality-delete-shorter" data-name-id="${esc(f.nameId)}" ${deleting ? 'disabled' : ''}>${deleting ? 'Deleting…' : 'Delete this former name'}</button>
+                </div>
+              `;
+            })
+            .join('');
+          return `<div>${esc(issue.detail)}</div>${rows}`;
+        }
+        return `<div>${esc(issue.detail)}</div>`;
+      })
+      .join('');
+    return `
+      <div class="ms-ct-warn ms-cv-namequality-warn ms-cv-dupaddr-warn">
+        ${lines}
+        ${cs.nameFixError ? `<div class="ms-ct-error">${esc(cs.nameFixError)}</div>` : ''}
+      </div>
+    `;
+  }
+
   function render() {
     const overlay = document.getElementById('ms-contacts-canvas-overlay');
     if (!overlay) return;
@@ -2453,6 +2589,7 @@
               ? `<div class="ms-ct-error">${esc(cs.error)}</div>`
               : `<div class="ms-cv-body">
                    ${renderNokCopyCorrespondenceWarning()}
+                   ${renderNameQualityWarning()}
                    ${renderFlagTokens()}
                    ${renderRemoveZone()}
                    ${renderDuplicateAddressWarning()}
@@ -3170,6 +3307,323 @@
     } finally {
       if (st === cs) {
         st.wrongTypePhoneFixing.delete(telephoneNumberId);
+        render();
+      }
+    }
+  }
+
+  // ── Name-quality fixes (2026-09-16 request) — write side, confirmed via HAR
+  // 125-editpreferredname.har through 128-deleteformername.har (see contacts-api.js's own
+  // comments on getEditOfficialName/changeOfficialName/etc for the exact shapes). Same "re-check
+  // identity immediately before the write" discipline as fixWrongTypePhone above (H-043/H-056) —
+  // renaming the WRONG patient's record is a materially worse mistake than a wrongly-typed phone
+  // number, so this is not a place to relax that guard.
+
+  // refreshNameQuality — re-fetches rather than patches the cached entry, same reasoning
+  // fixWrongTypePhone's own comment gives: the warning list (and the header, which shows
+  // indexPatientDetails.displayName) must reflect what Medicus actually holds after a write, not a
+  // locally-optimistic guess.
+  async function refreshNameQuality(st) {
+    const fresh = await window.ContactsApi.getPatientDetails(st.apiBase, st.patientId);
+    if (st !== cs) return;
+    st.indexPatientDetails = fresh;
+    try {
+      st.indexOfficialName = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+    } catch (_) {
+      st.indexOfficialName = null;
+    }
+    if (st !== cs) return;
+    st.nameQualityIssues = window.ContactRelationships.checkPatientNameQuality(
+      fresh.patientDetailsSection,
+      st.indexOfficialName
+    );
+  }
+
+  // fixRedundantPreferredName — clears the preferred name outright, since a preferred name equal
+  // to a word already in the official name tells the reader nothing (see
+  // isRedundantPreferredName's own comment). NOT CONFIRMED live whether an empty string actually
+  // clears it versus being rejected by Medicus (the capture this was built from only tested
+  // changing between two non-empty values) — a rejection surfaces as nameFixError like any other
+  // failure, it does not silently do nothing.
+  async function fixRedundantPreferredName() {
+    const key = 'redundant-preferred-name';
+    const st = cs;
+    if (st.nameFixesInFlight.has(key)) return;
+    if (anyWriteInFlight()) {
+      st.nameFixError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.nameFixError = null;
+    st.nameFixesInFlight.add(key);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      await window.ContactsApi.changePreferredName(st.apiBase, {
+        patientId: st.patientId,
+        preferredGivenName: '',
+      });
+      if (st !== cs) return;
+      await refreshNameQuality(st);
+    } catch (err) {
+      st.nameFixError = err.message || 'Failed to clear the preferred name.';
+    } finally {
+      if (st === cs) {
+        st.nameFixesInFlight.delete(key);
+        render();
+      }
+    }
+  }
+
+  // fixSplitFirstName — applies the mechanical (first word / rest) split checkPatientNameQuality
+  // already computed, keeping prefix/familyName/suffix exactly as getEditOfficialName returned
+  // them (full-replace endpoint, same discipline as changeAddress/changePatientContact).
+  async function fixSplitFirstName() {
+    const key = 'split-first-name';
+    const st = cs;
+    if (st.nameFixesInFlight.has(key)) return;
+    if (anyWriteInFlight()) {
+      st.nameFixError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    const issue = (st.nameQualityIssues || []).find((i) => i.type === 'split-first-name');
+    if (!issue || !st.indexOfficialName) return;
+    st.nameFixError = null;
+    st.nameFixesInFlight.add(key);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      await window.ContactsApi.changeOfficialName(st.apiBase, {
+        patientId: st.patientId,
+        prefix: st.indexOfficialName.prefix,
+        givenName: issue.suggestedGivenName,
+        middleNames: issue.suggestedMiddleNames,
+        familyName: st.indexOfficialName.familyName,
+        suffix: st.indexOfficialName.suffix,
+      });
+      if (st !== cs) return;
+      await refreshNameQuality(st);
+    } catch (err) {
+      st.nameFixError = err.message || 'Failed to split the given name.';
+    } finally {
+      if (st === cs) {
+        st.nameFixesInFlight.delete(key);
+        render();
+      }
+    }
+  }
+
+  // fixCapitalisation — applies checkPatientNameQuality's already-computed re-cased suggestion for
+  // every AFFECTED field (ContactRelationships.findWeirdCapitalisationFields), leaving any field
+  // that had no all-caps word untouched at its current value, and suffix untouched entirely (see
+  // that function's own comment on why). The suggested text is already visible in the button label
+  // before this ever fires, so — like fixSplitFirstName — this is a one-click hygiene write with no
+  // extra native confirm(): unlike adopting a former name, it never changes which words make up the
+  // name, only their case.
+  async function fixCapitalisation() {
+    const key = 'weird-capitalisation';
+    const st = cs;
+    if (st.nameFixesInFlight.has(key)) return;
+    if (anyWriteInFlight()) {
+      st.nameFixError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    const issue = (st.nameQualityIssues || []).find((i) => i.type === 'weird-capitalisation');
+    if (!issue || !st.indexOfficialName) return;
+    const bySlot = {};
+    for (const f of issue.fields) bySlot[f.key] = f.suggested;
+    st.nameFixError = null;
+    st.nameFixesInFlight.add(key);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      await window.ContactsApi.changeOfficialName(st.apiBase, {
+        patientId: st.patientId,
+        prefix: bySlot.prefix != null ? bySlot.prefix : st.indexOfficialName.prefix,
+        givenName: bySlot.givenName != null ? bySlot.givenName : st.indexOfficialName.givenName,
+        middleNames: bySlot.middleNames != null ? bySlot.middleNames : st.indexOfficialName.middleNames,
+        familyName: bySlot.familyName != null ? bySlot.familyName : st.indexOfficialName.familyName,
+        suffix: st.indexOfficialName.suffix,
+      });
+      if (st !== cs) return;
+      await refreshNameQuality(st);
+    } catch (err) {
+      st.nameFixError = err.message || 'Failed to fix the capitalisation.';
+    } finally {
+      if (st === cs) {
+        st.nameFixesInFlight.delete(key);
+        render();
+      }
+    }
+  }
+
+  // deleteShorterFormerName(nameId) — removes ONE former-name entry already confirmed
+  // (ContactRelationships.isShorterVersionOfName) to be nothing but an abbreviated copy of the
+  // current official name, e.g. "Test D Test" when the current name is "Test Dave Test". A plain
+  // one-click delete, no extra native confirm() — same "the visible context IS the confirmation"
+  // convention the duplicate-address/phone/email deletes already use (H-056), and materially lower
+  // stakes than any of the other three fixes: it never touches the patient's current, DISPLAYED
+  // name, only tidies an old record already established to be redundant with it.
+  async function deleteShorterFormerName(nameId) {
+    const key = `former-name-shorter:${nameId}`;
+    const st = cs;
+    if (st.nameFixesInFlight.has(key)) return;
+    if (anyWriteInFlight()) {
+      st.nameFixError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.nameFixError = null;
+    st.nameFixesInFlight.add(key);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      await window.ContactsApi.deleteFormerName(st.apiBase, nameId);
+      if (st !== cs) return;
+      await refreshNameQuality(st);
+    } catch (err) {
+      st.nameFixError = err.message || 'Failed to delete this former name.';
+    } finally {
+      if (st === cs) {
+        st.nameFixesInFlight.delete(key);
+        render();
+      }
+    }
+  }
+
+  // beginPlaceholderAdopt(nameId) — first phase of adopting a former name as the current official
+  // name. Fetches the former name's separated fields, then compares its middleNames against the
+  // CURRENT official middleNames (ContactRelationships.resolveMiddleNamesConflict) — Nick's own
+  // live-test finding, 2026-09-16: a straight full-replace from the former entry can silently
+  // regress a materially better middle name already on record (his own example: current "Dave"
+  // overwritten by a former entry's "D"), even though the fix is correctly repairing a placeholder
+  // FIRST name. No conflict (including both blank, or the two values being the same) skips
+  // straight to the write; a genuine conflict shows an inline picker instead and the write waits
+  // for confirmMiddleNameChoice().
+  async function beginPlaceholderAdopt(nameId) {
+    const key = `placeholder-birth-name:${nameId}`;
+    const st = cs;
+    if (st.nameFixesInFlight.has(key)) return;
+    if (anyWriteInFlight()) {
+      st.nameFixError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    st.nameFixError = null;
+    st.nameFixesInFlight.add(key);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      const former = await window.ContactsApi.getEditFormerName(st.apiBase, nameId);
+      if (st !== cs) return;
+      const currentMiddleNames = (st.indexOfficialName && st.indexOfficialName.middleNames) || '';
+      const resolved = window.ContactRelationships.resolveMiddleNamesConflict(currentMiddleNames, former.middleNames);
+      if (!resolved.conflict) {
+        st.nameFixesInFlight.delete(key);
+        await confirmAndApplyPlaceholderAdopt(nameId, former, former.middleNames);
+        return;
+      }
+      st.middleNameChoice = { nameId, former, options: resolved.options, chosen: resolved.defaultChoice };
+    } catch (err) {
+      st.nameFixError = err.message || 'Failed to set this as the current name.';
+    } finally {
+      if (st === cs) {
+        st.nameFixesInFlight.delete(key);
+        render();
+      }
+    }
+  }
+
+  function chooseMiddleNameOption(choiceKey) {
+    if (!cs.middleNameChoice) return;
+    cs.middleNameChoice.chosen = choiceKey;
+    render();
+  }
+
+  function cancelMiddleNameChoice() {
+    cs.middleNameChoice = null;
+    render();
+  }
+
+  async function confirmMiddleNameChoice() {
+    const choice = cs.middleNameChoice;
+    if (!choice) return;
+    const chosenOption = choice.options.find((o) => o.key === choice.chosen) || choice.options[0];
+    cs.middleNameChoice = null;
+    // Render NOW, not only inside confirmAndApplyPlaceholderAdopt — that function may return
+    // early with no render of its own (the user cancels the native confirm() dialog it opens),
+    // which would otherwise leave the picker showing on screen after its own state was cleared.
+    render();
+    await confirmAndApplyPlaceholderAdopt(choice.nameId, choice.former, chosenOption.value);
+  }
+
+  // confirmAndApplyPlaceholderAdopt(nameId, former, middleNames) — shared write path for adopting
+  // a former name as the current official name, whether or not a middle-name choice was needed.
+  // `middleNames` is the RESOLVED value (may differ from `former.middleNames` — see
+  // beginPlaceholderAdopt). Deliberately does NOT also delete the adopted former-name entry or
+  // record the placeholder being replaced as a new former name — either is a reasonable next step,
+  // but picking one on the user's behalf is a judgement call this code has no business making
+  // silently; renderNameQualityWarning's copy says so, and leaves both as a manual follow-up in
+  // Medicus's own former-name screen.
+  async function confirmAndApplyPlaceholderAdopt(nameId, former, middleNames) {
+    const key = `placeholder-birth-name:${nameId}`;
+    const st = cs;
+    if (st.nameFixesInFlight.has(key)) return;
+    if (anyWriteInFlight()) {
+      st.nameFixError = 'Another change is still saving — wait for it to finish, then try again.';
+      render();
+      return;
+    }
+    const fields = {
+      prefix: former.prefix,
+      givenName: former.givenName,
+      middleNames,
+      familyName: former.familyName,
+      suffix: former.suffix,
+    };
+    // This one REPLACES the patient's official name outright — an explicit native confirm()
+    // naming the exact resulting text (not the former entry's own pre-reconstructed `name`, which
+    // is only correct when the middle name was not overridden by a choice above).
+    const targetText = window.ContactRelationships.formatOfficialName(fields);
+    if (!window.confirm(`Set this patient's official name to "${targetText}"? This replaces their current official name in Medicus.`)) {
+      return;
+    }
+    st.nameFixError = null;
+    st.nameFixesInFlight.add(key);
+    render();
+    try {
+      const ctx = window.ContactsApi.resolveContext();
+      if (!ctx || ctx.patientId !== st.patientId) {
+        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      }
+      // Re-check identity immediately before the write — same H-043/H-056 discipline
+      // fixWrongTypePhone uses: beginPlaceholderAdopt's own GET (and the picker sitting on screen,
+      // for the conflict path) may have raced a navigation.
+      await window.ContactsApi.changeOfficialName(st.apiBase, { patientId: st.patientId, ...fields });
+      if (st !== cs) return;
+      await refreshNameQuality(st);
+    } catch (err) {
+      st.nameFixError = err.message || 'Failed to set this as the current name.';
+    } finally {
+      if (st === cs) {
+        st.nameFixesInFlight.delete(key);
         render();
       }
     }
@@ -4491,6 +4945,35 @@
     });
     overlay.querySelectorAll('.ms-cv-wrongtypephone-fix').forEach((btn) => {
       btn.addEventListener('click', () => fixWrongTypePhone(btn.getAttribute('data-telephone-id')));
+    });
+    overlay.querySelectorAll('.ms-cv-namequality-fix-preferred').forEach((btn) => {
+      btn.addEventListener('click', () => fixRedundantPreferredName());
+    });
+    overlay.querySelectorAll('.ms-cv-namequality-fix-split').forEach((btn) => {
+      btn.addEventListener('click', () => fixSplitFirstName());
+    });
+    overlay.querySelectorAll('.ms-cv-namequality-fix-caps').forEach((btn) => {
+      btn.addEventListener('click', () => fixCapitalisation());
+    });
+    overlay.querySelectorAll('.ms-cv-namequality-delete-shorter').forEach((btn) => {
+      btn.addEventListener('click', () => deleteShorterFormerName(btn.getAttribute('data-name-id')));
+    });
+    overlay.querySelectorAll('.ms-cv-namequality-fix-placeholder').forEach((btn) => {
+      // The native confirm() now lives in confirmAndApplyPlaceholderAdopt, once the final
+      // (possibly middle-name-choice-resolved) text is known — see its own comment.
+      btn.addEventListener('click', () => beginPlaceholderAdopt(btn.getAttribute('data-name-id')));
+    });
+    overlay.querySelectorAll('.ms-cv-middlename-choice-radio').forEach((r) => {
+      r.addEventListener('change', (e) => {
+        if (!e.target.checked) return;
+        chooseMiddleNameOption(r.getAttribute('data-choice-key'));
+      });
+    });
+    overlay.querySelectorAll('.ms-cv-middlename-choice-confirm').forEach((btn) => {
+      btn.addEventListener('click', () => confirmMiddleNameChoice());
+    });
+    overlay.querySelectorAll('.ms-cv-middlename-choice-cancel').forEach((btn) => {
+      btn.addEventListener('click', () => cancelMiddleNameChoice());
     });
     overlay.querySelectorAll('.ms-cv-dupemail-keep-radio').forEach((r) => {
       r.addEventListener('change', (e) => {
