@@ -331,6 +331,16 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
     pairSet.has('53889007|193570009'),
     'nuclear cataract (53889007) as a child of cataract (193570009) is still in the shipped file'
   );
+  // 2026-09-16: practice-requested cataract-procedure pairs (Nick), both
+  // verified live against the public NHS termbrowser API this session.
+  check(
+    pairSet.has('54885007|193570009'),
+    'other extraction of cataract (54885007) as a child of cataract (193570009) is in the shipped file'
+  );
+  check(
+    pairSet.has('172532006|193570009'),
+    'YAG laser capsulotomy of lens (172532006) as a child of cataract (193570009) is in the shipped file'
+  );
   // 2026-08-26: practice-requested seizure/epilepsy pairs (Nick) — added
   // while separately testing a problem-description-cleanup fix.
   check(

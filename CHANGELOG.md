@@ -2,6 +2,119 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.57] — 2026-09-16
+
+### Contacts canvas — name-quality writes re-check before POST (H-072)
+
+Steward review of #416: H-072 control (g) said every `changeOfficialName` body
+was built from a fresh read, but split / capitalisation / preferred-name /
+former-name-delete used the canvas-load snapshot. A PDS update between open
+and click could overwrite a better current name, or delete a former name that
+was no longer just an initialised copy.
+
+Every name-quality write now re-derives the live page patient, re-fetches the
+relevant GET payload, refuses a mismatched `patientId`, and re-validates the
+detection still holds immediately before POST. Adopting a former name also
+aborts if the official name is no longer a placeholder, or if the middle-name
+choice is stale against the live pair.
+
+`isShorterVersionOfName` now only treats a single-letter initial (`D` / `D.`)
+as a shorter copy. Multi-letter shortenings (John→Johnny, Rob→Robert) are
+real history and are no longer offered for one-click delete.
+
+## [v3.261.56] — 2026-09-16
+
+### Problem-nesting canvas — two more cataract-procedure suggestions
+
+Added `rules/problem-nesting-overrides.json` pairs offering "Other extraction
+of cataract" (54885007) and "YAG laser capsulotomy of lens" (172532006) as
+children of "Cataract" (193570009), alongside the existing
+pseudophakia/nuclear-cataract/phaco entries. Both concepts confirmed active
+via the public NHS termbrowser API; procedure-axis sequelae of a cataract
+problem, not SNOMED IS-A descendants of it, so the live descendant search
+would not surface either on its own. Regression-pinned in
+`test-problem-nesting.js`.
+
+## [v3.261.55] — 2026-09-16
+
+### Contacts canvas — patient-name quality checks (detect + fix)
+
+New section on the contacts canvas flags five PDS-driven name-quality issues on
+the hub patient's own record, each with a targeted fix — detection confirmed
+via HAR 124-persdetails.har, every write endpoint confirmed via a second HAR
+session (125-editpreferredname.har through 128-deleteformername.har).
+
+- **Redundant preferred name** — a preferred name equal to the official FIRST
+  name specifically, never a middle name ("Arthur" for "John Arthur Smith" is
+  a genuine entry, since Medicus only shows first + last by default). "Clear
+  preferred name" one-click fix.
+- **Placeholder birth name** — official name is literally "Baby"/"Infant" plus
+  a surname, the known PDS pattern that repeatedly overwrites a child's real
+  name. Every former-name entry on record is listed as a candidate; "Use as
+  current name" adopts one, gated behind a native `confirm()` naming the exact
+  resulting text. A middle-name conflict between the current record and the
+  chosen former name (e.g. current "Dave" vs a former entry's "D") is caught
+  before the write and resolved by explicit choice, defaulted to the
+  longer/more complete value — never silently taken from the former entry.
+- **Split first name** — a two-word given name with no middle name recorded
+  (e.g. "John Arthur" as one field), which can stop the patient logging in
+  since the patient-facing site expects the split Medicus itself produces.
+  One-click mechanical split.
+- **Weird capitalisation** — any of title/first/middle/last name in all-caps
+  ("MR Andrew Smith", "Mr ANDREW Smith") — a GP2GP/PDS import artifact.
+  Suffix excluded (Roman numerals/post-nominal letters are legitimately
+  all-caps). One-click re-case; "Mc" is handled specially (McDonald), "Mac"
+  is deliberately left alone (too many real spelling variants to guess).
+- **Former name is just a shorter copy** — a former-name entry that is purely
+  an abbreviated version of the current name: same word count, every word
+  identical or a strict same-position prefix (e.g. "Test D Test" against
+  current "Test Dave Test"). One-click delete, no confirm dialog — it never
+  touches the current, displayed name.
+
+Every write re-checks patient identity immediately before firing, re-fetches
+from Medicus afterward rather than patching local state, and joins the
+shared in-flight guard the canvas's other writes already use. See
+`docs/HAZARD-LOG.md` **H-072** (PENDING CSO REVIEW).
+
+## [v3.261.54] — 2026-09-16
+
+### Companion — general-task pages get the record section (Clinic only)
+
+The Companion widget's record section (appointments, booking links, open
+tasks, outstanding investigations) stayed hidden on any task type besides
+`review-investigation-report` or a communication-thread task classified as
+a genuine medical/admin request — `loadPatientRecord`'s classification only
+recognises a `communicationThreadTaskType` field most task overviews don't
+carry, and deliberately fails closed rather than guess.
+
+HAR 123-misctask.har confirmed `general-task` overviews (`taskList=
+general_task`, the "Miscellaneous task" queue) carry a reliable patient ID
+at `data.patient.id` — the same shape `review-investigation-report` uses —
+so a dedicated branch was added that fetches it directly, bypassing the
+classifier entirely. Scoped to Clinic role only (not Reception, which
+wasn't asked for); the section renders after Book/Create task rather than
+its usual pre-Book slot.
+
+Also required adding the type to `runInject()`'s own trigger gate, which
+decides whether `loadPatientRecord()` is even called — the same
+second-layer fix `review-investigation-report` needed; missing it would
+have left the new branch unreachable dead code.
+
+### Companion — unused booking links drop off after 12 months
+
+The record section's "Unused booking links" list previously showed every
+unbooked link regardless of age. It now hides links older than 365 days;
+appointments, open tasks, and outstanding investigations are unchanged —
+this filter applies to booking links only.
+
+Booking links carry no raw date field, only Medicus's pre-formatted
+display string (e.g. `"18 Mar 2026, 17:43"`), so a dedicated parser reads
+the date out of that string for the comparison — kept deliberately
+separate from `dateOnlyFromCreated`'s own "echo, don't parse" display
+logic, since filtering and display are different jobs. A link whose date
+doesn't match the expected shape is kept, not hidden, so an unrecognised
+format never silently drops something real from view.
+
 ## [v3.261.53] — 2026-09-15
 
 ### Prescription-request canvas — non-routine inbox is not a homepage staff GET

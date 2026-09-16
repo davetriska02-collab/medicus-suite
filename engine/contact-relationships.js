@@ -458,6 +458,301 @@
     return (entry && entry.telephoneNumberId) || null;
   }
 
+  // ── Patient name quality checks (hub patient only) — Nick's own request, 2026-09-16 ──────────
+  // PDS (the national Patient Demographic Service) regularly overwrites a correct name with data
+  // that reads as technically valid but is either pointless clutter or actively wrong. Detection
+  // confirmed live via HAR 124-persdetails.har (patient-details' own fullOfficialName/
+  // preferredGivenName/formerNames); the write side (ContactsApi.changePreferredName/
+  // changeOfficialName/createFormerName/deleteFormerName) confirmed via a second HAR session,
+  // same day (125-editpreferredname.har through 128-deleteformername.har) — see contacts-api.js's
+  // own comments on those four functions for the exact request/response shapes.
+
+  function nameTokens(s) {
+    return String(s || '')
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+
+  // isRedundantPreferredName(givenName, preferredGivenName) -> boolean
+  // True ONLY when the preferred name equals the official FIRST name specifically — e.g. givenName
+  // "Test", preferredGivenName "Test" (Nick's own screenshot: Medicus renders this as a harmless
+  // but pointless "Preferred name: Test" line). Nick's own correction, 2026-09-16: a preferred
+  // name equal to a MIDDLE name is NOT redundant — "John Arthur Smith" going by "Arthur" is a
+  // genuine, useful preferred-name entry, because Medicus only shows first + last name by default
+  // and "Arthur" would otherwise never appear. This is why the check now takes the CONFIRMED
+  // separated givenName field (ContactsApi.getEditOfficialName) rather than whole-word-matching
+  // against the combined fullOfficialName string the way the first version of this function did —
+  // that string can't distinguish "matches the first name" from "matches a middle name" at all.
+  function isRedundantPreferredName(givenName, preferredGivenName) {
+    const pref = String(preferredGivenName || '').trim();
+    const given = String(givenName || '').trim();
+    if (!pref || !given) return false;
+    return pref.toLowerCase() === given.toLowerCase();
+  }
+
+  // Narrow on purpose (Nick's own choice) — exact word "Baby" or "Infant", not a broader
+  // newborn-placeholder set, to keep false positives low on a first pass. Matched as a whole
+  // token, never a substring, so a genuine name that merely contains these letters never matches.
+  const PLACEHOLDER_NAME_WORD_RE = /^(baby|infant)$/i;
+
+  // findPlaceholderNameToken(fullOfficialName) -> string | null
+  // Returns the matched placeholder word (for display in the warning), or null. This is the
+  // "malign" pattern Nick described: a hospital birth record keeps re-supplying "Baby Smith" /
+  // "Infant Jones" over PDS, silently overwriting a name the child has actually been given.
+  function findPlaceholderNameToken(fullOfficialName) {
+    const hit = nameTokens(fullOfficialName).find((t) => PLACEHOLDER_NAME_WORD_RE.test(t));
+    return hit || null;
+  }
+
+  // isSplitFirstName(givenName, middleNames) -> boolean
+  // True when givenName itself contains more than one word AND middleNames is empty — the exact
+  // pattern Nick described: "John" middle "Arthur" surname "Smith" mis-recorded as givenName
+  // "John Arthur", middleNames "". This can stop the patient logging in, since the patient-facing
+  // website expects the name split the same way Medicus itself records it. Needs the SEPARATED
+  // fields (ContactsApi.getEditOfficialName) — patient-details' own fullOfficialName is one
+  // combined display string and cannot tell a genuine two-word first name (rare but real, e.g.
+  // "Mary Jane") from this mis-split; that is why this check takes those fields as its own
+  // argument rather than being folded into fullOfficialName parsing like the other two checks.
+  function isSplitFirstName(givenName, middleNames) {
+    if (String(middleNames || '').trim()) return false;
+    return nameTokens(givenName).length > 1;
+  }
+
+  // isAllCapsWord(word) -> boolean. Nick's own request, 2026-09-16: "MR Andrew Smith" and
+  // "Mr ANDREW Smith" are both GP2GP/PDS import artifacts, not a deliberate style choice — nobody
+  // is genuinely named in all capitals. Checked on the word's LETTERS only (strips anything else
+  // first), so a hyphenated word like "SMITH-JONES" is still caught as a whole. Requires at least
+  // 2 letters so a genuine middle-name initial ("D") is never flagged — a single letter has no
+  // "wrong" case to have.
+  function isAllCapsWord(word) {
+    const letters = String(word || '').replace(/[^A-Za-z]/g, '');
+    return letters.length >= 2 && letters === letters.toUpperCase();
+  }
+
+  // titleCaseNameWord(word) -> string. The SUGGESTED fix for one all-caps word — capitalises the
+  // first letter and every letter after a hyphen/apostrophe/space (so "SMITH-JONES" -> "Smith-
+  // Jones", "O'BRIEN" -> "O'Brien"), with one special case: a "Mc" prefix capitalises the letter
+  // straight after it too ("MCDONALD" -> "McDonald"), a common and essentially unambiguous UK
+  // convention. Deliberately does NOT special-case "Mac" the same way — Mack/Macy/Macdonald/
+  // MacDonald genuinely vary in real use, and guessing which the patient actually spells it as
+  // would be exactly the kind of invented certainty this codebase avoids; "MACDONALD" becomes the
+  // still-valid "Macdonald", not a guess at "MacDonald". This is a SUGGESTION shown to the user
+  // before it writes anywhere (see fixCapitalisation's own comment), never applied blind.
+  function titleCaseNameWord(word) {
+    const w = String(word || '');
+    if (!w) return w;
+    const lower = w.toLowerCase();
+    const mc = /^mc([a-z].*)$/.exec(lower);
+    if (mc) return 'Mc' + mc[1].charAt(0).toUpperCase() + mc[1].slice(1);
+    return lower.replace(/(^|[-'\s])([a-z])/g, (m, sep, ch) => sep + ch.toUpperCase());
+  }
+
+  // findWeirdCapitalisationFields(officialNameFields) -> [{ key, label, value, suggested }]
+  // Checks prefix/givenName/middleNames/familyName (each may itself be several words) for any
+  // all-caps word, one entry per AFFECTED field, with a fully re-cased suggestion for that field
+  // (every word re-cased, not just the offending one — idempotent on words that were already
+  // fine). `suffix` is deliberately excluded — post-nominals and generational suffixes are
+  // legitimately all-caps or mixed-case in ways this function has no business "fixing" (a Roman
+  // numeral "III", or letters after a name like "OBE", is correct as written, not a data-entry
+  // artifact).
+  const CAPS_CHECK_FIELDS = [
+    { key: 'prefix', label: 'title' },
+    { key: 'givenName', label: 'first name' },
+    { key: 'middleNames', label: 'middle name' },
+    { key: 'familyName', label: 'last name' },
+  ];
+  function findWeirdCapitalisationFields(officialNameFields) {
+    const f = officialNameFields || {};
+    const out = [];
+    for (const { key, label } of CAPS_CHECK_FIELDS) {
+      const value = f[key] || '';
+      if (!nameTokens(value).some(isAllCapsWord)) continue;
+      out.push({
+        key,
+        label,
+        value,
+        suggested: nameTokens(value).map(titleCaseNameWord).join(' '),
+      });
+    }
+    return out;
+  }
+
+  // isInitialNameToken(word) -> boolean. A single letter, optionally followed by a period
+  // ("D", "D.", "T") — the PDS/GP2GP "initial instead of the full word" shape Nick's own
+  // shorter-former-name example actually is. A multi-letter shortening ("John"/"Johnny",
+  // "Rob"/"Robert") is a real historical name, not a degraded copy, and must never match.
+  function isInitialNameToken(word) {
+    return /^[A-Za-z]\.?$/.test(String(word || '').trim());
+  }
+
+  // isShorterVersionOfName(formerNameStr, currentNameStr) -> boolean
+  // Nick's own example, 2026-09-16: former name "Test D Test" against current official name "Test
+  // Dave Test" — same word count, one word an INITIAL ("D" / "D.") of the same-position current
+  // word ("Dave"), every other word identical. That pattern means the "former" name isn't a
+  // different historical name at all, just a degraded (initialised) copy of the current one —
+  // worth flagging as probably safe to delete rather than kept as if it were real history. Word
+  // COUNT must match exactly, and EVERY differing word must be an initial of the same-position
+  // current word — a former name with any genuinely different, missing or extra word (a real old
+  // name), or a multi-letter shortening of a real given name (John→Johnny, Rob→Robert), never
+  // matches. At least one word must actually be shorter, so a byte-for-byte duplicate is not
+  // reported here (that would be a different, not-yet-built check).
+  function isShorterVersionOfName(formerNameStr, currentNameStr) {
+    const formerWords = nameTokens(formerNameStr);
+    const currentWords = nameTokens(currentNameStr);
+    if (!formerWords.length || formerWords.length !== currentWords.length) return false;
+    let anyShorter = false;
+    for (let i = 0; i < formerWords.length; i++) {
+      const f = formerWords[i];
+      const c = currentWords[i];
+      if (f.toLowerCase() === c.toLowerCase()) continue;
+      const initial = f.replace(/\.$/, '').toLowerCase();
+      const current = c.toLowerCase();
+      if (isInitialNameToken(f) && initial.length < current.length && current.startsWith(initial)) {
+        anyShorter = true;
+        continue;
+      }
+      return false;
+    }
+    return anyShorter;
+  }
+
+  // payloadPatientMatches(payload, expectedPatientId) -> boolean
+  // Fail-closed identity check for the name-edit GET payloads (getEditOfficialName /
+  // getEditPreferredName / getEditFormerName all confirm they return `patientId`). A missing
+  // id on either side is not a match — the canvas must refuse the write rather than assume
+  // the GET landed on the hub patient.
+  function payloadPatientMatches(payload, expectedPatientId) {
+    if (!payload || expectedPatientId == null || expectedPatientId === '') return false;
+    if (payload.patientId == null || payload.patientId === '') return false;
+    return String(payload.patientId) === String(expectedPatientId);
+  }
+
+  // checkPatientNameQuality(patientDetailsSection, officialNameFields) -> [{ type, detail, ... }]
+  // One entry per issue found (0-3 may fire together). officialNameFields is OPTIONAL — the
+  // separated {givenName, middleNames} from ContactsApi.getEditOfficialName; when omitted, only
+  // the placeholder-name check runs. The redundant-preferred-name and split-first-name checks BOTH
+  // need officialNameFields and are skipped (not approximated) without it — redundant-preferred
+  // used to run off the combined fullOfficialName string, but that could not tell a match against
+  // the first name apart from a match against a middle name (see isRedundantPreferredName's own
+  // comment for why that distinction matters), so it was moved onto the same confirmed-fields
+  // requirement split-first-name already had rather than keep a string heuristic that risked
+  // exactly the false positive Nick flagged. formerNames is only present on the placeholder-name
+  // issue — it's the candidate list ({nameId, name}) a human should check for the name that keeps
+  // getting overwritten, not a suggestion this code has any confidence is THE right one
+  // (formerNameType covers more than birth names — e.g. "Maiden name" — so every entry is shown,
+  // not filtered to a guessed type); nameId is what a caller needs to fetch the separated fields
+  // (ContactsApi.getEditFormerName) before adopting one as the current name.
+  // suggestedGivenName/suggestedMiddleNames on the split-name issue are the mechanical split (first
+  // word vs the rest) for a caller to prefill an edit form with — never applied automatically.
+  // The weird-capitalisation check (also officialNameFields-gated) lists every AFFECTED field with
+  // a re-cased suggestion (findWeirdCapitalisationFields's own comment). The former-name-shorter-
+  // version check runs unconditionally (fullOfficialName + formerNames only, no extra fetch) and
+  // is independent of every other issue here — it fires even when the CURRENT name is fine, since
+  // it is about a specific former-name entry being redundant clutter, not about the current name.
+  function checkPatientNameQuality(patientDetailsSection, officialNameFields) {
+    const d = patientDetailsSection || {};
+    const fullName = d.fullOfficialName || '';
+    const preferred = d.preferredGivenName || '';
+    const formerNames = Array.isArray(d.formerNames) ? d.formerNames : [];
+    const issues = [];
+
+    if (officialNameFields && isRedundantPreferredName(officialNameFields.givenName, preferred)) {
+      issues.push({
+        type: 'redundant-preferred-name',
+        detail: `Preferred name "${preferred}" is the same as the official first name "${officialNameFields.givenName}" — Medicus will still show it as a separate line, but it tells the reader nothing new.`,
+      });
+    }
+
+    const placeholderToken = findPlaceholderNameToken(fullName);
+    if (placeholderToken) {
+      issues.push({
+        type: 'placeholder-birth-name',
+        detail: `Official name "${fullName}" looks like a hospital birth-registration placeholder ("${placeholderToken}"), not the name this patient actually has.`,
+        formerNames: formerNames
+          .filter((f) => f && f.name)
+          .map((f) => ({ nameId: f.nameId, name: f.name })),
+      });
+    }
+
+    if (officialNameFields && isSplitFirstName(officialNameFields.givenName, officialNameFields.middleNames)) {
+      const tokens = nameTokens(officialNameFields.givenName);
+      issues.push({
+        type: 'split-first-name',
+        detail: `Given name "${officialNameFields.givenName}" looks like two names run together, with no middle name recorded — this can stop the patient logging in, since the website expects the name split the same way Medicus records it.`,
+        suggestedGivenName: tokens[0],
+        suggestedMiddleNames: tokens.slice(1).join(' '),
+      });
+    }
+
+    if (officialNameFields) {
+      const capsFields = findWeirdCapitalisationFields(officialNameFields);
+      if (capsFields.length) {
+        issues.push({
+          type: 'weird-capitalisation',
+          detail: `The ${capsFields.map((f) => `${f.label} ("${f.value}")`).join(' and ')} on this record ${capsFields.length === 1 ? 'looks' : 'look'} like ${capsFields.length === 1 ? "it's" : "they're"} in the wrong case — an import artifact, not a real spelling choice.`,
+          fields: capsFields,
+        });
+      }
+    }
+
+    const shorterFormerNames = formerNames.filter((f) => f && f.name && isShorterVersionOfName(f.name, fullName));
+    if (shorterFormerNames.length) {
+      issues.push({
+        type: 'former-name-shorter-version',
+        detail: `${shorterFormerNames.length === 1 ? 'A former name is' : `${shorterFormerNames.length} former names are`} recorded that ${shorterFormerNames.length === 1 ? 'is' : 'are'} just a shorter version of the current official name "${fullName}" — not a different historical name, just a worse copy of this one.`,
+        formerNames: shorterFormerNames.map((f) => ({ nameId: f.nameId, name: f.name })),
+      });
+    }
+
+    return issues;
+  }
+
+  // resolveMiddleNamesConflict(currentMiddleNames, formerMiddleNames) -> { conflict, options, defaultChoice }
+  // Nick's own request, 2026-09-16, from a live test: adopting a former name as the current
+  // official name (the placeholder-birth-name fix) must not silently REGRESS a materially better
+  // middle name already on record — his own example had current middleNames "Dave" and the former
+  // entry's middleNames "D" (just an initial); a straight full-replace from the former entry would
+  // have thrown away the good value while correctly fixing the placeholder FIRST name. Compares
+  // the two middle-name values SEPARATELY from the rest of the write (prefix/givenName/familyName/
+  // suffix are not in question — only middleNames is ever a plausible source of two independently
+  // "valid-looking" values); when they genuinely differ (case/whitespace-insensitive compare),
+  // returns both as named options rather than silently taking the former entry's value, with the
+  // LONGER (trimmed character count) one as the default choice — "more complete" as a proxy for
+  // "more likely correct", never a guess at which is semantically right. A tie defaults to keeping
+  // the current value (the least disruptive default). No conflict at all (including both blank) is
+  // reported with an empty options list — nothing for a caller to choose between.
+  function resolveMiddleNamesConflict(currentMiddleNames, formerMiddleNames) {
+    const current = String(currentMiddleNames || '').trim();
+    const former = String(formerMiddleNames || '').trim();
+    if (current.toLowerCase() === former.toLowerCase()) {
+      return { conflict: false, options: [], defaultChoice: 'current' };
+    }
+    return {
+      conflict: true,
+      options: [
+        { key: 'current', value: current },
+        { key: 'former', value: former },
+      ],
+      defaultChoice: former.length > current.length ? 'former' : 'current',
+    };
+  }
+
+  // formatOfficialName({prefix, givenName, middleNames, familyName, suffix}) -> string
+  // Same space-joined, blank-parts-skipped concatenation Medicus itself produces (confirmed by
+  // comparing getEditOfficialName's separated fields against that same patient's fullOfficialName
+  // in HAR 126-editgivenname.har: "Ms" + "Test" + "Dave" + "Test" -> "Ms Test Dave Test"). Used to
+  // show the ACTUAL resulting name in a confirm prompt when a middle-name choice has changed what
+  // will be written — the former-name entry's own pre-reconstructed `name` string is only correct
+  // when nothing in the write differs from it.
+  function formatOfficialName(fields) {
+    const f = fields || {};
+    return [f.prefix, f.givenName, f.middleNames, f.familyName, f.suffix]
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+
   // ── Duplicate-address detection (hub patient only) ───────────────────────────────────────────
   // A known PDS (Patient Demographic Service) data-quality pattern: the same real-world address
   // gets recorded on a patient's own record more than once, formatted slightly differently each
@@ -1062,6 +1357,18 @@
     extractPreferredPhone,
     extractPreferredPhoneNote,
     extractPreferredPhoneId,
+    isRedundantPreferredName,
+    findPlaceholderNameToken,
+    isSplitFirstName,
+    isAllCapsWord,
+    titleCaseNameWord,
+    findWeirdCapitalisationFields,
+    isShorterVersionOfName,
+    isInitialNameToken,
+    payloadPatientMatches,
+    checkPatientNameQuality,
+    resolveMiddleNamesConflict,
+    formatOfficialName,
     buildLinkPatientBody,
     buildManualContactBody,
   };
