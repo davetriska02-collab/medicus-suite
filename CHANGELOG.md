@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.54] — 2026-09-16
+
+### Companion — general-task pages get the record section (Clinic only)
+
+The Companion widget's record section (appointments, booking links, open
+tasks, outstanding investigations) stayed hidden on any task type besides
+`review-investigation-report` or a communication-thread task classified as
+a genuine medical/admin request — `loadPatientRecord`'s classification only
+recognises a `communicationThreadTaskType` field most task overviews don't
+carry, and deliberately fails closed rather than guess.
+
+HAR 123-misctask.har confirmed `general-task` overviews (`taskList=
+general_task`, the "Miscellaneous task" queue) carry a reliable patient ID
+at `data.patient.id` — the same shape `review-investigation-report` uses —
+so a dedicated branch was added that fetches it directly, bypassing the
+classifier entirely. Scoped to Clinic role only (not Reception, which
+wasn't asked for); the section renders after Book/Create task rather than
+its usual pre-Book slot.
+
+Also required adding the type to `runInject()`'s own trigger gate, which
+decides whether `loadPatientRecord()` is even called — the same
+second-layer fix `review-investigation-report` needed; missing it would
+have left the new branch unreachable dead code.
+
+### Companion — unused booking links drop off after 12 months
+
+The record section's "Unused booking links" list previously showed every
+unbooked link regardless of age. It now hides links older than 365 days;
+appointments, open tasks, and outstanding investigations are unchanged —
+this filter applies to booking links only.
+
+Booking links carry no raw date field, only Medicus's pre-formatted
+display string (e.g. `"18 Mar 2026, 17:43"`), so a dedicated parser reads
+the date out of that string for the comparison — kept deliberately
+separate from `dateOnlyFromCreated`'s own "echo, don't parse" display
+logic, since filtering and display are different jobs. A link whose date
+doesn't match the expected shape is kept, not hidden, so an unrecognised
+format never silently drops something real from view.
+
 ## [v3.261.53] — 2026-09-15
 
 ### Prescription-request canvas — non-routine inbox is not a homepage staff GET

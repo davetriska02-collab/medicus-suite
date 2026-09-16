@@ -258,7 +258,7 @@ check(
   "the record-first slot renders BEFORE the What's due section in buildHtml()'s markup order"
 );
 check(
-  /showRecord && !recordFirst \? recordSectionHtml\(\) : ''/.test(panel),
+  /showRecord && !recordFirst && !recordLast \? recordSectionHtml\(\) : ''/.test(panel),
   'the record section still renders in its original spot on every other page, never duplicated'
 );
 check(
@@ -315,18 +315,107 @@ check(
     // was genuinely dead code, never reached for this typeSlug at all.
     const fn = panel.slice(panel.indexOf('function runInject'), panel.indexOf('const _hub = window.__chObserverHub'));
     return (
-      /isCommunicationThreadSlug\(ctx\.typeSlug\) \|\| ctx\.typeSlug === INVESTIGATION_REPORT_TASK_TYPE/.test(fn) &&
-      fn.indexOf('(isCommunicationThreadSlug(ctx.typeSlug) || ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE)') <
-        fn.indexOf('loadPatientRecord(ctx)')
+      /isCommunicationThreadSlug\(ctx\.typeSlug\)\s*\|\|\s*ctx\.typeSlug === INVESTIGATION_REPORT_TASK_TYPE/.test(
+        fn
+      ) &&
+      fn.indexOf('ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE') < fn.indexOf('loadPatientRecord(ctx)')
     );
   })(),
   "runInject()'s own trigger for loadPatientRecord() also recognises review-investigation-report — the actual reason nothing showed, one layer above the classification fix"
+);
+
+console.log('\n--- Companion: general-task (misc task) gets record section, Clinic only, at the bottom (2026-09-16) ---');
+check(
+  /function isGeneralTask/.test(panel) &&
+    /GENERAL_TASK_TYPE = 'general-task'/.test(panel) &&
+    /info\.typeSlug === GENERAL_TASK_TYPE/.test(panel),
+  'matches the exact confirmed typeSlug (general-task), not a broader speculative pattern (HAR 123-misctask.har)'
+);
+check(
+  (() => {
+    const fn = panel.slice(
+      panel.indexOf('async function loadPatientRecord'),
+      panel.indexOf('async function doOpenBooking')
+    );
+    return (
+      /if \(ctx\.typeSlug === GENERAL_TASK_TYPE\)/.test(fn) &&
+      /genOverview\.data && genOverview\.data\.patient && genOverview\.data\.patient\.id/.test(fn) &&
+      fn.indexOf('GENERAL_TASK_TYPE') < fn.indexOf('classifyPatientRequest(overview)')
+    );
+  })(),
+  'general-task tasks get their own applicable/patientId path (HAR 123-misctask.har: data.patient.id), bypassing the communication-thread-only classifier entirely'
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function runInject'), panel.indexOf('const _hub = window.__chObserverHub'));
+    return (
+      /ctx\.typeSlug === GENERAL_TASK_TYPE/.test(fn) &&
+      fn.indexOf('ctx.typeSlug === GENERAL_TASK_TYPE') < fn.indexOf('loadPatientRecord(ctx)')
+    );
+  })(),
+  "runInject()'s own trigger for loadPatientRecord() also recognises general-task — without it the loadPatientRecord branch above is unreachable dead code, the same lesson review-investigation-report taught"
+);
+check(
+  /const showRecord =\s*\n?\s*shows\.record && s\.rec\.applicable === true && \(!isGeneralTaskType \|\| currentRole\(\) === 'clinic'\);/.test(
+    panel
+  ),
+  'general-task record section is restricted to Clinic role — Reception is not asked for yet'
+);
+check(
+  (() => {
+    const fn = panel.slice(panel.indexOf('function buildHtml'), panel.indexOf('function dueDegradedHtml'));
+    const recordLastIdx = fn.lastIndexOf("(recordLast ? recordSectionHtml() : '')");
+    const bookIdx = fn.indexOf('shows.book ? bookingSectionHtml()');
+    const taskIdx = fn.indexOf('shows.task ? taskSectionHtml()');
+    const footerIdx = fn.indexOf('chromeFooterHtml()');
+    return recordLastIdx > -1 && recordLastIdx > bookIdx && recordLastIdx > taskIdx && recordLastIdx < footerIdx;
+  })(),
+  "the recordLast slot renders AFTER Book/Create task and BEFORE the footer — appended at the bottom, not in the usual pre-Book position"
 );
 
 console.log('\n--- Booking-link rows: lozenge, no colour, type first ---');
 check(
   /function dateOnlyFromCreated/.test(panel) && /str\.indexOf\(','\)/.test(panel),
   'booking-link date is truncated at the comma, not parsed as a real date'
+);
+
+console.log('\n--- Booking links only: 12-month / 365-day age filter (2026-09-16) ---');
+check(
+  (() => {
+    const fn = panel.slice(
+      panel.indexOf('async function fetchAppointmentsAndLinks'),
+      panel.indexOf('async function loadPatientRecord')
+    );
+    return (
+      /isBookingLinkWithinMaxAge\(l, nowMs\)/.test(fn) &&
+      !/investigations\s*=\s*.*isBookingLinkWithinMaxAge/.test(fn) &&
+      !/tasks\s*=\s*.*isBookingLinkWithinMaxAge/.test(fn)
+    );
+  })(),
+  'the age filter is wired into bookingLinks only — appointments/tasks/investigations untouched'
+);
+check(
+  (() => {
+    // Extract the actual filter functions out of the real source and run
+    // them for real, rather than only regex-checking the shape — date
+    // arithmetic is exactly the kind of thing a source-text check can miss
+    // a sign error in.
+    const start = panel.indexOf('const BOOKING_LINK_MONTH_ABBR = {');
+    const end = panel.indexOf('function isBookingLinkWithinMaxAge');
+    const fnEnd = panel.indexOf('\n  }', end) + 4;
+    const src = panel.slice(start, fnEnd);
+    // eslint-disable-next-line no-new-func
+    const sandbox = new Function(src + '\nreturn { bookingLinkCreatedMs, isBookingLinkWithinMaxAge };')();
+    const nowMs = new Date('2026-09-16T12:00:00Z').getTime();
+    const recent = sandbox.isBookingLinkWithinMaxAge({ created: '18 Mar 2026, 17:43' }, nowMs);
+    const tooOld = sandbox.isBookingLinkWithinMaxAge({ created: '1 Jan 2025, 09:00' }, nowMs);
+    const withinYear = sandbox.isBookingLinkWithinMaxAge({ created: '17 Sep 2025, 12:00' }, nowMs);
+    const overYear = sandbox.isBookingLinkWithinMaxAge({ created: '15 Sep 2025, 12:00' }, nowMs);
+    const garbage = sandbox.isBookingLinkWithinMaxAge({ created: 'not a date' }, nowMs);
+    const missing = sandbox.isBookingLinkWithinMaxAge({}, nowMs);
+    return recent === true && tooOld === false && withinYear === true && overYear === false && garbage === true && missing === true;
+  })(),
+  'a link created within 365 days is kept, one older is dropped, and an unparseable/missing date is kept (fail open, not silently hidden)'
 );
 check(
   /function bookingLinkTypeName/.test(panel) && /v !== '-'/.test(panel),
