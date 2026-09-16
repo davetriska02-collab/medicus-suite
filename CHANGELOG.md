@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.56] — 2026-09-16
+
+### Problem-nesting canvas — two more cataract-procedure suggestions
+
+Added `rules/problem-nesting-overrides.json` pairs offering "Other extraction
+of cataract" (54885007) and "YAG laser capsulotomy of lens" (172532006) as
+children of "Cataract" (193570009), alongside the existing
+pseudophakia/nuclear-cataract/phaco entries. Both concepts confirmed active
+via the public NHS termbrowser API; procedure-axis sequelae of a cataract
+problem, not SNOMED IS-A descendants of it, so the live descendant search
+would not surface either on its own. Regression-pinned in
+`test-problem-nesting.js`.
+
 ## [v3.261.55] — 2026-09-16
 
 ### Contacts canvas — patient-name quality checks (detect + fix)
