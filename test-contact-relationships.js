@@ -1273,8 +1273,83 @@ console.log('19: isShorterVersionOfName');
     CR.isShorterVersionOfName('Ms T Dave Test', 'Ms Test Dave Test') === true,
     'the shortening can be in any word position, not only the middle name'
   );
+  check(
+    CR.isShorterVersionOfName('Ms Test D. Test', 'Ms Test Dave Test') === true,
+    'a single letter plus a period is still an initial, not a different name'
+  );
+  check(
+    CR.isShorterVersionOfName('John Smith', 'Johnny Smith') === false,
+    'a multi-letter given-name shortening (John→Johnny) is real history, never a deletable "shorter copy"'
+  );
+  check(
+    CR.isShorterVersionOfName('Rob Jones', 'Robert Jones') === false,
+    'Rob→Robert is a genuine former name, not an initialised copy'
+  );
+  check(CR.isInitialNameToken('D') === true, 'a bare letter is an initial');
+  check(CR.isInitialNameToken('D.') === true, 'a letter plus period is an initial');
+  check(CR.isInitialNameToken('John') === false, 'a multi-letter word is not an initial');
+  check(CR.payloadPatientMatches({ patientId: 'p-1' }, 'p-1') === true, 'matching patientId is accepted');
+  check(
+    CR.payloadPatientMatches({ patientId: 'p-other' }, 'p-1') === false,
+    'a GET payload for a different patient is refused'
+  );
+  check(
+    CR.payloadPatientMatches({ preferredGivenName: 'Test' }, 'p-1') === false,
+    'a payload with no patientId fails closed'
+  );
+  check(CR.payloadPatientMatches(null, 'p-1') === false, 'is defensive against a missing payload');
   check(CR.isShorterVersionOfName('', 'Ms Test Dave Test') === false, 'an empty former name is never flagged');
   check(CR.isShorterVersionOfName(null, null) === false, 'is defensive against missing values');
+}
+
+console.log('20: name-quality writes re-fetch and re-validate immediately before POST (H-072)');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const canvas = fs.readFileSync(path.join(__dirname, 'content-scripts/contacts-canvas.js'), 'utf8');
+  function fnBody(name) {
+    const start = canvas.indexOf('async function ' + name);
+    if (start === -1) return '';
+    const next = canvas.indexOf('\n  async function ', start + 10);
+    return canvas.slice(start, next === -1 ? canvas.length : next);
+  }
+  const split = fnBody('fixSplitFirstName');
+  check(
+    /getEditOfficialName/.test(split) &&
+      split.indexOf('getEditOfficialName') < split.indexOf('changeOfficialName') &&
+      /assertNamePayloadPatient/.test(split) &&
+      /split-first-name/.test(split),
+    'fixSplitFirstName re-fetches official name, checks patientId, and re-validates the split before writing'
+  );
+  const caps = fnBody('fixCapitalisation');
+  check(
+    /getEditOfficialName/.test(caps) &&
+      caps.indexOf('getEditOfficialName') < caps.indexOf('changeOfficialName') &&
+      /findWeirdCapitalisationFields\(official\)/.test(caps),
+    'fixCapitalisation rebuilds the re-cased body from a fresh official-name read, not the canvas-load snapshot'
+  );
+  const pref = fnBody('fixRedundantPreferredName');
+  check(
+    /getEditPreferredName/.test(pref) &&
+      /isRedundantPreferredName/.test(pref) &&
+      pref.indexOf('getEditPreferredName') < pref.indexOf('changePreferredName'),
+    'fixRedundantPreferredName re-reads preferred + official name and re-validates redundancy before clearing'
+  );
+  const del = fnBody('deleteShorterFormerName');
+  check(
+    /getPatientDetails/.test(del) &&
+      /isShorterVersionOfName/.test(del) &&
+      del.indexOf('getPatientDetails') < del.indexOf('deleteFormerName'),
+    'deleteShorterFormerName re-fetches former names and re-validates the initial-copy check before deleting'
+  );
+  const adopt = fnBody('confirmAndApplyPlaceholderAdopt');
+  check(
+    /findPlaceholderNameToken/.test(adopt) &&
+      /getEditFormerName/.test(adopt) &&
+      /getEditOfficialName/.test(adopt) &&
+      adopt.indexOf('findPlaceholderNameToken') < adopt.indexOf('changeOfficialName'),
+    'adopting a former name aborts if the current official name is no longer a placeholder, and re-checks the former-name payload patientId'
+  );
 }
 
 // ============================================================

@@ -578,32 +578,54 @@
     return out;
   }
 
+  // isInitialNameToken(word) -> boolean. A single letter, optionally followed by a period
+  // ("D", "D.", "T") — the PDS/GP2GP "initial instead of the full word" shape Nick's own
+  // shorter-former-name example actually is. A multi-letter shortening ("John"/"Johnny",
+  // "Rob"/"Robert") is a real historical name, not a degraded copy, and must never match.
+  function isInitialNameToken(word) {
+    return /^[A-Za-z]\.?$/.test(String(word || '').trim());
+  }
+
   // isShorterVersionOfName(formerNameStr, currentNameStr) -> boolean
   // Nick's own example, 2026-09-16: former name "Test D Test" against current official name "Test
-  // Dave Test" — same word count, one word ("D") a case-insensitive PREFIX of the same-position
-  // current word ("Dave") and genuinely shorter, every other word identical. That pattern means
-  // the "former" name isn't a different historical name at all, just a degraded (abbreviated)
-  // copy of the current one — worth flagging as probably safe to delete rather than kept as if it
-  // were real history. Word COUNT must match exactly, and EVERY word must be either identical or a
-  // strict prefix — a former name with a genuinely different, missing or extra word (a real old
-  // name) never matches. At least one word must actually be shorter, so a byte-for-byte duplicate
-  // is not reported here (that would be a different, not-yet-built check).
+  // Dave Test" — same word count, one word an INITIAL ("D" / "D.") of the same-position current
+  // word ("Dave"), every other word identical. That pattern means the "former" name isn't a
+  // different historical name at all, just a degraded (initialised) copy of the current one —
+  // worth flagging as probably safe to delete rather than kept as if it were real history. Word
+  // COUNT must match exactly, and EVERY differing word must be an initial of the same-position
+  // current word — a former name with any genuinely different, missing or extra word (a real old
+  // name), or a multi-letter shortening of a real given name (John→Johnny, Rob→Robert), never
+  // matches. At least one word must actually be shorter, so a byte-for-byte duplicate is not
+  // reported here (that would be a different, not-yet-built check).
   function isShorterVersionOfName(formerNameStr, currentNameStr) {
     const formerWords = nameTokens(formerNameStr);
     const currentWords = nameTokens(currentNameStr);
     if (!formerWords.length || formerWords.length !== currentWords.length) return false;
     let anyShorter = false;
     for (let i = 0; i < formerWords.length; i++) {
-      const f = formerWords[i].toLowerCase();
-      const c = currentWords[i].toLowerCase();
-      if (f === c) continue;
-      if (f.length < c.length && c.startsWith(f)) {
+      const f = formerWords[i];
+      const c = currentWords[i];
+      if (f.toLowerCase() === c.toLowerCase()) continue;
+      const initial = f.replace(/\.$/, '').toLowerCase();
+      const current = c.toLowerCase();
+      if (isInitialNameToken(f) && initial.length < current.length && current.startsWith(initial)) {
         anyShorter = true;
         continue;
       }
       return false;
     }
     return anyShorter;
+  }
+
+  // payloadPatientMatches(payload, expectedPatientId) -> boolean
+  // Fail-closed identity check for the name-edit GET payloads (getEditOfficialName /
+  // getEditPreferredName / getEditFormerName all confirm they return `patientId`). A missing
+  // id on either side is not a match — the canvas must refuse the write rather than assume
+  // the GET landed on the hub patient.
+  function payloadPatientMatches(payload, expectedPatientId) {
+    if (!payload || expectedPatientId == null || expectedPatientId === '') return false;
+    if (payload.patientId == null || payload.patientId === '') return false;
+    return String(payload.patientId) === String(expectedPatientId);
   }
 
   // checkPatientNameQuality(patientDetailsSection, officialNameFields) -> [{ type, detail, ... }]
@@ -1342,6 +1364,8 @@
     titleCaseNameWord,
     findWeirdCapitalisationFields,
     isShorterVersionOfName,
+    isInitialNameToken,
+    payloadPatientMatches,
     checkPatientNameQuality,
     resolveMiddleNamesConflict,
     formatOfficialName,

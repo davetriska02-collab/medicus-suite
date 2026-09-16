@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.57] — 2026-09-16
+
+### Contacts canvas — name-quality writes re-check before POST (H-072)
+
+Steward review of #416: H-072 control (g) said every `changeOfficialName` body
+was built from a fresh read, but split / capitalisation / preferred-name /
+former-name-delete used the canvas-load snapshot. A PDS update between open
+and click could overwrite a better current name, or delete a former name that
+was no longer just an initialised copy.
+
+Every name-quality write now re-derives the live page patient, re-fetches the
+relevant GET payload, refuses a mismatched `patientId`, and re-validates the
+detection still holds immediately before POST. Adopting a former name also
+aborts if the official name is no longer a placeholder, or if the middle-name
+choice is stale against the live pair.
+
+`isShorterVersionOfName` now only treats a single-letter initial (`D` / `D.`)
+as a shorter copy. Multi-letter shortenings (John→Johnny, Rob→Robert) are
+real history and are no longer offered for one-click delete.
+
 ## [v3.261.56] — 2026-09-16
 
 ### Problem-nesting canvas — two more cataract-procedure suggestions

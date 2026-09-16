@@ -571,8 +571,9 @@
       // own header comment. getEditOfficialName is a small bounded extra fetch (hub patient only,
       // same "correctness is worth one more small call" reasoning as getEditAddress above) — its
       // separated givenName/middleNames fields are what makes the split-first-name check possible
-      // at all, and are reused unchanged (prefix/familyName/suffix) by every one of the three fixes
-      // below. A failure here just means that one check doesn't run — never breaks the rest of the
+      // at all. Detection uses this snapshot; every write re-fetches immediately before POST
+      // (H-072 control (g)) rather than sending these cached prefix/familyName/suffix values.
+      // A failure here just means that one check doesn't run — never breaks the rest of the
       // canvas.
       try {
         st.indexOfficialName = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
@@ -3319,6 +3320,24 @@
   // renaming the WRONG patient's record is a materially worse mistake than a wrongly-typed phone
   // number, so this is not a place to relax that guard.
 
+  // assertLivePatient / assertNamePayloadPatient — H-043 / H-072: every name write re-derives
+  // the live page patient AND checks the GET payload's own patientId before a full-replace POST.
+  // Missing or mismatched ids fail closed (nothing written) rather than assuming the GET landed
+  // on the hub patient.
+  function assertLivePatient(st) {
+    const ctx = window.ContactsApi.resolveContext();
+    if (!ctx || ctx.patientId !== st.patientId) {
+      throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+    }
+    return ctx;
+  }
+
+  function assertNamePayloadPatient(payload, st) {
+    if (!window.ContactRelationships.payloadPatientMatches(payload, st.patientId)) {
+      throw new Error('Medicus returned a name record for a different patient — nothing was changed.');
+    }
+  }
+
   // refreshNameQuality — re-fetches rather than patches the cached entry, same reasoning
   // fixWrongTypePhone's own comment gives: the warning list (and the header, which shows
   // indexPatientDetails.displayName) must reflect what Medicus actually holds after a write, not a
@@ -3358,10 +3377,18 @@
     st.nameFixesInFlight.add(key);
     render();
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      assertLivePatient(st);
+      const official = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(official, st);
+      const preferred = await window.ContactsApi.getEditPreferredName(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(preferred, st);
+      if (!window.ContactRelationships.isRedundantPreferredName(official.givenName, preferred.preferredGivenName)) {
+        await refreshNameQuality(st);
+        throw new Error('The preferred name is no longer the same as the official first name — nothing was changed.');
       }
+      assertLivePatient(st);
       await window.ContactsApi.changePreferredName(st.apiBase, {
         patientId: st.patientId,
         preferredGivenName: '',
@@ -3378,9 +3405,10 @@
     }
   }
 
-  // fixSplitFirstName — applies the mechanical (first word / rest) split checkPatientNameQuality
-  // already computed, keeping prefix/familyName/suffix exactly as getEditOfficialName returned
-  // them (full-replace endpoint, same discipline as changeAddress/changePatientContact).
+  // fixSplitFirstName — applies the mechanical (first word / rest) split from a FRESH
+  // getEditOfficialName read (H-072 control (g): full-replace bodies are never built from the
+  // canvas-load snapshot). Re-validates isSplitFirstName on that read so a name PDS already
+  // corrected is not overwritten with the stale suggested split.
   async function fixSplitFirstName() {
     const key = 'split-first-name';
     const st = cs;
@@ -3396,17 +3424,27 @@
     st.nameFixesInFlight.add(key);
     render();
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      assertLivePatient(st);
+      const official = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(official, st);
+      const freshIssues = window.ContactRelationships.checkPatientNameQuality(
+        { fullOfficialName: '', preferredGivenName: '', formerNames: [] },
+        official
+      );
+      const fresh = freshIssues.find((i) => i.type === 'split-first-name');
+      if (!fresh) {
+        await refreshNameQuality(st);
+        throw new Error('The given name is no longer recorded as two words with no middle name — nothing was changed.');
       }
+      assertLivePatient(st);
       await window.ContactsApi.changeOfficialName(st.apiBase, {
         patientId: st.patientId,
-        prefix: st.indexOfficialName.prefix,
-        givenName: issue.suggestedGivenName,
-        middleNames: issue.suggestedMiddleNames,
-        familyName: st.indexOfficialName.familyName,
-        suffix: st.indexOfficialName.suffix,
+        prefix: official.prefix,
+        givenName: fresh.suggestedGivenName,
+        middleNames: fresh.suggestedMiddleNames,
+        familyName: official.familyName,
+        suffix: official.suffix,
       });
       if (st !== cs) return;
       await refreshNameQuality(st);
@@ -3438,23 +3476,29 @@
     }
     const issue = (st.nameQualityIssues || []).find((i) => i.type === 'weird-capitalisation');
     if (!issue || !st.indexOfficialName) return;
-    const bySlot = {};
-    for (const f of issue.fields) bySlot[f.key] = f.suggested;
     st.nameFixError = null;
     st.nameFixesInFlight.add(key);
     render();
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      assertLivePatient(st);
+      const official = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(official, st);
+      const freshFields = window.ContactRelationships.findWeirdCapitalisationFields(official);
+      if (!freshFields.length) {
+        await refreshNameQuality(st);
+        throw new Error('No all-caps name field remains on this record — nothing was changed.');
       }
+      const freshBySlot = {};
+      for (const f of freshFields) freshBySlot[f.key] = f.suggested;
+      assertLivePatient(st);
       await window.ContactsApi.changeOfficialName(st.apiBase, {
         patientId: st.patientId,
-        prefix: bySlot.prefix != null ? bySlot.prefix : st.indexOfficialName.prefix,
-        givenName: bySlot.givenName != null ? bySlot.givenName : st.indexOfficialName.givenName,
-        middleNames: bySlot.middleNames != null ? bySlot.middleNames : st.indexOfficialName.middleNames,
-        familyName: bySlot.familyName != null ? bySlot.familyName : st.indexOfficialName.familyName,
-        suffix: st.indexOfficialName.suffix,
+        prefix: freshBySlot.prefix != null ? freshBySlot.prefix : official.prefix,
+        givenName: freshBySlot.givenName != null ? freshBySlot.givenName : official.givenName,
+        middleNames: freshBySlot.middleNames != null ? freshBySlot.middleNames : official.middleNames,
+        familyName: freshBySlot.familyName != null ? freshBySlot.familyName : official.familyName,
+        suffix: official.suffix,
       });
       if (st !== cs) return;
       await refreshNameQuality(st);
@@ -3488,10 +3532,17 @@
     st.nameFixesInFlight.add(key);
     render();
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      assertLivePatient(st);
+      const fresh = await window.ContactsApi.getPatientDetails(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      const section = (fresh && fresh.patientDetailsSection) || {};
+      const formerNames = Array.isArray(section.formerNames) ? section.formerNames : [];
+      const entry = formerNames.find((f) => f && f.nameId === nameId);
+      if (!entry || !window.ContactRelationships.isShorterVersionOfName(entry.name, section.fullOfficialName)) {
+        await refreshNameQuality(st);
+        throw new Error('This former name is no longer just an initialised copy of the current name — nothing was changed.');
       }
+      assertLivePatient(st);
       await window.ContactsApi.deleteFormerName(st.apiBase, nameId);
       if (st !== cs) return;
       await refreshNameQuality(st);
@@ -3527,13 +3578,14 @@
     st.nameFixesInFlight.add(key);
     render();
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
-      }
+      assertLivePatient(st);
       const former = await window.ContactsApi.getEditFormerName(st.apiBase, nameId);
       if (st !== cs) return;
-      const currentMiddleNames = (st.indexOfficialName && st.indexOfficialName.middleNames) || '';
+      assertNamePayloadPatient(former, st);
+      const official = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(official, st);
+      const currentMiddleNames = official.middleNames || '';
       const resolved = window.ContactRelationships.resolveMiddleNamesConflict(currentMiddleNames, former.middleNames);
       if (!resolved.conflict) {
         st.nameFixesInFlight.delete(key);
@@ -3609,14 +3661,60 @@
     st.nameFixesInFlight.add(key);
     render();
     try {
-      const ctx = window.ContactsApi.resolveContext();
-      if (!ctx || ctx.patientId !== st.patientId) {
-        throw new Error('The page has moved to a different patient — reopen the canvas and try again.');
+      assertLivePatient(st);
+      const official = await window.ContactsApi.getEditOfficialName(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(official, st);
+      const details = await window.ContactsApi.getPatientDetails(st.apiBase, st.patientId);
+      if (st !== cs) return;
+      const fullName = (details && details.patientDetailsSection && details.patientDetailsSection.fullOfficialName) || '';
+      if (!window.ContactRelationships.findPlaceholderNameToken(fullName)) {
+        await refreshNameQuality(st);
+        throw new Error('The official name is no longer a placeholder — nothing was changed.');
       }
-      // Re-check identity immediately before the write — same H-043/H-056 discipline
-      // fixWrongTypePhone uses: beginPlaceholderAdopt's own GET (and the picker sitting on screen,
-      // for the conflict path) may have raced a navigation.
-      await window.ContactsApi.changeOfficialName(st.apiBase, { patientId: st.patientId, ...fields });
+      const formerFresh = await window.ContactsApi.getEditFormerName(st.apiBase, nameId);
+      if (st !== cs) return;
+      assertNamePayloadPatient(formerFresh, st);
+      const resolved = window.ContactRelationships.resolveMiddleNamesConflict(
+        official.middleNames,
+        formerFresh.middleNames
+      );
+      const chosenMiddle = String(middleNames || '')
+        .trim()
+        .toLowerCase();
+      if (resolved.conflict) {
+        const stillLive = resolved.options.some(
+          (o) =>
+            String(o.value || '')
+              .trim()
+              .toLowerCase() === chosenMiddle
+        );
+        if (!stillLive) {
+          await refreshNameQuality(st);
+          throw new Error('The current middle name changed while this was open — nothing was changed. Reopen and choose again.');
+        }
+      } else if (
+        chosenMiddle !==
+        String(official.middleNames || '')
+          .trim()
+          .toLowerCase()
+      ) {
+        await refreshNameQuality(st);
+        throw new Error('The current middle name changed while this was open — nothing was changed. Reopen and try again.');
+      }
+      const writeFields = {
+        prefix: formerFresh.prefix,
+        givenName: formerFresh.givenName,
+        middleNames,
+        familyName: formerFresh.familyName,
+        suffix: formerFresh.suffix,
+      };
+      if (window.ContactRelationships.formatOfficialName(writeFields) !== targetText) {
+        await refreshNameQuality(st);
+        throw new Error('The name on record changed while this was open — nothing was changed. Reopen and try again.');
+      }
+      assertLivePatient(st);
+      await window.ContactsApi.changeOfficialName(st.apiBase, { patientId: st.patientId, ...writeFields });
       if (st !== cs) return;
       await refreshNameQuality(st);
     } catch (err) {
