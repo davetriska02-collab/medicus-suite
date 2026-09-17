@@ -34,6 +34,48 @@ The page already has one assignee channel: the task-list GET's
 Nick PRs #417/#418 claim 3.261.58; 3.261.59–.60 left for Activity /
 Task Presence. This is 3.261.61. Merge held for Dave.
 
+## [v3.261.60] — 2026-09-17
+
+### Task Presence — occupant token on list rows, Rx message, and RHS
+
+The occupied masthead already told you a colleague had the request open.
+That did not help the next clinician scanning the list — they still opened
+the item only to find it taken. The same Task Presence occupants (native
+Pusher `presence-{site}-task-{taskUuid}` plus the existing folder/hosted
+store fallback — not a second channel, never the list-occupancy channel)
+now paint a compact token on three surfaces:
+
+- **List row** — icon + highlighted display name next to the entry
+  (initials stay on the icon; the name hides when the cell is tight)
+- **Request / prescription message chrome** — left/main card
+- **Clinical Summary RHS** — the right-hand panel for that item
+
+Clears when they leave or the store row goes stale. Hide-for-now on the
+masthead does not hide the tokens. Advisory, never a lock. Book-signing
+RHS scoping is out of scope. List-row markers still need the folder or
+hosted store (native Pusher is only subscribed on the open request).
+
+## [v3.261.59] — 2026-09-17
+
+### Activity — Last month overflow inverted the date range
+
+`ActivityApi.preset('lastMonth')` did `setMonth(n-1)` *before* `setDate(1)`.
+On the 31st of a month whose predecessor is shorter (31 Mar/May/Jul/Oct/Dec)
+JS Date overflows — 31 Mar → 3 Mar → `setDate(1)` → **1 Mar**, with
+`end.setDate(0)` still **28 Feb**. The Activity tab then queried an inverted
+window and showed empty / wrong totals. Same trap in Submissions'
+mirrored "Last month" preset.
+
+Fix: set the start to the 1st *before* stepping the month (the 1st always
+exists). `fetchActivityReport` now refuses inverted ranges. The Activity
+module resets a persisted inverted pair to today, and a range/toggle change
+mid-fetch no longer paints today's numbers under a Last-7d label (or the
+reverse) — the dropped request is queued instead.
+
+Tests in `test-api-clients.js` pin lastMonth from 31 Mar/May/Jul/Oct/Dec,
+leap-year 31 Mar 2028, and the inverted-range reject. Those cases fail on
+v3.261.57.
+
 ## [v3.261.57] — 2026-09-16
 
 ### Contacts canvas — name-quality writes re-check before POST (H-072)
