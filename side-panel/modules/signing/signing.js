@@ -277,7 +277,12 @@ async function fetchAndRun() {
           summary: t.summary || t.summaryLabel || '',
           priorityDisplay: t.priorityDisplay || '',
           createdAt: t.createdAt || '',
-          assignedTo: typeof t.assignedTo === 'string' ? t.assignedTo : t.assignedTo && t.assignedTo.label ? t.assignedTo.label : '',
+          assignedTo:
+            typeof t.assignedTo === 'string'
+              ? t.assignedTo
+              : t.assignedTo && t.assignedTo.label
+                ? t.assignedTo.label
+                : '',
           assignedId: pickAssignedId(t),
           // The row's own overview pointer — the PROVEN live path to the
           // patient (the queue bridge fetches exactly this field). Preferred
