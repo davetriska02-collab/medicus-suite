@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.58] — 2026-09-16
+
+### Lab Filing — per-profile comment allow-list, practice-wide profile sync (H-073)
+
+Diagnosed a real filing profile that could never fire: two fixed performer
+comments (an AKI-risk note on Creatinine, a NICE NG203 ethnicity-correction
+note on eGFR) recur on every renal panel and were correctly blocked by the
+"carries a comment the suite cannot score" gate. A filing profile can now
+carry `allowComments` — phrases the clinician types after reading a real
+comment — that excuse a specific, recurring comment for **that profile
+only**; the global benign-phrase set and the numeric severity gate are
+untouched.
+
+Filing-profile content (match rules, parameters, `allowComments`, trend
+guard) can also now sync practice-wide, via a new `labfiling` Practice
+Profile module — the same shared-folder channel the v3.260.0 Knowledge
+live-set sync already uses. Every synced profile still **arrives disabled**:
+the new module delegates to the existing `labfilingImport`/`lockForReview`
+path unconditionally (merge mode leaves an existing local profile of the
+same id — including its own enabled state — completely untouched; only new
+ids are appended, force-locked). A publish can never itself switch
+auto-filing on anywhere; each machine still needs a human review. The
+enable toggle now carries a bold, underlined "Click here to enable this
+profile" prompt so a freshly-synced (or freshly-authored) profile isn't
+missed. Profiles also record who last saved them and when (`updatedBy`/
+`updatedAt`), shown on the card.
+
+Regression-pinned in `test-lab-filing-utils.js` (allowComments scoping),
+`test-practice-profile.js` (labfiling merge/replace/force-disable), and
+`test-service-worker.js` (the new import wiring). New `docs/HAZARD-LOG.md`
+H-073, pending CSO review.
+
 ## [v3.261.57] — 2026-09-16
 
 ### Contacts canvas — name-quality writes re-check before POST (H-072)
