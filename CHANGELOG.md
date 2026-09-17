@@ -2,6 +2,82 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.62] — 2026-09-17
+
+### Lab Filing — block filing for any analyte no profile has declared (H-074)
+
+Found live while testing the previous release's allow-list feature: a CRP
+result sharing a task with a genuinely-configured U&E panel was offered for
+filing as part of "all normal" even though no filing profile names CRP
+anywhere. Never actually filed — caught before the confirm click — but the
+offer itself was the gap.
+
+Root cause: a filing profile's `match`/`analytes` gate whether the File
+button appears for a combined report at all, but nothing previously gated
+which *individual* results were swept into "all normal". The existing
+`requireRangeForAll` backstop only fires when a result has neither a
+clinician-set parameter nor a lab-supplied reference range — and most
+routine bloods, CRP included, are always lab-ranged, so an unconfigured
+analyte sailed straight through.
+
+New `unrecognisedAnalyteBlockers` now requires every result in the report to
+be named in a matched profile's own `analytes` list before filing is
+offered — same "unknown → not fileable" doctrine as `requireRangeForAll`,
+extended from "no range" to "never configured", using the same
+token-anchored match the parameter matcher already relies on. Fixed
+alongside a second, related bug in the same merge function:
+`mergeProfilesForReport`'s `analytes` field was hardcoded to an empty
+array, which would have left the new check unable to recognise anything
+from any profile at all — the same class of gap as the `allowComments`
+merge bug fixed the day before.
+
+**This is a genuine behavioural change across every existing filing
+profile.** Any profile whose `analytes` list is incomplete relative to what
+its reports actually show will now see filing blocked for the uncovered
+results, where it previously (incorrectly) offered them. Review your
+profiles' "Analyte names on this lab's reports" field if filing stops
+being offered somewhere it used to work.
+
+Regression-pinned in `test-lab-filing-utils.js`. New `docs/HAZARD-LOG.md`
+H-074, pending CSO review.
+
+### Lab Filing — fixed a filing attempt that silently never actually filed (H-075)
+
+Found live testing the previous release — the first time a live test
+reached the actual "File results" click, since every earlier attempt this
+week got blocked before getting that far. Symptom: clicking "File all
+normal" marked every result "Normal result, no action required", the
+confirm dialog appeared and was accepted, and the toast said the File
+control was clicked — but the task never actually left the queue, and
+Medicus's own primary button relabelled itself to "Reassign task".
+
+Root cause: Medicus's Next-Step radio control is a `<label for="id">`
+element whose actual `<input>` lives elsewhere in the DOM as a separate
+sibling, not nested inside the label. The macro's shared click helper
+(`realClick`) fired a full synthetic pointerdown/mousedown/pointerup/
+mouseup/click sequence on the label and then a *separate* `.click()`
+call — hitting that control's own interaction handling twice in one
+synchronous tick, with no time for its state to settle in between.
+
+`realClick` now resolves a label to its real associated control (via its
+`for` attribute, or a nested input for the wrap-style pattern used
+elsewhere) and clicks it directly, exactly once. Separately: `aria-checked`
+was proven, live, to always read `null` on this Medicus screen — so every
+"already selected, don't re-click" check in the macro was blind and
+re-clicking things that didn't need it. A new `isRadioSelected` helper
+reads the real control's `.checked` property instead, so an
+already-correct selection is never touched at all.
+
+This was diagnosed entirely from live evidence — console logs and DOM
+inspection run together with the practice, not guessed at — given this is
+the actual irreversible-write path. Live-confirmed working the same day.
+
+`docs/HAZARD-LOG.md` H-074 also live-confirmed working. New H-075, pending
+CSO review.
+
+Nick's branch claimed 3.261.59/60; those patches already shipped as
+Activity last-month (#419) and Task Presence (#420). This is 3.261.62.
+
 ## [v3.261.61] — 2026-09-17
 
 ### Signing Queue — RHS follows the book-signing list, not the whole practice

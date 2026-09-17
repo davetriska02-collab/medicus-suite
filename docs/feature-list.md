@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.261.60
+**Version:** v3.261.62
 **Generated:** 2026-09-17
 
 ## What it is
@@ -149,6 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.261.62 (17 Sep)** — Lab filing: block unrecognised analytes before offering File (H-074); Next-Step radio click now files the task (H-075)
 - **v3.261.50 (14 Sep)** — Prescription-request canvas: usual-GP send stays in the allocate action cluster
 - **v3.261.49 (14 Sep)** — Prescription-request canvas: Send N to usual GP is a peer of Distribute equally, not a featured CTA
 - **v3.261.48 (14 Sep)** — Prescription-request canvas: Send N to usual GP if they are working that day; not-in is an opt-in on that action only

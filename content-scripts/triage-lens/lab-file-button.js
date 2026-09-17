@@ -34,6 +34,20 @@
 (function () {
   'use strict';
 
+  // Debug logging is off by default; flip it on at runtime from the page console
+  // with: localStorage.setItem('ch-debug','1') then reload. (Same flag content.js
+  // uses.) Lets a clinician see exactly what a filing attempt is doing — added
+  // while diagnosing H-075 (a click that appeared to work but never actually
+  // selected anything).
+  const DEBUG = (() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem('ch-debug') === '1';
+    } catch (e) {
+      return false;
+    }
+  })();
+  const log = (...a) => DEBUG && console.log('[LabFiling]', ...a);
+
   // DOM-contract registry (Horizon-1) — dual-mode require so fileAllNormal's
   // generic selector families work identically under `node test-lab-file-macro.js`
   // (require) and in the browser (manifest loads shared/dom-contracts.js
@@ -79,6 +93,27 @@
     if (el.getAttribute && el.getAttribute('aria-disabled') === 'true') return false;
     if (el.classList && el.classList.contains && el.classList.contains('disabled')) return false;
     return true;
+  }
+  // A <label for="id"> can be a separate SIBLING of its actual control, not a
+  // wrapper (confirmed live, 2026-09-17 — Medicus's own Next-Step radios:
+  // `<input id="radio_group_...">` elsewhere in the DOM, referenced only by
+  // the label's `for`). Resolves to the real control either way — used both
+  // to click the real thing (realClick) and to read its real .checked state,
+  // which `aria-checked` cannot: also confirmed live, Medicus does not set
+  // aria-checked on this radio group at all, so a check against it always
+  // reads false/unselected regardless of the true state.
+  function resolveRadioControl(el) {
+    if (!el || el.tagName !== 'LABEL') return el;
+    return (
+      (el.htmlFor && document.getElementById(el.htmlFor)) ||
+      el.querySelector('input,[role="radio"],[role="checkbox"]') ||
+      el
+    );
+  }
+  function isRadioSelected(el) {
+    const c = resolveRadioControl(el);
+    if (c && typeof c.checked === 'boolean') return c.checked;
+    return !!(el && el.getAttribute && el.getAttribute('aria-checked') === 'true');
   }
   // Collect elements matching ANY of `selectors`, DE-DUPLICATED — an element that
   // matches two selectors (e.g. a <div role="radio">) must be returned once, or it
@@ -144,6 +179,41 @@
 
   function realClick(el) {
     if (!el) return;
+    // A <label for="id"> here is a separate SIBLING of its actual control,
+    // not a wrapper around it (confirmed live, 2026-09-17: Medicus's
+    // Next-Step radio is `<input id="radio_group_...">` elsewhere in the
+    // DOM, `<label for="radio_group_...">` referencing it by id only).
+    // Firing the full pointerdown/mousedown/pointerup/mouseup/click
+    // sequence and THEN a separate .click() call — the previous behaviour,
+    // used unconditionally for every element — hits that kind of
+    // Angular/Material-style radio-group component's own interaction
+    // handling TWICE in the same synchronous tick, with no time for its
+    // change detection to settle between them. Found live: the whole Next
+    // Steps group ended up with NOTHING selected afterwards — not even the
+    // option that was clicked, and not the one that had been selected
+    // beforehand either. For a label, resolve the real control it's
+    // labelling (its for/id target, or — for the label-wraps-input pattern
+    // used elsewhere — a descendant) and click THAT directly, exactly once.
+    // A single native .click() is also the spec-correct way to trigger a
+    // label's own forward-to-control activation behaviour in the first
+    // place; a bare dispatchEvent('click') does not reliably do that for a
+    // non-trusted synthetic event, which is a second, independent reason
+    // the old sequence could fail here even before the double-fire above.
+    if (el.tagName === 'LABEL') {
+      const control = resolveRadioControl(el);
+      log('realClick — label found, clicking its real control once:', {
+        labelText: el.textContent && el.textContent.trim(),
+        htmlFor: el.htmlFor || null,
+        resolvedTag: control.tagName,
+        resolvedId: control.id || null,
+      });
+      try {
+        if (typeof control.click === 'function') control.click();
+      } catch (e) {
+        /* ignore */
+      }
+      return;
+    }
     ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
       try {
         el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }));
@@ -269,7 +339,7 @@
         ? findAllByText(root, [f.rowSelector], f.normalOptionText, vis)
         : findAllByText(root, NORMAL_OPTION_SEL, f.normalOptionText, vis);
       for (const el of opts) {
-        if (el.getAttribute && el.getAttribute('aria-checked') === 'true') {
+        if (isRadioSelected(el)) {
           marked++; // already normal
           continue;
         }
@@ -316,7 +386,7 @@
         result.reason = 'no-message-step';
         return result;
       }
-      if (!(msgStep.getAttribute && msgStep.getAttribute('aria-checked') === 'true')) click(msgStep);
+      if (!isRadioSelected(msgStep)) click(msgStep);
 
       const m = profile.patientMessage || {};
       if (m.template) {
@@ -345,12 +415,65 @@
     // step: it guarantees we never file while "message patient" or "reassign" is
     // the selected next step. If the profile names one and it isn't on screen, abort.
     if (f.nextStepText) {
+      if (DEBUG) {
+        // findByText is NOT exact-only here (no 5th arg) — it can fall back to
+        // a PARTIAL/substring match if no exact one is found, and the
+        // selector list includes broad div/span tags. If Medicus wraps a
+        // radio's label in more than one element carrying the same visible
+        // text (e.g. the clickable <label> AND an inner text-only <span>),
+        // or if the stored nextStepText doesn't quite match what's on screen,
+        // this could click something other than the intended radio. Logged
+        // before AND after so a wrong click shows up as a changed selection.
+        // Restricted to elements whose resolved control actually exposes a
+        // real .checked (i.e. genuine radio/checkbox controls, not every
+        // div/span/label on the page) — the earlier unfiltered dump was
+        // hundreds of lines of unrelated nav/menu text and hard to read.
+        const radios = queryAll(root, STEP_RADIO_SELECTORS).filter((el) => {
+          if (!vis(el)) return false;
+          const t = norm(textOf(el));
+          if (!t || t.length >= 60) return false;
+          const c = resolveRadioControl(el);
+          return c && typeof c.checked === 'boolean';
+        });
+        log(
+          'STEP 1c — nextStepText:',
+          JSON.stringify(f.nextStepText),
+          '| on-screen options (checked=selected, now read from the REAL control, not aria-checked):',
+          JSON.stringify(radios.map((el) => ({ text: textOf(el), checked: isRadioSelected(el) })))
+        );
+      }
       const step = findByText(root, STEP_RADIO_SELECTORS, f.nextStepText, vis);
       if (!step) {
         result.reason = 'no-next-step';
         return result;
       }
-      if (!(step.getAttribute && step.getAttribute('aria-checked') === 'true')) click(step);
+      const stepAlreadySelected = isRadioSelected(step);
+      log('STEP 1c — matched element:', {
+        tag: step.tagName,
+        className: step.className,
+        text: textOf(step),
+        exactMatch: textOf(step) === norm(f.nextStepText),
+        alreadySelected: stepAlreadySelected,
+      });
+      // Only click if the REAL control isn't already selected — removes the
+      // risk entirely for the common case (Medicus's own default already
+      // matches), rather than just changing how the click is performed.
+      if (!stepAlreadySelected) click(step);
+      if (DEBUG) {
+        const after = queryAll(root, STEP_RADIO_SELECTORS).filter((el) => {
+          if (!vis(el)) return false;
+          const t = norm(textOf(el));
+          if (!t || t.length >= 60) return false;
+          const c = resolveRadioControl(el);
+          return c && typeof c.checked === 'boolean';
+        });
+        log(
+          'STEP 1c — options AFTER (skipped click?',
+          stepAlreadySelected,
+          '):',
+          JSON.stringify(after.map((el) => ({ text: textOf(el), checked: isRadioSelected(el) })))
+        );
+      }
     }
 
     // STEP 4 — commit gate. A human always presses the final button.
@@ -372,6 +495,35 @@
 
     // STEP 5 — file. Re-find the button (EXACT label only — a commit click must
     // never go through the substring fallback, audit R8) and require it enabled.
+    if (DEBUG) {
+      // findByText returns the FIRST exact-text visible match in DOM order —
+      // it never checks for a second one. A combined multi-heading report
+      // (Renal function tests + LFTs + Lipids + ...) may repeat the same
+      // button label once per section rather than sharing one File control;
+      // if so the macro could be clicking a DIFFERENT section's button than
+      // the one that actually completes the whole task. This makes that
+      // visible instead of silent.
+      const all = findAllByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis).filter(
+        (el) => textOf(el) === norm(f.fileButtonText)
+      );
+      log(
+        'STEP 5 — candidates for File button text',
+        JSON.stringify(f.fileButtonText),
+        ':',
+        all.length,
+        all.map((el, i) => ({
+          index: i,
+          tag: el.tagName,
+          className: el.className,
+          id: el.id || null,
+          enabled: isEnabled(el),
+          top: el.getBoundingClientRect ? Math.round(el.getBoundingClientRect().top) : null,
+          nearbyText: (el.closest('section,div[class*="card"],div[class*="panel"]') || el.parentElement || el)
+            .textContent.trim()
+            .slice(0, 80),
+        }))
+      );
+    }
     const fileBtn = await wait(() => {
       const b = findByText(root, FILE_BUTTON_SEL, f.fileButtonText, vis, true);
       return b && isEnabled(b) ? b : null;
@@ -380,6 +532,12 @@
       result.reason = 'file-button-disabled';
       return result;
     }
+    log('STEP 5 — clicking:', {
+      tag: fileBtn.tagName,
+      className: fileBtn.className,
+      id: fileBtn.id || null,
+      top: fileBtn.getBoundingClientRect ? Math.round(fileBtn.getBoundingClientRect().top) : null,
+    });
     click(fileBtn);
     // `filed` records that the File control WAS CLICKED — it is not a Medicus
     // confirmation that the report left the review list (audit R10: no
@@ -540,6 +698,7 @@
     const report = rs.report;
     const blockers = []
       .concat(LF.profileParamBlockers(report, profile))
+      .concat(LF.unrecognisedAnalyteBlockers(report, profile))
       .concat(LF.trendBlockers(report, profile))
       .concat(LF.suppressedBlockers(report, suppress))
       .concat(LF.textSuppressBlockers(report, profile, document.body ? document.body.textContent : ''));
