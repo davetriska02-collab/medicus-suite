@@ -73,6 +73,26 @@ const qof = require('./rules/qof-rules.json');
   );
   check(/id="sgSoftFlags"/.test(signingSrc) && /suite-toggle/.test(signingSrc),
     'Signing Queue softFlags uses the Suite CSS switch');
+
+  console.log('\n--- book-signing RHS follows the page list, not a second channel ---');
+  check(/getRxListScope/.test(signingSrc), 'Signing Queue reads the intercepted list scope');
+  check(/_scopeGen/.test(signingSrc), 'in-flight fetches are generation-gated');
+  check(/applySigningFetchResult/.test(signingSrc), 'stale practice payload cannot paint after a toggle');
+  check(/queryStringForSigningScope/.test(signingSrc), 'individual GET reuses masterAssignee');
+  check(/id="sgScope"/.test(signingSrc), 'RHS names the list it is scoped to');
+  check(
+    /No open repeat requests on this list/.test(signingSrc),
+    'empty individual list has its own honest empty, not leftover practice copy'
+  );
+  const sentinelSrc = fs.readFileSync(path.join(__dirname, 'content-scripts/sentinel.js'), 'utf8');
+  check(/getRxListScope/.test(sentinelSrc), 'content script answers getRxListScope');
+  check(/data-ch-rx-list-scope/.test(sentinelSrc), 'scope is the page-world stamp, not a new channel');
+  const pageWorldSrc = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/page-world.js'), 'utf8');
+  check(/stampRxListScope/.test(pageWorldSrc), 'page-world stamps every Rx task-list GET');
+  check(
+    /Stamp before the empty-body return/.test(pageWorldSrc) || /stampRxListScope\(u\)/.test(pageWorldSrc),
+    'empty individual GET still stamps — [] is that list, not a wipe of the channel'
+  );
   check(
     /Never write false just because a checkbox is missing/.test(optionsJs) &&
       !/signingSoftFlagsInput \? signingSoftFlagsInput\.checked : false/.test(optionsJs),
