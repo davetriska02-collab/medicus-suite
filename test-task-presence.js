@@ -24,6 +24,17 @@ const {
   buildHeartbeatPayload,
   activeOthers,
   presenceChipText,
+  occupantsForTask,
+  nameFitsToken,
+  occupantTokenHtml,
+  occupantTokenAria,
+  occupantTokenTitle,
+  overviewColumnSide,
+  isClinicalSummaryHeading,
+  isMessageChromeHeading,
+  isForbiddenPresenceHostKind,
+  pickOverviewMessageHost,
+  pickOverviewRhsHost,
   minutesAgoText,
   actionedChipText,
   resolvePresenceConfig,
@@ -994,6 +1005,116 @@ console.log('--- presence look sanitiser ---');
   const vars = Look.lookCssVars({ colour: 'blue', size: 'compact' });
   check(vars['--ms-tp-wash'] === Look.COLOURS.blue.wash, 'css vars follow colour');
   check(vars['--ms-tp-font'] === Look.SIZES.compact.font, 'css vars follow size');
+}
+
+console.log('--- occupancy token: icon + highlighted name, same sources as the banner ---');
+{
+  const one = [{ staffId: UUID_B, label: 'Dr Priya Nair', initials: 'PN', hue: '#047857', taskUuid: UUID_A }];
+  const html = occupantTokenHtml(one, { surface: 'row' });
+  check(html.indexOf('ms-tp-token') >= 0, 'token root class');
+  check(html.indexOf('ms-tp-token-row') >= 0, 'row surface class');
+  check(html.indexOf('ms-tp-token-who') >= 0 && html.indexOf('Dr Priya Nair') >= 0, 'display name is highlighted');
+  check(html.indexOf('>PN<') >= 0, 'avatar icon carries initials');
+  check(/role="status"/.test(html), 'token is a status');
+  check(/aria-label="/.test(html) && occupantTokenAria(one).indexOf('Dr Priya Nair') >= 0, 'aria names the colleague');
+  check(occupantTokenAria(one).indexOf('You can still work it.') >= 0, 'aria keeps the advisory, not a lock');
+  check(occupantTokenTitle(one) === occupiedBannerTitle(one), 'token title matches the banner title');
+  check(occupantTokenHtml([], { surface: 'row' }) === '', 'no occupants -> no token');
+  check(occupantTokenHtml(null) === '', 'null others -> no token');
+
+  const two = [
+    { staffId: UUID_B, label: 'Dr Priya Nair', initials: 'PN', hue: '#047857', taskUuid: UUID_A },
+    { staffId: UUID_ME, label: 'Dr Sam Okonkwo', initials: 'SO', hue: '#2563eb', taskUuid: UUID_A },
+  ];
+  const twoHtml = occupantTokenHtml(two, { surface: 'message' });
+  check(twoHtml.indexOf('ms-tp-token-message') >= 0, 'message surface class');
+  check(twoHtml.indexOf('ms-tp-token-more') >= 0 && twoHtml.indexOf('+1') >= 0, 'second occupant is +1, name still preferred');
+  check(occupantTokenHtml(two, { surface: 'rhs' }).indexOf('ms-tp-token-rhs') >= 0, 'rhs surface class');
+  check(!/Hide for now/.test(twoHtml), 'token is not the dismissable masthead');
+  check(!/patient|nhs|dob/i.test(twoHtml), 'token HTML carries no patient-shaped fields');
+
+  check(nameFitsToken(220, 'Dr Priya Nair') === true, 'wide cell prefers the display name');
+  check(nameFitsToken(40, 'Dr Priya Nair') === false, 'tight cell falls back to initials');
+  check(nameFitsToken(0, 'Dr Priya Nair') === false, 'zero width -> initials');
+  check(nameFitsToken(220, '') === false, 'empty label never claims to fit');
+}
+
+console.log('--- occupantsForTask: banner sources only; list occupancy is not a row occupant ---');
+{
+  const store = [{ staffId: UUID_B, label: 'Dr Priya Nair', taskUuid: UUID_A, openedAtMs: 1 }];
+  const native = [{ staffId: UUID_ME, label: 'Dr Sam Okonkwo', taskUuid: UUID_A, openedAtMs: 2, native: true }];
+  const listOnly = [{ staffId: UUID_B, label: 'List watcher', listSlug: 'medical_patient_request_task' }];
+  const merged = occupantsForTask(UUID_A, store, native, listOnly);
+  check(merged.length === 2, 'native + store merge for the request');
+  check(
+    merged.some((o) => o.staffId === UUID_B) && merged.some((o) => o.staffId === UUID_ME),
+    'both banner sources kept'
+  );
+  check(
+    occupantsForTask(UUID_A, [], [], listOnly).length === 0,
+    'list-channel members never become row occupants'
+  );
+  check(occupantsForTask(UUID_B, store, native, listOnly).length === 0, 'wrong task uuid -> empty');
+  check(occupantsForTask('not-a-uuid', store, native, []).length === 0, 'malformed uuid -> empty');
+  check(occupantsForTask(UUID_A, null, null, listOnly).length === 0, 'null sources + list leftovers -> empty');
+}
+
+console.log('--- overview hosts: left message + RHS summary; never book-signing ---');
+{
+  check(overviewColumnSide({ left: 20, right: 200 }, 1000) === 'left', 'left column');
+  check(overviewColumnSide({ left: 700, right: 980 }, 1000) === 'right', 'right column');
+  check(overviewColumnSide({ left: 480, right: 520 }, 1000) === '', 'centre is neither');
+  check(overviewColumnSide(null, 1000) === '', 'null rect');
+  check(isClinicalSummaryHeading('Clinical Summary') === true, 'clinical summary heading');
+  check(isClinicalSummaryHeading('  clinical   summary  ') === true, 'clinical summary folded');
+  check(isClinicalSummaryHeading('Clinical notes') === false, 'near-miss heading rejected');
+  check(isMessageChromeHeading('Next Repeat Prescribing Issue') === true, 'Rx message chrome');
+  check(isMessageChromeHeading('Prescription request') === true, 'prescription request chrome');
+  check(isMessageChromeHeading('Patient request') === true, 'patient request chrome');
+  check(isMessageChromeHeading('Message from reception') === true, 'message-from chrome');
+  check(isMessageChromeHeading('Codes & actions') === false, 'unrelated heading rejected');
+  check(isForbiddenPresenceHostKind('book-signing') === true, 'book-signing is out of scope');
+  check(isForbiddenPresenceHostKind('signing') === true, 'signing kind forbidden');
+  check(isForbiddenPresenceHostKind('allocate') === true, 'allocate canvas forbidden');
+  check(isForbiddenPresenceHostKind('message') === false, 'message is allowed');
+
+  const pickedMsg = pickOverviewMessageHost([
+    { id: 'rhs', side: 'right', clinicalSummary: true, inMain: true, card: true },
+    { id: 'msg', side: 'left', messageHeading: true, inMain: true, card: true },
+    { id: 'sign', side: 'right', kind: 'book-signing', clinicalSummary: true },
+  ]);
+  check(pickedMsg && pickedMsg.id === 'msg' && pickedMsg.side === 'left', 'message host is the left request card');
+
+  const pickedRhs = pickOverviewRhsHost([
+    { id: 'msg', side: 'left', messageHeading: true, clinicalSummary: false },
+    { id: 'sign', side: 'right', kind: 'book-signing', clinicalSummary: true },
+    { id: 'sum', side: 'right', clinicalSummary: true, inMain: true },
+  ]);
+  check(pickedRhs && pickedRhs.id === 'sum', 'RHS host is Clinical Summary, not book-signing');
+  check(pickOverviewRhsHost([{ id: 'sign', side: 'right', kind: 'book-signing', clinicalSummary: true }]) === null, 'book-signing alone -> no RHS token');
+  check(pickOverviewMessageHost([{ id: 'ms-tp-banner', side: 'left', messageHeading: true }]) === null, 'masthead is not message chrome');
+}
+
+console.log('--- source of truth: row tokens reuse banner pipeline, not a second channel ---');
+{
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.css'), 'utf8');
+  check(/function occupantsForTask\(/.test(src), 'occupantsForTask is the shared merge');
+  check(/occupantsForTask\(data\.taskUuid, store, _nativeOthers, _nativeListOthers\)/.test(src), 'list rows call occupantsForTask');
+  check(/function paintOverviewTokens\(/.test(src), 'overview tokens painted from the same occupants');
+  check(/occupantTokenHtml\(scoped, \{ surface: 'message' \}\)/.test(src), 'message chrome uses the token');
+  check(/occupantTokenHtml\(scoped, \{ surface: 'rhs' \}\)/.test(src), 'RHS uses the token');
+  check(/Hide-for-now is masthead-only/.test(src), 'dismiss does not clear row/message/RHS tokens');
+  check(!/\.subscribe\s*\(\s*['"]presence-/.test(src), 'content script still does not subscribe to presence channels');
+  check(/#ms-tp-msg/.test(css) && /#ms-tp-rhs/.test(css) && /\.ms-tp-token/.test(css), 'token CSS covers all three surfaces');
+  check(/@container \(max-width: 5\.5rem\)/.test(css), 'tight cells hide the name, keep the icon initials');
+  const beat = buildHeartbeatPayload('560b6c', UUID_A, UUID_ME, 'Dr D', '2026-08-04T12:00:00.000Z', null);
+  check(
+    Object.keys(beat).sort().join(',') === 'last_seen,site,staff_id,staff_label,task_uuid',
+    'presence payload still has no patient fields'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
