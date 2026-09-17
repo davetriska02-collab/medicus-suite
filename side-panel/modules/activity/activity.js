@@ -27,6 +27,12 @@ const MAX_SESSION_RANGE_DAYS = 31;
 
 let container = null;
 let _inFlight = false;
+// If the user changes range/toggles while a fetch is in flight, the early
+// `_inFlight` return used to drop that request. Combined with persistUi
+// already writing the new dates, the in-flight result then painted against
+// the *new* range (today's numbers labelled as Last 7d, or vice versa).
+// Queue one follow-up instead of dropping.
+let _pendingRefetch = false;
 let state = {
   startDate: null,
   endDate: null,
@@ -70,6 +76,14 @@ export async function init(el) {
     if (typeof saved.showMode === 'string' && VALID_MODES.includes(saved.showMode)) state.showMode = saved.showMode;
     if (typeof saved.compareOn === 'boolean') state.compareOn = saved.compareOn;
     if (typeof saved.perSessionOn === 'boolean') state.perSessionOn = saved.perSessionOn;
+    // lastMonth overflow (fixed v3.261.59) persisted inverted YYYY-MM-DD
+    // pairs for 24 h. Don't keep painting an empty/wrong window — drop
+    // back to today so the next fetch is a real inclusive range.
+    if (api && !api.isInclusiveRange(state.startDate, state.endDate)) {
+      const [s, e] = api.preset('today');
+      state.startDate = s;
+      state.endDate = e;
+    }
   }
 
   render();
@@ -162,10 +176,19 @@ async function fetchSessionCounts(siteId, startISO, endISO) {
 
 // ── Fetch ────────────────────────────────────────────────────────────────────
 
+function requestFingerprint() {
+  return `${state.startDate}|${state.endDate}|${state.compareOn}|${state.perSessionOn}`;
+}
+
 async function fetchAndRender() {
   if (!container) return;
-  if (_inFlight) return;
+  if (_inFlight) {
+    _pendingRefetch = true;
+    return;
+  }
   _inFlight = true;
+  _pendingRefetch = false;
+  const requested = requestFingerprint();
   const refreshBtn = container.querySelector('#actRefresh');
   if (refreshBtn) refreshBtn.disabled = true;
   try {
@@ -181,6 +204,10 @@ async function fetchAndRender() {
       state.error = 'No practice code — open a Medicus tab or set it in Options.';
       state.loading = false;
       render();
+      return;
+    }
+    if (requestFingerprint() !== requested) {
+      _pendingRefetch = true;
       return;
     }
 
@@ -200,6 +227,10 @@ async function fetchAndRender() {
             init,
           }),
       });
+      if (requestFingerprint() !== requested) {
+        _pendingRefetch = true;
+        return;
+      }
       state.rawResponse = data;
       state.aggregated = api.aggregate(data?.rowData || []);
       state.lastFetched = new Date();
@@ -217,6 +248,10 @@ async function fetchAndRender() {
           const prevData = await api.fetchActivityReport(code, prevStart, prevEnd, {
             fetch: (url, init) => window.ApiDiag.fetch({ module: 'activity', url, code, codeSource: source, init }),
           });
+          if (requestFingerprint() !== requested) {
+            _pendingRefetch = true;
+            return;
+          }
           state.compareAggregated = api.aggregate(prevData?.rowData || []);
         } catch (e) {
           state.compareError = e.message || String(e);
@@ -229,6 +264,11 @@ async function fetchAndRender() {
       render();
     }
 
+    if (requestFingerprint() !== requested) {
+      _pendingRefetch = true;
+      return;
+    }
+
     // FEATURE 2: per-session fetch runs after the main render so the manager sees primary
     // (and comparison) data immediately — it can be slow (up to ~31 requests) and is purely
     // additive, so there's no reason to gate the rest of the panel behind it.
@@ -238,6 +278,10 @@ async function fetchAndRender() {
       render();
       try {
         state.sessionData = await fetchSessionCounts(code, state.startDate, state.endDate);
+        if (requestFingerprint() !== requested) {
+          _pendingRefetch = true;
+          return;
+        }
       } catch (e) {
         state.sessionError = e.message || String(e);
         state.sessionData = null;
@@ -252,7 +296,12 @@ async function fetchAndRender() {
     }
   } finally {
     _inFlight = false;
-    if (refreshBtn) refreshBtn.disabled = false;
+    const liveRefresh = container && container.querySelector('#actRefresh');
+    if (liveRefresh) liveRefresh.disabled = false;
+    if (_pendingRefetch && container) {
+      _pendingRefetch = false;
+      fetchAndRender();
+    }
   }
 }
 
@@ -618,17 +667,26 @@ function wireControls() {
 
   const startEl = container.querySelector('#actStart');
   const endEl = container.querySelector('#actEnd');
+  function applyPickedRange() {
+    const api = ApiNs();
+    if (api && !api.isInclusiveRange(state.startDate, state.endDate) && state.startDate && state.endDate) {
+      // User inverted the pickers — swap so the API gets a real window.
+      const tmp = state.startDate;
+      state.startDate = state.endDate;
+      state.endDate = tmp;
+    }
+    persistUi();
+    fetchAndRender();
+  }
   if (startEl)
     startEl.addEventListener('change', () => {
       state.startDate = startEl.value;
-      persistUi();
-      fetchAndRender();
+      applyPickedRange();
     });
   if (endEl)
     endEl.addEventListener('change', () => {
       state.endDate = endEl.value;
-      persistUi();
-      fetchAndRender();
+      applyPickedRange();
     });
 
   container.querySelectorAll('.act-preset').forEach((btn) => {
