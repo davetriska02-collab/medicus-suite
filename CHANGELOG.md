@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.60] — 2026-09-17
+
+### Task Presence — occupant token on list rows, Rx message, and RHS
+
+The occupied masthead already told you a colleague had the request open.
+That did not help the next clinician scanning the list — they still opened
+the item only to find it taken. The same Task Presence occupants (native
+Pusher `presence-{site}-task-{taskUuid}` plus the existing folder/hosted
+store fallback — not a second channel, never the list-occupancy channel)
+now paint a compact token on three surfaces:
+
+- **List row** — icon + highlighted display name next to the entry
+  (initials stay on the icon; the name hides when the cell is tight)
+- **Request / prescription message chrome** — left/main card
+- **Clinical Summary RHS** — the right-hand panel for that item
+
+Clears when they leave or the store row goes stale. Hide-for-now on the
+masthead does not hide the tokens. Advisory, never a lock. Book-signing
+RHS scoping is out of scope. List-row markers still need the folder or
+hosted store (native Pusher is only subscribed on the open request).
+
 ## [v3.261.59] — 2026-09-17
 
 ### Activity — Last month overflow inverted the date range

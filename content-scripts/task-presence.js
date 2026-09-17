@@ -24,7 +24,9 @@
 //   clinician has a task overview open AND VISIBLE, heartbeat an advisory
 //   presence row (site, taskUuid, staffId, display label, timestamps) to a
 //   practice-configured Supabase table. Consumers:
-//     • queue rows get a "👁 <name>" chip while a colleague's presence is fresh
+//     • queue rows, the request/Rx message chrome, and the Clinical Summary
+//       RHS get the same occupancy token (icon + display name) while a
+//       colleague's presence is fresh — same occupants as the masthead
 //     • opening a task someone else has open can still paint the occupied
 //       strip from store rows when native Pusher membership is empty
 //   Presence store is DORMANT until the practice configures a store URL + key
@@ -209,10 +211,183 @@
 
   // Queue chip text for a task's active others. One name shown verbatim;
   // more are counted (the chip lives inside the fixed-width patient cell).
+  // Kept as a title/fallback string; the visible marker is occupantTokenHtml.
   function presenceChipText(others) {
     if (!Array.isArray(others) || !others.length) return '';
     if (others.length === 1) return '👁 ' + others[0].label;
     return '👁 ' + others.length + ' colleagues';
+  }
+
+  // Occupants for ONE request. Native Pusher + store only — the same two
+  // sources the occupied banner already reads. List-channel members
+  // (listSlug, no taskUuid) are "who has the list open" and must never
+  // become a per-row occupant.
+  function occupantsForTask(taskUuid, storeOthers, nativeOthers, listOthers) {
+    void listOthers;
+    if (typeof taskUuid !== 'string' || !UUID_RE.test(taskUuid)) return [];
+    var store = othersOnTask(Array.isArray(storeOthers) ? storeOthers : [], taskUuid);
+    var native = othersOnTask(Array.isArray(nativeOthers) ? nativeOthers : [], taskUuid);
+    var by = {};
+    var i;
+    for (i = 0; i < native.length; i++) {
+      var n = native[i];
+      if (!n || !n.staffId) continue;
+      if (n.listSlug && !(typeof n.taskUuid === 'string' && UUID_RE.test(n.taskUuid))) continue;
+      by[n.staffId] = n;
+    }
+    for (i = 0; i < store.length; i++) {
+      var s = store[i];
+      if (!s || !s.staffId) continue;
+      if (s.listSlug && !(typeof s.taskUuid === 'string' && UUID_RE.test(s.taskUuid))) continue;
+      if (!by[s.staffId]) by[s.staffId] = s;
+    }
+    var out = [];
+    for (var k in by) if (Object.prototype.hasOwnProperty.call(by, k)) out.push(by[k]);
+    out.sort(function (a, b) {
+      return (a.openedAtMs || 0) - (b.openedAtMs || 0);
+    });
+    return out;
+  }
+
+  // Prefer the display name when the token has room. Initials-only is the
+  // tight-cell fallback (CSS container query does the same live).
+  function nameFitsToken(availablePx, label) {
+    var name = typeof label === 'string' ? label.trim() : '';
+    if (!name) return false;
+    var px = Number(availablePx);
+    if (!isFinite(px) || px <= 0) return false;
+    return px >= 22 + 10 + Math.min(name.length, 60) * 7;
+  }
+
+  function occupantTokenAria(others) {
+    if (!Array.isArray(others) || !others.length) return '';
+    var parts = [];
+    for (var i = 0; i < others.length; i++) {
+      var t = others[i] && others[i].label;
+      var s = typeof t === 'string' ? t.trim() : '';
+      parts.push(!s || isUnknownColleagueLabel(s) ? 'A colleague' : s);
+    }
+    var who = occupiedNameList(parts);
+    if (parts.length === 1) return who + ' has this request open. You can still work it.';
+    return who + ' have this request open. You can still work it.';
+  }
+
+  function occupantTokenTitle(others) {
+    return occupiedBannerTitle(others);
+  }
+
+  // Compact Task Presence token: avatar icon + highlighted display name.
+  // Tight containers hide the name via CSS; the icon keeps initials.
+  function occupantTokenHtml(others, opts) {
+    opts = opts && typeof opts === 'object' ? opts : {};
+    var list = Array.isArray(others) ? others : [];
+    if (!list.length) return '';
+    var surface = typeof opts.surface === 'string' && /^(row|message|rhs)$/.test(opts.surface) ? opts.surface : 'row';
+    var first = list[0];
+    var unknown = isUnknownColleagueLabel(first && first.label);
+    var name = unknown ? 'A colleague' : String(first.label).trim().slice(0, 60);
+    var extra = list.length > 1 ? list.length - 1 : 0;
+    var initials =
+      first && typeof first.initials === 'string' && first.initials
+        ? first.initials
+        : unknown
+          ? '?'
+          : initialsFromLabel(name);
+    var hue = initials === '?' ? '' : safeAvatarHue(first && first.hue);
+    var title = occupantTokenTitle(list);
+    var aria = occupantTokenAria(list);
+    var nameHtml = extra
+      ? esc(name) + ' <span class="ms-tp-token-more">+' + extra + '</span>'
+      : esc(name);
+    return (
+      '<span class="ms-tp-token ms-tp-token-' +
+      surface +
+      '" title="' +
+      esc(title) +
+      '" aria-label="' +
+      esc(aria) +
+      '" role="status">' +
+      '<span class="ms-tp-token-icon ms-tp-av' +
+      (unknown || initials === '?' ? ' ms-tp-av-unknown' : '') +
+      '" aria-hidden="true"' +
+      (hue ? ' style="background:' + hue + '"' : '') +
+      '>' +
+      esc(initials) +
+      '</span>' +
+      '<span class="ms-tp-token-who">' +
+      nameHtml +
+      '</span>' +
+      '</span>'
+    );
+  }
+
+  function overviewColumnSide(rect, viewportWidth) {
+    if (!rect || typeof rect !== 'object') return '';
+    var vw = Number(viewportWidth);
+    if (!isFinite(vw) || vw <= 0) return '';
+    var left = Number(rect.left);
+    var right = Number(rect.right);
+    if (!isFinite(left) || !isFinite(right)) return '';
+    var mid = (left + right) / 2;
+    if (mid < vw * 0.45) return 'left';
+    if (mid > vw * 0.55) return 'right';
+    return '';
+  }
+
+  function isClinicalSummaryHeading(text) {
+    return /^clinical summary$/i.test(String(text || '').replace(/\s+/g, ' ').trim());
+  }
+
+  function isMessageChromeHeading(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 80) return false;
+    return /^(next repeat prescribing|prescription request|patient request|message from|requested by|message)\b/i.test(
+      t
+    );
+  }
+
+  function isForbiddenPresenceHostKind(kind) {
+    var k = String(kind || '').toLowerCase();
+    if (!k) return false;
+    return (
+      k === 'banner' ||
+      k === 'list-strip' ||
+      k === 'look' ||
+      k === 'task-actions' ||
+      k === 'allocate' ||
+      k === 'organise' ||
+      k === 'book-signing' ||
+      k === 'signing'
+    );
+  }
+
+  function pickOverviewMessageHost(candidates) {
+    if (!Array.isArray(candidates)) return null;
+    var best = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (!c || isForbiddenPresenceHostKind(c.kind)) continue;
+      if (c.side !== 'left') continue;
+      if (c.id === 'ms-tp-banner' || c.id === 'ms-tp-list') continue;
+      var score = 0;
+      if (c.messageHeading) score += 3;
+      if (c.inMain) score += 1;
+      if (c.card) score += 1;
+      if (!best || score > best._score) best = { id: c.id, side: 'left', _score: score };
+    }
+    return best && best._score > 0 ? { id: best.id, side: best.side } : null;
+  }
+
+  function pickOverviewRhsHost(candidates) {
+    if (!Array.isArray(candidates)) return null;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (!c || isForbiddenPresenceHostKind(c.kind)) continue;
+      if (c.side === 'left') continue;
+      if (!c.clinicalSummary) continue;
+      return { id: c.id, side: 'right' };
+    }
+    return null;
   }
 
   // "just now" / "N min ago" for the banner. Deliberately coarse — the exact
@@ -862,6 +1037,17 @@
       buildHeartbeatPayload: buildHeartbeatPayload,
       activeOthers: activeOthers,
       presenceChipText: presenceChipText,
+      occupantsForTask: occupantsForTask,
+      nameFitsToken: nameFitsToken,
+      occupantTokenHtml: occupantTokenHtml,
+      occupantTokenAria: occupantTokenAria,
+      occupantTokenTitle: occupantTokenTitle,
+      overviewColumnSide: overviewColumnSide,
+      isClinicalSummaryHeading: isClinicalSummaryHeading,
+      isMessageChromeHeading: isMessageChromeHeading,
+      isForbiddenPresenceHostKind: isForbiddenPresenceHostKind,
+      pickOverviewMessageHost: pickOverviewMessageHost,
+      pickOverviewRhsHost: pickOverviewRhsHost,
       minutesAgoText: minutesAgoText,
       actionedChipText: actionedChipText,
       resolvePresenceConfig: resolvePresenceConfig,
@@ -922,6 +1108,12 @@
     var list = document.getElementById(LIST_ID);
     if (banner) PresenceLook.applyLookToEl(banner, _look);
     if (list) PresenceLook.applyLookToEl(list, _look);
+    var msg = document.getElementById(MSG_ID);
+    var rhs = document.getElementById(RHS_ID);
+    if (msg) PresenceLook.applyLookToEl(msg, _look);
+    if (rhs) PresenceLook.applyLookToEl(rhs, _look);
+    var chips = document.querySelectorAll('.ms-tp-chips');
+    for (var i = 0; i < chips.length; i++) PresenceLook.applyLookToEl(chips[i], _look);
   }
 
   function refreshLook() {
@@ -1270,6 +1462,8 @@
   // Layer 2 (folder/Supabase) still paints if native is empty.
   var BANNER_ID = 'ms-tp-banner';
   var LIST_ID = 'ms-tp-list';
+  var MSG_ID = 'ms-tp-msg';
+  var RHS_ID = 'ms-tp-rhs';
   var _nativeOthers = [];
   var _nativeTaskUuid = '';
   var _selfExtras = 0;
@@ -1366,6 +1560,152 @@
     } catch (_) {}
     _paintCache = { path: '', sig: '', parent: null };
     _liveIds = '';
+  }
+
+  function isForbiddenPresenceEl(el) {
+    if (!el || !el.closest) return true;
+    try {
+      if (el.closest('#ms-tp-banner, #ms-tp-list, #ms-tp-look')) return true;
+      if (el.closest('.ms-rxac, .ms-lac, .ms-aoc, .ms-tap-root, #ms-tap, .ms-tap')) return true;
+    } catch (_) {
+      return true;
+    }
+    return false;
+  }
+
+  function insertionAnchor(node) {
+    var el = node;
+    var hops = 0;
+    while (el && el.parentElement && hops < 3) {
+      var kids = el.parentElement.children;
+      if (!kids || kids.length !== 1) break;
+      el = el.parentElement;
+      hops++;
+    }
+    return el;
+  }
+
+  function findOverviewMessageHost() {
+    var root = document.querySelector('main') || document.body;
+    if (!root) return null;
+    var vw = window.innerWidth || 0;
+    var nodes = root.querySelectorAll('h1, h2, h3, h4, h5, [class*="title"], [class*="Title"]');
+    var limit = Math.min(nodes.length, 40);
+    for (var i = 0; i < limit; i++) {
+      var el = nodes[i];
+      if (!el || isForbiddenPresenceEl(el)) continue;
+      var text = '';
+      try {
+        text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      } catch (_) {
+        continue;
+      }
+      if (!isMessageChromeHeading(text)) continue;
+      var side = '';
+      try {
+        side = overviewColumnSide(el.getBoundingClientRect(), vw);
+      } catch (_) {}
+      if (side && side !== 'left') continue;
+      var host = insertionAnchor(el.parentElement || el);
+      if (host && !isForbiddenPresenceEl(host)) return host;
+    }
+    var kids = root.children;
+    for (var k = 0; k < kids.length && k < 12; k++) {
+      var kid = kids[k];
+      if (!kid || kid.id === BANNER_ID || isForbiddenPresenceEl(kid)) continue;
+      var side2 = '';
+      try {
+        side2 = overviewColumnSide(kid.getBoundingClientRect(), vw);
+      } catch (_) {}
+      if (side2 === 'left') return kid;
+    }
+    return null;
+  }
+
+  function findOverviewRhsHost() {
+    var root = document.querySelector('main') || document.body;
+    if (!root) return null;
+    var vw = window.innerWidth || 0;
+    var nodes = root.querySelectorAll('h1, h2, h3, h4, h5, [class*="title"], [class*="Title"], strong');
+    var limit = Math.min(nodes.length, 60);
+    for (var i = 0; i < limit; i++) {
+      var el = nodes[i];
+      if (!el || isForbiddenPresenceEl(el)) continue;
+      var text = '';
+      try {
+        text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      } catch (_) {
+        continue;
+      }
+      if (!isClinicalSummaryHeading(text)) continue;
+      var side = '';
+      try {
+        side = overviewColumnSide(el.getBoundingClientRect(), vw);
+      } catch (_) {}
+      if (side === 'left') continue;
+      var host = insertionAnchor(el.parentElement || el);
+      if (host && !isForbiddenPresenceEl(host)) return host;
+    }
+    return null;
+  }
+
+  function removeOverviewTokens() {
+    var msg = document.getElementById(MSG_ID);
+    var rhs = document.getElementById(RHS_ID);
+    if (msg) msg.remove();
+    if (rhs) rhs.remove();
+  }
+
+  function placeTokenHost(id, host, html, title) {
+    if (!host || !html) return;
+    var existing = document.getElementById(id);
+    if (existing && existing.parentNode !== host) {
+      existing.remove();
+      existing = null;
+    }
+    var el = existing;
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'ms-tp-token-host';
+      el.style.flex = '0 0 100%';
+      el.style.gridColumn = '1 / -1';
+      host.insertBefore(el, host.firstChild);
+    }
+    if (el.getAttribute('data-sig') === html) {
+      applyLookNow();
+      return;
+    }
+    el.setAttribute('data-sig', html);
+    el.setAttribute('title', title);
+    el.innerHTML = html;
+    applyLookNow();
+  }
+
+  function paintOverviewTokens(others) {
+    var ctx = parseTaskOverviewPath(location.pathname);
+    if (!ctx || !Array.isArray(others) || !others.length) {
+      removeOverviewTokens();
+      return;
+    }
+    var scoped = othersOnTask(others, ctx.taskUuid);
+    if (!scoped.length) {
+      removeOverviewTokens();
+      return;
+    }
+    var title = occupantTokenTitle(scoped);
+    var msgHost = findOverviewMessageHost();
+    var rhsHost = findOverviewRhsHost();
+    if (msgHost) placeTokenHost(MSG_ID, msgHost, occupantTokenHtml(scoped, { surface: 'message' }), title);
+    else {
+      var staleMsg = document.getElementById(MSG_ID);
+      if (staleMsg) staleMsg.remove();
+    }
+    if (rhsHost) placeTokenHost(RHS_ID, rhsHost, occupantTokenHtml(scoped, { surface: 'rhs' }), title);
+    else {
+      var staleRhs = document.getElementById(RHS_ID);
+      if (staleRhs) staleRhs.remove();
+    }
   }
 
   function staffIdList(others) {
@@ -1724,9 +2064,13 @@
     if (ctx && !others.length && _selfExtras >= 1) {
       others = selfExtraOccupants(ctx.taskUuid);
     }
+    // Hide-for-now is masthead-only. Row / message / RHS tokens stay so a
+    // colleague scanning those surfaces still sees the occupant.
+    var tokenOthers = others.slice();
     if (ctx && others.length && occupancyIsDismissed(ctx.taskUuid, staffIdList(others), sessionStorage)) {
       others = [];
     }
+    paintOverviewTokens(ctx ? tokenOthers : []);
     var headline = others.length ? occupiedHeadline(others) : '';
     var note = others.length ? occupiedNote(others, nowMs) : '';
     var sig = (ctx ? ctx.taskUuid : '') + '|' + staffIdList(others).join(',') + '|' + headline + '|' + note;
@@ -1857,6 +2201,7 @@
     _nativeOthers = sanitizeNativePresence(_lastNativeDetail, me && me.staffId, expected, hint);
     _selfExtras = sanitizeSelfExtras(_lastNativeDetail, me && me.staffId, expected);
     paintOccupied();
+    scheduleInject();
   }
   window.addEventListener('ch-native-task-presence', function (e) {
     _lastNativeDetail = e && e.detail && typeof e.detail === 'object' ? e.detail : null;
@@ -2184,10 +2529,33 @@
     return /\/tasks\/[^/]+\/task-list/.test(location.pathname);
   }
 
+  function findQueuePreviewRow(row) {
+    if (!row) return null;
+    var rowId = '';
+    try {
+      rowId = row.getAttribute('row-id') || '';
+    } catch (_) {}
+    if (rowId) {
+      try {
+        var byId = document.querySelector('[row-id="detail_' + rowId.replace(/"/g, '') + '"]');
+        if (byId) return byId;
+      } catch (_) {}
+    }
+    var p = row.nextElementSibling;
+    var hops = 0;
+    while (p && hops < 3) {
+      if (p.classList && p.classList.contains('ag-full-width-row')) return p;
+      p = p.nextElementSibling;
+      hops++;
+    }
+    return null;
+  }
+
   function chipHost(row) {
-    // The patient-name cell — same final fallback host as content.js's
-    // decoration chips. Chips are width-capped in CSS so they can't push the
-    // name out of the fixed-width cell.
+    // Preview row when present (roomier — name can fit); else the patient-name
+    // cell. Width-capped in CSS so the name is never pushed out.
+    var preview = findQueuePreviewRow(row);
+    if (preview) return preview.querySelector('.h-full.w-full') || preview.firstElementChild || preview;
     return row.querySelector('[col-id="patientName"]');
   }
 
@@ -2198,26 +2566,25 @@
       if (!row) return;
       var host = chipHost(row);
       if (!host) return;
-      var others = _presence.get(data.taskUuid) || [];
-      var presenceTxt = presenceChipText(others);
+      var store = _presence.get(data.taskUuid) || [];
+      var others = occupantsForTask(data.taskUuid, store, _nativeOthers, _nativeListOthers);
+      var tokenHtml = occupantTokenHtml(others, { surface: 'row' });
       var actionedTxt = actionedChipText(data.actionedBy, data.actionedDateTime);
       var existing = host.querySelector('.ms-tp-chips');
-      if (!presenceTxt && !actionedTxt) {
+      if (!tokenHtml && !actionedTxt) {
         if (existing) existing.remove();
         return;
       }
-      var sig = presenceTxt + '||' + actionedTxt;
-      if (existing && existing.getAttribute('data-sig') === sig) return; // idempotent re-inject
+      var sig = tokenHtml + '||' + actionedTxt;
+      if (existing && existing.getAttribute('data-sig') === sig) {
+        applyLookNow();
+        return;
+      }
       var wrap = existing || document.createElement('span');
       wrap.className = 'ms-tp-chips';
       wrap.setAttribute('data-sig', sig);
       var html = '';
-      if (presenceTxt) {
-        html +=
-          '<span class="ms-tp-chip ms-tp-chip-presence" title="A colleague has this request open right now (Suite advisory — absence of this chip does not mean nobody has it open)">' +
-          esc(presenceTxt) +
-          '</span>';
-      }
+      if (tokenHtml) html += tokenHtml;
       if (actionedTxt) {
         html +=
           '<span class="ms-tp-chip ms-tp-chip-actioned" title="Last actioned by ' +
@@ -2230,6 +2597,7 @@
       wrap.innerHTML = html;
       // PREPEND, never append — Vue strips trailing foreign nodes on re-render.
       if (!existing) host.insertBefore(wrap, host.firstChild);
+      applyLookNow();
     });
   }
 

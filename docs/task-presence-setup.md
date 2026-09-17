@@ -47,8 +47,13 @@ practices whose Medicus build does not yet expose the presence channel.
   from when they opened the request. Membership has no opened-at. Store-backed
   fallback rows still say `Seen N min ago`.
 
-- **Queue chip `👁 <name>`** on any request a colleague currently has open
-  (folder / hosted store, when configured).
+- **Occupancy token** (avatar icon + highlighted display name) on:
+  - any **list row** a colleague currently has open (folder / hosted store,
+    when configured — native Pusher is only on the open request)
+  - the **request / prescription message** chrome (left/main card)
+  - the **Clinical Summary RHS** for that item
+  Initials stay on the icon; the name hides when the cell is tight. Same
+  occupants as the masthead. Hide-for-now does not clear these tokens.
 
 The strip is advisory. It never claims the request is locked, never blocks
 Medicus's own UI, and never asks you to leave.
@@ -163,8 +168,10 @@ clears the strip on that tab only; A joining still, then a third person
 arriving, brings it back. Close A's tab; the strip clears when they leave the
 presence channel.
 
-For the folder fallback: within ~25 s machine B's queue shows the `👁` chip
-on that row. Close A's tab; within ~90 s the chip clears.
+For the folder fallback: within ~25 s machine B's queue shows the occupancy
+token (icon + name) on that row. Close A's tab; within ~90 s the token
+clears. On the open request the message chrome and Clinical Summary RHS
+show the same token as the masthead (native Pusher; no store required).
 
 ## Mechanics (for future maintainers)
 
@@ -175,19 +182,21 @@ on that row. Close A's tab; within ~90 s the chip clears.
   - `presence-{site}-task-list-{slug}` → `ch-native-list-presence` with
     `{ slug, members, live? }` (compact named strip in the **queue title
     row** only). The list channel is still never a per-request occupant
-    and never feeds a row 👁 chip. Empty wipe on slug change; `idle`
+    and never feeds a row occupancy token. Empty wipe on slug change; `idle`
     sentinel after leaving a list so the poll does not flap.
   Empty wipe on task change; `idle` sentinel after leaving an overview so
   the poll does not flap. `live: false` when `connection.state` is not
   `connected` or `pusher:subscription_error` fired. Identity re-stamped
   from the counters channel for the life of the page.
 - Isolated world: `content-scripts/task-presence.js` prepends
-  `#ms-tp-banner` into `<main>` on an overview, and `#ms-tp-list` into the
+  `#ms-tp-banner` into `<main>` on an overview, `#ms-tp-list` into the
   queue title row (replacing Medicus's "is also working this list"
-  widget; host styles recorded and restored when our strip is gone). Fail
-  closed: no self id → no strip; wrong task/slug → no strip;
-  `live === false` → hide. Missing `live` is treated as live. List
-  members carry `listSlug`, never a request UUID.
+  widget), the occupancy token into list rows (`.ms-tp-token`), the
+  request/Rx message chrome (`#ms-tp-msg`), and the Clinical Summary RHS
+  (`#ms-tp-rhs`). Fail closed: no self id → no strip; wrong task/slug →
+  no strip; `live === false` → hide. Missing `live` is treated as live.
+  List members carry `listSlug`, never a request UUID. Hide-for-now is
+  masthead-only.
 - Folder store: `shared/presence-folder.js` (pure helpers + IDB handle
   persistence + FSA IO), driven by the service worker's `presence:folder*`
   message handlers; the Options page owns the picker and permission prompts
