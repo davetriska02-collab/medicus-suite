@@ -2,43 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.261.60] — 2026-09-17
-
-### Lab Filing — fixed a filing attempt that silently never actually filed (H-075)
-
-Found live testing the previous release — the first time a live test
-reached the actual "File results" click, since every earlier attempt this
-week got blocked before getting that far. Symptom: clicking "File all
-normal" marked every result "Normal result, no action required", the
-confirm dialog appeared and was accepted, and the toast said the File
-control was clicked — but the task never actually left the queue, and
-Medicus's own primary button relabelled itself to "Reassign task".
-
-Root cause: Medicus's Next-Step radio control is a `<label for="id">`
-element whose actual `<input>` lives elsewhere in the DOM as a separate
-sibling, not nested inside the label. The macro's shared click helper
-(`realClick`) fired a full synthetic pointerdown/mousedown/pointerup/
-mouseup/click sequence on the label and then a *separate* `.click()`
-call — hitting that control's own interaction handling twice in one
-synchronous tick, with no time for its state to settle in between.
-
-`realClick` now resolves a label to its real associated control (via its
-`for` attribute, or a nested input for the wrap-style pattern used
-elsewhere) and clicks it directly, exactly once. Separately: `aria-checked`
-was proven, live, to always read `null` on this Medicus screen — so every
-"already selected, don't re-click" check in the macro was blind and
-re-clicking things that didn't need it. A new `isRadioSelected` helper
-reads the real control's `.checked` property instead, so an
-already-correct selection is never touched at all.
-
-This was diagnosed entirely from live evidence — console logs and DOM
-inspection run together with the practice, not guessed at — given this is
-the actual irreversible-write path. Live-confirmed working the same day.
-
-`docs/HAZARD-LOG.md` H-074 (from the previous release) also live-confirmed
-working. New H-075, pending CSO review.
-
-## [v3.261.59] — 2026-09-17
+## [v3.261.62] — 2026-09-17
 
 ### Lab Filing — block filing for any analyte no profile has declared (H-074)
 
@@ -76,6 +40,117 @@ being offered somewhere it used to work.
 
 Regression-pinned in `test-lab-filing-utils.js`. New `docs/HAZARD-LOG.md`
 H-074, pending CSO review.
+
+### Lab Filing — fixed a filing attempt that silently never actually filed (H-075)
+
+Found live testing the previous release — the first time a live test
+reached the actual "File results" click, since every earlier attempt this
+week got blocked before getting that far. Symptom: clicking "File all
+normal" marked every result "Normal result, no action required", the
+confirm dialog appeared and was accepted, and the toast said the File
+control was clicked — but the task never actually left the queue, and
+Medicus's own primary button relabelled itself to "Reassign task".
+
+Root cause: Medicus's Next-Step radio control is a `<label for="id">`
+element whose actual `<input>` lives elsewhere in the DOM as a separate
+sibling, not nested inside the label. The macro's shared click helper
+(`realClick`) fired a full synthetic pointerdown/mousedown/pointerup/
+mouseup/click sequence on the label and then a *separate* `.click()`
+call — hitting that control's own interaction handling twice in one
+synchronous tick, with no time for its state to settle in between.
+
+`realClick` now resolves a label to its real associated control (via its
+`for` attribute, or a nested input for the wrap-style pattern used
+elsewhere) and clicks it directly, exactly once. Separately: `aria-checked`
+was proven, live, to always read `null` on this Medicus screen — so every
+"already selected, don't re-click" check in the macro was blind and
+re-clicking things that didn't need it. A new `isRadioSelected` helper
+reads the real control's `.checked` property instead, so an
+already-correct selection is never touched at all.
+
+This was diagnosed entirely from live evidence — console logs and DOM
+inspection run together with the practice, not guessed at — given this is
+the actual irreversible-write path. Live-confirmed working the same day.
+
+`docs/HAZARD-LOG.md` H-074 also live-confirmed working. New H-075, pending
+CSO review.
+
+Nick's branch claimed 3.261.59/60; those patches already shipped as
+Activity last-month (#419) and Task Presence (#420). This is 3.261.62.
+
+## [v3.261.61] — 2026-09-17
+
+### Signing Queue — RHS follows the book-signing list, not the whole practice
+
+When a clinician toggles onto their **own individual list** on Medicus book
+signing / the prescription-request queue, the Signing Queue (the RHS Rx
+panel) was still fetching the bare open pile — every practice request —
+and painting it next to a list that was only that person.
+
+The page already has one assignee channel: the task-list GET's
+`masterAssignee`. The panel now reuses that, and nothing else.
+
+- page-world stamps every prescription-request task-list GET onto
+  `data-ch-rx-list-scope`, including an empty `[]` (that is still that
+  person's list).
+- Signing Queue reads the stamp via the existing content-script message
+  channel. Individual scope GETs `?masterAssignee=<that UUID>` only —
+  never leftover `viewContext=homepage`. Practice / untoggled stays the
+  bare open list.
+- Toggle race: a generation token + `applySigningFetchResult` drop any
+  in-flight practice-wide payload that lands after the list has switched.
+  Scope change clears `state.rows` immediately so leftover practice rows
+  cannot paint.
+- Empty individual list is "No open repeat requests on this list." The
+  warm "pile's clear" line is reserved for a genuinely finished
+  practice-wide pile.
+- Multi-signer: Dave → Nick is a scope change. The previous signer's
+  rows are dropped before the next fetch is applied.
+
+Nick PRs #417/#418 claim 3.261.58; 3.261.59–.60 left for Activity /
+Task Presence. This is 3.261.61. Merge held for Dave.
+
+## [v3.261.60] — 2026-09-17
+
+### Task Presence — occupant token on list rows, Rx message, and RHS
+
+The occupied masthead already told you a colleague had the request open.
+That did not help the next clinician scanning the list — they still opened
+the item only to find it taken. The same Task Presence occupants (native
+Pusher `presence-{site}-task-{taskUuid}` plus the existing folder/hosted
+store fallback — not a second channel, never the list-occupancy channel)
+now paint a compact token on three surfaces:
+
+- **List row** — icon + highlighted display name next to the entry
+  (initials stay on the icon; the name hides when the cell is tight)
+- **Request / prescription message chrome** — left/main card
+- **Clinical Summary RHS** — the right-hand panel for that item
+
+Clears when they leave or the store row goes stale. Hide-for-now on the
+masthead does not hide the tokens. Advisory, never a lock. Book-signing
+RHS scoping is out of scope. List-row markers still need the folder or
+hosted store (native Pusher is only subscribed on the open request).
+
+## [v3.261.59] — 2026-09-17
+
+### Activity — Last month overflow inverted the date range
+
+`ActivityApi.preset('lastMonth')` did `setMonth(n-1)` *before* `setDate(1)`.
+On the 31st of a month whose predecessor is shorter (31 Mar/May/Jul/Oct/Dec)
+JS Date overflows — 31 Mar → 3 Mar → `setDate(1)` → **1 Mar**, with
+`end.setDate(0)` still **28 Feb**. The Activity tab then queried an inverted
+window and showed empty / wrong totals. Same trap in Submissions'
+mirrored "Last month" preset.
+
+Fix: set the start to the 1st *before* stepping the month (the 1st always
+exists). `fetchActivityReport` now refuses inverted ranges. The Activity
+module resets a persisted inverted pair to today, and a range/toggle change
+mid-fetch no longer paints today's numbers under a Last-7d label (or the
+reverse) — the dropped request is queued instead.
+
+Tests in `test-api-clients.js` pin lastMonth from 31 Mar/May/Jul/Oct/Dec,
+leap-year 31 Mar 2028, and the inverted-range reject. Those cases fail on
+v3.261.57.
 
 ## [v3.261.57] — 2026-09-16
 
