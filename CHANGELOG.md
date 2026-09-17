@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.261.61] — 2026-09-17
+
+### Signing Queue — RHS follows the book-signing list, not the whole practice
+
+When a clinician toggles onto their **own individual list** on Medicus book
+signing / the prescription-request queue, the Signing Queue (the RHS Rx
+panel) was still fetching the bare open pile — every practice request —
+and painting it next to a list that was only that person.
+
+The page already has one assignee channel: the task-list GET's
+`masterAssignee`. The panel now reuses that, and nothing else.
+
+- page-world stamps every prescription-request task-list GET onto
+  `data-ch-rx-list-scope`, including an empty `[]` (that is still that
+  person's list).
+- Signing Queue reads the stamp via the existing content-script message
+  channel. Individual scope GETs `?masterAssignee=<that UUID>` only —
+  never leftover `viewContext=homepage`. Practice / untoggled stays the
+  bare open list.
+- Toggle race: a generation token + `applySigningFetchResult` drop any
+  in-flight practice-wide payload that lands after the list has switched.
+  Scope change clears `state.rows` immediately so leftover practice rows
+  cannot paint.
+- Empty individual list is "No open repeat requests on this list." The
+  warm "pile's clear" line is reserved for a genuinely finished
+  practice-wide pile.
+- Multi-signer: Dave → Nick is a scope change. The previous signer's
+  rows are dropped before the next fetch is applied.
+
+Nick PRs #417/#418 claim 3.261.58; 3.261.59–.60 left for Activity /
+Task Presence. This is 3.261.61. Merge held for Dave.
+
 ## [v3.261.57] — 2026-09-16
 
 ### Contacts canvas — name-quality writes re-check before POST (H-072)
