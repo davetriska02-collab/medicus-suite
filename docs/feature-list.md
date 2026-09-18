@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.262.1
+**Version:** v3.263.0
 **Generated:** 2026-09-18
 
 ## What it is
@@ -112,7 +112,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with suggested links; several tiles can be staged and confirmed together
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance
 - **Clean up alerts** — pill on the patient banner; batch-clears Flag on patient banner only (W24)
-- **Appointment-book tally** — a single button on the appointment book showing booked and free counts for that day, with the same appointment-type checkboxes as Slot Counter (shared `slots.hiddenTypes`). Click to choose which types are included. Read-only
+- **Appointment-book tally** — a single button on the appointment book showing booked and free counts for that day, with the same appointment-type checkboxes as Slot Counter (shared `slots.hiddenTypes`). Optional flu / COVID / RSV eligibility toggles count unique booked patients on those types (inferred — double-check before offering a vaccine). Read-only
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
@@ -149,6 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.263.0 (18 Sep)** — Appointment-book tally: optional flu / COVID / RSV eligibility counts on the booked/free button
 - **v3.262.1 (18 Sep)** — Reception match: topic terms for earache `rf-under3m-fever` and feverish-child `rf-rigors`
 - **v3.262.0 (18 Sep)** — The Keeper: ciclosporin / tacrolimus / mercaptopurine / cenobamate monitoring rules; missing UK brands (Elozar, Arpoya, Bilprevda, Zvogra, Drovelis)
 - **v3.261.62 (17 Sep)** — Lab filing: block unrecognised analytes before offering File (H-074); Next-Step radio click now files the task (H-075)
@@ -167,6 +168,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **v3.261.36 (11 Sep)** — Prescription list Share out / overdue-monitoring buttons sit left of Sign
 - **v3.261.35 (11 Sep)** — Prescription lists: Check for overdue monitoring next to Share out; Monitoring/QOF buttons on flagged requests
 - **v3.261.34 (11 Sep)** — Prescriptions canvas: per-request item counts vs regimen totals, overdue reauthorising line, 1–5 complexity score
+- **v3.263.0 (18 Sep)** — Appointment-book tally: optional flu / COVID / RSV eligibility counts on the booked/free button
 - **v3.261.33 (11 Sep)** — Practice features: Focus alerts toggle for the queue status bar
 - **v3.261.32 (11 Sep)** — Companion: investigation-result review tasks get the appts/links/tasks section
 - **v3.261.29 (10 Sep)** — Tidy widgets route-gated; allocate harvest aborts on close; injector runtime loads before every consumer

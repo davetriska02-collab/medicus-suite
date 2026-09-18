@@ -3,7 +3,11 @@
 //
 // A single button on the Medicus appointment-book route: booked vs free
 // for this day's book, with the same type checkboxes as Slot Counter
-// (slots.hiddenTypes). Read-only — GET of the embedded-overview only.
+// (slots.hiddenTypes). Optional flu / COVID / RSV eligibility toggles
+// (slots.vaxTally) count unique booked patients on the ticked types via
+// the same vaccine engine as Sentinel. Read-only — GET of the
+// embedded-overview, plus per-patient record GETs only while a vaccine
+// toggle is on.
 'use strict';
 
 (function () {
@@ -15,10 +19,19 @@
 
   var HOST_ID = 'ms-apt-tally';
   var HIDDEN_KEY = 'slots.hiddenTypes';
+  var VAX_KEY = 'slots.vaxTally';
   var TTL_MS = 15 * 1000;
   var POLL_MS = 30 * 1000;
+  var VAX_GAP_MS = 200;
 
   var _hidden = new Set();
+  var _vaxOn = T.emptyVaxToggles();
+  var _vaxByUuid = {};
+  var _vaxRules = null;
+  var _vaxRulesPromise = null;
+  var _vaxScan = null;
+  var _vaxScanToken = 0;
+  var _vaxLoadError = null;
   var _showExcluded = false;
   var _open = false;
   var _loading = false;
@@ -51,6 +64,24 @@
 
   function visibleSlice() {
     return T.applyHidden(_tally && _tally.byType, _hidden);
+  }
+
+  function visibleVaxUuids() {
+    return T.visiblePatientUuids(_tally && _tally.patients, _hidden);
+  }
+
+  function vaxSummary() {
+    return T.summariseVax(_vaxByUuid, visibleVaxUuids());
+  }
+
+  function vaxScanning() {
+    return !!(_vaxScan && !_vaxScan.cancelled && T.anyVaxOn(_vaxOn) && vaxSummary().pending > 0);
+  }
+
+  function currentVaxParts() {
+    if (!T.anyVaxOn(_vaxOn)) return [];
+    var s = vaxSummary();
+    return T.vaxButtonParts(s, _vaxOn, s.pending > 0);
   }
 
   function findOpenActions() {
@@ -164,16 +195,88 @@
             '</div>'
           : '');
     }
-    return head + '<div class="ms-apt-tally-list">' + rows + '</div>' + total + excludedBlock;
+    return head + '<div class="ms-apt-tally-list">' + rows + '</div>' + total + vaxHtml() + excludedBlock;
+  }
+
+  function vaxCountText(bucket, scanning) {
+    if (!T.anyVaxOn(_vaxOn) && !scanning) return '';
+    var s = vaxSummary();
+    if (!s.checked && s.pending && scanning) return '\u2026';
+    var n = (bucket && bucket.eligible) || 0;
+    var due = (bucket && bucket.due) || 0;
+    var dueBit = due ? '<span class="ms-apt-tally-vax-due">' + due + ' due</span>' : '';
+    return '<span class="ms-apt-tally-n booked" data-vax-eligible>' + n + '</span>' + dueBit;
+  }
+
+  function vaxStatusHtml() {
+    if (!T.anyVaxOn(_vaxOn)) {
+      return '<div class="ms-apt-tally-vax-status" id="ms-apt-tally-vax-status">Tick to count booked patients eligible for that vaccine.</div>';
+    }
+    if (_vaxLoadError) {
+      return (
+        '<div class="ms-apt-tally-vax-status is-error" id="ms-apt-tally-vax-status">' +
+        esc(_vaxLoadError) +
+        '</div>'
+      );
+    }
+    var s = vaxSummary();
+    var missing = (_tally && _tally.patients && _tally.patients.missing) || 0;
+    var bits = [];
+    if (s.pending) bits.push('Checking ' + s.checked + ' of ' + s.total + '\u2026');
+    else bits.push(s.checked + ' of ' + s.total + ' booked patients checked');
+    if (s.errors) bits.push(s.errors + ' unread');
+    if (missing) bits.push(missing + ' booking' + (missing === 1 ? '' : 's') + ' without a patient id');
+    return (
+      '<div class="ms-apt-tally-vax-status" id="ms-apt-tally-vax-status" aria-live="polite">' +
+      bits.join(' \u00b7 ') +
+      '</div>'
+    );
+  }
+
+  function vaxRowHtml(key) {
+    var s = vaxSummary();
+    var scanning = vaxScanning();
+    var on = !!_vaxOn[key];
+    return (
+      '<label class="ms-apt-tally-vax-row">' +
+      '<input type="checkbox" class="ms-apt-tally-vax-toggle" data-vax="' +
+      esc(key) +
+      '"' +
+      (on ? ' checked' : '') +
+      ' />' +
+      '<span class="ms-apt-tally-type">' +
+      esc(T.VAX_LABELS[key]) +
+      '</span>' +
+      (on || s.checked ? vaxCountText(s[key], scanning) : '<span class="ms-apt-tally-vax-blank">\u2014</span>') +
+      '</label>'
+    );
+  }
+
+  function vaxHtml() {
+    var rows = T.VAX_KEYS.map(vaxRowHtml).join('');
+    return (
+      '<div class="ms-apt-tally-vax">' +
+      '<div class="ms-apt-tally-vax-title">Vaccine eligibility</div>' +
+      '<p class="ms-apt-tally-hint">Unique booked patients on the ticked types. Inferred from the coded record \u2014 double-check before offering a vaccine.</p>' +
+      '<div class="ms-apt-tally-vax-list">' +
+      rows +
+      '</div>' +
+      vaxStatusHtml() +
+      '</div>'
+    );
   }
 
   function buttonHtml() {
     var slice = _tally ? visibleSlice() : null;
     var label =
-      _loading && !_tally ? 'Tally\u2026' : _error && !_tally ? 'Tally ?' : T.buttonLabel(slice && slice.totals);
+      _loading && !_tally
+        ? 'Tally\u2026'
+        : _error && !_tally
+          ? 'Tally ?'
+          : T.buttonLabel(slice && slice.totals, currentVaxParts());
     var title = _error
       ? _error
-      : 'Booked and free on this day\u2019s appointment book. Same type toggles as Slot Counter.';
+      : 'Booked and free on this day\u2019s appointment book. Same type toggles as Slot Counter. Flu / COVID / RSV counts are optional and inferred.';
     return (
       '<button type="button" class="ms-apt-tally-btn" aria-expanded="' +
       (_open ? 'true' : 'false') +
@@ -248,6 +351,18 @@
         else _hidden.add(type);
         persistHidden();
         render();
+        startVaxScanIfNeeded();
+      });
+    });
+    host.querySelectorAll('.ms-apt-tally-vax-toggle').forEach(function (cb) {
+      cb.addEventListener('change', function () {
+        var key = cb.getAttribute('data-vax');
+        if (!key || T.VAX_KEYS.indexOf(key) === -1) return;
+        _vaxOn[key] = !!cb.checked;
+        persistVax();
+        render();
+        if (T.anyVaxOn(_vaxOn)) startVaxScanIfNeeded();
+        else cancelVaxScan();
       });
     });
   }
@@ -256,6 +371,198 @@
     try {
       chrome.storage.local.set({ 'slots.hiddenTypes': Array.from(_hidden) });
     } catch (_) {}
+  }
+
+  function persistVax() {
+    try {
+      chrome.storage.local.set({ 'slots.vaxTally': T.parseVaxToggles(_vaxOn) });
+    } catch (_) {}
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function cancelVaxScan() {
+    if (_vaxScan) _vaxScan.cancelled = true;
+    _vaxScan = null;
+  }
+
+  function loadVaxRules() {
+    if (_vaxRules) return Promise.resolve(_vaxRules);
+    if (_vaxRulesPromise) return _vaxRulesPromise;
+    var ids = T.VAX_RULE_IDS;
+    var wanted = {};
+    wanted[ids.flu] = true;
+    wanted[ids.covid] = true;
+    wanted[ids.rsv] = true;
+    _vaxRulesPromise = Promise.all([
+      fetch(chrome.runtime.getURL('rules/vaccine-rules.json')).then(function (r) {
+        return r.json();
+      }),
+      fetch(chrome.runtime.getURL('rules/qof-rules.json')).then(function (r) {
+        return r.json();
+      }),
+    ]).then(function (docs) {
+      var vax = (docs[0].rules || []).filter(function (r) {
+        return !!(r && wanted[r.id]);
+      });
+      var regs = (docs[1].rules || []).filter(function (r) {
+        return r && r.type === 'qof-register' && r.enabled !== false;
+      });
+      return new Promise(function (resolve) {
+        try {
+          chrome.storage.local.get(['sentinel.rules'], function (res) {
+            var individual = (res && res['sentinel.rules']) || {};
+            _vaxRules = regs.concat(vax).map(function (r) {
+              return individual[r.id] ? Object.assign({}, r, individual[r.id]) : r;
+            });
+            resolve(_vaxRules);
+          });
+        } catch (_) {
+          _vaxRules = regs.concat(vax);
+          resolve(_vaxRules);
+        }
+      });
+    });
+    return _vaxRulesPromise;
+  }
+
+  function evaluateVaxPatient(apiBase, uuid, rules) {
+    var api = window.SentinelApiClient;
+    var N = window.SentinelNormalisers;
+    var E = window.SentinelRules;
+    if (!api || !N || !E) {
+      _vaxByUuid[uuid] = { flu: null, covid: null, rsv: null, error: 'engine-missing' };
+      return Promise.resolve();
+    }
+    return api
+      .fetchAll(apiBase, uuid, { useCache: true })
+      .then(function (raw) {
+        if (!raw || !raw.banner) throw new Error('banner');
+        var failed = Object.keys(raw.errors || {}).filter(function (k) {
+          return k !== 'clinicalSummary' && k !== 'medicationHistory';
+        });
+        if (failed.length) throw new Error(failed.join(','));
+        var data = N.normaliseAll(raw, {
+          url: '',
+          title: 'tally',
+          view: 'tally',
+          patientUuid: uuid,
+        });
+        var chips = E.evaluatePatient(data.medications || [], data.observations || [], rules, {
+          now: new Date().toISOString(),
+          problems: data.problems || [],
+          patientContext: data.patientContext,
+          observationHistory: data.observationHistory || [],
+          patientRegisters: data.patientRegisters != null ? data.patientRegisters : null,
+        });
+        var flags = T.vaxFlagsFromChips(chips);
+        flags.error = null;
+        _vaxByUuid[uuid] = flags;
+      })
+      .catch(function () {
+        _vaxByUuid[uuid] = { flu: null, covid: null, rsv: null, error: 'unread' };
+      });
+  }
+
+  function startVaxScanIfNeeded() {
+    if (!T.anyVaxOn(_vaxOn) || !_tally) {
+      cancelVaxScan();
+      return;
+    }
+    var uuids = visibleVaxUuids();
+    var missing = uuids.filter(function (uuid) {
+      return !_vaxByUuid[uuid];
+    });
+    if (!missing.length) {
+      refreshVaxPaint();
+      return;
+    }
+    if (_vaxScan && !_vaxScan.cancelled) return;
+    runVaxScan(uuids);
+  }
+
+  function runVaxScan(visibleUuids) {
+    var route = currentRoute();
+    if (!route) return;
+    var token = ++_vaxScanToken;
+    var scan = { token: token, cancelled: false };
+    _vaxScan = scan;
+    var queue = visibleUuids.filter(function (uuid) {
+      return !_vaxByUuid[uuid];
+    });
+    var apiBase = route.apiBase;
+    refreshVaxPaint();
+    _vaxLoadError = null;
+    loadVaxRules()
+      .then(function (rules) {
+        function step(i) {
+          if (scan.cancelled || token !== _vaxScanToken) return Promise.resolve();
+          if (i >= queue.length) {
+            if (_vaxScan === scan) _vaxScan = null;
+            refreshVaxPaint();
+            return Promise.resolve();
+          }
+          return evaluateVaxPatient(apiBase, queue[i], rules).then(function () {
+            refreshVaxPaint();
+            if (scan.cancelled || token !== _vaxScanToken) return;
+            return delay(VAX_GAP_MS).then(function () {
+              return step(i + 1);
+            });
+          });
+        }
+        return step(0);
+      })
+      .catch(function () {
+        _vaxLoadError = 'Could not load vaccine rules.';
+        if (_vaxScan === scan) _vaxScan = null;
+        refreshVaxPaint();
+      });
+  }
+
+  function refreshVaxPaint() {
+    var host = document.getElementById(HOST_ID);
+    if (!host) return;
+    var btnLabel = host.querySelector('.ms-apt-tally-label');
+    var panel = host.querySelector('#ms-apt-tally-panel');
+    if (!btnLabel || (_open && !panel)) {
+      render();
+      return;
+    }
+    var slice = _tally ? visibleSlice() : null;
+    var label =
+      _loading && !_tally
+        ? 'Tally\u2026'
+        : _error && !_tally
+          ? 'Tally ?'
+          : T.buttonLabel(slice && slice.totals, currentVaxParts());
+    btnLabel.textContent = label;
+    if (_open && panel) {
+      var block = panel.querySelector('.ms-apt-tally-vax');
+      if (!block) {
+        render();
+        return;
+      }
+      var next = document.createElement('div');
+      next.innerHTML = vaxHtml();
+      var fresh = next.firstChild;
+      if (fresh) block.replaceWith(fresh);
+      host.querySelectorAll('.ms-apt-tally-vax-toggle').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var key = cb.getAttribute('data-vax');
+          if (!key || T.VAX_KEYS.indexOf(key) === -1) return;
+          _vaxOn[key] = !!cb.checked;
+          persistVax();
+          render();
+          if (T.anyVaxOn(_vaxOn)) startVaxScanIfNeeded();
+          else cancelVaxScan();
+        });
+      });
+    }
+    placeHost(host);
   }
 
   function render() {
@@ -293,7 +600,12 @@
   }
 
   function applyTally(raw, date) {
+    var prevDate = _tally && _tally.date;
     _tally = T.tallyFromOverview(raw, { date: date, now: new Date() });
+    if (prevDate && _tally.date && prevDate !== _tally.date) {
+      _vaxByUuid = {};
+      cancelVaxScan();
+    }
     _error = null;
     _fetchedAt = Date.now();
   }
@@ -307,9 +619,12 @@
       _tally = null;
       _error = null;
       _fetchedAt = 0;
+      _vaxByUuid = {};
+      cancelVaxScan();
     }
     if (!bypassCache && _tally && Date.now() - _fetchedAt < TTL_MS) {
       render();
+      startVaxScanIfNeeded();
       return Promise.resolve();
     }
     if (_inFlight && !bypassCache && _inFlightKey === key) return _inFlight;
@@ -344,6 +659,7 @@
         if (!T.shouldApplyFetch(key, _routeKey)) return;
         _loading = false;
         render();
+        startVaxScanIfNeeded();
       });
     _inFlight = p;
     _inFlightKey = key;
@@ -352,10 +668,20 @@
 
   function onStorage(changes, area) {
     if (area && area !== 'local') return;
-    if (!changes[HIDDEN_KEY]) return;
-    var next = changes[HIDDEN_KEY].newValue;
-    _hidden = new Set(Array.isArray(next) ? next : []);
+    var changed = false;
+    if (changes[HIDDEN_KEY]) {
+      var next = changes[HIDDEN_KEY].newValue;
+      _hidden = new Set(Array.isArray(next) ? next : []);
+      changed = true;
+    }
+    if (changes[VAX_KEY]) {
+      _vaxOn = T.parseVaxToggles(changes[VAX_KEY].newValue);
+      changed = true;
+    }
+    if (!changed) return;
     render();
+    if (T.anyVaxOn(_vaxOn)) startVaxScanIfNeeded();
+    else cancelVaxScan();
   }
 
   function onDocClick(e) {
@@ -413,15 +739,21 @@
   }
 
   function stopBookChrome() {
+    cancelVaxScan();
     removeBookListeners();
     removeHost();
   }
 
   function boot() {
     try {
-      chrome.storage.local.get(HIDDEN_KEY, function (r) {
+      chrome.storage.local.get([HIDDEN_KEY, VAX_KEY], function (r) {
         var v = r && r[HIDDEN_KEY];
         _hidden = new Set(Array.isArray(v) ? v : []);
+        _vaxOn = T.parseVaxToggles(r && r[VAX_KEY]);
+        if (document.getElementById(HOST_ID)) {
+          render();
+          startVaxScanIfNeeded();
+        }
       });
     } catch (_) {
       /* storage unavailable */
