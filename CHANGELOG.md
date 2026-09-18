@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.6] — 2026-09-19
+
+### Drug monitoring — stop one drug producing a card per acute issue (HAR 133)
+
+Live report: a patient on tirzepatide showed **eight** identical monitoring
+cards. The regimen held one current repeat (`vtmProductName: "Tirzepatide"`),
+six acute issues ("Tirzepatide · Solution for injection", one per pen strength
+or issue, each with its own `productCode`) and one "Prescribed elsewhere" row —
+and the acute and elsewhere rows carry no `vtmProductName`. The existing
+per-drug de-duplication in `evaluateDrugRule` only merges rows that have a VTM
+on both sides, so every VTM-less row became its own card, although the tests it
+checks (annual review, U&E) are patient-level and identical across all of them.
+Any drug with several acute issues in the last 12 months was affected.
+
+- Rows with no VTM now get a fallback merge key in two **exact-match** cases
+  only: an acute line ("<substance> · <form>" — the text before the "·"), and a
+  bare-name row (e.g. "Prescribed elsewhere: Tirzepatide") whose whole normalised
+  name equals an already-established key. Still never a substring guess; any other
+  VTM-less row is left alone exactly as before.
+- Merge behaviour is unchanged: keeps the longer display name and the EARLIEST
+  parseable start date (so post-initiation checks are not weakened).
+- Different substances are never merged (semaglutide stays its own card next to
+  tirzepatide under the GLP-1 rule).
+- `test-drug-monitoring-dedup.js`: +4 cases using HAR 133's exact shape (9 chips
+  before the fix, 2 after), an acute-only history, and no-merge cases.
+
 ## [v3.263.5] — 2026-09-18
 
 ### CSO documentation catch-up — six undocumented PRs + PR #403 review
