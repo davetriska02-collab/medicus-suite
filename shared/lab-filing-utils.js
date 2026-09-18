@@ -190,6 +190,13 @@
       errs.push('excludeIfMeds must be an array of strings.');
     if (p.suppressIfText !== undefined && !strArrOk(p.suppressIfText))
       errs.push('suppressIfText must be an array of strings.');
+    // Per-profile allow-list for a recurring performer comment (e.g. a fixed
+    // NICE-guidance note Medicus prints on every eGFR). Deliberately scoped to
+    // ONE profile, not a global edit to LF_BENIGN_COMMENT_PHRASES — a phrase
+    // benign for this profile's report type is not a general claim about every
+    // other profile's results.
+    if (p.allowComments !== undefined && !strArrOk(p.allowComments))
+      errs.push('allowComments must be an array of strings.');
 
     if (p.commitMode !== undefined && !LF_COMMIT_MODES.includes(p.commitMode)) {
       errs.push(`commitMode must be one of: ${LF_COMMIT_MODES.join(', ')}.`);
@@ -200,6 +207,7 @@
     if (p.enabled !== undefined && typeof p.enabled !== 'boolean') errs.push('enabled must be a boolean.');
     if (p.reviewed !== undefined && typeof p.reviewed !== 'boolean') errs.push('reviewed must be a boolean.');
     if (p.notes !== undefined && !isStr(p.notes)) errs.push('notes must be a string.');
+    if (p.updatedBy !== undefined && !isStr(p.updatedBy)) errs.push('updatedBy must be a string.');
 
     return errs;
   }
@@ -291,12 +299,23 @@
       // Don't auto-offer if the report/task text contains any of these phrases
       // (e.g. "telephone result", "call patient") — a contact was promised.
       suppressIfText: sanitiseStrArr(p.suppressIfText, LF_LIMITS.matchItem, LF_LIMITS.match),
+      // Performer-comment phrases THIS profile treats as benign, in addition to
+      // the global LF_BENIGN_COMMENT_PHRASES set — for a fixed comment a lab
+      // prints on every result of this type (see fileabilityBlockers below).
+      // Full sentences copied from a real comment, so clamp to LF_LIMITS.comment
+      // (a match/analyte term's 80-char matchItem limit is too short for one).
+      allowComments: sanitiseStrArr(p.allowComments, LF_LIMITS.comment, LF_LIMITS.match),
       commitMode: LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual',
       source: LF_SOURCES.includes(p.source) ? p.source : 'manual',
       reviewed: p.reviewed === true,
       enabled: p.enabled === true,
       notes: clamp(p.notes, LF_LIMITS.notes),
       updatedAt: isStr(p.updatedAt) && p.updatedAt ? p.updatedAt : new Date().toISOString(),
+      // Who last saved this profile locally (display only — never a security
+      // control). Free text: the identity typed into Options, mirroring
+      // publishedBy elsewhere in the suite. Blank on a profile nobody has
+      // attributed yet (e.g. one authored before this field existed).
+      updatedBy: clamp(p.updatedBy, LF_LIMITS.control),
     };
     return out;
   }
@@ -456,6 +475,13 @@
       trend: { maxDeltaPct: strictestTrend },
       excludeIfMeds: uniq(matched.flatMap((p) => (Array.isArray(p.excludeIfMeds) ? p.excludeIfMeds : []))),
       suppressIfText: uniq(matched.flatMap((p) => (Array.isArray(p.suppressIfText) ? p.suppressIfText : []))),
+      // BUG FIX 2026-09-16: allowComments was never carried into the merged
+      // effective profile, so the live gate (which always scores through this
+      // merge, even for a single matched profile) could never see an
+      // allowComments entry regardless of what was saved — the feature was a
+      // no-op on the real page from the moment it shipped. Same union pattern
+      // as excludeIfMeds/suppressIfText above.
+      allowComments: uniq(matched.flatMap((p) => (Array.isArray(p.allowComments) ? p.allowComments : []))),
       filing: primary.filing,
       patientMessage: primary.patientMessage,
       commitMode: matched.some((p) => p.commitMode === 'confirm') ? 'confirm' : 'manual',
@@ -989,13 +1015,182 @@
     if (Number.isFinite(r.value)) strip.push(String(r.value));
     if (isStr(r.unit) && r.unit.trim()) strip.push(r.unit.trim());
     if (isStr(r.name) && r.name.trim()) strip.push(r.name.trim());
+    // Strip only the FIRST occurrence of each token (no 'g' flag) — these
+    // exist to remove the row's own restated value/name as a label (e.g. a
+    // leading "Creatinine - " before the real comment), not every occurrence
+    // anywhere in the text. A global strip also ate a legitimate reuse of the
+    // analyte's own name inside real prose (e.g. "...historical creatinine
+    // data..." on a Creatinine result), silently mangling the residue that
+    // both the benign-phrase check and a profile's allowComments match against.
     for (const token of strip) {
-      residue = residue.replace(new RegExp(escapeRe(token), 'gi'), ' ');
+      residue = residue.replace(new RegExp(escapeRe(token), 'i'), ' ');
     }
-    return residue.replace(/\s+/g, ' ').trim();
+    return _collapseRepeatedWhole(residue.replace(/\s+/g, ' ').trim());
   }
 
-  function fileabilityBlockers(report, severity, resultRules) {
+  // Medicus's own report data has been observed (live, 2026-09-17) to carry a
+  // performer comment TWICE inside one result's text field, back to back with
+  // either nothing or a single space between the two copies — a data/render
+  // artifact upstream of this suite, not something either capture path here
+  // introduces. Left uncollapsed, the residue (and anything a clinician saves
+  // from it via the "whitelist this comment" action) would carry the doubled
+  // text verbatim. Detects "the whole string is exactly two back-to-back
+  // copies of the same substring" and returns just one copy; anything else
+  // (including a genuine short repeated word within otherwise normal prose)
+  // is returned unchanged — this only fires on an EXACT whole-string doubling.
+  function _collapseRepeatedWhole(s) {
+    const n = s.length;
+    if (n < 2) return s;
+    if (n % 2 === 0) {
+      const half = n / 2;
+      if (s.slice(0, half) === s.slice(half)) return s.slice(0, half).trim();
+    }
+    if (n % 2 === 1) {
+      const half = (n - 1) / 2;
+      if (s[half] === ' ' && s.slice(0, half) === s.slice(half + 1)) return s.slice(0, half).trim();
+    }
+    return s;
+  }
+
+  // A comment residue is allowed for THIS profile if it exactly matches, or
+  // contains, one of the profile's own allowComments phrases — same
+  // normalisation as the phrase being checked, same "contains" looseness as
+  // suppressIfText's own phrase matching. Never touches the global
+  // LF_BENIGN_COMMENT_PHRASES set: an allow-listed phrase excuses only the
+  // profile that lists it.
+  function _normComment(s) {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function _commentAllowedByProfile(norm, profile) {
+    if (!norm || !profile || !Array.isArray(profile.allowComments)) return false;
+    return profile.allowComments.some((phrase) => {
+      const p = _normComment(phrase);
+      // Bidirectional on purpose: an entry saved BEFORE the 2026-09-17 fix to
+      // _collapseRepeatedWhole above carries Medicus's doubled-comment text
+      // verbatim, which is now longer than a freshly computed (de-duplicated)
+      // residue — norm.includes(p) alone would stop matching it. Checking
+      // the reverse too keeps every already-saved entry working without
+      // requiring anyone to re-save it, at no extra risk: either direction
+      // still requires one full text to appear verbatim inside the other.
+      return p && (norm.includes(p) || p.includes(norm));
+    });
+  }
+
+  // Every numeric result whose comment residue is non-benign AND not already
+  // excused by the profile's own allowComments — the exact set fileabilityBlockers
+  // folds into its single "carries a comment" reason string. Exposed separately
+  // so a caller (the filing button's blocked-card UI) can offer a "whitelist this
+  // comment" action per result, using the SAME residue text the gate itself
+  // computed — never a retyped or copy-pasted approximation of it.
+  // A comment is excused only by a profile that actually owns this result.
+  // When `matchedProfiles` is provided (the live combined-report path), a
+  // U&E allow-list phrase must not excuse a Lipids heading — the same
+  // honesty rule as the whitelist write (profilesOwningResult). No owners
+  // means not excused (global benign phrases still apply at the caller).
+  // When matchedProfiles is omitted, fall back to the single `profile`
+  // argument so unit tests and single-profile callers stay unchanged.
+  function _commentAllowedForResult(norm, profile, result, matchedProfiles) {
+    if (Array.isArray(matchedProfiles) && matchedProfiles.length) {
+      const owners = profilesOwningResult(matchedProfiles, result);
+      if (!owners.length) return false;
+      return owners.some((p) => _commentAllowedByProfile(norm, p));
+    }
+    return _commentAllowedByProfile(norm, profile);
+  }
+
+  function unresolvedCommentedResults(report, profile, matchedProfiles) {
+    const out = [];
+    if (!report || !Array.isArray(report.results)) return out;
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      const hasText = isStr(r.text) && r.text.trim().length > 0;
+      if (!Number.isFinite(r.value) || !hasText) continue;
+      const residue = numericCommentResidue(r);
+      if (!residue) continue;
+      const norm = _normComment(residue);
+      if (norm && !LF_BENIGN_COMMENT_PHRASES.has(norm) && !_commentAllowedForResult(norm, profile, r, matchedProfiles)) {
+        // `result` (the raw row) rides along so a caller with several
+        // candidate profiles (a combined multi-panel report) can work out
+        // which one actually covers THIS analyte — see profilesOwningResult.
+        out.push({ name: isStr(r.name) && r.name.trim() ? r.name.trim() : 'unnamed', residue, result: r });
+      }
+    }
+    return out;
+  }
+
+  // Which of a set of profiles (already matched against the WHOLE report) has
+  // a match[] term hitting THIS ONE result specifically — e.g. a combined
+  // investigation-report task carrying several headings (Renal function
+  // tests, LFTs, Lipids), each with its own performer comments, under one
+  // shared File button. Used to attribute a "whitelist this comment" write
+  // to the profile(s) that actually own it, instead of guessing or
+  // restricting the feature to whichever report happens to match only one
+  // profile.
+  //
+  // HEADING FIRST: a Medicus performer comment is associated with the
+  // result's HEADING (the investigation group Medicus prints it under —
+  // "Lipids", "Renal function tests" — carried as `result.specimen` by
+  // engine/normalisers.js), not the individual analyte, in most cases
+  // (confirmed by the practice, 2026-09-17; unconfirmed for microbiology).
+  // Matching the heading first, and using ONLY that result if it finds
+  // anything, keeps every analyte under one heading attributed together —
+  // matching by analyte name alone could otherwise split a single heading's
+  // comment across profiles on nothing more than which individual term a
+  // profile's match[] happens to list (e.g. "cholesterol" but not
+  // "triglyceride"). Falls back to the analyte name alone only when there is
+  // no heading, or no profile names the heading itself.
+  //
+  // Returns the owning subset — 0 (nobody names this heading or analyte) or
+  // >1 (genuinely tied) are both returned as-is; the caller must not guess a
+  // single target, and MUST NOT fall back to "every matched profile" when
+  // this comes back empty — that silently writes an unrelated heading's
+  // comment into a profile that has nothing to do with it (found live,
+  // 2026-09-17: a Lipids comment was being saved onto the U&E and LFT
+  // profiles because neither of the profiles actually covering it existed
+  // in the practice's set, and the caller was filling the gap with every
+  // matched profile instead of offering no checkbox at all).
+  function profilesOwningResult(profiles, result) {
+    if (!result || typeof result !== 'object') return [];
+    const list = Array.isArray(profiles) ? profiles : [];
+    const byHaystack = (hay) =>
+      !hay
+        ? []
+        : list.filter(
+            (p) =>
+              p &&
+              Array.isArray(p.match) &&
+              p.match.some((m) => {
+                if (!isStr(m) || !m.trim()) return false;
+                const term = m.trim().toLowerCase();
+                // hay.includes(term) is the normal direction (a short match
+                // term found inside the result's longer name/heading). But
+                // Medicus has been observed (live, 2026-09-17) to truncate a
+                // result's own name to a fixed length — "Calculated LDL
+                // cholesterol level" arrives as "...cholesterol lev" in the
+                // report — so a profile's own longer, untruncated match term
+                // can never be a substring of the shorter haystack in that
+                // direction. term.startsWith(hay) catches exactly that: the
+                // truncated haystack is the beginning of the full term,
+                // character for character — specific enough not to invite
+                // false positives from short, generic names/headings.
+                return hay.includes(term) || term.startsWith(hay);
+              })
+          );
+    if (isStr(result.specimen) && result.specimen.trim()) {
+      const headingOwners = byHaystack(result.specimen.trim().toLowerCase());
+      if (headingOwners.length) return headingOwners;
+    }
+    if (isStr(result.name) && result.name.trim()) {
+      return byHaystack(result.name.trim().toLowerCase());
+    }
+    return [];
+  }
+
+  function fileabilityBlockers(report, severity, resultRules, profile, matchedProfiles) {
     const reasons = [];
     if (!report || !Array.isArray(report.results) || report.results.length === 0) {
       reasons.push('no results could be read from this report');
@@ -1014,25 +1209,13 @@
       reasons.push('result rules are not loaded, so cultures and thresholds cannot be checked');
     }
     const freeText = [];
-    const commented = [];
     for (const r of report.results) {
       if (!r || typeof r !== 'object') continue;
       const hasText = isStr(r.text) && r.text.trim().length > 0;
       const label = isStr(r.name) && r.name.trim() ? r.name.trim() : 'unnamed';
-      if (!Number.isFinite(r.value) && hasText) {
-        freeText.push(label);
-      } else if (Number.isFinite(r.value) && hasText) {
-        const residue = numericCommentResidue(r);
-        if (residue) {
-          const norm = residue
-            .toLowerCase()
-            .replace(/[^a-z0-9 ]+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          if (norm && !LF_BENIGN_COMMENT_PHRASES.has(norm)) commented.push(label);
-        }
-      }
+      if (!Number.isFinite(r.value) && hasText) freeText.push(label);
     }
+    const commented = unresolvedCommentedResults(report, profile, matchedProfiles).map((c) => c.name);
     if (freeText.length) {
       const shown = freeText.slice(0, 3).join(', ');
       reasons.push(
@@ -1240,6 +1423,12 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     profileParamBlockers,
     unrecognisedAnalyteBlockers,
     applyParamOverrides,
+    // Exported for the lab-file-button.js debug log (ch-debug flag) — lets the
+    // clinician see exactly what text an allowComments phrase is being
+    // compared against, rather than guess at it.
+    numericCommentResidue,
+    unresolvedCommentedResults,
+    profilesOwningResult,
     // 2026-08-22 audit R1b — exported so the unidirectional-match invariant is
     // pinned directly, not only through the blocker functions.
     LF_SCHEMA,

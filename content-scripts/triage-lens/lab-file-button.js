@@ -36,9 +36,11 @@
 
   // Debug logging is off by default; flip it on at runtime from the page console
   // with: localStorage.setItem('ch-debug','1') then reload. (Same flag content.js
-  // uses.) Lets a clinician see exactly what a filing attempt is doing — added
-  // while diagnosing H-075 (a click that appeared to work but never actually
-  // selected anything).
+  // uses.) Lets a clinician see exactly what comment TEXT a result is being
+  // compared against — the fastest way to diagnose "my allowComments phrase
+  // isn't excusing this" without guessing at normalisation — and exactly
+  // what a filing attempt is doing (added while diagnosing H-075: a click
+  // that appeared to work but never actually selected anything).
   const DEBUG = (() => {
     try {
       return typeof localStorage !== 'undefined' && localStorage.getItem('ch-debug') === '1';
@@ -677,14 +679,87 @@
   // should use. Without an override-enabled profile this is exactly rs's raw values, so
   // the default path is unchanged. The engine stays oblivious to lab-filing profiles —
   // the override is applied to a cloned report here, then re-scored by the same scorer.
+  // Debug only — prints exactly the text each result's comment residue was
+  // computed from and matched against, and whether allowComments excused it,
+  // so "why didn't my allow-list phrase match" is answerable from the console
+  // instead of guessed at. No-op unless DEBUG is on.
+  //
+  // De-duped: evaluateGate() re-runs on every DOM mutation the page observes
+  // (often more than once a second on a busy Medicus SPA), so this used to
+  // print the same snapshot over and over, making the console unreadable.
+  // Only actually logs when the printed content would differ from last time.
+  let lastCommentDebugSignature = null;
+  function logCommentDebug(report, profile, fileBlockers) {
+    if (!DEBUG || !LF || !report || !Array.isArray(report.results)) return;
+    const rowsForSignature = report.results
+      .filter((r) => r && typeof r === 'object' && r.text)
+      .map((r) => [r.name, LF.numericCommentResidue(r), LF.profilesOwningResult(currentMatchedProfiles, r).map((p) => p.id)]);
+    const signature = JSON.stringify([
+      profile && profile.name,
+      (profile && profile.allowComments) || [],
+      currentMatchedProfiles.map((p) => p.id),
+      rowsForSignature,
+    ]);
+    if (signature === lastCommentDebugSignature) return;
+    lastCommentDebugSignature = signature;
+    const commentBlocked = (fileBlockers || []).some((b) => /carries a comment/.test(b));
+    log(
+      'comment check — profile:',
+      profile && profile.name,
+      'allowComments:',
+      (profile && profile.allowComments) || [],
+      'still blocked on a comment:',
+      commentBlocked
+    );
+    // Stringified (not raw objects) — a plain console copy/paste renders raw
+    // objects as collapsed "{…}" placeholders unless each is manually
+    // expanded first; this line is readable as pasted, with no extra step.
+    log(
+      'matched profiles (candidates for whitelist ownership):',
+      JSON.stringify(currentMatchedProfiles.map((p) => ({ id: p.id, name: p.name, match: p.match, enabled: p.enabled })))
+    );
+    report.results.forEach((r) => {
+      if (!r || typeof r !== 'object' || !r.text) return;
+      const residue = LF.numericCommentResidue(r);
+      if (!residue) return;
+      const owners = LF.profilesOwningResult(currentMatchedProfiles, r);
+      log(
+        '  result:',
+        r.name,
+        '| specimen (heading):',
+        r.specimen,
+        '| raw text:',
+        JSON.stringify(r.text),
+        '| residue after strip:',
+        JSON.stringify(residue),
+        '| owning profile(s):',
+        owners.map((p) => p.name)
+      );
+    });
+  }
+
   function effectiveScore(rs, profile) {
     if (!rs) return { severity: null, report: null, fileBlockers: ['could not read the result'] };
-    if (!LF || !SEV || !profile || profile.paramsOverrideLabFlags !== true) {
-      return { severity: rs.severity, report: rs.report, fileBlockers: rs.blockers || [] };
+    if (!LF || !SEV) return { severity: rs.severity, report: rs.report, fileBlockers: rs.blockers || [] };
+    if (!profile || profile.paramsOverrideLabFlags !== true) {
+      // No lab-flag override — but still re-run fileabilityBlockers WITH the
+      // matched profile, so its allowComments can excuse a comment that
+      // rs.blockers (computed profile-agnostically in loadReportSeverity)
+      // still lists. No fetch involved — cheap to recompute.
+      const fileBlockers = LF.fileabilityBlockers(
+        rs.report,
+        rs.severity,
+        resultRules,
+        profile,
+        currentMatchedProfiles
+      );
+      logCommentDebug(rs.report, profile, fileBlockers);
+      return { severity: rs.severity, report: rs.report, fileBlockers };
     }
     const adj = LF.applyParamOverrides(rs.report, profile);
     const severity = SEV.evaluateReportSeverity(adj, { priorityDisplay: '', resultRules, problems: [] });
-    const fileBlockers = LF.fileabilityBlockers(adj, severity, resultRules);
+    const fileBlockers = LF.fileabilityBlockers(adj, severity, resultRules, profile, currentMatchedProfiles);
+    logCommentDebug(adj, profile, fileBlockers);
     return { severity, report: adj, fileBlockers };
   }
 
@@ -772,12 +847,23 @@
   let host = null;
   let titleEl = null;
   let subEl = null;
+  let whitelistBox = null;
   let btn = null;
   let msgBtn = null;
   let suppressLink = null;
   let busy = false;
   let currentProfile = null;
   let currentReport = null;
+  // The REAL stored profiles that matched (never the synthetic merged
+  // effective object, which always carries id '__merged__') — every one of
+  // them, since a combined report can match several profiles at once and
+  // each comment needs attributing to whichever of them actually owns it
+  // (see profilesOwningResult / renderWhitelistBox).
+  let currentMatchedProfiles = [];
+  let whitelistBusy = false;
+  // Last-rendered whitelist-box content signature — see renderWhitelistBox's
+  // idempotent-rebuild comment. null whenever the box is hidden/empty.
+  let whitelistSignature = null;
 
   function el(tag, className, text) {
     const n = document.createElement(tag);
@@ -796,6 +882,7 @@
 
     titleEl = el('div', 'chlf-title');
     subEl = el('div', 'chlf-sub');
+    whitelistBox = el('div', 'chlf-whitelist chlf-hidden');
 
     const actions = el('div', 'chlf-actions');
     btn = el('button', 'chlf-primary');
@@ -816,6 +903,7 @@
     host.appendChild(head);
     host.appendChild(titleEl);
     host.appendChild(subEl);
+    host.appendChild(whitelistBox);
     host.appendChild(actions);
     host.appendChild(foot);
 
@@ -859,6 +947,11 @@
 
   function showButton(profile) {
     currentProfile = profile;
+    if (whitelistBox) {
+      whitelistBox.classList.add('chlf-hidden');
+      whitelistBox.innerHTML = '';
+      whitelistSignature = null;
+    }
     const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
     host.className = 'chlf-card chlf-ready';
     // Title = the matched profile, so the clinician can SEE which rule fired. For a
@@ -891,7 +984,7 @@
   // cannot pass (out-of-range, free text, a guard tripped). The card NAMES the rule
   // and shows WHY inline — so the clinician sees the feature ran and deliberately
   // declined, rather than seeing nothing or a silent no-op.
-  function showBlockedHint(blockers, profile) {
+  function showBlockedHint(blockers, profile, commentedResults, matchedProfiles) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
     host.className = 'chlf-card chlf-blocked';
@@ -904,12 +997,194 @@
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     // Still allow opting this patient out, even on the not-offered state.
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
+    renderWhitelistBox(commentedResults, matchedProfiles);
     host.classList.remove('chlf-hidden');
+  }
+
+  // Builds the "whitelist this comment" checkbox row(s) inside the blocked card.
+  // Uses the EXACT residue text unresolvedCommentedResults computed (the same
+  // text the gate itself judged against), never a retyped or copy-pasted
+  // approximation — so a saved entry is guaranteed to match on the next
+  // report carrying the same comment.
+  //
+  // Every blocked-by-comment result gets an offer WHEN it can be attributed
+  // to a real owning profile — never silently dropped just because several
+  // profiles matched the report overall (e.g. one task combining Renal
+  // function tests, LFTs and Lipids, each with its own comments). Attributed
+  // via LF.profilesOwningResult, which matches by the result's HEADING first
+  // (Medicus associates a performer comment with the heading, not the
+  // individual analyte, in most cases) and falls back to the analyte name
+  // only when nothing names the heading itself.
+  //
+  // NEVER falls back to "every matched profile" when nobody owns a comment.
+  // That was tried and is actively harmful — found live 2026-09-17: a Lipids
+  // comment (Triglycerides) got saved onto the U&E and LFT profiles because
+  // no profile in the practice's set actually covered Lipids, and the
+  // fallback filled that gap with every profile that happened to match the
+  // combined report. A comment with no owning profile gets no checkbox —
+  // the clinician still sees it's blocking (in the reasons text above), just
+  // without an offer to save it somewhere that has nothing to do with it.
+  // If it comes back with more than one owner, the phrase is saved to ALL of
+  // them — never an arbitrary pick among genuinely tied candidates.
+  function renderWhitelistBox(commentedResults, matchedProfiles) {
+    if (!whitelistBox) return;
+    const list = Array.isArray(commentedResults) ? commentedResults : [];
+    const profiles = (Array.isArray(matchedProfiles) ? matchedProfiles : []).filter((p) => p && p.id);
+    const rows = list
+      .map((c) => ({ c, targets: LF ? LF.profilesOwningResult(profiles, c.result) : [] }))
+      .filter((x) => x.targets.length > 0);
+    if (!rows.length) {
+      whitelistBox.classList.add('chlf-hidden');
+      whitelistBox.innerHTML = '';
+      whitelistSignature = null;
+      return;
+    }
+    // IDEMPOTENT REBUILD — same inject/wipe race class as the queue chips
+    // (see CLAUDE.md). Medicus's SPA mutates constantly; evaluateGate() fires
+    // on every observed change (often more than once a second), and each
+    // pass used to call this function, which unconditionally cleared and
+    // rebuilt the box — wiping a checkbox the clinician had just ticked, and
+    // the Save button with it, before a click could ever land. Skip the
+    // rebuild entirely (leaving checked state and the Save button's visible/
+    // hidden state exactly as the clinician left them) when the underlying
+    // comment/profile content hasn't actually changed.
+    const signature = JSON.stringify(rows.map((x) => [x.c.name, x.c.residue, x.targets.map((p) => p.id).sort()]));
+    if (signature === whitelistSignature) return;
+    whitelistSignature = signature;
+    whitelistBox.innerHTML = '';
+    const multiProfile = profiles.length > 1;
+    whitelistBox.classList.remove('chlf-hidden');
+    whitelistBox.appendChild(
+      el(
+        'div',
+        'chlf-wl-intro',
+        'Recognise a comment below? Whitelist it for every future report on the profile(s) it belongs to — this machine only, until you publish a practice profile.'
+      )
+    );
+    const checks = [];
+    rows.forEach(({ c, targets }) => {
+      const row = el('label', 'chlf-wl-row');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      row.appendChild(cb);
+      const text = el('span', 'chlf-wl-text');
+      text.appendChild(el('strong', null, c.name + ': '));
+      text.appendChild(document.createTextNode('“' + c.residue + '”'));
+      if (multiProfile) {
+        const names = targets.map((p) => p.name || 'profile').join(', ');
+        text.appendChild(el('span', 'chlf-wl-target', ' → ' + names));
+      }
+      row.appendChild(text);
+      whitelistBox.appendChild(row);
+      checks.push({ checkbox: cb, residue: c.residue, targetProfiles: targets });
+    });
+    const saveBtn = el('button', 'chlf-wl-save chlf-hidden', 'Save & switch OFF for review');
+    saveBtn.type = 'button';
+    saveBtn.onclick = () => whitelistSelectedComments(checks, saveBtn);
+    whitelistBox.appendChild(saveBtn);
+    const note = el(
+      'div',
+      'chlf-wl-note',
+      'Saves to the profile(s) it belongs to and switches each one OFF — review and re-enable in Options → Lab Filing before it can file anything again.'
+    );
+    whitelistBox.appendChild(note);
+    const syncButtonVisibility = () => {
+      saveBtn.classList.toggle('chlf-hidden', !checks.some((c) => c.checkbox.checked));
+    };
+    checks.forEach((c) => (c.checkbox.onchange = syncButtonVisibility));
+  }
+
+  // Writes each checked residue text into every one of its target profiles'
+  // allowComments (never the synthetic merged object) and forces each of
+  // those profiles back to enabled:false, reviewed:false — same "any content
+  // change re-opens review" discipline as every other profile edit
+  // (Options → Lab Filing's own save handler). Grouped by profile id so a
+  // profile targeted by several checked comments (or the same profile
+  // appearing as a fallback/tied target for more than one) is only written
+  // once. Re-reads storage fresh immediately before writing so this never
+  // clobbers a concurrent edit made elsewhere (Options page, another
+  // machine's practice-profile sync) with a stale local copy.
+  async function whitelistSelectedComments(checks, saveBtn) {
+    if (whitelistBusy) return;
+    const ticked = (checks || []).filter((c) => c.checkbox.checked && Array.isArray(c.targetProfiles) && c.targetProfiles.length);
+    if (!ticked.length) return;
+    if (!LF || typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+      toast('Could not save — extension utilities not loaded.', 'err');
+      return;
+    }
+    const byProfileId = new Map();
+    ticked.forEach((c) => {
+      c.targetProfiles.forEach((p) => {
+        if (!p || !p.id) return;
+        if (!byProfileId.has(p.id)) byProfileId.set(p.id, []);
+        byProfileId.get(p.id).push(c.residue);
+      });
+    });
+    whitelistBusy = true;
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+    try {
+      const r = await new Promise((resolve) => chrome.storage.local.get([STORE_PROFILES, 'suite.feedbackEmail'], resolve));
+      const stored = Array.isArray(r[STORE_PROFILES]) ? r[STORE_PROFILES] : [];
+      const updatedNames = [];
+      const missing = [];
+      for (const [profileId, texts] of byProfileId) {
+        const idx = stored.findIndex((p) => p && p.id === profileId);
+        if (idx < 0) {
+          missing.push(profileId);
+          continue;
+        }
+        const existingAllow = Array.isArray(stored[idx].allowComments) ? stored[idx].allowComments : [];
+        const existingNorm = new Set(existingAllow.map((s) => String(s || '').toLowerCase().trim()));
+        const toAdd = texts.filter((t) => !existingNorm.has(String(t || '').toLowerCase().trim()));
+        const draft = Object.assign({}, stored[idx], {
+          allowComments: existingAllow.concat(toAdd),
+          enabled: false,
+          reviewed: false,
+          updatedAt: new Date().toISOString(),
+          updatedBy: r['suite.feedbackEmail'] || '',
+        });
+        const clean = LF.sanitiseProfile(draft);
+        clean.id = stored[idx].id; // sanitiseProfile only keeps a syntactically valid id — pin it explicitly
+        stored[idx] = clean;
+        updatedNames.push(clean.name || 'Profile');
+      }
+      if (!updatedNames.length) {
+        console.error('[LabFiling] whitelist save found no matching stored profile(s) for ids:', [...byProfileId.keys()]);
+        toast('Could not save — the matching profile(s) no longer exist (may have been deleted or renamed).', 'err');
+        return;
+      }
+      await new Promise((resolve) => chrome.storage.local.set({ [STORE_PROFILES]: stored }, resolve));
+      const namesStr = updatedNames.map((n) => '“' + n + '”').join(', ');
+      toast(namesStr + ' updated and switched OFF — review in Options → Lab Filing to re-enable.', 'ok');
+      // chrome.storage.onChanged already re-runs loadConfig()+scheduleEval() —
+      // no manual re-evaluate needed. The card will re-render on that pass.
+      return;
+    } catch (e) {
+      // Unconditional (not ch-debug gated) — a failed write here is silent
+      // otherwise, and the toast itself is only visible for ~5s.
+      console.error('[LabFiling] whitelist save threw:', e);
+      toast('Could not save the whitelist entry: ' + (e && e.message ? e.message : 'unknown error'), 'err');
+    } finally {
+      whitelistBusy = false;
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & switch OFF for review';
+      }
+    }
   }
   function hideButton() {
     currentProfile = null;
+    currentMatchedProfiles = [];
     if (host) host.classList.add('chlf-hidden');
     if (subEl) subEl.title = '';
+    if (whitelistBox) {
+      whitelistBox.classList.add('chlf-hidden');
+      whitelistBox.innerHTML = '';
+      whitelistSignature = null;
+    }
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     if (suppressLink) suppressLink.classList.add('chlf-hidden');
   }
@@ -1088,6 +1363,10 @@
       hideButton();
       return;
     }
+    // The REAL stored profiles (real id, own storage row), every one that
+    // matched — renderWhitelistBox attributes each comment to whichever of
+    // them actually owns it (see profilesOwningResult).
+    currentMatchedProfiles = Array.isArray(merge.matched) ? merge.matched : [];
     // The File control must actually be on this screen, else the profile doesn't fit.
     const fileBtn = findByText(
       document.body,
@@ -1108,7 +1387,10 @@
     const eff = effectiveScore(rs, profile);
     const blockers = (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile));
     if (blockers.length) {
-      showBlockedHint(blockers, profile);
+      const commentedResults = LF
+        ? LF.unresolvedCommentedResults(eff.report, profile, currentMatchedProfiles)
+        : [];
+      showBlockedHint(blockers, profile, commentedResults, currentMatchedProfiles);
       return;
     }
     showButton(profile);
@@ -1146,6 +1428,19 @@
     '.chlf-secondary:hover{border-color:#0d6e5e;background:#f0fdfa}',
     '.chlf-secondary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
     '.chlf-secondary.chlf-hidden{display:none}',
+    '.chlf-whitelist{margin-top:10px;padding-top:10px;border-top:1px solid #e3e8ee}',
+    '.chlf-whitelist.chlf-hidden{display:none}',
+    '.chlf-wl-intro{font:600 11px/1.4 ' + FONT + ';color:#334155;margin-bottom:7px}',
+    '.chlf-wl-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:7px;cursor:pointer}',
+    '.chlf-wl-row input{margin-top:2px;flex:0 0 auto}',
+    '.chlf-wl-text{font:400 11px/1.4 ' + FONT + ';color:#475569;word-break:break-word}',
+    '.chlf-wl-text strong{color:#0f172a}',
+    '.chlf-wl-save{appearance:none;border:0;border-radius:8px;background:#b45309;color:#fff;',
+    'font:600 12px/1.2 ' + FONT + ';padding:9px 12px;cursor:pointer;text-align:center;width:100%;margin-top:2px}',
+    '.chlf-wl-save:hover{background:#92400e}.chlf-wl-save:disabled{opacity:.55;cursor:default}',
+    '.chlf-wl-save:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
+    '.chlf-wl-save.chlf-hidden{display:none}',
+    '.chlf-wl-note{font:400 10.5px/1.4 ' + FONT + ';color:#94a3b8;margin-top:6px}',
     '.chlf-foot{display:flex;justify-content:flex-end;margin-top:9px}',
     '.chlf-link{background:none;border:0;color:#64748b;font:500 11px/1.2 ' + FONT + ';cursor:pointer;',
     'padding:2px;text-decoration:underline;text-underline-offset:2px}',

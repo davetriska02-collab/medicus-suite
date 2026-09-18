@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.3] — 2026-09-18
+
+### Lab Filing — per-profile comment allow-list, practice-wide profile sync (H-073)
+
+Diagnosed a real filing profile that could never fire: two fixed performer
+comments (an AKI-risk note on Creatinine, a NICE NG203 ethnicity-correction
+note on eGFR) recur on every renal panel and were correctly blocked by the
+"carries a comment the suite cannot score" gate. A filing profile can now
+carry `allowComments` — phrases the clinician types after reading a real
+comment — that excuse a specific, recurring comment for **that profile
+only**; the global benign-phrase set and the numeric severity gate are
+untouched.
+
+Filing-profile content (match rules, parameters, `allowComments`, trend
+guard) can also now sync practice-wide, via a new `labfiling` Practice
+Profile module — the same shared-folder channel the v3.260.0 Knowledge
+live-set sync already uses. Every synced profile still **arrives disabled**:
+the new module delegates to the existing `labfilingImport`/`lockForReview`
+path unconditionally (merge mode leaves an existing local profile of the
+same id — including its own enabled state — completely untouched; only new
+ids are appended, force-locked). A publish can never itself switch
+auto-filing on anywhere; each machine still needs a human review. The
+enable toggle now carries a bold, underlined "Click here to enable this
+profile" prompt so a freshly-synced (or freshly-authored) profile isn't
+missed. Profiles also record who last saved them and when (`updatedBy`/
+`updatedAt`), shown on the card.
+
+Merge review (onto v3.263.2): the live gate now excuses a comment only via
+the profile that *owns* that heading (`profilesOwningResult`), so a U&E
+allow-list phrase cannot silently clear a Lipids comment on a combined
+report. The whitelist checkbox copy no longer says "for everyone" (it is
+this machine until a practice profile is published). Merge-mode sync still
+never overwrites an existing local profile id.
+
+Regression-pinned in `test-lab-filing-utils.js` (allowComments scoping +
+owning-profile honesty), `test-practice-profile.js` (labfiling
+merge/replace/force-disable), and `test-service-worker.js` (the new import
+wiring). New `docs/HAZARD-LOG.md` H-073, pending CSO review.
+
 ## [v3.263.2] — 2026-09-18
 
 ### Allergy cleanup — offer to fix an onset date that is after the record date

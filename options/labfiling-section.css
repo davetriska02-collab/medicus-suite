@@ -209,6 +209,13 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.lf-enable-cta {
+  font-weight: 700;
+  text-decoration: underline;
+  color: var(--amber);
+  margin-right: 6px;
+  cursor: pointer;
+}
 
 /* ── Form ── */
 .lf-form {
