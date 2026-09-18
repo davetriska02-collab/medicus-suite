@@ -202,7 +202,8 @@
       past = [];
     const hasOnsetDateFor = (id) => (onsetIndex && id && onsetIndex.has(id) ? onsetIndex.get(id) : null);
     // problem-listing exposes problemCode: { conceptId, description, descriptionId }.
-    // Keep the IDs — QOF and vaccine eligibility match on them via itemCodeHits.
+    // Keep the IDs — QOF and vaccine eligibility match on them via itemCodeHits
+    // (conceptId and descriptionId; e.g. flu carer 224484003 / 1222761019).
     // Do not invent fields: only what the listing already carries.
     const listingCode = (p) => {
       const pc = p && p.problemCode;
