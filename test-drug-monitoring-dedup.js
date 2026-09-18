@@ -112,5 +112,72 @@ console.log('\n--- single regimen record (the common case) → unaffected ---');
   check(matching.length === 1, `a normal single-record patient still gets exactly one chip (got ${matching.length})`);
 }
 
+console.log('\n--- HAR 133: one repeat (vtm) + six acute issues + prescribed-elsewhere → ONE tirzepatide chip ---');
+{
+  const glp1 = (drugRules.rules || []).find((r) => r.id === 'glp1-receptor-agonist');
+  check(!!glp1, 'glp1-receptor-agonist rule exists');
+  const acute = (date) => ({
+    name: 'Tirzepatide · Solution for injection',
+    vtm: null,
+    startDate: date,
+    lastIssueDate: date,
+    source: 'Acute',
+  });
+  const repeat = {
+    name: 'Mounjaro KwikPen 15mg/0.6ml solution for injection 2.4ml pre-filled pens (Eli Lilly and Company Ltd)',
+    vtm: 'Tirzepatide',
+    startDate: '2026-03-16',
+    source: 'Repeat',
+  };
+  const meds = [
+    repeat,
+    acute('2026-07-15'),
+    acute('2026-02-16'),
+    acute('2026-01-07'),
+    acute('2025-12-10'),
+    acute('2025-11-12'),
+    acute('2025-10-22'),
+    { name: 'Semaglutide', vtm: null, startDate: null, source: 'Prescribed elsewhere' },
+    { name: 'Tirzepatide', vtm: null, startDate: null, source: 'Prescribed elsewhere' },
+  ];
+  const chips = engine.evaluatePatient(meds, [], [glp1], { now: NOW }).filter((c) => c.ruleId === 'glp1-receptor-agonist');
+  check(chips.length === 2, `tirzepatide collapses to one chip, semaglutide stays separate (got ${chips.length})`);
+  const tirz = chips.find((c) => /mounjaro|tirzepatide/i.test(c.drugName));
+  check(tirz && /Mounjaro/.test(tirz.drugName), `kept the detailed repeat name (got ${tirz && tirz.drugName})`);
+  const fact = tirz && tirz.evidence && (tirz.evidence.facts || []).find((f) => f.label === 'Drug matched');
+  check(fact && fact.date === '2025-10-22', `earliest start across the merged rows is kept (got ${fact && fact.date})`);
+  check(
+    chips.some((c) => /semaglutide/i.test(c.drugName)),
+    'semaglutide (a different drug in the same class) is NOT merged into tirzepatide'
+  );
+}
+
+console.log('\n--- acute-only history (no repeat row, no vtm anywhere) → still collapses per substance ---');
+{
+  const glp1 = (drugRules.rules || []).find((r) => r.id === 'glp1-receptor-agonist');
+  const meds = ['2026-07-15', '2026-02-16', '2025-12-10'].map((d) => ({
+    name: 'Tirzepatide · Solution for injection',
+    vtm: null,
+    startDate: d,
+    source: 'Acute',
+  }));
+  const chips = engine.evaluatePatient(meds, [], [glp1], { now: NOW }).filter((c) => c.ruleId === 'glp1-receptor-agonist');
+  check(chips.length === 1, `three acute issues of one substance → one chip (got ${chips.length})`);
+}
+
+console.log('\n--- different substances in acute lines are NOT merged; unrelated bare names are left alone ---');
+{
+  const glp1 = (drugRules.rules || []).find((r) => r.id === 'glp1-receptor-agonist');
+  const meds = [
+    { name: 'Tirzepatide · Solution for injection', vtm: null, startDate: '2026-01-01', source: 'Acute' },
+    { name: 'Semaglutide · Solution for injection', vtm: null, startDate: '2026-01-01', source: 'Acute' },
+    // bare name with no matching key anywhere: same conservative behaviour as before
+    { name: 'Liraglutide', vtm: null, startDate: null, source: 'Prescribed elsewhere' },
+    { name: 'Liraglutide', vtm: null, startDate: null, source: 'Prescribed elsewhere' },
+  ];
+  const chips = engine.evaluatePatient(meds, [], [glp1], { now: NOW }).filter((c) => c.ruleId === 'glp1-receptor-agonist');
+  check(chips.length === 4, `2 distinct acute substances + 2 unmatched bare rows stay separate (got ${chips.length})`);
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);
