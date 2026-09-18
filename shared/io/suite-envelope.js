@@ -298,7 +298,11 @@ function previewEnvelope(envelope) {
   if (mods.slots) {
     const hiddenCount = (mods.slots.hiddenTypes || []).length;
     const alertCount = (mods.slots.alertRules || []).length;
-    lines.push(`Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s)`);
+    const vax = mods.slots.vaxTally || {};
+    const vaxOn = ['flu', 'covid', 'rsv'].filter((k) => vax[k]).length;
+    lines.push(
+      `Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s), ${vaxOn} vaccine tally toggle(s)`
+    );
   } else {
     const m = missing('Slot Counter');
     if (m) lines.push(m);

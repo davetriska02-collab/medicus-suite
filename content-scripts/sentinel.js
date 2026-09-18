@@ -845,6 +845,16 @@
       sendResponse(_lastSnapshot || { chips: null, patientContext: null, evaluatedAt: null });
       return false;
     }
+    if (msg && msg.action === 'getRxListScope') {
+      var attr = '';
+      try {
+        attr = document.documentElement.getAttribute('data-ch-rx-list-scope') || '';
+      } catch (_) {
+        attr = '';
+      }
+      sendResponse({ attr: String(attr).slice(0, 160) });
+      return false;
+    }
     if (msg && msg.action === 'getTrendData') {
       if (!_lastTrendData) {
         sendResponse(null);

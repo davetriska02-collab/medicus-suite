@@ -59,7 +59,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: 320px;
+  width: 340px;
   max-height: min(70vh, 480px);
   overflow: auto;
   background: var(--bg-elev);
@@ -205,6 +205,67 @@
 
 #ms-apt-tally .ms-apt-tally-excluded-list {
   opacity: 0.95;
+}
+
+#ms-apt-tally .ms-apt-tally-vax {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+#ms-apt-tally .ms-apt-tally-vax-title {
+  font-weight: 600;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 44px auto;
+  gap: 6px;
+  align-items: center;
+  margin: 0;
+  padding: 3px 0;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-toggle {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-toggle:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-blank {
+  color: var(--text-3);
+  text-align: right;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-due {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-status {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+
+#ms-apt-tally .ms-apt-tally-vax-status.is-error {
+  color: var(--red);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -845,7 +845,12 @@
   // never clinical facts) and allergyReactions is only overridden when at
   // least one reaction was actually picked, otherwise the prefill's own
   // reactions carry through unchanged too.
-  function buildConversionChangeAllergyPayload(prefill, newSubstance, newReactions) {
+  //
+  // The ONE exception to the onsetDate invariant: `onsetOverride` (an ISO
+  // date, optional) — passed only after the clinician explicitly accepted
+  // the offered fix for an onset-after-record-date entry that Medicus would
+  // otherwise reject (see onsetDateAfterRecordDate).
+  function buildConversionChangeAllergyPayload(prefill, newSubstance, newReactions, onsetOverride) {
     var p = prefill || {};
     var reactions = Array.isArray(newReactions) ? newReactions.filter(Boolean) : [];
     return Object.assign(
@@ -856,7 +861,7 @@
         severity: p.severity != null ? p.severity : null,
         certainty: p.certainty != null ? p.certainty : null,
         allergyReactions: reactions.length ? reactions : Array.isArray(p.allergyReactions) ? p.allergyReactions : [],
-        onsetDate: p.onsetDate != null ? p.onsetDate : null,
+        onsetDate: payloadOnsetDate(p, onsetOverride),
         allergyCodeType: 'substances',
       },
       buildAllergyProvenanceFields(p)
@@ -873,7 +878,7 @@
   // additionalInformation/allergyReactions/onsetDate) and the authoritative
   // code itself pass through UNCHANGED — this only ever nulls the one stale
   // field, nothing else about the record changes.
-  function buildClearLegacyCodePayload(prefill) {
+  function buildClearLegacyCodePayload(prefill, onsetOverride) {
     var p = prefill || {};
     // FAIL CLOSED on anything except the one live-observed direction. The
     // checklist row was flagged from the OVERVIEW's allergyCodeType, but this
@@ -895,7 +900,7 @@
         severity: p.severity != null ? p.severity : null,
         certainty: p.certainty != null ? p.certainty : null,
         allergyReactions: Array.isArray(p.allergyReactions) ? p.allergyReactions : [],
-        onsetDate: p.onsetDate != null ? p.onsetDate : null,
+        onsetDate: payloadOnsetDate(p, onsetOverride),
         allergyCodeType: p.allergyCodeType != null ? p.allergyCodeType : null,
       },
       buildAllergyProvenanceFields(p)
@@ -935,6 +940,116 @@
     if (!month) return value;
     var day = m[1].length === 1 ? '0' + m[1] : m[1];
     return m[3] + '-' + month + '-' + day;
+  }
+
+  // Medicus rejects any change-allergy POST whose onsetDate is after its
+  // recordDate — POST 400 {"errors":{"onsetDate":["Onset date cannot be
+  // after the record date"]}} (HAR 132: onset 2014-03-04, record 1993-01-24,
+  // typically an import/back-dated record). Every payload builder here
+  // re-posts the entry's own onsetDate + recordDate byte-for-byte, so such
+  // an entry can never be re-saved (converted, text-cleaned, merged) until
+  // the onset is corrected — and that is a clinical-fact edit, so it is
+  // OFFERED to the clinician (the conversion modal), never applied silently.
+  //
+  // Onset may be a partial date ("2014", "2014-03", "2014-03-04");
+  // record is a full ISO date (a longer ISO datetime is clipped to its date).
+  // A partial onset is compared by its EARLIEST possible day, so a
+  // same-year/same-month onset is never flagged on a guess — the server's
+  // own 400 still surfaces if it disagrees.
+  function isoDateOnly(value) {
+    var m = /^(\d{4}-\d{2}-\d{2})/.exec(String(value == null ? '' : value).trim());
+    return m ? m[1] : null;
+  }
+
+  function onsetDateAfterRecordDate(onsetDate, recordDate) {
+    var record = isoDateOnly(recordDate);
+    var m = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/.exec(String(onsetDate == null ? '' : onsetDate).trim());
+    if (!record || !m) return false;
+    var earliestOnset = m[1] + '-' + (m[2] || '01') + '-' + (m[3] || '01');
+    return earliestOnset > record;
+  }
+
+  // The onsetDate a payload should carry: the prefill's own, unless the
+  // clinician accepted the offered correction (`onsetOverride`, an ISO date).
+  function payloadOnsetDate(prefill, onsetOverride) {
+    if (onsetOverride) return onsetOverride;
+    return prefill.onsetDate != null ? prefill.onsetDate : null;
+  }
+
+  // "1993-01-24" -> "24 Jan 1993" (display only); anything else unchanged.
+  function formatIsoDateForDisplay(value) {
+    var iso = isoDateOnly(value);
+    if (!iso) return String(value == null ? '' : value);
+    var monthName = Object.keys(OVERVIEW_MONTH_ABBR).filter(function (k) {
+      return OVERVIEW_MONTH_ABBR[k] === iso.slice(5, 7);
+    })[0];
+    return monthName ? String(parseInt(iso.slice(8, 10), 10)) + ' ' + monthName + ' ' + iso.slice(0, 4) : iso;
+  }
+
+  // One decision point for every write path (conversion, clean-text, merge,
+  // clear-legacy). Accepts either date shape (overview display "4 Mar 2014"
+  // or edit-allergy ISO). Returns:
+  //   conflict — onset is after record (Medicus would 400)
+  //   key      — identifies THIS onset/record pair, so an acceptance never
+  //              carries over to a different conflict (e.g. after the
+  //              clinician changes keeper / chosen onset in a merge)
+  //   accepted — the clinician already accepted THIS pair (acceptedKey)
+  //   pending  — conflict && !accepted: the save must not proceed
+  //   override — ISO record date to post as onsetDate, only when accepted
+  function onsetFixStatus(onsetDate, recordDate, acceptedKey) {
+    var onset = normalizeOnsetDateForSubmit(onsetDate);
+    var record = isoDateOnly(normalizeOnsetDateForSubmit(recordDate));
+    var conflict = onsetDateAfterRecordDate(onset, record);
+    var key = conflict ? String(onset) + '|' + record : null;
+    var accepted = conflict && acceptedKey === key;
+    return {
+      conflict: conflict,
+      key: key,
+      accepted: accepted,
+      pending: conflict && !accepted,
+      override: accepted ? record : undefined,
+      onset: onset,
+      record: record,
+    };
+  }
+
+  // Clear-legacy is a bulk write with no per-entry modal, so its onset fixes
+  // are confirmed ONCE for the whole batch. `prefills` is one edit-allergy
+  // response (or null for a failed fetch) per target; returns
+  // [{ index, onset, record }] for every entry Medicus would reject.
+  function planClearLegacyOnsetFixes(prefills) {
+    var out = [];
+    (Array.isArray(prefills) ? prefills : []).forEach(function (p, i) {
+      if (!p) return;
+      var status = onsetFixStatus(p.onsetDate, p.recordDate, null);
+      if (status.conflict) out.push({ index: i, onset: status.onset, record: status.record });
+    });
+    return out;
+  }
+
+  // Native confirm — the bulk tidy runs from both the panel checklist and the
+  // canvas Finalise, where a bespoke overlay could sit under the other UI.
+  function confirmOnsetFixesNatively(items) {
+    if (typeof window === 'undefined' || typeof window.confirm !== 'function') return false;
+    return window.confirm(
+      items.length +
+        (items.length === 1 ? ' allergy has' : ' allergies have') +
+        ' an onset date after the record date, which Medicus will not save:\n\n' +
+        items
+          .map(function (it) {
+            return (
+              '\u2022 ' +
+              it.description +
+              ' \u2014 onset ' +
+              formatIsoDateForDisplay(it.onset) +
+              ', recorded ' +
+              formatIsoDateForDisplay(it.record)
+            );
+          })
+          .join('\n') +
+        '\n\nOK = set the onset date to the record date for these and tidy them.\n' +
+        'Cancel = leave these untouched (the rest are still tidied).'
+    );
   }
 
   // ── Page-shape parsing (pure, so both URL shapes are unit-testable) ──────────
@@ -1039,6 +1154,10 @@
       computeGenericTextRemoval: computeGenericTextRemoval,
       buildCleanTextChangeAllergyPayload: buildCleanTextChangeAllergyPayload,
       normalizeOnsetDateForSubmit: normalizeOnsetDateForSubmit,
+      onsetDateAfterRecordDate: onsetDateAfterRecordDate,
+      onsetFixStatus: onsetFixStatus,
+      planClearLegacyOnsetFixes: planClearLegacyOnsetFixes,
+      formatIsoDateForDisplay: formatIsoDateForDisplay,
       parseCareRecordPath: parseCareRecordPath,
       parseTaskOverviewPath: parseTaskOverviewPath,
       parseSummaryBridgeAttr: parseSummaryBridgeAttr,
@@ -1353,7 +1472,9 @@
   // exists (see its own comment): cleaning import-noise text is a different
   // action from re-coding the substance, and must never accidentally change
   // what the allergy IS or any other clinical fact about it.
-  function buildCleanTextChangeAllergyPayload(prefill, cleanedText) {
+  // (`onsetOverride` — see buildConversionChangeAllergyPayload — is the sole
+  // exception, only for an accepted onset-after-record-date correction.)
+  function buildCleanTextChangeAllergyPayload(prefill, cleanedText, onsetOverride) {
     var p = prefill || {};
     return Object.assign(
       {
@@ -1363,7 +1484,7 @@
         severity: p.severity != null ? p.severity : null,
         certainty: p.certainty != null ? p.certainty : null,
         allergyReactions: Array.isArray(p.allergyReactions) ? p.allergyReactions : [],
-        onsetDate: p.onsetDate != null ? p.onsetDate : null,
+        onsetDate: payloadOnsetDate(p, onsetOverride),
         allergyCodeType: p.allergyCodeType != null ? p.allergyCodeType : null,
       },
       buildAllergyProvenanceFields(p)
@@ -1638,6 +1759,7 @@
         saving: false,
         saveError: null,
         merged: false,
+        onsetFixKey: null, // onsetFixStatus key the clinician accepted for this merge's onset/record pair
         removedIds: new Set(), // entries excluded from THIS merge review — never ended/modified
       };
     }
@@ -1667,6 +1789,7 @@
         cleaningText: false,
         cleanTextError: null,
         textCleaned: false,
+        onsetFixKey: null, // onsetFixStatus key the clinician accepted (set onset = record date; Medicus 400s otherwise)
         saving: false,
         saveError: null,
         converted: false,
@@ -2028,11 +2151,55 @@
     if (!targets.length || _dualCodedTidying) return { tidied: [], skipped: true };
     _dualCodedTidying = true;
     render();
-    var results = await Promise.allSettled(
+    // Prefetch first, so onset-after-record entries (Medicus 400s any save of
+    // them) can be confirmed ONCE for the batch before anything is written.
+    var fetched = await Promise.allSettled(
       targets.map(function (f) {
-        return fetchEditAllergyForm(f.id).then(function (prefill) {
-          return postChangeAllergy(f.id, buildClearLegacyCodePayload(prefill));
+        return fetchEditAllergyForm(f.id);
+      })
+    );
+    var prefills = fetched.map(function (r) {
+      return r.status === 'fulfilled' ? r.value : null;
+    });
+    var conflicts = planClearLegacyOnsetFixes(prefills);
+    var fixApproved = {};
+    var ask = (opts && opts.confirmOnsetFix) || confirmOnsetFixesNatively;
+    if (conflicts.length) {
+      var approved = false;
+      try {
+        approved = !!(await ask(
+          conflicts.map(function (c) {
+            return { description: targets[c.index].description, onset: c.onset, record: c.record };
+          })
+        ));
+      } catch (_) {
+        approved = false; // fail closed — an errored prompt is a "no"
+      }
+      if (approved) {
+        conflicts.forEach(function (c) {
+          fixApproved[c.index] = c.record;
         });
+      }
+    }
+    var conflictAt = {};
+    conflicts.forEach(function (c) {
+      conflictAt[c.index] = c;
+    });
+    var results = await Promise.allSettled(
+      targets.map(function (f, i) {
+        if (fetched[i].status === 'rejected') return Promise.reject(fetched[i].reason);
+        if (conflictAt[i] && !fixApproved[i]) {
+          return Promise.reject(
+            new Error(
+              'Skipped — the onset date (' +
+                formatIsoDateForDisplay(conflictAt[i].onset) +
+                ') is after the record date (' +
+                formatIsoDateForDisplay(conflictAt[i].record) +
+                '), which Medicus will not save. Left unchanged.'
+            )
+          );
+        }
+        return postChangeAllergy(f.id, buildClearLegacyCodePayload(prefills[i], fixApproved[i]));
       })
     );
     var allSucceeded = true;
@@ -2188,6 +2355,24 @@
     refreshModal('duplicate', idx);
   }
 
+  // The onset the merged entry will carry (chosen copy's, else the keeper's
+  // own) against the KEEPER's record date, from the loaded overviews — so the
+  // conflict can be shown before saving. confirmMerge re-derives it from the
+  // keeper's edit-allergy prefill and refuses to post if it disagrees.
+  function mergeOnsetStatus(st) {
+    var active = filterActiveEntries(st.entries, st.removedIds);
+    var keeper = active.find(function (e) {
+      return e.id === st.keeperId;
+    });
+    var source = active.find(function (e) {
+      return e.id === st.chosen.onsetDate;
+    });
+    var onset =
+      (source && source.overview && source.overview.onsetDate) ||
+      (keeper && keeper.overview && keeper.overview.onsetDate);
+    return onsetFixStatus(onset, keeper && keeper.overview && keeper.overview.recordDate, st.onsetFixKey);
+  }
+
   async function confirmMerge(idx) {
     var group = _duplicateGroups[idx];
     var st = groupState(idx);
@@ -2201,6 +2386,7 @@
     var chosen = Object.assign({}, st.chosen);
     var endDate = st.endDate;
     var additionalInfoText = st.additionalInfoText;
+    var onsetFixKey = st.onsetFixKey;
     var active = filterActiveEntries(st.entries, st.removedIds);
     st.saving = true;
     st.saveError = null;
@@ -2220,6 +2406,19 @@
         resolved[field] = field === 'onsetDate' ? normalizeOnsetDateForSubmit(value) : value;
       });
       resolved.additionalInformation = (additionalInfoText || '').trim() || null;
+      // Medicus rejects onset-after-record (400) — fail closed here, before any
+      // write, unless the clinician accepted THIS exact onset/record pair.
+      var onsetStatus = onsetFixStatus(
+        resolved.onsetDate !== undefined ? resolved.onsetDate : prefill.onsetDate,
+        prefill.recordDate,
+        onsetFixKey
+      );
+      if (onsetStatus.pending) {
+        throw new Error(
+          'The onset date is after the record date — Medicus would reject this. Use the option above to set the onset date to the record date, then merge again. Nothing was changed.'
+        );
+      }
+      if (onsetStatus.accepted) resolved.onsetDate = onsetStatus.override;
       var payload = buildMergeChangeAllergyPayload(prefill, resolved);
       await postChangeAllergy(keeperId, payload);
       // Only ACTIVE entries are ever ended — anything removed from this
@@ -2520,15 +2719,36 @@
     refreshModal('convert', idx);
   }
 
+  // True while the loaded entry's onset is after its record date and the
+  // clinician hasn't yet accepted the correction — Medicus would 400 any save.
+  function conversionOnsetStatus(st) {
+    var p = st.prefill || {};
+    return onsetFixStatus(p.onsetDate, p.recordDate, st.onsetFixKey);
+  }
+
+  function onsetFixPending(st) {
+    return !!st.prefill && conversionOnsetStatus(st).pending;
+  }
+
+  // The accepted correction (the record date, ISO) or undefined.
+  function onsetOverrideFor(st) {
+    return st.prefill ? conversionOnsetStatus(st).override : undefined;
+  }
+
   async function confirmConversion(idx) {
     var f = _conversionFlagged[idx];
     var st = conversionState(idx);
-    if (!f || !st.prefill || !st.pendingSubstance || st.saving) return;
+    if (!f || !st.prefill || !st.pendingSubstance || st.saving || onsetFixPending(st)) return;
     st.saving = true;
     st.saveError = null;
     refreshModal('convert', idx);
     try {
-      var payload = buildConversionChangeAllergyPayload(st.prefill, st.pendingSubstance, st.pendingReactions);
+      var payload = buildConversionChangeAllergyPayload(
+        st.prefill,
+        st.pendingSubstance,
+        st.pendingReactions,
+        onsetOverrideFor(st)
+      );
       await postChangeAllergy(f.id, payload);
       st.converted = true;
       setTimeout(function () {
@@ -2549,12 +2769,12 @@
   async function cleanAdditionalInfoText(idx) {
     var f = _conversionFlagged[idx];
     var st = conversionState(idx);
-    if (!f || !st.prefill || !st.genericTextRemoval || st.cleaningText) return;
+    if (!f || !st.prefill || !st.genericTextRemoval || st.cleaningText || onsetFixPending(st)) return;
     st.cleaningText = true;
     st.cleanTextError = null;
     refreshModal('convert', idx);
     try {
-      var payload = buildCleanTextChangeAllergyPayload(st.prefill, st.genericTextRemoval.cleaned);
+      var payload = buildCleanTextChangeAllergyPayload(st.prefill, st.genericTextRemoval.cleaned, onsetOverrideFor(st));
       await postChangeAllergy(f.id, payload);
       st.textCleaned = true;
       setTimeout(function () {
@@ -3028,6 +3248,40 @@
     );
   }
 
+  // Same offer as the conversion modal's (see there): a merged entry whose
+  // onset is after the keeper's record date is rejected by Medicus, so the
+  // clinician is asked to move the onset back to the record date; Merge stays
+  // disabled until they accept (or change keeper / onset source).
+  function mergeOnsetFixHtml(idx, st) {
+    var status = mergeOnsetStatus(st);
+    if (!status.conflict) return '';
+    if (status.accepted) {
+      return (
+        '<div class="ms-ac-conv-text-clean ms-ac-done">The merged entry\u2019s onset date will be set to the record date, ' +
+        esc(formatIsoDateForDisplay(status.record)) +
+        ' (was ' +
+        esc(formatIsoDateForDisplay(status.onset)) +
+        ').</div>'
+      );
+    }
+    return (
+      '<div class="ms-ac-conv-text-clean ms-ac-onset-fix">' +
+      '<div class="ms-ac-conv-text-clean-title">Onset date is after the record date</div>' +
+      '<div class="ms-ac-card-line">The onset date chosen for the merged entry (' +
+      esc(formatIsoDateForDisplay(status.onset)) +
+      ') is later than the kept entry\u2019s record date (' +
+      esc(formatIsoDateForDisplay(status.record)) +
+      '), and Medicus will not save an entry like that. Change the onset date to the (earlier) record date? ' +
+      'Or pick a different keeper / onset above.</div>' +
+      '<button type="button" class="ms-ac-conv-clean-text-btn ms-ac-onset-fix-btn" data-group="' +
+      esc(idx) +
+      '">Set onset date to ' +
+      esc(formatIsoDateForDisplay(status.record)) +
+      '</button>' +
+      '</div>'
+    );
+  }
+
   function duplicateModalBodyHtml(idx) {
     var group = _duplicateGroups[idx];
     var st = groupState(idx);
@@ -3157,12 +3411,13 @@
       esc(st.endDate) +
       '">' +
       '</div>' +
+      mergeOnsetFixHtml(idx, st) +
       (st.saveError ? '<div class="ms-ac-error">' + esc(st.saveError) + '</div>' : '') +
       '<div class="ms-ac-actions">' +
       '<button type="button" class="ms-ac-confirm-btn" data-group="' +
       esc(idx) +
       '"' +
-      (st.saving || !st.endDate ? ' disabled' : '') +
+      (st.saving || !st.endDate || mergeOnsetStatus(st).pending ? ' disabled' : '') +
       '>' +
       (st.saving ? 'Merging…' : 'Merge and end duplicates') +
       '</button>' +
@@ -3327,6 +3582,34 @@
       (currentLines || '<div class="ms-ac-card-muted ms-ac-card-line">No other clinical detail recorded</div>') +
       '</div>';
 
+    // Onset after record date — Medicus rejects every save of such an entry
+    // (400 "Onset date cannot be after the record date"), so the clinician is
+    // asked to move the onset back to the record date. Explicit opt-in: it is
+    // a clinical-fact edit, and Convert / Clean up text stay disabled until
+    // it is accepted (the only alternative is Cancel).
+    var onsetFixHtml = '';
+    if (st.prefill && conversionOnsetStatus(st).conflict) {
+      onsetFixHtml = conversionOnsetStatus(st).accepted
+        ? '<div class="ms-ac-conv-text-clean ms-ac-done">Onset date will be set to the record date, ' +
+          esc(formatIsoDateForDisplay(ov.recordDate)) +
+          ' (was ' +
+          esc(formatIsoDateForDisplay(ov.onsetDate)) +
+          ').</div>'
+        : '<div class="ms-ac-conv-text-clean ms-ac-onset-fix">' +
+          '<div class="ms-ac-conv-text-clean-title">Onset date is after the record date</div>' +
+          '<div class="ms-ac-card-line">Onset ' +
+          esc(formatIsoDateForDisplay(ov.onsetDate)) +
+          ' is later than the record date ' +
+          esc(formatIsoDateForDisplay(ov.recordDate)) +
+          ', and Medicus will not save an entry like that. Change the onset date to the (earlier) record date?</div>' +
+          '<button type="button" class="ms-ac-conv-clean-text-btn ms-ac-onset-fix-btn" data-idx="' +
+          esc(idx) +
+          '">Set onset date to ' +
+          esc(formatIsoDateForDisplay(ov.recordDate)) +
+          '</button>' +
+          '</div>';
+    }
+
     // Import-text noise cleanup (2026-08-23 request) — an INDEPENDENT action
     // from Convert: it only ever touches additionalInformation
     // (buildCleanTextChangeAllergyPayload), so it's offered and can be
@@ -3354,7 +3637,7 @@
         '<button type="button" class="ms-ac-conv-clean-text-btn" data-idx="' +
         esc(idx) +
         '"' +
-        (st.cleaningText ? ' disabled' : '') +
+        (st.cleaningText || onsetFixPending(st) ? ' disabled' : '') +
         '>' +
         (st.cleaningText ? 'Cleaning…' : 'Clean up text') +
         '</button>' +
@@ -3445,6 +3728,7 @@
       'all carried through unchanged.</div>' +
       ruleNoteHtml +
       currentRecordHtml +
+      onsetFixHtml +
       genericTextHtml +
       conceptSearchSectionHtml(idx, {
         fieldPrefix: 'substance',
@@ -3467,7 +3751,7 @@
       (st.saveError ? '<div class="ms-ac-error">' + esc(st.saveError) + '</div>' : '') +
       '<div class="ms-ac-actions">' +
       '<button type="button" class="ms-ac-conv-confirm-btn"' +
-      (st.saving || !st.pendingSubstance ? ' disabled' : '') +
+      (st.saving || !st.pendingSubstance || onsetFixPending(st) ? ' disabled' : '') +
       '>' +
       (st.saving ? 'Converting…' : 'Convert') +
       '</button>' +
@@ -3531,7 +3815,11 @@
     root.querySelector('.ms-ac-conv-confirm-btn')?.addEventListener('click', function () {
       confirmConversion(idx);
     });
-    root.querySelector('.ms-ac-conv-clean-text-btn')?.addEventListener('click', function () {
+    root.querySelector('.ms-ac-onset-fix-btn')?.addEventListener('click', function () {
+      st.onsetFixKey = conversionOnsetStatus(st).key;
+      refreshModal('convert', idx);
+    });
+    root.querySelector('.ms-ac-conv-clean-text-btn:not(.ms-ac-onset-fix-btn)')?.addEventListener('click', function () {
       cleanAdditionalInfoText(idx);
     });
   }
@@ -3610,6 +3898,7 @@
         var field = radio.getAttribute('data-field');
         var entryId = radio.getAttribute('data-entry-id');
         st.chosen[field] = entryId;
+        if (field === 'onsetDate') refreshModal('duplicate', idx);
         if (field === 'additionalInformation') {
           var active = filterActiveEntries(st.entries, st.removedIds);
           var entry = active.find(function (e) {
@@ -3625,6 +3914,10 @@
     });
     root.querySelector('.ms-ac-date-input')?.addEventListener('input', function (e) {
       st.endDate = e.target.value;
+    });
+    root.querySelector('.ms-ac-onset-fix-btn')?.addEventListener('click', function () {
+      st.onsetFixKey = mergeOnsetStatus(st).key;
+      refreshModal('duplicate', idx);
     });
     root.querySelector('.ms-ac-confirm-btn')?.addEventListener('click', function () {
       confirmMerge(idx);

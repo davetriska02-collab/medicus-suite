@@ -1,0 +1,466 @@
+[
+  {
+    "id": "drug-003-chc-brands",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "chc-combined-hormonal",
+    "change_type": "add-brand",
+    "title": "Add Drovelis / estetrol to CHC match list",
+    "current": "chc-combined-hormonal match[] lists 30 CHC brands plus ethinylestradiol/ethinyloestradiol but omits Drovelis (drospirenone 3 mg / estetrol 14.2 mg) \u2014 the only UK estetrol-containing CHC, licensed since 2021 and listed in BNF 92 medicinal forms.",
+    "proposed": "Add \"drovelis\" and \"estetrol\" to drug.match (generic \"drospirenone\" deliberately omitted \u2014 already covered for Yasmin/Lucette scripts and would add no incremental match for Drovelis brand-only records).",
+    "source": "BNF 92 drospirenone with estetrol medicinal forms (Drovelis 3mg/14.2mg tablets, Gedeon Richter)",
+    "source_url": "https://bnf.nice.org.uk/drugs/drospirenone-with-estetrol/medicinal-forms/",
+    "source_date": "2026-09",
+    "rag": "Red",
+    "rationale": "A Drovelis script written by brand name never fires the CHC annual BP/BMI monitoring chip \u2014 silent gap on a currently marketed combined pill.",
+    "test_update": "Add 'Drovelis 3mg/14.2mg tablets' and 'drospirenone with estetrol tablets' to EXPECTED['chc-combined-hormonal'] in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "previously-flagged",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF medicinal-forms page for drospirenone with estetrol lists exactly one UK product: Drovelis 3mg/14.2mg tablets (Gedeon Richter). Neither 'drovelis' nor 'estetrol' is in the chc-combined-hormonal match list; brand-completeness check confirms no other estetrol-CHC product exists."
+    }
+  },
+  {
+    "id": "drug-009-cenobamate-lft",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "(new)",
+    "change_type": "add-rule",
+    "title": "New cenobamate (Ontozry) hepatotoxicity LFT monitoring rule",
+    "current": "No drug-monitoring rule exists for cenobamate/Ontozry. BNF 92 (June 2026) added MHRA/CHM advice requiring LFTs before starting and during treatment after reports of severe liver injury with hepatic failure.",
+    "proposed": "Add enabled drug-monitoring rule id cenobamate-lft: drug.match [\"cenobamate\", \"ontozry\"]; phase maintenance; single LFT test intervalDays 365 / dueSoonDays 30; notes describing baseline LFT before initiation, prompt LFT if symptoms, and dose reduction/discontinuation if injury suspected; source BNF cenobamate Important safety information (June 2026).",
+    "source": "BNF cenobamate \u2014 Important safety information: new requirements for liver monitoring (June 2026)",
+    "source_url": "https://bnf.nice.org.uk/drugs/cenobamate/",
+    "source_date": "2026-06",
+    "rag": "Amber",
+    "rationale": "Cenobamate is an adjunctive focal-seizure antiepileptic now in BNF with explicit LFT monitoring after severe hepatotoxicity reports. Without a rule, Ontozry repeats in primary/shared care never raise a monitoring chip. Annual LFT is a conservative stable-maintenance default when the source mandates monitoring during treatment but does not fix a numeric interval (same Sentinel pattern as sodium-valproate annual LFT).",
+    "test_update": "Add EXPECTED['cenobamate-lft'] with 'Cenobamate 50mg tablets' and 'Ontozry 50mg tablets' to test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF cenobamate page (June 2026 safety update) confirms: perform LFTs before treatment initiation and during treatment 'as clinically indicated' (no numbered interval); hepatic disorders listed common/very common; severe liver injury with hepatic failure reported. Confirms the candidate's own framing that annual LFT is a Sentinel conservative default, not a BNF-mandated schedule \u2014 Amber, no monthly schedule invented."
+    }
+  },
+  {
+    "id": "drug-010-antipsychotic-elozar",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "antipsychotic",
+    "change_type": "add-brand",
+    "title": "Add aripiprazole brand Elozar to antipsychotic match list",
+    "current": "antipsychotic drug.match includes aripiprazole and Abilify but not Elozar \u2014 a UK-licensed aripiprazole 10mg orodispersible brand (Novumgen) listed in BNF medicinal forms.",
+    "proposed": "Add \"elozar\" to drug.match.",
+    "source": "BNF aripiprazole medicinal forms",
+    "source_url": "https://bnf.nice.org.uk/drugs/aripiprazole/medicinal-forms/",
+    "source_date": "2026-09",
+    "rag": "Red",
+    "rationale": "Brand-only Elozar scripts fail substring matching against 'aripiprazole'/'abilify' and silently skip metabolic monitoring (HbA1c, lipids, weight, BP, ECG).",
+    "test_update": "Add 'Elozar 10mg orodispersible tablets' to EXPECTED['antipsychotic'] in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF aripiprazole medicinal-forms page lists 'Elozar 10mg orodispersible tablets' (Novumgen Ltd) as a distinct product. Full brand-set extraction from the same page confirms every other listed product is either generic 'Aripiprazole' (parallel importers/generics, already substring-matched) or 'Abilify' (incl. Abilify Maintena depot \u2014 already covered by 'abilify', confirms the special check: Maintena must NOT be added alone). Elozar and Arpoya (drug-012) are the only two brands missing."
+    }
+  },
+  {
+    "id": "drug-011-denosumab-biosimilars",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "denosumab-calcium",
+    "change_type": "add-brand",
+    "title": "Add Bilprevda and Zvogra denosumab biosimilar brands",
+    "current": "denosumab-calcium lists 24 denosumab brands plus generic denosumab but omits Bilprevda and Zvogra \u2014 new 120mg/1.7ml solution-for-injection biosimilars in BNF medicinal forms (Xgeva strength band).",
+    "proposed": "Add \"bilprevda\" and \"zvogra\" to drug.match.",
+    "source": "BNF denosumab medicinal forms (BNF 92 cycle)",
+    "source_url": "https://bnf.nice.org.uk/drugs/denosumab/medicinal-forms/",
+    "source_date": "2026-09",
+    "rag": "Red",
+    "rationale": "Denosumab must be prescribed by brand; a script for Bilprevda or Zvogra does not match any current term and misses the 182-day calcium and annual U&E/eGFR chips \u2014 hypocalcaemia risk before dosing.",
+    "test_update": "Add 'Bilprevda 120mg/1.7ml injection' and 'Zvogra 120mg/1.7ml injection' to EXPECTED['denosumab-calcium'] in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF denosumab medicinal-forms page lists 22 distinct brand names (incl. Bilprevda [Organon] and Zvogra [Genus], both 120mg/1.7ml solution for injection vials \u2014 the Xgeva oncology-dose strength). Cross-checked against the live denosumab-calcium match list: 20 of the 22 BNF-listed brands are already present; Bilprevda and Zvogra are the only two missing. (Note: four brands already in the live list \u2014 wyost, evfraxy, xbryk, vevzuo \u2014 do not appear on this current BNF fetch; out of scope for this candidate, flagged in notes for a future audit.)"
+    }
+  },
+  {
+    "id": "drug-012-antipsychotic-arpoya",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "antipsychotic",
+    "change_type": "add-brand",
+    "title": "Add aripiprazole brand Arpoya to antipsychotic match list",
+    "current": "antipsychotic match includes aripiprazole and Abilify but not Arpoya (Torrent UK tablets, listed on BNF aripiprazole medicinal forms).",
+    "proposed": "Add \"arpoya\" to drug.match (alongside elozar if that candidate also survives).",
+    "source": "BNF aripiprazole medicinal forms",
+    "source_url": "https://bnf.nice.org.uk/drugs/aripiprazole/medicinal-forms/",
+    "source_date": "2026-09",
+    "rag": "Red",
+    "rationale": "Brand-only Arpoya scripts do not substring-match aripiprazole/abilify and silently skip metabolic monitoring.",
+    "test_update": "Add 'Arpoya 10mg tablets' to EXPECTED['antipsychotic'] in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF aripiprazole medicinal-forms page lists 'Arpoya 5mg/10mg/15mg tablets' (Torrent Pharma UK Ltd) as a distinct product, not a substring of 'aripiprazole' or 'abilify'. Combined with drug-010 (Elozar), this completes the current UK aripiprazole brand set \u2014 no further brands missing per full-page extraction."
+    }
+  },
+  {
+    "id": "drug-013-ciclosporin-maintenance",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "(new)",
+    "change_type": "add-rule",
+    "title": "New systemic ciclosporin monitoring rule (exclude ophthalmic)",
+    "current": "No drug-monitoring rule for ciclosporin. BNF requires BP, renal function, electrolytes (K, Mg), LFT and lipids for systemic use. Ophthalmic brands (Ikervis, Verkazia, Cequa, Vevizye) must not match.",
+    "proposed": "Add enabled rule ciclosporin-maintenance: match [ciclosporin, cyclosporin, neoral, capimune, capsorin, deximune, vanquoral, sandimmun]; exclude [ikervis, verkazia, cequa, vevizye, eye drop]; tests U&E (creatinine/K) 56d, LFT 56d, BP 56d. BNF states the RA-stable maintenance interval is 'every 4-8 weeks depending on stability' \u2014 56d (8wk) is the permitted upper bound of that range, not an invented or excessive interval; CSO may prefer tightening to 28d (4wk, the more frequent end) to match this file's general 'safer default' convention if a tighter chip cadence is wanted. sharedCare true.",
+    "source": "BNF ciclosporin \u2014 Monitoring of patient parameters (systemic use)",
+    "source_url": "https://bnf.nice.org.uk/drugs/ciclosporin/",
+    "source_date": "2026-09",
+    "rag": "Red",
+    "rationale": "Systemic ciclosporin is a high-toxicity immunosuppressant used in rheumatology/dermatology/transplant shared care. Without a rule, Neoral/Capimune repeats never raise a chip \u2014 silent under-monitoring. Eye-drop brands must be excluded so dry-eye scripts do not fire blood-test chips. Ophthalmic exclusion independently confirmed: Ikervis, Verkazia, Cequa and Vevizye are all eye-drop-only BNF products with no systemic formulation.",
+    "test_update": "Add EXPECTED['ciclosporin-maintenance'] for Neoral/Capimune/Vanquoral; add must-NOT-fire cases for Ikervis and Verkazia eye drops in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF ciclosporin monitoring-requirements text confirms: monitor LFT, serum potassium, serum magnesium, blood lipids (baseline + 1 month), BP, and creatinine (2-weekly x3mo, then monthly x3mo, then every 4-8 weeks once stable in RA). BNF medicinal-forms confirms systemic brands Neoral/Capimune/Capsorin/Deximune/Vanquoral (capsules/oral solution) plus Sandimmun (IV infusion) \u2014 matches the proposed list exactly. Separately confirms Ikervis, Verkazia, Cequa and Vevizye are all eye-drop-only products (no systemic form exists for any of them) \u2014 the ophthalmic exclude list is correct and complete."
+    }
+  },
+  {
+    "id": "drug-014-tacrolimus-systemic",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "(new)",
+    "change_type": "add-rule",
+    "title": "New systemic tacrolimus monitoring rule (exclude topical Protopic)",
+    "current": "No drug-monitoring rule for tacrolimus. BNF systemic monitoring includes BP, ECG, glucose, FBC, electrolytes, hepatic and renal function. Topical Protopic/ointment must be excluded (known prior false-positive path).",
+    "proposed": "Add enabled rule tacrolimus-systemic: match [tacrolimus, adoport, advagraf, dailiport, envarsus, modigraf, prograf]; exclude [protopic, ointment, cream, cutaneous]; tests FBC/LFT/U&E/BP 84d (stable shared-care default; BNF lists parameters but no numeric interval). sharedCare true.",
+    "source": "BNF tacrolimus \u2014 Monitoring of patient parameters (systemic use)",
+    "source_url": "https://bnf.nice.org.uk/drugs/tacrolimus/",
+    "source_date": "2026-09",
+    "rag": "Red",
+    "rationale": "Systemic tacrolimus (transplant / specialist dermatology) needs blood and BP monitoring. Brand-only Adoport/Advagraf/Envarsus records currently never fire. Topical ointment must stay excluded \u2014 a cream/Protopic match would false-alert and was a prior suite defect.",
+    "test_update": "Add EXPECTED['tacrolimus-systemic'] for Adoport/Prograf/Envarsus; must-NOT-fire Protopic ointment and tacrolimus ointment in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF tacrolimus monitoring-requirements text confirms systemic monitoring parameters (BP, ECG, fasting glucose, haematological/coagulation, electrolytes, hepatic and renal function) with no numbered interval \u2014 matches the candidate's own framing that 84d is a stable shared-care default, not a BNF number. BNF medicinal-forms confirms systemic brands Adoport/Prograf/Advagraf/Dailiport/Envarsus/Modigraf (capsules/MR capsules/MR tablets/granules) \u2014 matches the proposed match list exactly, and confirms Protopic 0.03% ointment (LEO Pharma) is topical-only, validating the exclude list."
+    }
+  },
+  {
+    "id": "drug-015-mercaptopurine",
+    "domain": "drugs",
+    "rule_file": "rules/drug-rules.json",
+    "rule_id": "(new)",
+    "change_type": "add-rule",
+    "title": "New mercaptopurine (IBD thiopurine) monitoring rule",
+    "current": "azathioprine-maintenance exists; no rule for mercaptopurine / Xaluprine / Hanixol. BNF says monitor liver function; IBD shared-care typically also monitors FBC like azathioprine.",
+    "proposed": "Add enabled rule mercaptopurine-maintenance: match [mercaptopurine, mercaptapurine, xaluprine, hanixol]; tests FBC/LFT/U&E 84d matching the existing azathioprine-maintenance safer default. sharedCare true. Notes: BNF text only names LFT; FBC/U&E included because UK IBD shared-care monitors thiopurines as a class \u2014 flag for CSO if they want LFT-only. NOTE: BNF text for mercaptopurine names only 'Monitor liver function' \u2014 FBC/U&E are added as class-parity with azathioprine/UK IBD shared-care practice, NOT a BNF-stated requirement for mercaptopurine specifically. This should carry a CSO note; CSO may choose to ship LFT-only if they want a strict BNF-only rule.",
+    "source": "BNF mercaptopurine \u2014 Monitoring of patient parameters",
+    "source_url": "https://bnf.nice.org.uk/drugs/mercaptopurine/",
+    "source_date": "2026-09",
+    "rag": "Amber",
+    "rationale": "Mercaptopurine is the IBD thiopurine counterpart to azathioprine. Without a rule, Xaluprine/Hanixol repeats never raise a chip.",
+    "test_update": "Add EXPECTED['mercaptopurine-maintenance'] for Xaluprine and Hanixol in test-drug-brand-coverage.js.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "BNF mercaptopurine monitoring-requirements text reads in full: 'Monitor liver function.' \u2014 no FBC or U&E mention at all, confirming the candidate's own caveat is accurate (FBC/U&E are class-parity extrapolation, not a BNF mandate for this specific drug). BNF medicinal-forms confirms Xaluprine (Nova Laboratories, oral suspension) and Hanixol (Fontus Health, tablets) as the two current UK brands \u2014 matches proposed match list; no other brand found."
+    }
+  },
+  {
+    "id": "alerts-001",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add missing UK DOAC brands to anticoagulant drugSets (pincer-2, pincer-13). weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-002",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). PINCER Query 4 \u2014 combined hormonal contraceptive in woman with VTE/arterial thrombosis history. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-003",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). PINCER primary outcome / Query 3 \u2014 ACE inhibitor or loop diuretic in \u226575 without U&E in 15 months. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-005",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add missing UK NSAID brands to all alert-library NSAID drugSets. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-006",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add missing UK ACEi/ARB brands to pincer-4 and mhra-acei-arb-ksparing-hyperkalaemia. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-007",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add missing UK SGLT2 inhibitor brands to mhra-sglt2-dka. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-009",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Semaglutide (Ozempic/Wegovy/Rybelsus) \u2014 NAION vision-loss awareness (MHRA Feb 2026). weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "alerts-010",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). ACE inhibitor + sacubitril/valsartan (Entresto) concurrent \u2014 contraindicated. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "medreview-001",
+    "domain": "medreview",
+    "rule_file": "engine/acb-scores.js",
+    "rule_id": "biperiden",
+    "change_type": "change-score",
+    "title": "Add biperiden (antiparkinson anticholinergic) to ACB_TABLE at score 3",
+    "current": "ACB_TABLE lists procyclidine, orphenadrine and trihexyphenidyl at score 3 but has no entry for biperiden. A patient on biperiden scores 0 ACB and is excluded from stopp-anticholinergic-elderly (ANTICHOLINERGIC_TERMS derived from ACB\u22652).",
+    "proposed": "Add `{ term: 'biperiden', score: 3, note: 'ACBcalc score 3; UK antiparkinson anticholinergic (N04AA02); all licensed oral AMPs discontinued but VMP remains prescribable and unlicensed injection still used for EPSE' }`. Optionally add `{ term: 'akineton', score: 3, note: 'brand: biperiden (discontinued UK oral brand; records may persist)' }` for brand-only records.",
+    "source": "ACBcalc.com medicines table (updated 03 Jul 2024); NHS dm+d VMP Biperiden 2mg tablets",
+    "source_url": "https://www.acbcalc.com/medicines?column=name&direction=asc",
+    "source_date": "2024-07-03",
+    "rag": "Red",
+    "rationale": "Resolves held item medreview-biperiden. Same anticholinergic antiparkinson class as procyclidine already in the table \u2014 a silent score-0 miss on repeat prescriptions or unlicensed-use records under-counts anticholinergic burden in elderly patients (falls, delirium, cognitive impairment).",
+    "test_update": "test-acb-scores.js \u2014 add cases for 'biperiden 2mg tablets' and optionally 'Akineton 2mg' asserting score 3.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "previously-flagged",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "ACBcalc.com /medicines table (fetched direct) lists 'Biperiden 3' \u2014 confirmed alongside procyclidine/orphenadrine/trihexyphenidyl already in ACB_TABLE at the same score."
+    }
+  },
+  {
+    "id": "medreview-002",
+    "domain": "medreview",
+    "rule_file": "engine/acb-scores.js",
+    "rule_id": "flavoxate",
+    "change_type": "change-score",
+    "title": "Add flavoxate (Urispas) to ACB_TABLE at score 3 \u2014 OAB antimuscarinic class hole",
+    "current": "ACB_TABLE lists oxybutynin, tolterodine, solifenacin, fesoterodine and darifenacin at score 3 but omits flavoxate. Every other UK OAB antimuscarinic in common use is present.",
+    "proposed": "Add `{ term: 'flavoxate', score: 3 }` and `{ term: 'urispas', score: 3, note: 'brand: flavoxate (Recordati UK)' }` to ACB_TABLE in the score-3 urological section.",
+    "source": "ACBcalc.com; emc Urispas 200mg (Recordati, PL 25046/0006, SmPC updated Mar 2024)",
+    "source_url": "https://www.acbcalc.com/medicines",
+    "source_date": "2024-07-03",
+    "rag": "Red",
+    "rationale": "Flavoxate is a licensed UK urinary antispasmodic with anticholinergic activity. Substring matching means a flavoxate/Urispas prescription currently contributes 0 to computeACB and does not feed stopp-anticholinergic-elderly \u2014 silent under-count in the same drug class as score-3 OAB agents already listed.",
+    "test_update": "test-acb-scores.js \u2014 add 'Urispas 200mg tablets' and 'flavoxate hydrochloride 200mg' cases asserting score 3.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-A",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:40:00Z",
+      "evidence": "ACBcalc.com /medicines table (fetched direct) lists 'Flavoxate Urispas\u2122 3' \u2014 brand name is printed directly on the canonical ACBcalc table itself, confirming both score and UK brand pairing."
+    }
+  },
+  {
+    "id": "medreview-003",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add cinnarizine (Stugeron) to ACB_TABLE at score 3. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "medreview-004",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add cyproheptadine (Periactin) to ACB_TABLE at score 3. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "medreview-005",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Raise amoxapine ACB score from 2 to 3 (ACBcalc alignment). weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "medreview-006",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). CSO review: carbamazepine ACB score 2 vs ACBcalc 0 \u2014 possible over-flagging. weakens_safety=True needs_engine_change=False"
+  },
+  {
+    "id": "medreview-007",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). CSO review: oxcarbazepine ACB score 2 vs ACBcalc 0 \u2014 possible over-flagging. weakens_safety=True needs_engine_change=False"
+  },
+  {
+    "id": "medreview-008",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). HUD prescribing-flags BENZO_Z regex misses loprazolam and lormetazepam. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "medreview-009",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). Add tramadol to ACB_TABLE at score 2 (ACBcalc) \u2014 CSO volume review required. weakens_safety=False needs_engine_change=False"
+  },
+  {
+    "id": "vax-006",
+    "domain": "vaccines",
+    "rule_file": "rules/vaccine-rules.json",
+    "rule_id": "vax-rsv",
+    "change_type": "change-eligibility",
+    "title": "Add missing RSV 65\u201374 chronic respiratory disease match terms",
+    "current": "vax-rsv's age 65\u201374 chronic-respiratory problem clause (eligibility.anyOf[2]) matches only \"copd\", \"chronic obstructive\", \"emphysema\", \"chronic bronchitis\", \"cystic fibrosis\", \"bronchiectasis\".",
+    "proposed": "Add \"interstitial lung fibrosis\", \"interstitial lung\", \"pulmonary fibrosis\", \"pneumoconiosis\", and \"bronchopulmonary dysplasia\" to that match list.",
+    "source": "UKHSA RSV programme information for healthcare professionals, v05 (\"Clinical risk groups\" FAQ) / JCVI advice 18 March 2026",
+    "source_url": "https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals/rsv-vaccination-of-older-adults-information-for-healthcare-practioners#clinical-risk-groups",
+    "source_date": "2026-07 (page fetched 2026-09-18, live)",
+    "rag": "Red",
+    "rationale": "From 1 September 2026, adults aged 65\u201374 with chronic respiratory disease are NHS-eligible for RSV vaccine. The UKHSA HCP page's \"Chronic risk groups\" FAQ lists interstitial lung fibrosis, pneumoconiosis and bronchopulmonary dysplasia as qualifying conditions alongside COPD/bronchiectasis/CF; a patient coded with only one of the three currently never fires vax-rsv \u2014 a silent eligibility gap for the September 2026 cohort. \"interstitial lung\" and \"pulmonary fibrosis\" are added as synonym stems (not verbatim HCP text) to catch the equivalent GP-coded terms \u2014 this mirrors the identical term pairing already shipped for the same clinical concept in vax-pneumo-risk-u65 and vax-flu's chronic-risk clauses in this same file, so it is a consistency fix, not a new pattern. All five additions widen eligibility only; none narrows or removes an existing match term.",
+    "test_update": "Add cases to test-vaccine-rules.js: age 68 with problem 'interstitial lung fibrosis' matches vax-rsv 65\u201374 chronic-respiratory clause; age 68 with 'pneumoconiosis' matches; age 68 with 'bronchopulmonary dysplasia' matches; age 68 with 'well-controlled asthma' alone still does NOT match (regression guard against over-flagging asthma, held separately \u2014 see rsv-poorly-controlled-asthma).",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-B",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:45:00Z",
+      "evidence": "UKHSA HCP page, \"Clinical risk groups\" section, states: chronic respiratory disease for 65\u201374s includes poorly controlled asthma, COPD (incl. chronic bronchitis/emphysema), chronic obstructive bronchiectasis, cystic fibrosis, interstitial lung fibrosis, pneumoconiosis, and bronchopulmonary dysplasia. Poorly controlled asthma is separately excluded from JSON encoding (see rsv-poorly-controlled-asthma). Current rule's match list confirmed by direct read of rules/vaccine-rules.json to omit interstitial lung fibrosis, pneumoconiosis and bronchopulmonary dysplasia."
+    }
+  },
+  {
+    "id": "rsv-poorly-controlled-asthma",
+    "killed": true,
+    "reason": "verified this run but not applied (focused monitoring-rules PR / CSO hold). RSV 65\u201374 poorly controlled asthma \u2014 hold, engine cannot encode OCS/admission gate. weakens_safety=False needs_engine_change=True"
+  },
+  {
+    "id": "pathway-005",
+    "domain": "pathways",
+    "rule_file": "rules/reception-pathways.json",
+    "rule_id": "earache/rf-facial-droop",
+    "change_type": "change-redflag",
+    "title": "Earache: promote rf-facial-droop from duty to 999",
+    "current": "earache/rf-facial-droop asks about drooping, weakness or loss of movement on one side of the face on the same side as the earache, and escalates to \"duty\".",
+    "proposed": "Change rf-facial-droop's escalate field from \"duty\" to \"999\" (ask text unchanged).",
+    "source": "NICE CKS: Otitis media \u2014 acute (topic summary, last revised August 2024)",
+    "source_url": "https://cks.nice.org.uk/topics/otitis-media-acute/",
+    "source_date": "2024-08 (last revised; page fetched live 2026-09-18)",
+    "rag": "Red",
+    "rationale": "CKS states plainly that people with suspected complications of AOM \u2014 including facial nerve paralysis \u2014 should be admitted to hospital for immediate specialist assessment, in the same sentence as meningitis, mastoiditis, intracranial abscess and sinus thrombosis (all already 999 elsewhere in this file for their respective pathways). At the current \"duty\" tier a receptionist may place the caller in a same-day queue rather than escalating immediately; facial palsy arising from AOM needs the same immediate-assessment route as those other listed complications. This change strengthens escalation and does not weaken safety.",
+    "test_update": "test-reception-pathways.js \u2014 add a check that earache's rf-facial-droop.escalate === '999'.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-B",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:45:00Z",
+      "evidence": "CKS Otitis media \u2014 acute (fetched full summary text, not just the SPA shell): \"The following groups of people should be admitted to hospital for immediate specialist assessment: People with a severe systemic infection. People with suspected complications of AOM, such as meningitis, mastoiditis, intracranial abscess, sinus thrombosis, or facial nerve paralysis. Children younger than 3 months of age with a temperature of 38\u00b0C or more.\""
+    }
+  },
+  {
+    "id": "pathway-006",
+    "domain": "pathways",
+    "rule_id": "earache/(new)",
+    "rule_file": "rules/reception-pathways.json",
+    "change_type": "change-redflag",
+    "title": "Earache: add red flag for infant under 3 months with fever",
+    "current": "The earache pathway has no age-specific infant-fever flag. rf-unwell-child covers floppy/hard-to-wake/breathing-fast/not-drinking at 999 but would not fire for an otherwise well-looking 6\u201310-week-old with isolated fever and earache symptoms.",
+    "proposed": "Add rf-under3m-fever to the earache pathway: { \"id\": \"rf-under3m-fever\", \"ask\": \"If a baby: are they under 3 months old with any fever?\", \"escalate\": \"duty\" }. Tier and wording mirror feverish-child's existing rf-under3m flag exactly (that flag's \"duty\" tier is already CSO-confirmed in the file's own notes as the practice's local route for this precise age/fever combination), rather than inventing a new 999 tier for the same criterion in a sibling pathway.",
+    "source": "NICE CKS: Otitis media \u2014 acute (topic summary); NICE NG143 rec 1.2.12",
+    "source_url": "https://cks.nice.org.uk/topics/otitis-media-acute/",
+    "source_date": "2024-08 (CKS last revised; NG143 rec 1.2.12 dated 2013, still current \u2014 both fetched live 2026-09-18)",
+    "rag": "Amber",
+    "rationale": "CKS explicitly lists children younger than 3 months with a temperature of 38\u00b0C or more among the groups who should be admitted to hospital for immediate specialist assessment, and NG143 rec 1.2.12 independently classes the same age/temperature combination as high-risk for serious illness. An earache call for a 6-week-old with fever should not rely on the caller volunteering floppiness or poor feeding to trigger rf-unwell-child. Downgraded from the scanner's ambiguous \"999 or duty per local CSO policy\" to a firm \"duty\" \u2014 the practice's CSO has already set the local route for this exact age/fever criterion at \"duty\" in the feverish-child pathway's own notes, so this earache-pathway copy should follow the same established, signed-off convention rather than introduce a second, inconsistent tier for an identical clinical scenario.",
+    "test_update": "test-reception-pathways.js \u2014 pin that earache gains red flag id 'rf-under3m-fever', its ask mentions 'under 3 months', and escalate === 'duty'.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-B",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:45:00Z",
+      "evidence": "CKS: \"Children younger than 3 months of age with a temperature of 38\u00b0C or more\" are among groups admitted for immediate specialist assessment. NG143 rec 1.2.12: \"children younger than 3 months with a temperature of 38\u00b0C or higher are in a high-risk group for serious illness.\" feverish-child's existing rf-under3m + file notes confirm the practice's CSO-approved local tier for this criterion is 'duty', contacted immediately (not a routine queue)."
+    }
+  },
+  {
+    "id": "pathway-008",
+    "domain": "pathways",
+    "rule_id": "feverish-child/(new)",
+    "rule_file": "rules/reception-pathways.json",
+    "change_type": "change-redflag",
+    "title": "Feverish child: add rigors / uncontrollable shivering flag (NG143 intermediate-risk)",
+    "current": "feverish-child screens non-blanching rash, floppy, breathing, colour, fontanelle, seizure, neck stiffness, fluids, chemo \u2014 but does not ask about rigors or uncontrollable shivering.",
+    "proposed": "Add rf-rigors to feverish-child: { \"id\": \"rf-rigors\", \"ask\": \"Shivering or shaking uncontrollably with the fever (rigors)?\", \"escalate\": \"duty\" }.",
+    "source": "NICE NG143: Fever in under 5s, rec 1.2.6 (traffic-light table, intermediate-risk column)",
+    "source_url": "https://www.nice.org.uk/guidance/ng143/chapter/Recommendations",
+    "source_date": "2013 (rec unchanged; page fetched live 2026-09-18)",
+    "rag": "Amber",
+    "rationale": "NG143 rec 1.2.6 lists rigors alongside reduced urine output as an intermediate-risk ('amber') marker for serious illness in feverish children \u2014 not a 999-tier red feature by itself, so 'duty' (same-day clinical review) is the right-sized tier, matching the file's existing intermediate-severity flags (e.g. rf-fluids, also duty). Absence of a rigors question is a real gap: a parent describing rigors without also volunteering a red-tier feature currently gets no escalation prompt at all.",
+    "test_update": "test-reception-pathways.js \u2014 pin that feverish-child gains red flag id 'rf-rigors', ask mentions 'rigors' or 'uncontrollably', and escalate === 'duty'.",
+    "weakens_safety": false,
+    "needs_engine_change": false,
+    "window_status": "new",
+    "provenance": {
+      "verified_by": "VERIFIER-B",
+      "method": "fetched source page",
+      "confidence": "high",
+      "checked_at": "2026-09-18T07:45:00Z",
+      "evidence": "NG143 rec 1.2.6: children with pallor reported by parent/carer, not responding normally to social cues, no smile, wakes only with prolonged stimulation, decreased activity, nasal flaring, dry mucous membranes, poor feeding in infants, reduced urine output, or rigors are in at least an intermediate-risk group for serious illness."
+    }
+  },
+  {
+    "id": "alerts-004",
+    "killed": true,
+    "reason": "Duplicates rules/drug-rules.json 'methotrexate-maintenance', which already fires FBC (intervalDays 84) and LFT (intervalDays 84) overdue chips on the identical methotrexate brand set (methotrexate, maxtrex, metoject, jylamvo, nordimet, zlatal, methofill) confirmed by direct file read. 84 days already satisfies PINCER Query 5's 'within the previous three months' threshold. The proposed pincer-query-5-mtx-monitoring alert would add a second, functionally identical FBC/LFT-overdue chip for the same drug set at the same cadence \u2014 no new behaviour, per VERIFIER brief instruction to kill if it adds nothing beyond the existing drug-rules.json rule."
+  },
+  {
+    "id": "alerts-008",
+    "killed": true,
+    "reason": "Overstated / based on a false premise. BNF's sodium-valproate monograph and medicinal-forms page (fetched direct) show the actual UK product names are 'Epilim Chrono\u00ae' and 'Epilim Chronosphere MR' \u2014 BOTH begin with the string 'Epilim', which is already in every valproate match list in the file (sodium-valproate, mhra-valproate-ppg, mhra-valproate-male-u55). No standalone 'Chronosphere' or 'Chrono' brand exists without the 'Epilim' prefix; the MHRA DSU title itself names the product as 'Epilim Chrono or Chronosphere', not a separate brand. There is therefore no monitoring/alerting gap to fix. (Also: the candidate's cited source_url 404s; the corrected live URL was found via search but does not change the substantive finding.)"
+  },
+  {
+    "id": "alerts-011",
+    "killed": true,
+    "reason": "Could not confirm against source \u2014 likely fabricated citation. The PRIMIS PINCER Evidence v2.0 PDF (the candidate's own stated source, fetched and searched in full) contains NO mention of 'secondary outcome 2a', 'CHD exclusion', 'coronary heart disease' or 'CHD' anywhere in the document. Query 2 (asthma + beta-blocker) is documented in the PDF with no CHD carve-out at all \u2014 it applies to any patient with a history of asthma. The candidate's claimed 'PINCER secondary outcome 2a' does not exist in the primary evidence document. Per VERIFIER brief instruction, a weakens_safety change narrowing an existing red contraindication alert must be killed unless PINCER explicitly mandates the exclusion \u2014 it does not. Killing keeps alert-002 firing for all coded asthma + beta-blocker patients as currently shipped."
+  },
+  {
+    "id": "pathway-007",
+    "killed": true,
+    "reason": "underspecified for safe apply; hold for dedicated pathway design. NG156 rec 1.1.7 was fetched and does support one component (think ruptured AAA in new abdominal and/or back pain with cardiovascular collapse or loss of consciousness, more likely with age >60/smoking/hypertension/existing AAA diagnosis) \u2014 but the candidate bundles that alongside a rigid/peritonitic-abdomen flag, a GI-bleed (haematemesis/melaena) flag, a shared rf-sepsis flag, an irreducible-hernia duty flag, and a full NG12 2WW age/symptom cluster, none of which were sourced or fetched this run. A brand-new clinician-only pathway with 5+ red flags spanning at least four distinct guideline bodies (AAA, GI bleed, hernia, cancer 2WW) cannot be safely verified or right-sized in a single pass on one fetched source. Route to a dedicated pathway-design pass that sources and verifies each red flag individually, the way gu-male/gyn-female/mental-health were built and CSO-reviewed one flag at a time."
+  }
+]

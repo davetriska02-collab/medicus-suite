@@ -49,6 +49,8 @@ const { requestMonitorImport } = require('./shared/io/request-monitor-io.js');
 const TriageAlertIO            = require('./shared/io/triage-alert-io.js');
 const KnowledgeUtils           = require('./shared/knowledge-utils.js');
 const { problemDescriptionCleanupImport } = require('./shared/io/problem-description-cleanup-io.js');
+const LabFilingUtils         = require('./shared/lab-filing-utils.js');
+const { labfilingImport }    = require('./shared/io/labfiling-io.js');
 
 // Inject as globals so practice-profile.js's _io() resolver can find them
 global.knowledgeImport      = knowledgeImport;
@@ -62,6 +64,8 @@ global.requestMonitorImport = requestMonitorImport;
 global.TriageAlertIO        = TriageAlertIO;
 global.KnowledgeUtils       = KnowledgeUtils;
 global.problemDescriptionCleanupImport = problemDescriptionCleanupImport;
+global.labfilingImport      = labfilingImport;
+global.LabFilingUtils       = LabFilingUtils;
 
 const PP = require('./shared/io/practice-profile.js');
 
@@ -1434,6 +1438,112 @@ function makeProfile(over = {}) {
   await PP.applyProfile(slGateFalse);
   check(store['sentinel.alertLibrary.acknowledged'] === undefined,
     'attestation gate=false: behaves as no gate (acknowledged NOT written)');
+
+  // ── Lab Filing merge: new profiles appended, force-disabled; local untouched ──
+  console.log('\n--- labfiling merge ---');
+  reset();
+  function makeLabProfile(over = {}) {
+    return Object.assign(
+      {
+        id: 'local-ue',
+        name: 'U&E — normal, no action',
+        match: ['sodium'],
+        filing: { normalOptionText: 'Normal result, no action required', fileButtonText: 'File results' },
+      },
+      over
+    );
+  }
+  const localLabProfile = LabFilingUtils.lockForReview(makeLabProfile(), 'manual');
+  localLabProfile.enabled = true; // a clinician already reviewed and switched this ONE on
+  localLabProfile.reviewed = true;
+  localLabProfile.allowComments = ['my own local note'];
+  store['labfiling.profiles'] = [localLabProfile];
+
+  const lfMergeProfile = makeProfile({
+    profileVersion: 'lf-merge-1',
+    apply: { modules: { labfiling: 'merge' } },
+    envelope: {
+      modules: {
+        labfiling: {
+          profiles: [
+            makeLabProfile({ id: 'local-ue', name: 'COLLISION — should not overwrite', enabled: true }), // id collision
+            makeLabProfile({ id: 'new-fbc', name: 'FBC — normal, no action', match: ['haemoglobin'], enabled: true }), // new
+          ],
+        },
+      },
+    },
+  });
+  const rLf1 = await PP.applyProfile(lfMergeProfile);
+  check(rLf1.modulesApplied.includes('labfiling'), 'labfiling merge applied');
+  check(store['labfiling.profiles'].length === 2, 'labfiling merge: appended new profile');
+  const keptLocal = store['labfiling.profiles'].find((p) => p.id === 'local-ue');
+  check(keptLocal.name === localLabProfile.name, 'labfiling merge: existing profile not overwritten (id collision)');
+  check(keptLocal.enabled === true, 'labfiling merge: existing ENABLED profile stays enabled — not re-locked');
+  check(
+    keptLocal.allowComments[0] === 'my own local note',
+    'labfiling merge: existing profile content (allowComments) untouched'
+  );
+  const newLabProfile = store['labfiling.profiles'].find((p) => p.id === 'new-fbc');
+  check(newLabProfile !== undefined, 'labfiling merge: new-id profile appended');
+  check(
+    newLabProfile.enabled === false && newLabProfile.reviewed === false,
+    'labfiling merge: newly-synced profile arrives DISABLED regardless of the published enabled value'
+  );
+  check(newLabProfile.source === 'import', "labfiling merge: newly-synced profile is source:'import'");
+
+  // Malformed incoming entry is skipped, not fatal to the rest of the merge.
+  reset();
+  store['labfiling.profiles'] = [];
+  const lfMalformedProfile = makeProfile({
+    profileVersion: 'lf-merge-bad-1',
+    apply: { modules: { labfiling: 'merge' } },
+    envelope: {
+      modules: {
+        labfiling: {
+          profiles: [
+            { id: 'bad-1' }, // no name, no filing block — invalid
+            makeLabProfile({ id: 'good-1' }),
+          ],
+        },
+      },
+    },
+  });
+  const rLf2 = await PP.applyProfile(lfMalformedProfile);
+  check(rLf2.errors.length === 0, 'labfiling merge: a malformed row does not surface as a module error');
+  check(
+    store['labfiling.profiles'].length === 1 && store['labfiling.profiles'][0].id === 'good-1',
+    'labfiling merge: malformed row skipped, valid row still applied'
+  );
+
+  // ── Lab Filing replace: wholesale overwrite, always force-disabled ───────────
+  console.log('\n--- labfiling replace ---');
+  reset();
+  const localLabProfile2 = LabFilingUtils.lockForReview(makeLabProfile({ id: 'local-ue' }), 'manual');
+  localLabProfile2.enabled = true;
+  localLabProfile2.reviewed = true;
+  store['labfiling.profiles'] = [localLabProfile2];
+
+  const lfReplaceProfile = makeProfile({
+    profileVersion: 'lf-rep-1',
+    apply: { modules: { labfiling: 'replace' } },
+    envelope: {
+      modules: {
+        labfiling: {
+          profiles: [makeLabProfile({ id: 'local-ue', name: 'Practice-enforced U&E policy', enabled: true })],
+        },
+      },
+    },
+  });
+  await PP.applyProfile(lfReplaceProfile);
+  check(store['labfiling.profiles'].length === 1, 'labfiling replace: wholesale overwrite, one profile');
+  check(
+    store['labfiling.profiles'][0].name === 'Practice-enforced U&E policy',
+    'labfiling replace: published content wins even for a matching id'
+  );
+  check(
+    store['labfiling.profiles'][0].enabled === false,
+    'labfiling replace: even a profile a clinician had enabled locally reverts to disabled — same id, republished content requires a fresh local review'
+  );
 
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

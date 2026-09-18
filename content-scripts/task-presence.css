@@ -9,7 +9,11 @@
 .ms-tp-chips,
 #ms-tp-banner,
 #ms-tp-list,
-#ms-tp-look {
+#ms-tp-look,
+#ms-tp-msg,
+#ms-tp-rhs,
+.ms-tp-token-host,
+.ms-tp-token {
   --bg-deep: #f8fafc;
   --bg-elev: #ffffff;
   --border: #cbd5e1;
@@ -86,6 +90,77 @@
   border: 1px solid var(--amber-line);
 }
 
+/* Compact occupancy token (list row / message chrome / RHS). Same look
+   tokens as the masthead. Prefer the highlighted name; initials stay on
+   the icon and the name hides when the container is tight. */
+.ms-tp-token-host,
+.ms-tp-token {
+  --ms-tp-wash: #fff44a;
+  --ms-tp-border: #c9b400;
+  --ms-tp-text: #1a1600;
+  --ms-tp-quiet: #3d3400;
+}
+
+#ms-tp-msg,
+#ms-tp-rhs {
+  display: flex;
+  align-items: center;
+  flex: 0 0 100%;
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  background: var(--ms-tp-wash);
+  border: 1px solid var(--ms-tp-border);
+  border-radius: var(--r-sm);
+  color: var(--ms-tp-text);
+}
+
+.ms-tp-token {
+  container-type: inline-size;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 1.5rem;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ms-tp-text, var(--amber));
+}
+
+.ms-tp-token-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}
+
+.ms-tp-token-who {
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ms-tp-text, var(--amber));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ms-tp-token-more {
+  font-weight: 700;
+}
+
+.ms-tp-chips .ms-tp-token {
+  color: var(--amber);
+}
+
+.ms-tp-chips .ms-tp-token-who {
+  color: var(--amber);
+}
+
+@container (max-width: 5.5rem) {
+  .ms-tp-token-who {
+    display: none;
+  }
+}
+
 /* Last-actioned — historical fact, neutral accent, informational only. */
 .ms-tp-chip-actioned {
   color: var(--text-3);
@@ -129,6 +204,17 @@
   flex-wrap: nowrap;
   overflow: hidden;
   cursor: pointer;
+}
+
+/* Vue on some request overviews replaces <main>'s children every patch and
+   fights an in-flow prepend (insert → wipe → insert). After three wipes we
+   pin the masthead to document.body so the page stops oscillating. */
+#ms-tp-banner.ms-tp-banner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483000;
 }
 
 /* Compact inline list occupancy — title-row notice, not a masthead.
@@ -338,7 +424,10 @@
 }
 
 #ms-tp-banner[data-look-avatars='0'] .ms-tp-avs,
-#ms-tp-list[data-look-avatars='0'] .ms-tp-avs {
+#ms-tp-list[data-look-avatars='0'] .ms-tp-avs,
+#ms-tp-msg[data-look-avatars='0'] .ms-tp-token-icon,
+#ms-tp-rhs[data-look-avatars='0'] .ms-tp-token-icon,
+.ms-tp-chips[data-look-avatars='0'] .ms-tp-token-icon {
   display: none;
 }
 
@@ -348,12 +437,17 @@
 }
 
 #ms-tp-banner[data-look-weight='regular'] .ms-tp-who,
-#ms-tp-list[data-look-weight='regular'] .ms-tp-who {
+#ms-tp-list[data-look-weight='regular'] .ms-tp-who,
+#ms-tp-msg[data-look-weight='regular'] .ms-tp-token-who,
+#ms-tp-rhs[data-look-weight='regular'] .ms-tp-token-who,
+.ms-tp-chips[data-look-weight='regular'] .ms-tp-token-who {
   font-weight: 400;
 }
 
 #ms-tp-banner[data-look-highlight='edge'],
-#ms-tp-list[data-look-highlight='edge'] {
+#ms-tp-list[data-look-highlight='edge'],
+#ms-tp-msg[data-look-highlight='edge'],
+#ms-tp-rhs[data-look-highlight='edge'] {
   background: var(--bg-elev);
   border-color: var(--border);
   border-left: 5px solid var(--ms-tp-border);
@@ -470,7 +564,9 @@
     }
   }
   #ms-tp-banner[data-look-highlight='flash'],
-  #ms-tp-list[data-look-highlight='flash'] {
+  #ms-tp-list[data-look-highlight='flash'],
+  #ms-tp-msg[data-look-highlight='flash'],
+  #ms-tp-rhs[data-look-highlight='flash'] {
     animation: ms-tp-look-flash 1.6s var(--ease) infinite;
   }
   @keyframes ms-tp-look-flash {

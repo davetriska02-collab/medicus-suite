@@ -253,10 +253,12 @@ const ue = {
   name: 'U&E',
   enabled: true,
   match: ['sodium', 'potassium', 'creatinine'],
+  analytes: ['sodium', 'potassium', 'creatinine'],
   filing: validFiling,
   parameters: [{ analyte: 'creatinine', low: 49, high: 90 }],
   trend: { maxDeltaPct: 15 },
   excludeIfMeds: ['ramipril'],
+  allowComments: ['insufficient historical creatinine data'],
 };
 const lft = { name: 'LFT', enabled: true, match: ['alt', 'bilirubin'], filing: validFiling, commitMode: 'manual' };
 const all3 = [bone, ue, lft];
@@ -277,9 +279,23 @@ check(
   merged.effective._matchedNames.join(',') === 'U&E,Bone,LFT',
   'merged carries the matched profile names (most-specific first) for the card'
 );
+check(
+  merged.effective.allowComments.includes('insufficient historical creatinine data'),
+  'merge unions allowComments across panels (bug fix 2026-09-16 — this used to be dropped entirely, so the live gate, which always scores through the merge, could never see it)'
+);
 // A single matched profile keeps its own name (not the "N profiles" label).
 const single = LF.mergeProfilesForReport([ue], comboReport);
 check(single.effective.name === 'U&E' && single.effective._matchedCount === 1, 'single match keeps its own name');
+check(
+  single.effective.allowComments.includes('insufficient historical creatinine data'),
+  'a single-profile merge still carries allowComments through'
+);
+check(
+  merged.effective.analytes.includes('sodium') &&
+    merged.effective.analytes.includes('creatinine') &&
+    merged.effective.analytes.includes('potassium'),
+  "merge unions analytes across panels (bug fix 2026-09-17 — analytes was hardcoded to an empty array here, so unrecognisedAnalyteBlockers could never recognise anything from any profile through the live merge, which every real report scores through, even for a single matched profile)"
+);
 check(LF.mergeProfilesForReport([], comboReport) === null, 'no profiles → null merge');
 check(
   LF.mergeProfilesForReport([{ name: 'x', enabled: false, match: ['sodium'] }], comboReport) === null,
@@ -458,6 +474,50 @@ check(
   'confirm dialog flags the lab-overridden analyte loudly'
 );
 
+// ── unrecognisedAnalyteBlockers (real-world regression, 2026-09-17) ───────────
+// Nick: a CRP result — no profile of his names it at all — was OFFERED for
+// filing alongside a genuinely-configured U&E panel sharing the same task
+// (never actually filed; caught before the File click, but the offer itself
+// was the gap). Root cause: a CRP result with its OWN lab-supplied reference
+// range sails straight through profileParamBlockers's requireRangeForAll
+// check (which only fires when there is NEITHER a parameter NOR a lab
+// range) — nothing anywhere asked "did any profile actually declare this
+// analyte?" This closes that gap.
+console.log('\n--- unrecognisedAnalyteBlockers ---');
+const ueWithCrpReport = {
+  unmatched: false,
+  results: [
+    { name: 'Sodium', value: 140, low: 133, high: 146 },
+    { name: 'Potassium', value: 4.1, low: 3.5, high: 5.3 },
+    { name: 'CRP', value: 3, low: 0, high: 5 }, // in range, lab-ranged — no profile names it
+  ],
+};
+const ueOnlyProfile = { name: 'U&E', analytes: ['sodium', 'potassium', 'creatinine'] };
+check(
+  LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) => /^CRP is not a recognised analyte/.test(r)),
+  "an in-range, lab-ranged analyte no profile ever declared blocks filing, named by its own result label"
+);
+check(
+  !LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) => /^Sodium/.test(r) || /^Potassium/.test(r)),
+  'a genuinely-covered analyte is not flagged'
+);
+check(
+  LF.unrecognisedAnalyteBlockers(
+    ueWithCrpReport,
+    Object.assign({}, ueOnlyProfile, { analytes: [...ueOnlyProfile.analytes, 'crp', 'c-reactive protein'] })
+  ).length === 0,
+  'adding the analyte to the profile (either short or long form) clears the block — token-anchored, not exact-string'
+);
+check(
+  LF.unrecognisedAnalyteBlockers(ueWithCrpReport, { analytes: [] }).length === 3,
+  "a profile with no declared analytes at all recognises NOTHING — fails closed, doesn't silently wave everything through"
+);
+check(
+  LF.unrecognisedAnalyteBlockers(null, ueOnlyProfile).length === 0 &&
+    LF.unrecognisedAnalyteBlockers(ueWithCrpReport, null).length === 0,
+  'fails closed to an empty list on missing report/profile, never throws'
+);
+
 // ── fileabilityBlockers (fail-closed gate) ────────────────────────────────────
 console.log('\n--- fileabilityBlockers ---');
 const okReport = {
@@ -497,6 +557,316 @@ check(
   'free-text/non-numeric result blocks and is named'
 );
 check(LF.fileabilityBlockers({ results: [] }, { level: 'none' }, someRules).length > 0, 'empty results blocks');
+
+// ── allowComments (per-profile comment allow-list) ────────────────────────────
+console.log('\n--- allowComments ---');
+const commentedReport = {
+  unmatched: false,
+  results: [
+    {
+      name: 'Creatinine',
+      value: 61,
+      unit: 'umol/L',
+      rawValue: '61',
+      text: 'Creatinine 61 umol/L See NICE NG203 ethnicity-based interpretation guidance',
+    },
+  ],
+};
+check(
+  LF.fileabilityBlockers(commentedReport, { level: 'none' }, someRules).some((r) => /carries a comment/.test(r)),
+  'un-benign comment blocks with no profile passed'
+);
+check(
+  LF.fileabilityBlockers(commentedReport, { level: 'none' }, someRules, { allowComments: [] }).some((r) =>
+    /carries a comment/.test(r)
+  ),
+  'un-benign comment blocks with a profile that has no allow-list entries'
+);
+check(
+  LF.fileabilityBlockers(commentedReport, { level: 'none' }, someRules, {
+    allowComments: ['NICE NG203 ethnicity'],
+  }).length === 0,
+  'the same comment is excused once the matched profile allow-lists it'
+);
+check(
+  LF.fileabilityBlockers(commentedReport, { level: 'none' }, someRules, {
+    allowComments: ['some unrelated phrase'],
+  }).some((r) => /carries a comment/.test(r)),
+  'a different profile without that allow-list entry still blocks — allow-listing is scoped to one profile'
+);
+
+// Real-world regression (Nick's own report, 2026-09-16): the comment reuses
+// the analyte's own name mid-sentence AND word-wraps across a line break —
+// numericCommentResidue used to strip EVERY occurrence of r.name (not just
+// the leading "Name - " label), so residue lost the word "creatinine" the
+// clinician's own allow-list phrase needed to match against. Fixed by
+// stripping only the first occurrence of each token.
+const realCreatinineReport = {
+  unmatched: false,
+  results: [
+    {
+      name: 'Creatinine',
+      value: 61,
+      unit: 'umol/L',
+      rawValue: '61',
+      text: 'Creatinine - Insufficient historical creatinine data to assess\nAKI risk',
+    },
+  ],
+};
+check(
+  LF.fileabilityBlockers(realCreatinineReport, { level: 'none' }, someRules).some((r) => /carries a comment/.test(r)),
+  'real-world Creatinine comment (repeats the analyte name, word-wrapped) blocks with no profile'
+);
+check(
+  LF.fileabilityBlockers(realCreatinineReport, { level: 'none' }, someRules, {
+    allowComments: ['Insufficient historical creatinine data to assess AKI risk'],
+  }).length === 0,
+  'the same real-world comment is excused once allow-listed verbatim — repeated analyte name and the line-wrap both no longer break the match'
+);
+
+// Real-world regression (Nick's own eGFR report, 2026-09-17): Medicus's own
+// report data carries the performer comment TWICE inside one result's text
+// field, back to back with a single space between the two copies. Left
+// uncollapsed, the residue — and anything saved from it via "whitelist this
+// comment" — would carry the doubled text verbatim.
+const doubledCommentText =
+  'Please note: eGFR should no longer be corrected for ethnicity, as per NICE guidelines (NG203) 2021. ' +
+  'The eGFR calculation assumes a stable creatinine level.';
+const doubledEgfrReport = {
+  unmatched: false,
+  results: [
+    {
+      name: 'eGFR (MDRD)',
+      value: 62,
+      unit: 'mL/min/1.73m2',
+      rawValue: '62',
+      text: 'eGFR (MDRD) 62 mL/min/1.73m2 ' + doubledCommentText + ' ' + doubledCommentText,
+    },
+  ],
+};
+const egfrResidue = LF.numericCommentResidue(doubledEgfrReport.results[0]);
+check(
+  egfrResidue === doubledCommentText,
+  'a comment Medicus repeats twice in one result is collapsed to a single copy in the residue, not shown/saved doubled'
+);
+check(
+  LF.fileabilityBlockers(doubledEgfrReport, { level: 'none' }, someRules, {
+    allowComments: [doubledCommentText],
+  }).length === 0,
+  'allow-listing the (now de-duplicated) single-copy text excuses the doubled real-world comment'
+);
+check(
+  LF.fileabilityBlockers(doubledEgfrReport, { level: 'none' }, someRules, {
+    allowComments: [doubledCommentText + ' ' + doubledCommentText],
+  }).length === 0,
+  'an entry saved BEFORE this fix (still carrying the doubled text) still excuses it — bidirectional match, no need to re-save anything already whitelisted'
+);
+
+// ── unresolvedCommentedResults (drives the blocked-card "whitelist this
+// comment" checkbox — must expose the EXACT residue text so a saved
+// allowComments entry is guaranteed to match on the next report) ─────────────
+console.log('\n--- unresolvedCommentedResults ---');
+const twoCommentReport = {
+  unmatched: false,
+  results: [
+    realCreatinineReport.results[0],
+    {
+      name: 'eGFR (MDRD)',
+      value: 90,
+      unit: 'mL/min/1.73m2',
+      rawValue: '90',
+      text: 'eGFR (MDRD) - This eGFR is consistent with category G1 - Normal eGFR',
+    },
+  ],
+};
+const unresolved = LF.unresolvedCommentedResults(twoCommentReport, null);
+check(unresolved.length === 2, 'lists both un-benign comments when no profile is passed');
+check(unresolved[0].name === 'Creatinine' && unresolved[1].name === 'eGFR (MDRD)', 'names each result in order');
+check(
+  unresolved[0].residue === LF.numericCommentResidue(twoCommentReport.results[0]),
+  'the residue returned is the exact text fileabilityBlockers itself compares against — never a re-derived copy'
+);
+check(
+  LF.unresolvedCommentedResults(twoCommentReport, {
+    allowComments: ['Insufficient historical creatinine data to assess AKI risk'],
+  }).length === 1,
+  'a comment excused by the profile drops out of the list, leaving only the still-blocking one'
+);
+check(
+  LF.unresolvedCommentedResults(null, null).length === 0 && LF.unresolvedCommentedResults({}, null).length === 0,
+  'fails closed to an empty list on missing report / no results, never throws'
+);
+check(
+  LF.unresolvedCommentedResults(twoCommentReport, null)[0].result === twoCommentReport.results[0],
+  'each entry carries the raw result row, not just its derived name/residue'
+);
+
+// ── profilesOwningResult (attributes a comment to ONE profile when several
+// matched a combined report — e.g. a lipids panel: cholesterol,
+// triglycerides and LDL each under their own profile) ────────────────────────
+console.log('\n--- profilesOwningResult ---');
+const cholProfile = { name: 'Cholesterol', match: ['cholesterol', 'ldl', 'hdl'] };
+const trigProfile = { name: 'Triglycerides', match: ['triglyceride'] };
+const ueProfileForOwning = { name: 'U&E', match: ['sodium', 'creatinine'] };
+const trigResult = { name: 'Triglycerides', specimen: null };
+const ldlResult = { name: 'Calculated LDL cholesterol level', specimen: null };
+const naResult = { name: 'Sodium', specimen: null };
+check(
+  LF.profilesOwningResult([cholProfile, trigProfile, ueProfileForOwning], trigResult).length === 1 &&
+    LF.profilesOwningResult([cholProfile, trigProfile, ueProfileForOwning], trigResult)[0].name === 'Triglycerides',
+  'a triglycerides result is owned by the triglycerides profile alone, even with cholesterol/U&E also matched'
+);
+check(
+  LF.profilesOwningResult([cholProfile, trigProfile, ueProfileForOwning], ldlResult)[0].name === 'Cholesterol',
+  'an LDL result is owned by the cholesterol profile (matches "ldl")'
+);
+check(
+  LF.profilesOwningResult([cholProfile, trigProfile], naResult).length === 0,
+  'a result no candidate profile actually names is owned by nobody — 0, not a guess'
+);
+check(
+  LF.profilesOwningResult(
+    [
+      { name: 'A', match: ['cholesterol'] },
+      { name: 'B', match: ['cholesterol'] },
+    ],
+    ldlResult
+  ).length === 2,
+  'two profiles both naming the same analyte both come back — genuinely ambiguous; the CALLER checks length!==1, this function never picks one arbitrarily'
+);
+check(
+  LF.profilesOwningResult(null, ldlResult).length === 0 && LF.profilesOwningResult([cholProfile], null).length === 0,
+  'fails closed to an empty list on missing inputs, never throws'
+);
+
+// ── profilesOwningResult: heading-first (real-world regression, 2026-09-17) ───
+// Nick: a combined investigation-report task carried Renal function tests,
+// LFTs and Lipids headings. The practice had U&E and LFT profiles but NO
+// Lipids profile. A Triglycerides comment (heading "Lipids") was being saved
+// onto the U&E and LFT profiles — the caller's old "fall back to every
+// matched profile" behaviour when ownership came back empty. Fixed by (a)
+// removing that fallback entirely at the call site, and (b) matching by
+// HEADING (result.specimen) first, since a Medicus performer comment belongs
+// to the heading, not the individual analyte, in most cases.
+console.log('\n--- profilesOwningResult: heading-first ---');
+const ueProfileReal = { name: 'U&E', match: ['sodium', 'potassium', 'creatinine', 'egfr'] };
+const lftProfileReal = { name: 'LFTs', match: ['alt', 'alp', 'bilirubin', 'albumin'] };
+const trigResultWithHeading = { name: 'Triglycerides', specimen: 'Lipids' };
+check(
+  LF.profilesOwningResult([ueProfileReal, lftProfileReal], trigResultWithHeading).length === 0,
+  "a Lipids-heading comment is owned by NOBODY when no profile covers Lipids — never falls back to U&E/LFT just because they matched the wider report"
+);
+const lipidsProfile = { name: 'Lipids', match: ['lipid'] };
+check(
+  LF.profilesOwningResult([ueProfileReal, lftProfileReal, lipidsProfile], trigResultWithHeading)[0].name === 'Lipids',
+  'once a Lipids profile exists (matches the HEADING "Lipids", not the analyte "triglyceride"), the comment is correctly attributed to it'
+);
+const ldlResultWithHeading = { name: 'Calculated LDL cholesterol level', specimen: 'Lipids' };
+check(
+  LF.profilesOwningResult([lipidsProfile, cholProfile], ldlResultWithHeading).length === 1 &&
+    LF.profilesOwningResult([lipidsProfile, cholProfile], ldlResultWithHeading)[0].name === 'Lipids',
+  'heading match wins outright over a competing analyte-name match — every analyte under one heading stays attributed together, not split per differing match[] term'
+);
+check(
+  LF.profilesOwningResult([cholProfile], ldlResultWithHeading)[0].name === 'Cholesterol',
+  'falls back to the analyte name when nothing names the heading itself (no Lipids profile here, but Cholesterol still names "ldl")'
+);
+
+// ── allowComments honesty on a combined report (merge-review fix, 2026-09-18) ─
+// The live gate used to score allowComments against the merged-union profile,
+// so a U&E phrase could excuse a Lipids-heading comment on the same task.
+// Same class as the live Lipids-onto-U&E write bug: a comment must only be
+// excused by a profile that owns that heading.
+console.log('\n--- allowComments owning-profile honesty ---');
+{
+  const comboCommented = {
+    unmatched: false,
+    results: [
+      {
+        name: 'Creatinine',
+        specimen: 'Renal function tests',
+        value: 80,
+        unit: 'umol/L',
+        rawValue: '80',
+        text: 'Creatinine - Insufficient historical creatinine data to assess AKI risk',
+      },
+      {
+        name: 'Triglycerides',
+        specimen: 'Lipids',
+        value: 1.2,
+        unit: 'mmol/L',
+        rawValue: '1.2',
+        text: 'Triglycerides - Insufficient historical creatinine data to assess AKI risk',
+      },
+    ],
+  };
+  const ueOnly = {
+    name: 'U&E',
+    match: ['creatinine', 'renal'],
+    allowComments: ['Insufficient historical creatinine data to assess AKI risk'],
+  };
+  const lipidsEmpty = { name: 'Lipids', match: ['lipid'], allowComments: [] };
+  const mergedUnion = {
+    allowComments: ['Insufficient historical creatinine data to assess AKI risk'],
+  };
+  check(
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion).length === 0,
+    'legacy single-profile call still excuses via the passed profile (unit-test / single-panel path unchanged)'
+  );
+  check(
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion, [ueOnly, lipidsEmpty]).some(
+      (r) => /carries a comment/.test(r)
+    ),
+    'combined report: a U&E allow-list phrase does not excuse a Lipids-heading comment'
+  );
+  const unresolvedCombo = LF.unresolvedCommentedResults(comboCommented, mergedUnion, [ueOnly, lipidsEmpty]);
+  check(
+    unresolvedCombo.length === 1 && unresolvedCombo[0].name === 'Triglycerides',
+    'only the Lipids-heading comment stays unresolved — Creatinine is owned by U&E and excused'
+  );
+  check(
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion, [ueOnly]).some((r) =>
+      /carries a comment/.test(r)
+    ),
+    'a Lipids comment with no owning profile is not excused by any other matched profile'
+  );
+}
+
+// ── profilesOwningResult: truncated analyte name (real-world regression,
+// Nick's live Lipids profile, 2026-09-17) ─────────────────────────────────────
+// Medicus truncates a result's own name to a fixed length in the report —
+// "Calculated LDL cholesterol level" arrives as "Calculated LDL cholesterol
+// lev". A profile authored with the full, untruncated name as its match
+// term (typed by hand, or seeded from a source that isn't truncated) could
+// never be found as a substring of the shorter, truncated haystack.
+console.log('\n--- profilesOwningResult: truncated analyte name ---');
+const lipidsProfileReal = {
+  name: 'Lipids - normal, no action',
+  match: [
+    'total cholesterol',
+    'hdl cholesterol',
+    'se non hdl cholesterol level',
+    'serum cholesterol/hdl ratio',
+    'triglycerides',
+    'calculated ldl cholesterol level',
+  ],
+};
+const truncatedLdlResult = { name: 'Calculated LDL cholesterol lev', specimen: 'Lipids' };
+// The profile's own "hdl cholesterol"/"total cholesterol" terms don't
+// contain the bare word "lipids", so heading-only matching alone doesn't
+// catch this — the fix that matters here is the term.startsWith(hay) prefix
+// check on the analyte-name fallback.
+check(
+  LF.profilesOwningResult([lipidsProfileReal], truncatedLdlResult)[0].name === 'Lipids - normal, no action',
+  "a truncated result name (Medicus's own report data) that is a PREFIX of the profile's full match term is correctly attributed — term.startsWith(hay)"
+);
+check(
+  LF.profilesOwningResult(
+    [{ name: 'Unrelated', match: ['see calculated ldl cholesterol level notes'] }],
+    truncatedLdlResult
+  ).length === 0,
+  'the check is a strict PREFIX match, not general containment — a term with the truncated text buried mid-string (not starting with it) does not match'
+);
 
 // ── buildFilingConfirmMessage ──────────────────────────────────────────────────
 console.log('\n--- buildFilingConfirmMessage ---');
@@ -628,6 +998,28 @@ check(
   'sanitise trims and drops empty excludeIfMeds'
 );
 check(guardSp.suppressIfText[0] === 'telephone result', 'sanitise preserves suppressIfText');
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { allowComments: [42] })).some((e) =>
+    /allowComments/.test(e)
+  ),
+  'non-string allowComments entry rejected'
+);
+check(
+  LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { updatedBy: 42 })).some((e) => /updatedBy/.test(e)),
+  'non-string updatedBy rejected'
+);
+const provSp = LF.sanitiseProfile(
+  withParams([{ analyte: 'k', high: 5 }], {
+    allowComments: ['  Insufficient historical data  ', ''],
+    updatedBy: 'dr.nair@example.nhs.uk',
+  })
+);
+check(
+  provSp.allowComments.length === 1 && provSp.allowComments[0] === 'Insufficient historical data',
+  'sanitise trims and drops empty allowComments'
+);
+check(provSp.updatedBy === 'dr.nair@example.nhs.uk', 'sanitise preserves updatedBy');
+check(LF.sanitiseProfile(withParams([{ analyte: 'k', high: 5 }], {})).updatedBy === '', 'updatedBy defaults to empty');
 check(
   LF.validateProfile(withParams([{ analyte: 'k', high: 5 }], { paramsOverrideLabFlags: 'yes' })).some((e) =>
     /paramsOverrideLabFlags/.test(e)

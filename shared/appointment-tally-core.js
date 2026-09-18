@@ -9,8 +9,13 @@
 // the caller's hiddenTypes set — the live widget writes slots.hiddenTypes
 // so the Slot Counter checkboxes and this tally cannot drift.
 //
+// Optional vaccine-eligibility totals (flu / COVID / RSV) are also derived
+// here from per-patient engine chips. The widget GETs patient records only
+// when a vaccine toggle is on. This file stays pure: no fetch, no chrome.*,
+// no DOM.
+//
 // Dual-mode: module.exports for Node tests, window.AppointmentTallyCore
-// for the appointment-book content script. No fetch, no chrome.*, no DOM.
+// for the appointment-book content script.
 
 (function (global) {
   'use strict';
@@ -24,8 +29,32 @@
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
+  var UUID_RE = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+
+  var VAX_KEYS = ['flu', 'covid', 'rsv'];
+  var VAX_LABELS = { flu: 'Flu', covid: 'COVID', rsv: 'RSV' };
+  var VAX_RULE_IDS = { flu: 'vax-flu', covid: 'vax-covid', rsv: 'vax-rsv' };
+
   function emptyCounts() {
     return { booked: 0, free: 0 };
+  }
+
+  function emptyVaxToggles() {
+    return { flu: false, covid: false, rsv: false };
+  }
+
+  function parseVaxToggles(val) {
+    var out = emptyVaxToggles();
+    if (!val || typeof val !== 'object' || Array.isArray(val)) return out;
+    out.flu = !!val.flu;
+    out.covid = !!val.covid;
+    out.rsv = !!val.rsv;
+    return out;
+  }
+
+  function anyVaxOn(toggles) {
+    var t = parseVaxToggles(toggles);
+    return !!(t.flu || t.covid || t.rsv);
   }
 
   function sumCounts(c) {
@@ -94,18 +123,63 @@
     return byType[name];
   }
 
+  function extractPatientUuid(entry) {
+    if (!entry) return null;
+    var p = entry.patient;
+    if (p) {
+      var fields = ['id', 'uuid', 'patientId', 'patientUuid'];
+      for (var i = 0; i < fields.length; i++) {
+        var v = p[fields[i]];
+        if (typeof v === 'string' && UUID_RE.test(v)) {
+          return v.toLowerCase().match(UUID_RE)[1];
+        }
+      }
+    }
+    var sources = p ? [p, entry] : [entry];
+    for (var s = 0; s < sources.length; s++) {
+      var obj = sources[s];
+      if (!obj || typeof obj !== 'object') continue;
+      var keys = Object.keys(obj);
+      for (var j = 0; j < keys.length; j++) {
+        var val = obj[keys[j]];
+        if (typeof val === 'string') {
+          var m = val.match(UUID_RE);
+          if (m) return m[1].toLowerCase();
+        }
+      }
+    }
+    return null;
+  }
+
   function walkEntries(entries, byType, opts) {
     (entries || []).forEach(function (entry) {
       var kind = entryType(entry);
       if (kind === 'appointment') {
         if (isCancelled(entry)) return;
         ensureType(byType, typeName(entry)).booked += 1;
+        if (opts.collectPatients) recordBookedPatient(opts.collectPatients, entry);
         return;
       }
       if (kind !== 'slot') return;
       if (opts.skipPastFree && slotIsPast(entry.startDateTime, opts.now)) return;
       ensureType(byType, typeName(entry)).free += 1;
     });
+  }
+
+  function recordBookedPatient(bucket, entry) {
+    bucket.appointmentCount += 1;
+    var uuid = extractPatientUuid(entry);
+    var type = typeName(entry);
+    if (!uuid) {
+      bucket.missing += 1;
+      return;
+    }
+    var row = bucket.byUuid[uuid];
+    if (!row) {
+      row = { uuid: uuid, types: {} };
+      bucket.byUuid[uuid] = row;
+    }
+    row.types[type] = true;
   }
 
   function walkSessions(sessions, staffName, byType, staffSeen, opts) {
@@ -135,10 +209,12 @@
     if (skipPastFree == null) {
       skipPastFree = !!(date && date === todayISO(now));
     }
+    var patients = { byUuid: {}, missing: 0, appointmentCount: 0 };
     var walkOpts = {
       now: now,
       skipPastFree: !!skipPastFree,
       staffNames: opts.staffNames || null,
+      collectPatients: patients,
     };
     var byType = {};
     var staffSeen = {};
@@ -156,7 +232,104 @@
         return a.localeCompare(b);
       }),
       skipPastFree: !!skipPastFree,
+      patients: patients,
     };
+  }
+
+  function visiblePatientUuids(patients, hiddenTypes) {
+    var hidden = hiddenSet(hiddenTypes);
+    var uuids = [];
+    var byUuid = (patients && patients.byUuid) || {};
+    Object.keys(byUuid).forEach(function (uuid) {
+      var types = Object.keys((byUuid[uuid] && byUuid[uuid].types) || {});
+      var visible = types.some(function (type) {
+        return !hidden.has(type);
+      });
+      if (visible) uuids.push(uuid);
+    });
+    uuids.sort();
+    return uuids;
+  }
+
+  function vaccineKeyFromChip(chip) {
+    if (!chip) return null;
+    var v = chip.vaccine;
+    if (v === 'flu' || v === 'covid' || v === 'rsv') return v;
+    if (chip.ruleId === VAX_RULE_IDS.flu) return 'flu';
+    if (chip.ruleId === VAX_RULE_IDS.covid) return 'covid';
+    if (chip.ruleId === VAX_RULE_IDS.rsv) return 'rsv';
+    return null;
+  }
+
+  function vaxFlagsFromChips(chips) {
+    var flags = { flu: null, covid: null, rsv: null };
+    (chips || []).forEach(function (chip) {
+      if (!chip || chip.type !== 'vaccine') return;
+      var key = vaccineKeyFromChip(chip);
+      if (!key) return;
+      flags[key] = chip.status || 'vax_due';
+    });
+    return flags;
+  }
+
+  function emptyVaxBucket() {
+    return { eligible: 0, due: 0, given: 0, declined: 0 };
+  }
+
+  function emptyVaxSummary(total) {
+    return {
+      flu: emptyVaxBucket(),
+      covid: emptyVaxBucket(),
+      rsv: emptyVaxBucket(),
+      checked: 0,
+      errors: 0,
+      pending: 0,
+      total: total || 0,
+    };
+  }
+
+  function countOneVax(bucket, status) {
+    if (!status) return;
+    bucket.eligible += 1;
+    if (status === 'vax_due') bucket.due += 1;
+    else if (status === 'vax_given') bucket.given += 1;
+    else if (status === 'vax_declined') bucket.declined += 1;
+  }
+
+  function summariseVax(byUuid, visibleUuids) {
+    var uuids = Array.isArray(visibleUuids) ? visibleUuids : [];
+    var summary = emptyVaxSummary(uuids.length);
+    var map = byUuid || {};
+    uuids.forEach(function (uuid) {
+      var row = map[uuid];
+      if (!row) {
+        summary.pending += 1;
+        return;
+      }
+      if (row.error) {
+        summary.errors += 1;
+        summary.checked += 1;
+        return;
+      }
+      summary.checked += 1;
+      countOneVax(summary.flu, row.flu);
+      countOneVax(summary.covid, row.covid);
+      countOneVax(summary.rsv, row.rsv);
+    });
+    return summary;
+  }
+
+  function vaxButtonParts(summary, toggles, scanning) {
+    var t = parseVaxToggles(toggles);
+    var s = summary || emptyVaxSummary(0);
+    var parts = [];
+    VAX_KEYS.forEach(function (key) {
+      if (!t[key]) return;
+      var label = VAX_LABELS[key];
+      var n = (s[key] && s[key].eligible) || 0;
+      parts.push(scanning ? label + ' ' + n + '\u2026' : label + ' ' + n);
+    });
+    return parts;
   }
 
   function hiddenSet(hiddenTypes) {
@@ -206,10 +379,12 @@
       });
   }
 
-  function buttonLabel(totals) {
+  function buttonLabel(totals, vaxParts) {
     var booked = (totals && totals.booked) || 0;
     var free = (totals && totals.free) || 0;
-    return booked + ' booked · ' + free + ' free';
+    var base = booked + ' booked \u00b7 ' + free + ' free';
+    if (!vaxParts || !vaxParts.length) return base;
+    return base + ' \u00b7 ' + vaxParts.join(' \u00b7 ');
   }
 
   function shouldApplyFetch(inFlightKey, currentKey) {
@@ -223,7 +398,19 @@
     typeName: typeName,
     isCancelled: isCancelled,
     slotIsPast: slotIsPast,
+    extractPatientUuid: extractPatientUuid,
     tallyFromOverview: tallyFromOverview,
+    visiblePatientUuids: visiblePatientUuids,
+    vaxFlagsFromChips: vaxFlagsFromChips,
+    summariseVax: summariseVax,
+    emptyVaxSummary: emptyVaxSummary,
+    emptyVaxToggles: emptyVaxToggles,
+    parseVaxToggles: parseVaxToggles,
+    anyVaxOn: anyVaxOn,
+    vaxButtonParts: vaxButtonParts,
+    VAX_KEYS: VAX_KEYS,
+    VAX_LABELS: VAX_LABELS,
+    VAX_RULE_IDS: VAX_RULE_IDS,
     applyHidden: applyHidden,
     sortedTypeEntries: sortedTypeEntries,
     buttonLabel: buttonLabel,

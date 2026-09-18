@@ -617,6 +617,11 @@ async function runActivityApiTests() {
     'Date range required',
     'null endDate → "Date range required"'
   );
+  await expectReject(
+    () => fetchActivityReport('a1b2c3', '2026-03-01', '2026-02-28', { fetch: async () => {} }),
+    'Date range inverted',
+    'inverted start>end (lastMonth overflow shape) → "Date range inverted"'
+  );
 
   // ── HTTP 401 ──────────────────────────────────────────────────────────────
 
@@ -948,6 +953,88 @@ async function runUtilityTests() {
   check(actAgg.maxUserTotal === actAgg.users[0].total, 'activity aggregate: maxUserTotal is highest user total');
   check(AA.aggregate([]).users.length === 0, 'activity aggregate: empty array → empty users');
   check(AA.aggregate(null).users.length === 0, 'activity aggregate: null → empty users');
+
+  console.log('\n--- activity-api.js: preset (incl. lastMonth overflow) ---');
+  // Noon local, not midnight — DST spring-forward can make 00:00 not exist.
+  const at = (y, m0, d) => new Date(y, m0, d, 12, 0, 0, 0);
+  {
+    const [s, e] = AA.preset('today', at(2026, 8, 17));
+    check(s === '2026-09-17' && e === '2026-09-17', `preset today (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('yesterday', at(2026, 8, 17));
+    check(s === '2026-09-16' && e === '2026-09-16', `preset yesterday (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('last7', at(2026, 8, 17));
+    check(s === '2026-09-11' && e === '2026-09-17', `preset last7 is 7 inclusive days (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('last30', at(2026, 8, 17));
+    check(s === '2026-08-19' && e === '2026-09-17', `preset last30 is 30 inclusive days (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('thisMonth', at(2026, 8, 17));
+    check(s === '2026-09-01' && e === '2026-09-17', `preset thisMonth is month-to-date (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 8, 17));
+    check(s === '2026-08-01' && e === '2026-08-31', `preset lastMonth from 17 Sep is August (got ${s}..${e})`);
+  }
+  // THE BUG: 31 Mar setMonth(Feb) overflowed to 3 Mar, then setDate(1) → 1 Mar
+  // with end.setDate(0) → 28 Feb — inverted range, empty Activity.
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 2, 31));
+    check(
+      s === '2026-02-01' && e === '2026-02-28',
+      `lastMonth from 31 Mar 2026 is Feb 1–28, not inverted Mar 1–Feb 28 (got ${s}..${e})`
+    );
+    check(s <= e, 'lastMonth from 31 Mar is not inverted');
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 4, 31));
+    check(s === '2026-04-01' && e === '2026-04-30', `lastMonth from 31 May is April (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 6, 31));
+    check(s === '2026-06-01' && e === '2026-06-30', `lastMonth from 31 Jul is June (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 9, 31));
+    check(s === '2026-09-01' && e === '2026-09-30', `lastMonth from 31 Oct is September (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 11, 31));
+    check(s === '2026-11-01' && e === '2026-11-30', `lastMonth from 31 Dec is November (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 0, 31));
+    check(s === '2025-12-01' && e === '2025-12-31', `lastMonth from 31 Jan rolls to prior Dec (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('lastMonth', at(2026, 7, 31));
+    check(s === '2026-07-01' && e === '2026-07-31', `lastMonth from 31 Aug (31-day prev) is July (got ${s}..${e})`);
+  }
+  // Leap year: 31 Mar 2028 → Feb 1–29.
+  {
+    const [s, e] = AA.preset('lastMonth', at(2028, 2, 31));
+    check(s === '2028-02-01' && e === '2028-02-29', `lastMonth from 31 Mar 2028 clamps to leap Feb (got ${s}..${e})`);
+  }
+  {
+    const [s, e] = AA.preset('last7', at(2026, 0, 3));
+    check(s === '2025-12-28' && e === '2026-01-03', `last7 rolls year boundary (got ${s}..${e})`);
+  }
+  check(AA.preset('nope', at(2026, 8, 17)) === null, 'unknown preset name → null');
+
+  console.log('\n--- activity-api.js: isInclusiveRange ---');
+  check(AA.isInclusiveRange('2026-02-01', '2026-02-28') === true, 'isInclusiveRange: Feb 1–28 ok');
+  check(
+    AA.isInclusiveRange('2026-03-01', '2026-02-28') === false,
+    'isInclusiveRange: lastMonth-overflow inverted pair rejected'
+  );
+  check(AA.isInclusiveRange('2026-09-17', '2026-09-17') === true, 'isInclusiveRange: single day ok');
+  check(AA.isInclusiveRange('', '2026-09-17') === false, 'isInclusiveRange: empty start rejected');
+  check(AA.isInclusiveRange(null, '2026-09-17') === false, 'isInclusiveRange: null start rejected');
 
   console.log('\n--- activity-api.js: daysBetweenInclusive ---');
   check(AA.daysBetweenInclusive('2026-07-01', '2026-07-01') === 1, 'daysBetweenInclusive: same day → 1');

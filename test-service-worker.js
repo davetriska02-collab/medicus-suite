@@ -69,9 +69,9 @@ console.log('\n--- every practice-profile _io() dependency is importScripts\'d -
 //
 // Derive the exact module list from practice-profile.js's own _io('xImport')
 // call sites (not "every -io.js file in shared/io" — several, e.g. condor,
-// labfiling, leaflets, notifications, patient-alerts, phrases, popout, rota,
-// are legitimately never resolved this way and correctly absent here) and
-// assert each has a matching importScripts call.
+// leaflets, notifications, patient-alerts, phrases, popout, rota, are
+// legitimately never resolved this way and correctly absent here) and assert
+// each has a matching importScripts call.
 const ppSrc = fs.readFileSync(path.join(__dirname, 'shared', 'io', 'practice-profile.js'), 'utf8');
 const ioModuleNames = [...ppSrc.matchAll(/_io\('(\w+)Import'\)/g)].map((m) => m[1]);
 const uniqueModules = [...new Set(ioModuleNames)];
