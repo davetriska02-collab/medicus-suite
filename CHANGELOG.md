@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.1] — 2026-09-18
+
+### Task presence — stop the occupied banner oscillating on some requests
+
+On some request overviews the injected "who is working on it" masthead
+(and the message / Clinical Summary tokens) fought Vue's re-render: the
+DOM hub re-painted on every mutation, and `insertionAnchor` treated our
+own token as a sibling, so the host flipped every frame.
+
+- Own presence nodes no longer count when climbing to a host, and a
+  connected token stays put unless Vue rebuilt an unrelated card.
+- Same-URL hub flushes skip paint when the masthead is already attached;
+  our own insert/move mutations never retrigger a paint.
+- If Vue still wipes the in-flow masthead three times in a short window,
+  it pins to `document.body` as a fixed overlay so the page stops jumping.
+
+`content-scripts/task-presence.js`, `content-scripts/task-presence.css`.
+Tests: `test-task-presence.js`.
+
 ## [v3.263.0] — 2026-09-18
 
 ### Appointment-book tally — flu / COVID / RSV eligibility toggles

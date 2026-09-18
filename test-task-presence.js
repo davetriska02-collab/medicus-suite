@@ -67,6 +67,14 @@ const {
   occupancyIsDismissed,
   occupancyWriteDismiss,
   sanitizeSelfExtras,
+  isOwnPresenceSpec,
+  foreignPresenceChildCount,
+  insertionAnchorHopCount,
+  shouldRelocatePresenceToken,
+  nextPresenceWipeState,
+  presenceWipeGiveUp,
+  mutationBatchIsOwnPresence,
+  presenceMutationPaintDecision,
   AVATAR_HUES,
   safeAvatarHue,
 } = require('./content-scripts/task-presence.js');
@@ -1093,6 +1101,172 @@ console.log('--- overview hosts: left message + RHS summary; never book-signing 
   check(pickedRhs && pickedRhs.id === 'sum', 'RHS host is Clinical Summary, not book-signing');
   check(pickOverviewRhsHost([{ id: 'sign', side: 'right', kind: 'book-signing', clinicalSummary: true }]) === null, 'book-signing alone -> no RHS token');
   check(pickOverviewMessageHost([{ id: 'ms-tp-banner', side: 'left', messageHeading: true }]) === null, 'masthead is not message chrome');
+  check(pickOverviewMessageHost([{ id: 'ms-tp-msg', side: 'left', messageHeading: true }]) === null, 'message token is not its own host');
+}
+
+console.log('--- overview injects must not oscillate on single-child request chrome ---');
+{
+  check(isOwnPresenceSpec({ id: 'ms-tp-banner' }) === true, 'masthead is own');
+  check(isOwnPresenceSpec({ id: 'ms-tp-msg', className: 'ms-tp-token-host' }) === true, 'message token is own');
+  check(isOwnPresenceSpec({ id: 'ms-tp-rhs' }) === true, 'RHS token is own');
+  check(isOwnPresenceSpec({ id: 'card', className: 'request-card' }) === false, 'request card is foreign');
+  check(
+    foreignPresenceChildCount([{ id: 'ms-tp-msg', className: 'ms-tp-token-host' }, { id: 'wrap' }]) === 1,
+    'token sibling does not count toward the climb'
+  );
+  check(foreignPresenceChildCount([{ id: 'wrap' }]) === 1, 'single real child still climbs');
+
+  const beforeInsert = [[{ id: 'headingParent' }], [{ id: 'wrap' }]];
+  const afterInsert = [
+    [{ id: 'headingParent' }],
+    [
+      { id: 'ms-tp-msg', className: 'ms-tp-token-host' },
+      { id: 'wrap' },
+    ],
+  ];
+  const hopsBefore = insertionAnchorHopCount(beforeInsert);
+  const hopsAfter = insertionAnchorHopCount(afterInsert);
+  check(hopsBefore === 2, 'single-child shells climb to the card');
+  check(hopsAfter === hopsBefore, 'token insert must not change the climb (the v3.263.1 oscillation)');
+  check(
+    insertionAnchorHopCount([
+      [
+        { id: 'ms-tp-msg', className: 'ms-tp-token-host' },
+        { id: 'headingParent' },
+        { id: 'other' },
+      ],
+    ]) === 0,
+    'two real siblings still stop the climb'
+  );
+
+  check(
+    shouldRelocatePresenceToken({
+      connected: true,
+      currentParent: 'card',
+      foundHost: 'card',
+      sameLineage: true,
+    }) === false,
+    'same host stays'
+  );
+  check(
+    shouldRelocatePresenceToken({
+      connected: true,
+      currentParent: 'card',
+      foundHost: 'wrap',
+      sameLineage: true,
+    }) === false,
+    'ancestor/descendant find jitter stays'
+  );
+  check(
+    shouldRelocatePresenceToken({
+      connected: true,
+      currentParent: 'card',
+      foundHost: null,
+      sameLineage: false,
+    }) === false,
+    'missing find this frame keeps the connected token'
+  );
+  check(
+    shouldRelocatePresenceToken({
+      connected: true,
+      currentParent: 'old-card',
+      foundHost: 'new-card',
+      sameLineage: false,
+    }) === true,
+    'unrelated host (Vue rebuilt the card) may move'
+  );
+  check(
+    shouldRelocatePresenceToken({ connected: false, foundHost: 'card' }) === true,
+    'disconnected token re-homes'
+  );
+
+  check(mutationBatchIsOwnPresence([]) === false, 'empty batch is not own');
+  check(
+    mutationBatchIsOwnPresence([{ added: [{ id: 'ms-tp-banner' }], removed: [] }]) === true,
+    'banner-only insert is own'
+  );
+  check(
+    mutationBatchIsOwnPresence([
+      { added: [{ id: 'ms-tp-msg', className: 'ms-tp-token-host' }], removed: [{ id: 'ms-tp-msg' }] },
+    ]) === true,
+    'token move is own'
+  );
+  check(
+    mutationBatchIsOwnPresence([
+      { added: [{ id: 'ms-tp-banner' }, { id: 'vue-row', className: 'ag-row' }], removed: [] },
+    ]) === false,
+    'mixed Vue + banner batch is not own'
+  );
+
+  check(
+    presenceMutationPaintDecision({ ownMutationsOnly: true, hrefChanged: false, isOverview: true, hasOccupants: true }) ===
+      'skip',
+    'own mutations skip paint (breaks the hub loop)'
+  );
+  check(
+    presenceMutationPaintDecision({
+      ownMutationsOnly: false,
+      hrefChanged: true,
+      isOverview: true,
+      hasOccupants: true,
+      bannerConnected: true,
+    }) === 'paint',
+    'route change always paints'
+  );
+  check(
+    presenceMutationPaintDecision({
+      ownMutationsOnly: false,
+      hrefChanged: false,
+      isOverview: true,
+      hasOccupants: true,
+      bannerConnected: true,
+      tokenMissing: false,
+    }) === 'skip',
+    'stable attached injects do not repaint on Vue churn'
+  );
+  check(
+    presenceMutationPaintDecision({
+      ownMutationsOnly: false,
+      hrefChanged: false,
+      isOverview: true,
+      hasOccupants: true,
+      bannerConnected: false,
+      tokenMissing: false,
+    }) === 'paint',
+    'Vue-wiped masthead is put back once'
+  );
+  check(
+    presenceMutationPaintDecision({
+      ownMutationsOnly: false,
+      hrefChanged: false,
+      isOverview: true,
+      hasOccupants: true,
+      bannerConnected: true,
+      tokenMissing: true,
+      tokenGiveUp: true,
+    }) === 'skip',
+    'after token wipe-loop give-up, stop injecting into the card'
+  );
+  check(
+    presenceMutationPaintDecision({
+      ownMutationsOnly: false,
+      hrefChanged: false,
+      isOverview: false,
+      bannerConnected: false,
+      tokenConnected: false,
+    }) === 'list-only',
+    'queue pages do not touch the request masthead'
+  );
+
+  let wipe = null;
+  wipe = nextPresenceWipeState(wipe, 'banner', 1000, '/t/1');
+  wipe = nextPresenceWipeState(wipe, 'banner', 1100, '/t/1');
+  wipe = nextPresenceWipeState(wipe, 'banner', 1200, '/t/1');
+  check(wipe.banner === 3 && presenceWipeGiveUp(wipe, 'banner') === true, 'three banner wipes in-window → overlay');
+  wipe = nextPresenceWipeState(wipe, 'banner', 3000, '/t/1');
+  check(wipe.banner === 1 && presenceWipeGiveUp(wipe, 'banner') === false, 'wipe window resets after 800ms');
+  const other = nextPresenceWipeState(wipe, 'banner', 3050, '/t/2');
+  check(other.path === '/t/2' && other.banner === 1, 'href change resets wipe state');
 }
 
 console.log('--- source of truth: row tokens reuse banner pipeline, not a second channel ---');
@@ -1110,6 +1284,13 @@ console.log('--- source of truth: row tokens reuse banner pipeline, not a second
   check(!/\.subscribe\s*\(\s*['"]presence-/.test(src), 'content script still does not subscribe to presence channels');
   check(/#ms-tp-msg/.test(css) && /#ms-tp-rhs/.test(css) && /\.ms-tp-token/.test(css), 'token CSS covers all three surfaces');
   check(/@container \(max-width: 5\.5rem\)/.test(css), 'tight cells hide the name, keep the icon initials');
+  check(/foreignPresenceChildCount\(foreignChildrenOf\(el\.parentElement\)\)/.test(src), 'insertionAnchor ignores own presence siblings');
+  check(!/function insertionAnchor\(node\) \{[\s\S]*?kids\.length !== 1/.test(src), 'insertionAnchor does not use raw child count');
+  check(/presenceMutationPaintDecision\(/.test(src), 'hub paints only when injects are missing or the route changed');
+  check(/mutationBatchIsOwnPresence\(batch\)/.test(src), 'own token/banner mutations do not retrigger paint');
+  check(/shouldRelocatePresenceToken\(/.test(src), 'connected tokens stay on the same lineage host');
+  check(/ms-tp-banner-overlay/.test(src) && /ms-tp-banner-overlay/.test(css), 'wipe-loop fallback pins the masthead out of <main>');
+  check(/resetPresenceInjectState\(\)/.test(src), 'href change resets wipe counters and overlay mode');
   const beat = buildHeartbeatPayload('560b6c', UUID_A, UUID_ME, 'Dr D', '2026-08-04T12:00:00.000Z', null);
   check(
     Object.keys(beat).sort().join(',') === 'last_seen,site,staff_id,staff_label,task_uuid',

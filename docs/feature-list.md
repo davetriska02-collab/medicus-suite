@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.263.0
+**Version:** v3.263.1
 **Generated:** 2026-09-18
 
 ## What it is
@@ -149,6 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.263.1 (18 Sep)** — Task presence: occupied banner no longer oscillates on request overviews that re-render the message chrome
 - **v3.263.0 (18 Sep)** — Appointment-book tally: optional flu / COVID / RSV eligibility counts on the booked/free button
 - **v3.262.1 (18 Sep)** — Reception match: topic terms for earache `rf-under3m-fever` and feverish-child `rf-rigors`
 - **v3.262.0 (18 Sep)** — The Keeper: ciclosporin / tacrolimus / mercaptopurine / cenobamate monitoring rules; missing UK brands (Elozar, Arpoya, Bilprevda, Zvogra, Drovelis)
