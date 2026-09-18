@@ -63,6 +63,10 @@ const {
   computeGenericTextRemoval,
   buildCleanTextChangeAllergyPayload,
   normalizeOnsetDateForSubmit,
+  onsetDateAfterRecordDate,
+  onsetFixStatus,
+  planClearLegacyOnsetFixes,
+  formatIsoDateForDisplay,
   parseCareRecordPath,
   parseTaskOverviewPath,
   parseSummaryBridgeAttr,
@@ -1639,6 +1643,104 @@ console.log(
   check(
     normalizeOnsetDateForSubmit('some unrecognised format') === 'some unrecognised format',
     'an unrecognised shape passes through unchanged rather than guessing'
+  );
+}
+
+console.log('--- onset after record date: real HAR132 400 "Onset date cannot be after the record date" ---');
+{
+  check(onsetDateAfterRecordDate('2014-03-04', '1993-01-24') === true, 'real HAR132 values are flagged');
+  check(onsetDateAfterRecordDate('1993-01-24', '2014-03-04') === false, 'onset before record is fine');
+  check(onsetDateAfterRecordDate('2014-03-04', '2014-03-04') === false, 'same day is fine');
+  check(onsetDateAfterRecordDate('2014', '2014-06-01') === false, 'partial year onset in the record year is not flagged');
+  check(onsetDateAfterRecordDate('2014-03', '2014-03-10') === false, 'partial month onset in the record month is not flagged');
+  check(onsetDateAfterRecordDate('2015', '2014-06-01') === true, 'partial year onset after the record year is flagged');
+  check(onsetDateAfterRecordDate('2014-07', '2014-06-01') === true, 'partial month onset after the record month is flagged');
+  check(onsetDateAfterRecordDate('2014-03-04', '1993-01-24T10:00:00Z') === true, 'a record datetime is clipped to its date');
+  check(onsetDateAfterRecordDate(null, '1993-01-24') === false, 'no onset -> not flagged');
+  check(onsetDateAfterRecordDate('2014-03-04', null) === false, 'no record date -> not flagged');
+  check(formatIsoDateForDisplay('1993-01-24') === '24 Jan 1993', 'ISO date formats for display');
+  check(formatIsoDateForDisplay('2014') === '2014', 'a partial date is shown as-is');
+
+  const prefill = {
+    substance: null,
+    onsetDate: '2014-03-04',
+    recordDate: '1993-01-24',
+    severity: null,
+    certainty: null,
+    allergyReactions: [],
+    additionalInformation: 'x',
+  };
+  const sub = { conceptId: '764146007', description: 'Penicillin', descriptionId: '3646462011' };
+  check(
+    buildConversionChangeAllergyPayload(prefill, sub, []).onsetDate === '2014-03-04',
+    'without an accepted fix the onset still carries through unchanged (never silently rewritten)'
+  );
+  const fixed = buildConversionChangeAllergyPayload(prefill, sub, [], '1993-01-24');
+  check(fixed.onsetDate === '1993-01-24', 'accepted fix: conversion posts onset = record date');
+  check(fixed.recordDate === '1993-01-24', 'accepted fix: record date itself is untouched');
+  check(
+    buildCleanTextChangeAllergyPayload(prefill, 'y', '1993-01-24').onsetDate === '1993-01-24',
+    'accepted fix also applies to the clean-text save'
+  );
+  check(
+    buildCleanTextChangeAllergyPayload(prefill, 'y').onsetDate === '2014-03-04',
+    'clean-text without an accepted fix leaves onset unchanged'
+  );
+}
+
+console.log('--- onset fix: shared status (merge / clear-legacy / conversion) ---');
+{
+  const st = onsetFixStatus('2014-03-04', '1993-01-24', null);
+  check(st.conflict && st.pending && !st.accepted, 'conflict with nothing accepted -> pending');
+  check(st.override === undefined, 'no override until accepted');
+  check(st.onset === '2014-03-04' && st.record === '1993-01-24', 'reports the ISO onset/record');
+  const ok = onsetFixStatus('2014-03-04', '1993-01-24', st.key);
+  check(ok.accepted && !ok.pending && ok.override === '1993-01-24', 'accepting THIS pair -> override = record date');
+  const other = onsetFixStatus('2015-05-05', '1993-01-24', st.key);
+  check(other.pending && !other.accepted, 'an acceptance does not carry over to a DIFFERENT onset/record pair');
+  const overview = onsetFixStatus('4 Mar 2014', '24 Jan 1993', null);
+  check(overview.conflict && overview.onset === '2014-03-04', 'overview display-format dates are normalised');
+  check(onsetFixStatus('1993-01-24', '2014-03-04', null).conflict === false, 'no conflict -> nothing to accept');
+  check(onsetFixStatus(null, '2014-03-04', null).pending === false, 'missing onset -> not pending');
+}
+
+console.log('--- onset fix: clear-legacy batch plan + payload ---');
+{
+  const prefills = [
+    { onsetDate: '2014-03-04', recordDate: '1993-01-24' },
+    null,
+    { onsetDate: '1990-01-01', recordDate: '1993-01-24' },
+    { onsetDate: null, recordDate: '1993-01-24' },
+  ];
+  const plan = planClearLegacyOnsetFixes(prefills);
+  check(plan.length === 1 && plan[0].index === 0, 'only the conflicting entry is planned (failed fetch / clean / no-onset skipped)');
+  check(plan[0].onset === '2014-03-04' && plan[0].record === '1993-01-24', 'plan carries onset + record for the prompt');
+  check(planClearLegacyOnsetFixes(null).length === 0, 'non-array input -> empty plan');
+
+  const prefill = {
+    allergyCodeType: 'substances',
+    substance: null,
+    onsetDate: '2014-03-04',
+    recordDate: '1993-01-24',
+    allergyReactions: [],
+  };
+  check(buildClearLegacyCodePayload(prefill).onsetDate === '2014-03-04', 'clear-legacy without approval leaves onset unchanged');
+  check(
+    buildClearLegacyCodePayload(prefill, '1993-01-24').onsetDate === '1993-01-24',
+    'clear-legacy with an approved fix posts onset = record date'
+  );
+}
+
+console.log('--- onset fix: merge payload ---');
+{
+  const prefill = { allergyCodeType: 'substances', onsetDate: '2014-03-04', recordDate: '1993-01-24' };
+  check(
+    buildMergeChangeAllergyPayload(prefill, { onsetDate: '1993-01-24' }).onsetDate === '1993-01-24',
+    'merge posts the accepted override as the chosen onset'
+  );
+  check(
+    buildMergeChangeAllergyPayload(prefill, {}).recordDate === '1993-01-24',
+    'merge never alters the record date'
   );
 }
 

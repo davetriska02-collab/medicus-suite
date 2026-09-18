@@ -102,6 +102,19 @@ try {
   console.warn('[Suite] importScripts shared/io/allocation-groups-io.js failed:', e && e.message);
 }
 try {
+  importScripts('shared/lab-filing-utils.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/lab-filing-utils.js failed:', e && e.message);
+}
+try {
+  // Dependency order matters: labfiling-io.js resolves LabFilingUtils at
+  // import time, so lab-filing-utils.js must be imported first (same class
+  // of ordering requirement as preferred-descriptions.js below).
+  importScripts('shared/io/labfiling-io.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/io/labfiling-io.js failed:', e && e.message);
+}
+try {
   importScripts('shared/io/suite-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);

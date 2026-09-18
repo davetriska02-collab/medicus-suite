@@ -365,6 +365,72 @@
     );
   }
 
+  // ── Patient name edits (hub patient only — see ContactRelationships.checkPatientNameQuality) ──
+  // Four confirmed via one HAR session, 2026-09-16 (125-editpreferredname.har through
+  // 128-deleteformername.har): preferred name, official (given/middle/family) name, and former
+  // names each have their own GET-prefill / POST-save pair, same "getEditX before changeX" shape
+  // as telephone numbers above. All four responses are just `{}` on success.
+
+  // GET -> { patientId, preferredGivenName }
+  function getEditPreferredName(apiBase, patientId) {
+    return apiFetch(apiBase, `/patient/data/name/edit-preferred-name/${encodeURIComponent(patientId)}`);
+  }
+
+  // body: { patientId, preferredGivenName }. Confirmed live changing between two non-empty values
+  // (Test -> Dave) — NOT confirmed whether an empty string/null clears the preferred name outright
+  // rather than being rejected; a caller wanting to CLEAR it should treat a failure here as
+  // possible and surface it, not assume success.
+  function changePreferredName(apiBase, body) {
+    return postJson(apiBase, '/patient/name/change-preferred-name', body);
+  }
+
+  // GET -> { patientId, prefix, givenName, middleNames, familyName, suffix }. This is the ONLY
+  // confirmed source of the given/middle name split — patient-details' own fullOfficialName is one
+  // combined display string ("Ms Test Test") with no field boundaries, confirmed by comparing this
+  // response ({givenName:"Test", middleNames:""}) against that same patient's fullOfficialName.
+  function getEditOfficialName(apiBase, patientId) {
+    return apiFetch(apiBase, `/patient/data/name/edit-official-name/${encodeURIComponent(patientId)}`);
+  }
+
+  // body: { patientId, prefix, givenName, middleNames, familyName, suffix }. Full replace — a
+  // caller changing only middleNames must still pass prefix/givenName/familyName/suffix back
+  // unchanged from the GET above, same discipline as changeAddress/changePatientContact.
+  function changeOfficialName(apiBase, body) {
+    return postJson(apiBase, '/patient/name/change-official-name', body);
+  }
+
+  // GET -> { patientId, displayName, formerNameTypes: [{value,label}, ...] }. Confirmed enum:
+  // maiden, bachelor, previous, birth ("Name at birth") — no type specific to "hospital
+  // birth-registration placeholder that keeps overwriting the real name"; when offering to record
+  // the placeholder being replaced, "previous" is the closest fit, not an exact one.
+  function getCreateFormerName(apiBase, patientId) {
+    return apiFetch(apiBase, `/patient/data/name/create-former-name/${encodeURIComponent(patientId)}`);
+  }
+
+  // body: { patientId, prefix, givenName, middleNames, familyName, suffix, formerNameType }.
+  // formerNameType is the lowercase `value` from getCreateFormerName's formerNameTypes, not the
+  // label. Response former-names entries only ever carry the reconstructed single `name` string
+  // (patient-details' formerNames[].name) — the separated fields used to create the entry are not
+  // readable back except via getEditFormerName below, per-entry.
+  function createFormerName(apiBase, body) {
+    return postJson(apiBase, '/patient/name/create-former-name', body);
+  }
+
+  // GET -> { patientFormerNameId, prefix, givenName, middleNames, familyName, suffix,
+  // formerNameType, formerNameTypes, patientId }. The separated-field read for ONE existing former
+  // name (nameId from patient-details' formerNames[].nameId) — used to pull real given/middle/
+  // family values before offering to adopt a former name as the current official name, rather than
+  // trying to re-split formerNames[].name (a single reconstructed string) ourselves.
+  function getEditFormerName(apiBase, nameId) {
+    return apiFetch(apiBase, `/patient/data/name/edit-former-name/${encodeURIComponent(nameId)}`);
+  }
+
+  // body: { id }. Confirmed live (128-deleteformername.har) — no patientId needed, same
+  // id-in-body shape as deleteAddress/deleteTelephoneNumber use id-in-URL for. Response just `{}`.
+  function deleteFormerName(apiBase, nameId) {
+    return postJson(apiBase, '/patient/name/delete-former-name', { id: nameId });
+  }
+
   // Confirmed via HAR capture 2026-08-20 (deleting a duplicate email address) — same shape as
   // deleteAddress/deleteTelephoneNumber: POST, no request body, id in the URL only, response body
   // just `{}`. The prefill/read side (getEditTelephoneNumber's equivalent) would be
@@ -760,6 +826,14 @@
     changeTelephoneNumber,
     deleteTelephoneNumber,
     deleteEmailAddress,
+    getEditPreferredName,
+    changePreferredName,
+    getEditOfficialName,
+    changeOfficialName,
+    getCreateFormerName,
+    createFormerName,
+    getEditFormerName,
+    deleteFormerName,
     getEditPatientContact,
     changePatientContact,
     findReverseManualMatch,

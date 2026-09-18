@@ -49,6 +49,7 @@ function baseData(age, dob) {
 
 // Fetch rules from file.
 const fluRule = vaxRules.rules.find((r) => r.id === 'vax-flu');
+const covidRule = vaxRules.rules.find((r) => r.id === 'vax-covid');
 const ppv23Rule = vaxRules.rules.find((r) => r.id === 'vax-pneumo-ppv23');
 const shinglesRule = vaxRules.rules.find((r) => r.id === 'vax-shingles');
 const rsvRule = vaxRules.rules.find((r) => r.id === 'vax-rsv');
@@ -57,6 +58,12 @@ const shinglesImmunoRule = vaxRules.rules.find((r) => r.id === 'vax-shingles-imm
 
 // ── Rule presence checks ───────────────────────────────────────────────────────
 console.log('\n--- rule presence ---');
+assert(!!covidRule, 'vax-covid rule found');
+assert(covidRule?.enabled === true, 'vax-covid enabled');
+assert(
+  covidRule?.season?.startMonth === 9 && covidRule?.season?.startDay === 1,
+  `vax-covid season opens 1 Sep (got startMonth=${covidRule?.season?.startMonth} startDay=${covidRule?.season?.startDay})`
+);
 assert(!!ppv23Rule, 'vax-pneumo-ppv23 rule found');
 assert(!!shinglesRule, 'vax-shingles rule found');
 assert(!!rsvRule, 'vax-rsv rule found');
@@ -303,6 +310,23 @@ console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
   assert(chips.length === 0, 'RSV: age 64 + COPD → no chip');
 }
 
+// Age 68 + interstitial lung fibrosis / pneumoconiosis / BPD → eligible (vax-006)
+{
+  const data = { ...baseData(68), problems: [{ label: 'Interstitial lung fibrosis', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + interstitial lung fibrosis → chip');
+}
+{
+  const data = { ...baseData(68), problems: [{ label: 'Pneumoconiosis', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + pneumoconiosis → chip');
+}
+{
+  const data = { ...baseData(68), problems: [{ label: 'Bronchopulmonary dysplasia', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + bronchopulmonary dysplasia → chip');
+}
+
 // Age 70 + lymphoma → immunosuppression problem
 {
   const data = { ...baseData(70), problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] };
@@ -406,6 +430,161 @@ assert(!!dmRegRule, 'DM register rule found in qof-rules.json (register clause d
   const data = { ...baseData(40), medications: [{ name: 'Tacrolimus 5mg/1ml concentrate for solution for infusion' }] };
   const chips = engine.evaluateVaccineRule(pneumoRiskRule, data, NOW);
   assert(chips.length === 1, 'pneumo-risk: age 40 + IV tacrolimus infusion → chip (still systemic immunosuppression)');
+}
+
+// ── Local-route steroid / immuno excludes (otic dexamethasone false-positive) ─
+// #351 excluded ointment/cream/protopic (topical tacrolimus) but left otic,
+// ophthalmic, inhaled and other local-route markers unmatched. Age 31 +
+// Ciprofloxacin + Dexamethasone ear drops was firing flu + pneumo-risk immuno
+// chips. Bare "gel" is intentionally omitted (would substring-match "gelatin"
+// capsules); "eye gel" covers ophthalmic gels. Bare "drops" is omitted so
+// oral dexamethasone drops still fire.
+console.log('\n--- local-route immuno excludes (otic dexamethasone, #351 follow-up) ---');
+
+const LOCAL_ROUTE_EXCLUDES = [
+  'ointment',
+  'cream',
+  'protopic',
+  'ear drop',
+  'ear drops',
+  'eardrop',
+  'eardrops',
+  'otic',
+  'eye drop',
+  'eye drops',
+  'eyedrop',
+  'eyedrops',
+  'eye gel',
+  'ophthalm',
+  'intravitreal',
+  'nasal',
+  'inhal',
+  'nebul',
+  'cutaneous',
+  'topical',
+  'shampoo',
+  'lotion',
+  'foam',
+  'spray',
+];
+const FLU_IN_CAMPAIGN = '2025-10-15';
+
+function immunoMedicationClauses() {
+  return vaxRules.rules.flatMap((r) =>
+    (r.eligibility?.anyOf || [])
+      .filter((c) => c.kind === 'medication')
+      .map((c) => ({ ruleId: r.id, clause: c }))
+  );
+}
+
+{
+  const immunoClauses = immunoMedicationClauses().filter(({ clause }) =>
+    (clause.match || []).some((t) =>
+      ['prednisolone', 'dexamethasone', 'tacrolimus'].includes(String(t).toLowerCase())
+    )
+  );
+  assert(immunoClauses.length >= 5, `found ${immunoClauses.length} vaccine immuno medication clauses (flu/covid/pneumo/shingles/rsv)`);
+  immunoClauses.forEach(({ ruleId, clause }) => {
+    const missing = LOCAL_ROUTE_EXCLUDES.filter((t) => !(clause.exclude || []).includes(t));
+    assert(
+      missing.length === 0,
+      `${ruleId} "${clause.label}" exclude lists local-route markers (missing: ${missing.join(', ') || 'none'})`
+    );
+    assert(
+      (clause.match || []).some((t) => String(t).toLowerCase() === 'tacrolimus') ||
+        (clause.match || []).some((t) => ['prednisolone', 'dexamethasone'].includes(String(t).toLowerCase())),
+      `${ruleId}: match list still includes an immuno steroid / tacrolimus stem`
+    );
+  });
+}
+
+{
+  const fluDex = (fluRule.eligibility.anyOf || []).find((c) => c.label === 'Immunosuppressive medication');
+  const pneumoDex = (pneumoRiskRule.eligibility.anyOf || []).find((c) =>
+    /immunosuppressive medication/i.test(c.label || '')
+  );
+  assert(
+    (fluDex?.match || []).includes('dexamethasone') && (fluDex?.match || []).includes('prednisolone'),
+    'vax-flu still matches dexamethasone / prednisolone (systemic stems kept)'
+  );
+  assert(
+    (pneumoDex?.match || []).includes('dexamethasone') && (pneumoDex?.match || []).includes('prednisolone'),
+    'vax-pneumo-risk-u65 still matches dexamethasone / prednisolone (systemic stems kept)'
+  );
+}
+
+function chipsForMed(rule, age, medName, now) {
+  const data = { ...baseData(age), medications: [{ name: medName }] };
+  return engine.evaluateVaccineRule(rule, data, now);
+}
+
+// Field report: age 31 + Ciprofloxacin + Dexamethasone ear drops (prescribed elsewhere).
+{
+  const flu = chipsForMed(fluRule, 31, 'Ciprofloxacin + Dexamethasone ear drops', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Ciprofloxacin + Dexamethasone ear drops', NOW);
+  assert(flu.length === 0, 'flu: age 31 + Ciprofloxacin + Dexamethasone ear drops → NO chip');
+  assert(pneumo.length === 0, 'pneumo-risk: age 31 + Ciprofloxacin + Dexamethasone ear drops → NO chip');
+}
+{
+  const flu = chipsForMed(fluRule, 31, 'Dexamethasone 0.1% ear drops', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 0.1% ear drops', NOW);
+  assert(flu.length === 0, 'flu: age 31 + Dexamethasone 0.1% ear drops → NO chip');
+  assert(pneumo.length === 0, 'pneumo-risk: age 31 + Dexamethasone 0.1% ear drops → NO chip');
+}
+
+// Systemic oral/IV must still fire.
+{
+  const flu = chipsForMed(fluRule, 31, 'Dexamethasone 2mg tablets', FLU_IN_CAMPAIGN);
+  assert(flu.length === 1, 'flu: age 31 + Dexamethasone 2mg tablets → chip');
+  assert(flu[0]?.status === 'vax_due', 'flu: age 31 + Dexamethasone 2mg tablets → vax_due');
+  assert(
+    /immunosuppressive medication/i.test(flu[0]?.eligibilityReason || ''),
+    `flu: dexamethasone tablets fire via immuno clause (got: ${flu[0]?.eligibilityReason})`
+  );
+}
+{
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 2mg tablets', NOW);
+  assert(pneumo.length === 1, 'pneumo-risk: age 31 + Dexamethasone 2mg tablets → chip');
+  assert(
+    /immunosuppressive medication/i.test(pneumo[0]?.eligibilityReason || ''),
+    `pneumo-risk: dexamethasone tablets fire via immuno clause (got: ${pneumo[0]?.eligibilityReason})`
+  );
+}
+{
+  const flu = chipsForMed(fluRule, 40, 'Prednisolone 5mg tablets', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 40, 'Prednisolone 5mg tablets', NOW);
+  assert(flu.length === 1, 'flu: age 40 + Prednisolone 5mg tablets → chip');
+  assert(pneumo.length === 1, 'pneumo-risk: age 40 + Prednisolone 5mg tablets → chip');
+}
+{
+  const flu = chipsForMed(fluRule, 31, 'Dexamethasone 2mg/5ml oral solution', FLU_IN_CAMPAIGN);
+  const pneumo = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 3.3mg/1ml solution for infusion', NOW);
+  assert(flu.length === 1, 'flu: age 31 + dexamethasone oral solution → chip (systemic)');
+  assert(pneumo.length === 1, 'pneumo-risk: age 31 + dexamethasone infusion → chip (systemic)');
+}
+
+// #351 topical tacrolimus regression — still excluded on flu as well as pneumo.
+{
+  const fluOintment = chipsForMed(fluRule, 40, 'Tacrolimus 0.1% ointment', FLU_IN_CAMPAIGN);
+  const fluCream = chipsForMed(fluRule, 40, 'Tacrolimus 0.1% cream', FLU_IN_CAMPAIGN);
+  const fluProtopic = chipsForMed(fluRule, 40, 'Protopic 0.03% ointment', FLU_IN_CAMPAIGN);
+  assert(fluOintment.length === 0, 'flu: age 40 + topical tacrolimus ointment → NO chip (#351)');
+  assert(fluCream.length === 0, 'flu: age 40 + tacrolimus cream special → NO chip (#351)');
+  assert(fluProtopic.length === 0, 'flu: age 40 + Protopic ointment → NO chip (#351)');
+}
+
+// Optional local-route variants: eye drops / inhaler / nasal spray.
+{
+  const fluEye = chipsForMed(fluRule, 31, 'Dexamethasone 0.1% eye drops', FLU_IN_CAMPAIGN);
+  const pneumoEye = chipsForMed(pneumoRiskRule, 31, 'Dexamethasone 0.1% eye drops', NOW);
+  const fluInhaler = chipsForMed(fluRule, 40, 'Prednisolone 5mg inhaler', FLU_IN_CAMPAIGN);
+  const pneumoInhaler = chipsForMed(pneumoRiskRule, 40, 'Prednisolone 5mg inhaler', NOW);
+  const fluNasal = chipsForMed(fluRule, 31, 'Dexamethasone 0.11% nasal spray', FLU_IN_CAMPAIGN);
+  assert(fluEye.length === 0, 'flu: age 31 + Dexamethasone 0.1% eye drops → NO chip');
+  assert(pneumoEye.length === 0, 'pneumo-risk: age 31 + Dexamethasone 0.1% eye drops → NO chip');
+  assert(fluInhaler.length === 0, 'flu: age 40 + Prednisolone inhaler → NO chip');
+  assert(pneumoInhaler.length === 0, 'pneumo-risk: age 40 + Prednisolone inhaler → NO chip');
+  assert(fluNasal.length === 0, 'flu: age 31 + Dexamethasone nasal spray → NO chip');
 }
 
 // Infant PCV13 record must NOT suppress a 40-year-old asplenic's due status
@@ -597,6 +776,84 @@ console.log('\n--- flu carer eligibility ---');
     };
     const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
     assert(chips.length === 0, 'flu carer: inactive problem is skipped even with matching code + label');
+  }
+}
+
+// ── COVID autumn 2026/27 early open (1 Sep, not 1 Oct) ──────────────────────
+// Opening startMonth/startDay to 1 Sep means 14 Sep 2026 evaluates the 2026/27
+// window (2026-09-01 → 2027-03-31), not the expired 2025/26 window. Eligibility
+// is unchanged. Summer out-of-campaign suppress remains.
+console.log('\n--- COVID 2026/27 early-open (vax-covid from 1 Sep) ---');
+{
+  const SEP14 = '2026-09-14';
+  const JUN15 = '2026-06-15';
+  const OCT15 = '2026-10-15';
+
+  assert(
+    /alerting opens 1 Sep/i.test(covidRule.notes || ''),
+    'vax-covid notes say autumn 2026/27 alerting opens 1 Sep'
+  );
+
+  // 1. 14 Sep 2026, age 75+, no COVID given → vax_due (must fire)
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(75), SEP14);
+    assert(chips.length === 1, 'COVID: 2026-09-14 age 75+ no given → chip');
+    assert(chips[0]?.status === 'vax_due', `COVID: 2026-09-14 age 75+ → vax_due (got: ${chips[0]?.status})`);
+    assert(
+      chips[0]?.seasonStartIso === '2026-09-01',
+      `COVID: 2026-09-14 seasonStartIso is 2026-09-01 not 2025-10-01 (got: ${chips[0]?.seasonStartIso})`
+    );
+    assert(chips[0]?.seasonLabel === '2026/27', `COVID: 2026-09-14 seasonLabel 2026/27 (got: ${chips[0]?.seasonLabel})`);
+    assert(chips[0]?.eligibilityReason === 'Age 75+', `COVID: 2026-09-14 eligibility is Age 75+ (got: ${chips[0]?.eligibilityReason})`);
+  }
+
+  // 2. 14 Sep 2026, age 40, not immuno/care home → no chip
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(40), SEP14);
+    assert(chips.length === 0, 'COVID: 2026-09-14 age 40 not immuno/care-home → no chip');
+  }
+
+  // 3. 14 Sep 2026, age 75+, COVID given 2025-11-01 → still vax_due
+  //    (last season does not satisfy 2026/27)
+  {
+    const data = {
+      ...baseData(75),
+      problems: [{ label: 'COVID-19 vaccination given', codedDate: '2025-11-01', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(covidRule, data, SEP14);
+    assert(chips.length === 1, 'COVID: 2026-09-14 age 75+ given 2025-11-01 → chip');
+    assert(
+      chips[0]?.status === 'vax_due',
+      `COVID: last-season 2025-11-01 jab does not satisfy 2026/27 → vax_due (got: ${chips[0]?.status})`
+    );
+  }
+
+  // 4. 14 Sep 2026, age 75+, COVID given 2026-09-05 → vax_given
+  {
+    const data = {
+      ...baseData(75),
+      problems: [{ label: 'COVID-19 vaccination given', codedDate: '2026-09-05', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(covidRule, data, SEP14);
+    assert(chips.length === 1, 'COVID: 2026-09-14 age 75+ given 2026-09-05 → chip');
+    assert(chips[0]?.status === 'vax_given', `COVID: given 2026-09-05 in 2026/27 window → vax_given (got: ${chips[0]?.status})`);
+  }
+
+  // 5. 15 Jun 2026, age 75+ → still out-of-campaign / no chip
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(75), JUN15);
+    assert(chips.length === 0, 'COVID: 2026-06-15 age 75+ → no chip (summer suppress remains)');
+  }
+
+  // 6. 15 Oct 2026, age 75+ → still vax_due as before
+  {
+    const chips = engine.evaluateVaccineRule(covidRule, baseData(75), OCT15);
+    assert(chips.length === 1, 'COVID: 2026-10-15 age 75+ no given → chip');
+    assert(chips[0]?.status === 'vax_due', `COVID: 2026-10-15 age 75+ → vax_due (got: ${chips[0]?.status})`);
+    assert(
+      chips[0]?.seasonStartIso === '2026-09-01',
+      `COVID: 2026-10-15 still uses 2026-09-01 window (got: ${chips[0]?.seasonStartIso})`
+    );
   }
 }
 

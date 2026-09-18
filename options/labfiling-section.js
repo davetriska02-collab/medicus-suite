@@ -277,13 +277,25 @@ function renderCard(p) {
     guards.push(`${p.excludeIfMeds.length} drug exclusion${p.excludeIfMeds.length === 1 ? '' : 's'}`);
   if (Array.isArray(p.suppressIfText) && p.suppressIfText.length)
     guards.push(`${p.suppressIfText.length} text rule${p.suppressIfText.length === 1 ? '' : 's'}`);
+  if (Array.isArray(p.allowComments) && p.allowComments.length)
+    guards.push(`${p.allowComments.length} allowed comment${p.allowComments.length === 1 ? '' : 's'}`);
   if (p.requireRangeForAll) guards.push('range required for all');
   if (p.paramsOverrideLabFlags) guards.push('my ranges override lab flags');
+  // A profile that's reviewed-but-off needs one human click to start firing —
+  // easy to miss on a profile that just arrived via a practice-profile sync
+  // (always disabled on arrival, see shared/io/practice-profile.js). Make
+  // that click impossible to overlook rather than a quiet toggle someone has
+  // to notice is there.
+  const enableCta =
+    !p.enabled && canEnable
+      ? `<span class="lf-enable-cta">Click here to enable this profile &rarr;</span>`
+      : '';
   return `
     <div class="lf-card${p.enabled ? ' lf-card-on' : ''}">
       <div class="lf-card-top">
         <div class="lf-card-name">${esc(p.name)}</div>
         <label class="lf-toggle${canEnable ? '' : ' lf-toggle-locked'}" title="${canEnable ? 'Enable / disable this profile' : 'Review the profile and acknowledge the notice before enabling'}">
+          ${enableCta}
           <input type="checkbox" data-act="toggle-enabled" data-id="${esc(p.id)}" ${p.enabled ? 'checked' : ''} ${canEnable ? '' : 'disabled'}>
           <span>${p.enabled ? 'On' : 'Off'}</span>
         </label>
@@ -292,7 +304,7 @@ function renderCard(p) {
       <div class="lf-card-row"><span class="lf-k">Applies to</span><span class="lf-v">${matchStr}</span></div>
       <div class="lf-card-row"><span class="lf-k">Marks normal as</span><span class="lf-v">${esc(p.filing && p.filing.normalOptionText)} → ${esc(p.filing && p.filing.fileButtonText)}${p.filing && p.filing.completeButtonText ? ' → ' + esc(p.filing.completeButtonText) : ''}</span></div>
       ${guards.length ? `<div class="lf-card-row"><span class="lf-k">Guards</span><span class="lf-v">${guards.map(esc).join(' · ')}</span></div>` : ''}
-      <div class="lf-card-prov">${updated ? `Last edited ${esc(updated)}` : 'Not yet saved'} · filed ${fired}× on this device</div>
+      <div class="lf-card-prov">${updated ? `Last edited ${esc(updated)}` : 'Not yet saved'}${p.updatedBy ? ` by ${esc(p.updatedBy)}` : ''} · filed ${fired}× on this device</div>
       <div class="lf-card-actions">
         ${p.reviewed ? '' : `<button class="lf-btn lf-btn-sm" data-act="mark-reviewed" data-id="${esc(p.id)}">Mark reviewed</button>`}
         <button class="lf-btn lf-btn-sm" data-act="edit" data-id="${esc(p.id)}">Edit</button>
@@ -370,6 +382,9 @@ function renderForm() {
         <label class="lf-field"><span>Don’t offer if the result text contains any of these phrases (comma-separated)</span>
           <input id="lfSuppressText" class="lf-input" value="${v((p.suppressIfText || []).join(', '))}" placeholder="telephone result, call patient, discuss with GP">
           <small class="lf-help">Use when a contact may have been promised on the report.</small></label>
+        <label class="lf-field"><span>Performer comments to treat as benign for THIS profile (leave a blank line between entries)</span>
+          <textarea id="lfAllowComments" class="lf-input" rows="4" placeholder="insufficient historical creatinine data to assess AKI risk&#10;&#10;consistent with category G1 - Normal eGFR">${v((p.allowComments || []).join('\n\n'))}</textarea>
+          <small class="lf-help">A result normally can’t auto-file if it carries any comment — an entry here excuses one that always appears on this lab’s reports (e.g. a fixed NICE-guidance note on eGFR). Paste the comment as it appears, even across several wrapped lines — only a genuinely <strong>blank</strong> line starts a new entry, so a pasted comment’s own line-wraps and commas are kept intact. Prefer the “Whitelist this comment” checkbox on the report itself when you can — it saves the exact text for you and avoids retyping. Matched as a substring, and only for this profile; every other profile still blocks on it.</small></label>
       </div>
 
       <div class="lf-fieldset">
@@ -659,6 +674,22 @@ function readForm() {
       .split(',')
       .map((x) => x.trim())
       .filter(Boolean);
+  // Blank-line-separated, not comma-separated AND not single-newline-separated:
+  // a real performer comment often contains its own commas (which a comma
+  // split would fragment), AND is often word-wrapped across several single
+  // newlines when copy-pasted straight from the report — a plain '\n' split
+  // shreds one comment into one fragment per wrapped line (found live,
+  // 2026-09-17: a pasted multi-line eGFR comment saved as 8+ separate
+  // allowComments entries, none of which matched the real residue text on
+  // their own). A blank line (an empty line between paragraphs) is the only
+  // thing treated as a boundary between two DIFFERENT phrases; single
+  // newlines within one pasted block collapse to a space, same as the report
+  // text itself does once through numericCommentResidue's own whitespace fold.
+  const splitLines = (s) =>
+    s
+      .split(/\n\s*\n+/)
+      .map((block) => block.replace(/\s+/g, ' ').trim())
+      .filter(Boolean);
   const modeEl = container.querySelector('input[name="lfMode"]:checked');
   const trendRaw = get('lfTrend');
   return {
@@ -671,6 +702,7 @@ function readForm() {
     trend: { maxDeltaPct: trendRaw === '' ? null : trendRaw },
     excludeIfMeds: splitList(get('lfExMeds')),
     suppressIfText: splitList(get('lfSuppressText')),
+    allowComments: splitLines(get('lfAllowComments')),
     filing: {
       normalOptionText: get('lfNormalOpt'),
       nextStepText: get('lfNextStep'),
@@ -738,6 +770,7 @@ function fillFromLlm() {
   );
   set('lfExMeds', (clean.excludeIfMeds || []).join(', '));
   set('lfSuppressText', (clean.suppressIfText || []).join(', '));
+  set('lfAllowComments', (clean.allowComments || []).join('\n\n'));
   // Rebuild the parameter rows from the parsed profile.
   const paramsBox = container.querySelector('#lfParams');
   if (paramsBox) {
@@ -777,6 +810,17 @@ async function saveForm() {
 
   const existing = editingProfile();
   const clean = LF.sanitiseProfile(draft);
+
+  // Who saved this content and when — shown on the card so a colleague can see
+  // whose policy they're trusting without opening Edit. Same identity source as
+  // the Practice Profile publisher field (Options → Suite backup).
+  clean.updatedAt = new Date().toISOString();
+  try {
+    const r = await chrome.storage.local.get('suite.feedbackEmail');
+    clean.updatedBy = r['suite.feedbackEmail'] || '';
+  } catch (_) {
+    clean.updatedBy = existing ? existing.updatedBy || '' : '';
+  }
 
   // Provenance + review state: editing preserves reviewed unless content is from
   // an LLM this session; a new/LLM-sourced profile arrives unreviewed & disabled.

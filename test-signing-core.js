@@ -48,6 +48,23 @@ const path = require('path');
     QOF_REVIEW_CODES,
     QOF_REVIEW_RED_STATUSES,
     QOF_REVIEW_AMBER_STATUSES,
+    isRxSigningSlug,
+    sameAssigneeId,
+    masterAssigneeIdFromSearch,
+    signingScopeFromPageSearch,
+    signingScopeFromTaskListUrl,
+    encodeRxListScopeAttr,
+    parseRxListScopeAttr,
+    normalizeSigningScope,
+    scopesEqual,
+    scopeSig,
+    queryStringForSigningScope,
+    pickAssignedId,
+    rowMatchesAssigneeScope,
+    visibleSigningRows,
+    applySigningFetchResult,
+    signingScopeClearsPayload,
+    PRACTICE_SIGNING_SCOPE,
   } = await import(corePath);
 
   // ── monitoringVerdict ────────────────────────────────────────────────────────
@@ -378,6 +395,132 @@ const path = require('path');
   check(emptyStateKind(0, false, false) === 'narrowed', 'a task type unticked → narrowed (neutral wording)');
   check(emptyStateKind(0, true, true) === 'narrowed', 'location filter active → narrowed');
   check(emptyStateKind(5, true, false) === null, 'rows present → no empty state');
+
+  // ── Book-signing RHS list scope ─────────────────────────────────────────────
+  console.log('\n--- signing list scope (RHS must follow the page list) ---');
+  const DAVE = '0198ef96-6a17-71e4-8354-78de2b371ef3';
+  const NICK = '0198ef96-6a17-71e4-8354-78de2b371ef4';
+  const INBOX = '0198ef96-6a17-71e4-8354-78de2b371ef5';
+
+  check(isRxSigningSlug('prescription_request_task_routine') === true, 'routine slug is a signing list');
+  check(isRxSigningSlug('prescription_request_task_non_routine') === true, 'non-routine slug is a signing list');
+  check(isRxSigningSlug('medical_patient_request_task') === false, 'medical queue is not a signing list');
+  check(sameAssigneeId(DAVE, DAVE.toUpperCase()) === true, 'assignee ids compare case-insensitive');
+  check(sameAssigneeId(DAVE, NICK) === false, 'different signers are not the same list');
+
+  check(
+    masterAssigneeIdFromSearch(
+      `?statuses[]=pending-review&viewContext=workflow&masterAssignee=${DAVE}`
+    ) === DAVE,
+    'masterAssignee read from a live list query'
+  );
+  check(masterAssigneeIdFromSearch('?viewContext=workflow') === '', 'no assignee → no individual list');
+  check(masterAssigneeIdFromSearch('https://evil.example/?masterAssignee=' + DAVE) === '', 'rejects a path-shaped search');
+
+  const leftover = signingScopeFromPageSearch(
+    `?statuses[]=pending-review&viewContext=homepage&masterAssignee=${DAVE}`
+  );
+  check(leftover.mode === 'practice', 'leftover homepage+staff URL is practice — not a silent own-list');
+  const toggled = signingScopeFromPageSearch(`?masterAssignee=${DAVE}`);
+  check(toggled.mode === 'individual' && toggled.assigneeId === DAVE, 'URL without homepage is the own-list toggle');
+  check(signingScopeFromPageSearch('').mode === 'practice', 'empty search is practice-wide');
+
+  const liveOwn = signingScopeFromTaskListUrl(
+    `https://560b6c.api.england.medicus.health/tasks/data/prescription_request_task_routine/task-list?masterAssignee=${DAVE}`
+  );
+  check(liveOwn && liveOwn.mode === 'individual' && liveOwn.assigneeId === DAVE, 'intercepted own-list GET is individual');
+  const livePractice = signingScopeFromTaskListUrl(
+    'https://560b6c.api.england.medicus.health/tasks/data/prescription_request_task_routine/task-list'
+  );
+  check(livePractice && livePractice.mode === 'practice', 'bare intercepted GET is practice-wide');
+  check(
+    signingScopeFromTaskListUrl(
+      'https://560b6c.api.england.medicus.health/tasks/data/medical_patient_request_task/task-list?masterAssignee=' + DAVE
+    ) === null,
+    'non-Rx intercept is ignored — do not steal another queue’s assignee'
+  );
+  check(
+    signingScopeFromTaskListUrl(
+      `https://560b6c.api.england.medicus.health/tasks/data/prescription_request_task_non_routine/task-list?masterAssignee=${NICK}`
+    ).assigneeId === NICK,
+    'non-routine own-list GET scopes to that signer, not Dave'
+  );
+
+  const attr = encodeRxListScopeAttr(liveOwn);
+  check(attr === `individual|${DAVE}|prescription_request_task_routine`, 'stamp encodes mode|id|slug');
+  check(parseRxListScopeAttr(attr).mode === 'individual', 'stamp round-trips to individual');
+  check(parseRxListScopeAttr(attr).assigneeId === DAVE, 'stamp round-trips the signer UUID');
+  check(parseRxListScopeAttr('practice||prescription_request_task_routine').mode === 'practice', 'practice stamp');
+  check(parseRxListScopeAttr('individual|not-a-uuid|x').mode === 'practice', 'junk individual stamp fails closed to practice');
+  check(parseRxListScopeAttr('').mode === 'practice', 'empty stamp is practice');
+  check(normalizeSigningScope({ mode: 'individual' }).mode === 'practice', 'individual without UUID is practice');
+  check(PRACTICE_SIGNING_SCOPE.mode === 'practice', 'frozen practice scope');
+
+  check(queryStringForSigningScope(liveOwn) === `?masterAssignee=${DAVE}`, 'scoped GET reuses masterAssignee only');
+  check(queryStringForSigningScope(livePractice) === '', 'practice GET stays the bare open list');
+  check(
+    !/viewContext=homepage/.test(queryStringForSigningScope(toggled)),
+    'scoped GET never carries leftover homepage'
+  );
+
+  const daveRow = { assignedId: DAVE, assignedTo: 'Dr Dave Triska', collectionLocation: 'Dispensary' };
+  const nickRow = { assignedId: NICK, assignedTo: 'Dr Nick', collectionLocation: '' };
+  const noIdRow = { assignedTo: 'Dr Dave Triska', collectionLocation: '' };
+  const inboxRow = { assignedId: INBOX, assignedTo: 'Routine Prescription Requests' };
+  check(rowMatchesAssigneeScope(daveRow, liveOwn) === true, 'Dave row matches Dave’s list');
+  check(rowMatchesAssigneeScope(nickRow, liveOwn) === false, 'Nick row does not match Dave’s list');
+  check(rowMatchesAssigneeScope(noIdRow, liveOwn) === false, 'unscoped payload + no id fails closed');
+  check(
+    rowMatchesAssigneeScope(noIdRow, liveOwn, { fetchedScoped: true }) === true,
+    'already-scoped fetch keeps a row even without assignedId'
+  );
+  check(rowMatchesAssigneeScope(inboxRow, livePractice) === true, 'practice scope shows the inbox row');
+  check(rowMatchesAssigneeScope(daveRow, livePractice) === true, 'practice scope shows Dave too');
+
+  const mixed = [daveRow, nickRow, noIdRow];
+  const onlyDave = visibleSigningRows(mixed, { assigneeScope: liveOwn, fetchedScoped: false });
+  check(onlyDave.length === 1 && onlyDave[0].assignedId === DAVE, 'visible rows drop the other signer');
+  const scopedFetchPaint = visibleSigningRows(mixed, { assigneeScope: liveOwn, fetchedScoped: true });
+  check(scopedFetchPaint.length === 3, 'scoped fetch is already the list — do not re-drop by missing ids');
+
+  check(
+    applySigningFetchResult(mixed, livePractice, liveOwn).length === 0,
+    'practice-wide payload landing after own-list toggle is dropped'
+  );
+  check(
+    applySigningFetchResult(mixed, liveOwn, livePractice).length === 0,
+    'own-list payload landing after practice toggle is dropped'
+  );
+  check(
+    applySigningFetchResult([daveRow], liveOwn, liveOwn).length === 1,
+    'matching scope keeps the fetch'
+  );
+  check(applySigningFetchResult(null, liveOwn, liveOwn).length === 0, 'null fetch on own list is honest empty');
+  check(signingScopeClearsPayload(livePractice, liveOwn) === true, 'practice → individual clears leftover payload');
+  check(signingScopeClearsPayload(liveOwn, { mode: 'individual', assigneeId: NICK }) === true, 'Dave → Nick clears');
+  check(signingScopeClearsPayload(liveOwn, liveOwn) === false, 'same signer does not clear');
+  check(scopesEqual(liveOwn, { mode: 'individual', assigneeId: DAVE.toUpperCase() }) === true, 'scope equality ignores case');
+  check(scopeSig(liveOwn) === `individual:${DAVE}`, 'scope sig is mode:id');
+  check(scopeSig(livePractice) === 'practice:', 'practice sig has no id');
+
+  check(pickAssignedId({ assignedId: DAVE }) === DAVE, 'pickAssignedId from assignedId');
+  check(pickAssignedId({ assignedTo: { id: NICK, label: 'Dr Nick' } }) === NICK, 'pickAssignedId from assignedTo object');
+  check(pickAssignedId({ assignedTo: 'Dr Dave' }) === '', 'name-only assignedTo has no id');
+  check(emptyStateKind(0, true, true) === 'narrowed', 'individual empty is narrowed — never the warm practice all-clear');
+
+  console.log('\n--- page-world stamp lock-step with signing-core ---');
+  const pw = require('./content-scripts/triage-lens/page-world.js');
+  const liveUrl = `https://560b6c.api.england.medicus.health/tasks/data/prescription_request_task_routine/task-list?masterAssignee=${DAVE}`;
+  const pwScope = pw.rxListScopeFromTaskListUrl(liveUrl);
+  const coreScope = signingScopeFromTaskListUrl(liveUrl);
+  check(pwScope && coreScope && pwScope.mode === coreScope.mode && pwScope.assigneeId === coreScope.assigneeId, 'intercept parse matches core');
+  check(
+    pw.encodeRxListScopeAttr(pwScope) === encodeRxListScopeAttr(coreScope),
+    'stamp encoding matches so the RHS reads what page-world wrote'
+  );
+  check(pw.parseRxListScopeAttr(pw.encodeRxListScopeAttr(pwScope)).assigneeId === DAVE, 'page-world stamp round-trips');
+  check(pw.isRxSigningSlug('prescription_request_task_routine') === true, 'page-world signing slug helper');
+  check(pw.rxListScopeFromTaskListUrl('/tasks/data/admin_patient_request_task/task-list') === null, 'page-world ignores non-Rx');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

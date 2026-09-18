@@ -1046,6 +1046,17 @@
   white-space: nowrap;
 }
 
+/* "Med review overdue" (rxOverdueMedReviewBadgeHtml) — a genuine clinical
+   flag, not routing metadata like the other tokens, so it gets the same
+   amber treatment as every other overdue/warning signal in this file
+   rather than the neutral default. */
+.ms-lac-tile-token-warn {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+  font-weight: 600;
+}
+
 .ms-lac-tile-who {
   flex-basis: 100%;
   font-size: 10.5px;
@@ -1372,6 +1383,50 @@
   margin-top: 10px;
 }
 
+/* Rx usual-GP send is another distribute path, not a featured CTA.
+   Preview is supporting copy; the button sits with Split / Top up /
+   Distribute equally at the quieter (non-primary) weight. */
+#ms-rxac-overlay .ms-lac-nwd-offer {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+#ms-rxac-overlay .ms-lac-nwd-offer strong {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in input {
+  margin-top: 2px;
+}
+
+#ms-rxac-overlay .ms-rxac-send-group {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
 #ms-lac-overlay .ms-lac-daybar {
   display: flex;
   flex-direction: column;
@@ -1468,6 +1523,18 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
+}
+
+#ms-rxac-overlay .ms-rxac-split-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-left: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-split-actions .ms-rxac-split-go {
+  margin-left: 0;
 }
 
 #ms-rxac-overlay .ms-lac-split .ms-lac-confirm-btn,

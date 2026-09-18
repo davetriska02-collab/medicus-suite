@@ -145,6 +145,7 @@ for (const [name, src] of [
 ]) {
   check(!/task-presence\.js/.test(src), `${name} does not load task-presence.js`);
   check(!/ms-tp-chip/.test(src), `${name} does not use occupancy chips`);
+  check(!/ms-tp-token/.test(src), `${name} does not use occupancy tokens`);
   check(!/presenceLook/.test(src), `${name} does not use suite.display.presenceLook`);
   check(!/presence\.enabled/.test(src), `${name} does not read presence.enabled`);
   check(!/['"]rota\.(staff|leave)['"]\s*:/.test(src), `${name} does not write rota.staff / rota.leave`);

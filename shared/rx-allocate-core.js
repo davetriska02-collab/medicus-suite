@@ -4,8 +4,10 @@
 // Sibling of lab-allocate-core / workflow-allocate-core. Same stage →
 // confirm → bulk-reassign write (W23 via LabAllocateCore.createClient) on
 // the non-routine prescription-request task-list. Named GP is a grouping
-// caption, never auto-placement. Even-split among doctors with a session
-// on today’s appointment book is local staging only — it does not write.
+// caption, never auto-placement. Send-to-usual-GP is user-initiated
+// staging of unallocated rows only — opening the canvas does not move
+// anything. Even-split among doctors with a session on today’s
+// appointment book is local staging only — it does not write.
 // This file does not POST — the lab client owns the write.
 //
 // Dual-mode: module.exports for Node tests, window.RxAllocateCore in the
@@ -32,6 +34,7 @@
   var PRESCRIPTION_SLUG_RE = /prescription/i;
   var EXCLUDE_SLUG_RE = /eps|cancellation|privacy|officer/i;
   var ROUTINE_ONLY_SLUG_RE = /prescription_request_task_routine|prescription-request-task-routine/i;
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var NOT_A_DOCTOR_RE =
     /\b(nurse|nursing|hca|phlebotom|reception|secretar|dispenser|pharmacist|paramedic|hcs\s?w|healthcare assistant|health care assistant)\b/i;
   var DOCTOR_HINT_RE = /\b(dr|doctor|gp|partner|locum|salaried|registrar|consultant|gpst)\b/i;
@@ -110,7 +113,121 @@
       try {
         v = decodeURIComponent(v);
       } catch (_) {}
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return v;
+      if (UUID_RE.test(v)) return v;
+    }
+    return '';
+  }
+
+  function sameStaffId(a, b) {
+    var left = String(a || '').toLowerCase();
+    var right = String(b || '').toLowerCase();
+    return !!(left && right && UUID_RE.test(left) && UUID_RE.test(right) && left === right);
+  }
+
+  function dropQueryKeys(search, keys) {
+    var qs = queryStringForRxList(search);
+    if (!qs) return '';
+    var drop = {};
+    (Array.isArray(keys) ? keys : []).forEach(function (k) {
+      if (k) drop[String(k).toLowerCase()] = true;
+    });
+    var kept = qs
+      .replace(/^\?/, '')
+      .split('&')
+      .filter(function (part) {
+        if (!part) return false;
+        var k = part.split('=')[0];
+        try {
+          k = decodeURIComponent(k);
+        } catch (_) {}
+        return !drop[String(k).toLowerCase()];
+      });
+    return kept.length ? '?' + kept.join('&') : '';
+  }
+
+  // Page location.search is the routine inbox box when masterAssignee is
+  // that box's UUID. The same query is a personal homepage slice when the
+  // UUID is the signed-in staff stamp (#413 class) — that GET is [] or a
+  // couple of "mine" rows while the Medicus grid still shows the shared
+  // pile. Walk widest-after-untrusted: skip the staff-stamp assignee, then
+  // drop homepage, then the captured statuses, then bare GET (Signing's
+  // open list). First non-empty wins.
+  function rxListQueryPlan(search, opts) {
+    var pageQs = queryStringForRxList(search);
+    var staffId = opts && opts.staffId ? String(opts.staffId) : '';
+    var pageAssignee = inboxAssigneeId(pageQs);
+    var assigneeIsStaff = sameStaffId(pageAssignee, staffId);
+    var seen = {};
+    var plan = [];
+    function add(qs) {
+      var q = qs == null || qs === '' ? '' : queryStringForRxList(qs);
+      if (Object.prototype.hasOwnProperty.call(seen, q)) return;
+      seen[q] = true;
+      plan.push(q);
+    }
+    if (pageQs && !assigneeIsStaff) add(pageQs);
+    if (pageQs) add(dropQueryKeys(pageQs, ['masterAssignee']));
+    if (pageQs) add(dropQueryKeys(pageQs, ['masterAssignee', 'viewContext']));
+    add('?statuses[]=pending-review');
+    add('?statuses[]=pending');
+    add('');
+    if (pageQs && assigneeIsStaff) add(pageQs);
+    return plan;
+  }
+
+  // Bridged ch-task-list-data is untrusted. Count / id-hint only — never
+  // treat the rows as write targets. Used when the page GET is empty so
+  // we can name "grid has work, Suite does not" and stamp already-fetched
+  // rows that the visible table included.
+  function inboxCountFromTaskListBridge(detail, expectedSlug) {
+    if (!detail || typeof detail !== 'object') return 0;
+    if (!Array.isArray(detail.rows)) return 0;
+    var slug = String(detail.taskTypeSlug || '').trim();
+    if (!slug || !isRxQueueSlug(slug)) return 0;
+    if (expectedSlug && slug !== String(expectedSlug)) return 0;
+    var n = detail.rows.length;
+    if (!isFinite(n) || n < 0) return 0;
+    return Math.floor(n);
+  }
+
+  function visiblePileIdsFromTaskListBridge(detail, expectedSlug) {
+    var out = {};
+    if (!inboxCountFromTaskListBridge(detail, expectedSlug)) return out;
+    detail.rows.forEach(function (row) {
+      var id = row && (row.taskUuid || row.id);
+      if (typeof id === 'string' && UUID_RE.test(id)) out[id.toLowerCase()] = true;
+    });
+    return out;
+  }
+
+  function rxEmptyPileReason(opts) {
+    opts = opts || {};
+    var rows = Number(opts.rowCount) || 0;
+    var pile = Number(opts.unallocatedCount) || 0;
+    var dests = Number(opts.destCount) || 0;
+    var bridge = Number(opts.bridgeCount) || 0;
+    var day = opts.dayPhrase || 'that day';
+    if (dests <= 0 && pile > 0) {
+      return (
+        'No doctors working ' +
+        day +
+        ' to share onto. The pile is still there — pick another working day, a group, or add a doctor.'
+      );
+    }
+    if (rows <= 0 && bridge > 0) {
+      return (
+        'The Medicus table has ' +
+        bridge +
+        ' row' +
+        (bridge === 1 ? '' : 's') +
+        '. Suite’s list is empty — the page filter is not this inbox.'
+      );
+    }
+    if (rows <= 0) {
+      return 'No open requests on this queue. If the grid still shows rows, reload the list, then open again.';
+    }
+    if (pile <= 0) {
+      return 'No unallocated requests in this inbox — they already sit with people. Split / Top up / usual-GP send need the Unallocated pile.';
     }
     return '';
   }
@@ -129,22 +246,36 @@
     return next;
   }
 
-  // Inbox GET (page masterAssignee) is the box to share out. Bare GET of
+  function visibleIdHit(visibleIds, id) {
+    if (!visibleIds || !id) return false;
+    return !!visibleIds[String(id).toLowerCase()];
+  }
+
+  function stampInboxRow(row) {
+    row.rxInboxPile = true;
+    row.rxInboxAssignedTo = row.assignedTo || '';
+    row.assignedTo = 'Unassigned';
+    return row;
+  }
+
+  // Inbox GET (winning query) is the box to share out. Bare GET of
   // the same slug is everyone already sitting with a GP. Folders need both.
-  function mergeInboxAndSitting(inboxRows, sittingRows, search) {
-    var inbox = markInboxRows(inboxRows, search);
+  // Stamp with the search that actually produced rows — a leftover
+  // homepage/staff masterAssignee must not restamp the bare pile as
+  // sitting GP work (person-shaped inbox names).
+  function mergeInboxAndSitting(inboxRows, sittingRows, search, opts) {
+    var inbox = markInboxRows(inboxRows, search, opts);
     var seen = {};
     inbox.forEach(function (r) {
       if (r && r.id) seen[r.id] = true;
     });
+    var visibleIds = opts && opts.visibleIds;
     var sitting = [];
     (Array.isArray(sittingRows) ? sittingRows : []).forEach(function (raw) {
       var row = decorateRxRow(raw);
       if (!row || !row.id || seen[row.id]) return;
-      if (isRxUnallocated(row)) {
-        row.rxInboxPile = true;
-        row.rxInboxAssignedTo = row.assignedTo || '';
-        row.assignedTo = 'Unassigned';
+      if (isRxUnallocated(row) || visibleIdHit(visibleIds, row.id)) {
+        stampInboxRow(row);
         inbox.push(row);
         seen[row.id] = true;
         return;
@@ -155,22 +286,25 @@
     return inbox.concat(sitting);
   }
 
-  // The page filter is the box to work. Those rows are assigned to the
-  // inbox UUID (often a person-shaped name on assignedTo), which made
-  // homeColumnKey treat the whole pile as already sitting with a GP.
+  // The winning inbox filter is the box to work. Those rows are assigned
+  // to the inbox UUID (often a person-shaped name on assignedTo), which
+  // made homeColumnKey treat the whole pile as already sitting with a GP.
   // Stamp them Unassigned so they stay in the unallocated list.
-  function markInboxRows(rows, search) {
+  // When the page filter was not this box, visibleIds (from the grid's
+  // own GET) can hint which already-fetched rows are the pile.
+  function markInboxRows(rows, search, opts) {
     var inboxId = inboxAssigneeId(search);
+    var visibleIds = opts && opts.visibleIds;
     return (Array.isArray(rows) ? rows : [])
       .map(function (row) {
         var next = decorateRxRow(row);
         if (!next) return next;
-        if (!inboxId) return next;
         var assignedId = String(next.assignedId || '').toLowerCase();
-        if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
-        next.rxInboxPile = true;
-        next.rxInboxAssignedTo = next.assignedTo || '';
-        next.assignedTo = 'Unassigned';
+        if (inboxId) {
+          if (assignedId && assignedId !== String(inboxId).toLowerCase()) return next;
+          return stampInboxRow(next);
+        }
+        if (visibleIdHit(visibleIds, next.id)) return stampInboxRow(next);
         return next;
       })
       .filter(Boolean);
@@ -294,11 +428,7 @@
     (board && board.columns ? board.columns : []).forEach(function (col) {
       lines.push(col.title + ' (' + col.count + ')');
       (col.tiles || []).forEach(function (t) {
-        var hint = t.requester
-          ? ' · grouped as ' + t.requester
-          : t.namedGp
-            ? ' · usual GP ' + t.namedGp
-            : '';
+        var hint = t.requester ? ' · grouped as ' + t.requester : t.namedGp ? ' · usual GP ' + t.namedGp : '';
         var staged = t.staged ? ' · staged on this canvas only' : '';
         lines.push('  - ' + (t.patientName || 'Unknown') + (t.summary ? ' · ' + t.summary : '') + hint + staged);
       });
@@ -416,37 +546,44 @@
   }
 
   // Live routine inbox (2026-08-31): statuses[]=pending-review, homepage,
-  // masterAssignee=<inbox uuid>. That filtered GET is the box on the page.
-  // Bare GET returns every open task of the type, including already
-  // allocated to GPs. Prefer the page query; fall back to bare GET only
-  // if the inbox filter comes back empty.
+  // masterAssignee=<inbox uuid>. That filtered GET is the box on the page
+  // when the UUID is the box, not the signed-in staff stamp. Homepage +
+  // staff empties or personal-slices the dedicated non-routine queue
+  // while the grid is full (#413 class; Dave 2026-09-15). Walk
+  // rxListQueryPlan; first non-empty wins; a thrown step is skipped.
   async function fetchRxTaskList(apiBase, slug, search, deps) {
     var client = Lab.createClient(apiBase, deps);
-    var pageQs = queryStringForRxList(search);
-    var filtered = null;
-    if (pageQs) {
-      filtered = await client.fetchTaskList(slug, pageQs, { keepMasterAssignee: true });
-      if (filtered && filtered.rows && filtered.rows.length) return filtered;
+    if (deps && deps.bareOnly) {
+      return client.fetchTaskList(slug, '');
     }
-    var openPile = await client.fetchTaskList(slug, '');
-    if (openPile && openPile.rows && openPile.rows.length) return openPile;
-    return filtered || openPile;
+    var plan = rxListQueryPlan(search, deps);
+    var last = { rows: [], slug: slug, search: '', taskList: undefined, body: null };
+    for (var i = 0; i < plan.length; i++) {
+      try {
+        var got = await client.fetchTaskList(slug, plan[i], { keepMasterAssignee: true });
+        if (got) last = got;
+        if (got && got.rows && got.rows.length) return got;
+      } catch (_) {}
+    }
+    return last;
   }
 
   // Write vanish-check needs every staged id, including already-sitting
-  // GP work that Distribute equally rebalances. The page-inbox GET is
-  // only the pile; the bare GET is sitting work. Same merge as loadBoard.
+  // GP work that Distribute equally rebalances. The winning inbox GET is
+  // the pile; the bare GET is sitting work. Stamp with the winning
+  // search, not the leftover page filter that just failed.
   async function fetchRxMergedTaskList(apiBase, slug, search, deps) {
     var inbox = await fetchRxTaskList(apiBase, slug, search, deps);
     var sitting = { rows: [], slug: '', taskList: undefined, body: null };
     try {
-      sitting = await fetchRxTaskList(apiBase, slug, '', deps);
+      sitting = await fetchRxTaskList(apiBase, slug, '', Object.assign({}, deps || {}, { bareOnly: true }));
     } catch (_) {}
+    var stampSearch = inbox && inbox.search != null ? inbox.search : '';
     return {
-      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], search),
+      rows: mergeInboxAndSitting(inbox.rows || [], sitting.rows || [], stampSearch, deps),
       slug: inbox.slug || sitting.slug || slug,
       taskList: inbox.taskList || sitting.taskList,
-      search: inbox.search || search || '',
+      search: stampSearch,
       body: inbox.body || sitting.body,
     };
   }
@@ -476,6 +613,37 @@
       variableRepeat: bucketLen('variableRepeat'),
       resolvedPatientId: resolvedPatientId || '',
     };
+  }
+
+  // overdueMedicationReviewFromPayload(payload) -> boolean
+  // PATIENT-level overdue medication review — not whether an individual
+  // medication's own reauthorisation is overdue (that's
+  // regimenTotalsFromPayload's isOverDue, a different concept already
+  // surfaced in rxMonitoringLine). Confirmed live, Nick, 2026-09-16, across
+  // three captures on the same field: `data.futureActionIdRequiringAttention`
+  // is a non-null future-action id when that patient's "Review of medication"
+  // future action (SNOMED 182836005) is OVERDUE, and null both when no such
+  // future action exists and when one exists but is still planned/in-date —
+  // confirmed by opening the id directly (a separate future-action/data/
+  // patient-overview/{id} fetch, which is where the status itself lives:
+  // `futureActionDisplayStatus.value === 'overdue'`) and by a second capture
+  // where an in-date review made the field null. The two more literally
+  // named fields on this same payload — `medicationRequiringReview` and
+  // `patientRequiresMedicationReview` — were BOTH empty/false on a
+  // confirmed-overdue task in the same capture, so they are NOT used here;
+  // whatever they track, it isn't this.
+  //
+  // Known gap, not yet closed: nothing in THIS payload confirms
+  // futureActionIdRequiringAttention can only ever point at a medication-
+  // review future action specifically, as opposed to any overdue future
+  // action Medicus chooses to surface on a prescription task. Every capture
+  // to date has been a genuine medication review, but that has not been
+  // stress-tested against a patient with a different kind of overdue future
+  // action (e.g. a diabetic review) to see whether this field still
+  // populates. Treat a true result as "an overdue future action exists",
+  // narrowed to "medication review" only as far as the evidence so far goes.
+  function overdueMedicationReviewFromPayload(payload) {
+    return !!(payload && payload.data && payload.data.futureActionIdRequiringAttention);
   }
 
   // Scope confirmed with Nick (2026-09-10): only the three repeat-type
@@ -524,7 +692,11 @@
     var repeatPart = fractionOrCount(counts.repeat, totals ? totals.repeatTotal : null, 'repeats');
     if (repeatPart) parts.push(repeatPart);
     if (counts.acute) parts.push(counts.acute + ' acute');
-    var dispensingPart = fractionOrCount(counts.repeatDispensing, totals ? totals.repeatDispensingTotal : null, 'batches');
+    var dispensingPart = fractionOrCount(
+      counts.repeatDispensing,
+      totals ? totals.repeatDispensingTotal : null,
+      'batches'
+    );
     if (dispensingPart) parts.push(dispensingPart);
     var variablePart = fractionOrCount(
       counts.variableRepeat,
@@ -569,8 +741,301 @@
     return { level: level, requestedItemsTotal: requestedItemsTotal, raw: raw };
   }
 
+  function staffUuid(v) {
+    var s = String(v || '').trim();
+    return UUID_RE.test(s) ? s : '';
+  }
+
+  function directoryRecordById(directory, id) {
+    var want = staffUuid(id);
+    if (!want || !directory) return null;
+    if (directory.byId && directory.byId[want]) return directory.byId[want];
+    var keys = directory.byId ? Object.keys(directory.byId) : [];
+    var lower = want.toLowerCase();
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).toLowerCase() === lower) return directory.byId[keys[i]];
+    }
+    return null;
+  }
+
+  function uniqueNameMatches(name, people, nameOf, idOf) {
+    var hits = [];
+    var seen = {};
+    (Array.isArray(people) ? people : []).forEach(function (p) {
+      if (!p) return;
+      var n = nameOf(p);
+      if (!n) return;
+      if (!Lab.sameClinician(n, name)) return;
+      var id = staffUuid(idOf(p)) || String(n).toLowerCase();
+      if (seen[id]) return;
+      seen[id] = true;
+      hits.push(p);
+    });
+    return hits;
+  }
+
+  function inDayByStaffId(staffId, inDayPeople) {
+    var want = staffUuid(staffId);
+    if (!want) return null;
+    var list = Array.isArray(inDayPeople) ? inDayPeople : [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && staffUuid(list[i].staffId) && staffUuid(list[i].staffId).toLowerCase() === want.toLowerCase()) {
+        return list[i];
+      }
+    }
+    return null;
+  }
+
+  function usualGpDestMove(tileId, person, fallbackName, staffId, notIn) {
+    var name = (person && person.name) || fallbackName || '';
+    var key = (person && person.key) || Lab.clinicianColumnKey(name);
+    if (!key || key === Lab.UNALLOCATED || key === Lab.POOL) return null;
+    return {
+      id: tileId,
+      toKey: key,
+      toName: name,
+      staffId: staffUuid((person && (person.staffId || person.id)) || staffId),
+      notIn: !!notIn,
+    };
+  }
+
+  function usualGpDisplayName(name, directory, staffId) {
+    var n = String(name || '').trim();
+    if (n) return n;
+    var rec = directoryRecordById(directory, staffId);
+    return rec && rec.name ? rec.name : '';
+  }
+
+  // Stage unallocated Rx onto the patient's usual / named GP, only when
+  // that person is on the picked day's book. includeNotIn is an explicit
+  // opt-in to also stage onto usual GPs who are not in that day.
+  // Sibling of lab planSendToRequester — do not reuse that function:
+  // requester on an Rx row is not the usual GP.
+  function planSendToUsualGp(tiles, inDayPeople, opts) {
+    opts = opts || {};
+    var includeNotIn = !!opts.includeNotIn;
+    var directory = opts.directory || { byId: {}, list: [] };
+    var dirList = Array.isArray(directory.list) ? directory.list : [];
+    var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      return t && t.id && isRxUnallocated(t);
+    });
+    var sent = [];
+    var skippedUnknown = [];
+    var skippedNotIn = [];
+    var skippedAmbiguous = [];
+
+    function pushUnknown(tile, extra) {
+      skippedUnknown.push(Object.assign({ id: tile.id }, extra || {}));
+    }
+    function pushNotIn(tile, extra) {
+      skippedNotIn.push(Object.assign({ id: tile.id }, extra || {}));
+    }
+    function pushAmbiguous(tile, extra) {
+      skippedAmbiguous.push(Object.assign({ id: tile.id }, extra || {}));
+    }
+
+    pool.forEach(function (tile) {
+      var id = staffUuid(tile.namedGpId);
+      var name = String(tile.namedGp || '').trim();
+      if (!id && !name) {
+        pushUnknown(tile);
+        return;
+      }
+      if (name && Lab.isTeamAssignee(name)) {
+        pushUnknown(tile, { namedGp: name, team: true });
+        return;
+      }
+
+      if (id) {
+        var byId = inDayByStaffId(id, inDayPeople);
+        if (byId) {
+          var moveId = usualGpDestMove(tile.id, byId, name, id, false);
+          if (moveId) sent.push(moveId);
+          else pushUnknown(tile, { namedGpId: id });
+          return;
+        }
+        var inDayNameHits = name
+          ? uniqueNameMatches(
+              name,
+              inDayPeople,
+              function (p) {
+                return p.name;
+              },
+              function (p) {
+                return p.staffId;
+              }
+            )
+          : [];
+        if (inDayNameHits.length === 1) {
+          var moveName = usualGpDestMove(tile.id, inDayNameHits[0], name, id, false);
+          if (moveName) {
+            moveName.staffId = id;
+            sent.push(moveName);
+          } else pushUnknown(tile, { namedGp: name, namedGpId: id });
+          return;
+        }
+        if (includeNotIn) {
+          var destName = usualGpDisplayName(name, directory, id);
+          var moveNotIn = usualGpDestMove(tile.id, null, destName, id, true);
+          if (moveNotIn) sent.push(moveNotIn);
+          else pushUnknown(tile, { namedGpId: id });
+          return;
+        }
+        pushNotIn(tile, { namedGp: name || destNameFromId(id), namedGpId: id });
+        return;
+      }
+
+      var dayHits = uniqueNameMatches(
+        name,
+        inDayPeople,
+        function (p) {
+          return p.name;
+        },
+        function (p) {
+          return p.staffId;
+        }
+      );
+      var dirHits = uniqueNameMatches(
+        name,
+        dirList,
+        function (p) {
+          return p.name;
+        },
+        function (p) {
+          return p.id;
+        }
+      );
+      if (dayHits.length > 1 || dirHits.length > 1) {
+        pushAmbiguous(tile, { namedGp: name });
+        return;
+      }
+      if (dayHits.length === 1) {
+        var moveDay = usualGpDestMove(tile.id, dayHits[0], name, dayHits[0].staffId, false);
+        if (moveDay) sent.push(moveDay);
+        else pushUnknown(tile, { namedGp: name });
+        return;
+      }
+      if (includeNotIn) {
+        var staffId = dirHits.length === 1 ? dirHits[0].id : '';
+        var dest = dirHits.length === 1 ? dirHits[0].name : name;
+        var moveOff = usualGpDestMove(tile.id, null, dest, staffId, true);
+        if (moveOff) sent.push(moveOff);
+        else pushUnknown(tile, { namedGp: name });
+        return;
+      }
+      pushNotIn(tile, { namedGp: name });
+    });
+
+    function destNameFromId(staffId) {
+      return usualGpDisplayName('', directory, staffId);
+    }
+
+    var reason = '';
+    if (!sent.length) {
+      if (skippedAmbiguous.length && !skippedNotIn.length && !skippedUnknown.length) {
+        reason = 'Two staff match that usual GP name — left in the pile.';
+      } else if (skippedNotIn.length && !includeNotIn) {
+        reason =
+          'Usual GP is not on the book for that day. Leave them in the pile, or turn on send-to-usual-GPs-who-are-not-in.';
+      } else if (
+        skippedUnknown.length &&
+        !pool.filter(function (t) {
+          return t && t.namedGp;
+        }).length
+      ) {
+        reason = 'No unallocated requests with a usual GP to send.';
+      } else {
+        reason = 'Nothing to send to usual GP.';
+      }
+    }
+    return {
+      ok: sent.length > 0,
+      sent: sent,
+      sentIn: sent.filter(function (m) {
+        return !m.notIn;
+      }).length,
+      sentNotIn: sent.filter(function (m) {
+        return m.notIn;
+      }).length,
+      skippedUnknown: skippedUnknown,
+      skippedNotIn: skippedNotIn,
+      skippedAmbiguous: skippedAmbiguous,
+      includeNotIn: includeNotIn,
+      total: pool.length,
+      reason: reason,
+    };
+  }
+
+  function applySendToUsualGp(draft, plan) {
+    var next = draft || Lab.emptyDraft();
+    if (!plan || !plan.ok) return next;
+    (plan.sent || []).forEach(function (move) {
+      if (!move || !move.id || !move.toKey) return;
+      next = Lab.addColumn(next, move.toName, move.staffId);
+      next = Lab.stageMove(next, move.id, move.toKey);
+    });
+    return next;
+  }
+
+  function usualGpPreviewCopy(safePlan, dayPhrase) {
+    var plan = safePlan || {};
+    var inN = Array.isArray(plan.sent) ? plan.sent.length : 0;
+    var notInN = Array.isArray(plan.skippedNotIn) ? plan.skippedNotIn.length : 0;
+    var unknownN = Array.isArray(plan.skippedUnknown) ? plan.skippedUnknown.length : 0;
+    var ambN = Array.isArray(plan.skippedAmbiguous) ? plan.skippedAmbiguous.length : 0;
+    var day = dayPhrase || 'that day';
+    var parts = [];
+    if (inN) {
+      parts.push(inN + ' can go to their usual GP (session that day).');
+    } else {
+      parts.push('Nobody’s usual GP is on the book for ' + day + '.');
+    }
+    if (notInN) {
+      parts.push(notInN + (notInN === 1 ? ' stays' : ' stay') + ' in the pile — those GPs are not in.');
+    }
+    if (unknownN) {
+      parts.push(unknownN + (unknownN === 1 ? ' has' : ' have') + ' no usual GP on the request.');
+    }
+    if (ambN) {
+      parts.push(ambN + (ambN === 1 ? ' stays' : ' stay') + ' — two staff match that name.');
+    }
+    return parts.join(' ');
+  }
+
+  function usualGpDestPhrase(plan) {
+    var sent = plan && Array.isArray(plan.sent) ? plan.sent : [];
+    if (!sent.length) return '';
+    var bags = [];
+    var index = {};
+    sent.forEach(function (m) {
+      if (!m || !m.toName) return;
+      var key = m.toKey || Lab.clinicianColumnKey(m.toName);
+      if (!index[key]) {
+        index[key] = { name: m.toName, count: 0 };
+        bags.push(index[key]);
+      }
+      index[key].count += 1;
+      if (String(m.toName).length > String(index[key].name).length) index[key].name = m.toName;
+    });
+    bags.sort(function (a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      var na = Lab.displayClinicianName(a.name).toLowerCase();
+      var nb = Lab.displayClinicianName(b.name).toLowerCase();
+      if (na < nb) return -1;
+      if (na > nb) return 1;
+      return 0;
+    });
+    var n = sent.length;
+    var noun = n === 1 ? 'prescription' : 'prescriptions';
+    var bits = bags.map(function (b) {
+      return b.count + ' with ' + Lab.displayClinicianName(b.name);
+    });
+    return n + ' ' + noun + ' would sit with their usual GP: ' + bits.join(', ') + '.';
+  }
+
   var api = {
     itemCountsFromOverviewPayload: itemCountsFromOverviewPayload,
+    overdueMedicationReviewFromPayload: overdueMedicationReviewFromPayload,
     regimenTotalsFromPayload: regimenTotalsFromPayload,
     fractionOrCount: fractionOrCount,
     rxMonitoringLine: rxMonitoringLine,
@@ -579,6 +1044,11 @@
     isRoutineRxQueueSlug: isRoutineRxQueueSlug,
     isRxQueueSlug: isRxQueueSlug,
     queryStringForRxList: queryStringForRxList,
+    dropQueryKeys: dropQueryKeys,
+    rxListQueryPlan: rxListQueryPlan,
+    inboxCountFromTaskListBridge: inboxCountFromTaskListBridge,
+    visiblePileIdsFromTaskListBridge: visiblePileIdsFromTaskListBridge,
+    rxEmptyPileReason: rxEmptyPileReason,
     parseRxQueueRoute: parseRxQueueRoute,
     decorateRxRow: decorateRxRow,
     markInboxRows: markInboxRows,
@@ -601,6 +1071,10 @@
     workingTodayDoctors: workingTodayDoctors,
     destNamesPhrase: destNamesPhrase,
     planEvenSplit: planEvenSplit,
+    planSendToUsualGp: planSendToUsualGp,
+    applySendToUsualGp: applySendToUsualGp,
+    usualGpPreviewCopy: usualGpPreviewCopy,
+    usualGpDestPhrase: usualGpDestPhrase,
     planTopUp: planTopUp,
     planLevel: planLevel,
     unallocatedNotStaged: unallocatedNotStaged,
