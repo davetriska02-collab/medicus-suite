@@ -1643,7 +1643,14 @@
 
   function itemCodeHits(item, snomed) {
     if (!Array.isArray(snomed) || !snomed.length || !item) return false;
-    const codes = [item.code, item.conceptId, item.snomed, item.problemCode && item.problemCode.conceptId]
+    const codes = [
+      item.code,
+      item.conceptId,
+      item.snomed,
+      item.descriptionId,
+      item.problemCode && item.problemCode.conceptId,
+      item.problemCode && item.problemCode.descriptionId,
+    ]
       .filter(Boolean)
       .map((c) => String(c));
     return snomed.some((s) => codes.includes(String(s)));

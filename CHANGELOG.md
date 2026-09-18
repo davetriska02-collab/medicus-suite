@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.2] — 2026-09-18
+
+### Flu eligibility — UK synonym "Is a carer" (SNOMED 224484003)
+
+Concept `224484003` was already on `vax-flu`, but Medicus's live term is
+the UK description **Is a carer** (description ID `1222761019`). A
+label-only problem with that wording did not match
+`patient themselves providing care`, so coded carers could still miss
+the chip.
+
+- Match phrase `is a carer` (still not a bare `carer` stem).
+- Description ID `1222761019` listed with the concept / Egton ids.
+- `itemCodeHits` now also reads `descriptionId` /
+  `problemCode.descriptionId`.
+
+`rules/vaccine-rules.json`, `engine/rules-engine.js`. Tests:
+`test-vaccine-rules.js`.
+
 ## [v3.263.1] — 2026-09-18
 
 ### Task presence — stop the occupied banner oscillating on some requests
