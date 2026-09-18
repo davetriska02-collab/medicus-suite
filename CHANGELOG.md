@@ -2,6 +2,64 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.262.1] — 2026-09-18
+
+### Reception pathways — wire topic terms for Keeper v1.11 red flags
+
+The 18 Sep Keeper run added `rf-under3m-fever` (earache) and `rf-rigors`
+(feverish-child) to `rules/reception-pathways.json` but missed the matching
+`RED_FLAG_TOPIC_TERMS` entries in `engine/reception-match.js`. Coverage
+tests fail closed on a missing entry (the flag would always read as a gap
+and be re-asked — safe, but noisier). Wired conservative terms from each
+flag's ask text, and updated the earache Pharmacy First ask-back pin to
+include the new infant-fever gap.
+
+## [v3.262.0] — 2026-09-18
+
+### The Keeper — monitoring-rules currency (CSO review)
+
+Compared every Sentinel monitoring rule in `rules/drug-rules.json` against
+current BNF monographs (BNF 92 cycle, September 2026) plus MHRA DSU.
+Additive only — no interval was lengthened.
+
+**New monitoring rules**
+- `ciclosporin-maintenance` — 56-day U&E / LFT / BP (BNF RA stable range
+  4–8 weeks). Ophthalmic brands (Ikervis, Verkazia, Cequa, Vevizye) and
+  any "eye drop" string excluded.
+- `tacrolimus-systemic` — 84-day FBC / LFT / U&E / BP. Protopic /
+  ointment / cream / cutaneous excluded.
+- `mercaptopurine-maintenance` — 84-day FBC / LFT / U&E. BNF names LFT
+  only; FBC/U&E are thiopurine class-parity with azathioprine (CSO may
+  ship LFT-only).
+- `cenobamate-lft` — annual LFT after the BNF June 2026 Ontozry
+  hepatotoxicity advice (LFTs before start and during treatment as
+  clinically indicated; annual is the Sentinel default).
+
+**Missing UK brands (silent under-match)**
+- Aripiprazole: Elozar, Arpoya
+- Denosumab: Bilprevda, Zvogra
+- Combined hormonal contraception: Drovelis / estetrol
+
+**Adjacent verified additions in the same run**
+- RSV 65–74 chronic-respiratory match now includes interstitial lung
+  fibrosis, pneumoconiosis and bronchopulmonary dysplasia (UKHSA HCP v05).
+- Earache facial-nerve palsy escalates 999 (NICE CKS otitis media).
+- Earache under-3-months-with-fever flag (duty); feverish-child rigors
+  flag (duty, NG143).
+- ACB table: biperiden / Akineton and flavoxate / Urispas at score 3
+  (ACBcalc).
+
+Held for CSO / a later pass: ACB score reductions (carbamazepine /
+oxcarbazepine 2→0), RSV poorly-controlled-asthma engine gate, new
+PINCER alert-library rules, adult abdominal-pain pathway.
+
+Sources: https://bnf.nice.org.uk/ (monographs + medicinal forms),
+https://www.gov.uk/drug-safety-update,
+https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals,
+https://cks.nice.org.uk/topics/otitis-media-acute/,
+https://www.nice.org.uk/guidance/ng143,
+https://www.acbcalc.com/medicines
+
 ## [v3.261.62] — 2026-09-17
 
 ### Lab Filing — block filing for any analyte no profile has declared (H-074)

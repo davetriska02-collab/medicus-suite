@@ -4506,11 +4506,18 @@ if (sandbox) {
     // all), and whose text volunteers the rf-mastoid red flag ("swelling
     // behind the ear", escalate '999') while leaving every other red flag on
     // that pathway (meningism/head-injury/sudden-deaf/facial-droop/
-    // unwell-child) as a gap — so ONE fixture exercises the PF chip, the
-    // ask-back gaps, AND the flaggedInText escalation note together. Verified
-    // directly against the real engine before writing these assertions.
+    // unwell-child/under3m-fever) as a gap — so ONE fixture exercises the PF
+    // chip, the ask-back gaps, AND the flaggedInText escalation note together.
+    // Verified directly against the real engine before writing these assertions.
     const requestText = 'Earache since yesterday, with some swelling behind the ear.';
-    const expectedGapIds = ['rf-meningism', 'rf-head-injury', 'rf-sudden-deaf', 'rf-facial-droop', 'rf-unwell-child'];
+    const expectedGapIds = [
+      'rf-meningism',
+      'rf-head-injury',
+      'rf-sudden-deaf',
+      'rf-facial-droop',
+      'rf-unwell-child',
+      'rf-under3m-fever',
+    ];
 
     let clipboardWrites;
     const mockClipboard = () => {
@@ -4639,7 +4646,7 @@ if (sandbox) {
     const gapItems = abSection.querySelector('.ch-pathway-gap-list').children;
     check(
       gapItems.length === expectedGapIds.length,
-      `ask-back lists exactly the un-mentioned red flags (${expectedGapIds.length}: meningism/head-injury/sudden-deaf/facial-droop/unwell-child), got ${gapItems.length}`
+      `ask-back lists exactly the un-mentioned red flags (${expectedGapIds.length}: meningism/head-injury/sudden-deaf/facial-droop/unwell-child/under3m-fever), got ${gapItems.length}`
     );
     check(
       !gapItems.some((li) => /swelling.*BEHIND the ear/i.test(li.textContent)),

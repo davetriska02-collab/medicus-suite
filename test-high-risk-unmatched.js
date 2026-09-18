@@ -231,6 +231,35 @@ console.log('\n--- monoclonal antibodies / biologics with no monitoring rule are
   check(flagged.length === 0, 'matched denosumab is not high-risk-unmatched (got ' + flagged.length + ')');
 }
 
+// 2026-09-18 Keeper: dedicated systemic tacrolimus / ciclosporin / mercaptopurine
+// rules now match those products — they must NOT raise a second unmatched banner.
+{
+  const unmatched = listUnmatchedMedicationsDetailed(
+    [
+      { name: 'Adoport 1mg capsules' },
+      { name: 'Neoral 100mg capsules' },
+      { name: 'Xaluprine 20mg/ml oral suspension' },
+      { name: 'Protopic 0.1% ointment' },
+      { name: 'Ikervis 1mg/ml eye drops' },
+    ],
+    drugRules.rules
+  );
+  const flagged = flagHighRiskUnmatched(unmatched);
+  check(
+    !unmatched.some((u) => /adoport|neoral|xaluprine/i.test(u.name)),
+    'Adoport / Neoral / Xaluprine match dedicated monitoring rules — not unmatched'
+  );
+  check(
+    !unmatched.some((u) => /protopic|ikervis/i.test(u.name)) ||
+      unmatched.some((u) => /protopic/i.test(u.name) && u.reason === 'excluded'),
+    'Protopic is excluded by tacrolimus-systemic (not a missing-rule gap)'
+  );
+  check(
+    !flagged.some((f) => /adoport|neoral|xaluprine|protopic|ikervis/i.test(f.name)),
+    'matched CNI/thiopurine and excluded topical/ophthalmic forms are not high-risk-unmatched'
+  );
+}
+
 // Local / ophthalmic bevacizumab is the non-systemic analog of topical tacrolimus:
 // GPs are asked to record AMD eye injections, and they do not need shared-care bloods.
 // Systemic IV bevacizumab (oncology) must still flag. Do NOT copy ointment/cream here —

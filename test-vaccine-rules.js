@@ -310,6 +310,23 @@ console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
   assert(chips.length === 0, 'RSV: age 64 + COPD → no chip');
 }
 
+// Age 68 + interstitial lung fibrosis / pneumoconiosis / BPD → eligible (vax-006)
+{
+  const data = { ...baseData(68), problems: [{ label: 'Interstitial lung fibrosis', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + interstitial lung fibrosis → chip');
+}
+{
+  const data = { ...baseData(68), problems: [{ label: 'Pneumoconiosis', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + pneumoconiosis → chip');
+}
+{
+  const data = { ...baseData(68), problems: [{ label: 'Bronchopulmonary dysplasia', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + bronchopulmonary dysplasia → chip');
+}
+
 // Age 70 + lymphoma → immunosuppression problem
 {
   const data = { ...baseData(70), problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] };
