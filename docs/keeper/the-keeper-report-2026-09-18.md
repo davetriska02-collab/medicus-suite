@@ -4,7 +4,7 @@
 **Generated:** 18 September 2026  
 **Extension version:** 3.261.62 → 3.262.0  
 **Rule files touched:** rules/drug-rules.json, rules/vaccine-rules.json, rules/reception-pathways.json, engine/acb-scores.js  
-**Tests:** ❌ FAILING — do not merge (test-drug-brand-coverage.js, test-vaccine-rules.js, test-reception-pathways.js, test-acb-scores.js, test-high-risk-unmatched.js)
+**Tests:** ✅ passing (test-drug-brand-coverage.js, test-qof-indicator-filters.js, test-qof-year.js, test-monitoring-chip.js, test-prescribing-flags.js, test-applicability-filters.js, test-custom-rules.js, test-custom-indicators.js, test-acb-scores.js, test-stopp-start.js, test-vaccine-rules.js, test-reception-pathways.js, test-reception-pathway-utils.js, test-clinical-thresholds-sync.js, test-passport-core.js, test-brief-core.js, test-high-risk-unmatched.js)
 
 > **How to read this.** The Keeper compares the suite’s clinical rule sets against their authoritative UK sources and proposes only verified, sourced changes. Every change links to the source it was checked against. Changes are rated 🔴 Red (a current patient-safety drift — usually a silent monitoring/alerting gap), 🟠 Amber (update to stay current) or 🟢 Green (housekeeping). **This is a proposal for the Clinical Safety Officer to review — clinical rule changes are not auto-merged.** Anything that could *reduce* alerting is collected in the sign-off box below.
 
