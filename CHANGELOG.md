@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.262.1] — 2026-09-18
+
+### Reception pathways — wire topic terms for Keeper v1.11 red flags
+
+The 18 Sep Keeper run added `rf-under3m-fever` (earache) and `rf-rigors`
+(feverish-child) to `rules/reception-pathways.json` but missed the matching
+`RED_FLAG_TOPIC_TERMS` entries in `engine/reception-match.js`. Coverage
+tests fail closed on a missing entry (the flag would always read as a gap
+and be re-asked — safe, but noisier). Wired conservative terms from each
+flag's ask text, and updated the earache Pharmacy First ask-back pin to
+include the new infant-fever gap.
+
 ## [v3.262.0] — 2026-09-18
 
 ### The Keeper — monitoring-rules currency (CSO review)
