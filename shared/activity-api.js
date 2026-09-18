@@ -73,6 +73,10 @@
     // an unexpected host if an injected or malformed value reaches this function.
     if (!_isValidPracticeCode(practiceCode)) throw new Error(`Invalid practice code format: ${practiceCode}`);
     if (!startDate || !endDate) throw new Error('Date range required');
+    // Inclusive YYYY-MM-DD ranges sort lexicographically. An inverted pair
+    // (start > end) is how the lastMonth Date-overflow used to ship — refuse
+    // it rather than ask Medicus for an empty/undefined window.
+    if (startDate > endDate) throw new Error('Date range inverted');
 
     const url = buildApiUrl(practiceCode, startDate, endDate);
     const r = await fetchImpl(url, { credentials: 'include' });
@@ -150,9 +154,14 @@
         start.setDate(1);
         break;
       case 'lastMonth':
-        start.setMonth(start.getMonth() - 1);
+        // MUST setDate(1) before setMonth(-1). JS Date overflow: 31 Mar
+        // setMonth(Feb) becomes 3 Mar (Feb has no 31st), then setDate(1)
+        // lands on 1 Mar with end.setDate(0) = 28 Feb — inverted range,
+        // empty Activity. Same trap on 31 May/Jul/Oct/Dec. The 1st of
+        // every month exists, so stepping the month from day 1 is safe.
         start.setDate(1);
-        end.setDate(0); // last day of previous month
+        start.setMonth(start.getMonth() - 1);
+        end.setDate(0); // last day of previous month (from today)
         break;
       default:
         return null;
@@ -241,6 +250,19 @@
     return { pct, direction: pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat' };
   }
 
+  // Inclusive YYYY-MM-DD pair, both present, start ≤ end. Used by the Activity
+  // UI to reject persisted lastMonth-overflow ranges and by fetchActivityReport
+  // so an inverted window never silently hits Medicus.
+  function isInclusiveRange(startISO, endISO) {
+    return (
+      typeof startISO === 'string' &&
+      typeof endISO === 'string' &&
+      startISO.length > 0 &&
+      endISO.length > 0 &&
+      startISO <= endISO
+    );
+  }
+
   const api = {
     METRICS,
     buildApiUrl,
@@ -251,6 +273,7 @@
     daysBetweenInclusive,
     previousRange,
     comparePct,
+    isInclusiveRange,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

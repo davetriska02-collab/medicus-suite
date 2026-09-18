@@ -464,7 +464,11 @@
       id: '__merged__',
       name: matched.length === 1 ? primary.name : `${matched.length} profiles matched`,
       match: [],
-      analytes: [],
+      // BUG FIX 2026-09-17: analytes was hardcoded to an empty array here,
+      // so unrecognisedAnalyteBlockers below could never recognise anything
+      // from any profile through the live merge (which every real report
+      // scores through, even for a single matched profile).
+      analytes: uniq(matched.flatMap((p) => (Array.isArray(p.analytes) ? p.analytes : []))),
       parameters: matched.flatMap((p) => (Array.isArray(p.parameters) ? p.parameters : [])),
       requireRangeForAll: matched.some((p) => p.requireRangeForAll === true),
       paramsOverrideLabFlags: matched.some((p) => p.paramsOverrideLabFlags === true),
@@ -748,6 +752,43 @@
       }
       if (requireAll && Number.isFinite(val) && r.low == null && r.high == null) {
         reasons.push(`${name || 'a result'} has no reference range — set a parameter for it before filing`);
+      }
+    }
+    return Array.from(new Set(reasons));
+  }
+
+  // A result whose analyte no profile ever declared must never be swept into
+  // "file all normal" just because it happens to be in range by the lab's
+  // own flag. requireRangeForAll's "unknown → not fileable" backstop only
+  // catches an analyte with NEITHER a parameter NOR a lab-supplied range —
+  // an analyte the lab always ranges (routine bloods usually are) sails
+  // through that check with no profile ever having named it at all, because
+  // the whole-report severity check has no concept of "in scope for this
+  // profile", only "in range or not". Confirmed live 2026-09-17: a CRP
+  // result with no profile covering it was OFFERED for filing alongside a
+  // genuinely-configured panel sharing the same task — never actually
+  // filed (caught before the File click), but the offer itself was the gap.
+  //
+  // Same "unknown → not fileable" doctrine as requireRangeForAll, extended
+  // from "no range" to "never configured". Matched against the profile's own
+  // `analytes` list (the field already exists for exactly this purpose —
+  // "Analyte names on this lab's reports" — it was just never consulted as a
+  // gate before now) using the same token-anchored analyteMatchesName the
+  // parameter matcher uses, not a naive substring, and not `match[]` (a
+  // profile only needs ONE match[] term to apply to the whole report — it is
+  // deliberately not an exhaustive inventory the way analytes is meant to be).
+  function unrecognisedAnalyteBlockers(report, profile) {
+    const reasons = [];
+    if (!report || !Array.isArray(report.results) || !profile) return reasons;
+    const analytes = Array.isArray(profile.analytes) ? profile.analytes.filter(isStr) : [];
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object') continue;
+      const name = isStr(r.name) && r.name.trim() ? r.name.trim() : '';
+      if (!name) continue;
+      if (!analytes.some((a) => analyteMatchesName(name, a))) {
+        reasons.push(
+          `${name} is not a recognised analyte for this profile — add it under "Analyte names on this lab's reports" before filing`
+        );
       }
     }
     return Array.from(new Set(reasons));
@@ -1045,7 +1086,23 @@
   // so a caller (the filing button's blocked-card UI) can offer a "whitelist this
   // comment" action per result, using the SAME residue text the gate itself
   // computed — never a retyped or copy-pasted approximation of it.
-  function unresolvedCommentedResults(report, profile) {
+  // A comment is excused only by a profile that actually owns this result.
+  // When `matchedProfiles` is provided (the live combined-report path), a
+  // U&E allow-list phrase must not excuse a Lipids heading — the same
+  // honesty rule as the whitelist write (profilesOwningResult). No owners
+  // means not excused (global benign phrases still apply at the caller).
+  // When matchedProfiles is omitted, fall back to the single `profile`
+  // argument so unit tests and single-profile callers stay unchanged.
+  function _commentAllowedForResult(norm, profile, result, matchedProfiles) {
+    if (Array.isArray(matchedProfiles) && matchedProfiles.length) {
+      const owners = profilesOwningResult(matchedProfiles, result);
+      if (!owners.length) return false;
+      return owners.some((p) => _commentAllowedByProfile(norm, p));
+    }
+    return _commentAllowedByProfile(norm, profile);
+  }
+
+  function unresolvedCommentedResults(report, profile, matchedProfiles) {
     const out = [];
     if (!report || !Array.isArray(report.results)) return out;
     for (const r of report.results) {
@@ -1055,7 +1112,7 @@
       const residue = numericCommentResidue(r);
       if (!residue) continue;
       const norm = _normComment(residue);
-      if (norm && !LF_BENIGN_COMMENT_PHRASES.has(norm) && !_commentAllowedByProfile(norm, profile)) {
+      if (norm && !LF_BENIGN_COMMENT_PHRASES.has(norm) && !_commentAllowedForResult(norm, profile, r, matchedProfiles)) {
         // `result` (the raw row) rides along so a caller with several
         // candidate profiles (a combined multi-panel report) can work out
         // which one actually covers THIS analyte — see profilesOwningResult.
@@ -1133,7 +1190,7 @@
     return [];
   }
 
-  function fileabilityBlockers(report, severity, resultRules, profile) {
+  function fileabilityBlockers(report, severity, resultRules, profile, matchedProfiles) {
     const reasons = [];
     if (!report || !Array.isArray(report.results) || report.results.length === 0) {
       reasons.push('no results could be read from this report');
@@ -1158,7 +1215,7 @@
       const label = isStr(r.name) && r.name.trim() ? r.name.trim() : 'unnamed';
       if (!Number.isFinite(r.value) && hasText) freeText.push(label);
     }
-    const commented = unresolvedCommentedResults(report, profile).map((c) => c.name);
+    const commented = unresolvedCommentedResults(report, profile, matchedProfiles).map((c) => c.name);
     if (freeText.length) {
       const shown = freeText.slice(0, 3).join(', ');
       reasons.push(
@@ -1364,6 +1421,7 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     mergeProfilesForReport,
     fileabilityBlockers,
     profileParamBlockers,
+    unrecognisedAnalyteBlockers,
     applyParamOverrides,
     // Exported for the lab-file-button.js debug log (ch-debug flag) — lets the
     // clinician see exactly what text an allowComments phrase is being

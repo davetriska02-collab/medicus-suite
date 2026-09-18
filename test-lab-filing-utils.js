@@ -253,6 +253,7 @@ const ue = {
   name: 'U&E',
   enabled: true,
   match: ['sodium', 'potassium', 'creatinine'],
+  analytes: ['sodium', 'potassium', 'creatinine'],
   filing: validFiling,
   parameters: [{ analyte: 'creatinine', low: 49, high: 90 }],
   trend: { maxDeltaPct: 15 },
@@ -288,6 +289,12 @@ check(single.effective.name === 'U&E' && single.effective._matchedCount === 1, '
 check(
   single.effective.allowComments.includes('insufficient historical creatinine data'),
   'a single-profile merge still carries allowComments through'
+);
+check(
+  merged.effective.analytes.includes('sodium') &&
+    merged.effective.analytes.includes('creatinine') &&
+    merged.effective.analytes.includes('potassium'),
+  "merge unions analytes across panels (bug fix 2026-09-17 — analytes was hardcoded to an empty array here, so unrecognisedAnalyteBlockers could never recognise anything from any profile through the live merge, which every real report scores through, even for a single matched profile)"
 );
 check(LF.mergeProfilesForReport([], comboReport) === null, 'no profiles → null merge');
 check(
@@ -465,6 +472,50 @@ const ovrMsg = LF.buildFilingConfirmMessage(ueReport, {
 check(
   /lab flagged low — accepted by your set range/.test(ovrMsg),
   'confirm dialog flags the lab-overridden analyte loudly'
+);
+
+// ── unrecognisedAnalyteBlockers (real-world regression, 2026-09-17) ───────────
+// Nick: a CRP result — no profile of his names it at all — was OFFERED for
+// filing alongside a genuinely-configured U&E panel sharing the same task
+// (never actually filed; caught before the File click, but the offer itself
+// was the gap). Root cause: a CRP result with its OWN lab-supplied reference
+// range sails straight through profileParamBlockers's requireRangeForAll
+// check (which only fires when there is NEITHER a parameter NOR a lab
+// range) — nothing anywhere asked "did any profile actually declare this
+// analyte?" This closes that gap.
+console.log('\n--- unrecognisedAnalyteBlockers ---');
+const ueWithCrpReport = {
+  unmatched: false,
+  results: [
+    { name: 'Sodium', value: 140, low: 133, high: 146 },
+    { name: 'Potassium', value: 4.1, low: 3.5, high: 5.3 },
+    { name: 'CRP', value: 3, low: 0, high: 5 }, // in range, lab-ranged — no profile names it
+  ],
+};
+const ueOnlyProfile = { name: 'U&E', analytes: ['sodium', 'potassium', 'creatinine'] };
+check(
+  LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) => /^CRP is not a recognised analyte/.test(r)),
+  "an in-range, lab-ranged analyte no profile ever declared blocks filing, named by its own result label"
+);
+check(
+  !LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) => /^Sodium/.test(r) || /^Potassium/.test(r)),
+  'a genuinely-covered analyte is not flagged'
+);
+check(
+  LF.unrecognisedAnalyteBlockers(
+    ueWithCrpReport,
+    Object.assign({}, ueOnlyProfile, { analytes: [...ueOnlyProfile.analytes, 'crp', 'c-reactive protein'] })
+  ).length === 0,
+  'adding the analyte to the profile (either short or long form) clears the block — token-anchored, not exact-string'
+);
+check(
+  LF.unrecognisedAnalyteBlockers(ueWithCrpReport, { analytes: [] }).length === 3,
+  "a profile with no declared analytes at all recognises NOTHING — fails closed, doesn't silently wave everything through"
+);
+check(
+  LF.unrecognisedAnalyteBlockers(null, ueOnlyProfile).length === 0 &&
+    LF.unrecognisedAnalyteBlockers(ueWithCrpReport, null).length === 0,
+  'fails closed to an empty list on missing report/profile, never throws'
 );
 
 // ── fileabilityBlockers (fail-closed gate) ────────────────────────────────────
@@ -720,6 +771,66 @@ check(
   LF.profilesOwningResult([cholProfile], ldlResultWithHeading)[0].name === 'Cholesterol',
   'falls back to the analyte name when nothing names the heading itself (no Lipids profile here, but Cholesterol still names "ldl")'
 );
+
+// ── allowComments honesty on a combined report (merge-review fix, 2026-09-18) ─
+// The live gate used to score allowComments against the merged-union profile,
+// so a U&E phrase could excuse a Lipids-heading comment on the same task.
+// Same class as the live Lipids-onto-U&E write bug: a comment must only be
+// excused by a profile that owns that heading.
+console.log('\n--- allowComments owning-profile honesty ---');
+{
+  const comboCommented = {
+    unmatched: false,
+    results: [
+      {
+        name: 'Creatinine',
+        specimen: 'Renal function tests',
+        value: 80,
+        unit: 'umol/L',
+        rawValue: '80',
+        text: 'Creatinine - Insufficient historical creatinine data to assess AKI risk',
+      },
+      {
+        name: 'Triglycerides',
+        specimen: 'Lipids',
+        value: 1.2,
+        unit: 'mmol/L',
+        rawValue: '1.2',
+        text: 'Triglycerides - Insufficient historical creatinine data to assess AKI risk',
+      },
+    ],
+  };
+  const ueOnly = {
+    name: 'U&E',
+    match: ['creatinine', 'renal'],
+    allowComments: ['Insufficient historical creatinine data to assess AKI risk'],
+  };
+  const lipidsEmpty = { name: 'Lipids', match: ['lipid'], allowComments: [] };
+  const mergedUnion = {
+    allowComments: ['Insufficient historical creatinine data to assess AKI risk'],
+  };
+  check(
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion).length === 0,
+    'legacy single-profile call still excuses via the passed profile (unit-test / single-panel path unchanged)'
+  );
+  check(
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion, [ueOnly, lipidsEmpty]).some(
+      (r) => /carries a comment/.test(r)
+    ),
+    'combined report: a U&E allow-list phrase does not excuse a Lipids-heading comment'
+  );
+  const unresolvedCombo = LF.unresolvedCommentedResults(comboCommented, mergedUnion, [ueOnly, lipidsEmpty]);
+  check(
+    unresolvedCombo.length === 1 && unresolvedCombo[0].name === 'Triglycerides',
+    'only the Lipids-heading comment stays unresolved — Creatinine is owned by U&E and excused'
+  );
+  check(
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion, [ueOnly]).some((r) =>
+      /carries a comment/.test(r)
+    ),
+    'a Lipids comment with no owning profile is not excused by any other matched profile'
+  );
+}
 
 // ── profilesOwningResult: truncated analyte name (real-world regression,
 // Nick's live Lipids profile, 2026-09-17) ─────────────────────────────────────

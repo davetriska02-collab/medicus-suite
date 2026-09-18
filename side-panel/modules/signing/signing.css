@@ -372,6 +372,19 @@
 
 /* Active-filter note — a narrowed view is never silent; hidden red flags are
    called out by count (H-038 control (j)). */
+.sg-scope {
+  margin-bottom: 8px;
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+  font-size: 10.5px;
+  color: var(--text-2);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+}
+.sg-scope.hidden {
+  display: none;
+}
+
 .sg-filter-note {
   margin-bottom: 8px;
   padding: 5px 9px;

@@ -125,7 +125,9 @@ const EXPECTED = {
     'Flupentixol 0.5mg tablets', 'Depixol 20mg/ml injection', 'Fluanxol 0.5mg tablets',
     'Fluphenazine 1mg tablets', 'Modecate 25mg/ml injection',
     // 2026-08-18 Keeper — BNF quetiapine MR brands
-    'Mintreleq XL 200mg tablets', 'Sondate XL 300mg tablets'
+    'Mintreleq XL 200mg tablets', 'Sondate XL 300mg tablets',
+    // 2026-09-18 Keeper — BNF aripiprazole brands
+    'Elozar 10mg orodispersible tablets', 'Arpoya 10mg tablets'
   ],
   'mirabegron': ['Mirabegron 50mg', 'Betmiga 50mg'],
   'levothyroxine': [
@@ -156,7 +158,9 @@ const EXPECTED = {
     'Microgynon 30 tablets', 'Rigevidon tablets', 'Yasmin tablets', 'Marvelon tablets',
     'Cilique tablets', 'Gedarel 30/150 tablets', 'Femodene tablets', 'Lucette tablets',
     'Evra transdermal patch', 'NuvaRing vaginal ring', 'Qlaira tablets', 'Zoely tablets',
-    'Logynon tablets', 'Synphase tablets'
+    'Logynon tablets', 'Synphase tablets',
+    // 2026-09-18 Keeper — Drovelis (estetrol/drospirenone CHC)
+    'Drovelis 3mg/14.2mg tablets', 'drospirenone with estetrol tablets'
   ],
   // 2026-07-11 Keeper additions — new drug-monitoring rules
   'sodium-valproate': [
@@ -228,7 +232,28 @@ const EXPECTED = {
     'Yaxwer 120mg solution for injection vial',
     'Xbryk 120mg solution for injection vial',
     'Vevzuo 120mg solution for injection vial',
-    'Denbrayce 120mg solution for injection vial'
+    'Denbrayce 120mg solution for injection vial',
+    // 2026-09-18 Keeper — BNF 92 Xgeva-strength biosimilars
+    'Bilprevda 120mg/1.7ml injection', 'Zvogra 120mg/1.7ml injection'
+  ],
+  // 2026-09-18 Keeper — new monitoring rules
+  'ciclosporin-maintenance': [
+    'Ciclosporin 100mg capsules', 'Neoral 100mg capsules',
+    'Capimune 50mg capsules', 'Vanquoral 100mg capsules',
+    'Deximune 25mg capsules', 'Capsorin 100mg capsules',
+    'Sandimmun 50mg/ml concentrate for solution for infusion'
+  ],
+  'tacrolimus-systemic': [
+    'Tacrolimus 1mg capsules', 'Adoport 1mg capsules', 'Prograf 1mg capsules',
+    'Advagraf 1mg modified-release capsules', 'Envarsus 1mg modified-release tablets',
+    'Dailiport 1mg capsules', 'Modigraf 0.2mg granules'
+  ],
+  'mercaptopurine-maintenance': [
+    'Mercaptopurine 50mg tablets', 'Xaluprine 20mg/ml oral suspension',
+    'Hanixol 50mg tablets'
+  ],
+  'cenobamate-lft': [
+    'Cenobamate 50mg tablets', 'Ontozry 50mg tablets', 'Ontozry 200mg tablets'
   ]
 };
 
@@ -265,7 +290,15 @@ const MUST_NOT = [
   ['thiazide-diuretic-ue', 'Furosemide 40mg tablets'],
   // amiloride ALONE is not a thiazide — only the co-amilozide combination fires
   ['thiazide-diuretic-ue', 'Amiloride 5mg tablets'],
-  ['denosumab-calcium', 'Alendronic acid 70mg tablets']
+  ['denosumab-calcium', 'Alendronic acid 70mg tablets'],
+  // ophthalmic ciclosporin must not raise systemic blood-test chips
+  ['ciclosporin-maintenance', 'Ikervis 1mg/ml eye drops'],
+  ['ciclosporin-maintenance', 'Verkazia 1mg/ml eye drops'],
+  ['ciclosporin-maintenance', 'Cequa 0.9mg/ml eye drops'],
+  // topical tacrolimus must not raise systemic monitoring chips
+  ['tacrolimus-systemic', 'Protopic 0.1% ointment'],
+  ['tacrolimus-systemic', 'Tacrolimus 0.1% ointment'],
+  ['tacrolimus-systemic', 'Tacrolimus 0.1% cream']
 ];
 
 console.log('\n--- negative controls (must NOT fire) ---');
