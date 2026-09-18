@@ -2,6 +2,35 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.4] — 2026-09-18
+
+### Non-routine prescription allocation canvas — overdue medication review flag
+
+Tiles now carry an amber "Med review overdue" badge when the patient's
+own **patient-level** medication review (a Medicus "future action",
+SNOMED 182836005 "Review of medication") is overdue — distinct from an
+*individual* medication's own reauthorisation-overdue flag, which the
+canvas already surfaces separately in its monitoring line.
+
+Confirmed live (Nick, three HAR captures): `data.futureActionIdRequiringAttention`
+on the task's own overview is a non-null future-action id specifically
+when that future action is overdue, and null both when none exists and
+when one exists but is still in-date. Two more literally-named fields on
+the same payload — `medicationRequiringReview` and
+`patientRequiresMedicationReview` — were checked and rejected: both were
+empty/false on a confirmed-overdue capture, so they track something
+else. Rides the same per-row overview fetch the item-count/complexity
+badge already makes (Pass A) — no new network call.
+
+Known gap, not yet closed: nothing in the payload confirms this field is
+scoped to medication-review future actions specifically, as opposed to
+any overdue future action Medicus chooses to surface on a prescription
+task — every capture to date has been a genuine medication review, but
+that has not been tested against a different overdue future-action type.
+
+Live-tested by Nick; regression-pinned in `test-rx-allocate-core.js`
+(358/358; +6 new checks).
+
 ## [v3.263.3] — 2026-09-18
 
 ### Lab Filing — per-profile comment allow-list, practice-wide profile sync (H-073)

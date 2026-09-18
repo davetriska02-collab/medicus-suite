@@ -1193,6 +1193,38 @@ console.log('\n--- canvas + manifest + css source locks ---');
     check(counts.resolvedPatientId === '', 'no patientId resolved falls back to empty string, not null/undefined');
   }
 
+  console.log(
+    '\n--- overdueMedicationReviewFromPayload: patient-level flag (futureActionIdRequiringAttention), 2026-09-16 ---'
+  );
+  {
+    check(
+      C.overdueMedicationReviewFromPayload({
+        data: { futureActionIdRequiringAttention: '019e2b99-a736-72b4-aea7-7c3cc39fa433' },
+      }) === true,
+      'a non-null futureActionIdRequiringAttention is an overdue review — confirmed live, HAR 130-reviewoverdue.har'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({ data: { futureActionIdRequiringAttention: null } }) === false,
+      'null futureActionIdRequiringAttention is NOT overdue — confirmed live on a patient with an in-date review'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({
+        data: {
+          futureActionIdRequiringAttention: null,
+          medicationRequiringReview: [],
+          patientRequiresMedicationReview: false,
+        },
+      }) === false,
+      'the two more literally-named fields are deliberately NOT read here — they were both empty/false on a confirmed-overdue capture, so they track something else'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({ data: {} }) === false,
+      'a missing field entirely is treated as not-overdue, never guessed true'
+    );
+    check(C.overdueMedicationReviewFromPayload({}) === false, 'missing data section -> false, no throw');
+    check(C.overdueMedicationReviewFromPayload(null) === false, 'is defensive against a missing payload');
+  }
+
   console.log('\n--- regimenTotalsFromPayload: repeat-type-only scope + isOverDue tally ---');
   {
     const regimen = {

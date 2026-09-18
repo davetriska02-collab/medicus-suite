@@ -90,6 +90,11 @@
   // task id -> { repeat, acute, repeatDispensing, variableRepeat, resolvedPatientId }
   // — from each row's own overview (data.prescriptionRequestItemsByType).
   var _rxItemCounts = {};
+  // task id -> boolean — PATIENT-level overdue medication review, from the
+  // same overview fetch as _rxItemCounts (zero extra cost). See
+  // RxAllocateCore.overdueMedicationReviewFromPayload's own comment for the
+  // field and the known gap.
+  var _rxOverdueMedReview = {};
   // patientId -> { repeatTotal, repeatDispensingTotal, variableRepeatTotal,
   // overdueCount, overdueTotal } — from medication-regimen, one fetch per
   // unique patient, lazy/on-screen-first (see loadRxMonitoringTotals).
@@ -448,6 +453,7 @@
         var resolvedPid = row.patientId || C.pickPatientIdFromPayload(payload);
         if (!patientId && resolvedPid) patientId = resolvedPid;
         _rxItemCounts[row.id] = C.itemCountsFromOverviewPayload(payload, resolvedPid);
+        _rxOverdueMedReview[row.id] = C.overdueMedicationReviewFromPayload(payload);
       } catch (_) {
         breaker.recordFailure();
         /* try the next overview */
@@ -552,6 +558,7 @@
     var keepDraft = opts.skipSplit ? _draft || C.emptyDraft() : null;
     _rxItemCounts = {};
     _rxRegimenTotals = {};
+    _rxOverdueMedReview = {};
     _loading = true;
     _error = null;
     render();
@@ -740,6 +747,17 @@
     );
   }
 
+  // "Med review overdue" — patient-level flag (RxAllocateCore.
+  // overdueMedicationReviewFromPayload), distinct from the per-medication
+  // "N/M repeats overdue for reauthorising" sentence rxMonitoringLine
+  // already carries. Only resolves once Pass A has fetched this row's own
+  // overview (same fetch rxComplexityBadgeHtml depends on) — renders
+  // nothing while that's still in flight or once resolved false.
+  function rxOverdueMedReviewBadgeHtml(taskId) {
+    if (!_rxOverdueMedReview[taskId]) return '';
+    return '<span class="ms-lac-tile-token ms-lac-tile-token-warn" title="This patient’s medication review is overdue (Medicus future action)">Med review overdue</span>';
+  }
+
   // "Request for 3/6 repeats, 1 acute, 0/2 batches. 3/5 repeats overdue for
   // reauthorising." — Nick's own confirmed format, 2026-09-10. The sentence
   // itself is built by shared/rx-allocate-core.js's rxMonitoringLine (pure,
@@ -800,6 +818,7 @@
       '</span>' +
       assignedPerson +
       whoLine +
+      rxOverdueMedReviewBadgeHtml(tile.id) +
       rxMonitoringLineHtml(tile.id) +
       '</div>'
     );
@@ -3435,6 +3454,7 @@
     _rows = [];
     _rxItemCounts = {};
     _rxRegimenTotals = {};
+    _rxOverdueMedReview = {};
     _draft = C.emptyDraft();
     _selected = {};
     _lastSelectId = '';
