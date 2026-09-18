@@ -206,6 +206,17 @@
   cursor: pointer;
 }
 
+/* Vue on some request overviews replaces <main>'s children every patch and
+   fights an in-flow prepend (insert → wipe → insert). After three wipes we
+   pin the masthead to document.body so the page stops oscillating. */
+#ms-tp-banner.ms-tp-banner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483000;
+}
+
 /* Compact inline list occupancy — title-row notice, not a masthead.
    Replaces Medicus's unnamed "GP is also working this list" widget. */
 #ms-tp-list {
