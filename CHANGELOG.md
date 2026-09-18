@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.0] — 2026-09-18
+
+### Appointment-book tally — flu / COVID / RSV eligibility toggles
+
+The diary tally still shows booked vs free. Three optional checkboxes now
+also count how many of those booked patients are eligible for flu, COVID
+and RSV — the same inferred rules as the Sentinel vaccine chips.
+
+- **Off by default.** Ticking Flu, COVID or RSV adds that count to the
+  button (`12 booked · 8 free · Flu 18`) and starts a polite read of
+  each unique booked patient on the types you already have ticked.
+- **Eligible, not just due.** Already-given and declined this season
+  still count as eligible; the panel also shows how many are still due.
+- **Counts only.** No names. Bookings without a patient id, and records
+  that could not be read, are listed as numbers so a zero is never a
+  silent all-clear.
+- **Same engine.** `vax-flu` / `vax-covid` / `vax-rsv` plus QOF register
+  rules, including a workstation disable in `sentinel.rules`. Double-check
+  before offering a vaccine (H-020).
+
+`shared/appointment-tally-core.js`, `content-scripts/appointment-tally.js`,
+`content-scripts/appointment-tally.css`. Toggles persist as `slots.vaxTally`
+(backed up with Slot Counter). Tests: `test-appointment-tally-core.js`.
+
 ## [v3.262.1] — 2026-09-18
 
 ### Reception pathways — wire topic terms for Keeper v1.11 red flags
