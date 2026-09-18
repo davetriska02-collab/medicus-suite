@@ -2,6 +2,40 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.2] — 2026-09-18
+
+### Allergy cleanup — offer to fix an onset date that is after the record date
+
+Live failure (HAR 132): converting a pre-defined allergy whose onset date
+(4 Mar 2014) was later than its record date (24 Jan 1993) was rejected by
+Medicus — `API 400: {"errors":{"onsetDate":["Onset date cannot be after the
+record date"]}}` — because every change-allergy payload re-posts the entry's
+own onset and record dates unchanged. Such entries (typically back-dated or
+imported records) could not be converted, text-cleaned, merged or tidied at
+all, and the error gave no way forward.
+
+- **Conversion modal** (Convert + "Clean up text"): an amber notice now names
+  both dates and offers "Set onset date to <record date>". Convert / Clean up
+  text stay disabled until it is accepted — the alternative is Cancel.
+- **Duplicate-merge modal**: the same offer, checked against the merged
+  entry's chosen onset and the KEEPER's record date; Merge stays disabled
+  until accepted (or the keeper / onset source is changed). `confirmMerge`
+  re-checks against the keeper's edit-allergy prefill and refuses to write
+  anything — including ending the duplicates — if an unaccepted conflict remains.
+- **Clear legacy code (bulk, panel checklist and canvas Finalise)**: entries
+  are prefetched and any conflicts are confirmed once for the batch (native
+  confirm, listing each entry's onset/record). OK sets their onset to the
+  record date; Cancel skips just those rows ("Left unchanged", still staged on
+  the canvas) and the rest are tidied. A failed prompt counts as "no".
+- Never applied silently: the onset date is a clinical fact, so it changes only
+  after an explicit accept. An acceptance is keyed to the exact onset/record pair,
+  so it never carries over to a different conflict. Partial onsets (`2014`,
+  `2014-03`) are compared by their earliest possible day, so a same-year or
+  same-month onset is not flagged on a guess.
+- Shared helper `onsetFixStatus`; 15 new cases in `test-allergy-cleanup.js`.
+  The modal and bulk-confirm wiring is not unit-tested (needs a DOM) and has not
+  yet been exercised live.
+
 ## [v3.263.1] — 2026-09-18
 
 ### Task presence — stop the occupied banner oscillating on some requests
