@@ -64,6 +64,8 @@
     { term: 'toviaz', score: 3, note: 'brand: fesoterodine' },
     { term: 'darifenacin', score: 3, note: 'M3-selective antimuscarinic (OAB); Boustani ACB score 3 (2026-07-11 Keeper addition)' },
     { term: 'emselex', score: 3, note: 'brand: darifenacin (2026-07-11 Keeper addition)' },
+    { term: 'flavoxate', score: 3, note: 'ACBcalc score 3; OAB antimuscarinic (2026-09-18 Keeper)' },
+    { term: 'urispas', score: 3, note: 'brand: flavoxate (Recordati UK)' },
     // Trospium: quaternary ammonium compound — limited CNS penetration, but
     // ACBcalc assigns score 1; some sources list as score 3. Using score 1
     // (conservative, avoids over-flagging). Included for completeness.
@@ -96,6 +98,8 @@
     { term: 'procyclidine', score: 3 },
     { term: 'orphenadrine', score: 3 },
     { term: 'trihexyphenidyl', score: 3 },
+    { term: 'biperiden', score: 3, note: 'ACBcalc score 3; UK antiparkinson anticholinergic (2026-09-18 Keeper)' },
+    { term: 'akineton', score: 3, note: 'brand: biperiden (oral AMP discontinued; records may persist)' },
     // ── Score 3: Antiemetic ───────────────────────────────────────────────────
     { term: 'prochlorperazine', score: 3 },
     // ── Score 1: Mild / possible anticholinergic effect ──────────────────────
