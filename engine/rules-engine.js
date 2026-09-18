@@ -1152,6 +1152,16 @@
     // join) can carry the true clinical start. Picking the longer name
     // alone was dropping that earlier date and re-breaking post-init
     // U&E checks.
+    //
+    // Rows with no vtmProductName get a fallback key in two EXACT-match cases
+    // only (still never a substring guess): (1) an acute line — Medicus names
+    // these "<substance> · <form>" (e.g. "Tirzepatide · Solution for
+    // injection"), and every issue of a titrating drug is its own line with its
+    // own productCode, so six acute issues used to mean six identical cards
+    // (HAR 133); the text before the " · " is the key; (2) a bare-name row
+    // (e.g. "Prescribed elsewhere: Tirzepatide") whose whole normalised name
+    // equals a key already established by (1) or by a real vtmProductName.
+    // Anything else without a vtm is still left alone.
     if (matchedMeds.length > 1) {
       const byVtm = new Map();
       const noVtm = [];
@@ -1160,8 +1170,20 @@
         const t = new Date(d);
         return isNaN(t.getTime()) ? null : t.getTime();
       };
+      const ACUTE_LINE_SEP = ' · ';
+      const keyOf = (m) => {
+        if (m.vtm) return normaliseDrugString(m.vtm);
+        const name = String(m.name || '');
+        const at = name.indexOf(ACUTE_LINE_SEP);
+        return at > 0 ? normaliseDrugString(name.slice(0, at)) : null;
+      };
+      const knownKeys = new Set(matchedMeds.map(keyOf).filter(Boolean));
       matchedMeds.forEach((m) => {
-        const key = m.vtm ? normaliseDrugString(m.vtm) : null;
+        let key = keyOf(m);
+        if (!key) {
+          const bare = normaliseDrugString(m.name);
+          if (bare && knownKeys.has(bare)) key = bare;
+        }
         if (!key) {
           noVtm.push(m);
           return;

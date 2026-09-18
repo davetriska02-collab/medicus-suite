@@ -979,6 +979,71 @@ const PracticeProfile = (() => {
       }
     }
 
+    // ── Lab Filing (v2 new) ─────────────────────────────────────────────────────
+    // SAFETY: whichever path runs below, a profile can only ever arrive on a
+    // machine DISABLED. labfilingImport() (shared/io/labfiling-io.js) always
+    // routes every profile it writes through LF.lockForReview — enabled:false,
+    // reviewed:false, patientMessage.enabled:false — regardless of what the
+    // published copy says, exactly like a manual backup restore. A publish can
+    // update filing RULES (match text, parameters, allowComments, trend guard,
+    // etc.) practice-wide, but can never itself switch auto-filing on anywhere;
+    // a clinician on each machine still has to review and click "enable this
+    // profile" locally (Options → Lab Filing). That review step is the control,
+    // not a formality — this module drives an irreversible patient-record write.
+    if (modMap.has('labfiling') && mods.labfiling && typeof mods.labfiling === 'object') {
+      try {
+        const merge = modMap.get('labfiling') === 'merge';
+        const labfilingImport = _io('labfilingImport');
+        if (!labfilingImport) throw new Error('labfilingImport not available in this context.');
+
+        if (Array.isArray(mods.labfiling.profiles)) {
+          if (merge) {
+            // Merge by id: only add profiles not already present locally.
+            // An existing local profile — including any local edit to its
+            // allowComments/parameters, and its own enabled/reviewed state —
+            // is left completely untouched: written directly to storage,
+            // never re-run through labfilingImport (which would force EVERY
+            // profile in the array inert, including ones a clinician already
+            // reviewed and enabled on this machine). Only the newly-added
+            // profiles are validated and locked, via the same LabFilingUtils
+            // helpers labfilingImport itself uses.
+            const LFU = _io('LabFilingUtils');
+            if (!LFU) throw new Error('LabFilingUtils not available in this context.');
+            const ex = await chrome.storage.local.get('labfiling.profiles');
+            const local = Array.isArray(ex['labfiling.profiles']) ? ex['labfiling.profiles'] : [];
+            const takenIds = new Set(local.map((p) => p && p.id));
+            const incoming = [];
+            for (const raw of mods.labfiling.profiles) {
+              if (!raw || !raw.id || takenIds.has(raw.id)) continue; // id collision — local wins
+              // A malformed incoming entry is skipped, not fatal to the whole
+              // merge — same "don't abort a valid batch over one bad row"
+              // discipline as sentinelImport's skipInvalidCustomRules.
+              if (LFU.validateProfile(raw).length > 0) continue;
+              const clean = LFU.lockForReview(raw, 'import');
+              if (!clean.id || takenIds.has(clean.id)) clean.id = LFU.generateProfileId(clean.name, takenIds);
+              takenIds.add(clean.id);
+              incoming.push(clean);
+            }
+            if (incoming.length > 0) {
+              await chrome.storage.local.set({ 'labfiling.profiles': [...local, ...incoming] });
+              applied.push('labfiling');
+            }
+          } else {
+            // Replace: the published list is the practice's authoritative
+            // policy — last publish wins, same trust model as Knowledge's
+            // replace mode. Every profile (including one already enabled
+            // locally under the same id) reverts to disabled on this path —
+            // an enforced policy change getting a fresh local review is the
+            // intended behaviour, not a bug.
+            await labfilingImport({ profiles: mods.labfiling.profiles });
+            applied.push('labfiling');
+          }
+        }
+      } catch (e) {
+        errors.push(`labfiling: ${e.message}`);
+      }
+    }
+
     // ── Suite: practiceCode + feedbackEmail + practice feature packs ──────────
     // NEVER push display, tabOrder, hiddenTabs, letterhead, practiceAcceptedAt,
     // attestations, waitingRoomThresholds, rollupAlwaysExpanded, txn.*, or

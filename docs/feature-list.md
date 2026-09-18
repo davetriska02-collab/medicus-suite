@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.263.2
+**Version:** v3.263.7
 **Generated:** 2026-09-18
 
 ## What it is
@@ -149,7 +149,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.263.2 (18 Sep)** — Flu chip: UK synonym "Is a carer" (SNOMED 224484003 / description 1222761019)
+- **v3.263.7 (19 Sep)** — Flu chip: UK synonym "Is a carer" (SNOMED 224484003 / description 1222761019)
 - **v3.263.1 (18 Sep)** — Task presence: occupied banner no longer oscillates on request overviews that re-render the message chrome
 - **v3.263.0 (18 Sep)** — Appointment-book tally: optional flu / COVID / RSV eligibility counts on the booked/free button
 - **v3.262.1 (18 Sep)** — Reception match: topic terms for earache `rf-under3m-fever` and feverish-child `rf-rigors`

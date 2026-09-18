@@ -615,6 +615,37 @@
     };
   }
 
+  // overdueMedicationReviewFromPayload(payload) -> boolean
+  // PATIENT-level overdue medication review — not whether an individual
+  // medication's own reauthorisation is overdue (that's
+  // regimenTotalsFromPayload's isOverDue, a different concept already
+  // surfaced in rxMonitoringLine). Confirmed live, Nick, 2026-09-16, across
+  // three captures on the same field: `data.futureActionIdRequiringAttention`
+  // is a non-null future-action id when that patient's "Review of medication"
+  // future action (SNOMED 182836005) is OVERDUE, and null both when no such
+  // future action exists and when one exists but is still planned/in-date —
+  // confirmed by opening the id directly (a separate future-action/data/
+  // patient-overview/{id} fetch, which is where the status itself lives:
+  // `futureActionDisplayStatus.value === 'overdue'`) and by a second capture
+  // where an in-date review made the field null. The two more literally
+  // named fields on this same payload — `medicationRequiringReview` and
+  // `patientRequiresMedicationReview` — were BOTH empty/false on a
+  // confirmed-overdue task in the same capture, so they are NOT used here;
+  // whatever they track, it isn't this.
+  //
+  // Known gap, not yet closed: nothing in THIS payload confirms
+  // futureActionIdRequiringAttention can only ever point at a medication-
+  // review future action specifically, as opposed to any overdue future
+  // action Medicus chooses to surface on a prescription task. Every capture
+  // to date has been a genuine medication review, but that has not been
+  // stress-tested against a patient with a different kind of overdue future
+  // action (e.g. a diabetic review) to see whether this field still
+  // populates. Treat a true result as "an overdue future action exists",
+  // narrowed to "medication review" only as far as the evidence so far goes.
+  function overdueMedicationReviewFromPayload(payload) {
+    return !!(payload && payload.data && payload.data.futureActionIdRequiringAttention);
+  }
+
   // Scope confirmed with Nick (2026-09-10): only the three repeat-type
   // buckets — isOverDue on acute/OTC/prescribed-elsewhere is out of scope
   // (acute items structurally can't carry a reauthorisation-overdue flag —
@@ -1004,6 +1035,7 @@
 
   var api = {
     itemCountsFromOverviewPayload: itemCountsFromOverviewPayload,
+    overdueMedicationReviewFromPayload: overdueMedicationReviewFromPayload,
     regimenTotalsFromPayload: regimenTotalsFromPayload,
     fractionOrCount: fractionOrCount,
     rxMonitoringLine: rxMonitoringLine,

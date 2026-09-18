@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.263.2] — 2026-09-18
+## [v3.263.7] — 2026-09-19
 
 ### Flu eligibility — UK synonym "Is a carer" (SNOMED 224484003)
 
@@ -19,6 +19,151 @@ the chip.
 
 `rules/vaccine-rules.json`, `engine/rules-engine.js`. Tests:
 `test-vaccine-rules.js`.
+
+## [v3.263.6] — 2026-09-19
+
+### Drug monitoring — stop one drug producing a card per acute issue (HAR 133)
+
+Live report: a patient on tirzepatide showed **eight** identical monitoring
+cards. The regimen held one current repeat (`vtmProductName: "Tirzepatide"`),
+six acute issues ("Tirzepatide · Solution for injection", one per pen strength
+or issue, each with its own `productCode`) and one "Prescribed elsewhere" row —
+and the acute and elsewhere rows carry no `vtmProductName`. The existing
+per-drug de-duplication in `evaluateDrugRule` only merges rows that have a VTM
+on both sides, so every VTM-less row became its own card, although the tests it
+checks (annual review, U&E) are patient-level and identical across all of them.
+Any drug with several acute issues in the last 12 months was affected.
+
+- Rows with no VTM now get a fallback merge key in two **exact-match** cases
+  only: an acute line ("<substance> · <form>" — the text before the "·"), and a
+  bare-name row (e.g. "Prescribed elsewhere: Tirzepatide") whose whole normalised
+  name equals an already-established key. Still never a substring guess; any other
+  VTM-less row is left alone exactly as before.
+- Merge behaviour is unchanged: keeps the longer display name and the EARLIEST
+  parseable start date (so post-initiation checks are not weakened).
+- Different substances are never merged (semaglutide stays its own card next to
+  tirzepatide under the GLP-1 rule).
+- `test-drug-monitoring-dedup.js`: +4 cases using HAR 133's exact shape (9 chips
+  before the fix, 2 after), an acute-only history, and no-merge cases.
+
+## [v3.263.5] — 2026-09-18
+
+### CSO documentation catch-up — six undocumented PRs + PR #403 review
+
+Retrospective CSN addenda **3.74–3.80** for six PRs that shipped with no
+safety-doc addendum (#359 concept-remap / year-only onset, #364 contacts
+on document-filing tasks, #385 repeat-prescribing authorisation pills,
+#386 companion investigation-review tasks, #398 focus-alerts toggle,
+#399 Rx canvas med summary / complexity) plus a review of PR #403's
+withdrawal of the ace-arb / thiazide post-initiation U&E test.
+
+Hazard **H-076** records the pills (originally drafted as H-072 — that ID
+on main is the later contacts name-quality write). **H-002 control (w)**
+records the post-initiation U&E addition-then-withdrawal in the control
+lineage. All entries **PENDING CSO REVIEW / Proposed**. Does not move
+`last_cso_review_version`. No code change.
+
+## [v3.263.4] — 2026-09-18
+
+### Non-routine prescription allocation canvas — overdue medication review flag
+
+Tiles now carry an amber "Med review overdue" badge when the patient's
+own **patient-level** medication review (a Medicus "future action",
+SNOMED 182836005 "Review of medication") is overdue — distinct from an
+*individual* medication's own reauthorisation-overdue flag, which the
+canvas already surfaces separately in its monitoring line.
+
+Confirmed live (Nick, three HAR captures): `data.futureActionIdRequiringAttention`
+on the task's own overview is a non-null future-action id specifically
+when that future action is overdue, and null both when none exists and
+when one exists but is still in-date. Two more literally-named fields on
+the same payload — `medicationRequiringReview` and
+`patientRequiresMedicationReview` — were checked and rejected: both were
+empty/false on a confirmed-overdue capture, so they track something
+else. Rides the same per-row overview fetch the item-count/complexity
+badge already makes (Pass A) — no new network call.
+
+Known gap, not yet closed: nothing in the payload confirms this field is
+scoped to medication-review future actions specifically, as opposed to
+any overdue future action Medicus chooses to surface on a prescription
+task — every capture to date has been a genuine medication review, but
+that has not been tested against a different overdue future-action type.
+
+Live-tested by Nick; regression-pinned in `test-rx-allocate-core.js`
+(358/358; +6 new checks).
+
+## [v3.263.3] — 2026-09-18
+
+### Lab Filing — per-profile comment allow-list, practice-wide profile sync (H-073)
+
+Diagnosed a real filing profile that could never fire: two fixed performer
+comments (an AKI-risk note on Creatinine, a NICE NG203 ethnicity-correction
+note on eGFR) recur on every renal panel and were correctly blocked by the
+"carries a comment the suite cannot score" gate. A filing profile can now
+carry `allowComments` — phrases the clinician types after reading a real
+comment — that excuse a specific, recurring comment for **that profile
+only**; the global benign-phrase set and the numeric severity gate are
+untouched.
+
+Filing-profile content (match rules, parameters, `allowComments`, trend
+guard) can also now sync practice-wide, via a new `labfiling` Practice
+Profile module — the same shared-folder channel the v3.260.0 Knowledge
+live-set sync already uses. Every synced profile still **arrives disabled**:
+the new module delegates to the existing `labfilingImport`/`lockForReview`
+path unconditionally (merge mode leaves an existing local profile of the
+same id — including its own enabled state — completely untouched; only new
+ids are appended, force-locked). A publish can never itself switch
+auto-filing on anywhere; each machine still needs a human review. The
+enable toggle now carries a bold, underlined "Click here to enable this
+profile" prompt so a freshly-synced (or freshly-authored) profile isn't
+missed. Profiles also record who last saved them and when (`updatedBy`/
+`updatedAt`), shown on the card.
+
+Merge review (onto v3.263.2): the live gate now excuses a comment only via
+the profile that *owns* that heading (`profilesOwningResult`), so a U&E
+allow-list phrase cannot silently clear a Lipids comment on a combined
+report. The whitelist checkbox copy no longer says "for everyone" (it is
+this machine until a practice profile is published). Merge-mode sync still
+never overwrites an existing local profile id.
+
+Regression-pinned in `test-lab-filing-utils.js` (allowComments scoping +
+owning-profile honesty), `test-practice-profile.js` (labfiling
+merge/replace/force-disable), and `test-service-worker.js` (the new import
+wiring). New `docs/HAZARD-LOG.md` H-073, pending CSO review.
+
+## [v3.263.2] — 2026-09-18
+
+### Allergy cleanup — offer to fix an onset date that is after the record date
+
+Live failure (HAR 132): converting a pre-defined allergy whose onset date
+(4 Mar 2014) was later than its record date (24 Jan 1993) was rejected by
+Medicus — `API 400: {"errors":{"onsetDate":["Onset date cannot be after the
+record date"]}}` — because every change-allergy payload re-posts the entry's
+own onset and record dates unchanged. Such entries (typically back-dated or
+imported records) could not be converted, text-cleaned, merged or tidied at
+all, and the error gave no way forward.
+
+- **Conversion modal** (Convert + "Clean up text"): an amber notice now names
+  both dates and offers "Set onset date to <record date>". Convert / Clean up
+  text stay disabled until it is accepted — the alternative is Cancel.
+- **Duplicate-merge modal**: the same offer, checked against the merged
+  entry's chosen onset and the KEEPER's record date; Merge stays disabled
+  until accepted (or the keeper / onset source is changed). `confirmMerge`
+  re-checks against the keeper's edit-allergy prefill and refuses to write
+  anything — including ending the duplicates — if an unaccepted conflict remains.
+- **Clear legacy code (bulk, panel checklist and canvas Finalise)**: entries
+  are prefetched and any conflicts are confirmed once for the batch (native
+  confirm, listing each entry's onset/record). OK sets their onset to the
+  record date; Cancel skips just those rows ("Left unchanged", still staged on
+  the canvas) and the rest are tidied. A failed prompt counts as "no".
+- Never applied silently: the onset date is a clinical fact, so it changes only
+  after an explicit accept. An acceptance is keyed to the exact onset/record pair,
+  so it never carries over to a different conflict. Partial onsets (`2014`,
+  `2014-03`) are compared by their earliest possible day, so a same-year or
+  same-month onset is not flagged on a guess.
+- Shared helper `onsetFixStatus`; 15 new cases in `test-allergy-cleanup.js`.
+  The modal and bulk-confirm wiring is not unit-tested (needs a DOM) and has not
+  yet been exercised live.
 
 ## [v3.263.1] — 2026-09-18
 
