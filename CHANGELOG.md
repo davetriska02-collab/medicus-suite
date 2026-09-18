@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.5] — 2026-09-18
+
+### CSO documentation catch-up — six undocumented PRs + PR #403 review
+
+Retrospective CSN addenda **3.74–3.80** for six PRs that shipped with no
+safety-doc addendum (#359 concept-remap / year-only onset, #364 contacts
+on document-filing tasks, #385 repeat-prescribing authorisation pills,
+#386 companion investigation-review tasks, #398 focus-alerts toggle,
+#399 Rx canvas med summary / complexity) plus a review of PR #403's
+withdrawal of the ace-arb / thiazide post-initiation U&E test.
+
+Hazard **H-076** records the pills (originally drafted as H-072 — that ID
+on main is the later contacts name-quality write). **H-002 control (w)**
+records the post-initiation U&E addition-then-withdrawal in the control
+lineage. All entries **PENDING CSO REVIEW / Proposed**. Does not move
+`last_cso_review_version`. No code change.
+
 ## [v3.263.4] — 2026-09-18
 
 ### Non-routine prescription allocation canvas — overdue medication review flag
