@@ -119,6 +119,16 @@
         // below, so lastIssueDate never becomes 2013-when-they-first-started.
         let startDate = null;
         let lastIssueDate = null;
+        // Provenance of startDate — post-initiation checks (NICE NG136 / CKS
+        // initiation recheck) may only fire when this is 'medication-history'.
+        // The regimen endpoint's medicationIssueHistory is batch-scoped (~12
+        // months); treating that as a clinical start is what produced #403's
+        // false "started, never rechecked" alerts on long-term patients.
+        //   medication-history — true first-ever issue via VTM join
+        //   issue-history      — earliest visible regimen issue (batch-scoped)
+        //   issue-date         — flat issueDate fallback
+        //   null               — no date at all
+        let startDateSource = null;
         if (Array.isArray(m.medicationIssueHistory?.data) && m.medicationIssueHistory.data.length > 0) {
           const dates = m.medicationIssueHistory.data
             .map((i) => _issueHistoryDateToIso(i.startDate) || i.issueDate || i.date)
@@ -127,6 +137,7 @@
           if (dates.length) {
             startDate = dates[0];
             lastIssueDate = dates[dates.length - 1];
+            startDateSource = 'issue-history';
           }
         }
         // Fall back to a flat issueDate whenever the history array didn't yield a
@@ -135,6 +146,7 @@
         // no start date just because one of two paths uses `else if`.
         if (!startDate && m.issueDate) {
           startDate = m.issueDate;
+          startDateSource = 'issue-date';
         }
         if (!lastIssueDate && m.issueDate) {
           lastIssueDate = m.issueDate;
@@ -143,14 +155,21 @@
         // medicationIssueHistory above is capped to a rolling ~12-month window
         // server-side, so it can only ever reflect the CURRENT authorisation batch's
         // start, never the drug's real clinical start (see normaliseMedicationHistory).
+        // Join is keyed on vtmProductName: a regimen item without it (or a
+        // history map that lacks that substance) stays on the batch-scoped
+        // date and keeps the weaker provenance — post-init must not fire.
         if (medicationHistory && medicationHistory.size) {
           const substanceKey = String(m.vtmProductName || '').trim().toLowerCase();
           const trueStart = substanceKey ? medicationHistory.get(substanceKey) : null;
-          if (trueStart) startDate = trueStart;
+          if (trueStart) {
+            startDate = trueStart;
+            startDateSource = 'medication-history';
+          }
         }
         out.push({
           name,
           startDate,
+          startDateSource,
           lastIssueDate,
           source: label,
           dosage: m.dosageInstructions || null,
