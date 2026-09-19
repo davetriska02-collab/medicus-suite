@@ -38,6 +38,13 @@
       "note": "Practice-requested pairing (2026-09-16, Nick), alongside the 'Other extraction of cataract' pair above. Concept verified live via the public NHS termbrowser API (release v20260729): 172532006 is active, FSN/preferred term 'YAG laser capsulotomy of lens' (Great Britain English), matching the requested description exactly -- no text mismatch to flag, unlike the pairing above. YAG capsulotomy treats posterior capsule opacification, a real clinical sequela that can follow cataract extraction (including well after the fact), not a SNOMED IS-A descendant of Cataract itself (different hierarchy branch, Procedure axis vs Disorder axis) -- same relationship shape as every other procedure/sequela pairing already in this file, so the live descendant search would not surface it on its own."
     },
     {
+      "childConceptId": "95722004",
+      "childDescription": "Bilateral cataracts",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "Practice-requested pairing (2026-09-19, Nick), alongside re-asking for nuclear cataract (53889007) and phacoemulsification (84149000), both already in this file above. Concept verified live via the public NHS termbrowser API (release v20260729): 95722004 is active, FSN 'Bilateral cataracts (disorder)'. UNLIKE the procedure/sequela pairings, this one IS a genuine SNOMED IS-A descendant of Cataract (walked the inferred parents live: Bilateral cataracts -> Cataract of right eye / Cataract of left eye -> ... -> Cataract 193570009), so it is added here as the same pragmatic workaround as nuclear cataract -- the live descendant search has been missing genuine descendants for real patients (see that entry's note; root cause still unconfirmed). If bilateral cataracts ever fails to nest for a real patient despite this entry, confirm the conceptId Medicus actually records on that patient's problem before re-guessing."
+    },
+    {
       "childConceptId": "1366066004",
       "childDescription": "Nocturnal epileptic seizures",
       "parentConceptId": "84757009",

@@ -301,11 +301,17 @@
   //   - identical-concept pairs never suggest (duplicate ≠ hierarchy);
   //   - options that would create a cycle against the CURRENT link map are
   //     dropped here AND re-checked at commit time by the caller;
-  //   - a candidate child that chronologically PREDATES the candidate
-  //     parent is dropped too (predatesParent, 2026-08-08) — a child can't
-  //     have happened before the parent condition it's part of existed.
-  //     Applies equally to override pairs — a practice-defined relationship
-  //     is still subject to the same chronology sense-check.
+  //   - DATES DO NOT GATE a suggestion (changed 2026-09-19; 2026-08-08 to
+  //     2026-09-19 a child dated before its parent was dropped via
+  //     predatesParent). Problem dates say when something was RECORDED, not
+  //     which is the natural parent: a generic "Cataract" is often entered
+  //     after the specific nuclear cataract / phaco / bilateral entries it
+  //     should group, and the earliest specific entry can itself be a
+  //     sensible parent. SNOMED does not define which codes a practice uses
+  //     sensibly, so the pairing is offered whatever the dates and the
+  //     clinician's explicit per-link confirm remains the safeguard.
+  //     (predatesParent / resolveChronologyDate below are now unused by this
+  //     function; kept exported for the moment, safe to delete.)
   //     SUGGESTION-only: none of this constrains manual/drag-created links,
   //     where the clinician's own judgement is never overridden.
   function buildNestingSuggestions(problems, infoById, pairHits, overridePairHits) {
@@ -334,7 +340,6 @@
         var isOverrideHit = overrides.has(pairKey);
         if (!isSnomedHit && !isOverrideHit) return;
         if (wouldCreateCycle(child.id, parent.id, parentIdByProblemId)) return;
-        if (predatesParent(ci, pi)) return; // can't have happened before the parent existed
         options.push({
           id: parent.id,
           description: parent.description,

@@ -167,20 +167,25 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
 
   check(buildNestingSuggestions(null, null, null).length === 0, 'null inputs -> empty, never throws');
 
-  // Chronology sense-check (2026-08-08 request): a candidate child dated
-  // BEFORE its candidate parent can't genuinely be part of it — the parent
-  // condition didn't exist yet. Angioplasty (2005) can't be the parent of a
-  // stent inserted in 2001.
+  // Dates never gate a suggestion (2026-09-19; the 2026-08-08 "a child can't
+  // predate its parent" check was removed). A generic parent problem is
+  // often recorded AFTER the specific entries it should group — real
+  // cataract case: Cataract 2023-11-18, Phacoemulsification 2023-10-27,
+  // Bilateral cataracts 2023-04-02, Nuclear cataract 2023-03-01.
   const infoBackwards = {
     angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
     stent: { conceptId: 'C1', parentProblemId: null, onsetDate: '1 Jan 2001' },
     htn: { conceptId: 'H1', parentProblemId: null },
   };
   check(
-    buildNestingSuggestions(problems, infoBackwards, hits).length === 0,
-    "a child dated before its candidate parent isn't suggested — can't predate the condition it's part of"
+    buildNestingSuggestions(problems, infoBackwards, hits).length === 1,
+    'a child dated before its candidate parent IS still suggested — dates do not gate'
   );
-  // Same date, or child dated AFTER — not excluded.
+  check(
+    buildNestingSuggestions(problems, infoBackwards, hits)[0].parentOptions[0].source === 'snomed',
+    'the date-independent suggestion keeps its SNOMED provenance tag'
+  );
+  // Same date, or child dated AFTER — also offered.
   const infoSameDay = {
     angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
     stent: { conceptId: 'C1', parentProblemId: null, onsetDate: '1 Jan 2005' },
@@ -341,6 +346,18 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
     pairSet.has('172532006|193570009'),
     'YAG laser capsulotomy of lens (172532006) as a child of cataract (193570009) is in the shipped file'
   );
+  // 2026-09-19: bilateral cataracts (Nick) — verified live against the NHS
+  // termbrowser API (active; genuine IS-A descendant of cataract). Nuclear
+  // cataract and phacoemulsification were re-requested the same day and are
+  // already pinned above / below.
+  check(
+    pairSet.has('95722004|193570009'),
+    'bilateral cataracts (95722004) as a child of cataract (193570009) is in the shipped file'
+  );
+  check(
+    pairSet.has('84149000|193570009'),
+    'phacoemulsification (84149000) as a child of cataract (193570009) is in the shipped file'
+  );
   // 2026-08-26: practice-requested seizure/epilepsy pairs (Nick) — added
   // while separately testing a problem-description-cleanup fix.
   check(
@@ -479,6 +496,38 @@ console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
   check(predatesParent({}, { onsetDate: '1 Jan 2005' }) === false, 'child date unknown -> fails open, not excluded');
   check(predatesParent({ onsetDate: '1 Jan 2005' }, {}) === false, 'parent date unknown -> fails open, not excluded');
   check(predatesParent(null, null) === false, 'null inputs -> false, never throws');
+}
+
+console.log('--- real cataract case (2026-09-19): dates never gate the shipped override pairs ---');
+{
+  const overrides = buildOverridePairSet(require('./rules/problem-nesting-overrides.json').pairs);
+  const problems = [
+    { id: 'cat', description: 'Cataract' },
+    { id: 'pseudo', description: 'Pseudophakia' },
+    { id: 'phaco', description: 'Phacoemulsification of lens' },
+    { id: 'bilat', description: 'Bilateral cataracts' },
+    { id: 'nuc', description: 'Nuclear cataract' },
+  ];
+  const info = {
+    cat: { conceptId: '193570009', parentProblemId: null, onsetDate: null, recordDate: '2023-11-18' },
+    pseudo: { conceptId: '95217000', parentProblemId: null, onsetDate: null, recordDate: '2023-11-18' },
+    phaco: { conceptId: '84149000', parentProblemId: null, onsetDate: null, recordDate: '2023-10-27' },
+    bilat: { conceptId: '95722004', parentProblemId: null, onsetDate: null, recordDate: '2023-04-02' },
+    nuc: { conceptId: '53889007', parentProblemId: null, onsetDate: null, recordDate: '2023-03-01' },
+  };
+  const out = buildNestingSuggestions(problems, info, new Set(), overrides);
+  const byChild = Object.fromEntries(out.map((s) => [s.childId, s]));
+  ['pseudo', 'phaco', 'bilat', 'nuc'].forEach((id) => {
+    check(
+      byChild[id] && byChild[id].parentOptions.length === 1 && byChild[id].parentOptions[0].id === 'cat',
+      id + ' is offered a nest under Cataract even though it is dated before it'
+    );
+    check(
+      byChild[id] && byChild[id].parentOptions[0].source === 'override',
+      id + ' is tagged as a practice override (not credited to SNOMED)'
+    );
+  });
+  check(!byChild.cat, 'Cataract itself is not offered a parent');
 }
 
 console.log('--- manualChildOptions: the manual builder is looser, except the cycle guard ---');

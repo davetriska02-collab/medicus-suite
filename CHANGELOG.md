@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.8] — 2026-09-19
+
+### Problem canvas — nesting suggestions no longer gated on dates; Bilateral cataracts added
+
+Live report: on a real patient the Cataract problem (recorded 2023-11-18) was
+offered Pseudophakia (same date) as a child, but NOT Phacoemulsification of
+lens (2023-10-27), Bilateral cataracts (2023-04-02) or Nuclear cataract
+(2023-03-01) — although the first and third were already in
+`rules/problem-nesting-overrides.json`. Cause: `buildNestingSuggestions`
+(2026-08-08) dropped any suggestion whose child was dated strictly before its
+parent ("a child can't predate the condition it's part of").
+
+- **Dates no longer gate a suggestion**, for SNOMED-derived and override pairs
+  alike. Problem dates say when something was *recorded*, not which is the
+  natural parent — a generic "Cataract" is often entered after the specific
+  entries it should group, and the earliest specific entry can itself be a sensible
+  parent. Nothing changes about safety: suggestions are never auto-applied,
+  every one still needs the explicit per-link confirm, the cycle guard and the
+  provenance tag (SNOMED vs practice override) are unchanged. Manual/drag links
+  were never date-gated.
+- **New override pair:** 95722004 Bilateral cataracts -> 193570009 Cataract
+  (verified live against the NHS termbrowser API: active, genuine IS-A
+  descendant of Cataract; added as the same workaround as Nuclear cataract,
+  since the live descendant search has been missing genuine descendants).
+- `predatesParent` / `resolveChronologyDate` (and problem-nesting.js's own
+  `dateSortKey` copy) are now unused by suggestions; left in place, safe to delete.
+- `test-problem-nesting.js`: the old "child dated before parent is not
+  suggested" test now asserts the opposite; +a test using the real cataract
+  case's dates and the shipped overrides (all four children offered Cataract).
+
 ## [v3.263.7] — 2026-09-19
 
 ### Flu eligibility — UK synonym "Is a carer" (SNOMED 224484003)
