@@ -1,0 +1,59 @@
+name: Medicus Steward PR review gate
+
+# Contributor PR review is owned by **Medicus Steward** (the Grok Bot CI
+# watch), not by a GitHub Action. The old Claude "Virtual Dave" Action
+# (anthropics/claude-code-action + CLAUDE_CODE_OAUTH_TOKEN) is retired — this
+# workflow needs NO Anthropic secret and makes no model calls.
+#
+# What this job does:
+#   1. Keeps the check name branch protection expects: the job id is `review`
+#      (same as the old workflow), and it exits successfully, so the required
+#      check goes green without any external dependency.
+#   2. Posts ONE comment on the PR (deduped by a hidden marker) telling the
+#      contributor that Medicus Steward owns the review and to expect its
+#      safety-first verdict as a PR comment.
+#
+# The Steward's actual review (verdict: Ship it / Ship after tweaks / Needs
+# work) arrives as a separate PR comment from the Steward itself — it is
+# advisory, never a merge gate (see docs/PR-REVIEW-SETUP.md).
+
+on:
+  pull_request:
+    # Same trigger set as the retired workflow: once when a PR opens / is
+    # reopened / is marked ready — NOT on every push (`synchronize`).
+    types: [opened, reopened, ready_for_review]
+
+# Don't pile up notices when a PR is re-triggered repeatedly — cancel the old run.
+concurrency:
+  group: steward-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Review contributors' PRs, but NOT the maintainer's own. Skip drafts too.
+    if: ${{ github.event.pull_request.draft == false && github.event.pull_request.user.login != 'davetriska02-collab' }}
+    steps:
+      - name: Post Medicus Steward handover notice (once per PR)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          marker='<!-- medicus-steward-review-notice -->'
+          if gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+               --json comments --jq '.comments[].body' | grep -qF "$marker"; then
+            echo "Steward notice already posted on #$PR_NUMBER — nothing to do."
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$marker
+          **Medicus Steward** (Grok Bot CI watch) owns contributor PR review on this repo now.
+
+          The Claude \"Virtual Dave\" review Action is retired — no Anthropic key (\`CLAUDE_CODE_OAUTH_TOKEN\` / \`ANTHROPIC_API_KEY\`) is required or used. This check exists only to keep the \`review\` gate green; the Steward's safety-first review (verdict: **Ship it** / **Ship after tweaks** / **Needs work**) will arrive as its own comment.
+
+          See \`docs/PR-REVIEW-SETUP.md\` for how review and the governance gates work."
