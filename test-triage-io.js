@@ -67,13 +67,66 @@ console.log('--- sanitiseTriageConfigForImport ---');
   check(!('version' in stored), 'stored config carries NO version — next mergeShippedDefaults re-runs');
   check(Array.isArray(stored.rules) && stored.rules[0].id === 'r1', 'rules array restored');
 
-  let threw = false;
-  try {
-    await IO.triageImport({ config: { systemChips: 'not-a-list' } });
-  } catch (e) {
-    threw = /must be an array/.test(e.message);
+  // systemChips is a MAP keyed by chip id, not a list (defaults.json, content.js
+  // mergeShippedDefaults and the options validator all agree). The 2026-08-23
+  // sanitiser demanded an array, so every real backup failed to restore
+  // (reported 2026-09-19: "systemChips must be an array — no changes were applied").
+  for (const bad of ['not-a-map', ['queue.child'], null]) {
+    let threw = false;
+    delete STORE['triagelens.config'];
+    try {
+      await IO.triageImport({ config: { systemChips: bad } });
+    } catch (e) {
+      threw = /systemChips must be an object/.test(e.message);
+    }
+    check(threw, `import with systemChips = ${JSON.stringify(bad)} throws before any write`);
+    check(!('triagelens.config' in STORE), `  …and nothing was written (${JSON.stringify(bad)})`);
   }
-  check(threw, 'import with a non-array systemChips throws before any write');
+
+  // The real shipped shape must restore — this is the regression.
+  const shipped = require('./defaults.json');
+  check(
+    shipped.systemChips && typeof shipped.systemChips === 'object' && !Array.isArray(shipped.systemChips),
+    'sanity: defaults.json ships systemChips as an object map'
+  );
+  delete STORE['triagelens.config'];
+  await IO.triageImport({
+    config: {
+      version: shipped.version,
+      rules: shipped.rules,
+      resultRules: shipped.resultRules,
+      systemChips: {
+        ...shipped.systemChips,
+        'queue.child': { enabled: false, label: 'Custom child', kind: 'amber', actions: [] },
+      },
+    },
+  });
+  const restored = STORE['triagelens.config'];
+  check(!!restored, 'a config carrying the real systemChips map restores');
+  check(
+    Object.keys(restored.systemChips).length === Object.keys(shipped.systemChips).length,
+    'every system chip survives the restore'
+  );
+  check(restored.systemChips['queue.child'].label === 'Custom child', 'a user-customised chip is preserved verbatim');
+  check(!('version' in restored), 'version is still dropped (migration-stranding guard unchanged)');
+
+  // Full backup round-trip through the same sanitiser: export shape in, same shape out.
+  const roundTrip = IO.sanitiseTriageConfigForImport(JSON.parse(JSON.stringify(shipped)));
+  check(
+    Array.isArray(roundTrip.rules) && Array.isArray(roundTrip.resultRules) && !Array.isArray(roundTrip.systemChips),
+    'the entire shipped defaults.json passes the sanitiser with its shapes intact'
+  );
+  check(
+    (() => {
+      try {
+        IO.sanitiseTriageConfigForImport({ rules: {} });
+        return false;
+      } catch (e) {
+        return /rules must be an array/.test(e.message);
+      }
+    })(),
+    'rules / resultRules are still required to be arrays'
+  );
 
   if (failed) {
     console.error(`\n${failed} check(s) failed, ${passed} passed`);

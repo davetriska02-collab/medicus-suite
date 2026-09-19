@@ -44,9 +44,22 @@ function sanitiseTriageConfigForImport(config) {
     out[k] = config[k];
   }
   delete out.version;
-  for (const key of ['rules', 'resultRules', 'systemChips']) {
+  for (const key of ['rules', 'resultRules']) {
     if (out[key] !== undefined && !Array.isArray(out[key])) {
       throw new Error(`triagelens.config.${key} must be an array.`);
+    }
+  }
+  // systemChips is a MAP keyed by chip id ({ 'queue.child': { enabled, label,
+  // kind, actions }, ... }) — that is how defaults.json ships it and how
+  // mergeShippedDefaults / the options editor read it ({ ...shipped.systemChips,
+  // ...cfg.systemChips }). The 2026-08-23 audit hardening wrongly required an
+  // ARRAY here, so EVERY real backup (all carry systemChips) failed to restore
+  // with "triagelens.config.systemChips must be an array — no changes were
+  // applied" (reported 2026-09-19). It must be a plain object, not a list.
+  if (out.systemChips !== undefined) {
+    const sc = out.systemChips;
+    if (sc === null || typeof sc !== 'object' || Array.isArray(sc)) {
+      throw new Error('triagelens.config.systemChips must be an object.');
     }
   }
   return out;
