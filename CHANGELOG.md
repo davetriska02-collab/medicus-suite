@@ -2,7 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.263.11] — 2026-09-19
+## [v3.263.13] — 2026-09-19
+
+### Version renumber: 3.263.11 → 3.263.13
+
+The Medicus Steward change below briefly shipped to `main` as v3.263.11, but
+v3.263.11 and v3.263.12 are already claimed by in-flight PRs #430 and #431 —
+so `main` skips to v3.263.13 to avoid the collision. No code change beyond the
+version fields.
 
 ### PR review gate handed to Medicus Steward — Claude Action retired
 
