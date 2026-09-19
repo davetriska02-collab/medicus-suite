@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.11] — 2026-09-19
+
+### PR review gate handed to Medicus Steward — Claude Action retired
+
+Contributor PR review is now owned by **Medicus Steward** (the Grok Bot CI
+watch). The `Virtual Dave PR review` GitHub Action
+(`anthropics/claude-code-action`) is retired, along with its
+`CLAUDE_CODE_OAUTH_TOKEN` dependency — the token expired periodically and
+silently killed reviews when it lapsed.
+
+- `.github/workflows/claude-review.yml` → `steward-review.yml`
+  ("Medicus Steward PR review gate"): same triggers (opened / reopened /
+  ready_for_review), same skip rules (drafts, maintainer's own PRs), and the
+  **same `review` job id** so the branch-protection required check still
+  matches. The job posts one deduped handover notice via the built-in
+  `GITHUB_TOKEN` and exits green — no Anthropic secret, no model call.
+- `docs/PR-REVIEW-SETUP.md` rewritten: Steward owns review; the Claude
+  App / `CLAUDE_CODE_OAUTH_TOKEN` setup section replaced with a retirement
+  note (the secrets can be deleted). Governance stack unchanged — the Steward
+  remains advisory; deterministic tests + CODEOWNERS review are the gates.
+
+No extension code changed — CI/infra only.
+
 ## [v3.263.10] — 2026-09-19
 
 ### StackChan PHI test uses a checksum-invalid NHS lookalike
