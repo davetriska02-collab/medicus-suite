@@ -1113,6 +1113,7 @@ async function doFullExport() {
     rota,
     board,
     allocationGroups,
+    stackchan,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -1134,6 +1135,7 @@ async function doFullExport() {
     rotaExport(),
     boardExport(),
     allocationGroupsExport(),
+    stackchanExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -1159,6 +1161,7 @@ async function doFullExport() {
       rota,
       board,
       allocationGroups,
+      stackchan,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -1187,6 +1190,7 @@ async function doModuleExport(scope) {
     rota: () => rotaExport(),
     board: () => boardExport(),
     allocationGroups: () => allocationGroupsExport(),
+    stackchan: () => stackchanExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -1229,6 +1233,7 @@ async function applyEnvelope(envelope) {
     mods.rota && (() => rotaImport(mods.rota)),
     mods.board && (() => boardImport(mods.board)),
     mods.allocationGroups && (() => allocationGroupsImport(mods.allocationGroups)),
+    mods.stackchan && (() => stackchanImport(mods.stackchan)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1554,6 +1559,13 @@ async function isPracticeAccepted() {
         defaultChecked: false,
         defaultMode: 'merge',
         desc: 'Filing profiles (match rules, parameters, allow-listed comments). A synced profile always arrives OFF — each machine still enables it locally after review. Replace: every profile here is replaced by the practice set. Merge: adds new profiles and keeps yours.',
+      },
+      {
+        id: 'stackchan',
+        label: 'StackChan desk robot',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'LAN URL and enable flag for the desk robot. Off by default. Never carries patient data.',
       },
       {
         id: 'suite',
@@ -2775,6 +2787,159 @@ rmSaveBtn?.addEventListener('click', async () => {
   if (rmSavedTag) {
     rmSavedTag.classList.add('show');
     setTimeout(() => rmSavedTag.classList.remove('show'), 2000);
+  }
+});
+
+// ── StackChan desk robot ─────────────────────────────────────────────────────
+
+const scEnabled = document.getElementById('scEnabled');
+const scBaseUrl = document.getElementById('scBaseUrl');
+const scToken = document.getElementById('scToken');
+const scRespectQuiet = document.getElementById('scRespectQuiet');
+const scHookSentinel = document.getElementById('scHookSentinel');
+const scHookRm = document.getElementById('scHookRm');
+const scHookCompanion = document.getElementById('scHookCompanion');
+const scSaveBtn = document.getElementById('saveStackchan');
+const scSavedTag = document.getElementById('scSaved');
+const scStatus = document.getElementById('scStatus');
+const scTestFaces = document.getElementById('scTestFaces');
+const scTestResult = document.getElementById('scTestResult');
+const scHealthBtn = document.getElementById('scHealthBtn');
+
+function scReadForm() {
+  const Bridge = window.StackchanBridge;
+  if (!Bridge) return null;
+  return Bridge.sanitiseConfig({
+    enabled: !!scEnabled?.checked,
+    baseUrl: scBaseUrl?.value || '',
+    token: scToken?.value || '',
+    respectQuiet: scRespectQuiet ? !!scRespectQuiet.checked : true,
+    hookSentinel: scHookSentinel ? !!scHookSentinel.checked : true,
+    hookRequestMonitor: scHookRm ? !!scHookRm.checked : true,
+    hookCompanion: scHookCompanion ? !!scHookCompanion.checked : true,
+  });
+}
+
+function scFillForm(cfg) {
+  if (scEnabled) scEnabled.checked = !!cfg.enabled;
+  if (scBaseUrl) scBaseUrl.value = cfg.baseUrl || '';
+  if (scToken) scToken.value = cfg.token || '';
+  if (scRespectQuiet) scRespectQuiet.checked = cfg.respectQuiet !== false;
+  if (scHookSentinel) scHookSentinel.checked = cfg.hookSentinel !== false;
+  if (scHookRm) scHookRm.checked = cfg.hookRequestMonitor !== false;
+  if (scHookCompanion) scHookCompanion.checked = cfg.hookCompanion !== false;
+}
+
+async function scEnsureOriginPermission(baseUrl) {
+  const Bridge = window.StackchanBridge;
+  if (!Bridge || !chrome.permissions?.request) return { ok: true };
+  const origin = Bridge.originFromBaseUrl(baseUrl);
+  if (!origin) return { ok: false, error: 'Set a valid http(s) base URL first' };
+  try {
+    const granted = await chrome.permissions.request({ origins: [origin + '/*'] });
+    return granted ? { ok: true } : { ok: false, error: 'LAN permission denied — Edge/Chrome blocked the robot origin' };
+  } catch (e) {
+    return { ok: false, error: (e && e.message) || 'permission request failed' };
+  }
+}
+
+(async function initStackchanSection() {
+  try {
+    if (!window.StackchanBridge) return;
+    scFillForm(await window.StackchanBridge.getConfig());
+  } catch (e) {
+    console.warn('[StackChan init]', e && e.message);
+  }
+})();
+
+if (scTestFaces && window.StackchanBridge) {
+  const colours = {
+    idle: '#334155',
+    calm: '#16a34a',
+    alert: '#dc2626',
+    wait: '#b45309',
+    done: '#15803d',
+    celebrate: '#7c3aed',
+    listen: '#2563eb',
+  };
+  window.StackchanBridge.COMMANDS.forEach((cmd) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'ghost';
+    btn.textContent = cmd;
+    btn.dataset.scCmd = cmd;
+    btn.style.background = colours[cmd] || '';
+    btn.style.color = '#fff';
+    btn.style.border = '0';
+    scTestFaces.appendChild(btn);
+  });
+}
+
+scSaveBtn?.addEventListener('click', async () => {
+  const cfg = scReadForm();
+  if (!cfg || !window.StackchanBridge) return;
+  if (cfg.enabled && !cfg.baseUrl) {
+    if (scSavedTag) {
+      scSavedTag.textContent = 'Need a base URL to enable';
+      scSavedTag.style.color = '#f87171';
+      scSavedTag.classList.add('show');
+      setTimeout(() => {
+        scSavedTag.classList.remove('show');
+        scSavedTag.textContent = 'Saved ✓';
+        scSavedTag.style.color = '';
+      }, 3000);
+    }
+    return;
+  }
+  if (cfg.baseUrl) {
+    const perm = await scEnsureOriginPermission(cfg.baseUrl);
+    if (!perm.ok && scStatus) scStatus.textContent = perm.error;
+  }
+  const saved = await window.StackchanBridge.setConfig(cfg);
+  scFillForm(saved);
+  if (scSavedTag) {
+    scSavedTag.classList.add('show');
+    setTimeout(() => scSavedTag.classList.remove('show'), 2000);
+  }
+});
+
+async function scCallWorker(action, extra) {
+  const cfg = scReadForm();
+  if (!cfg) return { ok: false, error: 'bridge not loaded' };
+  if (cfg.baseUrl) {
+    const perm = await scEnsureOriginPermission(cfg.baseUrl);
+    if (!perm.ok) return perm;
+  }
+  await window.StackchanBridge.setConfig(cfg);
+  return await chrome.runtime.sendMessage(Object.assign({ action }, extra || {}));
+}
+
+scHealthBtn?.addEventListener('click', async () => {
+  if (scStatus) scStatus.textContent = 'pinging…';
+  try {
+    const res = await scCallWorker('stackchan:health');
+    if (scStatus) {
+      scStatus.textContent = res && res.ok
+        ? `ok  v${res.version || '?'}  cmd=${res.cmd || '?'}  camera=${res.camera}  mic=${res.mic}`
+        : (res && res.error) || 'no response';
+    }
+  } catch (e) {
+    if (scStatus) scStatus.textContent = (e && e.message) || 'ping failed';
+  }
+});
+
+scTestFaces?.addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('[data-sc-cmd]');
+  if (!btn) return;
+  const cmd = btn.dataset.scCmd;
+  if (scTestResult) scTestResult.textContent = `sending ${cmd}…`;
+  try {
+    const res = await scCallWorker('stackchan:test', { command: cmd });
+    if (scTestResult) {
+      scTestResult.textContent = res && res.ok ? `${cmd} → ${res.cmd || cmd}` : (res && res.error) || 'no response';
+    }
+  } catch (e) {
+    if (scTestResult) scTestResult.textContent = (e && e.message) || 'test failed';
   }
 });
 

@@ -108,6 +108,10 @@ An optional **Transactional API** proxy is **off by default**, read-only,
 and practice-configured — see
 [`docs/TRANSACTIONAL-API-INTEGRATION.md`](docs/TRANSACTIONAL-API-INTEGRATION.md).
 
+An optional **StackChan** desk robot (M5Stack, practice LAN, default off)
+can show a face for Sentinel severity / new Request Monitor work. Camera and
+mics stay off. Flash + wire-up: [`docs/STACKCHAN.md`](docs/STACKCHAN.md).
+
 ## Licence
 
 **Proprietary — all rights reserved.** Copyright © 2026 Dr Dave Triska /

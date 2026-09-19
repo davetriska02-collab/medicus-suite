@@ -139,6 +139,11 @@ try {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
 }
 try {
+  importScripts('shared/stackchan-bridge.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/stackchan-bridge.js failed:', e && e.message);
+}
+try {
   importScripts('shared/presence-folder.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/presence-folder.js failed:', e && e.message);
@@ -1046,6 +1051,17 @@ async function pollRequestMonitor() {
     if (cfg.notifyEnabled && !result.isFirstPoll && Object.keys(result.freshByBucket).length > 0) {
       await sendRmNotifications(result.freshByBucket, cfg, code);
     }
+
+    // Desk robot: fire on genuine new work even when desktop toasts are off.
+    // Keys only — never the bucket items (those can hold initials / summaries).
+    if (!result.isFirstPoll && Object.keys(result.freshByBucket).length > 0) {
+      try {
+        const mapped = self.StackchanBridge && self.StackchanBridge.mapRequestMonitorEvent({
+          buckets: Object.keys(result.freshByBucket),
+        });
+        dispatchStackchan(mapped, {}).catch(() => {});
+      } catch (_) {}
+    }
   } catch (pollErr) {
     console.warn('[RM] pollAll failed:', pollErr && pollErr.message);
   }
@@ -1226,5 +1242,117 @@ async function initialiseUpdateChecker() {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === UPDATE_ALARM) {
     _runUpdateCheck();
+  }
+});
+
+// ── StackChan desk presence (LAN HTTP, no PHI) ───────────────────────────────
+// Fire-and-forget POST. Never blocks Medicus UI. Unknown / failed → swallow.
+let _stackchanLastCmd = '';
+let _stackchanLastAt = 0;
+
+async function dispatchStackchan(mapped, opts) {
+  const Bridge = self.StackchanBridge;
+  if (!Bridge) return { ok: false, error: 'bridge not loaded' };
+  if (!mapped) return { ok: false, skipped: true, error: 'nothing to send' };
+  const isTest = !!(opts && opts.isTest);
+  let cfg;
+  try {
+    cfg = await Bridge.getConfig();
+  } catch (_) {
+    return { ok: false, error: 'config unread' };
+  }
+  let quiet = false;
+  if (!isTest) {
+    try {
+      quiet = (await self.QuietMode?.isQuiet?.()) ?? false;
+    } catch (_) {
+      quiet = false;
+    }
+  }
+  if (!Bridge.shouldDispatch(cfg, { quiet, isTest, event: mapped.event })) {
+    return { ok: false, skipped: true, error: 'not dispatched' };
+  }
+  const payload = Bridge.buildPayload({
+    command: mapped.command,
+    event: mapped.event,
+    severity: mapped.severity,
+    ts: Date.now(),
+  });
+  if (!isTest && payload.cmd === _stackchanLastCmd && Date.now() - _stackchanLastAt < 4000) {
+    return { ok: true, skipped: true, cmd: payload.cmd };
+  }
+  const post = Bridge.buildPost(cfg, payload);
+  if (!post) return { ok: false, error: 'no URL' };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Bridge.clampTimeout(cfg.timeoutMs));
+  try {
+    const res = await fetch(post.url, Object.assign({}, post.init, { signal: ctrl.signal }));
+    clearTimeout(timer);
+    let body = null;
+    try {
+      body = await res.json();
+    } catch (_) {}
+    if (!res.ok) return { ok: false, error: 'HTTP ' + res.status, cmd: payload.cmd };
+    _stackchanLastCmd = payload.cmd;
+    _stackchanLastAt = Date.now();
+    return {
+      ok: true,
+      cmd: (body && body.cmd) || payload.cmd,
+      camera: body && body.camera,
+      mic: body && body.mic,
+    };
+  } catch (e) {
+    clearTimeout(timer);
+    const timeout = e && e.name === 'AbortError';
+    return { ok: false, error: timeout ? 'timeout' : String((e && e.message) || e) };
+  }
+}
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!sender || sender.id !== chrome.runtime.id) return;
+  if (!msg) return;
+  if (msg.type === 'stackchan:event') {
+    try {
+      const mapped = self.StackchanBridge && self.StackchanBridge.mapSuiteEvent(msg);
+      dispatchStackchan(mapped, {}).catch(() => {});
+    } catch (_) {}
+    return;
+  }
+  if (msg.action === 'stackchan:test') {
+    try {
+      const mapped =
+        self.StackchanBridge &&
+        self.StackchanBridge.mapSuiteEvent({ source: 'options.test', command: msg.command });
+      dispatchStackchan(mapped, { isTest: true })
+        .then(sendResponse)
+        .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+      return true;
+    } catch (e) {
+      sendResponse({ ok: false, error: String((e && e.message) || e) });
+      return;
+    }
+  }
+  if (msg.action === 'stackchan:health') {
+    (async () => {
+      const Bridge = self.StackchanBridge;
+      if (!Bridge) return { ok: false, error: 'bridge not loaded' };
+      const cfg = await Bridge.getConfig();
+      const get = Bridge.buildHealthGet(cfg);
+      if (!get) return { ok: false, error: 'no URL' };
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), Bridge.clampTimeout(cfg.timeoutMs));
+      try {
+        const res = await fetch(get.url, Object.assign({}, get.init, { signal: ctrl.signal }));
+        clearTimeout(timer);
+        const body = await res.json().catch(() => ({}));
+        return Object.assign({ ok: !!res.ok }, body, res.ok ? {} : { error: 'HTTP ' + res.status });
+      } catch (e) {
+        clearTimeout(timer);
+        return { ok: false, error: e && e.name === 'AbortError' ? 'timeout' : String((e && e.message) || e) };
+      }
+    })()
+      .then(sendResponse)
+      .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));
+    return true;
   }
 });

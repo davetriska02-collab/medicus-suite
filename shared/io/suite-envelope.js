@@ -6,7 +6,7 @@
 //   formatVersion: 1
 //   scope: "suite" | "sentinel" | "capacity" | "triage" | "triageAlerts" |
 //           "slots" | "submissions" | "popout" | "referrals" | "requestMonitor" |
-//           "condor"
+//           "condor" | "stackchan"
 //   modules: { [scope]: { ...module data } }
 //
 // A scoped export (e.g. just Capacity) includes only that module's key under
@@ -107,6 +107,7 @@ const VALID_SCOPES = [
   'rota',
   'board',
   'allocationGroups',
+  'stackchan',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -529,6 +530,15 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Note board');
+    if (m) lines.push(m);
+  }
+
+  if (mods.stackchan) {
+    const enabled = mods.stackchan.enabled === true;
+    const url = mods.stackchan.baseUrl || 'no URL';
+    lines.push(`StackChan: ${enabled ? 'enabled' : 'disabled'}, ${url}`);
+  } else {
+    const m = missing('StackChan');
     if (m) lines.push(m);
   }
 

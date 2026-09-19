@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.263.9
+**Version:** v3.263.10
 **Generated:** 2026-09-19
 
 ## What it is
@@ -116,6 +116,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
+- **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
@@ -149,6 +150,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.263.10 (19 Sep)** — StackChan desk-robot presence: LAN HTTP face commands from Sentinel / Request Monitor / Companion; firmware camera+mic off; Options Test face
 - **v3.263.9 (19 Sep)** — Restored ACE-I/ARB and thiazide post-initiation U&E, gated on a true medication-history start (batch dates cannot fire)
 - **v3.263.7 (19 Sep)** — Flu chip: UK synonym "Is a carer" (SNOMED 224484003 / description 1222761019)
 - **v3.263.1 (18 Sep)** — Task presence: occupied banner no longer oscillates on request overviews that re-render the message chrome
