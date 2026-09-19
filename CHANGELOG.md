@@ -26,11 +26,16 @@ parent ("a child can't predate the condition it's part of").
   (verified live against the NHS termbrowser API: active, genuine IS-A
   descendant of Cataract; added as the same workaround as Nuclear cataract,
   since the live descendant search has been missing genuine descendants).
-- `predatesParent` / `resolveChronologyDate` (and problem-nesting.js's own
-  `dateSortKey` copy) are now unused by suggestions; left in place, safe to delete.
+- **Removed the now-dead date helpers** from `problem-nesting.js`:
+  `predatesParent`, `resolveChronologyDate` and that file's own `dateSortKey`
+  copy (plus the date regexes/month table only they used; ~120 lines). The
+  canvas's tile ordering is unaffected — `problem-nesting-canvas.js` has its own
+  `dateSortKey` / `compareDatesDesc`, and `window.ProblemNesting` never exposed
+  these.
 - `test-problem-nesting.js`: the old "child dated before parent is not
   suggested" test now asserts the opposite; +a test using the real cataract
-  case's dates and the shipped overrides (all four children offered Cataract).
+  case's dates and the shipped overrides (all four children offered Cataract);
+  the date-helper tests are removed with the helpers.
 
 ## [v3.263.7] — 2026-09-19
 

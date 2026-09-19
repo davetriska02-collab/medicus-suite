@@ -144,119 +144,6 @@
     return false;
   }
 
-  var ONSET_DATE_RE = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/;
-  var ONSET_MONTH_ABBR = {
-    Jan: '01',
-    Feb: '02',
-    Mar: '03',
-    Apr: '04',
-    May: '05',
-    Jun: '06',
-    Jul: '07',
-    Aug: '08',
-    Sep: '09',
-    Oct: '10',
-    Nov: '11',
-    Dec: '12',
-  };
-  // recordDate comes back from slideover/overview ALREADY in ISO shape
-  // (confirmed live 2026-08-08, HAR 48: "recordDate":"2025-01-15" on the
-  // SAME response as "onsetDate":"20 Apr 2006") — onsetDate and recordDate
-  // are two DIFFERENT formats on the same object, not one format that's
-  // sometimes present. dateSortKey below must recognise both, or the
-  // onset-blank record-date fallback silently returns null (the mis-sorting
-  // Nick found live 2026-08-08 — a chronology check built on a null date
-  // fails open, so this also silently defeated predatesParent below).
-  var ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-  // A PARTIAL onset date — month + year only, no day (e.g. "Dec 2008") —
-  // is a real, legitimate shape Medicus stores (an imported/historic record
-  // that never had a day recorded), confirmed live 2026-08-20: it fell
-  // through ONSET_DATE_RE (which requires a day) AND ISO_DATE_RE, so
-  // dateSortKey returned null — resolveChronologyDate below then also
-  // returned null for it, silently defeating predatesParent's own
-  // chronology check for any problem with a partial onset date, not just
-  // the display sort order.
-  var ONSET_MONTH_ONLY_RE = /^([A-Za-z]{3}) (\d{4})$/;
-
-  // A YEAR-ONLY onset date — no month, no day (e.g. "2012") — is a further,
-  // even less specific shape Medicus stores; same family as the month-only
-  // case above but confirmed live separately (2026-08-27, Nick: a "since
-  // 2012" prostate-cancer problem sorted as the OLDEST entry in the canvas).
-  // See problem-nesting-canvas.js's own dateSortKey for the full story —
-  // same fix, duplicated here for predatesParent's chronology check.
-  var ONSET_YEAR_ONLY_RE = /^(\d{4})$/;
-
-  // Parses the confirmed "DD Mon YYYY" onset-date display shape, an
-  // already-ISO "YYYY-MM-DD" shape (recordDate), a partial "Mon YYYY" onset
-  // date, OR a bare "YYYY" onset date into a zero-padded, lexically
-  // comparable key. Returns null for missing/malformed input — never
-  // guesses a month or day that wasn't given.
-  // Same regex/table as problem-nesting-canvas.js's own dateSortKey and
-  // allergy-cleanup.js's normalizeOnsetDateForSubmit — duplicated, not
-  // shared, the same way each content script already carries its own copy
-  // of small parsing helpers.
-  function dateSortKey(value) {
-    if (value == null) return null;
-    var s = String(value).trim();
-    var iso = ISO_DATE_RE.exec(s);
-    if (iso) return iso[1] + '-' + iso[2] + '-' + iso[3];
-    var m = ONSET_DATE_RE.exec(s);
-    if (m) {
-      var month = ONSET_MONTH_ABBR[m[2]];
-      if (!month) return null;
-      var day = m[1].length === 1 ? '0' + m[1] : m[1];
-      return m[3] + '-' + month + '-' + day;
-    }
-    // Deliberately NOT padded to a guessed day — see
-    // problem-nesting-canvas.js's own dateSortKey for why a bare 'YYYY-MM'
-    // key already sorts correctly via plain string-prefix comparison.
-    var mo = ONSET_MONTH_ONLY_RE.exec(s);
-    if (mo) {
-      var monthOnly = ONSET_MONTH_ABBR[mo[1]];
-      if (!monthOnly) return null;
-      return mo[2] + '-' + monthOnly;
-    }
-    // Same prefix logic one level up — see problem-nesting-canvas.js's own
-    // dateSortKey for why a bare 'YYYY' key already sorts correctly.
-    var yr = ONSET_YEAR_ONLY_RE.exec(s);
-    if (yr) return yr[1];
-    return null;
-  }
-
-  // Onset date, falling back to record date when onset is blank — same
-  // fallback the canvas already uses for display (2026-08-08), so "which
-  // date counts" stays consistent between what's shown on a tile and what
-  // the chronology check below judges it against.
-  function resolveChronologyDate(info) {
-    if (!info) return null;
-    return dateSortKey(info.onsetDate) || dateSortKey(info.recordDate);
-  }
-
-  // True when childInfo/parentInfo's own dates rule OUT a parent/child
-  // relationship: a child can't chronologically PREDATE the parent
-  // condition it's supposedly part of (2026-08-08 request). Fails OPEN when
-  // either date is unknown — this is a negative/exclusionary check on
-  // positive evidence, not a data-completeness requirement, so missing
-  // dates never block a suggestion that would otherwise have been offered.
-  // Equal dates (e.g. a stent inserted the same day the underlying disease
-  // was recorded) are NOT excluded — only a strictly earlier child is.
-  //
-  // Partial dates compare at the SHARED precision: a bare 'YYYY' key is a
-  // string prefix of every 'YYYY-MM' / 'YYYY-MM-DD' key, so a raw `<` would
-  // read "2012" as earlier than "2012-03-15" — i.e. "unknown within the
-  // year" would be treated as "known to predate", silently dropping every
-  // suggestion whose parent is dated in the same year (or month, for the
-  // month-only case). Truncating both keys to the shorter one's length
-  // turns that into an equal-dates comparison, which is NOT excluded.
-  function predatesParent(childInfo, parentInfo) {
-    var childDate = resolveChronologyDate(childInfo);
-    var parentDate = resolveChronologyDate(parentInfo);
-    if (!childDate || !parentDate) return false;
-    var n = Math.min(childDate.length, parentDate.length); // 4, 7 or 10
-    return childDate.slice(0, n) < parentDate.slice(0, n);
-  }
-
   // Builds the 'childConceptId|parentConceptId' key Set from
   // rules/problem-nesting-overrides.json's own pairs — the SAME string
   // shape buildNestingSuggestions' pairHits already uses, so its existing
@@ -301,17 +188,14 @@
   //   - identical-concept pairs never suggest (duplicate ≠ hierarchy);
   //   - options that would create a cycle against the CURRENT link map are
   //     dropped here AND re-checked at commit time by the caller;
-  //   - DATES DO NOT GATE a suggestion (changed 2026-09-19; 2026-08-08 to
-  //     2026-09-19 a child dated before its parent was dropped via
-  //     predatesParent). Problem dates say when something was RECORDED, not
+  //   - DATES DO NOT GATE a suggestion (changed 2026-09-19; from 2026-08-08 a
+  //     child dated before its parent was dropped). Problem dates say when something was RECORDED, not
   //     which is the natural parent: a generic "Cataract" is often entered
   //     after the specific nuclear cataract / phaco / bilateral entries it
   //     should group, and the earliest specific entry can itself be a
   //     sensible parent. SNOMED does not define which codes a practice uses
   //     sensibly, so the pairing is offered whatever the dates and the
   //     clinician's explicit per-link confirm remains the safeguard.
-  //     (predatesParent / resolveChronologyDate below are now unused by this
-  //     function; kept exported for the moment, safe to delete.)
   //     SUGGESTION-only: none of this constrains manual/drag-created links,
   //     where the clinician's own judgement is never overridden.
   function buildNestingSuggestions(problems, infoById, pairHits, overridePairHits) {
@@ -587,9 +471,6 @@
       buildUpdateProblemLinksPayload: buildUpdateProblemLinksPayload,
       resolveOverviewConceptId: resolveOverviewConceptId,
       wouldCreateCycle: wouldCreateCycle,
-      dateSortKey: dateSortKey,
-      resolveChronologyDate: resolveChronologyDate,
-      predatesParent: predatesParent,
       buildOverridePairSet: buildOverridePairSet,
       buildNestingSuggestions: buildNestingSuggestions,
       buildTextLinkSuggestions: buildTextLinkSuggestions,
