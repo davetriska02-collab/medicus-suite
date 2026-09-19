@@ -8,9 +8,11 @@
 //
 // This core:
 //   - reads a results-queue task-list (same envelopes as task-bulk-action)
-//   - extracts a requester when the task-list Requested By column or an
-//     overview / OIR-style label actually names one (never treats named GP
-//     as "who ordered"; never treats the lab/org requester object as a GP)
+//   - extracts a requester from overview outstandingInvestigationRequestOptions
+//     labels (`Panel (Dr Name • date)`, live 2026-09-12). Task-list Requested
+//     By and investigationReport.requester.practitionerName are the lab/org
+//     name (e.g. TRISKA) — not who ordered. Never treats named GP as who
+//     ordered; never promotes the lab/org requester object.
 //   - builds an unallocated-reports pool + clinician-field workspace and stages moves
 //   - writes via Medicus's own bulk-reassign (captured 2026-08-25)
 //
@@ -503,9 +505,16 @@
     if (open > 0) {
       out.name = raw.slice(0, open).trim() || null;
       var inner = raw.slice(open + 1).replace(/\)\s*$/, '');
-      var bullet = inner.indexOf('•');
-      out.requester = (bullet !== -1 ? inner.slice(0, bullet) : inner).trim() || null;
+      var bullet = inner.search(/[•·●∙\u2013\u2014]/);
       var dm = inner.match(/(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{4})/);
+      var cut = bullet;
+      if (cut < 0 && dm) cut = dm.index;
+      if (cut < 0) {
+        var hyphen = inner.search(/\s[-–—]\s/);
+        if (hyphen !== -1) cut = hyphen;
+      }
+      var who = (cut >= 0 ? inner.slice(0, cut) : inner).replace(/[\s,;:./-]+$/g, '').trim();
+      out.requester = who || null;
       if (dm) {
         var mon = MONTHS[dm[2].toLowerCase()];
         if (mon) out.requestedDate = dm[3] + '-' + mon + '-' + dm[1].padStart(2, '0');
@@ -530,10 +539,98 @@
 
   // Live overview `investigationReport.requester` is the sending lab/org,
   // not the GP who ordered the test. practitionerName on that object is
-  // still the lab side — do not promote it.
+  // still the lab side — do not promote it. Live 2026-09-12: ODS H81031
+  // with practitionerName "TRISKA" while OIR labels named Dr Emma Nicholls.
   function isOrgRequester(v) {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
     return !!(v.organisationName || v.organisationOdsCode);
+  }
+
+  function considerOirString(text, found) {
+    if (!isStr(text)) return;
+    if (text.indexOf('(') === -1) return;
+    var parsed = parseRequestLabel(text);
+    if (parsed.requester)
+      found.push({ name: clip(parsed.requester, 80), source: 'oir-label', date: parsed.requestedDate || null });
+  }
+
+  function isoDayFromUnknown(v) {
+    var m = String(v == null ? '' : v).match(/(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : '';
+  }
+
+  function daysBetweenISO(a, b) {
+    if (!a || !b) return 99999;
+    var da = new Date(a + 'T12:00:00');
+    var db = new Date(b + 'T12:00:00');
+    if (isNaN(da.getTime()) || isNaN(db.getTime())) return 99999;
+    return Math.abs((da.getTime() - db.getTime()) / 86400000);
+  }
+
+  function reportDayFromOverview(payload) {
+    var root = payload && payload.data && typeof payload.data === 'object' ? payload.data : payload;
+    if (!root || typeof root !== 'object') return '';
+    var ir = root.investigationReport && typeof root.investigationReport === 'object' ? root.investigationReport : null;
+    return (
+      isoDayFromUnknown(ir && ir.issuedDateTime) ||
+      isoDayFromUnknown(ir && ir.receivedDateTime) ||
+      isoDayFromUnknown(root.createdDateTime) ||
+      ''
+    );
+  }
+
+  function uniqueOirPeople(hits) {
+    var unique = [];
+    (hits || []).forEach(function (f) {
+      if (!f || !f.name) return;
+      var seen = false;
+      for (var u = 0; u < unique.length; u++) {
+        if (sameClinician(unique[u].name, f.name)) seen = true;
+      }
+      if (!seen) unique.push(f);
+    });
+    return unique;
+  }
+
+  function majorityOirPerson(hits) {
+    var unique = uniqueOirPeople(hits);
+    if (unique.length <= 1) return unique[0] || null;
+    var counts = unique.map(function (u) {
+      var n = 0;
+      hits.forEach(function (f) {
+        if (sameClinician(u.name, f.name)) n += 1;
+      });
+      return { hit: u, n: n };
+    });
+    counts.sort(function (a, b) {
+      return b.n - a.n;
+    });
+    if (counts[0].n >= 2 && counts[0].n * 2 > hits.length) return counts[0].hit;
+    return null;
+  }
+
+  // Historical completed requests stay on the OIR card (live 2026-09-12:
+  // Jessica Foreman Sep 2026 outstanding + Dr Whitaker May 2025 completed).
+  // Scope to labels dated near this report, else the most recent cluster.
+  function scopeOirHits(oir, reportDay) {
+    var dated = (oir || []).filter(function (f) {
+      return f && f.date;
+    });
+    if (!dated.length) return oir;
+    if (reportDay) {
+      var near = dated.filter(function (f) {
+        return daysBetweenISO(f.date, reportDay) <= 120;
+      });
+      if (near.length) return near;
+    }
+    var latest = '';
+    dated.forEach(function (f) {
+      if (f.date > latest) latest = f.date;
+    });
+    var recent = dated.filter(function (f) {
+      return daysBetweenISO(f.date, latest) <= 30;
+    });
+    return recent.length ? recent : oir;
   }
 
   function pickRequesterFromOverview(payload) {
@@ -542,12 +639,8 @@
       if (!node || typeof node !== 'object' || depth > 8) return;
       if (Array.isArray(node)) {
         for (var i = 0; i < node.length && i < 80; i++) {
-          if (isStr(node[i]) && node[i].indexOf('•') !== -1) {
-            var parsed = parseRequestLabel(node[i]);
-            if (parsed.requester) found.push({ name: clip(parsed.requester, 80), source: 'oir-label' });
-          } else {
-            walk(node[i], depth + 1);
-          }
+          if (isStr(node[i])) considerOirString(node[i], found);
+          else walk(node[i], depth + 1);
         }
         return;
       }
@@ -557,6 +650,7 @@
         var lk = key.toLowerCase();
         if (SKIP_WALK_KEYS[lk]) continue;
         var val = node[key];
+        if (isStr(val)) considerOirString(val, found);
         if (REQUESTER_KEYS[lk]) {
           // Lab/org requester { organisationName, organisationOdsCode,
           // departmentName, practitionerName } is who the lab thinks
@@ -564,15 +658,30 @@
           if (isOrgRequester(val)) continue;
           var name = nameFromUnknown(val);
           if (name) found.push({ name: name, source: key });
-        } else {
+        } else if (val && typeof val === 'object') {
           walk(val, depth + 1);
         }
       }
     }
     walk(payload, 0);
-    if (!found.length) return null;
-    var first = found[0];
-    return { name: first.name, source: first.source, confidence: 'requester' };
+    var oir = found.filter(function (f) {
+      return f.source === 'oir-label';
+    });
+    if (oir.length) oir = scopeOirHits(oir, reportDayFromOverview(payload));
+    var pool = oir.length ? oir : found;
+    if (!pool.length) return null;
+    var unique = uniqueOirPeople(pool);
+    if (unique.length > 1 && oir.length) {
+      var maj = majorityOirPerson(oir);
+      if (maj) unique = [maj];
+      else return { name: null, source: 'oir-mixed', confidence: 'none', mixed: true };
+    }
+    var best = unique[0];
+    if (!best) return null;
+    pool.forEach(function (f) {
+      if (sameClinician(f.name, best.name) && scoreStaffName(f.name) > scoreStaffName(best.name)) best = f;
+    });
+    return { name: best.name, source: best.source, confidence: 'requester' };
   }
 
   function pickRequesterFromTaskRow(item) {
@@ -636,7 +745,14 @@
 
   function applyRequester(row, hint) {
     if (!row) return row;
-    if (!hint || !hint.name) return row;
+    if (!hint) return row;
+    if (hint.mixed) {
+      row.requester = null;
+      row.requesterSource = hint.source || 'oir-mixed';
+      row.requesterConfidence = 'none';
+      return row;
+    }
+    if (!hint.name) return row;
     row.requester = clip(hint.name, 80);
     row.requesterSource = hint.source || '';
     row.requesterConfidence = hint.confidence || 'requester';
@@ -655,6 +771,13 @@
       if (key && key.indexOf('clinician:') === 0) return key;
     }
     return POOL;
+  }
+
+  // Who-ordered overview is only needed for the unallocated pile. Rows
+  // already sitting with a named person are not grouped or auto-sent.
+  function needsRequesterOverview(row) {
+    if (!row || !row.overviewURL) return false;
+    return homeColumnKey(row) === POOL;
   }
 
   function placementReason(row) {
@@ -1747,6 +1870,84 @@
       '-' +
       String(d.getDate()).padStart(2, '0')
     );
+  }
+
+  // England & Wales bank holidays 2026–2028, same dates as shared/uk-calendar.js.
+  // Content-script core cannot import that ESM; keep this map in step when regen runs.
+  var EW_BANK_HOLIDAYS = {
+    '2026-01-01': 1,
+    '2026-04-03': 1,
+    '2026-04-06': 1,
+    '2026-05-04': 1,
+    '2026-05-25': 1,
+    '2026-08-31': 1,
+    '2026-12-25': 1,
+    '2026-12-28': 1,
+    '2027-01-01': 1,
+    '2027-03-26': 1,
+    '2027-03-29': 1,
+    '2027-05-03': 1,
+    '2027-05-31': 1,
+    '2027-08-30': 1,
+    '2027-12-27': 1,
+    '2027-12-28': 1,
+    '2028-01-03': 1,
+    '2028-04-14': 1,
+    '2028-04-17': 1,
+    '2028-05-01': 1,
+    '2028-05-29': 1,
+    '2028-08-28': 1,
+    '2028-12-25': 1,
+    '2028-12-26': 1,
+  };
+
+  function weekdayName(iso) {
+    var day = coerceWorkDate(iso, todayISO());
+    var names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    var d = new Date(day + 'T12:00:00');
+    if (isNaN(d.getTime())) return '';
+    return names[d.getDay()] || '';
+  }
+
+  function isWeekendISO(iso) {
+    var day = coerceWorkDate(iso, todayISO());
+    var d = new Date(day + 'T12:00:00');
+    if (isNaN(d.getTime())) return false;
+    var dow = d.getDay();
+    return dow === 0 || dow === 6;
+  }
+
+  function isBankHolidayISO(iso) {
+    var day = coerceWorkDate(iso, todayISO());
+    return !!EW_BANK_HOLIDAYS[day];
+  }
+
+  function isWorkingDayISO(iso) {
+    return !isWeekendISO(iso) && !isBankHolidayISO(iso);
+  }
+
+  function nextWorkingDayISO(fromISO) {
+    var d = addDaysISO(fromISO || todayISO(), 1);
+    for (var i = 0; i < 30; i++) {
+      if (isWorkingDayISO(d)) return d;
+      d = addDaysISO(d, 1);
+    }
+    return d;
+  }
+
+  function defaultWorkDateISO(calendarToday) {
+    var cal = coerceWorkDate(calendarToday, todayISO());
+    return isWorkingDayISO(cal) ? cal : nextWorkingDayISO(cal);
+  }
+
+  function nextWorkingDayPhrase(iso, calendarToday) {
+    var day = coerceWorkDate(iso, calendarToday);
+    var cal = coerceWorkDate(calendarToday, todayISO());
+    if (day === cal) return 'today';
+    if (day === addDaysISO(cal, 1) && isWorkingDayISO(day)) return 'tomorrow';
+    var week = weekdayName(day);
+    var short = formatLeaveDate(day).replace(/\s+\d{4}$/, '');
+    return week ? week + ' ' + short : formatLeaveDate(day);
   }
 
   function workDayPhrase(iso, calendarToday) {
@@ -2912,6 +3113,109 @@
     return next;
   }
 
+  function matchInDayPerson(requesterName, inDayPeople, aliases) {
+    var who = String(requesterName || '').trim();
+    if (!who) return null;
+    var want = clinicianKeyForName(who, aliases);
+    var list = Array.isArray(inDayPeople) ? inDayPeople : [];
+    var i;
+    if (want && want.indexOf('clinician:') === 0) {
+      for (i = 0; i < list.length; i++) {
+        if (list[i] && list[i].key === want) return list[i];
+      }
+    }
+    for (i = 0; i < list.length; i++) {
+      if (list[i] && sameClinician(list[i].name, who)) return list[i];
+    }
+    return null;
+  }
+
+  // Stage unallocated results onto the GP who ordered them, only when that
+  // person is on the picked day's book. includeNotIn is an explicit opt-in
+  // to also stage onto requesters who are not in that day.
+  function planSendToRequester(tiles, inDayPeople, opts) {
+    opts = opts || {};
+    var includeNotIn = !!opts.includeNotIn;
+    var aliases = opts.aliases || null;
+    var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
+      return t && t.id && tileInSplitPool(t, opts);
+    });
+    var sent = [];
+    var skippedUnknown = [];
+    var skippedNotIn = [];
+    pool.forEach(function (tile) {
+      var who = tile.requester;
+      if (!who) {
+        skippedUnknown.push({ id: tile.id });
+        return;
+      }
+      var hit = matchInDayPerson(who, inDayPeople, aliases);
+      if (hit) {
+        sent.push({
+          id: tile.id,
+          toKey: hit.key || clinicianColumnKey(hit.name),
+          toName: hit.name,
+          staffId: hit.staffId || '',
+          notIn: false,
+        });
+        return;
+      }
+      if (includeNotIn) {
+        var key = clinicianColumnKey(who);
+        if (!key || key === UNALLOCATED) {
+          skippedUnknown.push({ id: tile.id, requester: who });
+          return;
+        }
+        sent.push({
+          id: tile.id,
+          toKey: key,
+          toName: who,
+          staffId: '',
+          notIn: true,
+        });
+        return;
+      }
+      skippedNotIn.push({ id: tile.id, requester: who });
+    });
+    var reason = '';
+    if (!sent.length) {
+      if (skippedNotIn.length && !includeNotIn) {
+        reason =
+          'Who ordered is not on the book for that day. Leave them in the pile, or turn on send-to-people-who-are-not-in.';
+      } else if (skippedUnknown.length && !pool.filter(function (t) { return t && t.requester; }).length) {
+        reason = 'No unallocated results with a known requester to send.';
+      } else {
+        reason = 'Nothing to send to who ordered.';
+      }
+    }
+    return {
+      ok: sent.length > 0,
+      sent: sent,
+      sentIn: sent.filter(function (m) {
+        return !m.notIn;
+      }).length,
+      sentNotIn: sent.filter(function (m) {
+        return m.notIn;
+      }).length,
+      skippedUnknown: skippedUnknown,
+      skippedNotIn: skippedNotIn,
+      includeNotIn: includeNotIn,
+      total: pool.length,
+      reason: reason,
+    };
+  }
+
+  function applySendToRequester(draft, plan) {
+    var next = draft || emptyDraft();
+    if (!plan || !plan.ok) return next;
+    (plan.sent || []).forEach(function (move) {
+      if (!move || !move.id || !move.toKey) return;
+      next = addColumn(next, move.toName, move.staffId);
+      next = stageMove(next, move.id, move.toKey);
+    });
+    return next;
+  }
+
   function planTopUp(tiles, destinations, boxCounts, opts) {
     opts = opts || {};
     var pool = (Array.isArray(tiles) ? tiles : []).filter(function (t) {
@@ -3149,6 +3453,7 @@
     normaliseTaskRow: normaliseTaskRow,
     applyRequester: applyRequester,
     homeColumnKey: homeColumnKey,
+    needsRequesterOverview: needsRequesterOverview,
     placementReason: placementReason,
     emptyDraft: emptyDraft,
     addColumn: addColumn,
@@ -3182,6 +3487,13 @@
     formatLeaveDate: formatLeaveDate,
     coerceWorkDate: coerceWorkDate,
     addDaysISO: addDaysISO,
+    weekdayName: weekdayName,
+    isWeekendISO: isWeekendISO,
+    isBankHolidayISO: isBankHolidayISO,
+    isWorkingDayISO: isWorkingDayISO,
+    nextWorkingDayISO: nextWorkingDayISO,
+    defaultWorkDateISO: defaultWorkDateISO,
+    nextWorkingDayPhrase: nextWorkingDayPhrase,
     workDayPhrase: workDayPhrase,
     inDayClinicians: inDayClinicians,
     mergeInDayClinicians: mergeInDayClinicians,
@@ -3213,6 +3525,9 @@
     isSplitDest: isSplitDest,
     destNamesPhrase: destNamesPhrase,
     planEvenSplit: planEvenSplit,
+    matchInDayPerson: matchInDayPerson,
+    planSendToRequester: planSendToRequester,
+    applySendToRequester: applySendToRequester,
     applyEvenSplit: applyEvenSplit,
     planTopUp: planTopUp,
     planLevel: planLevel,

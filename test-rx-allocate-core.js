@@ -479,6 +479,169 @@ console.log('\n--- likely-doctor filter ---');
   check(C.isLikelyDoctor('Pharmacist Kim', 'Pharmacy') === false, 'pharmacist is not a doctor');
 }
 
+console.log('\n--- send to usual GP is staging, never auto-place ---');
+{
+  const janeId = uuid(100);
+  const daveId = uuid(101);
+  const samA = uuid(200);
+  const samB = uuid(201);
+  const janeKey = Lab.clinicianColumnKey('Dr Jane Cole');
+  const daveKey = Lab.clinicianColumnKey('Dr David Triska');
+  const inDay = [
+    { key: janeKey, name: 'Dr Jane Cole', staffId: janeId },
+    { key: daveKey, name: 'Dr David Triska', staffId: daveId },
+  ];
+  const dir = Lab.harvestStaffDirectory(
+    [
+      rxRow(1, { namedGp: 'Dr Jane Cole', namedGpId: janeId }),
+      rxRow(2, { namedGp: 'Dr David Triska', namedGpId: daveId }),
+      rxRow(3, { namedGp: 'Dr Sam Smith', namedGpId: samA }),
+      rxRow(4, { namedGp: 'Dr Sam Smith', namedGpId: samB }),
+    ],
+    null
+  );
+
+  const inDayJane = rxRow(10, { namedGp: 'Dr Jane Cole', namedGpId: janeId, summary: 'Ramipril' });
+  const inDayDave = rxRow(11, { namedGp: 'Dr David Triska', namedGpId: daveId });
+  const notInSam = rxRow(12, { namedGp: 'Dr Natalie Azadian', namedGpId: uuid(300) });
+  const noGp = rxRow(13, { summary: 'Acute' });
+  const ambiguous = rxRow(14, { namedGp: 'Dr Sam Smith' });
+  const requesterOnly = rxRow(15, { requester: 'Dr Jane Cole' });
+  const sitting = rxRow(16, {
+    assignedTo: 'Dr Jane Cole',
+    assignedId: janeId,
+    namedGp: 'Dr David Triska',
+    namedGpId: daveId,
+  });
+  const teamName = rxRow(17, { namedGp: 'Duty Doctor' });
+  const nameOnlyIn = rxRow(18, { namedGp: 'Dr Jane Cole' });
+  const idBeatsRequester = rxRow(19, {
+    namedGp: 'Dr David Triska',
+    namedGpId: daveId,
+    requester: 'Dr Jane Cole',
+  });
+
+  const boardBefore = C.buildWorkspace(
+    [inDayJane, inDayDave, notInSam, noGp, ambiguous, requesterOnly, sitting, teamName],
+    C.emptyDraft()
+  );
+  check(
+    boardBefore.pool.tiles.some((t) => t.id === inDayJane.id),
+    'usual-GP row stays in the pool until the user asks'
+  );
+  check(C.homeColumnKey(inDayJane) === Lab.POOL, 'homeColumnKey stays pool — named GP never auto-places');
+  check(!inDayJane.requester, 'decorate still does not write named GP onto requester');
+
+  const safe = C.planSendToUsualGp(
+    [inDayJane, inDayDave, notInSam, noGp, ambiguous, requesterOnly, sitting, teamName, nameOnlyIn, idBeatsRequester],
+    inDay,
+    { directory: dir }
+  );
+  check(safe.ok === true, 'in-day usual GPs can be staged');
+  check(
+    safe.sent.length === 4,
+    'in-day send stages Jane, Dave, name-only Jane, and id-preferred Dave (got ' + safe.sent.length + ')'
+  );
+  check(
+    safe.sent.every(function (m) {
+      return m.toKey === janeKey || m.toKey === daveKey;
+    }),
+    'in-day dests are the usual GPs, not a duty / first dest'
+  );
+  check(
+    safe.sent.some(function (m) {
+      return m.id === idBeatsRequester.id && m.toKey === daveKey && m.staffId === daveId;
+    }),
+    'namedGpId is preferred; requester is ignored'
+  );
+  check(
+    safe.sent.some(function (m) {
+      return m.id === nameOnlyIn.id && m.toKey === janeKey;
+    }),
+    'unique usual-GP name on the working-day book is used'
+  );
+  check(
+    safe.sent.every(function (m) {
+      return m.id !== sitting.id;
+    }),
+    'work already sitting with a person is not in the send pool'
+  );
+  check(
+    safe.skippedNotIn.some((s) => s.id === notInSam.id),
+    'usual GP who is not in stays in the pile'
+  );
+  check(
+    safe.skippedUnknown.some((s) => s.id === noGp.id),
+    'no usual GP stays in the pile'
+  );
+  check(
+    safe.skippedUnknown.some((s) => s.id === requesterOnly.id),
+    'requester-only row is not treated as usual GP'
+  );
+  check(
+    safe.skippedUnknown.some((s) => s.id === teamName.id),
+    'team-inbox usual-GP name stays in the pile'
+  );
+  check(
+    safe.skippedAmbiguous.some((s) => s.id === ambiguous.id),
+    'two staff matching the name stay in the pile'
+  );
+  check(!safe.sent.some((m) => m.id === ambiguous.id), 'ambiguous name is never picked');
+  check(
+    safe.sent.every(function (m) {
+      return !m.notIn;
+    }),
+    'safe plan does not stage not-in usual GPs'
+  );
+
+  const unsafe = C.planSendToUsualGp([notInSam], inDay, { includeNotIn: true, directory: dir });
+  check(
+    unsafe.sent.length === 1 && unsafe.sent[0].notIn === true,
+    'not-in toggle stages the usual GP who is not working'
+  );
+  check(unsafe.sent[0].staffId === uuid(300), 'not-in send pins namedGpId on the dest');
+
+  const idOnly = rxRow(20, { namedGp: '', namedGpId: janeId });
+  const idPlan = C.planSendToUsualGp([idOnly], inDay, { directory: dir });
+  check(
+    idPlan.ok && idPlan.sent[0] && idPlan.sent[0].toKey === janeKey && idPlan.sent[0].staffId === janeId,
+    'namedGpId matches the in-day book even without a display name on the row'
+  );
+
+  const leftoverTiles = [notInSam, noGp, ambiguous, requesterOnly];
+  const leftoverPlan = C.planEvenSplit(leftoverTiles, inDay);
+  check(
+    leftoverPlan.ok === true && leftoverPlan.total === 4,
+    'Split equally still works on leftovers after usual-GP send'
+  );
+
+  let draft = C.emptyDraft();
+  draft = C.applySendToUsualGp(draft, safe);
+  check(draft.moves[inDayJane.id] === janeKey, 'apply stages the in-day usual-GP move');
+  check(draft.columnStaffIds[janeKey] === janeId, 'apply pins namedGpId on the dest column');
+  check(!draft.moves[notInSam.id], 'apply does not stage the not-in usual GP when the toggle is off');
+  check(!draft.moves[sitting.id], 'apply does not move sitting work');
+  check(!draft.moves[requesterOnly.id], 'apply never stages the requester as usual GP');
+
+  const preview = C.usualGpPreviewCopy(safe, 'Tue 15 Sep');
+  check(/can go to their usual GP/.test(preview), 'preview names will-send');
+  check(/those GPs are not in/.test(preview), 'preview names not-in');
+  check(/no usual GP on the request/.test(preview), 'preview names missing usual GP');
+  check(/two staff match that name/.test(preview), 'preview names ambiguous name');
+  check(
+    !/\b(Done|Sent|Allocated|Submitted|Booked|Filed|Issued|Signed)\b/.test(preview),
+    'preview has no completion verbs'
+  );
+  const destPhrase = C.usualGpDestPhrase(safe);
+  check(/would sit with their usual GP/.test(destPhrase), 'dest phrase names usual GP, not a write');
+  check(
+    !/\b(Done|Sent|Allocated|Submitted|Booked|Filed|Issued|Signed)\b/.test(destPhrase),
+    'dest phrase has no completion verbs'
+  );
+  const rxCoreSrc = fs.readFileSync(path.join(__dirname, 'shared/rx-allocate-core.js'), 'utf8');
+  check(!/planSendToRequester\(/.test(rxCoreSrc), 'rx core does not call the lab requester planner');
+}
+
 console.log('\n--- write stays on the lab client ---');
 {
   const src = fs.readFileSync(path.join(__dirname, 'shared/rx-allocate-core.js'), 'utf8');
@@ -590,6 +753,26 @@ console.log('\n--- write stays on the lab client ---');
     /result\.written > 0[\s\S]{0,240}?await loadBoard\(\{ skipSplit: true \}\)/.test(canvas),
     'a partly-written batch re-reads the queue without restaging the even split'
   );
+  check(
+    /currentStaffId/.test(canvas) && /data-ch-staff/.test(canvas),
+    'canvas reads the staff stamp to skip a homepage personal slice'
+  );
+  check(
+    /inboxFetchOpts/.test(canvas) && /mergeOptsFor/.test(canvas),
+    'loadBoard passes staffId and winning-search merge opts'
+  );
+  check(/stampSearch/.test(canvas), 'loadBoard stamps with the winning GET, not leftover location.search');
+  check(/bareOnly:\s*true/.test(canvas), 'sitting GET is the bare open list, not the query plan');
+  check(/ch-task-list-data/.test(canvas), 'launcher listens for the task-list bridge count');
+  check(
+    /rxEmptyPileReason/.test(canvas) && /pileReason/.test(canvas),
+    'distribute copy names empty dests vs empty pile'
+  );
+  check(/Suite’s list is empty — the table is not/.test(canvas), 'empty overlay names a grid-vs-Suite mismatch');
+  check(
+    /No doctors working/.test(canvas) || /no doctors to share onto/.test(canvas),
+    'empty dests are not described as an empty inbox'
+  );
 }
 
 console.log('\n--- canvas + manifest + css source locks ---');
@@ -615,6 +798,15 @@ console.log('\n--- canvas + manifest + css source locks ---');
     'share-this-box has an overlay-local keyboard ring'
   );
   check(/#ms-rxac-overlay \.ms-rxac-split-go/.test(css), 'split equally is sized as the primary action');
+  check(/#ms-rxac-overlay \.ms-lac-nwd-offer/.test(css), 'usual-GP offer strip is painted on the rx overlay');
+  check(
+    /#ms-rxac-overlay \.ms-lac-nwd-offer[\s\S]{0,220}background:\s*transparent/.test(css),
+    'usual-GP preview is supporting copy, not an accent callout'
+  );
+  check(
+    !/#ms-lac-overlay \.ms-lac-nwd-offer,\s*#ms-rxac-overlay \.ms-lac-nwd-offer/.test(css),
+    'lab send strip and rx usual-GP preview do not share the hero panel'
+  );
   check(/#ms-rxac-overlay \.ms-rxac-count-pop/.test(css), 'proposed dest counts are a pop number');
   check(/#ms-rxac-overlay \.ms-rxac-review-dock/.test(css), 'review docks inside the panel');
   check(
@@ -655,6 +847,26 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(!/window\.prompt/.test(canvas), 'rx Save as group does not use window.prompt');
   check(/data-people-key/.test(canvas), 'people-drag starts from clinician field headers, not patient tiles');
   check(/Named GP[\s\S]{0,80}never auto-placement/.test(canvas), 'named GP still never auto-places');
+  check(/planSendToUsualGp/.test(canvas), 'send-to-usual-GP uses the Rx planner');
+  check(!/planSendToRequester/.test(canvas), 'rx canvas does not call the lab requester planner');
+  check(/id="ms-rxac-send-usual"/.test(canvas), 'send-to-usual-GP is a named button');
+  check(
+    /class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-send-usual"/.test(canvas),
+    'usual-GP send matches Distribute equally, not Split equally'
+  );
+  check(!/ms-lac-primary[^>]*id="ms-rxac-send-usual"/.test(canvas), 'usual-GP send is not a primary CTA');
+  check(/actions \+\s*usualOffer\.button/.test(canvas), 'usual-GP send sits in the split-row action cluster');
+  check(/ms-rxac-split-actions/.test(canvas), 'usual-GP send stays with Top up / Distribute equally');
+  check(/#ms-rxac-overlay \.ms-rxac-split-actions/.test(css), 'allocate peers share one action cluster');
+  check(/id="ms-rxac-send-not-in"/.test(canvas), 'not-in usual-GP toggle is session state on the overlay');
+  check(/_sendToUsualGpNotIn/.test(canvas), 'not-in usual-GP box is not a storage key');
+  check(/Send .* to usual GP/.test(canvas), 'primary control is Send N to usual GP');
+  check(/Send this pile to usual GP/.test(canvas), 'per-group send is on a usual-GP pile header');
+  check(/ms-lac-nwd-offer/.test(canvas), 'usual-GP preview stays on the overlay as supporting copy');
+  check(
+    !/chrome\.storage/.test(canvas) || !/_sendToUsualGpNotIn[\s\S]{0,80}chrome\.storage/.test(canvas),
+    'not-in usual-GP is not persisted'
+  );
   check(!/assigneeType:\s*['"]team['"]/.test(canvas), 'groups never write assigneeType team');
   check(/parseRxQueueRoute/.test(canvas), 'rx canvas owns the non-routine route');
   check(!/parseRxQueueRoute/.test(labCanvas), 'lab canvas does not parse rx routes');
@@ -672,7 +884,10 @@ console.log('\n--- canvas + manifest + css source locks ---');
     /if \(!_open && !_writing\) _route = route/.test(canvas),
     'open overlay pins _route so ensureLauncher cannot clobber search'
   );
-  check(/pin\.apiBase/.test(canvas) && /fetchRxMergedTaskList\(pin\.apiBase/.test(canvas), 'Write confirm GET snapshots the route, not live _route');
+  check(
+    /pin\.apiBase/.test(canvas) && /fetchRxMergedTaskList\(pin\.apiBase/.test(canvas),
+    'Write confirm GET snapshots the route, not live _route'
+  );
   check(
     /reload Medicus if the grid still shows the old number/.test(canvas),
     'after Write the canvas says the open-list count may not drop'
@@ -778,6 +993,173 @@ console.log('\n--- canvas + manifest + css source locks ---');
     'merged write re-GET still treats the inbox rows as the pile'
   );
 
+  console.log('\n--- homepage+staff stamp must not empty the non-routine pile ---');
+  {
+    const staffId = '0198ef96-6a17-71e4-8354-78de2b371ef3';
+    const inboxId = uuid(80);
+    const staffQs = '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + staffId;
+    const plan = C.rxListQueryPlan(staffQs, { staffId: staffId });
+    check(plan[0] && plan[0].indexOf('masterAssignee=') === -1, 'staff-stamp assignee is not the first GET');
+    check(plan[plan.length - 1] === staffQs, 'personal slice is last resort, not the inbox');
+    check(
+      C.rxListQueryPlan(qs)[0] && C.rxListQueryPlan(qs)[0].indexOf('masterAssignee=0198ef96') !== -1,
+      'a non-staff inbox UUID stays first (routine box)'
+    );
+
+    const pileBody = {
+      tasks: [
+        {
+          id: uuid(81),
+          patientName: 'FORD, A',
+          assignedTo: 'Non-Routine Prescription Requests',
+          assignedId: inboxId,
+          summary: 'Acute A',
+        },
+        {
+          id: uuid(82),
+          patientName: 'FORD, B',
+          assignedTo: 'Non-Routine Prescription Requests',
+          assignedId: inboxId,
+          summary: 'Acute B',
+        },
+        {
+          id: uuid(83),
+          patientName: 'OTHER, C',
+          assignedTo: 'Dr Jane Cole',
+          assignedId: uuid(10),
+          summary: 'Already sitting',
+        },
+      ],
+    };
+    const personalBody = {
+      tasks: [{ id: uuid(84), patientName: 'MINE, D', assignedTo: 'Dr Dave', assignedId: staffId, summary: 'Mine' }],
+    };
+    const staffThenPile = async (url) => {
+      const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+      const body = path.indexOf('masterAssignee=' + staffId) !== -1 ? personalBody : pileBody;
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    };
+    const recovered = await C.fetchRxTaskList(
+      'https://560b6c.api.england.medicus.health',
+      'prescription_request_task_non_routine',
+      staffQs,
+      { fetchImpl: staffThenPile, staffId: staffId }
+    );
+    check(
+      recovered.rows && recovered.rows.length === 3,
+      'working staff stamp does not keep the 1-row personal slice (got ' +
+        ((recovered.rows && recovered.rows.length) || 0) +
+        ')'
+    );
+    check(
+      recovered.search != null && String(recovered.search).indexOf('masterAssignee=' + staffId) === -1,
+      'winning search is not the homepage+staff filter'
+    );
+
+    const thrownThenBare = async (url) => {
+      const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+      if (path.indexOf('?') !== -1) {
+        const err = new Error('HTTP 400');
+        err.status = 400;
+        throw err;
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(pileBody) };
+    };
+    const afterThrow = await C.fetchRxTaskList(
+      'https://560b6c.api.england.medicus.health',
+      'prescription_request_task_non_routine',
+      staffQs,
+      { fetchImpl: thrownThenBare, staffId: staffId }
+    );
+    check(
+      afterThrow.rows && afterThrow.rows.length === 3,
+      'a 4xx homepage GET is skipped so the bare pile still loads'
+    );
+
+    const mergedStaff = await C.fetchRxMergedTaskList(
+      'https://560b6c.api.england.medicus.health',
+      'prescription_request_task_non_routine',
+      staffQs,
+      { fetchImpl: staffThenPile, staffId: staffId }
+    );
+    check(
+      mergedStaff.rows.filter((r) => C.isRxUnallocated(r)).length === 2,
+      'winning-search merge keeps the shared inbox as Unallocated, not the staff stamp'
+    );
+    check(
+      mergedStaff.rows.filter((r) => r.id === uuid(83) && !C.isRxUnallocated(r)).length === 1,
+      'already-sitting GP work stays sitting after the staff-stamp fallback'
+    );
+
+    const personShaped = rxRow(85, { assignedTo: 'Dr Jane Cole', assignedId: inboxId });
+    const sittingGp = rxRow(86, { assignedTo: 'Dr David Triska', assignedId: uuid(11) });
+    const leakedStamp = C.mergeInboxAndSitting([personShaped, sittingGp], [], staffQs);
+    check(
+      leakedStamp.filter((r) => C.isRxUnallocated(r)).length === 0,
+      'stamping with the leftover staff UUID hides a person-shaped inbox (the live failure)'
+    );
+    const winningEmpty = C.mergeInboxAndSitting([personShaped, sittingGp], [], '');
+    check(
+      winningEmpty.filter((r) => C.isRxUnallocated(r)).length === 0,
+      'without an inbox UUID, person-shaped names stay sitting unless the grid hints them'
+    );
+    const hinted = C.mergeInboxAndSitting([personShaped, sittingGp], [], '', {
+      visibleIds: { [personShaped.id.toLowerCase()]: true },
+    });
+    check(
+      hinted
+        .filter((r) => C.isRxUnallocated(r))
+        .map((r) => r.id)
+        .join() === personShaped.id,
+      'grid-visible person-shaped inbox rows are the Unallocated pile'
+    );
+    check(
+      C.isRxUnallocated(hinted.find((r) => r.id === sittingGp.id) || {}) === false,
+      'grid hint does not restamp sitting GPs'
+    );
+
+    const dests = [
+      { key: Lab.clinicianColumnKey('Dr A'), name: 'Dr A' },
+      { key: Lab.clinicianColumnKey('Dr B'), name: 'Dr B' },
+    ];
+    const split = C.planEvenSplit(hinted, dests);
+    check(split.ok === true && split.total === 1, 'Split equally can stage the recovered non-routine pile');
+    const usual = C.planSendToUsualGp(
+      hinted.map((r) => Object.assign({}, r, { namedGp: 'Dr A', namedGpId: '' })),
+      dests
+    );
+    check(usual.ok === true && usual.sent.length === 1, 'usual-GP send still stages recovered unallocated rows');
+
+    check(
+      /No doctors working/.test(
+        C.rxEmptyPileReason({ rowCount: 4, unallocatedCount: 4, destCount: 0, dayPhrase: 'today' })
+      ),
+      'empty dests say no doctors, not an empty pile'
+    );
+    check(
+      /already sit with people/.test(C.rxEmptyPileReason({ rowCount: 4, unallocatedCount: 0, destCount: 3 })),
+      'rows but no Unallocated says they already sit with people'
+    );
+    check(
+      /table has 12/.test(C.rxEmptyPileReason({ rowCount: 0, unallocatedCount: 0, destCount: 3, bridgeCount: 12 })),
+      'grid-has-work / Suite-empty is named'
+    );
+    check(
+      C.inboxCountFromTaskListBridge(
+        { rows: new Array(5), taskTypeSlug: 'prescription_request_task_non_routine' },
+        'prescription_request_task_non_routine'
+      ) === 5,
+      'bridge count is count-only on the matching Rx slug'
+    );
+    check(
+      C.inboxCountFromTaskListBridge(
+        { rows: new Array(5), taskTypeSlug: 'prescription_request_task_non_routine' },
+        'prescription_request_task_routine'
+      ) === 0,
+      'bridge count ignores another Rx slug'
+    );
+  }
+
   // ---- Per-request medication summary (2026-09-10) ----
   console.log('\n--- itemCountsFromOverviewPayload: prescriptionRequestItemsByType bucket summing ---');
   {
@@ -793,7 +1175,10 @@ console.log('\n--- canvas + manifest + css source locks ---');
       },
     };
     const counts = C.itemCountsFromOverviewPayload(payload, 'pt-1');
-    check(counts.repeat === 3, 'repeat = repeatWithAnAuthorisedIssue + repeatPrescribingWithNoIssues (got ' + counts.repeat + ')');
+    check(
+      counts.repeat === 3,
+      'repeat = repeatWithAnAuthorisedIssue + repeatPrescribingWithNoIssues (got ' + counts.repeat + ')'
+    );
     check(counts.acute === 1, 'acute reads the acutePrescriptions bucket (HAR-confirmed live, 2026-09-10)');
     check(counts.repeatDispensing === 2, 'repeatDispensing reads its own bucket');
     check(counts.variableRepeat === 0, 'an empty bucket counts as 0, not omitted');
@@ -806,6 +1191,38 @@ console.log('\n--- canvas + manifest + css source locks ---');
       'missing prescriptionRequestItemsByType entirely -> all zero counts, no throw'
     );
     check(counts.resolvedPatientId === '', 'no patientId resolved falls back to empty string, not null/undefined');
+  }
+
+  console.log(
+    '\n--- overdueMedicationReviewFromPayload: patient-level flag (futureActionIdRequiringAttention), 2026-09-16 ---'
+  );
+  {
+    check(
+      C.overdueMedicationReviewFromPayload({
+        data: { futureActionIdRequiringAttention: '019e2b99-a736-72b4-aea7-7c3cc39fa433' },
+      }) === true,
+      'a non-null futureActionIdRequiringAttention is an overdue review — confirmed live, HAR 130-reviewoverdue.har'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({ data: { futureActionIdRequiringAttention: null } }) === false,
+      'null futureActionIdRequiringAttention is NOT overdue — confirmed live on a patient with an in-date review'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({
+        data: {
+          futureActionIdRequiringAttention: null,
+          medicationRequiringReview: [],
+          patientRequiresMedicationReview: false,
+        },
+      }) === false,
+      'the two more literally-named fields are deliberately NOT read here — they were both empty/false on a confirmed-overdue capture, so they track something else'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({ data: {} }) === false,
+      'a missing field entirely is treated as not-overdue, never guessed true'
+    );
+    check(C.overdueMedicationReviewFromPayload({}) === false, 'missing data section -> false, no throw');
+    check(C.overdueMedicationReviewFromPayload(null) === false, 'is defensive against a missing payload');
   }
 
   console.log('\n--- regimenTotalsFromPayload: repeat-type-only scope + isOverDue tally ---');
@@ -823,8 +1240,14 @@ console.log('\n--- canvas + manifest + css source locks ---');
     check(totals.repeatTotal === 3, 'repeatTotal is currentRepeatPrescribingMedications.length');
     check(totals.variableRepeatTotal === 1, 'variableRepeatTotal is currentVariableRepeatMedications.length');
     check(totals.repeatDispensingTotal === 1, 'repeatDispensingTotal is currentRepeatDispensingMedications.length');
-    check(totals.overdueTotal === 5, 'overdueTotal = 3+1+1 repeat-type meds, acute/OTC excluded (got ' + totals.overdueTotal + ')');
-    check(totals.overdueCount === 3, 'overdueCount = isOverDue:true across repeat-type meds ONLY, acute/OTC excluded (got ' + totals.overdueCount + ')');
+    check(
+      totals.overdueTotal === 5,
+      'overdueTotal = 3+1+1 repeat-type meds, acute/OTC excluded (got ' + totals.overdueTotal + ')'
+    );
+    check(
+      totals.overdueCount === 3,
+      'overdueCount = isOverDue:true across repeat-type meds ONLY, acute/OTC excluded (got ' + totals.overdueCount + ')'
+    );
   }
   {
     const totals = C.regimenTotalsFromPayload({});
@@ -836,7 +1259,10 @@ console.log('\n--- canvas + manifest + css source locks ---');
 
   console.log('\n--- fractionOrCount ---');
   check(C.fractionOrCount(0, 6, 'repeats') === '', 'zero requested -> omitted entirely, even with a known total');
-  check(C.fractionOrCount(3, null, 'repeats') === '3 repeats', 'no total yet (Pass B unresolved) -> bare requested count');
+  check(
+    C.fractionOrCount(3, null, 'repeats') === '3 repeats',
+    'no total yet (Pass B unresolved) -> bare requested count'
+  );
   check(C.fractionOrCount(3, 6, 'repeats') === '3/6 repeats', 'total known -> requested/total fraction');
   check(C.fractionOrCount(0, null, 'batches') === '', 'zero requested, no total either -> still omitted');
 
@@ -849,7 +1275,7 @@ console.log('\n--- canvas + manifest + css source locks ---');
   check(
     C.rxMonitoringLine({ repeat: 3, acute: 1, repeatDispensing: 0, variableRepeat: 0 }, null) ===
       'Request for 3 repeats, 1 acute.',
-    "Pass B not yet resolved for this patient -> bare counts, zero segments (batches) omitted, no trailing overdue sentence"
+    'Pass B not yet resolved for this patient -> bare counts, zero segments (batches) omitted, no trailing overdue sentence'
   );
   check(
     C.rxMonitoringLine(

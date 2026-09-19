@@ -310,6 +310,154 @@
   color: var(--text-3);
 }
 
+/* Who-ordered enrich: full-width banner. The old #ms-lac-progress hint
+   sat in the header at 11px --text-4 and was easy to miss. */
+#ms-lac-overlay .ms-lac-reorg[hidden] {
+  display: none !important;
+}
+
+#ms-lac-overlay .ms-lac-reorg {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 14px 18px 16px;
+  background: var(--accent-dim);
+  border-bottom: 2px solid var(--accent-line);
+  color: var(--text-1);
+}
+
+#ms-lac-overlay .ms-lac-reorg-stage {
+  position: relative;
+  flex: 0 0 168px;
+  height: 56px;
+}
+
+#ms-lac-overlay .ms-lac-reorg-card,
+#ms-lac-overlay .ms-lac-reorg-pile {
+  position: absolute;
+  left: 0;
+  top: 10px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  color: var(--text-2);
+}
+
+#ms-lac-overlay .ms-lac-reorg-card:nth-child(1) {
+  top: 4px;
+  left: 0;
+  animation: ms-lac-reorg-deal 1.6s var(--ease) infinite;
+}
+#ms-lac-overlay .ms-lac-reorg-card:nth-child(2) {
+  top: 12px;
+  left: 8px;
+  animation: ms-lac-reorg-deal 1.6s var(--ease) 0.2s infinite;
+}
+#ms-lac-overlay .ms-lac-reorg-card:nth-child(3) {
+  top: 20px;
+  left: 16px;
+  animation: ms-lac-reorg-deal 1.6s var(--ease) 0.4s infinite;
+}
+
+#ms-lac-overlay .ms-lac-reorg-arrow {
+  position: absolute;
+  left: 78px;
+  top: 18px;
+  font-size: 16px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+#ms-lac-overlay .ms-lac-reorg-pile {
+  left: 100px;
+  top: 12px;
+  background: var(--chip-on-bg);
+  border-color: var(--chip-on-border);
+  color: var(--chip-on-text);
+}
+
+#ms-lac-overlay .ms-lac-reorg-copy {
+  flex: 1 1 240px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#ms-lac-overlay .ms-lac-reorg-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+
+#ms-lac-overlay .ms-lac-reorg-sub {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+#ms-lac-overlay .ms-lac-reorg-count {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-lac-overlay .ms-lac-reorg-meter {
+  height: 8px;
+  margin-top: 6px;
+  background: var(--bg-elev);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+#ms-lac-overlay .ms-lac-reorg-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: var(--r-pill);
+  transition: width var(--med) var(--ease);
+}
+
+#ms-lac-overlay .ms-lac-reorg-settled {
+  background: var(--green-dim);
+  border-bottom-color: var(--green-line);
+}
+
+#ms-lac-overlay .ms-lac-reorg-settled .ms-lac-reorg-fill {
+  background: var(--green);
+}
+
+#ms-lac-overlay .ms-lac-reorg-settled .ms-lac-reorg-card {
+  animation: none;
+}
+
+#ms-lac-overlay .ms-lac-panel-reorg .ms-lac-board {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+@keyframes ms-lac-reorg-deal {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  45% {
+    transform: translate(88px, 4px);
+    opacity: 0.35;
+  }
+}
+
 .ms-lac-close,
 .ms-lac-ghost {
   padding: 4px 12px;
@@ -898,6 +1046,17 @@
   white-space: nowrap;
 }
 
+/* "Med review overdue" (rxOverdueMedReviewBadgeHtml) — a genuine clinical
+   flag, not routing metadata like the other tokens, so it gets the same
+   amber treatment as every other overdue/warning signal in this file
+   rather than the neutral default. */
+.ms-lac-tile-token-warn {
+  color: var(--amber);
+  background: var(--amber-dim);
+  border-color: var(--amber-line);
+  font-weight: 600;
+}
+
 .ms-lac-tile-who {
   flex-basis: 100%;
   font-size: 10.5px;
@@ -1187,6 +1346,87 @@
   background: var(--accent-dim);
 }
 
+#ms-lac-overlay .ms-lac-nwd-offer {
+  margin: 0 18px 10px;
+  padding: 12px 14px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-1);
+}
+
+#ms-lac-overlay .ms-lac-nwd-offer strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+#ms-lac-overlay .ms-lac-send-not-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+#ms-lac-overlay .ms-lac-send-not-in input {
+  margin-top: 3px;
+}
+
+#ms-lac-overlay .ms-lac-nwd-offer .ms-lac-confirm-btn {
+  margin-top: 10px;
+}
+
+/* Rx usual-GP send is another distribute path, not a featured CTA.
+   Preview is supporting copy; the button sits with Split / Top up /
+   Distribute equally at the quieter (non-primary) weight. */
+#ms-rxac-overlay .ms-lac-nwd-offer {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+#ms-rxac-overlay .ms-lac-nwd-offer strong {
+  display: inline;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+#ms-rxac-overlay .ms-lac-send-not-in input {
+  margin-top: 2px;
+}
+
+#ms-rxac-overlay .ms-rxac-send-group {
+  flex: 0 0 auto;
+  margin-left: 6px;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
 #ms-lac-overlay .ms-lac-daybar {
   display: flex;
   flex-direction: column;
@@ -1283,6 +1523,18 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 10px;
+}
+
+#ms-rxac-overlay .ms-rxac-split-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-left: auto;
+}
+
+#ms-rxac-overlay .ms-rxac-split-actions .ms-rxac-split-go {
+  margin-left: 0;
 }
 
 #ms-rxac-overlay .ms-lac-split .ms-lac-confirm-btn,
@@ -2665,5 +2917,8 @@
   #ms-rxac-overlay *,
   #ms-qac-overlay * {
     transition: none !important;
+  }
+  #ms-lac-overlay .ms-lac-reorg-card {
+    animation: none !important;
   }
 }

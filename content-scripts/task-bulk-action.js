@@ -117,9 +117,13 @@
     if (!body) return [];
     if (Array.isArray(body)) return body;
     if (Array.isArray(body.tasks)) return body.tasks;
+    if (Array.isArray(body.items)) return body.items;
     if (Array.isArray(body.results)) return body.results;
     if (Array.isArray(body.rows)) return body.rows;
+    if (Array.isArray(body.taskList)) return body.taskList;
+    if (body.taskList && Array.isArray(body.taskList.tasks)) return body.taskList.tasks;
     if (body.data && Array.isArray(body.data.tasks)) return body.data.tasks;
+    if (body.data && Array.isArray(body.data.items)) return body.data.items;
     if (Array.isArray(body.data)) return body.data;
     return [];
   }
@@ -183,6 +187,66 @@
     return { qs: String(value == null ? '' : value), scopeWarning: null };
   }
 
+  // location.search (or any query string), minus a leading '?'.
+  function stripSearch(search) {
+    var raw = String(search == null ? '' : search);
+    if (raw.charAt(0) === '?') raw = raw.slice(1);
+    return raw;
+  }
+
+  // True when the page URL already carries the filters Medicus used to
+  // paint the grid. Those must win over a hardcoded homepage+assignee
+  // capture — that capture is a different inbox and returns [] while
+  // the dedicated queue is full (Dave, live, 2026-09-15).
+  function searchHasListFilters(search) {
+    var qs = stripSearch(search);
+    if (!qs) return false;
+    return /(?:^|&)(statuses(?:%5B%5D|\[\])?|viewContext|masterAssignee)=/i.test(qs);
+  }
+
+  function queryPlanKey(qs) {
+    var s = stripSearch(qs);
+    try {
+      s = decodeURIComponent(s);
+    } catch (_) {
+      /* keep raw */
+    }
+    return s.replace(/statuses\[\]=/gi, 'statuses%5B%5D=').toLowerCase();
+  }
+
+  // listQueryString may resolve to one query or an ordered plan. The
+  // engine walks the plan and keeps the first response that has rows.
+  function asQueryPlan(value) {
+    var list = Array.isArray(value) ? value : [value];
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var norm = normaliseListQuery(list[i]);
+      var key = queryPlanKey(norm.qs);
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push(norm);
+    }
+    return out;
+  }
+
+  // Shared doctrine for any widget that used to ship a frozen task-list
+  // capture: this page's own filters first, then the historical queries.
+  // First non-empty response wins in fetchTaskList. Do not invent a
+  // masterAssignee from data-ch-staff here — that is a personal inbox
+  // and empties the dedicated queue (Privacy Officer, Dave, 2026-09-15).
+  function pageFiltersFirstPlan(pageSearch, fallbacks) {
+    var plan = [];
+    var pageQs = stripSearch(pageSearch);
+    if (searchHasListFilters(pageQs)) {
+      plan.push({ qs: pageQs, scopeWarning: null });
+    }
+    var extra = Array.isArray(fallbacks) ? fallbacks : fallbacks != null ? [fallbacks] : [];
+    for (var i = 0; i < extra.length; i++) plan.push(extra[i]);
+    return asQueryPlan(plan);
+  }
+
+
   // ── Node test hook ────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -194,6 +258,10 @@
       canSubmit: canSubmit,
       buildActionPayload: buildActionPayload,
       normaliseListQuery: normaliseListQuery,
+      stripSearch: stripSearch,
+      searchHasListFilters: searchHasListFilters,
+      asQueryPlan: asQueryPlan,
+      pageFiltersFirstPlan: pageFiltersFirstPlan,
     };
   }
 
@@ -224,10 +292,14 @@
   //   verbedAdjective    e.g. 'acknowledged' (past-participle, for tags/done text)
   //   taskListSlug       e.g. 'patient_privacy_officer_alert_task'
   //   listQueryString    already-encoded query string appended to the list
-  //                      fetch — a static string, or a (possibly async)
-  //                      function evaluated fresh at fetch time; either may
-  //                      resolve to { qs, scopeWarning } instead of a bare
-  //                      string (see normaliseListQuery)
+  //                      fetch — a static string, a (possibly async)
+  //                      function evaluated fresh at fetch time, or an
+  //                      ordered plan (array). Each entry may be a bare
+  //                      string or { qs, scopeWarning } (see
+  //                      normaliseListQuery / asQueryPlan). The engine
+  //                      walks the plan and keeps the first non-empty
+  //                      response so a stale homepage+assignee capture
+  //                      cannot hide the list this page is actually showing.
   //   actionPath         e.g. '/tasks/patient-privacy-officer/complete'
   //   itemNounSingular   e.g. 'privacy officer alert'
   //   itemNounPlural     e.g. 'privacy officer alerts'
@@ -256,6 +328,10 @@
     var _scopeWarning = null; // non-null = this load's list is wider than the contract intends
     var _acting = false;
     var _onMatchingPage = false;
+    // Count-only, from the untrusted ch-task-list-data bridge. Used to
+    // explain an empty Suite list when Medicus's own grid still has rows.
+    // Never used as task ids for a write.
+    var _pageRowCount = 0;
     // Bumped by removeWidget() (SPA navigation away). In-flight async work
     // (load(), runAction()) captures the value at start and refuses to apply
     // its results if it changed — otherwise a fetch/batch completing AFTER
@@ -298,20 +374,37 @@
     }
 
     async function fetchTaskList() {
-      // listQueryString may be a static string (EPS — no assignee scoping,
-      // matches its confirmed workflow-view query) or a possibly-async
-      // function evaluated fresh at fetch time (Privacy Officer — needs the
-      // CURRENT user's own staff id, and waits briefly for the identity
-      // stamp; see that instantiation's header for why). Either may resolve
-      // to { qs, scopeWarning } — see normaliseListQuery.
+      // listQueryString may be a static string or a possibly-async
+      // function evaluated fresh at fetch time. Privacy Officer and EPS
+      // both return a plan: this page's own filters first, then the
+      // historical capture, then unscoped fallbacks. Each entry may be
+      // { qs, scopeWarning } — see asQueryPlan / pageFiltersFirstPlan.
       var resolved =
         typeof config.listQueryString === 'function' ? await config.listQueryString() : config.listQueryString;
-      var norm = normaliseListQuery(resolved);
-      var data = await apiFetch('/tasks/data/' + config.taskListSlug + '/task-list?' + norm.qs);
+      var plan = asQueryPlan(resolved);
+      var lastEmpty = { tasks: [], scopeWarning: null };
+      var lastErr = null;
+      var anyOk = false;
+      for (var i = 0; i < plan.length; i++) {
+        try {
+          var data = await apiFetch('/tasks/data/' + config.taskListSlug + '/task-list?' + plan[i].qs);
+          anyOk = true;
+          var tasks = extractTaskArray(data);
+          lastEmpty = { tasks: tasks, scopeWarning: plan[i].scopeWarning };
+          // First non-empty response wins. Later, wider queries are only
+          // reached when this page's own list (or the scoped inbox) is
+          // empty — that is the Dave-live failure, not a silent widen
+          // of a list that already had rows.
+          if (tasks.length) return lastEmpty;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      if (!anyOk && lastErr) throw lastErr;
       // Returned (not written to _scopeWarning here) so load() can apply it
       // only after its own generation check — a fetch completing after SPA
       // navigation must not pollute the next page entry's state.
-      return { tasks: extractTaskArray(data), scopeWarning: norm.scopeWarning };
+      return lastEmpty;
     }
 
     function postAction(taskId) {
@@ -444,7 +537,7 @@
         live.length +
         ' ' +
         (live.length === 1 ? esc(config.itemNounSingular) : esc(config.itemNounPlural)) +
-        '.</div>';
+        ' in Suite’s list. Ticking rows in Medicus’s table above does not select them here.</div>';
 
       // select-all is gated ONLY by config.selectAllAllowed — a scope
       // warning no longer withholds it (see this file's SOFTENED 2026-08-20
@@ -609,30 +702,92 @@
       );
     }
 
+    function retryButtonHtml() {
+      return '<button type="button" class="ms-tba-retry" id="ms-tba-retry-' + esc(config.id) + '">Retry</button>';
+    }
+
+    function emptyExplanationHtml() {
+      var html = esc(config.emptyMessage);
+      html +=
+        ' Ticking rows in Medicus’s table does not select them here — this control uses Suite’s own list, not the table checkboxes.';
+      if (_pageRowCount > 0) {
+        html += ' The table above currently has rows that Suite’s list fetch did not return.';
+      }
+      return html;
+    }
+
+    function statusOrErrorHtml() {
+      if (_loadState === 'loading') {
+        return '<div class="ms-tba-status"><span class="ms-tba-loading">Loading Suite’s list…</span></div>';
+      }
+      if (_loadState === 'error') {
+        return (
+          '<div class="ms-tba-status"><span class="ms-tba-error">' +
+          esc(_loadError) +
+          '</span> ' +
+          retryButtonHtml() +
+          '</div>'
+        );
+      }
+      if (_loadState === 'done' && _rows.length === 0) {
+        return (
+          '<div class="ms-tba-status"><span class="ms-tba-empty">' +
+          emptyExplanationHtml() +
+          '</span> ' +
+          retryButtonHtml() +
+          '</div>'
+        );
+      }
+      if (_loadState === 'done' && _rows.length > 0 && !_open) {
+        return (
+          '<div class="ms-tba-status">' +
+          _rows.length +
+          ' pending in Suite’s list. Open to tick and ' +
+          esc(config.verb).toLowerCase() +
+          ' — Medicus’s table checkboxes are not used.</div>'
+        );
+      }
+      return '';
+    }
+
     function buildHtml() {
+      var emptyDone = _loadState === 'done' && _rows.length === 0;
       var header =
-        '<button type="button" class="ms-tba-toggle" id="ms-tba-toggle-' +
+        '<button type="button" class="ms-tba-toggle' +
+        (emptyDone ? ' ms-tba-toggle-empty' : '') +
+        '" id="ms-tba-toggle-' +
         esc(config.id) +
         '" aria-expanded="' +
         _open +
-        '">' +
+        '"' +
+        (emptyDone ? ' aria-disabled="true"' : '') +
+        '>' +
         (_open ? '▾' : '▸') +
         ' ' +
         esc(config.triggerLabel) +
         '</button>';
-      if (!_open) return header;
+      // Empty / error / loading stay visible even when the panel is
+      // collapsed — a closed pill with no copy was the silent no-op
+      // (Dave: selected every Medicus row, clicked Bulk acknowledge,
+      // saw "No pending…" only if the panel happened to be open).
+      if (!_open) return header + statusOrErrorHtml();
       var body;
       if (_loadState === 'loading') {
-        body = '<div class="ms-tba-body"><span class="ms-tba-loading">Loading…</span></div>';
+        body = '<div class="ms-tba-body"><span class="ms-tba-loading">Loading Suite’s list…</span></div>';
       } else if (_loadState === 'error') {
         body =
           '<div class="ms-tba-body"><span class="ms-tba-error">' +
           esc(_loadError) +
-          '</span> <button type="button" class="ms-tba-retry" id="ms-tba-retry-' +
-          esc(config.id) +
-          '">Retry</button></div>';
-      } else if (_loadState === 'done' && _rows.length === 0) {
-        body = '<div class="ms-tba-body"><span class="ms-tba-empty">' + esc(config.emptyMessage) + '</span></div>';
+          '</span> ' +
+          retryButtonHtml() +
+          '</div>';
+      } else if (emptyDone) {
+        body =
+          '<div class="ms-tba-body"><span class="ms-tba-empty">' +
+          emptyExplanationHtml() +
+          '</span> ' +
+          retryButtonHtml() +
+          '</div>';
       } else if (_loadState === 'done') {
         body = _step === 'confirm' ? renderConfirmStep() : _step === 'done' ? renderDoneStep() : renderSelectStep();
       } else {
@@ -894,6 +1049,7 @@
       _rows = [];
       _scopeWarning = null;
       _acting = false;
+      _pageRowCount = 0;
     }
 
     function checkPage() {
@@ -906,6 +1062,10 @@
       _onMatchingPage = true;
       _siteId = info.siteId;
       injectTrigger();
+      // Prefetch so an empty Suite list is visible without a click.
+      // Clicking a loaded-empty pill must never look like a working
+      // action that silently does nothing.
+      if (_loadState === 'idle') load();
     }
 
     // ── SPA-navigation-aware scheduling — same throttle/hub pattern as
@@ -948,9 +1108,39 @@
     var _ownObs = null;
     var _scanInterval = null;
     var _visHandler = null;
+    var _bridgeOn = false;
+
+    function slugsMatch(a, b) {
+      var na = String(a || '')
+        .toLowerCase()
+        .replace(/-/g, '_');
+      var nb = String(b || '')
+        .toLowerCase()
+        .replace(/-/g, '_');
+      return !!(na && nb && na === nb);
+    }
+
+    // Untrusted MAIN-world bridge — count only, never task ids for a write.
+    function onTaskListData(e) {
+      var d = e && e.detail;
+      if (!d || typeof d !== 'object') return;
+      if (!slugsMatch(d.taskTypeSlug, config.taskListSlug)) return;
+      var rows = Array.isArray(d.rows) ? d.rows : [];
+      var n = 0;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i] && (rows[i].taskUuid || rows[i].id || rows[i].taskId)) n++;
+      }
+      if (n === _pageRowCount) return;
+      _pageRowCount = n;
+      if (_loadState === 'done' && _rows.length === 0) render();
+    }
 
     function startHeavyChrome() {
       if (_scanInterval) return;
+      if (!_bridgeOn) {
+        _bridgeOn = true;
+        window.addEventListener('ch-task-list-data', onTaskListData);
+      }
       var hub = window.__chObserverHub;
       if (hub && hub.subscribe) {
         _hubUnsub = hub.subscribe(function (mutations) {
@@ -999,6 +1189,10 @@
         clearTimeout(_throttle);
         _throttle = null;
       }
+      if (_bridgeOn) {
+        window.removeEventListener('ch-task-list-data', onTaskListData);
+        _bridgeOn = false;
+      }
       removeWidget();
       _onMatchingPage = false;
     }
@@ -1020,5 +1214,10 @@
     }
   }
 
-  window.TaskBulkAction = { create: create };
+  window.TaskBulkAction = {
+    create: create,
+    pageFiltersFirstPlan: pageFiltersFirstPlan,
+    stripSearch: stripSearch,
+    searchHasListFilters: searchHasListFilters,
+  };
 })();

@@ -1,0 +1,58 @@
+{
+  "practice_name": "Witley and Milford Surgery",
+  "baseline": {
+    "drug-rules.json": "2026-09-11 (lastUpdated; last full Keeper drug apply 2026-08-18)",
+    "qof-rules.json": "QOF 2026/27 (2026-08-28 PRN02356 audit)",
+    "vaccine-rules.json": "2026/27 season / 2026-09-14",
+    "alert-library.json": "2026-08-18 (verified, not edited this run)",
+    "reception-pathways.json": "v1.10 / 2026-08-23",
+    "acb-scores.js + stopp-start.js": "starter set \u2014 CSO verification still outstanding; biperiden+flavoxate added 2026-09-18",
+    "clinical-thresholds": "test-clinical-thresholds-sync.js pin set \u2014 no drift"
+  },
+  "generated_at": "2026-09-18",
+  "manifest_version_before": "3.261.62",
+  "manifest_version_after": "3.262.0",
+  "sources_checked": [
+    "BNF 92 monitoring requirements and medicinal forms (57 monographs + aripiprazole/denosumab/drovelis/ciclosporin/tacrolimus/lithium forms)",
+    "BNF about/changes (Sept 2026 print cycle)",
+    "MHRA Drug Safety Update index (gov.uk)",
+    "NHS England QOF 2026/27 PRN02356 July update (reconfirmed current)",
+    "UKHSA RSV HCP information v05 (July 2026)",
+    "NICE CKS Otitis media \u2014 acute",
+    "NICE NG143 Fever in under 5s",
+    "ACBcalc.com medicines table (updated 03 Jul 2024)"
+  ],
+  "rule_files_touched": [
+    "rules/drug-rules.json",
+    "rules/vaccine-rules.json",
+    "rules/reception-pathways.json",
+    "engine/acb-scores.js"
+  ],
+  "tests_run": [
+    "test-drug-brand-coverage.js",
+    "test-qof-indicator-filters.js",
+    "test-qof-year.js",
+    "test-monitoring-chip.js",
+    "test-prescribing-flags.js",
+    "test-applicability-filters.js",
+    "test-custom-rules.js",
+    "test-custom-indicators.js",
+    "test-acb-scores.js",
+    "test-stopp-start.js",
+    "test-vaccine-rules.js",
+    "test-reception-pathways.js",
+    "test-reception-pathway-utils.js",
+    "test-clinical-thresholds-sync.js",
+    "test-passport-core.js",
+    "test-brief-core.js",
+    "test-high-risk-unmatched.js"
+  ],
+  "tests_passed": true,
+  "excluded_low_relevance": 5,
+  "source_gaps": [
+    "bnf.nice.org.uk returns 403 to a normal Chrome UA from this VM; fetched with Googlebot UA fallback (public pages, 200). mycophenolic-acid BNF slug 404 (mofetil monograph covers Myfortic/Ceptava).",
+    "NHS England QOF landing pages HTTP 202 WAF (0 bytes) \u2014 primary PRN02356 PDF previously fetched 2026-08-28 still current.",
+    "NHS England Pharmacy First spec HTTP 202 WAF \u2014 age gates not re-verified.",
+    "NICE KTT index 403; PRIMIS PINCER spec landing 404 on legacy URL \u2014 alert-library candidates verified against live JSON + MHRA/CKS where fetched, then held for a dedicated alerts pass."
+  ]
+}

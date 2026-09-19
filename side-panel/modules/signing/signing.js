@@ -42,11 +42,19 @@ import {
   renalContext,
   formatObsAge,
   locationBuckets,
-  rowMatchesLocationFilter,
-  rowMatchesFlaggedFilter,
   filterHiddenSummary,
   isDispensaryLocation,
   emptyStateKind,
+  visibleSigningRows,
+  normalizeSigningScope,
+  parseRxListScopeAttr,
+  signingScopeFromPageSearch,
+  queryStringForSigningScope,
+  pickAssignedId,
+  applySigningFetchResult,
+  signingScopeClearsPayload,
+  scopeSig,
+  PRACTICE_SIGNING_SCOPE,
   RENAL_STALE_DAYS,
   ROW_STATE,
   CHIP_STATUS_TEXT,
@@ -72,6 +80,10 @@ let _abort = false;
 let _running = false;
 let _currentRun = null; // in-flight pass promise — refresh awaits it (never silently no-ops)
 let _stopFresh = null;
+let _scopeGen = 0; // bumped on every fetch; stale in-flight results are dropped
+let _scopePoll = null;
+let _onTabChange = null;
+let _lastScopeSig = '';
 
 // Verdicts already computed this session, keyed by PATIENT UUID — the only
 // identity ever trusted for sharing a verdict between rows (wrong-patient
@@ -91,6 +103,9 @@ let state = {
   // Practice toggle (suite.signing.softFlags, default OFF): QOF-review
   // badges + Flagged filter. Existing monitoring chips stay always-on.
   softFlags: false,
+  // Book-signing list scope — the same masterAssignee the Medicus page
+  // already fetched. practice = whole pile; individual = that person's list.
+  scope: { ...PRACTICE_SIGNING_SCOPE },
   lastFetched: null,
   error: null,
   noCode: false,
@@ -111,17 +126,86 @@ export async function init(el) {
   renderShell();
   _stopFresh = attachFreshnessTicker(container);
   if (chrome.storage?.onChanged) chrome.storage.onChanged.addListener(onSoftFlagsStorageChange);
+  _onTabChange = (_tabId, changeInfo) => {
+    if (changeInfo && changeInfo.status && changeInfo.status !== 'complete') return;
+    syncScopeFromPage();
+  };
+  if (chrome.tabs?.onActivated) chrome.tabs.onActivated.addListener(_onTabChange);
+  if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.addListener(_onTabChange);
+  _scopePoll = setInterval(() => syncScopeFromPage(), 1500);
   await fetchAndRun();
 
   return () => {
     _abort = true;
+    _scopeGen += 1;
     if (chrome.storage?.onChanged) chrome.storage.onChanged.removeListener(onSoftFlagsStorageChange);
+    if (_onTabChange) {
+      if (chrome.tabs?.onActivated) chrome.tabs.onActivated.removeListener(_onTabChange);
+      if (chrome.tabs?.onUpdated) chrome.tabs.onUpdated.removeListener(_onTabChange);
+    }
+    if (_scopePoll) {
+      clearInterval(_scopePoll);
+      _scopePoll = null;
+    }
     if (_stopFresh) _stopFresh();
+    _onTabChange = null;
     container = null;
   };
 }
 
 // ── Fetch + monitoring pass ───────────────────────────────────────────────────
+
+async function readPageSigningScope() {
+  const fallback = { ...PRACTICE_SIGNING_SCOPE };
+  if (!chrome.tabs?.query) return fallback;
+  try {
+    const active = await chrome.tabs.query({ active: true, currentWindow: true });
+    const medicus = await chrome.tabs.query({ url: 'https://*.medicus.health/*' });
+    const tab =
+      (active && active[0] && /medicus\.health/i.test(active[0].url || '') && active[0]) || (medicus && medicus[0]);
+    if (!tab || !tab.id) return fallback;
+    let attr = '';
+    try {
+      const resp = await chrome.tabs.sendMessage(tab.id, { action: 'getRxListScope' });
+      attr = resp && resp.attr != null ? String(resp.attr) : '';
+    } catch (_) {
+      attr = '';
+    }
+    if (attr) return parseRxListScopeAttr(attr);
+    // No intercept yet — page URL only, and leftover homepage+staff is
+    // practice (same class as #415). Individual toggle without homepage
+    // still lands here.
+    let search = '';
+    try {
+      const href = tab.url || '';
+      const q = href.indexOf('?');
+      if (q >= 0) search = href.slice(q);
+    } catch (_) {
+      search = '';
+    }
+    return signingScopeFromPageSearch(search);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+async function syncScopeFromPage() {
+  if (!container) return;
+  const next = normalizeSigningScope(await readPageSigningScope());
+  const sig = scopeSig(next);
+  if (sig === _lastScopeSig && scopeSig(state.scope) === sig) return;
+  _lastScopeSig = sig;
+  if (signingScopeClearsPayload(state.scope, next)) {
+    state.scope = next;
+    state.rows = [];
+    _verdictByUuid = new Map();
+    renderAll();
+    rerunPass();
+    return;
+  }
+  state.scope = next;
+  renderScopeBanner();
+}
 
 async function fetchAndRun() {
   if (!container) return;
@@ -138,12 +222,24 @@ async function fetchAndRun() {
   }
   _running = true;
   _abort = false;
+  const myGen = ++_scopeGen;
   try {
     state.error = null;
     state.noCode = false;
 
     state.softFlags = await loadSoftFlags();
+    const nextScope = normalizeSigningScope(await readPageSigningScope());
+    if (myGen !== _scopeGen) return;
+    if (signingScopeClearsPayload(state.scope, nextScope)) {
+      state.rows = [];
+      _verdictByUuid = new Map();
+    }
+    state.scope = nextScope;
+    _lastScopeSig = scopeSig(nextScope);
+    renderAll();
+
     const { code } = await window.PracticeCode.resolve();
+    if (myGen !== _scopeGen) return;
     if (!code || !_SITE_CODE_RE.test(code)) {
       state.noCode = true;
       state.rows = [];
@@ -151,17 +247,23 @@ async function fetchAndRun() {
       return;
     }
     const apiBase = `https://${code}.api.england.medicus.health`;
+    const requestScope = normalizeSigningScope(state.scope);
+    const qs = queryStringForSigningScope(requestScope);
 
     // 1. The pile: open prescription-request tasks. Deliberately NO createdAt
     // filter — the endpoint's default view is exactly the outstanding tasks,
     // and completed requests leaving the table is the behaviour we want here.
+    // Individual book-signing lists reuse the page masterAssignee so the
+    // RHS cannot paint the whole practice on top of one person's list.
     const selected = TASK_TYPES.filter((tt) => state.types[tt.key]);
     const rows = [];
     for (const tt of selected) {
-      const r = await fetch(`${apiBase}/tasks/data/${tt.slug}/task-list`, {
+      if (myGen !== _scopeGen || _abort) return;
+      const r = await fetch(`${apiBase}/tasks/data/${tt.slug}/task-list${qs}`, {
         credentials: 'include',
         cache: 'no-store',
       });
+      if (myGen !== _scopeGen) return;
       if (!r.ok) throw new Error(`${tt.label} requests HTTP ${r.status}`);
       const tasks = extractTaskArray(await r.json());
       for (const t of tasks) {
@@ -175,7 +277,13 @@ async function fetchAndRun() {
           summary: t.summary || t.summaryLabel || '',
           priorityDisplay: t.priorityDisplay || '',
           createdAt: t.createdAt || '',
-          assignedTo: t.assignedTo || '',
+          assignedTo:
+            typeof t.assignedTo === 'string'
+              ? t.assignedTo
+              : t.assignedTo && t.assignedTo.label
+                ? t.assignedTo.label
+                : '',
+          assignedId: pickAssignedId(t),
           // The row's own overview pointer — the PROVEN live path to the
           // patient (the queue bridge fetches exactly this field). Preferred
           // over constructing /tasks/data/{list-slug}/overview/{id}: on live
@@ -198,7 +306,9 @@ async function fetchAndRun() {
         });
       }
     }
-    state.rows = rows;
+    if (myGen !== _scopeGen) return;
+    const applied = applySigningFetchResult(rows, requestScope, state.scope);
+    state.rows = applied;
     _verdictByUuid = new Map();
     state.lastFetched = new Date();
     renderAll();
@@ -206,11 +316,15 @@ async function fetchAndRun() {
     _currentRun = runMonitoringPass(apiBase);
     await _currentRun;
   } catch (err) {
+    if (myGen !== _scopeGen) return;
     state.error = err.message || 'Failed to load';
     renderAll();
   } finally {
+    // Always release the run lock so a waiting toggle can start. Stale
+    // gens must not paint — that is how a practice-wide payload would
+    // land on an individual list.
     _running = false;
-    renderAll();
+    if (myGen === _scopeGen) renderAll();
   }
 }
 
@@ -479,6 +593,7 @@ function renderShell() {
       </div>
 
       <div id="sgLocPills" class="sg-loc-pills"></div>
+      <div id="sgScope" class="sg-scope hidden" role="status"></div>
       <div id="sgBanner" class="banner hidden"></div>
       <div id="sgFilterNote" class="sg-filter-note hidden" role="status"></div>
       <div id="sgList" class="sg-list"></div>
@@ -541,6 +656,7 @@ function renderAll() {
   }
   renderFlagPills();
   renderLocPills();
+  renderScopeBanner();
   renderList();
   const foot = container.querySelector('#sgFoot');
   if (foot) foot.innerHTML = state.lastFetched ? freshnessHtml(state.lastFetched) : '';
@@ -638,19 +754,26 @@ function renderList() {
     // type selected, no filter). A narrowed view keeps the neutral wording:
     // warmth on a false all-clear is worse than no warmth at all.
     const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
-    const kind = emptyStateKind(0, allTypes, state.locationFilter.size > 0 || state.flaggedOnly);
+    const scoped = state.scope && state.scope.mode === 'individual';
+    const kind = emptyStateKind(0, allTypes, state.locationFilter.size > 0 || state.flaggedOnly || scoped);
     list.innerHTML =
       kind === 'done'
         ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
-        : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
+        : scoped
+          ? '<div class="sg-empty">No open repeat requests on this list.</div>'
+          : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
     renderMore(0);
     return;
   }
 
   const now = Date.now();
-  const visible = state.rows.filter(
-    (r) => rowMatchesLocationFilter(r, state.locationFilter) && rowMatchesFlaggedFilter(r, state.flaggedOnly)
-  );
+  const fetchedScoped = !!(state.scope && state.scope.mode === 'individual');
+  const visible = visibleSigningRows(state.rows, {
+    locationFilter: state.locationFilter,
+    flaggedOnly: state.flaggedOnly,
+    assigneeScope: state.scope,
+    fetchedScoped,
+  });
   renderFilterNote();
   if (visible.length === 0) {
     const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
@@ -658,7 +781,9 @@ function renderList() {
     list.innerHTML =
       kind === 'done'
         ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
-        : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
+        : fetchedScoped
+          ? '<div class="sg-empty">No open repeat requests on this list.</div>'
+          : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
     renderMore(state.rows.filter((r) => r.state === ROW_STATE.PENDING).length);
     return;
   }
@@ -732,6 +857,22 @@ function renderFlagPills() {
     renderLocPills();
     renderList();
   });
+}
+
+function renderScopeBanner() {
+  const host = container?.querySelector('#sgScope');
+  if (!host) return;
+  const scope = normalizeSigningScope(state.scope);
+  if (scope.mode !== 'individual') {
+    host.className = 'sg-scope hidden';
+    host.textContent = '';
+    return;
+  }
+  const who =
+    (state.rows.find((r) => r.assignedId && r.assignedId === scope.assigneeId && r.assignedTo) || {}).assignedTo ||
+    'this list';
+  host.className = 'sg-scope';
+  host.textContent = `This list: ${who} — not the whole practice.`;
 }
 
 function renderLocPills() {

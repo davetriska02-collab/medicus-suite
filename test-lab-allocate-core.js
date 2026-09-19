@@ -67,6 +67,10 @@ console.log('\n--- parseRequestLabel (OIR card shape) ---');
   check(p.name === 'Full Lipid Profile', 'panel name');
   check(p.requester === 'Dr David Triska', 'requester from OIR label');
   check(p.requestedDate === '2026-06-09', 'requested date');
+  const hyphen = C.parseRequestLabel('XR Chest (Dr Emma Nicholls - 08 Sep 2026, 15:58)');
+  check(hyphen.requester === 'Dr Emma Nicholls', 'OIR label with ASCII hyphen still yields the GP');
+  const nodot = C.parseRequestLabel('XR Chest (Dr Emma Nicholls 08 Sep 2026, 15:58)');
+  check(nodot.requester === 'Dr Emma Nicholls', 'OIR label with date and no bullet still yields the GP');
 }
 
 console.log('\n--- pickRequesterFromOverview ---');
@@ -104,6 +108,94 @@ console.log('\n--- pickRequesterFromOverview ---');
     },
   });
   check(orgReq === null, 'lab/org requester object is not who ordered');
+  const liveOir = C.pickRequesterFromOverview({
+    data: {
+      investigationReport: {
+        requester: {
+          organisationName: null,
+          organisationOdsCode: 'H81031',
+          departmentName: null,
+          practitionerName: 'TRISKA',
+        },
+      },
+      outstandingInvestigationRequestOptions: [
+        { label: 'XR Chest (Dr Emma Nicholls • 08 Sep 2026, 15:58)', value: '01a08187-1df1-7275-a8be-2b6527d87878' },
+        {
+          label: 'Full Blood Count (Dr Emma Nicholls • 08 Sep 2026, 15:33)',
+          value: '01a08170-3d96-72d7-b1ca-148083a25da9',
+        },
+      ],
+    },
+  });
+  check(liveOir && liveOir.name === 'Dr Emma Nicholls', 'OIR option labels win over lab practitionerName TRISKA');
+  check(liveOir && liveOir.source === 'oir-label', 'live OIR source is oir-label');
+  const mixedOir = C.pickRequesterFromOverview({
+    data: {
+      outstandingInvestigationRequestOptions: [
+        { label: 'FBC (Dr Emma Nicholls • 08 Sep 2026, 15:33)', value: 'a' },
+        { label: 'U&E (Dr David Triska • 08 Sep 2026, 15:33)', value: 'b' },
+      ],
+    },
+  });
+  check(mixedOir && mixedOir.mixed === true, 'mixed OIR requesters do not pick the first name');
+  check(mixedOir && !mixedOir.name, 'mixed OIR does not claim a single requester');
+  const majority = C.pickRequesterFromOverview({
+    data: {
+      outstandingInvestigationRequestOptions: [
+        { label: 'FBC (Dr Emma Nicholls • 08 Sep 2026, 15:33)', value: 'a' },
+        { label: 'U&E (Dr Emma Nicholls • 08 Sep 2026, 15:33)', value: 'b' },
+        { label: 'LFT (Dr Emma Nicholls • 08 Sep 2026, 15:33)', value: 'c' },
+        { label: 'XR Chest (Dr Emma Nicholls - 08 Sep 2026, 15:58)', value: 'd' },
+        { label: 'FIT (Locum Other • 01 Sep 2026, 09:00)', value: 'e' },
+      ],
+    },
+  });
+  check(majority && majority.name === 'Dr Emma Nicholls', 'one odd OIR row does not wipe a clear majority requester');
+  const foremanLive = C.pickRequesterFromOverview({
+    data: {
+      createdDateTime: '2026-09-11 20:42:47',
+      investigationReport: {
+        issuedDateTime: '2026-09-10T09:00:00',
+        receivedDateTime: '2026-09-11T08:00:00',
+        requester: { organisationName: null, organisationOdsCode: null, practitionerName: 'Foreman' },
+      },
+      outstandingInvestigationRequestOptions: [
+        { label: 'Faecal Immunochemical Test (Jessica Foreman • 09 Sep 2026, 17:11)', value: 'a' },
+        { label: 'Faeces Culture (Jessica Foreman • 09 Sep 2026, 17:11)', value: 'b' },
+        { label: 'Prostate Specific Antigen (PSA) (Dr J A J Whitaker • 07 May 2025, 15:57)', value: 'c' },
+        { label: 'Mid-Stream Urine C and S (Dr J A J Whitaker • 07 May 2025, 15:57)', value: 'd' },
+      ],
+    },
+  });
+  check(
+    foremanLive && foremanLive.name === 'Jessica Foreman',
+    'current OIR GP wins over a completed request from another clinician last year'
+  );
+  const seeded = C.normaliseTaskRow(
+    {
+      id: uuid(21),
+      patientName: 'X',
+      assignedTo: 'Investigation Reports',
+      requestedBy: 'TRISKA',
+      investigations: 'Standard chest X-ray',
+    },
+    'review_investigation_results_task'
+  );
+  check(seeded && seeded.requester === 'TRISKA', 'task-list still seeds Requested By before overview enrich');
+  C.applyRequester(seeded, liveOir);
+  check(seeded.requester === 'Dr Emma Nicholls', 'OIR hint overrides list TRISKA');
+  const seededMixed = C.normaliseTaskRow(
+    {
+      id: uuid(22),
+      patientName: 'Y',
+      assignedTo: 'Investigation Reports',
+      requestedBy: 'TRISKA',
+      investigations: 'U&E',
+    },
+    'review_investigation_results_task'
+  );
+  C.applyRequester(seededMixed, mixedOir);
+  check(!seededMixed.requester, 'mixed OIR clears the false list requester');
   const fromRow = C.pickRequesterFromTaskRow({
     requestedBy: 'TRISKA D',
     namedGp: 'Dr Registered GP',
@@ -164,6 +256,22 @@ console.log('\n--- normaliseTaskRow / team vs person assignee ---');
     'Non-Routine Prescription Requests is an inbox, not a person'
   );
   check(C.isTeamAssignee('Dr Jane Cole') === false, 'a named doctor is not a team');
+  check(C.needsRequesterOverview(person) === false, 'already-assigned lab does not need a who-ordered overview');
+  const inboxOv = C.normaliseTaskRow(
+    {
+      id: uuid(13),
+      patientName: 'A',
+      assignedTo: 'Investigation Reports',
+      overviewURL: '/tasks/data/review-investigation-report/overview/' + uuid(13),
+      requestedBy: 'TRISKA',
+    },
+    'review_investigation_results_task'
+  );
+  check(C.needsRequesterOverview(inboxOv) === true, 'unallocated inbox lab still needs a who-ordered overview');
+  check(
+    C.needsRequesterOverview({ assignedTo: 'Investigation Reports' }) === false,
+    'no overviewURL → no who-ordered fetch'
+  );
   check(
     C.homeColumnKey(person) === C.clinicianColumnKey('Dr Jane Cole'),
     'person assignee homes to that clinician field'
@@ -354,9 +462,17 @@ console.log('\n--- canvas + manifest source locks ---');
   check(!/calendar-resources/.test(canvas), 'canvas never calls calendar-resources');
   check(/workingFlag\(\)/.test(canvas), 'chips can show Working today / Working d MMM from the appointment book');
   check(
-    /ms-lac-day/.test(canvas) && /ms-lac-day-tomorrow/.test(canvas),
-    'working-day date input and Tomorrow shortcut are on the canvas'
+    /ms-lac-day/.test(canvas) && /ms-lac-day-nwd/.test(canvas),
+    'working-day date input and Next working day shortcut are on the canvas'
   );
+  check(/nextWorkingDayISO/.test(canvas), 'canvas uses next working day, not calendar tomorrow');
+  check(/Share equally onto people working/.test(canvas), 'split offer names people working that day');
+  check(/ms-lac-nwd-offer/.test(canvas), 'canvas offers to send to who ordered if they are working');
+  check(/ms-lac-send-who/.test(canvas), 'send-to-who-ordered is a named button');
+  check(/ms-lac-send-not-in/.test(canvas), 'not-in send is an explicit toggle, off by default');
+  check(/planSendToRequester/.test(canvas), 'send-to-who-ordered uses the shared planner');
+  check(/Also send/.test(canvas) && /not in/.test(canvas), 'toggle copy names people who are not in');
+  check(/defaultWorkDateISO/.test(canvas), 'canvas defaults to next working day when today is closed');
   check(/mergeInDayClinicians/.test(canvas), 'people on the picked day’s book appear as drop fields');
   check(
     /setWorkDate/.test(canvas) && /reloadWorkingDay/.test(canvas),
@@ -368,6 +484,18 @@ console.log('\n--- canvas + manifest source locks ---');
   );
   check(/Unallocated reports/.test(canvas), 'the large box is labelled Unallocated reports');
   check(/harvestStaffFromOverviews/.test(canvas), 'staff UUIDs are harvested even when requester is already known');
+  check(
+    !/overviewURL && !r\.requester/.test(canvas),
+    'who-ordered enrich is not skipped when the list already has Requested By'
+  );
+  check(/needsRequesterOverview/.test(canvas), 'who-ordered enrich skips labs already sitting with a person');
+  check(/ms-lac-reorg/.test(canvas), 'who-ordered enrich has a dedicated reorganising banner');
+  check(/Finding who ordered these/.test(canvas), 'banner says it is finding who ordered');
+  check(/Grouped by who ordered/.test(canvas), 'banner settles as grouped by who ordered');
+  check(/paintReorgBanner/.test(canvas), 'progress paints the banner without a full re-render');
+  const coreSrc = fs.readFileSync(path.join(__dirname, 'shared/lab-allocate-core.js'), 'utf8');
+  check(/outstandingInvestigationRequestOptions/.test(coreSrc), 'core names the live OIR options field');
+  check(/oir-label/.test(coreSrc), 'core tags OIR labels as who ordered');
   check(/gen !== _boardGen/.test(canvas), 'overview harvest stops when the overlay is closed');
   check(/fetchAssigneeStaff/.test(canvas), 'staff directory falls back to the create-task assignee list');
   check(!/list\.length >= 8/.test(canvas), 'overview harvest does not stop at eight staff ids');
@@ -412,6 +540,11 @@ console.log('\n--- canvas + manifest source locks ---');
     'warn/red surfaces use the token triads, not raw hexes'
   );
   check(/prefers-reduced-motion/.test(canvasCss), 'motion respects prefers-reduced-motion');
+  check(/ms-lac-reorg-deal/.test(canvasCss), 'reorganising cards have a deal animation');
+  check(
+    /ms-lac-reorg-card[\s\S]*animation:\s*none/.test(canvasCss),
+    'reorganising cards stop moving when reduced-motion is on'
+  );
   check(/ms-lac-lifting/.test(canvasCss), 'lifting a group dims the rest of the pile, not the well');
   check(/ms-lac-drag-source/.test(canvasCss), 'the dragged reports are marked, not the whole list');
   check(/inset: 0;/.test(canvasCss) && !/min\(1280px/.test(canvasCss), 'workbench is full-bleed, not a capped modal');
@@ -445,6 +578,28 @@ console.log('\n--- canvas + manifest source locks ---');
   check(/REQUESTED-BY SCOPING capture/.test(reqCap), 'requester capture script is present');
   check(!/method:\s*['"]POST['"]/.test(reqCap), 'requester capture does not POST');
   check(!/inset:24px/.test(reqCap), 'requester capture is a corner panel, not a full-page overlay');
+  const truthCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-requester-truth-capture.js'), 'utf8');
+  check(/lab REQUESTER TRUTH capture/.test(truthCap), 'requester-truth capture script is present');
+  check(!/method:\s*['"]POST['"]/.test(truthCap), 'requester-truth capture does not POST');
+  check(!/inset:24px/.test(truthCap), 'requester-truth capture is a corner panel, not a full-page overlay');
+  check(/makeDraggable/.test(truthCap), 'requester-truth capture panel can be dragged');
+  check(
+    /test-outstanding-investigation-requests/.test(truthCap),
+    'requester-truth capture reads the OIR card on the result'
+  );
+  check(
+    /listAgreesWithOirOrRequest/.test(truthCap),
+    'requester-truth capture compares list requestedBy with OIR/request tags'
+  );
+  check(
+    /outstandingInvestigationRequestOptions/.test(truthCap),
+    'requester-truth capture samples overview OIR options'
+  );
+  check(/taskList/.test(truthCap), 'requester-truth capture uses the queue slug from ?taskList=');
+  check(
+    !/\/clinical\/data\/investigation-request\/overview\/' \+ out\.page\.requestId/.test(truthCap),
+    'requester-truth capture does not invent an investigation-request overview slug'
+  );
   check(!/Absence unknown<\/span>/.test(canvas), 'chips do not wear Absence unknown as a standing badge');
   const labCap = fs.readFileSync(path.join(__dirname, 'scripts/lab-allocate-capture.js'), 'utf8');
   check(/describeWriteValue/.test(labCap), 'lab-allocate capture samples write-key types, not PHI values');
@@ -938,6 +1093,24 @@ console.log('\n--- working day defaults to the calendar and can look ahead ---')
   check(C.addDaysISO('2026-08-31', 1) === '2026-09-01', 'tomorrow is calendar day + 1');
   check(C.workDayPhrase('2026-08-31', '2026-08-31') === 'today', 'same day reads as today');
   check(/1 Sep 2026/.test(C.workDayPhrase('2026-09-01', '2026-08-31')), 'ahead day is named, not called today');
+  check(C.isWeekendISO('2026-09-12'), '12 Sep 2026 is Saturday');
+  check(C.isWeekendISO('2026-09-13'), '13 Sep 2026 is Sunday');
+  check(!C.isWorkingDayISO('2026-09-12'), 'Saturday is not a working day');
+  check(C.isWorkingDayISO('2026-09-11'), 'Friday is a working day');
+  check(C.isBankHolidayISO('2026-05-25'), 'Spring bank holiday 2026 is recognised');
+  check(!C.isWorkingDayISO('2026-05-25'), 'bank holiday Monday is not a working day');
+  check(C.nextWorkingDayISO('2026-09-12') === '2026-09-14', 'Saturday next working day is Monday');
+  check(C.nextWorkingDayISO('2026-09-11') === '2026-09-14', 'Friday next working day skips the weekend');
+  check(C.nextWorkingDayISO('2026-05-22') === '2026-05-26', 'Friday before Spring BH skips the holiday Monday');
+  check(C.defaultWorkDateISO('2026-09-12') === '2026-09-14', 'weekend default work date is next Monday');
+  check(C.defaultWorkDateISO('2026-09-11') === '2026-09-11', 'Friday stays on today');
+  check(C.defaultWorkDateISO('2026-05-25') === '2026-05-26', 'bank holiday default is the next open day');
+  check(C.nextWorkingDayPhrase('2026-09-11', '2026-09-10') === 'tomorrow', 'Friday from Thursday is tomorrow');
+  check(
+    C.nextWorkingDayPhrase('2026-09-14', '2026-09-12') === 'Monday 14 Sep',
+    'next working day from Saturday is Monday 14 Sep'
+  );
+  check(C.weekdayName('2026-09-12') === 'Saturday', 'weekday name for Saturday');
 }
 
 console.log('\n--- in-day clinicians from the picked day’s book ---');
@@ -1844,6 +2017,61 @@ console.log('\n--- even split onto dests including nurses ---');
   );
   const mixed = C.planEvenSplit([pile[0], sitting], dests);
   check(mixed.total === 1, 'sitting work is not in Split equally');
+
+  const emmaKey = C.clinicianColumnKey('Dr Emma Nicholls');
+  const inDay = [
+    { key: emmaKey, name: 'Dr Emma Nicholls', staffId: uuid(40) },
+    { key: C.clinicianColumnKey('Dr Jane Cole'), name: 'Dr Jane Cole', staffId: uuid(41) },
+  ];
+  const orderedIn = C.applyRequester(
+    C.normaliseTaskRow(
+      { id: uuid(42), patientName: 'E', assignedTo: 'Investigation Reports', summary: 'XR Chest' },
+      'x'
+    ),
+    { name: 'Dr Emma Nicholls', source: 'oir-label', confidence: 'requester' }
+  );
+  const orderedCaps = C.applyRequester(
+    C.normaliseTaskRow(
+      { id: uuid(43), patientName: 'F', assignedTo: 'Investigation Reports', summary: 'FBC' },
+      'x'
+    ),
+    { name: 'NICHOLLS E', source: 'oir-label', confidence: 'requester' }
+  );
+  const orderedOut = C.applyRequester(
+    C.normaliseTaskRow(
+      { id: uuid(44), patientName: 'G', assignedTo: 'Investigation Reports', summary: 'U&E' },
+      'x'
+    ),
+    { name: 'Dr David Triska', source: 'oir-label', confidence: 'requester' }
+  );
+  const unknownReq = C.normaliseTaskRow(
+    { id: uuid(45), patientName: 'H', assignedTo: 'Investigation Reports', summary: 'LFT' },
+    'x'
+  );
+  const sendSafe = C.planSendToRequester([orderedIn, orderedCaps, orderedOut, unknownReq], inDay, {
+    includeNotIn: false,
+  });
+  check(sendSafe.ok && sendSafe.sent.length === 2, 'send-to-who-ordered stages the in-day requester only');
+  check(
+    sendSafe.sent.every(function (m) {
+      return m.toKey === emmaKey;
+    }),
+    'OIR Dr Emma Nicholls and NICHOLLS E both land on Emma if she is in'
+  );
+  check(sendSafe.skippedNotIn.length === 1, 'requester who is not in stays in the pile');
+  check(sendSafe.skippedUnknown.length === 1, 'unknown requester stays in the pile');
+  const sendUnsafe = C.planSendToRequester([orderedIn, orderedOut], inDay, { includeNotIn: true });
+  check(sendUnsafe.sent.length === 2, 'not-in toggle also stages the requester who is not working');
+  check(
+    sendUnsafe.sent.some(function (m) {
+      return m.notIn && /Triska/i.test(m.toName);
+    }),
+    'not-in send is marked notIn'
+  );
+  let draftSend = C.emptyDraft();
+  draftSend = C.applySendToRequester(draftSend, sendSafe);
+  check(draftSend.moves[orderedIn.id] === emmaKey, 'apply stages the in-day requester move');
+  check(!draftSend.moves[orderedOut.id], 'apply does not stage the not-in requester when the toggle is off');
 }
 
 console.log('\n--- dest-set strip + even-split canvas source locks ---');

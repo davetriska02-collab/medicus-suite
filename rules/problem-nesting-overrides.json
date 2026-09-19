@@ -24,6 +24,27 @@
       "note": "CORRECTED 2026-08-20 after Nick reported the first cut (1359971008, FSN 'Extraction of lens by phacoemulsification (procedure)') wasn't matching a real patient's own recorded problem -- 84149000 (FSN 'Aspiration of cataract by phacoemulsification (procedure)') is the code actually used/recorded for this in practice. Confirmed via the public NHS termbrowser API (release v20260729) that 84149000 IS-A both 112963003 'Aspiration of cataract' and 1359971008 (the original entry's own concept) -- a more specific descendant of it, on the same Procedure axis, still NOT a descendant of Cataract (193570009, Disorder/Clinical-finding axis) itself. Same relationship shape as the pseudophakia entry above: a real clinical sequela of a cataract problem (the extraction procedure), different hierarchy branch entirely, so the live descendant search would never surface it on its own. Requested 2026-08-20 alongside a request to always offer this pairing regardless of hierarchy nuance. If this specific conceptId ever stops matching a real patient again, check whether the practice's records instead use 1359971008 or another sibling under 75170007 'Extraction of lens of eye' before re-guessing -- ask Nick to confirm from a real problem entry rather than picking by text search alone, same lesson as this correction."
     },
     {
+      "childConceptId": "54885007",
+      "childDescription": "Other extraction of cataract",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "Practice-requested pairing (2026-09-16, Nick), alongside the YAG capsulotomy pair below. Concept verified live via the public NHS termbrowser API (release v20260729): 54885007 is active; its own preferred synonyms there are 'Extraction of cataract' / 'Cataract extraction' / 'Excision of cataract', not literally 'Other extraction of cataract' -- it does carry a CTV3 simple-map cross-reference (code XUGH3, same memberships shape the phaco entry above used to resolve its own mismatch), so 'Other extraction of cataract' is very likely Medicus's own Read/CTV3-derived display term for this same concept rather than a different one -- same 'practice's own everyday term for the same concept' shape as the diabetic-retinopathy entry below, not independently confirmed against a real patient record. Same relationship shape as the phaco entry above: an extraction-procedure sequela of a cataract problem, different hierarchy branch (Procedure axis) to Cataract (193570009, Disorder axis) itself, so the live descendant search would not surface it on its own. If this ever stops matching a real patient's recorded problem, confirm the actual conceptId Medicus records for 'Other extraction of cataract' from a real problem entry before re-guessing, same lesson as the phaco correction above."
+    },
+    {
+      "childConceptId": "172532006",
+      "childDescription": "YAG laser capsulotomy of lens",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "Practice-requested pairing (2026-09-16, Nick), alongside the 'Other extraction of cataract' pair above. Concept verified live via the public NHS termbrowser API (release v20260729): 172532006 is active, FSN/preferred term 'YAG laser capsulotomy of lens' (Great Britain English), matching the requested description exactly -- no text mismatch to flag, unlike the pairing above. YAG capsulotomy treats posterior capsule opacification, a real clinical sequela that can follow cataract extraction (including well after the fact), not a SNOMED IS-A descendant of Cataract itself (different hierarchy branch, Procedure axis vs Disorder axis) -- same relationship shape as every other procedure/sequela pairing already in this file, so the live descendant search would not surface it on its own."
+    },
+    {
+      "childConceptId": "95722004",
+      "childDescription": "Bilateral cataracts",
+      "parentConceptId": "193570009",
+      "parentDescription": "Cataract",
+      "note": "Practice-requested pairing (2026-09-19, Nick), alongside re-asking for nuclear cataract (53889007) and phacoemulsification (84149000), both already in this file above. Concept verified live via the public NHS termbrowser API (release v20260729): 95722004 is active, FSN 'Bilateral cataracts (disorder)'. UNLIKE the procedure/sequela pairings, this one IS a genuine SNOMED IS-A descendant of Cataract (walked the inferred parents live: Bilateral cataracts -> Cataract of right eye / Cataract of left eye -> ... -> Cataract 193570009), so it is added here as the same pragmatic workaround as nuclear cataract -- the live descendant search has been missing genuine descendants for real patients (see that entry's note; root cause still unconfirmed). If bilateral cataracts ever fails to nest for a real patient despite this entry, confirm the conceptId Medicus actually records on that patient's problem before re-guessing."
+    },
+    {
       "childConceptId": "1366066004",
       "childDescription": "Nocturnal epileptic seizures",
       "parentConceptId": "84757009",

@@ -5,7 +5,8 @@
 // confirm / bulk-reassign pattern on the routine and non-routine
 // prescription-request task-lists. The large left box is UNALLOCATED
 // requests, grouped by registered GP when that is on the row. Named GP
-// is a grouping caption, never auto-placement. Split equally / Top up /
+// is a grouping caption, never auto-placement. Send-to-usual-GP is a
+// user-initiated stage of unallocated rows only. Split equally / Top up /
 // Distribute equally stage locally — they do not write. Does not issue,
 // sign, or file a prescription.
 //
@@ -78,12 +79,22 @@
   var _agLoaded = false;
   var _namingGroup = false;
   var _scheduleAutoPick = false;
+  var _sendToUsualGpNotIn = false;
+  var _lastUsualGpPlan = null;
   var _lastSkipped = [];
   var _peopleDragKeys = null;
   var _marquee = null;
+  var _bridgeCount = 0;
+  var _visiblePileIds = {};
+  var _bridgeOn = false;
   // task id -> { repeat, acute, repeatDispensing, variableRepeat, resolvedPatientId }
   // — from each row's own overview (data.prescriptionRequestItemsByType).
   var _rxItemCounts = {};
+  // task id -> boolean — PATIENT-level overdue medication review, from the
+  // same overview fetch as _rxItemCounts (zero extra cost). See
+  // RxAllocateCore.overdueMedicationReviewFromPayload's own comment for the
+  // field and the known gap.
+  var _rxOverdueMedReview = {};
   // patientId -> { repeatTotal, repeatDispensingTotal, variableRepeatTotal,
   // overdueCount, overdueTotal } — from medication-regimen, one fetch per
   // unique patient, lazy/on-screen-first (see loadRxMonitoringTotals).
@@ -225,6 +236,57 @@
       if (e.clientY < rect.top + edge) scroller.scrollTop -= step;
       else if (e.clientY > rect.bottom - edge) scroller.scrollTop += step;
     }
+  }
+
+  function currentStaffId() {
+    try {
+      var raw = document.documentElement.getAttribute('data-ch-staff');
+      if (!raw) return '';
+      var bar = raw.indexOf('|');
+      var id = (bar >= 0 ? raw.slice(0, bar) : raw).trim();
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function onTaskListData(e) {
+    var route = currentRoute() || _route;
+    if (!route || !C.inboxCountFromTaskListBridge) return;
+    var detail = e && e.detail;
+    var n = C.inboxCountFromTaskListBridge(detail, route.slug);
+    if (!n) return;
+    _bridgeCount = n;
+    _visiblePileIds = C.visiblePileIdsFromTaskListBridge ? C.visiblePileIdsFromTaskListBridge(detail, route.slug) : {};
+  }
+
+  function inboxFetchOpts(extra) {
+    return Object.assign(
+      {
+        staffId: currentStaffId(),
+      },
+      extra || {}
+    );
+  }
+
+  function mergeOptsFor(stampSearch) {
+    var opts = {};
+    if (!C.inboxAssigneeId(stampSearch) && _visiblePileIds && Object.keys(_visiblePileIds).length) {
+      opts.visibleIds = _visiblePileIds;
+    }
+    return opts;
+  }
+
+  function pileReason() {
+    return C.rxEmptyPileReason
+      ? C.rxEmptyPileReason({
+          rowCount: _rows.length,
+          unallocatedCount: visibleUnallocatedCount(),
+          destCount: splitDestinations().length,
+          bridgeCount: _bridgeCount,
+          dayPhrase: dayPhrase(),
+        })
+      : '';
   }
 
   function currentRoute() {
@@ -391,6 +453,7 @@
         var resolvedPid = row.patientId || C.pickPatientIdFromPayload(payload);
         if (!patientId && resolvedPid) patientId = resolvedPid;
         _rxItemCounts[row.id] = C.itemCountsFromOverviewPayload(payload, resolvedPid);
+        _rxOverdueMedReview[row.id] = C.overdueMedicationReviewFromPayload(payload);
       } catch (_) {
         breaker.recordFailure();
         /* try the next overview */
@@ -495,6 +558,7 @@
     var keepDraft = opts.skipSplit ? _draft || C.emptyDraft() : null;
     _rxItemCounts = {};
     _rxRegimenTotals = {};
+    _rxOverdueMedReview = {};
     _loading = true;
     _error = null;
     render();
@@ -503,16 +567,24 @@
       if (gen !== _boardGen) return;
       _agLoaded = true;
       var presenceP = Promise.all([loadRotaAbsences(), loadMedicusPresence()]);
-      var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search);
-      var sittingP = C.fetchRxTaskList(_route.apiBase, _route.slug, '').catch(function () {
-        return { rows: [] };
-      });
+      var inboxP = C.fetchRxTaskList(_route.apiBase, _route.slug, _route.search, inboxFetchOpts());
+      var sittingP = C.fetchRxTaskList(_route.apiBase, _route.slug, '', inboxFetchOpts({ bareOnly: true })).catch(
+        function () {
+          return { rows: [] };
+        }
+      );
       var out = await inboxP;
       var sitting = await sittingP;
       if (gen !== _boardGen) return;
-      _rows = C.mergeInboxAndSitting(out.rows || [], (sitting && sitting.rows) || [], _route.search);
+      var stampSearch = out && out.search != null ? out.search : '';
+      _rows = C.mergeInboxAndSitting(
+        out.rows || [],
+        (sitting && sitting.rows) || [],
+        stampSearch,
+        mergeOptsFor(stampSearch)
+      );
       _route.slug = out.slug || _route.slug;
-      if (out.search) _route.search = out.search;
+      _route.search = stampSearch;
       _taskList = out.taskList;
       _staffDir = C.harvestStaffDirectory(_rows, out.body);
       _teamDir = C.harvestTeamDirectory(_rows, out.body);
@@ -675,6 +747,17 @@
     );
   }
 
+  // "Med review overdue" — patient-level flag (RxAllocateCore.
+  // overdueMedicationReviewFromPayload), distinct from the per-medication
+  // "N/M repeats overdue for reauthorising" sentence rxMonitoringLine
+  // already carries. Only resolves once Pass A has fetched this row's own
+  // overview (same fetch rxComplexityBadgeHtml depends on) — renders
+  // nothing while that's still in flight or once resolved false.
+  function rxOverdueMedReviewBadgeHtml(taskId) {
+    if (!_rxOverdueMedReview[taskId]) return '';
+    return '<span class="ms-lac-tile-token ms-lac-tile-token-warn" title="This patient’s medication review is overdue (Medicus future action)">Med review overdue</span>';
+  }
+
   // "Request for 3/6 repeats, 1 acute, 0/2 batches. 3/5 repeats overdue for
   // reauthorising." — Nick's own confirmed format, 2026-09-10. The sentence
   // itself is built by shared/rx-allocate-core.js's rxMonitoringLine (pure,
@@ -735,6 +818,7 @@
       '</span>' +
       assignedPerson +
       whoLine +
+      rxOverdueMedReviewBadgeHtml(tile.id) +
       rxMonitoringLineHtml(tile.id) +
       '</div>'
     );
@@ -789,6 +873,11 @@
       '">' +
       esc(pickLabel) +
       '</button>' +
+      (group.known
+        ? '<button type="button" class="ms-lac-ghost ms-rxac-send-group" data-usual-gp-ids="' +
+          idsAttr +
+          '" draggable="false" title="Stage this usual-GP pile onto that clinician if they are working the picked day. Proposal only.">Send this pile to usual GP</button>'
+        : '') +
       '<button type="button" class="ms-lac-group-toggle" data-toggle-key="' +
       esc(group.key) +
       '" aria-expanded="' +
@@ -946,20 +1035,31 @@
   }
 
   function emptyPoolHtml() {
+    var destN = splitDestinations().length;
+    var title = !_rows.length
+      ? _bridgeCount
+        ? 'Suite’s list is empty — the table is not'
+        : 'No open requests on this queue'
+      : destN
+        ? 'Inbox is on the right — not saved yet'
+        : 'Requests are here — no doctors to share onto';
+    var sub =
+      pileReason() ||
+      (_rows.length
+        ? 'Doctors working ' +
+          dayPhrase() +
+          ' are on the right. Open a name to see who, or drag to move. Medicus does not change until you confirm.'
+        : 'If the grid on this page still shows rows, reload the list, then open again.');
     return (
       '<div class="ms-lac-empty">' +
       '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
       '<path d="M3 8l4-5h10l4 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 8h18"/><path d="M9 12h6"/>' +
       '</svg>' +
       '<div class="ms-lac-empty-title">' +
-      (_rows.length ? 'Inbox is on the right — not saved yet' : 'No open requests on this queue') +
+      esc(title) +
       '</div>' +
       '<div class="ms-lac-empty-sub">' +
-      (_rows.length
-        ? 'Doctors working ' +
-          dayPhrase() +
-          ' are on the right. Open a name to see who, or drag to move. Medicus does not change until you confirm.'
-        : 'If the grid on this page still shows rows, reload the list, then open again.') +
+      esc(sub) +
       '</div>' +
       '</div>'
     );
@@ -1508,11 +1608,15 @@
     var plan = C.planEvenSplit(tilesForPlan(), dests, { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
+      if (plan.reason && /Nothing unallocated/.test(plan.reason)) {
+        plan.reason = pileReason() || plan.reason;
+      }
       return plan;
     }
     _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
     _splitDefaulted = true;
     _selected = {};
+    _lastUsualGpPlan = null;
     openDestsFromPlan(plan);
     return plan;
   }
@@ -1525,11 +1629,15 @@
     var plan = C.planTopUp(tilesForPlan(), dests, destBoxCounts(), { dayPhrase: dayPhrase() });
     if (!plan.ok) {
       _splitDefaulted = false;
+      if (plan.reason && /Nothing unallocated/.test(plan.reason)) {
+        plan.reason = pileReason() || plan.reason;
+      }
       return plan;
     }
     _draft = C.applyEvenSplit(_draft || C.ensureWorkingTodayColumns(C.emptyDraft(), dests), plan);
     _splitDefaulted = true;
     _selected = {};
+    _lastUsualGpPlan = null;
     openDestsFromPlan(plan);
     return plan;
   }
@@ -1552,12 +1660,43 @@
         return true;
       });
     var plan = C.planLevel(tiles, dests, { dayPhrase: dayPhrase() });
-    if (!plan.ok) return plan;
+    if (!plan.ok) {
+      if (plan.reason && /Nothing to distribute/.test(plan.reason)) {
+        plan.reason = pileReason() || plan.reason;
+      }
+      return plan;
+    }
     var next = C.ensureWorkingTodayColumns(C.emptyDraft(), dests);
     _draft = C.applyEvenSplit(next, plan);
     _splitDefaulted = true;
     _selected = {};
+    _lastUsualGpPlan = null;
     openDestsFromPlan(plan);
+    return plan;
+  }
+
+  function usualGpPlanOpts(includeNotIn) {
+    return {
+      includeNotIn: !!includeNotIn,
+      directory: _staffDir,
+    };
+  }
+
+  function applySendToUsualGp(tiles) {
+    var plan = C.planSendToUsualGp(tiles || tilesForPlan(), inTodayPeople(), usualGpPlanOpts(_sendToUsualGpNotIn));
+    if (!plan.ok) {
+      if (!visibleUnallocatedCount()) plan.reason = pileReason() || plan.reason;
+      return plan;
+    }
+    var dests = (plan.sent || []).map(function (m) {
+      return { key: m.toKey, name: m.toName, staffId: m.staffId };
+    });
+    _draft = C.applySendToUsualGp(C.ensureWorkingTodayColumns(_draft || C.emptyDraft(), dests), plan);
+    _selected = {};
+    _lastUsualGpPlan = plan;
+    (plan.sent || []).forEach(function (m) {
+      if (m && m.toKey) _openDests[m.toKey] = true;
+    });
     return plan;
   }
 
@@ -1669,6 +1808,55 @@
     );
   }
 
+  function usualGpOfferParts() {
+    var poolN = visibleUnallocatedCount();
+    var tiles = tilesForPlan();
+    var people = inTodayPeople();
+    var sendSafe = C.planSendToUsualGp(tiles, people, usualGpPlanOpts(false));
+    var sendPlan = _sendToUsualGpNotIn ? C.planSendToUsualGp(tiles, people, usualGpPlanOpts(true)) : sendSafe;
+    if (
+      !poolN ||
+      !sendPlan ||
+      !(
+        sendSafe.sent.length ||
+        sendSafe.skippedNotIn.length ||
+        sendSafe.skippedUnknown.length ||
+        sendSafe.skippedAmbiguous.length
+      )
+    ) {
+      return { preview: '', button: '' };
+    }
+    var day = dayPhrase();
+    var willSend = sendPlan.sent.length;
+    var sendLabel = willSend > 0 ? 'Send ' + willSend + ' to usual GP' : 'Nobody’s usual GP is in';
+    var preview = C.usualGpPreviewCopy(sendSafe, day);
+    var notInN = sendSafe.skippedNotIn.length;
+    return {
+      preview:
+        '<div class="ms-lac-nwd-offer" role="status">' +
+        '<strong>Send to usual GP if they are working ' +
+        esc(day) +
+        '?</strong> ' +
+        esc(preview) +
+        ' Proposal only — nothing is written until you confirm.' +
+        (notInN
+          ? '<label class="ms-lac-send-not-in"><input type="checkbox" id="ms-rxac-send-not-in"' +
+            (_sendToUsualGpNotIn ? ' checked' : '') +
+            '> Also send ' +
+            notInN +
+            ' to usual GPs who are not in on ' +
+            esc(day) +
+            '</label>'
+          : '') +
+        '</div>',
+      button: willSend
+        ? '<button type="button" class="ms-lac-confirm-btn ms-rxac-action" id="ms-rxac-send-usual" title="Stage each unallocated request onto the patient’s usual GP, only if they have a session that day unless you turned on the not-in toggle. Proposal only.">' +
+          esc(sendLabel) +
+          '</button>'
+        : '',
+    };
+  }
+
   function evenSplitHtml() {
     var dests = splitDestinations();
     var phrase = dayPhrase();
@@ -1735,9 +1923,12 @@
       var emptyBook = _destKind === 'in-today' && inTodayPeople().length === 0;
       actions =
         '<span class="ms-lac-split-note">' +
-        (emptyBook
-          ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
-          : 'Pick Working today, a group, or encircle people. Or pick another day, or add a doctor or team.') +
+        esc(
+          pileReason() ||
+            (emptyBook
+              ? 'No one is on the book for this day. Type a name below to add them, or pick a saved group.'
+              : 'Pick Working today, a group, or encircle people. Or pick another day, or add a doctor or team.')
+        ) +
         '</span>';
     } else if (poolN && !haveWork) {
       actions =
@@ -1759,7 +1950,12 @@
         '">Distribute equally</button>';
     } else {
       actions =
-        '<span class="ms-lac-split-note">Inbox is clear. Share this box on a doctor splits only that doctor’s requests among the current destinations.</span>';
+        '<span class="ms-lac-split-note">' +
+        esc(
+          pileReason() ||
+            'Inbox is clear. Share this box on a doctor splits only that doctor’s requests among the current destinations.'
+        ) +
+        '</span>';
     }
     var naming = _namingGroup && Strip && typeof Strip.saveGroupRowHtml === 'function' ? Strip.saveGroupRowHtml() : '';
     var dist =
@@ -1773,10 +1969,12 @@
             })
           )
         : '';
+    var usualPhrase = _lastUsualGpPlan && C.usualGpDestPhrase ? C.usualGpDestPhrase(_lastUsualGpPlan) : '';
+    var usualOffer = usualGpOfferParts();
     var proposal = stagedN
       ? '<div class="ms-rxac-proposal" role="status">' +
         '<strong>Proposal, not written yet.</strong> ' +
-        esc(dist || stagedN + ' prescriptions would sit with ' + dests.length + ' people.') +
+        esc(usualPhrase || dist || stagedN + ' prescriptions would sit with ' + dests.length + ' people.') +
         ' <span class="ms-rxac-drag-hint">Drag a patient from one person onto another to change who gets them.</span>' +
         '</div>'
       : '';
@@ -1787,6 +1985,7 @@
       strip +
       naming +
       allPanel +
+      usualOffer.preview +
       '<div class="ms-rxac-split-row">' +
       '<label class="ms-lac-split-day-label" for="ms-rxac-day" title="The appointment book for this date decides who is in. Defaults to today; pick tomorrow if you are doing this the night before.">Working day</label>' +
       '<input type="date" id="ms-rxac-day" value="' +
@@ -1803,7 +2002,10 @@
       '">' +
       esc(summary) +
       '</span>' +
+      '<div class="ms-rxac-split-actions">' +
       actions +
+      usualOffer.button +
+      '</div>' +
       '</div>' +
       destLine +
       proposal +
@@ -2466,6 +2668,65 @@
         render();
       });
     }
+    var sendNotIn = root.querySelector('#ms-rxac-send-not-in');
+    if (sendNotIn)
+      sendNotIn.addEventListener('change', function () {
+        _sendToUsualGpNotIn = !!sendNotIn.checked;
+        render();
+      });
+    bindPileAction(
+      '#ms-rxac-send-usual',
+      function () {
+        return applySendToUsualGp(tilesForPlan());
+      },
+      function (applied) {
+        var inN = applied.sentIn != null ? applied.sentIn : (applied.sent || []).length;
+        var notInN = (applied.skippedNotIn || []).length;
+        var ambN = (applied.skippedAmbiguous || []).length;
+        var extra = applied.sentNotIn ? ' Including ' + applied.sentNotIn + ' whose usual GP is not in.' : '';
+        var left = notInN ? ' ' + notInN + ' stayed in the pile — those usual GPs are not in.' : '';
+        var amb = ambN ? ' ' + ambN + ' stayed — two staff match that name.' : '';
+        return (
+          'Staged ' +
+          inN +
+          ' onto their usual GP (working ' +
+          dayPhrase() +
+          ').' +
+          extra +
+          left +
+          amb +
+          ' Proposal, not written yet.'
+        );
+      }
+    );
+    root.querySelectorAll('.ms-rxac-send-group').forEach(function (btn) {
+      btn.addEventListener('mousedown', function (e) {
+        e.stopPropagation();
+      });
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (_writing) return;
+        var ids = parseIdList(btn.getAttribute('data-usual-gp-ids'));
+        var want = {};
+        ids.forEach(function (id) {
+          want[id] = true;
+        });
+        var tiles = tilesForPlan().filter(function (t) {
+          return t && t.id && want[t.id];
+        });
+        var applied = applySendToUsualGp(tiles);
+        _confirmWrite = null;
+        _copyNote =
+          applied && applied.ok
+            ? 'Staged ' +
+              (applied.sentIn != null ? applied.sentIn : (applied.sent || []).length) +
+              ' from this pile onto their usual GP. Proposal, not written yet.'
+            : (applied && applied.reason) || 'Could not stage this pile.';
+        announce(_copyNote);
+        render();
+      });
+    });
     bindPileAction('#ms-rxac-split', applyPileSplit, function (applied) {
       return (
         'Split ' +
@@ -2693,6 +2954,7 @@
         _openDests = {};
         _expandedChip = '';
         _copyNote = '';
+        _lastUsualGpPlan = null;
         _pendingAbsence = null;
         announce('Proposals cleared. Doctor boxes show what already sits with them. The queue itself is unchanged.');
         render();
@@ -2833,7 +3095,9 @@
         if (
           e.target &&
           e.target.closest &&
-          (e.target.closest('.ms-lac-group-toggle') || e.target.closest('.ms-lac-group-pick'))
+          (e.target.closest('.ms-lac-group-toggle') ||
+            e.target.closest('.ms-lac-group-pick') ||
+            e.target.closest('.ms-rxac-send-group'))
         ) {
           return;
         }
@@ -3111,7 +3375,7 @@
         directory: _staffDir,
         teamDirectory: _teamDir,
         fetchList: function () {
-          return C.fetchRxMergedTaskList(pin.apiBase, pin.slug, pin.search);
+          return C.fetchRxMergedTaskList(pin.apiBase, pin.slug, pin.search, inboxFetchOpts());
         },
       });
       if (!result || !result.ok) {
@@ -3190,6 +3454,7 @@
     _rows = [];
     _rxItemCounts = {};
     _rxRegimenTotals = {};
+    _rxOverdueMedReview = {};
     _draft = C.emptyDraft();
     _selected = {};
     _lastSelectId = '';
@@ -3215,6 +3480,8 @@
     _agLoaded = false;
     _namingGroup = false;
     _scheduleAutoPick = false;
+    _sendToUsualGpNotIn = false;
+    _lastUsualGpPlan = null;
     _lastSkipped = [];
     _peopleDragKeys = null;
     _marquee = null;
@@ -3255,6 +3522,8 @@
     _agLoaded = false;
     _namingGroup = false;
     _scheduleAutoPick = false;
+    _sendToUsualGpNotIn = false;
+    _lastUsualGpPlan = null;
     _lastSkipped = [];
     _peopleDragKeys = null;
     _marquee = null;
@@ -3494,10 +3763,20 @@
   );
 
   function startHeavyChrome() {
+    if (!_bridgeOn) {
+      _bridgeOn = true;
+      window.addEventListener('ch-task-list-data', onTaskListData);
+    }
     ensureLauncher();
   }
 
   function stopHeavyChrome() {
+    if (_bridgeOn) {
+      window.removeEventListener('ch-task-list-data', onTaskListData);
+      _bridgeOn = false;
+    }
+    _bridgeCount = 0;
+    _visiblePileIds = {};
     muteAllocateChrome();
   }
 

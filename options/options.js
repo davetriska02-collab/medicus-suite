@@ -1549,6 +1549,13 @@ async function isPracticeAccepted() {
         desc: 'Replace: every group on this computer is replaced by the practice set. Merge: adds the practice groups and keeps yours.',
       },
       {
+        id: 'labfiling',
+        label: 'Lab Filing',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Filing profiles (match rules, parameters, allow-listed comments). A synced profile always arrives OFF — each machine still enables it locally after review. Replace: every profile here is replaced by the practice set. Merge: adds new profiles and keeps yours.',
+      },
+      {
         id: 'suite',
         label: 'Practice code, feedback email &amp; Signing soft flags',
         defaultChecked: true,

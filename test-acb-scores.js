@@ -50,6 +50,22 @@ console.log('\n--- Individual drug scores ---');
 { const r = computeACB(['amantadine 100mg capsules']); assert(r.perDrug[0] && r.perDrug[0].score === 2, 'amantadine scores 2 (Keeper)'); }
 { const r = computeACB(['pethidine 50mg injection']); assert(r.perDrug[0] && r.perDrug[0].score === 2, 'pethidine scores 2 (Keeper)'); }
 {
+  const r = computeACB(['biperiden 2mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'biperiden scores 3 (2026-09-18 Keeper)');
+}
+{
+  const r = computeACB(['Akineton 2mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Akineton scores 3 (biperiden brand)');
+}
+{
+  const r = computeACB(['Urispas 200mg tablets']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'Urispas scores 3 (flavoxate brand)');
+}
+{
+  const r = computeACB(['flavoxate hydrochloride 200mg']);
+  assert(r.perDrug[0] && r.perDrug[0].score === 3, 'flavoxate scores 3');
+}
+{
   const r = computeACB(['cetirizine']);
   assert(r.perDrug[0].score === 1, 'cetirizine scores 1');
 }

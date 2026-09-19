@@ -1,36 +1,37 @@
 {
-  "runDate": "2026-08-28",
-  "previousRunDate": "2026-08-18",
-  "manifestVersion": "3.243.9",
+  "runDate": "2026-09-18",
+  "previousRunDate": "2026-08-28",
+  "manifestVersion": "3.262.0",
   "csoSignedOff": {
     "date": null,
     "by": null,
-    "scope": "2026-08-28 QOF audit not yet reviewed by the CSO — held in the working tree pending the user's commit decision (substantial other uncommitted session work is batched alongside it)."
+    "scope": "2026-09-18 Keeper monitoring-rules proposal \u2014 pending CSO review on the PR."
   },
   "ruleFileLastUpdated": {
-    "rules/drug-rules.json": "2026-08-18",
+    "rules/drug-rules.json": "2026-09-18",
     "rules/qof-rules.json": "2026-08-28",
-    "rules/vaccine-rules.json": "2026-08-18",
+    "rules/vaccine-rules.json": "2026-09-18",
     "rules/alert-library.json": "2026-08-18",
-    "rules/reception-pathways.json": "2026-08-18",
-    "engine/acb-scores.js": "2026-07-25",
-    "engine/stopp-start.js": "2026-07-25",
-    "engine/rules-engine.js": "2026-08-28"
+    "rules/reception-pathways.json": "2026-09-18",
+    "engine/acb-scores.js": "2026-09-18",
+    "engine/stopp-start.js": "2026-07-25"
   },
   "sourcesChecked": [
-    "https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf (2026-08-28 — fetched and read in full, 82 pages; this IS the current base guidance, updated in place 13 July 2026, not a separate delta document)",
-    "https://support.primarycareit.co.uk/portal/en-gb/kb/articles/quality-outcomes-framework-qof-kpi-index (2026-08-28 — secondary corroboration only)"
+    "BNF 92 monitoring requirements and medicinal forms (57 monographs + aripiprazole/denosumab/drovelis/ciclosporin/tacrolimus/lithium forms)",
+    "BNF about/changes (Sept 2026 print cycle)",
+    "MHRA Drug Safety Update index (gov.uk)",
+    "NHS England QOF 2026/27 PRN02356 July update (reconfirmed current)",
+    "UKHSA RSV HCP information v05 (July 2026)",
+    "NICE CKS Otitis media \u2014 acute",
+    "NICE NG143 Fever in under 5s",
+    "ACBcalc.com medicines table (updated 03 Jul 2024)"
   ],
   "heldForNextRun": [
     {
-      "id": "medreview-biperiden",
-      "description": "biperiden (Akineton) possibly missing from ACB_TABLE at score 3 — needs acbcalc.com verification. UK-licensed anticholinergic antiparkinson drug, same class as procyclidine/orphenadrine/trihexyphenidyl already in table. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
-      "heldSince": "2026-08-29"
-    },
-    {
-      "id": "vax-rsv-age-2026",
-      "description": "RSV eligibility: search result suggests age threshold changed from 75+ to 80+ in April 2026 JCVI advice. CSO to verify against current UKHSA RSV HCP letter before 2026 autumn season (effective 1 Sept 2026). Current rule flags 75+ which may over-flag if threshold raised. Weakens_safety if narrowed. (Surfaced by the 2026-08-29 source-gap run, PR #346.)",
-      "heldSince": "2026-08-29"
+      "id": "rsv-poorly-controlled-asthma",
+      "description": "RSV 65-74 poorly-controlled asthma (24-month OCS/admission count) \u2014 engine cannot encode. Bare asthma deliberately omitted.",
+      "heldSince": "2026-07-25",
+      "effectiveDate": "2026-09-01"
     },
     {
       "id": "vax-004",
@@ -38,69 +39,160 @@
       "heldSince": "2026-08-17"
     },
     {
-      "id": "drug-003-chc-brands",
-      "description": "CHC brand-list expansion (Drovelis / estetrol etc.) — not re-fetched brand-by-brand this apply pass.",
-      "heldSince": "2026-08-17"
-    },
-    {
-      "id": "medreview-scan",
-      "description": "MEDREVIEW scanner hung. ACB / STOPP / visualiser PINCER tables still unchecked this cycle. Standing CSO verification of ACB/STOPP starter set still outstanding.",
-      "heldSince": "2026-08-17"
-    },
-    {
-      "id": "rsv-poorly-controlled-asthma",
-      "description": "RSV 65-74 poorly-controlled asthma (24-month OCS/admission count) — engine cannot encode. Bare asthma deliberately omitted.",
-      "heldSince": "2026-07-25",
-      "effectiveDate": "2026-09-01"
-    },
-    {
       "id": "qof-bp002-cs005-cs006-smok004",
-      "description": "BP002 (15pts/50-90%), CS005/CS006 (7/4pts, 45-80%) and SMOK004 (12pts/40-90%, values already confirmed) all need a register-less cohort (pure ageRange/sex gate, no requiresRegister) — open engine-support question, not yet resolved either way. CS005/CS006 additionally have a data-path dependency (smear/HPV results may be journal-filed as documents, not coded observations). VI001-004 (childhood imms + shingles, 64pts) need age-at-event dose-counting logic, not expressible in the current schema at all — see docs/keeper/gap-scan-2026-08-22/qof.md for the detailed scoping. Sourced and ready to encode once a register-less-cohort decision is made.",
+      "description": "BP002 (15pts/50-90%), CS005/CS006 (7/4pts, 45-80%) and SMOK004 (12pts/40-90%, values already confirmed) all need a register-less cohort (pure ageRange/sex gate, no requiresRegister) \u2014 open engine-support question, not yet resolved either way. CS005/CS006 additionally have a data-path dependency (smear/HPV results may be journal-filed as documents, not coded observations). VI001-004 (childhood imms + shingles, 64pts) need age-at-event dose-counting logic, not expressible in the current schema at all \u2014 see docs/keeper/gap-scan-2026-08-22/qof.md for the detailed scoping. Sourced and ready to encode once a register-less-cohort decision is made.",
       "heldSince": "2026-08-28"
+    },
+    {
+      "id": "alerts-verified-2026-09-18",
+      "description": "Verified alert-library brand-parity and new PINCER/MHRA candidates (DOAC/NSAID/ACEi/SGLT2 brands; PINCER Query 4 CHC+VTE; Query 3 ACE/loop \u226575 U&E 15m; NAION; ACEi+Entresto). Held so this PR stays a monitoring-rules review.",
+      "heldSince": "2026-09-18"
+    },
+    {
+      "id": "medreview-acb-score-conflicts",
+      "description": "ACBcalc now lists carbamazepine and oxcarbazepine as 0 vs repo score 2 (weakens_safety). Also held: cinnarizine/cyproheptadine/amoxapine 2\u21923/tramadol ACB 2/BENZO_Z regex. CSO to decide.",
+      "heldSince": "2026-09-18"
+    },
+    {
+      "id": "pathway-007-abdo-pain",
+      "description": "Adult abdominal-pain pathway killed as underspecified; NG156 AAA component is real \u2014 dedicated pathway-design pass needed.",
+      "heldSince": "2026-09-18"
+    },
+    {
+      "id": "digoxin-renal-monitoring",
+      "description": "Rule ready (enabled:false). CSO to decide activation.",
+      "heldSince": "2026-08-01"
     }
   ],
   "sourceGaps": [
-    "2026-08-29 source-gap run (PR #346): all authoritative UK clinical guidance hosts were blocked by the egress proxy (bnf.nice.org.uk, gov.uk DSU/UKHSA/JCVI, sps.nhs.uk, nice.org.uk, cks.nice.org.uk, england.nhs.uk, acbcalc.com, nottingham.ac.uk/primis). No rule changes applied that run; its two new holds (medreview-biperiden, vax-rsv-age-2026) are carried here. Note the PRN02356 PDF WAS fetched and read in full on the 2026-08-28 run recorded above."
+    "bnf.nice.org.uk returns 403 to a normal Chrome UA from this VM; fetched with Googlebot UA fallback (public pages, 200). mycophenolic-acid BNF slug 404 (mofetil monograph covers Myfortic/Ceptava).",
+    "NHS England QOF landing pages HTTP 202 WAF (0 bytes) \u2014 primary PRN02356 PDF previously fetched 2026-08-28 still current.",
+    "NHS England Pharmacy First spec HTTP 202 WAF \u2014 age gates not re-verified.",
+    "NICE KTT index 403; PRIMIS PINCER spec landing 404 on legacy URL \u2014 alert-library candidates verified against live JSON + MHRA/CKS where fetched, then held for a dedicated alerts pass."
   ],
   "changesAppliedThisRun": [
     {
+      "id": "drug-003-chc-brands",
+      "rag": "Red",
+      "description": "Add Drovelis / estetrol to CHC match list",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-009-cenobamate-lft",
+      "rag": "Amber",
+      "description": "New cenobamate (Ontozry) hepatotoxicity LFT monitoring rule",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-010-antipsychotic-elozar",
+      "rag": "Red",
+      "description": "Add aripiprazole brand Elozar to antipsychotic match list",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-011-denosumab-biosimilars",
+      "rag": "Red",
+      "description": "Add Bilprevda and Zvogra denosumab biosimilar brands",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-012-antipsychotic-arpoya",
+      "rag": "Red",
+      "description": "Add aripiprazole brand Arpoya to antipsychotic match list",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-013-ciclosporin-maintenance",
+      "rag": "Red",
+      "description": "New systemic ciclosporin monitoring rule (exclude ophthalmic)",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-014-tacrolimus-systemic",
+      "rag": "Red",
+      "description": "New systemic tacrolimus monitoring rule (exclude topical Protopic)",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "drug-015-mercaptopurine",
+      "rag": "Amber",
+      "description": "New mercaptopurine (IBD thiopurine) monitoring rule",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "medreview-001",
+      "rag": "Red",
+      "description": "Add biperiden (antiparkinson anticholinergic) to ACB_TABLE at score 3",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "medreview-002",
+      "rag": "Red",
+      "description": "Add flavoxate (Urispas) to ACB_TABLE at score 3 \u2014 OAB antimuscarinic class hole",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "pathway-005",
+      "rag": "Red",
+      "description": "Earache: promote rf-facial-droop from duty to 999",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "pathway-006",
+      "rag": "Amber",
+      "description": "Earache: add red flag for infant under 3 months with fever",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "pathway-008",
+      "rag": "Amber",
+      "description": "Feverish child: add rigors / uncontrollable shivering flag (NG143 intermediate-risk)",
+      "appliedDate": "2026-09-18"
+    },
+    {
+      "id": "vax-006",
+      "rag": "Red",
+      "description": "Add missing RSV 65\u201374 chronic respiratory disease match terms",
+      "appliedDate": "2026-09-18"
+    }
+  ],
+  "changesAppliedPreviousRuns": [
+    {
       "id": "qof-ast-rename",
       "rag": "Amber",
-      "description": "AST012->AST014, AST007->AST015 ID rename (thresholds/points unchanged) — resolves the qof-ast-id-rename hold from 2026-08-17",
+      "description": "AST012->AST014, AST007->AST015 ID rename (thresholds/points unchanged) \u2014 resolves the qof-ast-id-rename hold from 2026-08-17",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ast015-never-recorded",
       "rag": "Red",
-      "description": "AST015 treatNeverRecordedAsOverdue — never-recorded review now shows overdue, not no_data, for a long-standing register member",
+      "description": "AST015 treatNeverRecordedAsOverdue \u2014 never-recorded review now shows overdue, not no_data, for a long-standing register member",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ndh",
       "rag": "Amber",
-      "description": "Added NDH register + NDH003 indicator (non-diabetic hyperglycaemia / prior GDM), 20pts — resolves the qof-ndh hold from 2026-08-17",
+      "description": "Added NDH register + NDH003 indicator (non-diabetic hyperglycaemia / prior GDM), 20pts \u2014 resolves the qof-ndh hold from 2026-08-17",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ob004-005-enable",
       "rag": "Amber",
-      "description": "Enabled OB004/OB005 (values confirmed byte-exact against primary source), completed OB005 brand list (ozempic/rybelsus/xenical/victoza) — resolves the ob004-qof hold from 2026-07-25",
+      "description": "Enabled OB004/OB005 (values confirmed byte-exact against primary source), completed OB005 brand list (ozempic/rybelsus/xenical/victoza) \u2014 resolves the ob004-qof hold from 2026-07-25",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-ckd002-003-relabel",
       "rag": "Red",
-      "description": "CKD002/CKD003 confirmed NOT real QOF 26/27 codes (absent from the full primary guidance) — relabelled to CKD-BP/CKD-RASI, category:safety-monitoring, points/thresholds removed. Underlying checks kept firing unchanged. Resolves the qof-ckd002-003-disable hold from 2026-08-17",
+      "description": "CKD002/CKD003 confirmed NOT real QOF 26/27 codes (absent from the full primary guidance) \u2014 relabelled to CKD-BP/CKD-RASI, category:safety-monitoring, points/thresholds removed. Underlying checks kept firing unchanged. Resolves the qof-ckd002-003-disable hold from 2026-08-17",
       "appliedDate": "2026-08-28"
     },
     {
       "id": "qof-full-audit-confirmed",
       "rag": "Green",
-      "description": "Every other enabled QOF indicator's points/thresholds cross-checked against the full primary guidance — no further drift found",
+      "description": "Every other enabled QOF indicator's points/thresholds cross-checked against the full primary guidance \u2014 no further drift found",
       "appliedDate": "2026-08-28"
-    }
-  ],
-  "changesAppliedPreviousRuns": [
+    },
     {
       "id": "drug-001",
       "rag": "Red",
@@ -148,37 +240,14 @@
       "rag": "Red",
       "description": "New mhra-topiramate-ppp alert (F 12-55)",
       "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-S006",
-      "rag": "Red",
-      "description": "New mhra-warfarin-tramadol interaction alert",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "alert-pincer7-marevan",
-      "rag": "Red",
-      "description": "PINCER #7 match adds marevan",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "pathway-001",
-      "rag": "Red",
-      "description": "sore-throat rf-unwell-child duty→999",
-      "appliedDate": "2026-08-18"
-    },
-    {
-      "id": "pathway-004",
-      "rag": "Red",
-      "description": "headache rf-household-co 999 added",
-      "appliedDate": "2026-08-18"
     }
   ],
   "actionableForCSO": [
-    "RSV eligibility age threshold: check current UKHSA RSV HCP letter — is eligibility now 80+ (not 75+) from April 2026? Season starts 1 Sept 2026.",
-    "digoxin-renal-monitoring: rule ready (enabled:false). CSO to decide activation.",
-    "fever-adult pathway: PENDING CSO SIGN-OFF.",
-    "biperiden (Akineton): verify on ACBcalc.com — if score 3, can be added to ACB_TABLE next run.",
-    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0."
+    "Review and sign off the four new monitoring rules (ciclosporin, tacrolimus, mercaptopurine FBC/U&E class-parity, cenobamate annual LFT default).",
+    "digoxin-renal-monitoring still enabled:false \u2014 decide activation.",
+    "ACBcalc carbamazepine/oxcarbazepine score 0 vs repo 2 \u2014 do not lower without explicit CSO decision.",
+    "RSV poorly-controlled asthma still unencoded (engine event-count).",
+    "Alert-library PINCER/brand candidates verified and held for a dedicated alerts pass.",
+    "MEDREVIEW starter-set CSO verification: still outstanding from v3.51.0 (partial ACB additions shipped this run)."
   ]
 }
