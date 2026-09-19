@@ -310,6 +310,23 @@ console.log('\n--- RSV 65-74 clinical-risk (vax-001, 2026-08-18) ---');
   assert(chips.length === 0, 'RSV: age 64 + COPD → no chip');
 }
 
+// Age 68 + interstitial lung fibrosis / pneumoconiosis / BPD → eligible (vax-006)
+{
+  const data = { ...baseData(68), problems: [{ label: 'Interstitial lung fibrosis', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + interstitial lung fibrosis → chip');
+}
+{
+  const data = { ...baseData(68), problems: [{ label: 'Pneumoconiosis', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + pneumoconiosis → chip');
+}
+{
+  const data = { ...baseData(68), problems: [{ label: 'Bronchopulmonary dysplasia', status: 'active' }] };
+  const chips = engine.evaluateVaccineRule(rsvRule, data, NOW);
+  assert(chips.length === 1, 'RSV: age 68 + bronchopulmonary dysplasia → chip');
+}
+
 // Age 70 + lymphoma → immunosuppression problem
 {
   const data = { ...baseData(70), problems: [{ label: 'Non-Hodgkin lymphoma', status: 'active' }] };
@@ -648,18 +665,21 @@ console.log('\n--- shingles severely immunosuppressed 18+ (vax-shingles-immuno, 
 }
 
 // ── Flu carer eligibility (Witley / Karen Edwards, 2026-09-10) ──────────────
-// Match terms: the SNOMED preferred phrase "patient themselves providing care"
-// only — NOT a bare "carer" stem. Bare "carer" would false-positive on
-// "carer needs assessment", "carer review", "has a carer", etc.
-// Code match: SNOMED CT concept 224484003 and Egton 4928511000006113, via
-// itemCodeHits (conceptId / problemCode.conceptId). Either path is enough.
+// Match terms: SNOMED phrases "patient themselves providing care" and the UK
+// synonym "is a carer" (descriptionId 1222761019) — NOT a bare "carer" stem.
+// Bare "carer" would false-positive on "carer needs assessment", "carer
+// review", "has a carer", etc.
+// Code match: concept 224484003, description 1222761019, Egton 4928511000006113,
+// via itemCodeHits (conceptId / descriptionId / problemCode.*). Either path is enough.
 console.log('\n--- flu carer eligibility ---');
 {
   const carerClause = (fluRule.eligibility.anyOf || []).find((c) => c.label === 'Carer (provides care)');
   assert(!!carerClause, 'vax-flu has a Carer (provides care) eligibility clause');
   assert(
-    Array.isArray(carerClause?.match) && carerClause.match.includes('patient themselves providing care'),
-    'carer match term is the specific SNOMED phrase, not a bare "carer" stem'
+    Array.isArray(carerClause?.match) &&
+      carerClause.match.includes('patient themselves providing care') &&
+      carerClause.match.includes('is a carer'),
+    'carer match terms are the specific SNOMED phrases, not a bare "carer" stem'
   );
   assert(
     !carerClause.match.some((t) => t.toLowerCase() === 'carer'),
@@ -668,8 +688,9 @@ console.log('\n--- flu carer eligibility ---');
   assert(
     Array.isArray(carerClause?.snomed) &&
       carerClause.snomed.includes('224484003') &&
+      carerClause.snomed.includes('1222761019') &&
       carerClause.snomed.includes('4928511000006113'),
-    'carer clause lists both SNOMED 224484003 and Egton 4928511000006113'
+    'carer clause lists concept 224484003, description 1222761019, and Egton 4928511000006113'
   );
   assert(
     /care home residents are not detected/i.test(fluRule.notes) && !/carers and care home/i.test(fluRule.notes),
@@ -692,6 +713,17 @@ console.log('\n--- flu carer eligibility ---');
       chips[0]?.eligibilityReason === 'Carer (provides care)',
       `flu carer: eligibilityReason is Carer (provides care) (got: ${chips[0]?.eligibilityReason})`
     );
+  }
+
+  // (a2) UK preferred synonym "Is a carer" (description 1222761019) as label
+  {
+    const data = {
+      ...adult(),
+      problems: [{ label: 'Is a carer', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: "Is a carer" label alone → chip');
+    assert(chips[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: "Is a carer" → carer clause');
   }
 
   // (b) conceptId 224484003 alone matches with a non-matching label
@@ -730,6 +762,32 @@ console.log('\n--- flu carer eligibility ---');
     };
     const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
     assert(chips.length === 1, 'flu carer: Egton id on problemCode.conceptId → chip');
+  }
+
+  // (c2) descriptionId 1222761019 alone (UK "Is a carer" synonym, no conceptId)
+  {
+    const data = {
+      ...adult(),
+      problems: [{ label: 'Social support arrangement', descriptionId: '1222761019', status: 'active' }],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: descriptionId 1222761019 alone → chip');
+    assert(chips[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: descriptionId 1222761019 → carer clause');
+  }
+
+  {
+    const data = {
+      ...adult(),
+      problems: [
+        {
+          label: 'Social support arrangement',
+          problemCode: { descriptionId: '1222761019' },
+          status: 'active',
+        },
+      ],
+    };
+    const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+    assert(chips.length === 1, 'flu carer: descriptionId on problemCode.descriptionId → chip');
   }
 
   // (d) unrelated "carer needs" / "carer review" labels do NOT false-positive

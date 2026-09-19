@@ -416,6 +416,197 @@ export function emptyStateKind(rowCount, allTypesSelected, filterActive) {
   return allTypesSelected && !filterActive ? 'done' : 'narrowed';
 }
 
+// ── Book-signing / Signing Queue list scope (v3.261.61) ──────────────────────
+// The Medicus book-signing page already has one assignee channel: the
+// task-list GET's masterAssignee (the list the clinician toggled onto).
+// This panel is the RHS Rx view of that same list. It must not invent a
+// second filter, and it must not keep painting a practice-wide payload
+// after the page has switched to one person.
+//
+// Scope object: { mode: 'practice'|'individual', assigneeId, slug }
+//   practice    — untoggled / whole-practice / team inbox. Bare GET is fine.
+//   individual  — a person-shaped masterAssignee on the live list GET.
+// An individual scope with no rows is an honest empty, never leftover
+// practice rows. Apply-time scope tokens drop in-flight fetches that
+// landed after the clinician toggled.
+
+const _SCOPE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const _RX_SIGNING_SLUG_RE =
+  /prescription_request_task_(?:non_)?routine|prescription-request-task-(?:non-)?routine|^prescription-requests$/i;
+
+export const PRACTICE_SIGNING_SCOPE = Object.freeze({ mode: 'practice', assigneeId: '', slug: '' });
+
+export function isRxSigningSlug(slug) {
+  return _RX_SIGNING_SLUG_RE.test(String(slug || ''));
+}
+
+export function sameAssigneeId(a, b) {
+  const left = String(a || '').toLowerCase();
+  const right = String(b || '').toLowerCase();
+  return !!(left && right && _SCOPE_UUID_RE.test(left) && _SCOPE_UUID_RE.test(right) && left === right);
+}
+
+export function masterAssigneeIdFromSearch(search) {
+  const raw = String(search == null ? '' : search).trim();
+  if (!raw) return '';
+  const qs = raw.charAt(0) === '?' ? raw.slice(1) : raw;
+  if (!qs || /[:/\\]/.test(qs)) return '';
+  const parts = qs.split('&');
+  for (let i = 0; i < parts.length; i++) {
+    const kv = parts[i].split('=');
+    let k = kv[0] || '';
+    try {
+      k = decodeURIComponent(k);
+    } catch (_) {
+      /* keep raw */
+    }
+    if (!/^masterAssignee$/i.test(k)) continue;
+    let v = kv.slice(1).join('=');
+    try {
+      v = decodeURIComponent(v);
+    } catch (_) {
+      /* keep raw */
+    }
+    if (_SCOPE_UUID_RE.test(v)) return v.toLowerCase();
+  }
+  return '';
+}
+
+// Page URL is untrusted leftover more often than it is the live toggle
+// (homepage+staff stamp on a dedicated queue — #413/#415 class). Only
+// treat location.search as an individual list when masterAssignee is
+// present AND the leftover homepage viewContext is not. The intercepted
+// task-list GET (rxListScopeFromTaskListUrl) is the authoritative channel.
+export function signingScopeFromPageSearch(search) {
+  const raw = String(search == null ? '' : search);
+  const assigneeId = masterAssigneeIdFromSearch(raw);
+  if (!assigneeId) return { ...PRACTICE_SIGNING_SCOPE };
+  if (/viewContext=homepage/i.test(raw)) return { ...PRACTICE_SIGNING_SCOPE };
+  return { mode: 'individual', assigneeId, slug: '' };
+}
+
+export function signingScopeFromTaskListUrl(url) {
+  const raw = String(url == null ? '' : url);
+  const pathMatch = raw.match(/\/tasks\/data\/([^/?#]+)\/task-list/i);
+  if (!pathMatch) return null;
+  const slug = pathMatch[1];
+  if (!isRxSigningSlug(slug)) return null;
+  let search = '';
+  const q = raw.indexOf('?');
+  if (q >= 0) {
+    const end = raw.indexOf('#', q);
+    search = raw.slice(q, end >= 0 ? end : undefined);
+  }
+  const assigneeId = masterAssigneeIdFromSearch(search);
+  if (assigneeId) return { mode: 'individual', assigneeId, slug };
+  return { mode: 'practice', assigneeId: '', slug };
+}
+
+export function encodeRxListScopeAttr(scope) {
+  if (!scope || typeof scope !== 'object') return '';
+  const slug = String(scope.slug || '')
+    .replace(/\|/g, '')
+    .slice(0, 80);
+  let id = String(scope.assigneeId || '').toLowerCase();
+  if (!_SCOPE_UUID_RE.test(id)) id = '';
+  const mode = scope.mode === 'individual' && id ? 'individual' : 'practice';
+  if (mode === 'practice') id = '';
+  if (!slug && mode === 'practice' && !id) return '';
+  return `${mode}|${id}|${slug}`;
+}
+
+export function parseRxListScopeAttr(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (!s) return { ...PRACTICE_SIGNING_SCOPE };
+  const parts = s.split('|');
+  const mode = parts[0] === 'individual' ? 'individual' : 'practice';
+  const assigneeId = _SCOPE_UUID_RE.test(parts[1] || '') ? String(parts[1]).toLowerCase() : '';
+  const slug = String(parts[2] || '')
+    .replace(/\|/g, '')
+    .slice(0, 80);
+  if (mode === 'individual' && assigneeId) return { mode: 'individual', assigneeId, slug };
+  return { mode: 'practice', assigneeId: '', slug };
+}
+
+export function normalizeSigningScope(scope) {
+  if (!scope || typeof scope !== 'object') return { ...PRACTICE_SIGNING_SCOPE };
+  const assigneeId = _SCOPE_UUID_RE.test(scope.assigneeId || '') ? String(scope.assigneeId).toLowerCase() : '';
+  const slug = isRxSigningSlug(scope.slug) ? String(scope.slug) : '';
+  if (scope.mode === 'individual' && assigneeId) return { mode: 'individual', assigneeId, slug };
+  return { mode: 'practice', assigneeId: '', slug };
+}
+
+export function scopesEqual(a, b) {
+  const left = normalizeSigningScope(a);
+  const right = normalizeSigningScope(b);
+  return left.mode === right.mode && left.assigneeId === right.assigneeId;
+}
+
+export function scopeSig(scope) {
+  const s = normalizeSigningScope(scope);
+  return `${s.mode}:${s.assigneeId}`;
+}
+
+// Query appended to Signing Queue's own task-list GET. Individual lists
+// reuse the page's masterAssignee only — never viewContext=homepage, never
+// a leftover full search string. Practice is the bare open list.
+export function queryStringForSigningScope(scope) {
+  const s = normalizeSigningScope(scope);
+  if (s.mode !== 'individual' || !s.assigneeId) return '';
+  return `?masterAssignee=${encodeURIComponent(s.assigneeId)}`;
+}
+
+export function pickAssignedId(item) {
+  if (!item || typeof item !== 'object') return '';
+  const candidates = [item.assignedId, item.assigneeId];
+  if (item.assignedTo && typeof item.assignedTo === 'object') {
+    candidates.push(item.assignedTo.id, item.assignedTo.value, item.assignedTo.staffId);
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    const v = candidates[i];
+    if (typeof v === 'string' && _SCOPE_UUID_RE.test(v)) return v.toLowerCase();
+  }
+  return '';
+}
+
+export function rowMatchesAssigneeScope(row, scope, opts) {
+  const s = normalizeSigningScope(scope);
+  if (s.mode !== 'individual' || !s.assigneeId) return true;
+  // Fetch already used masterAssignee — the API is the list. Keep rows
+  // even when a task has no assignedId (Medicus sometimes omits it).
+  if (opts && opts.fetchedScoped === true) return true;
+  const id = row && row.assignedId ? String(row.assignedId).toLowerCase() : '';
+  if (id) return id === s.assigneeId;
+  // Unscoped payload + no id: fail closed. A practice row without an
+  // assignee id must not leak onto someone else's list.
+  return false;
+}
+
+export function visibleSigningRows(rows, filters) {
+  const list = Array.isArray(rows) ? rows : [];
+  const locationFilter = filters && filters.locationFilter;
+  const flaggedOnly = !!(filters && filters.flaggedOnly);
+  const scope = filters && filters.assigneeScope;
+  const fetchedScoped = !!(filters && filters.fetchedScoped);
+  return list.filter(
+    (r) =>
+      rowMatchesLocationFilter(r, locationFilter) &&
+      rowMatchesFlaggedFilter(r, flaggedOnly) &&
+      rowMatchesAssigneeScope(r, scope, { fetchedScoped })
+  );
+}
+
+// In-flight fetch landed after the clinician toggled: drop it. Never keep
+// the previous practice-wide rows as a stand-in for an individual miss.
+export function applySigningFetchResult(nextRows, requestScope, currentScope) {
+  if (!scopesEqual(requestScope, currentScope)) return [];
+  return Array.isArray(nextRows) ? nextRows : [];
+}
+
+export function signingScopeClearsPayload(prevScope, nextScope) {
+  return !scopesEqual(prevScope, nextScope);
+}
+
 // Age of a request in whole days from its createdAt to `now` (ms). null when
 // unparseable — the renderer shows nothing rather than "0d".
 export function requestAgeDays(createdAt, nowMs) {

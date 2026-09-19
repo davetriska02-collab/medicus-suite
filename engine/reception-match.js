@@ -920,6 +920,29 @@
       'central america',
       'malaria',
     ],
+
+    // ── Added 2026-09-18 (The Keeper monitoring-rules currency) ────────────────────────────────
+    // New red-flag ids from reception-pathways v1.11. Terms derived conservatively from each
+    // flag's `ask` text. A missing/unmatched term is the SAFE direction (the topic reads as a
+    // GAP and is re-asked). rf-under3m-fever shares the same clinical meaning as rf-under3m
+    // (feverish-child) but is a distinct id on earache, so it needs its own entry.
+
+    // earache — infant under 3 months with any fever (duty; mirrors feverish-child rf-under3m).
+    'rf-under3m-fever': [
+      'baby under 3 months',
+      'under 3 months old with any fever',
+      'under 3 months old with a fever',
+      'under 3 months with fever',
+      '3 month old fever',
+    ],
+    // feverish-child — rigors / uncontrollable shivering with the fever (duty; NICE NG143 1.2.6).
+    'rf-rigors': [
+      'rigors',
+      'shaking uncontrollably',
+      'shivering uncontrollably',
+      'uncontrollable shivering',
+      'shivering or shaking uncontrollably',
+    ],
   };
 
   // ── matchPathways(requestText, pathways?) ─────────────────────────────────────────────────────

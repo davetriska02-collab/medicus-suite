@@ -24,7 +24,9 @@
 //   clinician has a task overview open AND VISIBLE, heartbeat an advisory
 //   presence row (site, taskUuid, staffId, display label, timestamps) to a
 //   practice-configured Supabase table. Consumers:
-//     • queue rows get a "👁 <name>" chip while a colleague's presence is fresh
+//     • queue rows, the request/Rx message chrome, and the Clinical Summary
+//       RHS get the same occupancy token (icon + display name) while a
+//       colleague's presence is fresh — same occupants as the masthead
 //     • opening a task someone else has open can still paint the occupied
 //       strip from store rows when native Pusher membership is empty
 //   Presence store is DORMANT until the practice configures a store URL + key
@@ -209,10 +211,183 @@
 
   // Queue chip text for a task's active others. One name shown verbatim;
   // more are counted (the chip lives inside the fixed-width patient cell).
+  // Kept as a title/fallback string; the visible marker is occupantTokenHtml.
   function presenceChipText(others) {
     if (!Array.isArray(others) || !others.length) return '';
     if (others.length === 1) return '👁 ' + others[0].label;
     return '👁 ' + others.length + ' colleagues';
+  }
+
+  // Occupants for ONE request. Native Pusher + store only — the same two
+  // sources the occupied banner already reads. List-channel members
+  // (listSlug, no taskUuid) are "who has the list open" and must never
+  // become a per-row occupant.
+  function occupantsForTask(taskUuid, storeOthers, nativeOthers, listOthers) {
+    void listOthers;
+    if (typeof taskUuid !== 'string' || !UUID_RE.test(taskUuid)) return [];
+    var store = othersOnTask(Array.isArray(storeOthers) ? storeOthers : [], taskUuid);
+    var native = othersOnTask(Array.isArray(nativeOthers) ? nativeOthers : [], taskUuid);
+    var by = {};
+    var i;
+    for (i = 0; i < native.length; i++) {
+      var n = native[i];
+      if (!n || !n.staffId) continue;
+      if (n.listSlug && !(typeof n.taskUuid === 'string' && UUID_RE.test(n.taskUuid))) continue;
+      by[n.staffId] = n;
+    }
+    for (i = 0; i < store.length; i++) {
+      var s = store[i];
+      if (!s || !s.staffId) continue;
+      if (s.listSlug && !(typeof s.taskUuid === 'string' && UUID_RE.test(s.taskUuid))) continue;
+      if (!by[s.staffId]) by[s.staffId] = s;
+    }
+    var out = [];
+    for (var k in by) if (Object.prototype.hasOwnProperty.call(by, k)) out.push(by[k]);
+    out.sort(function (a, b) {
+      return (a.openedAtMs || 0) - (b.openedAtMs || 0);
+    });
+    return out;
+  }
+
+  // Prefer the display name when the token has room. Initials-only is the
+  // tight-cell fallback (CSS container query does the same live).
+  function nameFitsToken(availablePx, label) {
+    var name = typeof label === 'string' ? label.trim() : '';
+    if (!name) return false;
+    var px = Number(availablePx);
+    if (!isFinite(px) || px <= 0) return false;
+    return px >= 22 + 10 + Math.min(name.length, 60) * 7;
+  }
+
+  function occupantTokenAria(others) {
+    if (!Array.isArray(others) || !others.length) return '';
+    var parts = [];
+    for (var i = 0; i < others.length; i++) {
+      var t = others[i] && others[i].label;
+      var s = typeof t === 'string' ? t.trim() : '';
+      parts.push(!s || isUnknownColleagueLabel(s) ? 'A colleague' : s);
+    }
+    var who = occupiedNameList(parts);
+    if (parts.length === 1) return who + ' has this request open. You can still work it.';
+    return who + ' have this request open. You can still work it.';
+  }
+
+  function occupantTokenTitle(others) {
+    return occupiedBannerTitle(others);
+  }
+
+  // Compact Task Presence token: avatar icon + highlighted display name.
+  // Tight containers hide the name via CSS; the icon keeps initials.
+  function occupantTokenHtml(others, opts) {
+    opts = opts && typeof opts === 'object' ? opts : {};
+    var list = Array.isArray(others) ? others : [];
+    if (!list.length) return '';
+    var surface = typeof opts.surface === 'string' && /^(row|message|rhs)$/.test(opts.surface) ? opts.surface : 'row';
+    var first = list[0];
+    var unknown = isUnknownColleagueLabel(first && first.label);
+    var name = unknown ? 'A colleague' : String(first.label).trim().slice(0, 60);
+    var extra = list.length > 1 ? list.length - 1 : 0;
+    var initials =
+      first && typeof first.initials === 'string' && first.initials
+        ? first.initials
+        : unknown
+          ? '?'
+          : initialsFromLabel(name);
+    var hue = initials === '?' ? '' : safeAvatarHue(first && first.hue);
+    var title = occupantTokenTitle(list);
+    var aria = occupantTokenAria(list);
+    var nameHtml = extra
+      ? esc(name) + ' <span class="ms-tp-token-more">+' + extra + '</span>'
+      : esc(name);
+    return (
+      '<span class="ms-tp-token ms-tp-token-' +
+      surface +
+      '" title="' +
+      esc(title) +
+      '" aria-label="' +
+      esc(aria) +
+      '" role="status">' +
+      '<span class="ms-tp-token-icon ms-tp-av' +
+      (unknown || initials === '?' ? ' ms-tp-av-unknown' : '') +
+      '" aria-hidden="true"' +
+      (hue ? ' style="background:' + hue + '"' : '') +
+      '>' +
+      esc(initials) +
+      '</span>' +
+      '<span class="ms-tp-token-who">' +
+      nameHtml +
+      '</span>' +
+      '</span>'
+    );
+  }
+
+  function overviewColumnSide(rect, viewportWidth) {
+    if (!rect || typeof rect !== 'object') return '';
+    var vw = Number(viewportWidth);
+    if (!isFinite(vw) || vw <= 0) return '';
+    var left = Number(rect.left);
+    var right = Number(rect.right);
+    if (!isFinite(left) || !isFinite(right)) return '';
+    var mid = (left + right) / 2;
+    if (mid < vw * 0.45) return 'left';
+    if (mid > vw * 0.55) return 'right';
+    return '';
+  }
+
+  function isClinicalSummaryHeading(text) {
+    return /^clinical summary$/i.test(String(text || '').replace(/\s+/g, ' ').trim());
+  }
+
+  function isMessageChromeHeading(text) {
+    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 80) return false;
+    return /^(next repeat prescribing|prescription request|patient request|message from|requested by|message)\b/i.test(
+      t
+    );
+  }
+
+  function isForbiddenPresenceHostKind(kind) {
+    var k = String(kind || '').toLowerCase();
+    if (!k) return false;
+    return (
+      k === 'banner' ||
+      k === 'list-strip' ||
+      k === 'look' ||
+      k === 'task-actions' ||
+      k === 'allocate' ||
+      k === 'organise' ||
+      k === 'book-signing' ||
+      k === 'signing'
+    );
+  }
+
+  function pickOverviewMessageHost(candidates) {
+    if (!Array.isArray(candidates)) return null;
+    var best = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (!c || isForbiddenPresenceHostKind(c.kind)) continue;
+      if (c.side !== 'left') continue;
+      if (c.id === 'ms-tp-banner' || c.id === 'ms-tp-list' || c.id === 'ms-tp-msg' || c.id === 'ms-tp-rhs') continue;
+      var score = 0;
+      if (c.messageHeading) score += 3;
+      if (c.inMain) score += 1;
+      if (c.card) score += 1;
+      if (!best || score > best._score) best = { id: c.id, side: 'left', _score: score };
+    }
+    return best && best._score > 0 ? { id: best.id, side: best.side } : null;
+  }
+
+  function pickOverviewRhsHost(candidates) {
+    if (!Array.isArray(candidates)) return null;
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      if (!c || isForbiddenPresenceHostKind(c.kind)) continue;
+      if (c.side === 'left') continue;
+      if (!c.clinicalSummary) continue;
+      return { id: c.id, side: 'right' };
+    }
+    return null;
   }
 
   // "just now" / "N min ago" for the banner. Deliberately coarse — the exact
@@ -850,6 +1025,126 @@
     }
   }
 
+  // ── inject-loop guards (pure; overview banner/tokens must not fight Vue) ──
+  // Some request overviews wrap the message heading in a single-child shell.
+  // insertionAnchor climbs that shell; after we prepend a token the parent
+  // has two children, the next find climbs one hop less, placeTokenHost
+  // moves the token, the shell is an only-child again — 60fps oscillation
+  // via the DOM hub. Own nodes must not count as siblings, and a connected
+  // token must not relocate to an ancestor/descendant of its current host.
+  var PRESENCE_OWN_IDS = {
+    'ms-tp-banner': 1,
+    'ms-tp-list': 1,
+    'ms-tp-look': 1,
+    'ms-tp-msg': 1,
+    'ms-tp-rhs': 1,
+  };
+
+  function classNameToString(className) {
+    if (typeof className === 'string') return className;
+    if (className && typeof className.baseVal === 'string') return className.baseVal;
+    return '';
+  }
+
+  function isOwnPresenceSpec(spec) {
+    if (!spec || typeof spec !== 'object') return false;
+    var id = spec.id || '';
+    if (PRESENCE_OWN_IDS[id]) return true;
+    var cls = classNameToString(spec.className);
+    return /(?:^|\s)(?:ms-tp-token-host|ms-tp-token)(?:\s|$)/.test(cls);
+  }
+
+  function specFromNode(n) {
+    if (!n) return null;
+    if (typeof n.nodeType === 'number' && n.nodeType !== 1) return null;
+    return { id: n.id || '', className: n.className };
+  }
+
+  function foreignPresenceChildCount(children) {
+    if (!children || !children.length) return 0;
+    var n = 0;
+    for (var i = 0; i < children.length; i++) {
+      if (!isOwnPresenceSpec(children[i])) n++;
+    }
+    return n;
+  }
+
+  function insertionAnchorHopCount(ancestorChildLists) {
+    if (!Array.isArray(ancestorChildLists)) return 0;
+    var hops = 0;
+    for (var i = 0; i < ancestorChildLists.length && hops < 3; i++) {
+      if (foreignPresenceChildCount(ancestorChildLists[i]) !== 1) break;
+      hops++;
+    }
+    return hops;
+  }
+
+  function shouldRelocatePresenceToken(input) {
+    if (!input || typeof input !== 'object') return false;
+    if (!input.connected) return !!input.foundHost;
+    if (!input.foundHost) return false;
+    if (input.currentParent === input.foundHost) return false;
+    if (input.sameLineage) return false;
+    return true;
+  }
+
+  function nextPresenceWipeState(prev, kind, nowMs, path) {
+    var windowMs = 800;
+    var t = typeof nowMs === 'number' && isFinite(nowMs) ? nowMs : 0;
+    var p = typeof path === 'string' ? path : '';
+    var empty = { path: p, windowStart: t, banner: 0, token: 0 };
+    if (!prev || prev.path !== p || t - prev.windowStart > windowMs) prev = empty;
+    var next = { path: prev.path, windowStart: prev.windowStart, banner: prev.banner, token: prev.token };
+    if (kind === 'banner') next.banner += 1;
+    else if (kind === 'token') next.token += 1;
+    return next;
+  }
+
+  function presenceWipeGiveUp(state, kind) {
+    if (!state) return false;
+    if (kind === 'banner') return state.banner >= 3;
+    if (kind === 'token') return state.token >= 3;
+    return false;
+  }
+
+  function mutationBatchIsOwnPresence(records) {
+    if (!records || !records.length) return false;
+    var saw = false;
+    for (var i = 0; i < records.length; i++) {
+      var rec = records[i];
+      if (!rec) continue;
+      var added = rec.addedNodes || rec.added || [];
+      var removed = rec.removedNodes || rec.removed || [];
+      var lists = [added, removed];
+      for (var li = 0; li < lists.length; li++) {
+        var nodes = lists[li];
+        if (!nodes) continue;
+        for (var j = 0; j < nodes.length; j++) {
+          var n = nodes[j];
+          if (!n) continue;
+          if (typeof n.nodeType === 'number' && n.nodeType !== 1) continue;
+          saw = true;
+          var spec = n.id != null || n.className != null ? specFromNode(n) : n;
+          if (!isOwnPresenceSpec(spec)) return false;
+        }
+      }
+    }
+    return saw;
+  }
+
+  function presenceMutationPaintDecision(input) {
+    if (!input || typeof input !== 'object') return 'paint';
+    if (input.ownMutationsOnly) return 'skip';
+    if (input.hrefChanged) return 'paint';
+    if (!input.isOverview) {
+      return input.bannerConnected || input.tokenConnected ? 'paint' : 'list-only';
+    }
+    if (input.hasOccupants && !input.bannerConnected) return 'paint';
+    if (!input.hasOccupants && (input.bannerConnected || input.tokenConnected)) return 'paint';
+    if (input.hasOccupants && input.tokenMissing && !input.tokenGiveUp) return 'paint';
+    return 'skip';
+  }
+
   // ── test hook (node) ──────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -862,6 +1157,17 @@
       buildHeartbeatPayload: buildHeartbeatPayload,
       activeOthers: activeOthers,
       presenceChipText: presenceChipText,
+      occupantsForTask: occupantsForTask,
+      nameFitsToken: nameFitsToken,
+      occupantTokenHtml: occupantTokenHtml,
+      occupantTokenAria: occupantTokenAria,
+      occupantTokenTitle: occupantTokenTitle,
+      overviewColumnSide: overviewColumnSide,
+      isClinicalSummaryHeading: isClinicalSummaryHeading,
+      isMessageChromeHeading: isMessageChromeHeading,
+      isForbiddenPresenceHostKind: isForbiddenPresenceHostKind,
+      pickOverviewMessageHost: pickOverviewMessageHost,
+      pickOverviewRhsHost: pickOverviewRhsHost,
       minutesAgoText: minutesAgoText,
       actionedChipText: actionedChipText,
       resolvePresenceConfig: resolvePresenceConfig,
@@ -898,6 +1204,14 @@
       occupancyIsDismissed: occupancyIsDismissed,
       occupancyWriteDismiss: occupancyWriteDismiss,
       sanitizeSelfExtras: sanitizeSelfExtras,
+      isOwnPresenceSpec: isOwnPresenceSpec,
+      foreignPresenceChildCount: foreignPresenceChildCount,
+      insertionAnchorHopCount: insertionAnchorHopCount,
+      shouldRelocatePresenceToken: shouldRelocatePresenceToken,
+      nextPresenceWipeState: nextPresenceWipeState,
+      presenceWipeGiveUp: presenceWipeGiveUp,
+      mutationBatchIsOwnPresence: mutationBatchIsOwnPresence,
+      presenceMutationPaintDecision: presenceMutationPaintDecision,
       AVATAR_HUES: AVATAR_HUES,
       safeAvatarHue: safeAvatarHue,
     };
@@ -922,6 +1236,12 @@
     var list = document.getElementById(LIST_ID);
     if (banner) PresenceLook.applyLookToEl(banner, _look);
     if (list) PresenceLook.applyLookToEl(list, _look);
+    var msg = document.getElementById(MSG_ID);
+    var rhs = document.getElementById(RHS_ID);
+    if (msg) PresenceLook.applyLookToEl(msg, _look);
+    if (rhs) PresenceLook.applyLookToEl(rhs, _look);
+    var chips = document.querySelectorAll('.ms-tp-chips');
+    for (var i = 0; i < chips.length; i++) PresenceLook.applyLookToEl(chips[i], _look);
   }
 
   function refreshLook() {
@@ -1270,6 +1590,8 @@
   // Layer 2 (folder/Supabase) still paints if native is empty.
   var BANNER_ID = 'ms-tp-banner';
   var LIST_ID = 'ms-tp-list';
+  var MSG_ID = 'ms-tp-msg';
+  var RHS_ID = 'ms-tp-rhs';
   var _nativeOthers = [];
   var _nativeTaskUuid = '';
   var _selfExtras = 0;
@@ -1277,6 +1599,9 @@
   var _firstSeen = {}; // staffId → first-seen ms on this overview (this-tab dwell)
   var _knownLabels = {}; // staffId → last known display label (store + native)
   var _paintCache = { path: '', sig: '', parent: null };
+  var _bannerMode = 'main';
+  var _wipeState = null;
+  var _tokenPainted = { msg: false, rhs: false };
   var _liveIds = '';
   var _nativeListOthers = [];
   var _nativeListSlug = '';
@@ -1366,6 +1691,221 @@
     } catch (_) {}
     _paintCache = { path: '', sig: '', parent: null };
     _liveIds = '';
+  }
+
+  function isOwnPresenceEl(el) {
+    if (!el) return false;
+    try {
+      if (isOwnPresenceSpec(specFromNode(el))) return true;
+      if (el.closest && el.closest('#ms-tp-banner, #ms-tp-list, #ms-tp-look, #ms-tp-msg, #ms-tp-rhs, .ms-tp-token-host')) {
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  function isForbiddenPresenceEl(el) {
+    if (!el || !el.closest) return true;
+    try {
+      if (isOwnPresenceEl(el)) return true;
+      if (el.closest('.ms-rxac, .ms-lac, .ms-aoc, .ms-tap-root, #ms-tap, .ms-tap')) return true;
+    } catch (_) {
+      return true;
+    }
+    return false;
+  }
+
+  function foreignChildrenOf(parent) {
+    if (!parent || !parent.children) return [];
+    var out = [];
+    var kids = parent.children;
+    for (var i = 0; i < kids.length; i++) {
+      out.push(specFromNode(kids[i]));
+    }
+    return out;
+  }
+
+  function insertionAnchor(node) {
+    var el = node;
+    var hops = 0;
+    while (el && el.parentElement && hops < 3) {
+      if (foreignPresenceChildCount(foreignChildrenOf(el.parentElement)) !== 1) break;
+      el = el.parentElement;
+      hops++;
+    }
+    return el;
+  }
+
+  function hostsShareLineage(a, b) {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    try {
+      return a.contains(b) || b.contains(a);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function resetPresenceInjectState() {
+    _bannerMode = 'main';
+    _wipeState = null;
+    _tokenPainted = { msg: false, rhs: false };
+  }
+
+  function notePresenceWipe(kind) {
+    _wipeState = nextPresenceWipeState(_wipeState, kind, Date.now(), location.pathname);
+    if (kind === 'banner' && presenceWipeGiveUp(_wipeState, 'banner')) {
+      _bannerMode = 'fixed';
+    }
+  }
+
+  function applyBannerModeClass(el) {
+    if (!el || !el.classList) return;
+    if (_bannerMode === 'fixed') el.classList.add('ms-tp-banner-overlay');
+    else el.classList.remove('ms-tp-banner-overlay');
+  }
+
+  function findOverviewMessageHost() {
+    var root = document.querySelector('main') || document.body;
+    if (!root) return null;
+    var vw = window.innerWidth || 0;
+    var nodes = root.querySelectorAll('h1, h2, h3, h4, h5, [class*="title"], [class*="Title"]');
+    var limit = Math.min(nodes.length, 40);
+    for (var i = 0; i < limit; i++) {
+      var el = nodes[i];
+      if (!el || isForbiddenPresenceEl(el)) continue;
+      var text = '';
+      try {
+        text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      } catch (_) {
+        continue;
+      }
+      if (!isMessageChromeHeading(text)) continue;
+      var side = '';
+      try {
+        side = overviewColumnSide(el.getBoundingClientRect(), vw);
+      } catch (_) {}
+      if (side && side !== 'left') continue;
+      var host = insertionAnchor(el.parentElement || el);
+      if (host && !isForbiddenPresenceEl(host)) return host;
+    }
+    var kids = root.children;
+    for (var k = 0; k < kids.length && k < 12; k++) {
+      var kid = kids[k];
+      if (!kid || kid.id === BANNER_ID || isForbiddenPresenceEl(kid)) continue;
+      var side2 = '';
+      try {
+        side2 = overviewColumnSide(kid.getBoundingClientRect(), vw);
+      } catch (_) {}
+      if (side2 === 'left') return kid;
+    }
+    return null;
+  }
+
+  function findOverviewRhsHost() {
+    var root = document.querySelector('main') || document.body;
+    if (!root) return null;
+    var vw = window.innerWidth || 0;
+    var nodes = root.querySelectorAll('h1, h2, h3, h4, h5, [class*="title"], [class*="Title"], strong');
+    var limit = Math.min(nodes.length, 60);
+    for (var i = 0; i < limit; i++) {
+      var el = nodes[i];
+      if (!el || isForbiddenPresenceEl(el)) continue;
+      var text = '';
+      try {
+        text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      } catch (_) {
+        continue;
+      }
+      if (!isClinicalSummaryHeading(text)) continue;
+      var side = '';
+      try {
+        side = overviewColumnSide(el.getBoundingClientRect(), vw);
+      } catch (_) {}
+      if (side === 'left') continue;
+      var host = insertionAnchor(el.parentElement || el);
+      if (host && !isForbiddenPresenceEl(host)) return host;
+    }
+    return null;
+  }
+
+  function removeOverviewTokens() {
+    var msg = document.getElementById(MSG_ID);
+    var rhs = document.getElementById(RHS_ID);
+    if (msg) msg.remove();
+    if (rhs) rhs.remove();
+  }
+
+  function placeTokenHost(id, host, html, title) {
+    if (!html) return false;
+    var existing = document.getElementById(id);
+    if (existing && existing.isConnected && existing.parentNode) {
+      var move = shouldRelocatePresenceToken({
+        connected: true,
+        currentParent: existing.parentNode,
+        foundHost: host,
+        sameLineage: hostsShareLineage(existing.parentNode, host),
+      });
+      if (!move) host = existing.parentNode;
+    }
+    if (!host) return !!(existing && existing.isConnected);
+    if (existing && existing.parentNode !== host) {
+      existing.remove();
+      existing = null;
+    }
+    var el = existing;
+    if (!el) {
+      if (_tokenPainted.msg && id === MSG_ID) notePresenceWipe('token');
+      if (_tokenPainted.rhs && id === RHS_ID) notePresenceWipe('token');
+      if (presenceWipeGiveUp(_wipeState, 'token')) return false;
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'ms-tp-token-host';
+      el.style.flex = '0 0 100%';
+      el.style.gridColumn = '1 / -1';
+      host.insertBefore(el, host.firstChild);
+    }
+    if (id === MSG_ID) _tokenPainted.msg = true;
+    if (id === RHS_ID) _tokenPainted.rhs = true;
+    if (el.getAttribute('data-sig') === html) {
+      applyLookNow();
+      return true;
+    }
+    el.setAttribute('data-sig', html);
+    el.setAttribute('title', title);
+    el.innerHTML = html;
+    applyLookNow();
+    return true;
+  }
+
+  function paintOverviewTokens(others) {
+    var ctx = parseTaskOverviewPath(location.pathname);
+    if (!ctx || !Array.isArray(others) || !others.length) {
+      removeOverviewTokens();
+      return;
+    }
+    var scoped = othersOnTask(others, ctx.taskUuid);
+    if (!scoped.length) {
+      removeOverviewTokens();
+      return;
+    }
+    if (presenceWipeGiveUp(_wipeState, 'token')) {
+      removeOverviewTokens();
+      return;
+    }
+    var title = occupantTokenTitle(scoped);
+    var msgHost = findOverviewMessageHost();
+    var rhsHost = findOverviewRhsHost();
+    if (msgHost) placeTokenHost(MSG_ID, msgHost, occupantTokenHtml(scoped, { surface: 'message' }), title);
+    else {
+      var staleMsg = document.getElementById(MSG_ID);
+      if (staleMsg && !staleMsg.isConnected) staleMsg.remove();
+    }
+    if (rhsHost) placeTokenHost(RHS_ID, rhsHost, occupantTokenHtml(scoped, { surface: 'rhs' }), title);
+    else {
+      var staleRhs = document.getElementById(RHS_ID);
+      if (staleRhs && !staleRhs.isConnected) staleRhs.remove();
+    }
   }
 
   function staffIdList(others) {
@@ -1724,9 +2264,13 @@
     if (ctx && !others.length && _selfExtras >= 1) {
       others = selfExtraOccupants(ctx.taskUuid);
     }
+    // Hide-for-now is masthead-only. Row / message / RHS tokens stay so a
+    // colleague scanning those surfaces still sees the occupant.
+    var tokenOthers = others.slice();
     if (ctx && others.length && occupancyIsDismissed(ctx.taskUuid, staffIdList(others), sessionStorage)) {
       others = [];
     }
+    paintOverviewTokens(ctx ? tokenOthers : []);
     var headline = others.length ? occupiedHeadline(others) : '';
     var note = others.length ? occupiedNote(others, nowMs) : '';
     var sig = (ctx ? ctx.taskUuid : '') + '|' + staffIdList(others).join(',') + '|' + headline + '|' + note;
@@ -1753,10 +2297,17 @@
     try {
       document.documentElement.classList.add('ms-tp-occupied');
     } catch (_) {}
-    var host =
-      (el && el.parentNode && el.parentNode.tagName === 'MAIN' && el.parentNode) ||
-      document.querySelector('main') ||
-      document.body;
+    if (!el && _paintCache.path === path && _paintCache.parent) {
+      notePresenceWipe('banner');
+    }
+    var host;
+    if (_bannerMode === 'fixed') {
+      host = document.body;
+    } else if (el && el.isConnected && el.parentNode && el.parentNode.tagName === 'MAIN') {
+      host = el.parentNode;
+    } else {
+      host = document.querySelector('main') || document.body;
+    }
     if (el) {
       var inner = el.querySelector('.ms-tp-inner');
       if (inner) inner.outerHTML = html;
@@ -1779,6 +2330,7 @@
       }
       bindBannerClicks(el);
       applyLookNow();
+      applyBannerModeClass(el);
       if (host && el.parentNode !== host) host.insertBefore(el, host.firstChild);
       _paintCache = { path: path, sig: sig, parent: el.parentNode };
       return;
@@ -1795,8 +2347,11 @@
     _liveIds = idSet;
     bindBannerClicks(el);
     applyLookNow();
+    applyBannerModeClass(el);
     // PREPEND into <main> — trailing foreign nodes get reconciled away by Vue
-    // (CLAUDE.md queue-chip rule 1).
+    // (CLAUDE.md queue-chip rule 1). If Vue keeps wiping this node, we pin it
+    // to document.body as a fixed overlay (ms-tp-banner-overlay) so the page
+    // stops oscillating.
     if (host) host.insertBefore(el, host.firstChild);
     _paintCache = { path: path, sig: sig, parent: el.parentNode };
   }
@@ -1857,6 +2412,7 @@
     _nativeOthers = sanitizeNativePresence(_lastNativeDetail, me && me.staffId, expected, hint);
     _selfExtras = sanitizeSelfExtras(_lastNativeDetail, me && me.staffId, expected);
     paintOccupied();
+    scheduleInject();
   }
   window.addEventListener('ch-native-task-presence', function (e) {
     _lastNativeDetail = e && e.detail && typeof e.detail === 'object' ? e.detail : null;
@@ -2184,10 +2740,33 @@
     return /\/tasks\/[^/]+\/task-list/.test(location.pathname);
   }
 
+  function findQueuePreviewRow(row) {
+    if (!row) return null;
+    var rowId = '';
+    try {
+      rowId = row.getAttribute('row-id') || '';
+    } catch (_) {}
+    if (rowId) {
+      try {
+        var byId = document.querySelector('[row-id="detail_' + rowId.replace(/"/g, '') + '"]');
+        if (byId) return byId;
+      } catch (_) {}
+    }
+    var p = row.nextElementSibling;
+    var hops = 0;
+    while (p && hops < 3) {
+      if (p.classList && p.classList.contains('ag-full-width-row')) return p;
+      p = p.nextElementSibling;
+      hops++;
+    }
+    return null;
+  }
+
   function chipHost(row) {
-    // The patient-name cell — same final fallback host as content.js's
-    // decoration chips. Chips are width-capped in CSS so they can't push the
-    // name out of the fixed-width cell.
+    // Preview row when present (roomier — name can fit); else the patient-name
+    // cell. Width-capped in CSS so the name is never pushed out.
+    var preview = findQueuePreviewRow(row);
+    if (preview) return preview.querySelector('.h-full.w-full') || preview.firstElementChild || preview;
     return row.querySelector('[col-id="patientName"]');
   }
 
@@ -2198,26 +2777,25 @@
       if (!row) return;
       var host = chipHost(row);
       if (!host) return;
-      var others = _presence.get(data.taskUuid) || [];
-      var presenceTxt = presenceChipText(others);
+      var store = _presence.get(data.taskUuid) || [];
+      var others = occupantsForTask(data.taskUuid, store, _nativeOthers, _nativeListOthers);
+      var tokenHtml = occupantTokenHtml(others, { surface: 'row' });
       var actionedTxt = actionedChipText(data.actionedBy, data.actionedDateTime);
       var existing = host.querySelector('.ms-tp-chips');
-      if (!presenceTxt && !actionedTxt) {
+      if (!tokenHtml && !actionedTxt) {
         if (existing) existing.remove();
         return;
       }
-      var sig = presenceTxt + '||' + actionedTxt;
-      if (existing && existing.getAttribute('data-sig') === sig) return; // idempotent re-inject
+      var sig = tokenHtml + '||' + actionedTxt;
+      if (existing && existing.getAttribute('data-sig') === sig) {
+        applyLookNow();
+        return;
+      }
       var wrap = existing || document.createElement('span');
       wrap.className = 'ms-tp-chips';
       wrap.setAttribute('data-sig', sig);
       var html = '';
-      if (presenceTxt) {
-        html +=
-          '<span class="ms-tp-chip ms-tp-chip-presence" title="A colleague has this request open right now (Suite advisory — absence of this chip does not mean nobody has it open)">' +
-          esc(presenceTxt) +
-          '</span>';
-      }
+      if (tokenHtml) html += tokenHtml;
       if (actionedTxt) {
         html +=
           '<span class="ms-tp-chip ms-tp-chip-actioned" title="Last actioned by ' +
@@ -2230,6 +2808,7 @@
       wrap.innerHTML = html;
       // PREPEND, never append — Vue strips trailing foreign nodes on re-render.
       if (!existing) host.insertBefore(wrap, host.firstChild);
+      applyLookNow();
     });
   }
 
@@ -2293,13 +2872,15 @@
 
   // ── SPA navigation + grid churn wiring ────────────────────────────────────
   var _lastHref = location.href;
-  function onMaybeNavigated() {
-    if (location.href !== _lastHref) {
+  function onMaybeNavigated(batch) {
+    var hrefChanged = location.href !== _lastHref;
+    if (hrefChanged) {
       _lastHref = location.href;
-      var ctx = parseTaskOverviewPath(location.pathname);
-      if (!ctx || ctx.taskUuid !== _nativeTaskUuid) {
+      resetPresenceInjectState();
+      var ctxNav = parseTaskOverviewPath(location.pathname);
+      if (!ctxNav || ctxNav.taskUuid !== _nativeTaskUuid) {
         _nativeOthers = [];
-        _nativeTaskUuid = ctx ? ctx.taskUuid : '';
+        _nativeTaskUuid = ctxNav ? ctxNav.taskUuid : '';
         _selfExtras = 0;
         _firstSeen = {};
         _storeOthers = [];
@@ -2307,6 +2888,42 @@
       }
       syncBeacon();
       if (_beat) refreshBanner();
+      applyNativePresence();
+      applyNativeListPresence();
+      scheduleInject();
+      return;
+    }
+    var ownOnly = mutationBatchIsOwnPresence(batch);
+    var ctx = parseTaskOverviewPath(location.pathname);
+    var others = ctx ? othersOnTask(mergedOthers(), ctx.taskUuid) : [];
+    if (ctx && !others.length && _selfExtras >= 1) others = [1];
+    var banner = document.getElementById(BANNER_ID);
+    var msg = document.getElementById(MSG_ID);
+    var rhs = document.getElementById(RHS_ID);
+    var tokenMissing = false;
+    if (_tokenPainted.msg && !(msg && msg.isConnected)) tokenMissing = true;
+    if (_tokenPainted.rhs && !(rhs && rhs.isConnected)) tokenMissing = true;
+    if (!_tokenPainted.msg && !_tokenPainted.rhs && !presenceWipeGiveUp(_wipeState, 'token')) {
+      tokenMissing = !!(ctx && others.length);
+    }
+    var mode = presenceMutationPaintDecision({
+      ownMutationsOnly: ownOnly,
+      hrefChanged: false,
+      isOverview: !!ctx,
+      hasOccupants: !!(ctx && others.length),
+      bannerConnected: !!(banner && banner.isConnected),
+      tokenConnected: !!(msg && msg.isConnected) || !!(rhs && rhs.isConnected),
+      tokenMissing: tokenMissing,
+      tokenGiveUp: presenceWipeGiveUp(_wipeState, 'token'),
+    });
+    if (mode === 'skip') {
+      scheduleInject();
+      return;
+    }
+    if (mode === 'list-only') {
+      applyNativeListPresence();
+      scheduleInject();
+      return;
     }
     applyNativePresence();
     applyNativeListPresence();

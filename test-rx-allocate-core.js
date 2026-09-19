@@ -753,6 +753,26 @@ console.log('\n--- write stays on the lab client ---');
     /result\.written > 0[\s\S]{0,240}?await loadBoard\(\{ skipSplit: true \}\)/.test(canvas),
     'a partly-written batch re-reads the queue without restaging the even split'
   );
+  check(
+    /currentStaffId/.test(canvas) && /data-ch-staff/.test(canvas),
+    'canvas reads the staff stamp to skip a homepage personal slice'
+  );
+  check(
+    /inboxFetchOpts/.test(canvas) && /mergeOptsFor/.test(canvas),
+    'loadBoard passes staffId and winning-search merge opts'
+  );
+  check(/stampSearch/.test(canvas), 'loadBoard stamps with the winning GET, not leftover location.search');
+  check(/bareOnly:\s*true/.test(canvas), 'sitting GET is the bare open list, not the query plan');
+  check(/ch-task-list-data/.test(canvas), 'launcher listens for the task-list bridge count');
+  check(
+    /rxEmptyPileReason/.test(canvas) && /pileReason/.test(canvas),
+    'distribute copy names empty dests vs empty pile'
+  );
+  check(/Suite’s list is empty — the table is not/.test(canvas), 'empty overlay names a grid-vs-Suite mismatch');
+  check(
+    /No doctors working/.test(canvas) || /no doctors to share onto/.test(canvas),
+    'empty dests are not described as an empty inbox'
+  );
 }
 
 console.log('\n--- canvas + manifest + css source locks ---');
@@ -973,6 +993,173 @@ console.log('\n--- canvas + manifest + css source locks ---');
     'merged write re-GET still treats the inbox rows as the pile'
   );
 
+  console.log('\n--- homepage+staff stamp must not empty the non-routine pile ---');
+  {
+    const staffId = '0198ef96-6a17-71e4-8354-78de2b371ef3';
+    const inboxId = uuid(80);
+    const staffQs = '?statuses[]=pending-review&viewContext=homepage&masterAssignee=' + staffId;
+    const plan = C.rxListQueryPlan(staffQs, { staffId: staffId });
+    check(plan[0] && plan[0].indexOf('masterAssignee=') === -1, 'staff-stamp assignee is not the first GET');
+    check(plan[plan.length - 1] === staffQs, 'personal slice is last resort, not the inbox');
+    check(
+      C.rxListQueryPlan(qs)[0] && C.rxListQueryPlan(qs)[0].indexOf('masterAssignee=0198ef96') !== -1,
+      'a non-staff inbox UUID stays first (routine box)'
+    );
+
+    const pileBody = {
+      tasks: [
+        {
+          id: uuid(81),
+          patientName: 'FORD, A',
+          assignedTo: 'Non-Routine Prescription Requests',
+          assignedId: inboxId,
+          summary: 'Acute A',
+        },
+        {
+          id: uuid(82),
+          patientName: 'FORD, B',
+          assignedTo: 'Non-Routine Prescription Requests',
+          assignedId: inboxId,
+          summary: 'Acute B',
+        },
+        {
+          id: uuid(83),
+          patientName: 'OTHER, C',
+          assignedTo: 'Dr Jane Cole',
+          assignedId: uuid(10),
+          summary: 'Already sitting',
+        },
+      ],
+    };
+    const personalBody = {
+      tasks: [{ id: uuid(84), patientName: 'MINE, D', assignedTo: 'Dr Dave', assignedId: staffId, summary: 'Mine' }],
+    };
+    const staffThenPile = async (url) => {
+      const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+      const body = path.indexOf('masterAssignee=' + staffId) !== -1 ? personalBody : pileBody;
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    };
+    const recovered = await C.fetchRxTaskList(
+      'https://560b6c.api.england.medicus.health',
+      'prescription_request_task_non_routine',
+      staffQs,
+      { fetchImpl: staffThenPile, staffId: staffId }
+    );
+    check(
+      recovered.rows && recovered.rows.length === 3,
+      'working staff stamp does not keep the 1-row personal slice (got ' +
+        ((recovered.rows && recovered.rows.length) || 0) +
+        ')'
+    );
+    check(
+      recovered.search != null && String(recovered.search).indexOf('masterAssignee=' + staffId) === -1,
+      'winning search is not the homepage+staff filter'
+    );
+
+    const thrownThenBare = async (url) => {
+      const path = String(url).replace(/^https?:\/\/[^/]+/, '');
+      if (path.indexOf('?') !== -1) {
+        const err = new Error('HTTP 400');
+        err.status = 400;
+        throw err;
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify(pileBody) };
+    };
+    const afterThrow = await C.fetchRxTaskList(
+      'https://560b6c.api.england.medicus.health',
+      'prescription_request_task_non_routine',
+      staffQs,
+      { fetchImpl: thrownThenBare, staffId: staffId }
+    );
+    check(
+      afterThrow.rows && afterThrow.rows.length === 3,
+      'a 4xx homepage GET is skipped so the bare pile still loads'
+    );
+
+    const mergedStaff = await C.fetchRxMergedTaskList(
+      'https://560b6c.api.england.medicus.health',
+      'prescription_request_task_non_routine',
+      staffQs,
+      { fetchImpl: staffThenPile, staffId: staffId }
+    );
+    check(
+      mergedStaff.rows.filter((r) => C.isRxUnallocated(r)).length === 2,
+      'winning-search merge keeps the shared inbox as Unallocated, not the staff stamp'
+    );
+    check(
+      mergedStaff.rows.filter((r) => r.id === uuid(83) && !C.isRxUnallocated(r)).length === 1,
+      'already-sitting GP work stays sitting after the staff-stamp fallback'
+    );
+
+    const personShaped = rxRow(85, { assignedTo: 'Dr Jane Cole', assignedId: inboxId });
+    const sittingGp = rxRow(86, { assignedTo: 'Dr David Triska', assignedId: uuid(11) });
+    const leakedStamp = C.mergeInboxAndSitting([personShaped, sittingGp], [], staffQs);
+    check(
+      leakedStamp.filter((r) => C.isRxUnallocated(r)).length === 0,
+      'stamping with the leftover staff UUID hides a person-shaped inbox (the live failure)'
+    );
+    const winningEmpty = C.mergeInboxAndSitting([personShaped, sittingGp], [], '');
+    check(
+      winningEmpty.filter((r) => C.isRxUnallocated(r)).length === 0,
+      'without an inbox UUID, person-shaped names stay sitting unless the grid hints them'
+    );
+    const hinted = C.mergeInboxAndSitting([personShaped, sittingGp], [], '', {
+      visibleIds: { [personShaped.id.toLowerCase()]: true },
+    });
+    check(
+      hinted
+        .filter((r) => C.isRxUnallocated(r))
+        .map((r) => r.id)
+        .join() === personShaped.id,
+      'grid-visible person-shaped inbox rows are the Unallocated pile'
+    );
+    check(
+      C.isRxUnallocated(hinted.find((r) => r.id === sittingGp.id) || {}) === false,
+      'grid hint does not restamp sitting GPs'
+    );
+
+    const dests = [
+      { key: Lab.clinicianColumnKey('Dr A'), name: 'Dr A' },
+      { key: Lab.clinicianColumnKey('Dr B'), name: 'Dr B' },
+    ];
+    const split = C.planEvenSplit(hinted, dests);
+    check(split.ok === true && split.total === 1, 'Split equally can stage the recovered non-routine pile');
+    const usual = C.planSendToUsualGp(
+      hinted.map((r) => Object.assign({}, r, { namedGp: 'Dr A', namedGpId: '' })),
+      dests
+    );
+    check(usual.ok === true && usual.sent.length === 1, 'usual-GP send still stages recovered unallocated rows');
+
+    check(
+      /No doctors working/.test(
+        C.rxEmptyPileReason({ rowCount: 4, unallocatedCount: 4, destCount: 0, dayPhrase: 'today' })
+      ),
+      'empty dests say no doctors, not an empty pile'
+    );
+    check(
+      /already sit with people/.test(C.rxEmptyPileReason({ rowCount: 4, unallocatedCount: 0, destCount: 3 })),
+      'rows but no Unallocated says they already sit with people'
+    );
+    check(
+      /table has 12/.test(C.rxEmptyPileReason({ rowCount: 0, unallocatedCount: 0, destCount: 3, bridgeCount: 12 })),
+      'grid-has-work / Suite-empty is named'
+    );
+    check(
+      C.inboxCountFromTaskListBridge(
+        { rows: new Array(5), taskTypeSlug: 'prescription_request_task_non_routine' },
+        'prescription_request_task_non_routine'
+      ) === 5,
+      'bridge count is count-only on the matching Rx slug'
+    );
+    check(
+      C.inboxCountFromTaskListBridge(
+        { rows: new Array(5), taskTypeSlug: 'prescription_request_task_non_routine' },
+        'prescription_request_task_routine'
+      ) === 0,
+      'bridge count ignores another Rx slug'
+    );
+  }
+
   // ---- Per-request medication summary (2026-09-10) ----
   console.log('\n--- itemCountsFromOverviewPayload: prescriptionRequestItemsByType bucket summing ---');
   {
@@ -1004,6 +1191,38 @@ console.log('\n--- canvas + manifest + css source locks ---');
       'missing prescriptionRequestItemsByType entirely -> all zero counts, no throw'
     );
     check(counts.resolvedPatientId === '', 'no patientId resolved falls back to empty string, not null/undefined');
+  }
+
+  console.log(
+    '\n--- overdueMedicationReviewFromPayload: patient-level flag (futureActionIdRequiringAttention), 2026-09-16 ---'
+  );
+  {
+    check(
+      C.overdueMedicationReviewFromPayload({
+        data: { futureActionIdRequiringAttention: '019e2b99-a736-72b4-aea7-7c3cc39fa433' },
+      }) === true,
+      'a non-null futureActionIdRequiringAttention is an overdue review — confirmed live, HAR 130-reviewoverdue.har'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({ data: { futureActionIdRequiringAttention: null } }) === false,
+      'null futureActionIdRequiringAttention is NOT overdue — confirmed live on a patient with an in-date review'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({
+        data: {
+          futureActionIdRequiringAttention: null,
+          medicationRequiringReview: [],
+          patientRequiresMedicationReview: false,
+        },
+      }) === false,
+      'the two more literally-named fields are deliberately NOT read here — they were both empty/false on a confirmed-overdue capture, so they track something else'
+    );
+    check(
+      C.overdueMedicationReviewFromPayload({ data: {} }) === false,
+      'a missing field entirely is treated as not-overdue, never guessed true'
+    );
+    check(C.overdueMedicationReviewFromPayload({}) === false, 'missing data section -> false, no throw');
+    check(C.overdueMedicationReviewFromPayload(null) === false, 'is defensive against a missing payload');
   }
 
   console.log('\n--- regimenTotalsFromPayload: repeat-type-only scope + isOverDue tally ---');

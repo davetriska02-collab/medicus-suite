@@ -20,11 +20,32 @@ Accept:
 
 The live routine inbox (Witley 2026-08-31) is
 `?statuses[]=pending-review&viewContext=homepage&masterAssignee=<inbox uuid>`.
-That UUID **is** the routine box. Keep it on the GET. Rows from that
+That UUID **is** the routine box **only when it is that box**, not the
+signed-in staff stamp. Keep it on the GET when it wins. Rows from that
 GET are the pile to allocate even when `assignedTo` is a person name
 (they sit with the box, not a working-today GP). Stamp them
 `rxInboxPile` / Unassigned so they appear in the unallocated list.
 Bare GET of the slug returns already-allocated GP work as well.
+
+**Dave 2026-09-15 — non-routine empty while the grid is full.** The
+dedicated non-routine page often still has leftover
+`viewContext=homepage&masterAssignee=<data-ch-staff>` (or another
+queue’s UUID). That is the Privacy Officer #413 class: a working staff
+stamp returns `[]` or a personal slice while Medicus’s table shows the
+shared pile. #414 marked Rx PASS because the canvas reads
+`location.search` — that is exactly the stale filter. Walk
+`rxListQueryPlan`: skip the assignee when it equals the staff stamp,
+then drop assignee / homepage, then `pending-review` / `pending`, then
+bare GET (Signing’s open list). First non-empty wins; a thrown step is
+skipped so `loadBoard` cannot wipe `_rows` after a 4xx homepage GET.
+Stamp / merge with the **winning** search only. A failed
+`masterAssignee` must not restamp the bare pile — person-shaped inbox
+names then look like sitting GP work and Split / Top up / Distribute
+equally / usual-GP send all report empty. If the winning GET has no
+inbox UUID, the grid’s own `ch-task-list-data` ids are a classify-only
+hint (already-fetched rows only; never write targets). Honest copy
+must say “no doctors working today” vs “no requests in the pile” vs
+“the table has rows and Suite’s list is empty”.
 
 Reject:
 

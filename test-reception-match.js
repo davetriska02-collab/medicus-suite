@@ -284,6 +284,26 @@ console.log('\n--- redFlagGaps: gap vs mentioned ---');
     'every red flag is accounted for exactly once between gaps and flaggedInText-or-silently-covered'
   );
 }
+{
+  // 2026-09-18 Keeper: new ids must actually match their topic terms, not just exist.
+  const earache = byId('earache');
+  const feverishChild = byId('feverish-child');
+  const infant = redFlagGaps(earache, 'Earache in a baby under 3 months old with a fever.');
+  assert(
+    infant.flaggedInText.some((g) => g.id === 'rf-under3m-fever'),
+    'earache: "under 3 months old with a fever" marks rf-under3m-fever as mentioned'
+  );
+  assert(
+    !infant.gaps.some((g) => g.id === 'rf-under3m-fever'),
+    'earache: mentioned rf-under3m-fever is not also listed as a gap'
+  );
+  const rigors = redFlagGaps(feverishChild, 'Child has a fever with rigors and is shivering uncontrollably.');
+  assert(
+    rigors.flaggedInText.some((g) => g.id === 'rf-rigors'),
+    'feverish-child: "rigors" marks rf-rigors as mentioned'
+  );
+  assert(!rigors.gaps.some((g) => g.id === 'rf-rigors'), 'feverish-child: mentioned rf-rigors is not also listed as a gap');
+}
 
 // ── redFlagGaps: conservative over-inclusion when unsure ─────────────────────────────────────
 console.log('\n--- redFlagGaps: over-include when unsure ---');

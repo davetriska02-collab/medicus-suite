@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.262.0
-**Generated:** 2026-09-15
+**Version:** v3.263.10
+**Generated:** 2026-09-19
 
 ## What it is
 
@@ -112,7 +112,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with suggested links; several tiles can be staged and confirmed together
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance
 - **Clean up alerts** — pill on the patient banner; batch-clears Flag on patient banner only (W24)
-- **Appointment-book tally** — a single button on the appointment book showing booked and free counts for that day, with the same appointment-type checkboxes as Slot Counter (shared `slots.hiddenTypes`). Click to choose which types are included. Read-only
+- **Appointment-book tally** — a single button on the appointment book showing booked and free counts for that day, with the same appointment-type checkboxes as Slot Counter (shared `slots.hiddenTypes`). Optional flu / COVID / RSV eligibility toggles count unique booked patients on those types (inferred — double-check before offering a vaccine). Read-only
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
@@ -150,10 +150,17 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.263.10 (19 Sep)** — StackChan desk-robot presence: LAN HTTP face commands from Sentinel / Request Monitor / Companion; firmware camera+mic off; Options Test face
+- **v3.263.9 (19 Sep)** — Restored ACE-I/ARB and thiazide post-initiation U&E, gated on a true medication-history start (batch dates cannot fire)
+- **v3.263.7 (19 Sep)** — Flu chip: UK synonym "Is a carer" (SNOMED 224484003 / description 1222761019)
+- **v3.263.1 (18 Sep)** — Task presence: occupied banner no longer oscillates on request overviews that re-render the message chrome
+- **v3.263.0 (18 Sep)** — Appointment-book tally: optional flu / COVID / RSV eligibility counts on the booked/free button
+- **v3.262.1 (18 Sep)** — Reception match: topic terms for earache `rf-under3m-fever` and feverish-child `rf-rigors`
+- **v3.262.0 (18 Sep)** — The Keeper: ciclosporin / tacrolimus / mercaptopurine / cenobamate monitoring rules; missing UK brands (Elozar, Arpoya, Bilprevda, Zvogra, Drovelis)
+- **v3.261.62 (17 Sep)** — Lab filing: block unrecognised analytes before offering File (H-074); Next-Step radio click now files the task (H-075)
 - **v3.261.50 (14 Sep)** — Prescription-request canvas: usual-GP send stays in the allocate action cluster
 - **v3.261.49 (14 Sep)** — Prescription-request canvas: Send N to usual GP is a peer of Distribute equally, not a featured CTA
 - **v3.261.48 (14 Sep)** — Prescription-request canvas: Send N to usual GP if they are working that day; not-in is an opt-in on that action only
-- **v3.262.0 (15 Sep)** — StackChan desk-robot presence: LAN HTTP face commands from Sentinel / Request Monitor / Companion; firmware camera+mic off; Options Test face
 - **v3.261.45 (12 Sep)** — Lab allocation canvas: who-ordered uses current OIR dates, not completed requests from another GP
 - **v3.261.44 (12 Sep)** — Lab allocation canvas: who-ordered overview only for unallocated results
 - **v3.261.43 (12 Sep)** — Lab allocation canvas: keep majority OIR requester; parse hyphen/date labels
@@ -166,6 +173,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **v3.261.36 (11 Sep)** — Prescription list Share out / overdue-monitoring buttons sit left of Sign
 - **v3.261.35 (11 Sep)** — Prescription lists: Check for overdue monitoring next to Share out; Monitoring/QOF buttons on flagged requests
 - **v3.261.34 (11 Sep)** — Prescriptions canvas: per-request item counts vs regimen totals, overdue reauthorising line, 1–5 complexity score
+- **v3.263.0 (18 Sep)** — Appointment-book tally: optional flu / COVID / RSV eligibility counts on the booked/free button
 - **v3.261.33 (11 Sep)** — Practice features: Focus alerts toggle for the queue status bar
 - **v3.261.32 (11 Sep)** — Companion: investigation-result review tasks get the appts/links/tasks section
 - **v3.261.29 (10 Sep)** — Tidy widgets route-gated; allocate harvest aborts on close; injector runtime loads before every consumer
@@ -182,6 +190,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **v3.261.8 (8 Sep)** — Occupied/list strip hides you (Pusher myID / email / display name, not only staff UUID); occupancy look is a Suite table (colour, size, highlight) with click-the-alert on-the-fly changes; default fluoro yellow
 - **v3.261.7 (8 Sep)** — Occupied/list heading starts Note:; note wash not peach; queue shows 47 in this inbox from the task-list bridge
 - **v3.261.6 (8 Sep)** — Occupied/list heading starts Note:; request launcher shows the task-list count; dest-set footer names Morning triage when that set is on
+- **v3.261.60 (17 Sep)** — Task Presence token (icon + display name) on list rows, request/Rx message chrome, and Clinical Summary RHS — same occupants as the masthead
 - **v3.261.5 (8 Sep)** — Queue title strip: named list occupancy from Medicus `presence-{site}-task-list-{slug}` replaces the host "GP is also working this list" widget (advisory, never a per-request occupant)
 - **v3.261.4 (8 Sep)** — Occupied strip and allocation groups review pass: wipe/idle/socket fail-closed; one-sentence occupancy copy; Working today chips, gated Write hidden, dest cards no longer overlap (see CHANGELOG)
 - **v3.261.3 (7 Sep)** — Allocation groups: named sets of people to even-split onto (encircle/drag on the canvas, optional days/times); same dest-set on labs and Rx; new homepage medical/admin request canvas (Write blocked until capture)

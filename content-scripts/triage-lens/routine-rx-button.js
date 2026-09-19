@@ -15,6 +15,13 @@
 // as if the clinician clicked. This file makes NO network calls and reads no
 // patient-data field values.
 //
+// NOT the Privacy Officer bulk-ack bug class (2026-09-15 audit): this is a
+// single-task overview DOM macro (W8). It does not GET a queue list, does not
+// read the staff-identity stamp, does not invent a personal-inbox query, and
+// does not treat Medicus AG-Grid row ticks as Suite's selected-task set.
+// A working staff stamp cannot empty it. The list-page sibling is the Rx
+// allocate canvas (W23), which already uses this page's location.search.
+//
 // SAFETY
 //   • All controls are matched by VISIBLE TEXT — every id on this screen is
 //     generated per session (radio_group_*, select_*, select-item-<uuid>), so

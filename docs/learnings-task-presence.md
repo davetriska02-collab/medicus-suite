@@ -1,6 +1,6 @@
 # Learnings — is a task tagged as "being worked on"?
 
-**Updated:** 2026-09-08 — list occupancy strip on the queue title.
+**Updated:** 2026-09-17 — occupant token on list rows, Rx message chrome, and Clinical Summary RHS (same per-task occupants as the masthead; list channel still never a row occupant).
 channels. Live on a medical patient-request overview:
 
 | Channel                            | Meaning                                                                                                                                                                                |

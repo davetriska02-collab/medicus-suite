@@ -153,6 +153,23 @@
     return !!(info && info.typeSlug === INVESTIGATION_REPORT_TASK_TYPE);
   }
 
+  // Exact typeSlug, confirmed via HAR 123-misctask.har (2026-09-16):
+  // /tasks/data/general-task/overview/{id}?...&taskList=general_task — the
+  // "Miscellaneous task" type. data.patient.id is present in that overview
+  // (same shape review-investigation-report uses), but there is no
+  // communicationThreadTaskType field, so classifyPatientRequest() would
+  // always call it non-triage — the record section stayed hidden here
+  // until this was added. Clinic only for now (not Reception) — Nick asked
+  // to land this for the type as a whole rather than wait to verify every
+  // other non-communication-thread task type first; record renders LAST
+  // (after Book/Create task), not in the usual pre-Book position, per that
+  // same request.
+  const GENERAL_TASK_TYPE = 'general-task';
+  function isGeneralTask() {
+    const info = getTaskInfo();
+    return !!(info && info.typeSlug === GENERAL_TASK_TYPE);
+  }
+
   function pageKey() {
     const ctx = getPageContext();
     return ctx ? ctx.pageKey : null;
@@ -1022,11 +1039,20 @@
     if (readDocked()) return dockedHtml();
     if (s.collapsed) return outerHeaderHtml();
     const shows = currentShows();
-    const showRecord = shows.record && s.rec.applicable === true;
+    // general-task (see isGeneralTask's comment): Clinic only, for now —
+    // Reception's roleShows.record would otherwise also fire on this type,
+    // which was never asked for.
+    const isGeneralTaskType = isGeneralTask();
+    const showRecord =
+      shows.record && s.rec.applicable === true && (!isGeneralTaskType || currentRole() === 'clinic');
     // See isInvestigationResultTask's own comment: on those pages the
     // record section moves above "What's due" instead of its usual spot
     // below pulse/slots/desk.
     const recordFirst = showRecord && isInvestigationResultTask();
+    // general-task renders the record section LAST (after Book/Create
+    // task) instead of its usual pre-Book spot — Nick asked for it
+    // appended at the bottom rather than in the normal position.
+    const recordLast = showRecord && isGeneralTaskType;
     return (
       outerHeaderHtml() +
       '<div class="ms-tap-body">' +
@@ -1035,9 +1061,10 @@
       (shows.desk ? deskSectionHtml() : '') +
       (shows.slots ? slotsGlanceHtml() : '') +
       (shows.pulse ? pulseSectionHtml() : '') +
-      (showRecord && !recordFirst ? recordSectionHtml() : '') +
+      (showRecord && !recordFirst && !recordLast ? recordSectionHtml() : '') +
       (shows.book ? bookingSectionHtml() : '') +
       (shows.task ? taskSectionHtml() : '') +
+      (recordLast ? recordSectionHtml() : '') +
       chromeFooterHtml() +
       '</div>' +
       '<div class="ms-tap-resize" id="ms-tap-resize" role="separator" aria-orientation="horizontal" aria-label="Resize Companion"></div>'
@@ -1507,6 +1534,43 @@
     if (typeof str !== 'string') return '';
     const idx = str.indexOf(',');
     return idx === -1 ? str : str.slice(0, idx);
+  }
+
+  // Booking-links-only age filter (Nick's own request, 2026-09-16): unlike
+  // dateOnlyFromCreated above (display, deliberately never parses), this DOES
+  // parse l.created — there's no other date field on a booking link to filter
+  // by. Narrow, explicit month-name parse rather than trusting the Date
+  // constructor's locale-dependent loose parsing of "18 Mar 2026, 17:43". A
+  // link whose date doesn't match the expected shape is KEPT, not hidden —
+  // an unparseable date is safer shown than silently dropped from the list.
+  const BOOKING_LINK_MONTH_ABBR = {
+    Jan: 0,
+    Feb: 1,
+    Mar: 2,
+    Apr: 3,
+    May: 4,
+    Jun: 5,
+    Jul: 6,
+    Aug: 7,
+    Sep: 8,
+    Oct: 9,
+    Nov: 10,
+    Dec: 11,
+  };
+  const BOOKING_LINK_MAX_AGE_MS = 365 * 24 * 60 * 60 * 1000;
+  function bookingLinkCreatedMs(str) {
+    if (typeof str !== 'string') return null;
+    const m = /^(\d{1,2}) (\w{3}) (\d{4}),?\s*(\d{1,2}):(\d{2})/.exec(str.trim());
+    if (!m) return null;
+    const month = BOOKING_LINK_MONTH_ABBR[m[2]];
+    if (month == null) return null;
+    const d = new Date(Number(m[3]), month, Number(m[1]), Number(m[4]), Number(m[5]));
+    return isNaN(d.getTime()) ? null : d.getTime();
+  }
+  function isBookingLinkWithinMaxAge(l, nowMs) {
+    const ms = bookingLinkCreatedMs(l && l.created);
+    if (ms == null) return true;
+    return nowMs - ms <= BOOKING_LINK_MAX_AGE_MS;
   }
 
   // "-" is Medicus's own placeholder for "not set" (same convention as
@@ -2294,7 +2358,10 @@
       st.appointments = appointments
         .filter((a) => a && typeof a.startDateTime === 'string' && a.startDateTime > now)
         .sort((a, b) => (a.startDateTime < b.startDateTime ? -1 : a.startDateTime > b.startDateTime ? 1 : 0));
-      st.bookingLinks = bookingLinks.filter((l) => l && l.appointmentBooked === 'No');
+      const nowMs = Date.now();
+      st.bookingLinks = bookingLinks.filter(
+        (l) => l && l.appointmentBooked === 'No' && isBookingLinkWithinMaxAge(l, nowMs)
+      );
       st.investigations = outstandingInvestigationRequests(journal);
       st.tasks = openTasks
         .filter((t) => t && taskUuidFromOverviewUrl(t.overviewURL) !== excludeTaskUuid)
@@ -2351,6 +2418,42 @@
       }
       if (st !== s.rec) return;
       const patientId = (invOverview.data && invOverview.data.patient && invOverview.data.patient.id) || null;
+      st.checking = false;
+      st.applicable = !!patientId;
+      if (!patientId) {
+        st.loadedForTask = ctx.pageKey;
+        rerender();
+        return;
+      }
+      await fetchAppointmentsAndLinks(st, patientId, ctx.taskUuid);
+      if (st === s.rec) {
+        st.loadedForTask = ctx.pageKey;
+        rerender();
+      }
+      return;
+    }
+
+    // general-task ("Miscellaneous task", confirmed via HAR
+    // 123-misctask.har, 2026-09-16): same situation as
+    // review-investigation-report above — no communicationThreadTaskType
+    // field, so classification below would always say "not triage", but
+    // data.patient.id IS present, so there is no need to classify at all.
+    if (ctx.typeSlug === GENERAL_TASK_TYPE) {
+      rec.checking = true;
+      rec.error = null;
+      rerender();
+      let genOverview;
+      try {
+        genOverview = await apiFetchTaskOverview(ctx.typeSlug, ctx.taskUuid);
+      } catch (_) {
+        if (st === s.rec) {
+          st.checking = false;
+          rerender();
+        }
+        return;
+      }
+      if (st !== s.rec) return;
+      const patientId = (genOverview.data && genOverview.data.patient && genOverview.data.patient.id) || null;
       st.checking = false;
       st.applicable = !!patientId;
       if (!patientId) {
@@ -3114,9 +3217,13 @@
     // inside it could ever run. Found only after "still not showing"
     // following that first fix — a real lesson that a fix two layers deep
     // needs its caller checked too, not just the function itself.
+    // general-task added 2026-09-16 for the same reason — its
+    // loadPatientRecord branch would otherwise be unreachable dead code.
     if (
       ctx.kind === 'task' &&
-      (isCommunicationThreadSlug(ctx.typeSlug) || ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE) &&
+      (isCommunicationThreadSlug(ctx.typeSlug) ||
+        ctx.typeSlug === INVESTIGATION_REPORT_TASK_TYPE ||
+        ctx.typeSlug === GENERAL_TASK_TYPE) &&
       s.rec.loadedForTask !== ctx.pageKey &&
       !s.rec.checking &&
       !s.rec.loading

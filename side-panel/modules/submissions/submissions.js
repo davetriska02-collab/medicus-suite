@@ -1161,8 +1161,10 @@ function monthRangePreset(name) {
   if (name === 'thisMonth') {
     start.setDate(1);
   } else if (name === 'lastMonth') {
-    start.setMonth(start.getMonth() - 1);
+    // Same lastMonth overflow trap as shared/activity-api.js preset() —
+    // setDate(1) BEFORE setMonth(-1) or 31 Mar/May/Jul/Oct/Dec invert.
     start.setDate(1);
+    start.setMonth(start.getMonth() - 1);
     end.setDate(0); // last day of previous month
   } else {
     return null;

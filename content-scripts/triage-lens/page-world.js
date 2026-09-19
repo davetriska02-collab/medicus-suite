@@ -133,6 +133,85 @@
     return m ? m[1] : null;
   }
 
+  // Book-signing / prescription-request list scope. The intercepted task-list
+  // GET is the list the clinician toggled onto — Signing Queue (RHS) reuses
+  // this masterAssignee rather than inventing a second filter. Stamp even
+  // when the body is [] so an empty individual list is honest, not leftover
+  // practice-wide rows. Attribute is mode|assigneeId|slug — no patient data.
+  var RX_SIGNING_SLUG_RE =
+    /prescription_request_task_(?:non_)?routine|prescription-request-task-(?:non-)?routine|^prescription-requests$/i;
+  var RX_SCOPE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  var RX_LIST_SCOPE_ATTR = 'data-ch-rx-list-scope';
+
+  function isRxSigningSlug(slug) {
+    return RX_SIGNING_SLUG_RE.test(String(slug || ''));
+  }
+
+  function masterAssigneeIdFromSearch(search) {
+    var raw = String(search == null ? '' : search).trim();
+    if (!raw) return '';
+    var qs = raw.charAt(0) === '?' ? raw.slice(1) : raw;
+    if (!qs || /[:/\\]/.test(qs)) return '';
+    var parts = qs.split('&');
+    for (var i = 0; i < parts.length; i++) {
+      var kv = parts[i].split('=');
+      var k = kv[0] || '';
+      try {
+        k = decodeURIComponent(k);
+      } catch (_) {}
+      if (!/^masterAssignee$/i.test(k)) continue;
+      var v = kv.slice(1).join('=');
+      try {
+        v = decodeURIComponent(v);
+      } catch (_) {}
+      if (RX_SCOPE_UUID_RE.test(v)) return v.toLowerCase();
+    }
+    return '';
+  }
+
+  function rxListScopeFromTaskListUrl(u) {
+    var raw = String(u == null ? '' : u);
+    var pathMatch = raw.match(/\/tasks\/data\/([^/?#]+)\/task-list/i);
+    if (!pathMatch) return null;
+    var slug = pathMatch[1];
+    if (!isRxSigningSlug(slug)) return null;
+    var search = '';
+    var q = raw.indexOf('?');
+    if (q >= 0) {
+      var hash = raw.indexOf('#', q);
+      search = raw.slice(q, hash >= 0 ? hash : undefined);
+    }
+    var assigneeId = masterAssigneeIdFromSearch(search);
+    if (assigneeId) return { mode: 'individual', assigneeId: assigneeId, slug: slug };
+    return { mode: 'practice', assigneeId: '', slug: slug };
+  }
+
+  function encodeRxListScopeAttr(scope) {
+    if (!scope || typeof scope !== 'object') return '';
+    var slug = String(scope.slug || '')
+      .replace(/\|/g, '')
+      .slice(0, 80);
+    var id = String(scope.assigneeId || '').toLowerCase();
+    if (!RX_SCOPE_UUID_RE.test(id)) id = '';
+    var mode = scope.mode === 'individual' && id ? 'individual' : 'practice';
+    if (mode === 'practice') id = '';
+    if (!slug && mode === 'practice' && !id) return '';
+    return mode + '|' + id + '|' + slug;
+  }
+
+  function parseRxListScopeAttr(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return { mode: 'practice', assigneeId: '', slug: '' };
+    var parts = s.split('|');
+    var mode = parts[0] === 'individual' ? 'individual' : 'practice';
+    var assigneeId = RX_SCOPE_UUID_RE.test(parts[1] || '') ? String(parts[1]).toLowerCase() : '';
+    var slug = String(parts[2] || '')
+      .replace(/\|/g, '')
+      .slice(0, 80);
+    if (mode === 'individual' && assigneeId) return { mode: 'individual', assigneeId: assigneeId, slug: slug };
+    return { mode: 'practice', assigneeId: '', slug: slug };
+  }
+
   // Node tests require this file for the helper only. MAIN-world behaviour is
   // unchanged: chrome content scripts have no `module`, so we fall through.
   if (typeof module !== 'undefined' && module.exports) {
@@ -142,6 +221,10 @@
       currentTaskListSlug: currentTaskListSlug,
       PRESENCE_LIST_CH_RE: PRESENCE_LIST_CH_RE,
       reauthorisePrescriptionIdFromUrl: reauthorisePrescriptionIdFromUrl,
+      isRxSigningSlug: isRxSigningSlug,
+      rxListScopeFromTaskListUrl: rxListScopeFromTaskListUrl,
+      encodeRxListScopeAttr: encodeRxListScopeAttr,
+      parseRxListScopeAttr: parseRxListScopeAttr,
     };
     return;
   }
@@ -194,9 +277,25 @@
     return null;
   }
 
+  function stampRxListScope(u) {
+    try {
+      var scope = rxListScopeFromTaskListUrl(u);
+      if (!scope) return;
+      var value = encodeRxListScopeAttr(scope);
+      if (!value) return;
+      if (document.documentElement.getAttribute(RX_LIST_SCOPE_ATTR) !== value) {
+        document.documentElement.setAttribute(RX_LIST_SCOPE_ATTR, value);
+      }
+    } catch (_) {}
+  }
+
   function handleTaskList(u, body) {
     var m = u.match(TL_RE);
     if (!m) return;
+    // Stamp before the empty-body return — an individual list that is []
+    // is still that person's list. Signing Queue must not keep the last
+    // practice-wide payload.
+    stampRxListScope(u);
     var items = body && (body.tasks || body.data || body.results || body.rows || (Array.isArray(body) ? body : null));
     if (!Array.isArray(items)) {
       console.warn('[ClinHUD] task-list: no array found; body keys=', body ? Object.keys(body) : body);

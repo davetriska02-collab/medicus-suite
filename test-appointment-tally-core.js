@@ -30,13 +30,18 @@ function slot(type, start) {
 
 function appt(type, extra) {
   extra = extra || {};
-  return {
+  const row = {
     diaryEntryType: { value: 'appointment' },
     appointmentType: { name: type },
     displayStatus: { value: extra.status || 'booked' },
     appointmentStatus: extra.appointmentStatus || { isCancelled: false },
     startDateTime: extra.start || '2026-09-10 09:00:00',
   };
+  if (extra.patient) row.patient = extra.patient;
+  if (extra.patientId) {
+    row.patient = { id: extra.patientId, name: extra.name || 'Anon' };
+  }
+  return row;
 }
 
 function overview(staffSchedules, unassigned) {
@@ -245,9 +250,103 @@ console.log('\n--- unknown type name ---');
   check(t.byType.Unknown.free === 1, 'missing appointmentType becomes Unknown');
 }
 
+console.log('\n--- booked patient extraction ---');
+{
+  const raw = overview([
+    {
+      name: 'Dr A',
+      schedule: [
+        {
+          summary: { status: { isCancelled: false } },
+          entries: [
+            appt('GP Routine', { patientId: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'One' }),
+            appt('Phone', { patientId: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'One' }),
+            appt('Nurse', { patientId: 'bbbbbbbb-0000-0000-0000-000000000002', name: 'Two' }),
+            appt('GP Routine', { status: 'cancelled', patientId: 'cccccccc-0000-0000-0000-000000000003' }),
+            appt('Duty', { name: 'No id' }),
+          ],
+        },
+      ],
+    },
+  ]);
+  const t = core.tallyFromOverview(raw, { skipPastFree: false });
+  check(t.patients.appointmentCount === 4, 'cancelled booking is not a collected patient appointment');
+  check(t.patients.missing === 1, 'booking without a patient id is counted as missing');
+  check(!!t.patients.byUuid['aaaaaaaa-0000-0000-0000-000000000001'], 'first patient is collected once');
+  check(
+    t.patients.byUuid['aaaaaaaa-0000-0000-0000-000000000001'].types['GP Routine'] &&
+      t.patients.byUuid['aaaaaaaa-0000-0000-0000-000000000001'].types.Phone,
+    'same patient booked twice keeps both types'
+  );
+  check(!!t.patients.byUuid['bbbbbbbb-0000-0000-0000-000000000002'], 'second patient is collected');
+  check(!t.patients.byUuid['cccccccc-0000-0000-0000-000000000003'], 'cancelled patient is not collected');
+  const vis = core.visiblePatientUuids(t.patients, ['Phone', 'Duty']);
+  check(vis.length === 2, 'visible uuids include anyone with a still-ticked type');
+  const nurseOnly = core.visiblePatientUuids(t.patients, ['GP Routine', 'Phone', 'Duty']);
+  check(nurseOnly.length === 1 && nurseOnly[0] === 'bbbbbbbb-0000-0000-0000-000000000002', 'hiding GP+Phone leaves the nurse patient');
+}
+
+console.log('\n--- unassigned diary patients ---');
+{
+  const raw = overview(
+    [],
+    [
+      {
+        scheduleType: 'diary',
+        summary: { status: { isCancelled: false } },
+        entries: [appt('Duty', { patientId: 'dddddddd-0000-0000-0000-000000000004' })],
+      },
+    ]
+  );
+  const t = core.tallyFromOverview(raw, { skipPastFree: false });
+  check(!!t.patients.byUuid['dddddddd-0000-0000-0000-000000000004'], 'unassigned diary bookings are eligible for the vax count');
+}
+
+console.log('\n--- uuid extract prefers patient.id ---');
+{
+  const uuid = core.extractPatientUuid({
+    patient: { id: 'eeeeeeee-0000-0000-0000-000000000005', href: '/x/ffffffff-0000-0000-0000-000000000006' },
+    appointmentId: '99999999-0000-0000-0000-000000000099',
+  });
+  check(uuid === 'eeeeeeee-0000-0000-0000-000000000005', 'patient.id wins over other UUIDs on the entry');
+  check(core.extractPatientUuid({ patient: { name: 'None' } }) === null, 'no uuid returns null');
+}
+
+console.log('\n--- vaccine toggle + chip summary ---');
+{
+  check(core.anyVaxOn({}) === false, 'empty toggles are off');
+  check(core.anyVaxOn({ flu: true }) === true, 'flu on is any-on');
+  check(core.parseVaxToggles({ flu: 1, extra: true }).flu === true, 'truthy flu is kept');
+  check(core.parseVaxToggles({ flu: 1, extra: true }).covid === false, 'unknown keys are dropped');
+  const flags = core.vaxFlagsFromChips([
+    { type: 'vaccine', vaccine: 'flu', status: 'vax_due' },
+    { type: 'vaccine', ruleId: 'vax-covid', status: 'vax_given' },
+    { type: 'vaccine', vaccine: 'rsv', status: 'vax_declined' },
+    { type: 'qof-indicator', vaccine: 'flu', status: 'vax_due' },
+  ]);
+  check(flags.flu === 'vax_due' && flags.covid === 'vax_given' && flags.rsv === 'vax_declined', 'only vaccine chips count');
+  const byUuid = {
+    a: { flu: 'vax_due', covid: null, rsv: 'vax_given' },
+    b: { flu: 'vax_given', covid: 'vax_due', rsv: null },
+    c: { error: 'unread' },
+  };
+  const sum = core.summariseVax(byUuid, ['a', 'b', 'c', 'd']);
+  check(sum.total === 4 && sum.checked === 3 && sum.pending === 1 && sum.errors === 1, 'pending / error / checked split');
+  check(sum.flu.eligible === 2 && sum.flu.due === 1 && sum.flu.given === 1, 'flu eligible includes due and given');
+  check(sum.covid.eligible === 1 && sum.covid.due === 1, 'covid due only');
+  check(sum.rsv.eligible === 1 && sum.rsv.given === 1, 'rsv given is still eligible');
+  const parts = core.vaxButtonParts(sum, { flu: true, covid: false, rsv: true }, true);
+  check(parts[0] === 'Flu 2…' && parts[1] === 'RSV 1…', 'button parts follow the toggles and show a scan ellipsis');
+  check(
+    core.buttonLabel({ booked: 10, free: 2 }, ['Flu 2']) === '10 booked · 2 free · Flu 2',
+    'button label appends vaccine parts'
+  );
+}
+
 console.log('\n--- source lock: injected widget ---');
 {
   const js = fs.readFileSync(path.join(__dirname, 'content-scripts', 'appointment-tally.js'), 'utf8');
+  const coreSrc = fs.readFileSync(path.join(__dirname, 'shared', 'appointment-tally-core.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, 'content-scripts', 'appointment-tally.css'), 'utf8');
   const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
   check(!/method:\s*['"]POST['"]/.test(js), 'tally JS has no POST');
@@ -256,12 +355,24 @@ console.log('\n--- source lock: injected widget ---');
     'tally JS does not click Medicus controls'
   );
   check(js.includes('slots.hiddenTypes'), 'tally writes/reads slots.hiddenTypes');
+  check(js.includes('slots.vaxTally'), 'tally writes/reads slots.vaxTally');
+  const ioSrc = fs.readFileSync(path.join(__dirname, 'shared', 'io', 'slot-counter-io.js'), 'utf8');
+  check(ioSrc.includes('slots.vaxTally'), 'slot-counter-io backs up the vaccine tally toggles');
+  check(
+    coreSrc.includes("flu: 'vax-flu'") && coreSrc.includes("covid: 'vax-covid'") && coreSrc.includes("rsv: 'vax-rsv'"),
+    'core maps flu/COVID/RSV to the Sentinel vaccine rule ids'
+  );
+  check(/double-check before offering a vaccine/i.test(js), 'tally vaccine copy tells the user to double-check');
+  check(js.includes('SentinelRules'), 'tally reuses the live vaccine engine');
+  check(js.includes('qof-register'), 'tally loads QOF register rules so flu clinical-risk clauses can fire');
+  check(!/patient\?\.name|patient\.name|displayName/.test(js), 'tally vaccine UI never paints a patient name');
   check(js.includes('embedded-overview'), 'tally uses the Slot Counter overview');
   check(js.includes('AppointmentTallyCore'), 'tally delegates counts to the shared core');
   check(js.includes('parseBookRoute'), 'tally only injects on the appointment-book route');
   check(js.includes('&quot;'), 'esc() quotes attributes');
   check(/replace\(\/"\/g,\s*'&quot;'\)/.test(js), 'esc() replaces double quotes');
   check(/#ms-apt-tally/.test(css) && /#1e3a5f/.test(css), 'CSS uses the organise-canvas navy');
+  check(/ms-apt-tally-vax/.test(css), 'CSS styles the vaccine eligibility toggles');
   check(/prefers-reduced-motion/.test(css), 'CSS respects prefers-reduced-motion');
   check(manifest.includes('shared/appointment-tally-core.js'), 'core is in the manifest');
   check(manifest.includes('content-scripts/appointment-tally.js'), 'widget JS is in the manifest');

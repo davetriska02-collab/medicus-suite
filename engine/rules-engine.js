@@ -1058,15 +1058,26 @@
   // ACTIONABLE. A test carries this behaviour by setting `postInitiationDays`.
   //
   // Fail-safe against crying wolf: it fires ONLY when the drug's start date is
-  // known (med.startDate, derived from issue history) and there is no qualifying
-  // test on or after that start. An established patient whose start date we can't
-  // see, or who has had the test since starting, never trips it.
+  // a trusted clinical start (med.startDateSource === 'medication-history' —
+  // the true first-ever issue from the prescribing-history join) AND there is
+  // no qualifying test on or after that start. A batch-scoped regimen date
+  // (issue-history / issue-date) is treated as unknown: architecturally
+  // incapable of raising a false "started, never rechecked" alert. An
+  // established patient whose true start we can't see, or who has had the
+  // test since starting, never trips it.
   //
-  //   no startDate                          → no_data (neutral; can't assess)
+  //   no trusted startDate                  → no_data (neutral; can't assess)
   //   test recorded on/after startDate       → in_date (requirement met)
   //   none, ≤ dueSoon window                 → recently_initiated (neutral)
   //   none, > dueSoon but ≤ postInitiationDays→ due_soon (amber)
   //   none, > postInitiationDays             → overdue (red)
+  const POST_INIT_TRUSTED_START_SOURCE = 'medication-history';
+
+  function trustedClinicalStartDate(med) {
+    if (!med || med.startDateSource !== POST_INIT_TRUSTED_START_SOURCE) return null;
+    return med.startDate || null;
+  }
+
   function evalPostInitiationTest(test, obs, startDate, now) {
     const base = { ...test, latestObs: obs || null, postInitiation: true };
     if (!startDate) return { ...base, status: 'no_data', days: null };
@@ -1152,6 +1163,16 @@
     // join) can carry the true clinical start. Picking the longer name
     // alone was dropping that earlier date and re-breaking post-init
     // U&E checks.
+    //
+    // Rows with no vtmProductName get a fallback key in two EXACT-match cases
+    // only (still never a substring guess): (1) an acute line — Medicus names
+    // these "<substance> · <form>" (e.g. "Tirzepatide · Solution for
+    // injection"), and every issue of a titrating drug is its own line with its
+    // own productCode, so six acute issues used to mean six identical cards
+    // (HAR 133); the text before the " · " is the key; (2) a bare-name row
+    // (e.g. "Prescribed elsewhere: Tirzepatide") whose whole normalised name
+    // equals a key already established by (1) or by a real vtmProductName.
+    // Anything else without a vtm is still left alone.
     if (matchedMeds.length > 1) {
       const byVtm = new Map();
       const noVtm = [];
@@ -1160,8 +1181,20 @@
         const t = new Date(d);
         return isNaN(t.getTime()) ? null : t.getTime();
       };
+      const ACUTE_LINE_SEP = ' · ';
+      const keyOf = (m) => {
+        if (m.vtm) return normaliseDrugString(m.vtm);
+        const name = String(m.name || '');
+        const at = name.indexOf(ACUTE_LINE_SEP);
+        return at > 0 ? normaliseDrugString(name.slice(0, at)) : null;
+      };
+      const knownKeys = new Set(matchedMeds.map(keyOf).filter(Boolean));
       matchedMeds.forEach((m) => {
-        const key = m.vtm ? normaliseDrugString(m.vtm) : null;
+        let key = keyOf(m);
+        if (!key) {
+          const bare = normaliseDrugString(m.name);
+          if (bare && knownKeys.has(bare)) key = bare;
+        }
         if (!key) {
           noVtm.push(m);
           return;
@@ -1176,7 +1209,21 @@
         const keepStart = parseStart(keep.startDate);
         const otherStart = parseStart(other.startDate);
         if (otherStart != null && (keepStart == null || otherStart < keepStart)) {
-          byVtm.set(key, { ...keep, startDate: other.startDate });
+          byVtm.set(key, {
+            ...keep,
+            startDate: other.startDate,
+            startDateSource: other.startDateSource || null,
+          });
+        } else if (
+          otherStart != null &&
+          keepStart != null &&
+          otherStart === keepStart &&
+          other.startDateSource === POST_INIT_TRUSTED_START_SOURCE &&
+          keep.startDateSource !== POST_INIT_TRUSTED_START_SOURCE
+        ) {
+          // Same date, stronger provenance — keep the trusted source so a
+          // later post-init check can still fire.
+          byVtm.set(key, { ...keep, startDateSource: other.startDateSource });
         } else {
           byVtm.set(key, keep);
         }
@@ -1191,15 +1238,21 @@
         // Post-initiation requirement (fires if missing after the drug was
         // started) — evaluated against med.startDate, not the rolling interval.
         if (test.postInitiationDays != null) {
-          const result = evalPostInitiationTest(test, obs, med.startDate, now);
+          // Provenance gate: only a medication-history (true first-ever)
+          // start may drive this check. Batch-scoped issue-history /
+          // issue-date / missing source are passed as null so the
+          // evaluator cannot raise overdue/due_soon off a fake start.
+          const clinicalStart = trustedClinicalStartDate(med);
+          const result = evalPostInitiationTest(test, obs, clinicalStart, now);
           // Diagnostic-only annotation for the evidence/"why" text — does NOT
           // feed evalPostInitiationTest's own status decision (that stays the
           // single latest-qualifying-observation check above). Surfaces the
-          // start date actually read, plus the EARLIEST qualifying result on
+          // start date actually trusted, plus the EARLIEST qualifying result on
           // or after it, so a clinician can see exactly what the engine used
           // instead of having to trust an opaque status.
-          result.startDate = med.startDate || null;
-          if (med.startDate) {
+          result.startDate = clinicalStart;
+          result.startDateSource = med.startDateSource || null;
+          if (clinicalStart) {
             // Prefer the full multi-year point series (data.observationHistory)
             // over the latest-only data.observations — a drug started years ago
             // can have several qualifying results since, and data.observations
@@ -1213,12 +1266,12 @@
               ? historyPoints
               : filterMatchingObservations(data.observations, test);
             const sinceStart = sinceStartSource
-              .filter((o) => o && o.date && (daysBetween(med.startDate, o.date) ?? -1) >= 0)
+              .filter((o) => o && o.date && (daysBetween(clinicalStart, o.date) ?? -1) >= 0)
               .sort((a, b) => a.date.localeCompare(b.date));
             result.sinceStartCount = sinceStart.length;
             result.firstSinceStartDate = sinceStart.length ? sinceStart[0].date : null;
             if (sinceStart.length) {
-              const daysToFirst = daysBetween(med.startDate, sinceStart[0].date);
+              const daysToFirst = daysBetween(clinicalStart, sinceStart[0].date);
               const overdueAt = test.postInitiationDays || 21;
               const dueSoonAt =
                 test.postInitiationDueSoonDays != null ? test.postInitiationDueSoonDays : Math.max(0, overdueAt - 7);
@@ -1268,7 +1321,10 @@
         const minInterval = Math.min(...rule.tests.map((t) => t.intervalDays || 365));
         if (daysSinceStart != null && daysSinceStart < minInterval / 2) {
           testEvaluations.forEach((te) => {
-            if (te.status === 'no_data') {
+            // Post-initiation rows have their own recently_initiated window,
+            // and only on a trusted clinical start. Do not rewrite an
+            // untrusted post-init no_data into "recently started".
+            if (te.status === 'no_data' && !te.postInitiation) {
               te.status = 'recently_initiated';
               suppressedNoData = true;
             }
@@ -1342,6 +1398,7 @@
                 test: tv.testName || tv.name || '',
                 postInitiation: true,
                 startDate: tv.startDate || null,
+                startDateSource: tv.startDateSource || null,
                 firstSinceStartDate: tv.firstSinceStartDate || null,
                 sinceStartCount: tv.sinceStartCount || 0,
                 metWindow: !!tv.metWindow,
@@ -1643,7 +1700,14 @@
 
   function itemCodeHits(item, snomed) {
     if (!Array.isArray(snomed) || !snomed.length || !item) return false;
-    const codes = [item.code, item.conceptId, item.snomed, item.problemCode && item.problemCode.conceptId]
+    const codes = [
+      item.code,
+      item.conceptId,
+      item.snomed,
+      item.descriptionId,
+      item.problemCode && item.problemCode.conceptId,
+      item.problemCode && item.problemCode.descriptionId,
+    ]
       .filter(Boolean)
       .map((c) => String(c));
     return snomed.some((s) => codes.includes(String(s)));

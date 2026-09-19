@@ -729,6 +729,9 @@
         const arStatus = STATUS_LABEL[ar.status] || ar.status || '';
         if (ar.postInitiation) {
           if (!ar.startDate) {
+            if (ar.startDateSource && ar.startDateSource !== 'medication-history') {
+              return `${ar.test}: clinical start not confirmed (batch-scoped date only) → ${arStatus.toLowerCase()}`;
+            }
             return `${ar.test}: start date not visible in record → ${arStatus.toLowerCase()}`;
           }
           const startStr = formatDate(ar.startDate);

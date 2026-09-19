@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.262.1] — 2026-09-15
+## [v3.263.10] — 2026-09-19
 
 ### StackChan PHI test uses a checksum-invalid NHS lookalike
 
@@ -10,8 +10,6 @@ All notable changes to Medicus Suite are documented here.
 prove names / NHS / drug text never reach the robot. The fixture is now
 `943 476 5911` (Modulus-11 invalid, same as patient-alerts tests) so the
 committed-patient-data guard stays tight. No allowlist hole.
-
-## [v3.262.0] — 2026-09-15
 
 ### StackChan desk presence — Suite talks to a real robot
 
@@ -35,6 +33,681 @@ real hook (Sentinel chip colour) that changes the face.
   LAN origin is requested via `optional_host_permissions`.
 - **Docs:** `docs/STACKCHAN.md` (unbox → flash → prove). Shortlist for the
   Emile pitch: `docs/medicus-avatar-shortlist.md`.
+
+## [v3.263.9] — 2026-09-19
+
+### Provenance-gated restore of post-initiation U&E
+
+ACE-I/ARB and thiazide "U&E within ~2 weeks of starting" is back (NICE NG136 /
+CKS initiation recheck), but it can only fire when the start date is the true
+first-ever issue from the prescribing-history join.
+
+#403 withdrew the row because Medicus batch-scoped start dates (~12 months)
+were flagging patients established for years. That withdrawal was correct for
+the false-positive class. The residual gap: tests had constructed meds by hand
+and skipped `normaliseMedications`, so they never proved the #343 history join
+insufficient. The join is still keyed on `vtmProductName`; a regimen item
+without it silently kept the batch date.
+
+- `normaliseMedications` now stamps `startDateSource`: `medication-history` |
+  `issue-history` | `issue-date`.
+- `postInitiationDays` evaluates only against `medication-history`. Missing or
+  failed VTM join is `no_data` — architecturally incapable of a false
+  "started, never rechecked" alert. The later "recently initiated" rewrite
+  (which used any `startDate` to flip `no_data`) no longer touches
+  post-initiation rows, or an untrusted batch date could have relabelled
+  the gated `no_data` as a recent start.
+- Shipped tests restored on `ace-arb` (21d) and `thiazide-diuretic-ue` (28d).
+- `test-ace-arb-postinit.js` drives the real history join: join succeeds →
+  can fire; no `vtmProductName` → must not fire on the batch date; established
+  patient with a true old start → `in_date`. Hand-built bypass fixtures are
+  locked as unable to fire (the #403 process gap).
+
+H-002 / H-003. Does not move `last_cso_review_version`.
+## [v3.263.8] — 2026-09-19
+
+### Problem canvas — nesting suggestions no longer gated on dates; Bilateral cataracts added
+
+Live report: on a real patient the Cataract problem (recorded 2023-11-18) was
+offered Pseudophakia (same date) as a child, but NOT Phacoemulsification of
+lens (2023-10-27), Bilateral cataracts (2023-04-02) or Nuclear cataract
+(2023-03-01) — although the first and third were already in
+`rules/problem-nesting-overrides.json`. Cause: `buildNestingSuggestions`
+(2026-08-08) dropped any suggestion whose child was dated strictly before its
+parent ("a child can't predate the condition it's part of").
+
+- **Dates no longer gate a suggestion**, for SNOMED-derived and override pairs
+  alike. Problem dates say when something was *recorded*, not which is the
+  natural parent — a generic "Cataract" is often entered after the specific
+  entries it should group, and the earliest specific entry can itself be a sensible
+  parent. Nothing changes about safety: suggestions are never auto-applied,
+  every one still needs the explicit per-link confirm, the cycle guard and the
+  provenance tag (SNOMED vs practice override) are unchanged. Manual/drag links
+  were never date-gated.
+- **New override pair:** 95722004 Bilateral cataracts -> 193570009 Cataract
+  (verified live against the NHS termbrowser API: active, genuine IS-A
+  descendant of Cataract; added as the same workaround as Nuclear cataract,
+  since the live descendant search has been missing genuine descendants).
+- **Removed the now-dead date helpers** from `problem-nesting.js`:
+  `predatesParent`, `resolveChronologyDate` and that file's own `dateSortKey`
+  copy (plus the date regexes/month table only they used; ~120 lines). The
+  canvas's tile ordering is unaffected — `problem-nesting-canvas.js` has its own
+  `dateSortKey` / `compareDatesDesc`, and `window.ProblemNesting` never exposed
+  these.
+- `test-problem-nesting.js`: the old "child dated before parent is not
+  suggested" test now asserts the opposite; +a test using the real cataract
+  case's dates and the shipped overrides (all four children offered Cataract);
+  the date-helper tests are removed with the helpers.
+
+## [v3.263.7] — 2026-09-19
+
+### Flu eligibility — UK synonym "Is a carer" (SNOMED 224484003)
+
+Concept `224484003` was already on `vax-flu`, but Medicus's live term is
+the UK description **Is a carer** (description ID `1222761019`). A
+label-only problem with that wording did not match
+`patient themselves providing care`, so coded carers could still miss
+the chip.
+
+- Match phrase `is a carer` (still not a bare `carer` stem).
+- Description ID `1222761019` listed with the concept / Egton ids.
+- `itemCodeHits` now also reads `descriptionId` /
+  `problemCode.descriptionId`.
+
+`rules/vaccine-rules.json`, `engine/rules-engine.js`. Tests:
+`test-vaccine-rules.js`.
+
+## [v3.263.6] — 2026-09-19
+
+### Drug monitoring — stop one drug producing a card per acute issue (HAR 133)
+
+Live report: a patient on tirzepatide showed **eight** identical monitoring
+cards. The regimen held one current repeat (`vtmProductName: "Tirzepatide"`),
+six acute issues ("Tirzepatide · Solution for injection", one per pen strength
+or issue, each with its own `productCode`) and one "Prescribed elsewhere" row —
+and the acute and elsewhere rows carry no `vtmProductName`. The existing
+per-drug de-duplication in `evaluateDrugRule` only merges rows that have a VTM
+on both sides, so every VTM-less row became its own card, although the tests it
+checks (annual review, U&E) are patient-level and identical across all of them.
+Any drug with several acute issues in the last 12 months was affected.
+
+- Rows with no VTM now get a fallback merge key in two **exact-match** cases
+  only: an acute line ("<substance> · <form>" — the text before the "·"), and a
+  bare-name row (e.g. "Prescribed elsewhere: Tirzepatide") whose whole normalised
+  name equals an already-established key. Still never a substring guess; any other
+  VTM-less row is left alone exactly as before.
+- Merge behaviour is unchanged: keeps the longer display name and the EARLIEST
+  parseable start date (so post-initiation checks are not weakened).
+- Different substances are never merged (semaglutide stays its own card next to
+  tirzepatide under the GLP-1 rule).
+- `test-drug-monitoring-dedup.js`: +4 cases using HAR 133's exact shape (9 chips
+  before the fix, 2 after), an acute-only history, and no-merge cases.
+
+## [v3.263.5] — 2026-09-18
+
+### CSO documentation catch-up — six undocumented PRs + PR #403 review
+
+Retrospective CSN addenda **3.74–3.80** for six PRs that shipped with no
+safety-doc addendum (#359 concept-remap / year-only onset, #364 contacts
+on document-filing tasks, #385 repeat-prescribing authorisation pills,
+#386 companion investigation-review tasks, #398 focus-alerts toggle,
+#399 Rx canvas med summary / complexity) plus a review of PR #403's
+withdrawal of the ace-arb / thiazide post-initiation U&E test.
+
+Hazard **H-076** records the pills (originally drafted as H-072 — that ID
+on main is the later contacts name-quality write). **H-002 control (w)**
+records the post-initiation U&E addition-then-withdrawal in the control
+lineage. All entries **PENDING CSO REVIEW / Proposed**. Does not move
+`last_cso_review_version`. No code change.
+
+## [v3.263.4] — 2026-09-18
+
+### Non-routine prescription allocation canvas — overdue medication review flag
+
+Tiles now carry an amber "Med review overdue" badge when the patient's
+own **patient-level** medication review (a Medicus "future action",
+SNOMED 182836005 "Review of medication") is overdue — distinct from an
+*individual* medication's own reauthorisation-overdue flag, which the
+canvas already surfaces separately in its monitoring line.
+
+Confirmed live (Nick, three HAR captures): `data.futureActionIdRequiringAttention`
+on the task's own overview is a non-null future-action id specifically
+when that future action is overdue, and null both when none exists and
+when one exists but is still in-date. Two more literally-named fields on
+the same payload — `medicationRequiringReview` and
+`patientRequiresMedicationReview` — were checked and rejected: both were
+empty/false on a confirmed-overdue capture, so they track something
+else. Rides the same per-row overview fetch the item-count/complexity
+badge already makes (Pass A) — no new network call.
+
+Known gap, not yet closed: nothing in the payload confirms this field is
+scoped to medication-review future actions specifically, as opposed to
+any overdue future action Medicus chooses to surface on a prescription
+task — every capture to date has been a genuine medication review, but
+that has not been tested against a different overdue future-action type.
+
+Live-tested by Nick; regression-pinned in `test-rx-allocate-core.js`
+(358/358; +6 new checks).
+
+## [v3.263.3] — 2026-09-18
+
+### Lab Filing — per-profile comment allow-list, practice-wide profile sync (H-073)
+
+Diagnosed a real filing profile that could never fire: two fixed performer
+comments (an AKI-risk note on Creatinine, a NICE NG203 ethnicity-correction
+note on eGFR) recur on every renal panel and were correctly blocked by the
+"carries a comment the suite cannot score" gate. A filing profile can now
+carry `allowComments` — phrases the clinician types after reading a real
+comment — that excuse a specific, recurring comment for **that profile
+only**; the global benign-phrase set and the numeric severity gate are
+untouched.
+
+Filing-profile content (match rules, parameters, `allowComments`, trend
+guard) can also now sync practice-wide, via a new `labfiling` Practice
+Profile module — the same shared-folder channel the v3.260.0 Knowledge
+live-set sync already uses. Every synced profile still **arrives disabled**:
+the new module delegates to the existing `labfilingImport`/`lockForReview`
+path unconditionally (merge mode leaves an existing local profile of the
+same id — including its own enabled state — completely untouched; only new
+ids are appended, force-locked). A publish can never itself switch
+auto-filing on anywhere; each machine still needs a human review. The
+enable toggle now carries a bold, underlined "Click here to enable this
+profile" prompt so a freshly-synced (or freshly-authored) profile isn't
+missed. Profiles also record who last saved them and when (`updatedBy`/
+`updatedAt`), shown on the card.
+
+Merge review (onto v3.263.2): the live gate now excuses a comment only via
+the profile that *owns* that heading (`profilesOwningResult`), so a U&E
+allow-list phrase cannot silently clear a Lipids comment on a combined
+report. The whitelist checkbox copy no longer says "for everyone" (it is
+this machine until a practice profile is published). Merge-mode sync still
+never overwrites an existing local profile id.
+
+Regression-pinned in `test-lab-filing-utils.js` (allowComments scoping +
+owning-profile honesty), `test-practice-profile.js` (labfiling
+merge/replace/force-disable), and `test-service-worker.js` (the new import
+wiring). New `docs/HAZARD-LOG.md` H-073, pending CSO review.
+
+## [v3.263.2] — 2026-09-18
+
+### Allergy cleanup — offer to fix an onset date that is after the record date
+
+Live failure (HAR 132): converting a pre-defined allergy whose onset date
+(4 Mar 2014) was later than its record date (24 Jan 1993) was rejected by
+Medicus — `API 400: {"errors":{"onsetDate":["Onset date cannot be after the
+record date"]}}` — because every change-allergy payload re-posts the entry's
+own onset and record dates unchanged. Such entries (typically back-dated or
+imported records) could not be converted, text-cleaned, merged or tidied at
+all, and the error gave no way forward.
+
+- **Conversion modal** (Convert + "Clean up text"): an amber notice now names
+  both dates and offers "Set onset date to <record date>". Convert / Clean up
+  text stay disabled until it is accepted — the alternative is Cancel.
+- **Duplicate-merge modal**: the same offer, checked against the merged
+  entry's chosen onset and the KEEPER's record date; Merge stays disabled
+  until accepted (or the keeper / onset source is changed). `confirmMerge`
+  re-checks against the keeper's edit-allergy prefill and refuses to write
+  anything — including ending the duplicates — if an unaccepted conflict remains.
+- **Clear legacy code (bulk, panel checklist and canvas Finalise)**: entries
+  are prefetched and any conflicts are confirmed once for the batch (native
+  confirm, listing each entry's onset/record). OK sets their onset to the
+  record date; Cancel skips just those rows ("Left unchanged", still staged on
+  the canvas) and the rest are tidied. A failed prompt counts as "no".
+- Never applied silently: the onset date is a clinical fact, so it changes only
+  after an explicit accept. An acceptance is keyed to the exact onset/record pair,
+  so it never carries over to a different conflict. Partial onsets (`2014`,
+  `2014-03`) are compared by their earliest possible day, so a same-year or
+  same-month onset is not flagged on a guess.
+- Shared helper `onsetFixStatus`; 15 new cases in `test-allergy-cleanup.js`.
+  The modal and bulk-confirm wiring is not unit-tested (needs a DOM) and has not
+  yet been exercised live.
+
+## [v3.263.1] — 2026-09-18
+
+### Task presence — stop the occupied banner oscillating on some requests
+
+On some request overviews the injected "who is working on it" masthead
+(and the message / Clinical Summary tokens) fought Vue's re-render: the
+DOM hub re-painted on every mutation, and `insertionAnchor` treated our
+own token as a sibling, so the host flipped every frame.
+
+- Own presence nodes no longer count when climbing to a host, and a
+  connected token stays put unless Vue rebuilt an unrelated card.
+- Same-URL hub flushes skip paint when the masthead is already attached;
+  our own insert/move mutations never retrigger a paint.
+- If Vue still wipes the in-flow masthead three times in a short window,
+  it pins to `document.body` as a fixed overlay so the page stops jumping.
+
+`content-scripts/task-presence.js`, `content-scripts/task-presence.css`.
+Tests: `test-task-presence.js`.
+
+## [v3.263.0] — 2026-09-18
+
+### Appointment-book tally — flu / COVID / RSV eligibility toggles
+
+The diary tally still shows booked vs free. Three optional checkboxes now
+also count how many of those booked patients are eligible for flu, COVID
+and RSV — the same inferred rules as the Sentinel vaccine chips.
+
+- **Off by default.** Ticking Flu, COVID or RSV adds that count to the
+  button (`12 booked · 8 free · Flu 18`) and starts a polite read of
+  each unique booked patient on the types you already have ticked.
+- **Eligible, not just due.** Already-given and declined this season
+  still count as eligible; the panel also shows how many are still due.
+- **Counts only.** No names. Bookings without a patient id, and records
+  that could not be read, are listed as numbers so a zero is never a
+  silent all-clear.
+- **Same engine.** `vax-flu` / `vax-covid` / `vax-rsv` plus QOF register
+  rules, including a workstation disable in `sentinel.rules`. Double-check
+  before offering a vaccine (H-020).
+
+`shared/appointment-tally-core.js`, `content-scripts/appointment-tally.js`,
+`content-scripts/appointment-tally.css`. Toggles persist as `slots.vaxTally`
+(backed up with Slot Counter). Tests: `test-appointment-tally-core.js`.
+
+## [v3.262.1] — 2026-09-18
+
+### Reception pathways — wire topic terms for Keeper v1.11 red flags
+
+The 18 Sep Keeper run added `rf-under3m-fever` (earache) and `rf-rigors`
+(feverish-child) to `rules/reception-pathways.json` but missed the matching
+`RED_FLAG_TOPIC_TERMS` entries in `engine/reception-match.js`. Coverage
+tests fail closed on a missing entry (the flag would always read as a gap
+and be re-asked — safe, but noisier). Wired conservative terms from each
+flag's ask text, and updated the earache Pharmacy First ask-back pin to
+include the new infant-fever gap.
+
+## [v3.262.0] — 2026-09-18
+
+### The Keeper — monitoring-rules currency (CSO review)
+
+Compared every Sentinel monitoring rule in `rules/drug-rules.json` against
+current BNF monographs (BNF 92 cycle, September 2026) plus MHRA DSU.
+Additive only — no interval was lengthened.
+
+**New monitoring rules**
+- `ciclosporin-maintenance` — 56-day U&E / LFT / BP (BNF RA stable range
+  4–8 weeks). Ophthalmic brands (Ikervis, Verkazia, Cequa, Vevizye) and
+  any "eye drop" string excluded.
+- `tacrolimus-systemic` — 84-day FBC / LFT / U&E / BP. Protopic /
+  ointment / cream / cutaneous excluded.
+- `mercaptopurine-maintenance` — 84-day FBC / LFT / U&E. BNF names LFT
+  only; FBC/U&E are thiopurine class-parity with azathioprine (CSO may
+  ship LFT-only).
+- `cenobamate-lft` — annual LFT after the BNF June 2026 Ontozry
+  hepatotoxicity advice (LFTs before start and during treatment as
+  clinically indicated; annual is the Sentinel default).
+
+**Missing UK brands (silent under-match)**
+- Aripiprazole: Elozar, Arpoya
+- Denosumab: Bilprevda, Zvogra
+- Combined hormonal contraception: Drovelis / estetrol
+
+**Adjacent verified additions in the same run**
+- RSV 65–74 chronic-respiratory match now includes interstitial lung
+  fibrosis, pneumoconiosis and bronchopulmonary dysplasia (UKHSA HCP v05).
+- Earache facial-nerve palsy escalates 999 (NICE CKS otitis media).
+- Earache under-3-months-with-fever flag (duty); feverish-child rigors
+  flag (duty, NG143).
+- ACB table: biperiden / Akineton and flavoxate / Urispas at score 3
+  (ACBcalc).
+
+Held for CSO / a later pass: ACB score reductions (carbamazepine /
+oxcarbazepine 2→0), RSV poorly-controlled-asthma engine gate, new
+PINCER alert-library rules, adult abdominal-pain pathway.
+
+Sources: https://bnf.nice.org.uk/ (monographs + medicinal forms),
+https://www.gov.uk/drug-safety-update,
+https://www.gov.uk/government/publications/respiratory-syncytial-virus-rsv-programme-information-for-healthcare-professionals,
+https://cks.nice.org.uk/topics/otitis-media-acute/,
+https://www.nice.org.uk/guidance/ng143,
+https://www.acbcalc.com/medicines
+
+## [v3.261.62] — 2026-09-17
+
+### Lab Filing — block filing for any analyte no profile has declared (H-074)
+
+Found live while testing the previous release's allow-list feature: a CRP
+result sharing a task with a genuinely-configured U&E panel was offered for
+filing as part of "all normal" even though no filing profile names CRP
+anywhere. Never actually filed — caught before the confirm click — but the
+offer itself was the gap.
+
+Root cause: a filing profile's `match`/`analytes` gate whether the File
+button appears for a combined report at all, but nothing previously gated
+which *individual* results were swept into "all normal". The existing
+`requireRangeForAll` backstop only fires when a result has neither a
+clinician-set parameter nor a lab-supplied reference range — and most
+routine bloods, CRP included, are always lab-ranged, so an unconfigured
+analyte sailed straight through.
+
+New `unrecognisedAnalyteBlockers` now requires every result in the report to
+be named in a matched profile's own `analytes` list before filing is
+offered — same "unknown → not fileable" doctrine as `requireRangeForAll`,
+extended from "no range" to "never configured", using the same
+token-anchored match the parameter matcher already relies on. Fixed
+alongside a second, related bug in the same merge function:
+`mergeProfilesForReport`'s `analytes` field was hardcoded to an empty
+array, which would have left the new check unable to recognise anything
+from any profile at all — the same class of gap as the `allowComments`
+merge bug fixed the day before.
+
+**This is a genuine behavioural change across every existing filing
+profile.** Any profile whose `analytes` list is incomplete relative to what
+its reports actually show will now see filing blocked for the uncovered
+results, where it previously (incorrectly) offered them. Review your
+profiles' "Analyte names on this lab's reports" field if filing stops
+being offered somewhere it used to work.
+
+Regression-pinned in `test-lab-filing-utils.js`. New `docs/HAZARD-LOG.md`
+H-074, pending CSO review.
+
+### Lab Filing — fixed a filing attempt that silently never actually filed (H-075)
+
+Found live testing the previous release — the first time a live test
+reached the actual "File results" click, since every earlier attempt this
+week got blocked before getting that far. Symptom: clicking "File all
+normal" marked every result "Normal result, no action required", the
+confirm dialog appeared and was accepted, and the toast said the File
+control was clicked — but the task never actually left the queue, and
+Medicus's own primary button relabelled itself to "Reassign task".
+
+Root cause: Medicus's Next-Step radio control is a `<label for="id">`
+element whose actual `<input>` lives elsewhere in the DOM as a separate
+sibling, not nested inside the label. The macro's shared click helper
+(`realClick`) fired a full synthetic pointerdown/mousedown/pointerup/
+mouseup/click sequence on the label and then a *separate* `.click()`
+call — hitting that control's own interaction handling twice in one
+synchronous tick, with no time for its state to settle in between.
+
+`realClick` now resolves a label to its real associated control (via its
+`for` attribute, or a nested input for the wrap-style pattern used
+elsewhere) and clicks it directly, exactly once. Separately: `aria-checked`
+was proven, live, to always read `null` on this Medicus screen — so every
+"already selected, don't re-click" check in the macro was blind and
+re-clicking things that didn't need it. A new `isRadioSelected` helper
+reads the real control's `.checked` property instead, so an
+already-correct selection is never touched at all.
+
+This was diagnosed entirely from live evidence — console logs and DOM
+inspection run together with the practice, not guessed at — given this is
+the actual irreversible-write path. Live-confirmed working the same day.
+
+`docs/HAZARD-LOG.md` H-074 also live-confirmed working. New H-075, pending
+CSO review.
+
+Nick's branch claimed 3.261.59/60; those patches already shipped as
+Activity last-month (#419) and Task Presence (#420). This is 3.261.62.
+
+## [v3.261.61] — 2026-09-17
+
+### Signing Queue — RHS follows the book-signing list, not the whole practice
+
+When a clinician toggles onto their **own individual list** on Medicus book
+signing / the prescription-request queue, the Signing Queue (the RHS Rx
+panel) was still fetching the bare open pile — every practice request —
+and painting it next to a list that was only that person.
+
+The page already has one assignee channel: the task-list GET's
+`masterAssignee`. The panel now reuses that, and nothing else.
+
+- page-world stamps every prescription-request task-list GET onto
+  `data-ch-rx-list-scope`, including an empty `[]` (that is still that
+  person's list).
+- Signing Queue reads the stamp via the existing content-script message
+  channel. Individual scope GETs `?masterAssignee=<that UUID>` only —
+  never leftover `viewContext=homepage`. Practice / untoggled stays the
+  bare open list.
+- Toggle race: a generation token + `applySigningFetchResult` drop any
+  in-flight practice-wide payload that lands after the list has switched.
+  Scope change clears `state.rows` immediately so leftover practice rows
+  cannot paint.
+- Empty individual list is "No open repeat requests on this list." The
+  warm "pile's clear" line is reserved for a genuinely finished
+  practice-wide pile.
+- Multi-signer: Dave → Nick is a scope change. The previous signer's
+  rows are dropped before the next fetch is applied.
+
+Nick PRs #417/#418 claim 3.261.58; 3.261.59–.60 left for Activity /
+Task Presence. This is 3.261.61. Merge held for Dave.
+
+## [v3.261.60] — 2026-09-17
+
+### Task Presence — occupant token on list rows, Rx message, and RHS
+
+The occupied masthead already told you a colleague had the request open.
+That did not help the next clinician scanning the list — they still opened
+the item only to find it taken. The same Task Presence occupants (native
+Pusher `presence-{site}-task-{taskUuid}` plus the existing folder/hosted
+store fallback — not a second channel, never the list-occupancy channel)
+now paint a compact token on three surfaces:
+
+- **List row** — icon + highlighted display name next to the entry
+  (initials stay on the icon; the name hides when the cell is tight)
+- **Request / prescription message chrome** — left/main card
+- **Clinical Summary RHS** — the right-hand panel for that item
+
+Clears when they leave or the store row goes stale. Hide-for-now on the
+masthead does not hide the tokens. Advisory, never a lock. Book-signing
+RHS scoping is out of scope. List-row markers still need the folder or
+hosted store (native Pusher is only subscribed on the open request).
+
+## [v3.261.59] — 2026-09-17
+
+### Activity — Last month overflow inverted the date range
+
+`ActivityApi.preset('lastMonth')` did `setMonth(n-1)` *before* `setDate(1)`.
+On the 31st of a month whose predecessor is shorter (31 Mar/May/Jul/Oct/Dec)
+JS Date overflows — 31 Mar → 3 Mar → `setDate(1)` → **1 Mar**, with
+`end.setDate(0)` still **28 Feb**. The Activity tab then queried an inverted
+window and showed empty / wrong totals. Same trap in Submissions'
+mirrored "Last month" preset.
+
+Fix: set the start to the 1st *before* stepping the month (the 1st always
+exists). `fetchActivityReport` now refuses inverted ranges. The Activity
+module resets a persisted inverted pair to today, and a range/toggle change
+mid-fetch no longer paints today's numbers under a Last-7d label (or the
+reverse) — the dropped request is queued instead.
+
+Tests in `test-api-clients.js` pin lastMonth from 31 Mar/May/Jul/Oct/Dec,
+leap-year 31 Mar 2028, and the inverted-range reject. Those cases fail on
+v3.261.57.
+
+## [v3.261.57] — 2026-09-16
+
+### Contacts canvas — name-quality writes re-check before POST (H-072)
+
+Steward review of #416: H-072 control (g) said every `changeOfficialName` body
+was built from a fresh read, but split / capitalisation / preferred-name /
+former-name-delete used the canvas-load snapshot. A PDS update between open
+and click could overwrite a better current name, or delete a former name that
+was no longer just an initialised copy.
+
+Every name-quality write now re-derives the live page patient, re-fetches the
+relevant GET payload, refuses a mismatched `patientId`, and re-validates the
+detection still holds immediately before POST. Adopting a former name also
+aborts if the official name is no longer a placeholder, or if the middle-name
+choice is stale against the live pair.
+
+`isShorterVersionOfName` now only treats a single-letter initial (`D` / `D.`)
+as a shorter copy. Multi-letter shortenings (John→Johnny, Rob→Robert) are
+real history and are no longer offered for one-click delete.
+
+## [v3.261.56] — 2026-09-16
+
+### Problem-nesting canvas — two more cataract-procedure suggestions
+
+Added `rules/problem-nesting-overrides.json` pairs offering "Other extraction
+of cataract" (54885007) and "YAG laser capsulotomy of lens" (172532006) as
+children of "Cataract" (193570009), alongside the existing
+pseudophakia/nuclear-cataract/phaco entries. Both concepts confirmed active
+via the public NHS termbrowser API; procedure-axis sequelae of a cataract
+problem, not SNOMED IS-A descendants of it, so the live descendant search
+would not surface either on its own. Regression-pinned in
+`test-problem-nesting.js`.
+
+## [v3.261.55] — 2026-09-16
+
+### Contacts canvas — patient-name quality checks (detect + fix)
+
+New section on the contacts canvas flags five PDS-driven name-quality issues on
+the hub patient's own record, each with a targeted fix — detection confirmed
+via HAR 124-persdetails.har, every write endpoint confirmed via a second HAR
+session (125-editpreferredname.har through 128-deleteformername.har).
+
+- **Redundant preferred name** — a preferred name equal to the official FIRST
+  name specifically, never a middle name ("Arthur" for "John Arthur Smith" is
+  a genuine entry, since Medicus only shows first + last by default). "Clear
+  preferred name" one-click fix.
+- **Placeholder birth name** — official name is literally "Baby"/"Infant" plus
+  a surname, the known PDS pattern that repeatedly overwrites a child's real
+  name. Every former-name entry on record is listed as a candidate; "Use as
+  current name" adopts one, gated behind a native `confirm()` naming the exact
+  resulting text. A middle-name conflict between the current record and the
+  chosen former name (e.g. current "Dave" vs a former entry's "D") is caught
+  before the write and resolved by explicit choice, defaulted to the
+  longer/more complete value — never silently taken from the former entry.
+- **Split first name** — a two-word given name with no middle name recorded
+  (e.g. "John Arthur" as one field), which can stop the patient logging in
+  since the patient-facing site expects the split Medicus itself produces.
+  One-click mechanical split.
+- **Weird capitalisation** — any of title/first/middle/last name in all-caps
+  ("MR Andrew Smith", "Mr ANDREW Smith") — a GP2GP/PDS import artifact.
+  Suffix excluded (Roman numerals/post-nominal letters are legitimately
+  all-caps). One-click re-case; "Mc" is handled specially (McDonald), "Mac"
+  is deliberately left alone (too many real spelling variants to guess).
+- **Former name is just a shorter copy** — a former-name entry that is purely
+  an abbreviated version of the current name: same word count, every word
+  identical or a strict same-position prefix (e.g. "Test D Test" against
+  current "Test Dave Test"). One-click delete, no confirm dialog — it never
+  touches the current, displayed name.
+
+Every write re-checks patient identity immediately before firing, re-fetches
+from Medicus afterward rather than patching local state, and joins the
+shared in-flight guard the canvas's other writes already use. See
+`docs/HAZARD-LOG.md` **H-072** (PENDING CSO REVIEW).
+
+## [v3.261.54] — 2026-09-16
+
+### Companion — general-task pages get the record section (Clinic only)
+
+The Companion widget's record section (appointments, booking links, open
+tasks, outstanding investigations) stayed hidden on any task type besides
+`review-investigation-report` or a communication-thread task classified as
+a genuine medical/admin request — `loadPatientRecord`'s classification only
+recognises a `communicationThreadTaskType` field most task overviews don't
+carry, and deliberately fails closed rather than guess.
+
+HAR 123-misctask.har confirmed `general-task` overviews (`taskList=
+general_task`, the "Miscellaneous task" queue) carry a reliable patient ID
+at `data.patient.id` — the same shape `review-investigation-report` uses —
+so a dedicated branch was added that fetches it directly, bypassing the
+classifier entirely. Scoped to Clinic role only (not Reception, which
+wasn't asked for); the section renders after Book/Create task rather than
+its usual pre-Book slot.
+
+Also required adding the type to `runInject()`'s own trigger gate, which
+decides whether `loadPatientRecord()` is even called — the same
+second-layer fix `review-investigation-report` needed; missing it would
+have left the new branch unreachable dead code.
+
+### Companion — unused booking links drop off after 12 months
+
+The record section's "Unused booking links" list previously showed every
+unbooked link regardless of age. It now hides links older than 365 days;
+appointments, open tasks, and outstanding investigations are unchanged —
+this filter applies to booking links only.
+
+Booking links carry no raw date field, only Medicus's pre-formatted
+display string (e.g. `"18 Mar 2026, 17:43"`), so a dedicated parser reads
+the date out of that string for the comparison — kept deliberately
+separate from `dateOnlyFromCreated`'s own "echo, don't parse" display
+logic, since filtering and display are different jobs. A link whose date
+doesn't match the expected shape is kept, not hidden, so an unrecognised
+format never silently drops something real from view.
+
+## [v3.261.53] — 2026-09-15
+
+### Prescription-request canvas — non-routine inbox is not a homepage staff GET
+
+Dave: **Share out this inbox** on non-routine prescriptions treated the
+pile as empty (Split / Top up / Distribute equally / usual-GP send)
+while Medicus’s table still had work.
+
+#414 called this path PASS because it uses `location.search`. That is
+the leftover filter. The dedicated queue often still has
+`viewContext=homepage&masterAssignee=<data-ch-staff>` — the same class
+as Privacy Officer #413. A working staff stamp returns `[]` or a
+personal slice; a 4xx aborted `loadBoard` and wiped the board. When
+the page filter was empty, merge still stamped with that failed
+assignee, so person-shaped inbox names looked like sitting GP work.
+
+`fetchRxTaskList` now walks a query plan: skip the assignee when it is
+the staff stamp, then drop assignee / homepage, then `pending-review` /
+`pending`, then the bare open list. First non-empty wins; thrown steps
+are skipped. Stamp / merge use the winning search only. The grid’s
+`ch-task-list-data` ids are a classify-only hint when the winning GET
+has no inbox UUID. Copy names “no doctors working today” vs “no
+requests in the pile” vs “the table has rows and Suite’s list is
+empty”. Usual-GP send (#410/#411) is unchanged except that it sees
+the recovered Unallocated pile. Independent of #413/#414 (those PRs
+do not touch this path).
+
+## [v3.261.52] — 2026-09-15
+
+### Bulk widgets — same empty-list class as Privacy Officer, swept
+
+Dave asked for a sweep after the Privacy Officer **Bulk acknowledge?**
+no-op (v3.261.51 / PR #413). The proven failure: a frozen
+`viewContext=homepage&masterAssignee={data-ch-staff}` GET on a
+dedicated queue page. A working staff stamp returns `[]` while
+Medicus’s grid is full. Nick never got the stamp, so the unscoped
+fallback “worked”.
+
+Audit (investigate; discard hunches that do not hold):
+
+| Surface | Verdict |
+|---|---|
+| Send to routine (W8, `routine-rx-button.js`) | **PASS — not a twin.** Overview DOM macro. No task-list GET, no staff stamp, no table ticks as Suite selection. |
+| Privacy Officer bulk-ack (W21) | Already fixed in v3.261.51. Not regressed. |
+| EPS **Bulk discard?** (W21) | **Twin of the frozen-query half.** Capture ignored this page’s filters. No staff stamp (and must never gain one). |
+| Rx / lab / request / workflow allocate (W23) | **PASS.** Already use `location.search`. Inbox `masterAssignee` is the box on the page, not the staff stamp. |
+| Request Monitor / Today / Condor / Submissions | **PASS.** Date-range or configured-inbox polls, not mounted on a dedicated queue they can empty. |
+
+EPS now uses the same doctrine: this page’s `location.search` first,
+then the 2026-08-08 workflow capture, then unscoped fallbacks with a
+visible warning. Honest empty (from the shared engine) stays. Do not
+treat Medicus header-checkbox ticks as Suite’s selected-task set.
+
+## [v3.261.51] — 2026-09-15
+
+### Privacy Officer bulk-acknowledge — empty homepage inbox is not “no alerts”
+
+Dave, live: on the Privacy Officer Alerts task-list he ticked Medicus’s
+**Patient** header checkbox and clicked Suite’s **Bulk acknowledge?**.
+Nothing useful happened. The screenshot is the widget’s own italic
+*No pending privacy officer alerts.* above a selected grid — the click
+did open, the fetch had already returned `[]`.
+
+Root cause: the widget’s GET was still the 2026-08-08 homepage capture
+(`statuses[]=pending&viewContext=homepage&masterAssignee={data-ch-staff}`).
+That is a **personal inbox**, not the dedicated alerts queue. A working
+staff stamp (Dave) makes that GET empty while Medicus’s table is full.
+Nick’s privacy-officer role never got the stamp, so the unscoped
+fallback was the only path that worked — a working stamp was the
+regression. Medicus’s header checkbox is also not Suite’s selected-task
+set (H6: AG-Grid `row-index` is not a task id).
+
+- Query plan, first non-empty response wins: this page’s own
+  `location.search` filters, then the historical homepage+assignee
+  capture, then unscoped `statuses[]=pending`, unscoped homepage, and
+  `viewContext=workflow`. Wider steps keep the existing review warning.
+- Prefetch on page match. An empty Suite list is visible without a
+  click; the pill looks disabled and the status says table ticks are
+  not used. If the task-list bridge saw rows Suite did not, that
+  mismatch is named. Retry stays on the empty/error states.
+- Confirm is still the two-step `{ taskId }` POST to
+  `/tasks/patient-privacy-officer/complete`.
 
 ## [v3.261.50] — 2026-09-14
 

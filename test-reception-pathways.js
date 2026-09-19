@@ -333,6 +333,23 @@ check(feverAdult && (feverAdult.sources || []).some(s => /CG151/.test(s)), 'feve
 }
 check(/v1\.10/.test(doc.specVersion || ''), 'specVersion records the v1.10 additions');
 
+console.log('\n--- 2026-09-18 Keeper: earache facial-droop 999 + infant fever; feverish-child rigors ---');
+{
+  const earache = doc.pathways.find((p) => p.id === 'earache');
+  const rfFacial = earache && (earache.redFlags || []).find((rf) => rf.id === 'rf-facial-droop');
+  check(!!rfFacial, 'earache rf-facial-droop exists');
+  check(rfFacial && rfFacial.escalate === '999', 'earache rf-facial-droop escalates to 999 (CKS AOM facial-nerve paralysis)');
+  const rfInfant = earache && (earache.redFlags || []).find((rf) => rf.id === 'rf-under3m-fever');
+  check(!!rfInfant, 'earache rf-under3m-fever exists');
+  check(rfInfant && rfInfant.escalate === 'duty', 'earache rf-under3m-fever escalates to duty');
+  check(rfInfant && /under 3 months/i.test(rfInfant.ask), 'earache rf-under3m-fever ask mentions under 3 months');
+  const rfRigors = feverishChild && (feverishChild.redFlags || []).find((rf) => rf.id === 'rf-rigors');
+  check(!!rfRigors, 'feverish-child rf-rigors exists');
+  check(rfRigors && rfRigors.escalate === 'duty', 'feverish-child rf-rigors escalates to duty');
+  check(rfRigors && /rigors|uncontrollabl/i.test(rfRigors.ask), 'feverish-child rf-rigors ask mentions rigors');
+  check(/v1\.11/.test(doc.specVersion || ''), 'specVersion records the v1.11 Keeper additions');
+}
+
 // ── 2026-07-28 (plan section E): disposition routing blocks ──────────────────
 // Structural locks only — the guardrail truth table lives in
 // test-reception-disposition.js. What matters here is that the five
