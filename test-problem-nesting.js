@@ -17,9 +17,6 @@ const {
   buildUpdateProblemLinksPayload,
   resolveOverviewConceptId,
   wouldCreateCycle,
-  dateSortKey,
-  resolveChronologyDate,
-  predatesParent,
   buildOverridePairSet,
   buildNestingSuggestions,
   buildTextLinkSuggestions,
@@ -167,20 +164,25 @@ console.log('--- buildNestingSuggestions: the safety rules ---');
 
   check(buildNestingSuggestions(null, null, null).length === 0, 'null inputs -> empty, never throws');
 
-  // Chronology sense-check (2026-08-08 request): a candidate child dated
-  // BEFORE its candidate parent can't genuinely be part of it — the parent
-  // condition didn't exist yet. Angioplasty (2005) can't be the parent of a
-  // stent inserted in 2001.
+  // Dates never gate a suggestion (2026-09-19; the 2026-08-08 "a child can't
+  // predate its parent" check was removed). A generic parent problem is
+  // often recorded AFTER the specific entries it should group — real
+  // cataract case: Cataract 2023-11-18, Phacoemulsification 2023-10-27,
+  // Bilateral cataracts 2023-04-02, Nuclear cataract 2023-03-01.
   const infoBackwards = {
     angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
     stent: { conceptId: 'C1', parentProblemId: null, onsetDate: '1 Jan 2001' },
     htn: { conceptId: 'H1', parentProblemId: null },
   };
   check(
-    buildNestingSuggestions(problems, infoBackwards, hits).length === 0,
-    "a child dated before its candidate parent isn't suggested — can't predate the condition it's part of"
+    buildNestingSuggestions(problems, infoBackwards, hits).length === 1,
+    'a child dated before its candidate parent IS still suggested — dates do not gate'
   );
-  // Same date, or child dated AFTER — not excluded.
+  check(
+    buildNestingSuggestions(problems, infoBackwards, hits)[0].parentOptions[0].source === 'snomed',
+    'the date-independent suggestion keeps its SNOMED provenance tag'
+  );
+  // Same date, or child dated AFTER — also offered.
   const infoSameDay = {
     angio: { conceptId: 'P1', parentProblemId: null, onsetDate: '1 Jan 2005' },
     stent: { conceptId: 'C1', parentProblemId: null, onsetDate: '1 Jan 2005' },
@@ -341,6 +343,18 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
     pairSet.has('172532006|193570009'),
     'YAG laser capsulotomy of lens (172532006) as a child of cataract (193570009) is in the shipped file'
   );
+  // 2026-09-19: bilateral cataracts (Nick) — verified live against the NHS
+  // termbrowser API (active; genuine IS-A descendant of cataract). Nuclear
+  // cataract and phacoemulsification were re-requested the same day and are
+  // already pinned above / below.
+  check(
+    pairSet.has('95722004|193570009'),
+    'bilateral cataracts (95722004) as a child of cataract (193570009) is in the shipped file'
+  );
+  check(
+    pairSet.has('84149000|193570009'),
+    'phacoemulsification (84149000) as a child of cataract (193570009) is in the shipped file'
+  );
   // 2026-08-26: practice-requested seizure/epilepsy pairs (Nick) — added
   // while separately testing a problem-description-cleanup fix.
   check(
@@ -373,112 +387,36 @@ console.log('--- rules/problem-nesting-overrides.json: the shipped list itself -
   });
 }
 
-console.log('--- dateSortKey / resolveChronologyDate / predatesParent ---');
+console.log('--- real cataract case (2026-09-19): dates never gate the shipped override pairs ---');
 {
-  check(dateSortKey('1 Jan 2005') === '2005-01-01', 'single-digit day zero-padded');
-  check(dateSortKey('20 Apr 2020') === '2020-04-20', 'two-digit day parsed');
-  check(dateSortKey(null) === null, 'null -> null');
-  check(dateSortKey('garbage') === null, 'garbage -> null, never throws');
-  // recordDate comes back from slideover/overview ALREADY in ISO shape
-  // (confirmed live 2026-08-08, HAR 48: "recordDate":"2025-01-15" on the
-  // SAME response as "onsetDate":"20 Apr 2006") — must parse both formats,
-  // or the onset-blank record-date fallback below silently goes null.
-  check(dateSortKey('2025-01-15') === '2025-01-15', 'already-ISO shape (recordDate) parsed too');
-  // The real bug Nick found live 2026-08-20: a partial onset date (month +
-  // year only, no day — a real shape Medicus stores for an imported/
-  // historic record) used to fall through the day-requiring regex and
-  // return null, which silently defeated predatesParent's chronology check
-  // for that problem, not just its display sort order.
-  check(dateSortKey('Dec 2008') === '2008-12', 'partial "Mon YYYY" onset date parses to a YYYY-MM key, not null');
-  // The real bug Nick found live 2026-08-27: a YEAR-ONLY onset date (a
-  // "since 2012" prostate-cancer problem, additionalInformation confirming
-  // it, no month recorded at all) sorted as fully undated — the SAME
-  // failure mode the 2026-08-20 month-only fix addressed, one level less
-  // specific, and not covered by that fix.
-  check(dateSortKey('2012') === '2012', 'a bare year with no month parses to a YYYY key, not null');
-  check(dateSortKey('12345') === null, 'a 5-digit string is not a bare year — never guessed at');
-
-  check(
-    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '1 Jan 2020' }) === true,
-    'a partial-dated child correctly predates a later full-dated parent — the real live case this fixes'
-  );
-  check(
-    predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: 'Dec 2008' }) === true,
-    'a partial-dated parent is also handled — the earlier full-dated child still predates it'
-  );
-  check(
-    predatesParent({ onsetDate: '2012' }, { onsetDate: '1 Jan 2020' }) === true,
-    'a year-only-dated child correctly predates a later full-dated parent'
-  );
-  check(
-    predatesParent({ onsetDate: '1 Jan 1990' }, { onsetDate: '2012' }) === true,
-    'a year-only-dated parent is also handled — the earlier full-dated child still predates it'
-  );
-  // Shared-precision comparison: "unknown within the year/month" must never
-  // read as "known to predate" — a bare 'YYYY' key is a string prefix of
-  // every fuller key in that year, so a raw `<` would exclude these.
-  check(
-    predatesParent({ onsetDate: '2012' }, { onsetDate: '15 Mar 2012' }) === false,
-    'a year-only child does NOT predate a full-dated parent in the same year'
-  );
-  check(
-    predatesParent({ onsetDate: '2012' }, { onsetDate: '31 Dec 2012' }) === false,
-    'a year-only child does NOT predate a parent dated at the end of the same year'
-  );
-  check(
-    predatesParent({ onsetDate: '2012' }, { onsetDate: 'Jun 2012' }) === false,
-    'a year-only child does NOT predate a month-only parent in the same year'
-  );
-  check(
-    predatesParent({ onsetDate: '2012' }, { onsetDate: null, recordDate: '2012-03-15' }) === false,
-    'a year-only child does NOT predate a parent whose record-date fallback is in the same year'
-  );
-  check(
-    predatesParent({ onsetDate: 'Dec 2008' }, { onsetDate: '15 Dec 2008' }) === false,
-    'a month-only child does NOT predate a full-dated parent in the same month'
-  );
-  check(
-    predatesParent({ onsetDate: '15 Mar 2012' }, { onsetDate: '2012' }) === false,
-    'a full-dated child does NOT predate a year-only parent in the same year'
-  );
-  check(
-    predatesParent({ onsetDate: '2011' }, { onsetDate: '15 Mar 2012' }) === true,
-    'a year-only child in an earlier year still predates'
-  );
-
-  check(
-    resolveChronologyDate({ onsetDate: '1 Jan 2020', recordDate: '1 Jan 2019' }) === '2020-01-01',
-    'onset date preferred when present'
-  );
-  check(
-    resolveChronologyDate({ onsetDate: null, recordDate: '1 Jan 2019' }) === '2019-01-01',
-    'record date used when onset is blank — same fallback the canvas displays'
-  );
-  check(
-    resolveChronologyDate({ onsetDate: null, recordDate: '2019-01-01' }) === '2019-01-01',
-    'the ISO-shaped recordDate fallback resolves correctly too — the real live bug (2026-08-08): this used to silently return null'
-  );
-  check(resolveChronologyDate(null) === null, 'no info at all -> null, never throws');
-
-  check(
-    predatesParent({ onsetDate: '1 Jan 2001' }, { onsetDate: '1 Jan 2005' }) === true,
-    'an earlier-dated child predates a later-dated parent'
-  );
-  check(
-    predatesParent({ onsetDate: null, recordDate: '2001-01-01' }, { onsetDate: '1 Jan 2005' }) === true,
-    'mixed formats across the pair (ISO recordDate fallback vs UK-style onsetDate) still compare correctly'
-  );
-  check(
-    predatesParent({ onsetDate: '1 Jan 2005' }, { onsetDate: '1 Jan 2001' }) === false,
-    'a child dated AFTER the parent does not predate it'
-  );
-  check(
-    predatesParent({ onsetDate: '1 Jan 2005' }, { onsetDate: '1 Jan 2005' }) === false,
-    'equal dates do not count as predating'
-  );
-  check(predatesParent({}, { onsetDate: '1 Jan 2005' }) === false, 'child date unknown -> fails open, not excluded');
-  check(predatesParent({ onsetDate: '1 Jan 2005' }, {}) === false, 'parent date unknown -> fails open, not excluded');
-  check(predatesParent(null, null) === false, 'null inputs -> false, never throws');
+  const overrides = buildOverridePairSet(require('./rules/problem-nesting-overrides.json').pairs);
+  const problems = [
+    { id: 'cat', description: 'Cataract' },
+    { id: 'pseudo', description: 'Pseudophakia' },
+    { id: 'phaco', description: 'Phacoemulsification of lens' },
+    { id: 'bilat', description: 'Bilateral cataracts' },
+    { id: 'nuc', description: 'Nuclear cataract' },
+  ];
+  const info = {
+    cat: { conceptId: '193570009', parentProblemId: null, onsetDate: null, recordDate: '2023-11-18' },
+    pseudo: { conceptId: '95217000', parentProblemId: null, onsetDate: null, recordDate: '2023-11-18' },
+    phaco: { conceptId: '84149000', parentProblemId: null, onsetDate: null, recordDate: '2023-10-27' },
+    bilat: { conceptId: '95722004', parentProblemId: null, onsetDate: null, recordDate: '2023-04-02' },
+    nuc: { conceptId: '53889007', parentProblemId: null, onsetDate: null, recordDate: '2023-03-01' },
+  };
+  const out = buildNestingSuggestions(problems, info, new Set(), overrides);
+  const byChild = Object.fromEntries(out.map((s) => [s.childId, s]));
+  ['pseudo', 'phaco', 'bilat', 'nuc'].forEach((id) => {
+    check(
+      byChild[id] && byChild[id].parentOptions.length === 1 && byChild[id].parentOptions[0].id === 'cat',
+      id + ' is offered a nest under Cataract even though it is dated before it'
+    );
+    check(
+      byChild[id] && byChild[id].parentOptions[0].source === 'override',
+      id + ' is tagged as a practice override (not credited to SNOMED)'
+    );
+  });
+  check(!byChild.cat, 'Cataract itself is not offered a parent');
 }
 
 console.log('--- manualChildOptions: the manual builder is looser, except the cycle guard ---');
