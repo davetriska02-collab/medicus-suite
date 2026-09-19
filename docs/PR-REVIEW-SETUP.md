@@ -46,7 +46,7 @@ review:
 
 ### History — Claude "Virtual Dave" Action (retired)
 
-Until v3.263.11 this gate ran `anthropics/claude-code-action` with the
+Until v3.263.13 this gate ran `anthropics/claude-code-action` with the
 `virtual-dave` persona, authenticated by a repo secret
 `CLAUDE_CODE_OAUTH_TOKEN` that expired periodically and silently killed
 reviews when it lapsed. That Action, the Claude GitHub App installation, and
