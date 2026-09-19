@@ -1294,7 +1294,17 @@
       var url = buildConceptUrl(config, conceptId);
       if (!url) return parseConceptRetirement(null);
       var relayed = await chrome.runtime.sendMessage({ action: 'termbrowser:fetchConcept', url: url });
-      if (!relayed || !relayed.ok || !relayed.httpOk) return parseConceptRetirement(null);
+      // relayed.timedOut (service-worker.js's own AbortController bound, added
+      // 2026-08-01) is surfaced as a distinct flag on the fail-closed result —
+      // not folded into a generic error — so runRetiredCodesScan can tell the
+      // clinician this specific code's status is UNKNOWN because termbrowser
+      // itself didn't respond, rather than silently under-counting it the same
+      // as every other "nothing to flag" case.
+      if (!relayed || !relayed.ok || !relayed.httpOk) {
+        var failedClosed = parseConceptRetirement(null);
+        failedClosed.timedOut = !!(relayed && relayed.timedOut);
+        return failedClosed;
+      }
       var data;
       try {
         data = JSON.parse(relayed.text);
@@ -1470,6 +1480,7 @@
         genericAdditionalInfoSaving: false,
         severityContradiction: null, // {stated, current, cleaned} — set when the GP2GP severity-defaulting text contradicts the stored significance (see computeAdditionalInfoFindings)
         severityContradictionSaving: false,
+        severityCorrected: null, // {stated} — set once applyCorrectSeverityAndRemoveJunk saves successfully; drives the "Refresh page" offer (see severityCorrectedHtml)
         severityReviewNote: null, // {priorityValue, current} — set when a source-system "PRIORITY=n" value with no confirmed Major/Minor mapping was found (see computeAdditionalInfoFindings) — informational only, no correction offered
         linkSuggestion: null, // {problemName, match:{problemId,description,confidence}|null, source, cleaned} — set when a "(Grouped with X)" reference was found (see computeAdditionalInfoFindings / shared/problem-text-linking.js)
         linkSuggestionActing: false, // true while a create-link POST for this row is in flight (any of the three relationship choices)
@@ -2206,6 +2217,30 @@
     );
   }
 
+  // Confirmation + explicit "Refresh page" offer once the severity/junk-text
+  // save above has actually gone through — mirrors problem-bulk-end.js's own
+  // renderDoneStep (same reasoning: the structured significance field has no
+  // on-page representation this content script can update in place, unlike
+  // applyCode's problemCode text swap, so Medicus's OWN list keeps showing
+  // the stale severity until reloaded — a silent state clear here read as
+  // "did this actually do anything?" with no visible change and no refresh).
+  // Never an auto-reload — same discipline as problem-bulk-end.js's own note:
+  // a half-typed consultation elsewhere on the page must never be binned by
+  // a reload the clinician didn't ask for.
+  function severityCorrectedHtml(problemId, st) {
+    if (!st.severityCorrected) return '';
+    return (
+      '<div class="ms-pdc-severity-corrected">' +
+      '<div class="ms-pdc-severity-corrected-note">✓ Severity corrected to <strong>' +
+      esc(capitalize(st.severityCorrected.stated)) +
+      '</strong> and junk text removed. Medicus’s own list won’t reflect the new severity until the page is refreshed.</div>' +
+      '<button type="button" class="ms-pdc-severity-refresh-btn" data-problem-id="' +
+      esc(problemId) +
+      '">Refresh page</button>' +
+      '</div>'
+    );
+  }
+
   // Source-system priority value, no confirmed severity mapping (2026-07-29)
   // — see rules/generic-additional-info-text.json's sourceSystemPriorityValue
   // entry for the full story. Deliberately informational-only, no button:
@@ -2498,6 +2533,7 @@
         : '') +
       nestingInfoHtml(problemId, st) +
       severityContradictionHtml(problemId, st) +
+      severityCorrectedHtml(problemId, st) +
       severityReviewNoteHtml(st) +
       linkSuggestionHtml(problemId, st) +
       genericAdditionalInfoHtml(problemId, st) +
@@ -2743,6 +2779,11 @@
         } else {
           undoJournalCodeSync(problemId, entryId);
         }
+      });
+    });
+    root.querySelectorAll('.ms-pdc-severity-refresh-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        location.reload();
       });
     });
     // Grouped multi-synonym "Use" button (see candidateGroupsHtml) — reads
@@ -4238,6 +4279,7 @@
         significance: correctedSignificance,
       });
       st.severityContradiction = null;
+      st.severityCorrected = { stated: correctedSignificance };
       // The plain generic-strip offer was suppressed while the contradiction
       // was live (see computeAdditionalInfoFindings) — cleared here too since
       // this save already removed every matched generic line, same `cleaned`
@@ -4467,6 +4509,7 @@
   var _retiredScanState = 'idle'; // 'idle' | 'scanning' | 'done' | 'error'
   var _retiredScanError = null;
   var _retiredFlaggedCount = 0;
+  var _retiredTimedOutCount = 0; // distinct concepts whose termbrowser lookup timed out this run
 
   async function runRetiredCodesScan() {
     // Captured before the first await (review finding): scan() resets
@@ -4477,6 +4520,7 @@
     var scanPatientId = _lastPatientId;
     _retiredScanState = 'scanning';
     _retiredScanError = null;
+    _retiredTimedOutCount = 0;
     renderRetiredWidget();
     try {
       if (!_problemsCache || !_problemsCache.length) throw new Error('No active problems to check.');
@@ -4528,6 +4572,9 @@
           });
         })
       );
+      _retiredTimedOutCount = distinctConceptIds.filter(function (conceptId) {
+        return retirementByConceptId[conceptId] && retirementByConceptId[conceptId].timedOut;
+      }).length;
       // Zero extra fetches — prefillsById[p.id].additionalInformation is
       // already in hand from the edit-problem fetch above, so this THIRD
       // (and FOURTH — severity contradiction, same source data) flagging
@@ -4729,7 +4776,16 @@
             (_retiredFlaggedCount === 1 ? '' : 's') +
             ' flagged (retired code, Read-code-derived description, generic import text, a GP2GP severity-defaulting contradiction, an unmapped source-system priority value, and/or a "Grouped with" reference suggesting a link to another problem) — see "Clean up code" on the flagged problem(s) above.'
           : 'Nothing flagged.') +
-        '</span>'
+        '</span>' +
+        (_retiredTimedOutCount
+          ? ' <span class="ms-pdc-retired-scan-timeout-note">⚠ ' +
+            _retiredTimedOutCount +
+            ' code' +
+            (_retiredTimedOutCount === 1 ? '' : 's') +
+            " could not be checked against SNOMED — termbrowser.nhs.uk didn't respond in time, so retirement status for " +
+            (_retiredTimedOutCount === 1 ? 'it is' : 'those is') +
+            ' unknown, not confirmed clear. This usually reflects a temporary problem with that NHS service, not this extension — try again shortly.</span>'
+          : '')
       );
     }
     return '<button type="button" class="ms-pdc-retired-scan-btn" id="ms-pdc-retired-scan-btn">Code cleanup?</button>';
