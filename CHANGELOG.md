@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.263.11] — 2026-09-19
+## [v3.263.14] — 2026-09-19
 
 ### Termbrowser retirement-scan hang fix + severity-correction refresh note
 
