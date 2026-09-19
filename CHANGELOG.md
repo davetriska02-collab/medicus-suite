@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.15] — 2026-09-19
+
+### Backup restore — every suite/triage restore failed on `systemChips`
+
+Live report (Nick, restoring a work backup onto a home PC): the Options
+"Restore from this backup" button appeared to do nothing. The real result was
+hidden — `#backupStatus` sits at the very bottom of the Backup tab, ~20 module
+cards below the button, and clears after 4 s — and read:
+`Restore failed: triagelens.config.systemChips must be an array. — no changes were applied`.
+
+Cause: `sanitiseTriageConfigForImport` (shared/io/triage-io.js, added by the
+2026-08-23 audit hardening, v3.237.2) required `rules`, `resultRules` AND
+`systemChips` to be arrays. `systemChips` is a **map keyed by chip id**
+(`{ "queue.child": { enabled, label, kind, actions }, ... }`) — as shipped in
+`defaults.json`, as merged by `mergeShippedDefaults`
+(`{ ...shipped.systemChips, ...cfg.systemChips }`) and as validated by the
+options editor ("systemChips must be an object"). Every real triage config
+carries it, so **every backup restore that included a saved triage config was
+rejected** from v3.237.2 onward. The transactional rollback worked as designed
+(nothing was changed). A test enforced the wrong rule (`systemChips: 'not-a-list'`
+expecting "must be an array").
+
+- `systemChips` must now be a plain object (arrays, strings and null are still
+  rejected, before any write). `rules` / `resultRules` are unchanged (arrays).
+  The migration-stranding guard (imported `version` dropped) is unchanged.
+- `test-triage-io.js` (19 checks): the wrong test replaced by rejection tests
+  for non-maps that also assert nothing was written; regression tests restore the
+  real `defaults.json` shape incl. a customised chip, and pass the whole shipped
+  config through the sanitiser. The new checks fail on the old code.
+- Not changed here (worth a follow-up): restore results are still shown in
+  `#backupStatus` at the bottom of the page, which is what hid this error.
+
 ## [v3.263.13] — 2026-09-19
 
 ### Version renumber: 3.263.11 → 3.263.13
