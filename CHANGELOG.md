@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.263.12] — 2026-09-19
+## [v3.263.15] — 2026-09-19
 
 ### Backup restore — every suite/triage restore failed on `systemChips`
 
@@ -33,6 +33,36 @@ expecting "must be an array").
   config through the sanitiser. The new checks fail on the old code.
 - Not changed here (worth a follow-up): restore results are still shown in
   `#backupStatus` at the bottom of the page, which is what hid this error.
+
+## [v3.263.13] — 2026-09-19
+
+### Version renumber: 3.263.11 → 3.263.13
+
+The Medicus Steward change below briefly shipped to `main` as v3.263.11, but
+v3.263.11 and v3.263.12 are already claimed by in-flight PRs #430 and #431 —
+so `main` skips to v3.263.13 to avoid the collision. No code change beyond the
+version fields.
+
+### PR review gate handed to Medicus Steward — Claude Action retired
+
+Contributor PR review is now owned by **Medicus Steward** (the Grok Bot CI
+watch). The `Virtual Dave PR review` GitHub Action
+(`anthropics/claude-code-action`) is retired, along with its
+`CLAUDE_CODE_OAUTH_TOKEN` dependency — the token expired periodically and
+silently killed reviews when it lapsed.
+
+- `.github/workflows/claude-review.yml` → `steward-review.yml`
+  ("Medicus Steward PR review gate"): same triggers (opened / reopened /
+  ready_for_review), same skip rules (drafts, maintainer's own PRs), and the
+  **same `review` job id** so the branch-protection required check still
+  matches. The job posts one deduped handover notice via the built-in
+  `GITHUB_TOKEN` and exits green — no Anthropic secret, no model call.
+- `docs/PR-REVIEW-SETUP.md` rewritten: Steward owns review; the Claude
+  App / `CLAUDE_CODE_OAUTH_TOKEN` setup section replaced with a retirement
+  note (the secrets can be deleted). Governance stack unchanged — the Steward
+  remains advisory; deterministic tests + CODEOWNERS review are the gates.
+
+No extension code changed — CI/infra only.
 
 ## [v3.263.10] — 2026-09-19
 
