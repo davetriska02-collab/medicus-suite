@@ -387,6 +387,14 @@ const PracticeProfile = (() => {
               applied.push('triage');
             } else {
               const localTests = Array.isArray(local.oirTests) ? local.oirTests : [];
+              // Engine choice for the Outstanding Requests matcher is practice-published (Phase D, decision 5): the
+              // profile carries it and it is applied whenever the profile is applied — a practice chooses the engine
+              // once, not per PC. Whitelisted values only; anything else (or an absent key from an older publisher)
+              // leaves the local choice alone. Every failure mode of the catalogue engine falls back to the legacy one.
+              const publishedEngine = config.prefs && typeof config.prefs === 'object' ? config.prefs.oirEngine : undefined;
+              const applyEngine = publishedEngine === 'legacy' || publishedEngine === 'catalogue';
+              const engineChanged =
+                applyEngine && !(local.prefs && local.prefs.oirEngine === publishedEngine);
               // ── Retirement: CONTENT-AWARE, never a blind key filter ───────
               // An edited test is never merged in-place over an existing key
               // (that would risk silently clobbering a clinician's own local
@@ -480,10 +488,10 @@ const PracticeProfile = (() => {
                 }
               }
 
-              if (retiredSomething || addedSomething || updatedSomething) {
-                await chrome.storage.local.set({
-                  'triagelens.config': Object.assign({}, local, { oirTests: nextTests }),
-                });
+              if (retiredSomething || addedSomething || updatedSomething || engineChanged) {
+                const next = Object.assign({}, local, { oirTests: nextTests });
+                if (engineChanged) next.prefs = Object.assign({}, local.prefs || {}, { oirEngine: publishedEngine });
+                await chrome.storage.local.set({ 'triagelens.config': next });
                 applied.push('triage');
               }
             }

@@ -586,11 +586,18 @@
 
     // Coverage — mirrors the existing matcher's confident/tentative tiers (see header).
     const coverage = new Map();
-    const upgrade = (id, conf, via, rids, labMessageOnly) => {
+    const upgrade = (id, conf, via, rids, labMessageOnly, groupNo) => {
       const cur = coverage.get(id);
       if (!cur || (conf === 'confident' && cur.confidence !== 'confident')) {
-        coverage.set(id, { confidence: conf, via, results: [...new Set(rids)], labMessageOnly });
+        coverage.set(id, {
+          confidence: conf,
+          via,
+          results: [...new Set(rids)],
+          labMessageOnly,
+          groupNos: groupNo == null ? [] : [groupNo],
+        });
       } else if (conf === cur.confidence) {
+        if (groupNo != null && !cur.groupNos.includes(groupNo)) cur.groupNos.push(groupNo);
         cur.results = [...new Set([...cur.results, ...rids])];
         cur.labMessageOnly = cur.labMessageOnly && labMessageOnly;
       }
@@ -599,7 +606,7 @@
       for (const id of p.hm.identifies) {
         const rids = p.resolved.filter((r) => r.resultId).map((r) => r.resultId);
         const onlyMsgs = p.resolved.length > 0 && p.resolved.every((r) => r.labMessage);
-        upgrade(id, 'confident', 'heading', rids, onlyMsgs);
+        upgrade(id, 'confident', 'heading', rids, onlyMsgs, prepared.indexOf(p));
       }
     }
     const allResolved = [...prepared.flatMap((p) => p.resolved), ...ungroupedPrepared.resolved];
@@ -612,7 +619,12 @@
       const presentCore = new Set(supporting.map((r) => r.resultId));
       if (!presentCore.size) continue;
       const need = thresholdFor(inv, presentCore);
-      const conf = presentCore.size >= need ? 'confident' : 'tentative';
+      // A result that is a core member of several tests (a generic "Culture") cannot tell them apart: evidence made only of such
+      // results can never be more than tentative.
+      const distinctive = [...presentCore].some(
+        (rid) => (index.membership.get(rid) || []).filter((m) => m.role === 'core').length === 1
+      );
+      const conf = presentCore.size >= need && distinctive ? 'confident' : 'tentative';
       upgrade(
         id,
         conf,
@@ -620,6 +632,24 @@
         [...presentCore],
         supporting.every((r) => r.labMessage)
       );
+    }
+
+    // Tests with no results of their own (imaging / procedures) that a report answers through the SAME generic group or the same
+    // result (e.g. "Ultrasonography" for groin, abdomen and neck alike): the report says an ultrasound was done, not which. Record who
+    // shares the evidence so a consumer can refuse to be confident when more than one of them is being asked for.
+    const NO_RESULT_KINDS = ['imaging', 'procedure'];
+    for (const [id, c] of coverage) {
+      const me = index.investigations.get(id);
+      c.sharedWith = [];
+      if (!me || !NO_RESULT_KINDS.includes(me.def.kind)) continue;
+      for (const [oid, oc] of coverage) {
+        if (oid === id) continue;
+        const o = index.investigations.get(oid);
+        if (!o || !NO_RESULT_KINDS.includes(o.def.kind)) continue;
+        const sameGroup = (c.groupNos || []).some((g) => (oc.groupNos || []).includes(g));
+        const sameResult = c.results.some((r) => oc.results.includes(r));
+        if (sameGroup || sameResult) c.sharedWith.push(oid);
+      }
     }
 
     for (const p of prepared) {

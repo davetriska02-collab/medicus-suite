@@ -2,6 +2,45 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.0] — 2026-09-22
+
+### Outstanding Requests can now use the Lab Result Catalogue (opt-in, default off) + catalogue fixes
+
+The Outstanding Investigation Requests card can recognise requests and lab reports through the practice's approved Lab
+Result Catalogue (SNOMED code, then the lab's own report heading, then wording) instead of the free-text test rules.
+**It is off by default** (`oirEngine: 'legacy'`), so nothing changes until a practice turns it on. Plan and hazard text:
+`docs/plans/PHASE-D-OUTSTANDING-MATCHER-ON-CATALOGUE-2026-09-22.md` (proposed H-078 / H-079, not yet in the hazard log).
+
+- **New engine, same clearing rules.** `engine/outstanding-match-catalogue.js` (pure). A request only clears when the
+  report covers it AND it predates the sample; only confident matches auto-tick; auto-tick is still its own default-off
+  opt-in (`oirAutoTick`) decided by `shared/oir-write-core.js`; the strict confidence floor, review toast, audit trail and
+  "resulted elsewhere" behave as before. Verdicts have the legacy shape plus `investigationId`, `via`,
+  `labMessageKind`, `sharedHeading`, `engine`. Any catalogue problem (unreadable, invalid, empty, engine error) falls
+  back to the legacy engine for that card; a request the catalogue cannot identify, or two tests tying on a wording, is
+  left outstanding. Only APPROVED entries are read.
+- **Sample-problem lab messages** ("sample dropped / wrong bottle") complete the old request like any other lab message
+  (a repeat needs a new request anyway) and are flagged "may need repeating" on the verdict and the auto-tick toast.
+- **Generic evidence is never confident.** A lab heading or result shared by several result-less tests (one generic
+  "Ultrasonography" for groin / abdomen / neck) flags each requested test "possibly resulted — confirm" instead of
+  ticking it, when more than one of them is on the card; a result that is core to several tests can never make a
+  match more than tentative on its own.
+- **Engine choice** is a Triage option ("Matching engine") and is **published through the practice profile**
+  (`shared/io/practice-profile.js` applies only `oirEngine`, whitelisted, to an existing config — no other pref travels).
+  `defaults.json` version 26. Audit entries record which engine produced them. Manifest: the catalogue modules load with
+  the OIR engine; `rules/lab-catalogue.json` is web-accessible.
+- **Investigations page.** Edit and Details are one screen: every result has a **Codes & wordings** button that edits its
+  codes and wordings in place. Labs can be **renamed** (display only; recognition still uses organisation / department).
+  Deleting an imported test is remembered, so "Read again" no longer re-creates it (**Bring them back** restores them).
+- **Matching tool fixes.** A urine/faeces/blood specimen now fits a microbiology test (recorded groups no longer come
+  back as "unlinked"); a group recognised for several tests is finished when nothing is left to add, and says what is
+  missing when something is; a generic imaging group (Ultrasonography) can be linked to every test it answers; unrecognised
+  groups say why. **A result is only reused by name when the name means the same** — a urine culture is no longer merged
+  into the generic "Culture" result (which put "Urine culture" into throat / genital swabs). If your catalogue already has
+  a merged result, remove the extra codes and wordings from it (Edit → Codes & wordings).
+- Tests: `test-outstanding-match-catalogue.js` (parity/differential against the legacy engine with a reviewed allow-list,
+  fail-safes, clearing gate, strict floor, sample-problem, shared-heading, wiring) plus new cases in the scan, import,
+  overlay, Investigations-page and practice-profile suites.
+
 ## [v3.264.34] — 2026-09-23
 
 ### Jump menu — Triage, QOF tools, Phrases off this build

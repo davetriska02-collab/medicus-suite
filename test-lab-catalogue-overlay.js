@@ -1147,5 +1147,55 @@ console.log('\n── stripApprovals: approvals (and reviewer names) never trave
   check(o.results[0].provenance.reviewed === true, 'the input overlay is not mutated');
 }
 
+console.log('\n── lab display names ──');
+{
+  const LAB = 'rj700-general-pathology';
+  const renamed = OV.renameLab(OV.emptyOverlay(), LAB, '  Kingston Hospital pathology  ');
+  const m = OV.mergeCatalogue(builtin, renamed, {});
+  const lab = m.catalogue.labs.find((l) => l.id === LAB);
+  check(lab && lab.name === 'Kingston Hospital pathology', 'a built-in lab can be given a readable name (trimmed)');
+  check(
+    lab.identifiers.performerOrg === 'RJ700' && lab.identifiers.department === 'General Pathology',
+    'renaming never changes how the lab is recognised (organisation / department)'
+  );
+  check(
+    m.catalogue.labs.find((l) => l.id === LAB).groupHeadings.length ===
+      builtin.labs.find((l) => l.id === LAB).groupHeadings.length && m.problems.length === 0,
+    'and does not touch its headings or add problems'
+  );
+  const back = OV.renameLab(renamed, LAB, '   ');
+  check(
+    Object.keys(back.context.labNames).length === 0 &&
+      OV.mergeCatalogue(builtin, back, {}).catalogue.labs.find((l) => l.id === LAB).name ===
+        builtin.labs.find((l) => l.id === LAB).name,
+    'a blank name puts the original back'
+  );
+  const kept = OV.setContext(renamed, { icb: 'X', labs: [], orderingSystems: [] });
+  check(
+    kept.context.labNames[LAB] === 'Kingston Hospital pathology',
+    'saving the practice details keeps the lab names'
+  );
+  const polluted = OV.sanitiseOverlay({
+    ...OV.emptyOverlay(),
+    context: { ...OV.emptyOverlay().context, labNames: JSON.parse('{"__proto__":"x","ok":"Fine"}') },
+  });
+  check(
+    polluted.context.labNames.ok === 'Fine' && Object.keys(polluted.context.labNames).length === 1,
+    'prototype-pollution keys are dropped from lab names'
+  );
+  let threw = false;
+  try {
+    OV.renameLab(OV.emptyOverlay(), LAB, 'x'.repeat(5000));
+  } catch (e) {
+    threw = true;
+  }
+  check(threw, 'an over-long name is rejected, not truncated');
+  const withDismissed = OV.setContext(
+    { ...OV.emptyOverlay(), context: { ...OV.emptyOverlay().context, dismissed: ['a'] } },
+    { labs: [] }
+  );
+  check(withDismissed.context.dismissed.length === 1, 'saving the practice details keeps the list of deleted imports');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

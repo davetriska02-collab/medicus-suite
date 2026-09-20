@@ -179,5 +179,21 @@ check(
   'entries the catalogue had to exclude can be removed from the problems list (they are not listed anywhere else)'
 );
 
+console.log('\n── Edit and Details are one screen ──');
+check(
+  !/'Details'/.test(src) && !/'Hide'/.test(src),
+  'there is no separate Details / Hide button — Edit opens everything'
+);
+check(
+  /function resultEditorSlot/.test(src) &&
+    /'Codes & wordings'/.test(src) &&
+    /r \? resultEditorSlot\(r\) : null/.test(src),
+  "each result in a test's edit screen has a Codes & wordings button that edits the result's own codes and wordings in place"
+);
+check(
+  /S\.open\.delete\(S\.editing\)/.test(src),
+  'finishing an edit returns the card to its summary (nothing is left stuck open)'
+);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

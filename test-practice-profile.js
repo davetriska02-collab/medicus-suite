@@ -432,6 +432,39 @@ function makeProfile(over = {}) {
   check(store['triagelens.config'].rules?.existingRule === true && !store['triagelens.config'].rules?.profileRule,
     'triage merge: local rules untouched — rules/thresholds/systemChips/resultRules are NOT merged, by design');
 
+  // ── Triage Lens merge: practice-published OIR engine choice (Phase D) ───────────
+  console.log('--- triage merge: oirEngine is practice-published, whitelisted, and touches nothing else ---');
+  const engineProfile = (v, ver, extra) =>
+    makeProfile({
+      profileVersion: ver,
+      apply: { modules: { triage: 'merge' } },
+      envelope: { modules: { triage: { config: { prefs: { oirEngine: v, ...(extra || {}) } } } } },
+    });
+  reset();
+  store['triagelens.config'] = { version: 7, prefs: { oirEngine: 'legacy', oirAutoTick: false, showAgeChip: true }, oirTests: [] };
+  const rEng = await PP.applyProfile(engineProfile('catalogue', 'eng-1', { oirAutoTick: true, showAgeChip: false }));
+  check(rEng.modulesApplied.includes('triage'), 'oirEngine: a changed published engine is applied to a populated local config');
+  check(store['triagelens.config'].prefs.oirEngine === 'catalogue', 'oirEngine: local pref now catalogue');
+  check(
+    store['triagelens.config'].prefs.oirAutoTick === false && store['triagelens.config'].prefs.showAgeChip === true,
+    'oirEngine: NO other pref travels (auto-tick stays a local decision — H-036)'
+  );
+  check(store['triagelens.config'].version === 7, 'oirEngine: local version untouched');
+  reset();
+  store['triagelens.config'] = { version: 7, prefs: { oirEngine: 'catalogue' }, oirTests: [] };
+  const rEng2 = await PP.applyProfile(engineProfile('legacy', 'eng-2'));
+  check(store['triagelens.config'].prefs.oirEngine === 'legacy', 'oirEngine: the practice can switch back to legacy');
+  reset();
+  store['triagelens.config'] = { version: 7, prefs: { oirEngine: 'legacy' }, oirTests: [] };
+  await PP.applyProfile(engineProfile('evil', 'eng-3'));
+  check(store['triagelens.config'].prefs.oirEngine === 'legacy', 'oirEngine: an unknown published value is ignored');
+  reset();
+  store['triagelens.config'] = { version: 7, prefs: { oirEngine: 'catalogue' }, oirTests: [] };
+  await PP.applyProfile(
+    makeProfile({ profileVersion: 'eng-4', apply: { modules: { triage: 'merge' } }, envelope: { modules: { triage: { config: { prefs: { showAgeChip: false } } } } } })
+  );
+  check(store['triagelens.config'].prefs.oirEngine === 'catalogue', 'oirEngine: a profile from an older publisher (no key) leaves the local choice alone');
+
   // ── Triage Lens merge: genuinely empty local config still applies wholesale ─
   console.log('\n--- triage merge: genuinely empty local config -> whole config applied ---');
   reset();

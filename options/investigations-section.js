@@ -1019,7 +1019,9 @@ function renderEditor(st, done) {
           : h('div', {
               class: 'inv-em-codelist inv-tag ' + (codes === 'no code' ? 'inv-tag-warn' : ''),
               text: codes === 'no code' ? 'no code yet — matched by name only' : codes,
-            })
+            }),
+        // the result's own codes and wordings are edited right here (a result can be shared by several tests)
+        r ? resultEditorSlot(r) : null
       )
     );
   });
@@ -1072,7 +1074,8 @@ function renderEditor(st, done) {
   pRes.appendChild(
     editorRow(
       '',
-      'Core results identify the test. Click a result under Details to edit its codes and wordings. ' + QOF_LEGEND,
+      'Core results identify the test. Use “Codes & wordings” on a result to edit its codes and wordings. ' +
+        QOF_LEGEND,
       st.members.length ? rows : h('span', { class: 'lf-muted', text: 'None yet.' }),
       h('div', { class: 'inv-panel-sub', text: 'Add more tests to this panel' }),
       h(
@@ -1190,6 +1193,24 @@ function renderEditor(st, done) {
 
 // One result's editor (codes and wordings; name and value type). Everything is editable. Used by every test that
 // includes the result — the line below says how many.
+// A "Codes & wordings" button that opens the result editor in place, inside the test's edit screen.
+function resultEditorSlot(r) {
+  const holder = h('div', { class: 'inv-em-resedit' });
+  const open = btn(
+    'Codes & wordings',
+    () => {
+      if (holder.firstChild) {
+        holder.textContent = '';
+        return;
+      }
+      holder.appendChild(renderResultEditor(r, () => (holder.textContent = '')));
+    },
+    'lf-btn-sm inv-edit-result',
+    'Edit this result’s SNOMED codes and wordings (shared by every test that uses it)'
+  );
+  return h('div', { class: 'inv-em-resslot' }, open, holder);
+}
+
 function renderResultEditor(r, done) {
   const ov = S.overlay.results.find((x) => x.id === r.id) || null;
   const usedBy = S.merged.investigations.filter((i) => i.members.some((m) => m.result === r.id));
@@ -1321,6 +1342,7 @@ function renderResultEditor(r, done) {
 }
 
 function finishEdit() {
+  if (S.editing) S.open.delete(S.editing); // the card goes back to its one-line summary
   S.editing = null;
   S.editState = null;
   render();
@@ -1417,17 +1439,6 @@ function renderInvestigation(d) {
       d.inBuiltin
         ? 'Change this built-in test for your practice (the shipped version can be restored)'
         : 'Edit this test'
-    )
-  );
-  actions.appendChild(
-    btn(
-      open ? 'Hide' : 'Details',
-      () => {
-        if (open) S.open.delete(inv.id);
-        else S.open.add(inv.id);
-        render();
-      },
-      'lf-btn-sm'
     )
   );
 
@@ -1652,12 +1663,25 @@ function renderLabs() {
     const ov = S.overlay.labs.find((l) => l.id === lab.id);
     const needs = ov && ov.provenance.reviewed !== true;
     const heads = lab.groupHeadings || [];
+    const rename = () => {
+      const now = (S.overlay.context.labNames || {})[lab.id] || lab.name;
+      const next = prompt(
+        'A name that means something to your team for this lab (“' +
+          lab.identifiers.performerOrg +
+          '” is its code). Leave blank to go back to the original name.',
+        now
+      );
+      if (next === null) return;
+      save(OV.renameLab(S.overlay, lab.id, next), next.trim() ? 'Lab renamed.' : 'Lab name reset.');
+    };
     const block = h(
       'div',
       { class: 'inv-lab-block' },
       h('strong', {
         text: `${lab.name} — ${lab.identifiers.performerOrg}${lab.identifiers.department ? ' / ' + lab.identifiers.department : ''}`,
       }),
+      ' ',
+      btn('Rename', rename, 'lf-btn-sm'),
       ' ',
       needs ? badge('awaiting review', 'lf-badge-warn') : null,
       needs ? ' ' : null,
@@ -1739,7 +1763,13 @@ async function runMatch() {
     if (tests.length) {
       const imp = IMP.importOirTests(tests, S.builtin, { labId: sc.lab || undefined });
       const merged = IMP.mergeIntoOverlay(S.overlay, imp.overlay);
-      sc.importNotes = { read: tests.length, added: merged.added, skipped: merged.skipped, review: imp.review };
+      sc.importNotes = {
+        read: tests.length,
+        added: merged.added,
+        skipped: merged.skipped,
+        dismissed: merged.dismissedSkipped || 0,
+        review: imp.review,
+      };
       if (merged.added) {
         await labcatalogueSaveOverlay(merged.overlay);
         await load();
@@ -1772,6 +1802,8 @@ async function runMatch() {
     const targets = SC.findGaps(S.merged, S.overlay.context).map((g) => g.id);
     sc.analysis = SC.analyse(S.merged, r.observations, { targets });
     sc.items = [...sc.analysis.proposals, ...sc.analysis.unmatched].map((u) => {
+      // one generic group several tests share (an ultrasound): the person picks which tests it answers; never ticked for them
+      if (u.multi) return { u, choice: 'tests', checked: false, tests: new Set(u.candidates) };
       if (u.target) return { u, choice: 'test:' + u.target, checked: true }; // linked with evidence: ticked, still reviewable
       if (u.hint) return { u, choice: 'test:' + u.hint, checked: false }; // a hint is only pre-selected
       return { u, choice: u.maybe && u.maybe.length === 1 ? 'req:' + u.maybe[0] : '', checked: false };
@@ -1793,6 +1825,7 @@ function parseChoice(v) {
   if (v === 'group') return { type: 'group' };
   if (v.startsWith('req:')) return { type: 'request', label: v.slice(4) };
   if (v.startsWith('test:')) return { type: 'test', id: v.slice(5) };
+  if (v === 'tests') return { type: 'tests' };
   return null;
 }
 
@@ -2015,13 +2048,17 @@ async function applyTicked() {
   const createdFromItems = new Set();
   for (const it of sc.items.filter((x) => x.checked && x.choice)) {
     let action = parseChoice(it.choice);
+    if (action && action.type === 'tests')
+      action = it.tests && it.tests.size ? { type: 'tests', ids: [...it.tests] } : null;
     if (action && action.type === 'request') createdFromItems.add(LC.norm(action.label));
     const where = action
-      ? action.type === 'test'
-        ? label(action.id)
-        : action.type === 'request'
-          ? action.label
-          : 'a group-and-results test'
+      ? action.type === 'tests'
+        ? action.ids.map(label).join(' + ')
+        : action.type === 'test'
+          ? label(action.id)
+          : action.type === 'request'
+            ? action.label
+            : 'a group-and-results test'
       : '';
     apply(`“${it.u.heading}” → ${where}`, (cat) => {
       // a request that already resolves to a test (in the catalogue or just created) is attached to it, never duplicated
@@ -2113,6 +2150,28 @@ function groupItem(it, unknownRequests) {
       .map((i) => ({ k: 'test:' + i.id, id: i.id })),
     (t) => h('option', { value: 'test:' + t.id, selected: it.choice === 'test:' + t.id }, nameOf(t.id))
   );
+  const multiBox = u.multi
+    ? h(
+        'div',
+        { class: 'inv-multi' },
+        h('div', {
+          class: 'inv-scan-meta',
+          text: 'This group is the same for all of these tests, so it cannot say which was done. Tick every test it answers — a report is then only ever flagged "possibly resulted — confirm" against them, never auto-ticked, when more than one is requested.',
+        }),
+        (u.candidates || []).map((id) => {
+          const cb = h('input', { type: 'checkbox', checked: !!(it.tests && it.tests.has(id)) });
+          cb.addEventListener('change', () => {
+            if (!it.tests) it.tests = new Set();
+            if (cb.checked) it.tests.add(id);
+            else it.tests.delete(id);
+            if (!it.tests.size) it.checked = false;
+            tick.disabled = !it.tests.size;
+          });
+          return h('label', { class: 'inv-multi-item' }, cb, ' ', nameOf(id));
+        })
+      )
+    : null;
+  if (u.multi) tick.disabled = !(it.tests && it.tests.size);
   const sel = h(
     'select',
     { class: 'lf-input inv-sel-sm inv-scan-choice', 'aria-label': 'What is ' + u.heading },
@@ -2165,6 +2224,26 @@ function groupItem(it, unknownRequests) {
       h('span', { class: 'lf-muted', text: `${u.lab.name}${u.lab.isNew ? ' (new lab)' : ''}` })
     ),
     h('div', { class: 'inv-scan-meta', text: why.join(' · ') }),
+    u.recognisedFor && u.recognisedFor.length
+      ? h('div', {
+          class: 'inv-scan-meta inv-scan-warn',
+          text:
+            'Already recognised for several tests, so choose which one gets what is missing: ' +
+            u.recognisedFor
+              .map((r) => {
+                const bits = [
+                  r.headings ? plural(r.headings, 'heading') : '',
+                  r.results ? plural(r.results, 'result') : '',
+                  r.members ? plural(r.members, 'linked result') : '',
+                ].filter(Boolean);
+                return `${(S.merged.investigations.find((i) => i.id === r.id) || { label: r.id }).label} (missing: ${bits.join(', ') || 'nothing'})`;
+              })
+              .join('; '),
+        })
+      : null,
+    u.why && u.why.length
+      ? h('div', { class: 'inv-scan-meta inv-scan-warn', text: 'Why it is not recognised: ' + u.why.join('; ') + '.' })
+      : null,
     u.unknownOnCard && u.unknownOnCard.length
       ? h('div', {
           class: 'inv-scan-meta inv-scan-warn',
@@ -2172,6 +2251,7 @@ function groupItem(it, unknownRequests) {
         })
       : null,
     h('div', { class: 'inv-scan-results' }, results),
+    it.choice === 'tests' && multiBox ? multiBox : null,
     h('div', { class: 'inv-orphan-pick' }, sel)
   );
   row.addEventListener('dragstart', (e) => {
@@ -2197,7 +2277,19 @@ function importNotesEl(n) {
     unchanged: 'Nothing to add',
     disabled: 'Disabled built-ins',
   };
-  return h(
+  const restore = n.dismissed
+    ? h(
+        'div',
+        { class: 'inv-scan-meta' },
+        `${plural(n.dismissed, 'test')} you deleted earlier ${n.dismissed === 1 ? 'was' : 'were'} not added back. `,
+        btn(
+          'Bring them back',
+          () => save(OV.restoreDismissed(S.overlay), 'Deleted tests will be added back the next time you read.'),
+          'lf-btn-sm'
+        )
+      )
+    : null;
+  const details = h(
     'details',
     { class: 'inv-details' },
     h(
@@ -2220,6 +2312,7 @@ function importNotesEl(n) {
       )
     )
   );
+  return h('div', {}, details, restore);
 }
 
 function renderMatch() {

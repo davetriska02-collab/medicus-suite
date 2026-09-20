@@ -983,6 +983,19 @@
           >
         </label>
         <label class="tl-field">
+          <span>Matching engine</span>
+          <select data-pref="oirEngine">
+            <option value="legacy">Current (test wordings in the list below)</option>
+            <option value="catalogue">Lab Result Catalogue (Options → Investigations)</option>
+          </select>
+          <small
+            >The catalogue engine recognises requests and results by SNOMED code and the lab's own headings, using only
+            tests you have approved on the Investigations page. It follows exactly the same clearing rules (request must
+            predate the sample; only confident matches auto-tick). A request it cannot identify stays outstanding. If the
+            catalogue cannot be read, the current engine is used instead. Published through the practice profile.</small
+          >
+        </label>
+        <label class="tl-field">
           <span>Lookback window</span>
           <select data-pref="oirLookbackMonths" data-pref-type="number">
             <option value="0">No limit</option>

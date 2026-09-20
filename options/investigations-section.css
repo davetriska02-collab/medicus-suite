@@ -1026,3 +1026,17 @@
 .inv-edit-member {
   flex-wrap: wrap;
 }
+
+.inv-multi { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding: 8px; background: rgba(0, 0, 0, 0.03); border-radius: 6px; }
+.inv-multi-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.inv-em-resslot {
+  flex: 1 1 100%;
+  margin: 2px 0 4px 8px;
+}
+.inv-em-resedit:not(:empty) {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+}

@@ -1,5 +1,5 @@
 {
-  "version": 25,
+  "version": 26,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3696,6 +3696,7 @@
     "oirEnabled": true,
     "oirBulkTickOff": true,
     "oirConfidenceFloor": "default",
+    "oirEngine": "legacy",
     "oirLookbackMonths": 0,
     "oirShowValueOnBadge": false,
     "oirDateFormat": "absolute",

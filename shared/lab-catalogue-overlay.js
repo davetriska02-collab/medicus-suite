@@ -83,7 +83,7 @@
   function emptyOverlay() {
     return {
       schema: OVERLAY_SCHEMA,
-      context: { icb: '', icbCode: '', borough: '', labs: [], orderingSystems: [] },
+      context: { icb: '', icbCode: '', borough: '', labs: [], orderingSystems: [], dismissed: [], labNames: {} },
       results: [],
       investigations: [],
       labs: [],
@@ -250,6 +250,17 @@
     return out;
   }
 
+  function sanitiseLabNames(v) {
+    const out = {};
+    if (!isObj(v)) return out;
+    for (const k of Object.keys(v).slice(0, 50)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      const name = str(v[k], LIMITS.text, 'context.labNames', false);
+      if (name && k.length <= 64) out[k] = name.trim();
+    }
+    return out;
+  }
+
   function sanitiseContext(c) {
     const o = isObj(c) ? c : {};
     const sys = strArr(o.orderingSystems, 8, 16, 'context.orderingSystems');
@@ -259,6 +270,10 @@
       borough: str(o.borough, LIMITS.context, 'context.borough') || '',
       labs: strArr(o.labs, 20, 64, 'context.labs'),
       orderingSystems: sys,
+      // ids of IMPORTED tests the person deleted: reading the Outstanding Requests tests again must not bring them back
+      dismissed: strArr(o.dismissed, 300, 128, 'context.dismissed'),
+      // human-readable names the practice gives labs (display only; never changes how a lab is recognised)
+      labNames: sanitiseLabNames(o.labNames),
     };
   }
 
@@ -377,7 +392,9 @@
 
   function setContext(overlay, ctx) {
     const o = safeClone(overlay);
-    o.context = sanitiseContext(ctx);
+    // the settings form only edits labs / systems / area: what else the context carries (deleted imports, lab names) stays
+    const keep = { dismissed: o.context && o.context.dismissed, labNames: o.context && o.context.labNames };
+    o.context = sanitiseContext({ ...keep, ...ctx });
     return sanitiseOverlay(o);
   }
 
@@ -1205,8 +1222,15 @@
   function removeInvestigation(builtin, overlay, id) {
     const o = safeClone(overlay);
     const before = o.investigations.length;
+    const gone = o.investigations.find((x) => x.id === id);
     o.investigations = o.investigations.filter((x) => x.id !== id);
     if (o.investigations.length === before) fail(`investigations "${id}" not found`);
+    // a deleted IMPORTED test is remembered, or the next "read my tests" would quietly recreate it
+    if (gone && gone.provenance && gone.provenance.source === 'imported') {
+      const list = asArr(o.context && o.context.dismissed).filter((x) => x !== id);
+      list.push(id);
+      o.context = { ...(o.context || {}), dismissed: list.slice(-300) };
+    }
     const used = new Set();
     for (const i of [...asArr(builtin && builtin.investigations), ...o.investigations])
       for (const m of asArr(i.members)) used.add(m.result);
@@ -1219,6 +1243,24 @@
     o.disabled.investigations = o.disabled.investigations.filter((x) => x !== id);
     stripFromLabs(o, 'inv:' + id, id);
     return { overlay: o, removedResults };
+  }
+
+  // Give a lab a human-readable name (display only). An empty name removes it, so the lab shows its own name again.
+  function renameLab(overlay, labId, name) {
+    const o = safeClone(overlay);
+    const names = { ...((o.context && o.context.labNames) || {}) };
+    const clean = String(name == null ? '' : name).trim();
+    if (clean) names[labId] = clean;
+    else delete names[labId];
+    o.context = { ...(o.context || {}), labNames: names };
+    return sanitiseOverlay(o);
+  }
+
+  // "Bring my deleted imported tests back": forget the deletions (the next import re-adds them).
+  function restoreDismissed(overlay) {
+    const o = safeClone(overlay);
+    o.context = { ...(o.context || {}), dismissed: [] };
+    return o;
   }
 
   function setInvestigationDisabled(overlay, id, disabled) {
@@ -1389,6 +1431,11 @@
         }
       }
     }
+    // --- display names the practice gave its labs (cosmetic: identification uses org / department, never the name) ---
+    function applyLabNames(cat) {
+      const names = (overlay.context && overlay.context.labNames) || {};
+      for (const lab of cat.labs) if (names[lab.id]) lab.name = names[lab.id];
+    }
     // --- disables + pruning -------------------------------------------------------------------------------------
     function applyDisables(cat) {
       const rmRes = new Set(overlay.disabled.results);
@@ -1436,6 +1483,7 @@
     const problemMark = problems.length;
     for (const it of entries) applyOne(cat, it);
     applyDisables(cat);
+    applyLabNames(cat);
     let v = LC.validateCatalogue(cat);
     if (v.errors.length === 0) return { catalogue: cat, problems, excluded, warnings: v.warnings };
 
@@ -1468,6 +1516,7 @@
       cat = beforeDisable;
       v = LC.validateCatalogue(cat);
     }
+    applyLabNames(cat);
     return { catalogue: cat, problems, excluded, warnings: v.warnings };
   }
 
@@ -1490,6 +1539,8 @@
     describeChanges,
     ownLabHeadings,
     removeInvestigation,
+    restoreDismissed,
+    renameLab,
     removeEntry,
     setInvestigationDisabled,
     mergeCatalogue,
