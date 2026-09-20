@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.263.10
-**Generated:** 2026-09-19
+**Version:** v3.264.0
+**Generated:** 2026-09-20
 
 ## What it is
 
@@ -144,12 +144,14 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **Practice Profile** — shared-folder managed deployment so rules, thresholds and pathways can be published once and picked up across every machine in the practice
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
 - **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags)
+- **Investigations (Lab Result Catalogue)** — a single, coded, per-practice catalogue of investigations, results and labs with its own settings page (practice context, browse/search, per-test edit and gated per-test review; entries arriving by backup, shared profile or import stay inert until approved on that machine). **Nothing acts on it yet** — Outstanding Requests, Lab Filing and every other feature still use their own rules until the Phase D wiring, which needs its own hazard-log entry and CSO review
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
 - **Diagnostics** — Event Ledger (machine-local record of what the suite has flagged), Suite health (self-diagnosis of the extension's own data pipeline), and Debug, collapsed into one Settings page
 
 ## Recent additions (last 4 weeks)
 
+- **v3.264.0 (20 Sep)** — Lab Result Catalogue + Options → Investigations page: coded per-practice catalogue of investigations/results/labs, inert-until-approved practice overlay, gated per-test review, "Match requests to lab reports" scan (names/headings/codes/units only — never values or patient/staff data). No existing feature acts on it yet
 - **v3.263.10 (19 Sep)** — StackChan desk-robot presence: LAN HTTP face commands from Sentinel / Request Monitor / Companion; firmware camera+mic off; Options Test face
 - **v3.263.9 (19 Sep)** — Restored ACE-I/ARB and thiazide post-initiation U&E, gated on a true medication-history start (batch dates cannot fire)
 - **v3.263.7 (19 Sep)** — Flu chip: UK synonym "Is a carer" (SNOMED 224484003 / description 1222761019)
