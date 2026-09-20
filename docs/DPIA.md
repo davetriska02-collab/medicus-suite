@@ -2,8 +2,8 @@
 
 **Document reference:** MS-DPO-DPIA-001
 **Product version:** 3.211.0 (§2 employee-data / rota section and the associated §5 rows added at this version; §2 Reception module and its §5 rows at 3.199.1; the remainder was written at 3.84.2)
-**Document version:** 1.3 (DRAFT — pending sign-off)
-**Date:** 2026-06-14; Reception module section added 2026-07-28; rota / employee-data section added 2026-08-02 (v1.2); Transactional API proxy section added 2026-09-20 (v1.3 — optional UK-proxy read path; **no DPO/CSO signature invented**)
+**Document version:** 1.3 (SIGNED 2026-09-20 — Dr D. Triska, CSO / manufacturer DPO contact, GMC 6159481, in session; practice-side controls per §6 remain with each deploying practice as controller)
+**Date:** 2026-06-14; Reception module section added 2026-07-28; rota / employee-data section added 2026-08-02 (v1.2); Transactional API proxy section added 2026-09-20 (v1.3 — optional UK-proxy read path); v1.3 signed 2026-09-20 (the document's first signature — versions 1.0–1.2 were never signed, and no earlier signature is invented)
 **Data controller:** The deploying GP practice (each practice is controller for
 its own patient data). Graysbrook Ltd is the software manufacturer.
 **Manufacturer DPO / contact:** Dr Dave Triska — [DPO CONTACT EMAIL]
@@ -115,13 +115,15 @@ display, under each user's own credentials. Purpose: surface monitoring, QOF,
 and operational information already in Medicus to support (not replace) clinical
 and administrative work.
 
-### 2.2 Optional Transactional API proxy — added 2026-09-20 (DRAFT)
+### 2.2 Optional Transactional API proxy — added 2026-09-20 (SIGNED 2026-09-20)
 
 This is the open action from the v3.202.0 INTENDED-PURPOSE signature: the
 optional Medicus Transactional API path had no controller/processor or transfer
-assessment. This section is the draft assessment. **It is not signed.** Until
-it is, practices must not set `txn.integrationMode` to `hybrid` or
-`transactional`.
+assessment. This section is that assessment, **signed 2026-09-20 by Dr D.
+Triska (CSO, GMC 6159481, in session)** alongside hazard H-077 and CSN §6
+items 1/8/9 — see `docs/CSO-SIGNOFF-PACK-H063-H076.md`. A practice may set
+`txn.integrationMode` to `hybrid` or `transactional` only after putting its own
+processing record / DPA with Graysbrook in place (see "Lawful basis" below).
 
 **Nature.** When — and only when — a practice sets `txn.integrationMode` to
 `hybrid` or `transactional` and supplies a proxy URL plus `txn.callerKey`,
@@ -151,8 +153,8 @@ Medicus. The processor relationship for the proxy hop needs a practice-side
 processing record / DPA with Graysbrook before the path is enabled.
 
 **Mitigation posture.** Default off; read-only; SW-only credential; short-lived
-token; hazard **H-077** (Proposed). Enabling the path is a practice
-configuration act, not a silent update.
+token; hazard **H-077** (Accepted (ALARP), CSO 2026-09-20). Enabling the path is
+a practice configuration act, not a silent update.
 
 ### 2.1 Reception module (guided phone capture) — added 2026-07-28
 
@@ -286,7 +288,7 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 | Wrong-patient display (IG + safety) | Low / Med | UUID-keyed cache + SPA-navigation invalidation; source-verification duty (H-001) | Low |
 | Malicious backup import degrading/altering data handling | Low / Med | Import hardening, type validation, preview warnings, size cap (F1/F7/NF1) | Low |
 | Patient data leaving the browser (default `session` mode) | — | None by design in the default configuration | N/A |
-| Patient data leaving the browser via the optional Transactional API proxy (`hybrid` / `transactional`) | Low / High if enabled without review | Default off; read-only; SW-only `txn.callerKey`; UK proxy; H-077 Proposed; practices must not enable until this DPIA increment and H-077 are signed | Med until signed; Low after sign-off with practice DPA |
+| Patient data leaving the browser via the optional Transactional API proxy (`hybrid` / `transactional`) | Low / High if enabled without review | Default off; read-only; SW-only `txn.callerKey`; UK proxy; H-077 Accepted (ALARP); this DPIA increment and H-077 signed 2026-09-20; a practice must put its own processing record / DPA with Graysbrook in place before enabling | Low with the practice-side DPA in place (signed 2026-09-20) |
 | Re-identification via desktop notifications | Low / Low | Notification text minimised; "clinic mode" mute (F2) | Low |
 | **Reception:** special-category (health) free text buffered in `chrome.storage.local` as a capture draft | Low / Med | Answers only (no name/NHS number/DOB written); 4 h TTL enforced on read; cleared on generate/discard; excluded from suite backups and CI-guarded (`test-backup-coverage.js`); local to the workstation, no server copy | Low |
 | **Reception:** a draft on a **shared front-desk workstation** seen or restored by the next member of staff | Med / Med | Restore is never automatic — explicit choice from a time-stamped banner, with the instruction to confirm it belongs to the current contact and discard otherwise (H-029, CSN limitation 34); TTL 4 h; practice shared-workstation controls (per-user profile/login, screen lock, end session at shift end) stated as a deploying-organisation responsibility | Med — residual sits with the practice's own workstation controls |
@@ -301,8 +303,8 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 
 Residual data-protection risk is **low** for the default patient-data
 processing, driven principally by the local-only architecture. The optional
-Transactional API proxy is a separate residual (Medium until this increment is
-signed; then Low with a practice-side DPA) and is **off by default**. The Reception module is
+Transactional API proxy is a separate residual (this increment was signed
+2026-09-20; Low with a practice-side DPA in place) and is **off by default**. The Reception module is
 the one patient-data area carrying a **medium** residual, and it is medium for an
 environmental reason rather than a software one: a shared front-desk workstation,
 where the confidentiality of a locally-buffered draft is the confidentiality of
@@ -321,7 +323,7 @@ document.
 
 Approved for the stated processing, subject to those practice-side controls.
 
-**DPO / accountable person:** Dr Dave Triska — [SIGNATURE / DATE]
+**DPO / accountable person:** Dr Dave Triska (CSO / manufacturer DPO contact, GMC 6159481) — signed in session, 2026-09-20 (document version 1.3, product v3.264.1; recorded per `docs/CSO-SIGNOFF-PACK-H063-H076.md` — "Reviews and signed")
 **Review:** at each minor/major release and on any change to data flows.
 **Next scheduled revisit:** when reception appointment booking (phase D) and the
 `sensitive`-pathway autosave exclusion (phase B) ship.
@@ -332,5 +334,6 @@ Approved for the stated processing, subject to those practice-side controls.
 |---|---|---|---|---|
 | 1.0 | 2026-06-14 | DT | DRAFT — pending sign-off | Initial DPIA at product v3.84.2. |
 | 1.2 | 2026-08-02 | Claude (drafted for DPO review) | DRAFT — pending sign-off | Rota / employee-data section (Article 9 staff health data; optional shared-drive replication). **No sign-off given.** |
+| 1.3 | 2026-09-20 | DT | SIGNED 2026-09-20 | **First signature on this document** (versions 1.0–1.2 were never signed). Signed: Dr D. Triska (CSO / manufacturer DPO contact, GMC 6159481), in session, 2026-09-20, alongside H-077 and CSN §6 items 1/8/9 — see `docs/CSO-SIGNOFF-PACK-H063-H076.md` and `docs/cso-review-ledger.json` (product v3.264.1). Approval is for the stated processing, subject to the practice-side controls named in §6 (each deploying practice remains controller; the txn-proxy path additionally needs a practice-side processing record / DPA with Graysbrook before it is enabled). Closes INTENDED-PURPOSE open action (ii). |
 | 1.3 | 2026-09-20 | Grok (drafted for DPO/CSO review) | DRAFT — pending sign-off | Added §2.2 Optional Transactional API proxy (controller/processor, UK transfer, SW-only `txn.callerKey`, read-only, default off). Corrected §1 / §2 / §5 claims of unqualified zero egress. New §5 row for the proxy path. **No sign-off given. No signature invented.** Closes the draft of INTENDED-PURPOSE open action (ii); still needs a human DPO/CSO signature. |
 | 1.1 | 2026-07-28 | Claude (drafted for DPO review) | DRAFT — pending sign-off | Added §2.1 Reception module (special-category phone-capture text; transient `reception.captureDraft` persistence — 4 h TTL, never backed up, sensitive-pathway exclusion marked PLANNED; shared front-desk workstation processing; paste-into-Medicus flow with Medicus as system of record; planned reception booking marked as not shipped). Added the reception lawful-basis paragraph to §4 recording **no change of lawful basis**. Added five reception rows and one no-egress row to the §5 risk table. Corrected the §2 statement that the extension "writes nothing back to Medicus" (see CSN §6.1). Prepared as Phase 0 of `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md`. **No sign-off given.** |

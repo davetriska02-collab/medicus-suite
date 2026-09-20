@@ -1,27 +1,38 @@
-# Ready for CSO sign-off — H-063–H-076 + txn-proxy open actions
+# SIGNED — CSO sign-off — H-063–H-076 + txn-proxy open actions
+
+> ## ✔ SIGNED 2026-09-20
+>
+> **Signed:** Dr D. Triska (Clinical Safety Officer), GMC 6159481, in session, 2026-09-20 ("Reviews and signed").
+> **Product at signature:** v3.264.1.
+> **Scope signed:** every Proposed row in the inventory below — **H-063–H-076 all Accepted (ALARP)** at their proposed residual scores — plus the txn-proxy trio: **H-077 Accepted (ALARP)**, **CSN §6 items 1/8/9 as rewritten at doc v3.82** (recorded as CSN doc v3.83), and **DPIA v1.3** (the DPIA's first signature).
+> **Not signed** (exactly as this pack scoped it): H-060, H-061, the H-002 (w) / H-003 (k) U&E-restore addendum, and the long tail of 2026-08/09 PENDING CSN/hazard addenda — those remain PENDING.
+> **Recorded in:** `docs/HAZARD-LOG.md` v3.68, `docs/CLINICAL-SAFETY-NOTICE.md` v3.83, `docs/DPIA.md` v1.3 (signed), and `docs/cso-review-ledger.json` (`last_cso_review_version` → 3.264.1 for CSN / HAZARD-LOG / DPIA).
+> **Txn-proxy consequence:** with the trio signed, the remaining gate on `txn.integrationMode` `hybrid`/`transactional` is the practice-side processing record / DPA with Graysbrook (DPIA §2.2 "Lawful basis") — enabling stays a deliberate practice configuration act.
 
 **Product at this pack:** v3.264.1 (docs increment; **not** a re-baseline).  
-**Last signed CSO review:** v3.261.21 (2026-09-10, Dr D. Triska, GMC 6159481).  
-**This pack does not invent a signature or a sign-off date.** Every hazard below stays **Proposed** until Dr Dave signs.
+**Last signed CSO review at drafting:** v3.261.21 (2026-09-10, Dr D. Triska, GMC 6159481).  
+This pack was drafted without inventing a signature or a sign-off date; the signature above was recorded on Dave's own session instruction of 2026-09-20.
 
-Use this as the review agenda. Controls described here are already in shipped code unless marked draft-this-increment.
-
----
-
-## How to sign (when you are ready)
-
-1. Read each Proposed row against the live control text in `docs/HAZARD-LOG.md`.
-2. For any row you accept: change **Acceptability** to Accepted (ALARP) and the §6 Status cell to match. Record the date and GMC number yourself.
-3. For the txn-proxy trio (CSN §6 items 1/8/9 as rewritten, DPIA §2.2, H-077): same — human signature only.
-4. Only then move `last_cso_review_version` in `docs/cso-review-ledger.json`. Pending notes must not move it.
-
-Until (3) is signed, practices must not set `txn.integrationMode` to `hybrid` or `transactional`.
+The sections below are the review agenda as it was put to the CSO, retained verbatim for the record. Controls described here are already in shipped code unless marked draft-this-increment.
 
 ---
 
-## Inventory — Proposed hazards H-063–H-076
+## How this was signed (completed 2026-09-20)
 
-Controls are already written as shipped. Residual scores are from the register. None of these are Accepted.
+The steps this pack prescribed were carried out on Dave's instruction, all on 2026-09-20:
+
+1. ~~Read each Proposed row against the live control text in `docs/HAZARD-LOG.md`.~~ Done in session.
+2. ~~Change **Acceptability** to Accepted (ALARP) and the §6 Status cell to match; record the date and GMC number.~~ Done — hazard-log v3.68, every row H-063–H-076 (and H-077) now reads "Accepted (ALARP) — CSO signed off 2026-09-20 (Dr D. Triska, GMC 6159481, in session)".
+3. ~~For the txn-proxy trio (CSN §6 items 1/8/9 as rewritten, DPIA §2.2, H-077): same — human signature only.~~ Done — CSN doc v3.83, DPIA v1.3 signed, H-077 Accepted.
+4. ~~Only then move `last_cso_review_version` in `docs/cso-review-ledger.json`.~~ Done — moved to 3.264.1 / 2026-09-20 for CSN, HAZARD-LOG and DPIA. Pending notes did not move it; the signature did.
+
+With (3) signed, a practice may set `txn.integrationMode` to `hybrid` or `transactional` only after putting its own processing record / DPA with Graysbrook in place (DPIA §2.2).
+
+---
+
+## Inventory — hazards H-063–H-076 (all Accepted (ALARP) 2026-09-20; table retained as put to the CSO)
+
+Controls are already written as shipped. Residual scores are from the register. At drafting, none of these were Accepted; all fifteen (including H-077 below) were Accepted at the 2026-09-20 signature.
 
 | ID | Title | Residual | Shipped controls (short) | Ask of CSO |
 | --- | --- | --- | --- | --- |
