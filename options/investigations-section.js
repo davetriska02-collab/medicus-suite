@@ -892,7 +892,7 @@ function renderEditor(st, done) {
   // "never matches" guard.
   const pReq = panel('req', 'How it is requested in Medicus');
   const pLab = panel('lab', 'How it comes back from the lab');
-  const pNever = panel('never', 'Never matches…');
+  const pNever = panel('never', 'Never counts as this test…');
   const pRes = panel('res', 'SNOMED codes');
   wrap.appendChild(flowGrid(pReq, pLab, pNever, pRes));
 
@@ -968,14 +968,43 @@ function renderEditor(st, done) {
 
   // results — one line each: name, role, any-one, codes, lab wording
   const newSpec = (m) => st.newResults.find((x) => 'new:' + x.label === m.result);
-  const rows = h('div', { class: 'inv-reslist' });
+  // ONE full-width table of the results (a result is one thing, shared by every test that uses it). Each code is its own line
+  // (code | SNOMED description | unit); name, core/optional, wordings, lab and the actions span all of a result's code lines.
+  // The autofiling columns (practice range, safety guards, filing controls, enable) join at the right, in their own colour.
+  const rows = h('div', { class: 'inv-restable' });
+  const COLS = { name: 1, code: 2, desc: 3, unit: 4, role: 5, words: 6, lab: 7 };
+  const cell = (cls, col, row, span, ...kids) => {
+    const c = h('div', { class: 'inv-rt-c ' + cls }, ...kids);
+    c.style.gridColumn = String(col);
+    c.style.gridRow = span > 1 ? row + ' / span ' + span : String(row);
+    return c;
+  };
+  if (st.members.length) {
+    [
+      ['Name', 'name'],
+      ['Code', 'code'],
+      ['SNOMED description', 'desc'],
+      ['Unit', 'unit'],
+      ['Core / optional', 'role'],
+      ['Wordings', 'words'],
+      ['Lab', 'lab'],
+    ].forEach(([t, k]) => {
+      const c = h('div', { class: 'inv-rt-h', text: t });
+      c.style.gridColumn = String(COLS[k]);
+      c.style.gridRow = '1';
+      rows.appendChild(c);
+    });
+  }
+  let cursor = 2;
   st.members.forEach((m, i) => {
     const isNew = m.result.startsWith('new:');
     const r = isNew ? null : resultById(m.result);
     const ns = isNew ? newSpec(m) : null;
     const nameText = isNew ? m.result.slice(4) + ' (new)' : r ? r.label : m.result;
-    const codes = isNew ? (ns && ns.code ? ns.code : 'no code') : codesText(r);
-    const wording = isNew ? '' : wordingText(r);
+    const codeList = r ? r.codes : [];
+    const n = Math.max(1, codeList.length);
+    const start = cursor;
+    cursor += n + 1; // + a full-width line for the inline result editor
     const role = sel(ROLE_OPTIONS, m.role);
     role.addEventListener('change', () => {
       m.role = role.value;
@@ -984,46 +1013,128 @@ function renderEditor(st, done) {
     });
     const anchor = h('input', { type: 'checkbox', checked: !!m.anchor, disabled: m.role !== 'core' });
     anchor.addEventListener('change', () => (m.anchor = anchor.checked));
+    const usedBy = r ? S.merged.investigations.filter((x) => x.members.some((y) => y.result === r.id)).length : 0;
+    const parts = r ? resultEditorParts(r) : null;
     rows.appendChild(
-      h(
-        'div',
-        {
-          class: 'inv-edit-member',
-          title: [
-            nameText,
-            r
-              ? 'Codes: ' + (r.codes.map((c) => c.conceptId + (c.unit ? ` (${c.unit})` : '')).join(', ') || 'none')
-              : '',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        },
-        h('span', { class: 'inv-em-name', text: nameText }),
+      cell(
+        'inv-rt-name',
+        COLS.name,
+        start,
+        n,
+        h('strong', { text: nameText }),
+        usedBy > 1 ? h('div', { class: 'lf-muted', text: 'shared by ' + usedBy + ' tests' }) : null,
+        h(
+          'div',
+          { class: 'inv-rt-actions' },
+          parts ? parts.button : null,
+          h('button', {
+            type: 'button',
+            class: 'inv-chip-x',
+            title: 'Remove this result from the test',
+            'aria-label': 'Remove ' + nameText,
+            onclick: () => (st.members.splice(i, 1), redraw()),
+            text: '×',
+          })
+        )
+      )
+    );
+    if (codeList.length) {
+      codeList.forEach((c, k) => {
+        const info = codeInfoFor(c);
+        const q = info.qof ? ' inv-code-qof' : '';
+        rows.appendChild(
+          cell(
+            'inv-rt-code' + q,
+            COLS.code,
+            start + k,
+            1,
+            h('span', { class: 'inv-code-id', text: c.conceptId }),
+            info.qof ? h('span', { class: 'inv-qof-tag', text: 'QOF' }) : null
+          )
+        );
+        rows.appendChild(
+          cell(
+            'inv-rt-desc' + q,
+            COLS.desc,
+            start + k,
+            1,
+            h('span', { class: info.desc ? '' : 'lf-muted', text: info.desc || 'no description recorded' })
+          )
+        );
+        rows.appendChild(
+          cell(
+            'inv-rt-unit' + q,
+            COLS.unit,
+            start + k,
+            1,
+            c.unit ? c.unit : h('span', { class: 'lf-muted', text: '—' })
+          )
+        );
+      });
+    } else {
+      const none = isNew && ns && ns.code ? ns.code : '';
+      rows.appendChild(
+        cell(
+          'inv-rt-code',
+          COLS.code,
+          start,
+          1,
+          none
+            ? h('span', { class: 'inv-code-id', text: none })
+            : h('span', { class: 'inv-tag inv-tag-warn', text: 'no code yet' })
+        )
+      );
+      rows.appendChild(
+        cell('inv-rt-desc', COLS.desc, start, 1, h('span', { class: 'lf-muted', text: 'matched by name only' }))
+      );
+      rows.appendChild(cell('inv-rt-unit', COLS.unit, start, 1, h('span', { class: 'lf-muted', text: '—' })));
+    }
+    rows.appendChild(
+      cell(
+        'inv-rt-role',
+        COLS.role,
+        start,
+        n,
         role,
         h(
           'label',
           { class: 'lf-check inv-em-any', title: 'Any one of the "any one" results is enough to recognise the test' },
           anchor,
           ' any one'
-        ),
-        wording ? h('span', { class: 'inv-em-lab', text: wording }) : null,
-        h('button', {
-          type: 'button',
-          class: 'inv-chip-x',
-          title: 'Remove',
-          onclick: () => (st.members.splice(i, 1), redraw()),
-          text: '×',
-        }),
-        r && r.codes.length
-          ? h('div', { class: 'inv-codelist inv-em-codelist' }, r.codes.map(codeLine))
-          : h('div', {
-              class: 'inv-em-codelist inv-tag ' + (codes === 'no code' ? 'inv-tag-warn' : ''),
-              text: codes === 'no code' ? 'no code yet — matched by name only' : codes,
-            }),
-        // the result's own codes and wordings are edited right here (a result can be shared by several tests)
-        r ? resultEditorSlot(r) : null
+        )
       )
     );
+    const words = r ? r.aliases : [];
+    rows.appendChild(
+      cell(
+        'inv-rt-words',
+        COLS.words,
+        start,
+        n,
+        ...(words.length
+          ? words.map((a) =>
+              h('span', { class: 'inv-chip inv-chip-ro', text: (a.lab ? labShort(a.lab) + ': ' : '') + a.text })
+            )
+          : [h('span', { class: 'lf-muted', text: '—' })])
+      )
+    );
+    const labs = [...new Set(words.filter((a) => a.lab).map((a) => labShort(a.lab)))];
+    rows.appendChild(
+      cell(
+        'inv-rt-lab',
+        COLS.lab,
+        start,
+        n,
+        labs.length ? labs.join(', ') : h('span', { class: 'lf-muted', text: 'Any' })
+      )
+    );
+    if (parts) {
+      // the result's own codes and wordings are edited right here, full width (a result can be shared by several tests)
+      const line = h('div', { class: 'inv-rt-edit' }, parts.holder);
+      line.style.gridColumn = '1 / -1';
+      line.style.gridRow = String(start + n);
+      rows.appendChild(line);
+    }
   });
   const listId = 'invResList' + Math.random().toString(36).slice(2, 7);
   const dl = h(
@@ -1093,14 +1204,23 @@ function renderEditor(st, done) {
 
   // note
   const note = h('textarea', {
-    class: 'lf-input inv-in',
-    rows: '2',
+    class: 'lf-input inv-in inv-note',
+    rows: '1',
     maxlength: '1000',
     placeholder: 'Optional note for whoever reviews this',
     'aria-label': 'Note',
   });
   note.value = st.note;
-  note.addEventListener('input', () => (st.note = note.value));
+  // only as tall as its text (it grows as you type; drag the corner to make it larger)
+  const fitNote = () => {
+    note.style.height = 'auto';
+    note.style.height = note.scrollHeight + 2 + 'px';
+  };
+  note.addEventListener('input', () => {
+    st.note = note.value;
+    fitNote();
+  });
+  requestAnimationFrame(fitNote);
   wrap.appendChild(editorRow('Note', null, note));
 
   // save / approve
@@ -1194,7 +1314,7 @@ function renderEditor(st, done) {
 // One result's editor (codes and wordings; name and value type). Everything is editable. Used by every test that
 // includes the result — the line below says how many.
 // A "Codes & wordings" button that opens the result editor in place, inside the test's edit screen.
-function resultEditorSlot(r) {
+function resultEditorParts(r) {
   const holder = h('div', { class: 'inv-em-resedit' });
   const open = btn(
     'Codes & wordings',
@@ -1208,7 +1328,7 @@ function resultEditorSlot(r) {
     'lf-btn-sm inv-edit-result',
     'Edit this result’s SNOMED codes and wordings (shared by every test that uses it)'
   );
-  return h('div', { class: 'inv-em-resslot' }, open, holder);
+  return { button: open, holder };
 }
 
 function renderResultEditor(r, done) {

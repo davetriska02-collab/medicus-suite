@@ -110,9 +110,12 @@ for (const fn of src.match(/\blabcatalogue[A-Za-z]+(?=\()/g) || []) {
 
 console.log('\n── card layout and unlinked-group actions ──');
 check(
-  ['How it is requested in Medicus', 'How it comes back from the lab', 'Never matches…', 'SNOMED codes'].every((t) =>
-    src.includes(t)
-  ),
+  [
+    'How it is requested in Medicus',
+    'How it comes back from the lab',
+    'Never counts as this test…',
+    'SNOMED codes',
+  ].every((t) => src.includes(t)),
   'the card shows the four areas: requested / comes back from the lab / never matches / results'
 );
 check(/Add more tests to this panel/.test(src), 'the results panel offers "Add more tests to this panel"');
@@ -179,15 +182,36 @@ check(
   'entries the catalogue had to exclude can be removed from the problems list (they are not listed anywhere else)'
 );
 
+console.log('\n── layout: two columns on top; the never strip and the results table run the full width ──');
+{
+  const css = read('options/investigations-section.css');
+  check(
+    /\.inv-panel-never \{\s*grid-column: 1 \/ -1;\s*grid-row: 2;/.test(css) &&
+      /\.inv-panel-res \{\s*grid-column: 1 \/ -1;\s*grid-row: 3;/.test(css),
+    'the "never counts as this test" strip and the SNOMED codes block each span the whole width, below the two columns'
+  );
+  check(
+    /'inv-restable'/.test(src) &&
+      /'SNOMED description'/.test(src) &&
+      /'Core \/ optional'/.test(src) &&
+      /'Wordings'/.test(src),
+    'the results are ONE table: name, code, SNOMED description, unit, core/optional, wordings, lab'
+  );
+  check(
+    /gridRow = span > 1/.test(src) && /'shared by ' \+ usedBy/.test(src),
+    'each code is its own line, name / role / wordings span them, and a result shared by several tests says so'
+  );
+}
+
 console.log('\n── Edit and Details are one screen ──');
 check(
   !/'Details'/.test(src) && !/'Hide'/.test(src),
   'there is no separate Details / Hide button — Edit opens everything'
 );
 check(
-  /function resultEditorSlot/.test(src) &&
+  /function resultEditorParts/.test(src) &&
     /'Codes & wordings'/.test(src) &&
-    /r \? resultEditorSlot\(r\) : null/.test(src),
+    /r \? resultEditorParts\(r\) : null/.test(src),
   "each result in a test's edit screen has a Codes & wordings button that edits the result's own codes and wordings in place"
 );
 check(

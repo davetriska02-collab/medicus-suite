@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.2] — 2026-09-22
+
+### Investigations page: test card layout (first step of folding Lab Filing into the catalogue)
+
+Layout only — no filing data yet (design: `docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`).
+
+- **The test card runs in rows.** Two columns on top (how it is requested in Medicus → how it comes back from the lab), then
+  the red strip — renamed **"Never counts as this test…"**, so a later "never offer to file when…" strip is clearly a different
+  thing — and the results, both full width.
+- **One results table** instead of a list of rows: Name | Code | SNOMED description | Unit | Core / optional | Wordings | Lab.
+  Each code is its own line (HbA1c shows its four codes stacked); name, role, wordings and lab span a result's code lines. The QOF
+  tag sits beside the code and the pale-green highlight is kept. A result used by several tests says "shared by N tests".
+- **Codes & wordings** (and remove) now sit under the result's name, and open the result editor full width under its row.
+- **The Note box** is only as tall as its text.
+- Tests: `test-investigations-section.js` guards the layout (full-width strip and table, table columns, per-code lines).
+
 ## [v3.265.1] — 2026-09-22
 
 ### Lab Filing: a whitelisted lab comment must now explain the WHOLE comment (H-073 review item)
