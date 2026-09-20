@@ -399,6 +399,24 @@ const overlayWith = (extra) => ({ ...OV.emptyOverlay(), ...extra });
     );
   }
 
+  console.log('\n--- export strips approvals at the source (they never travel) ---');
+  {
+    STORE = {
+      [KEY]: overlayWith({ results: [res('appr', '900000000000321', true)] }),
+    };
+    const e = await IO.labcatalogueExport();
+    const p = e.practice.results[0].provenance;
+    check(
+      p.reviewed === false && !('reviewedBy' in p) && !('reviewedAt' in p),
+      'an approved entry exports unreviewed, with the reviewer name removed'
+    );
+    check(
+      STORE[KEY].results[0].provenance.reviewed === true,
+      'the stored overlay keeps its local approval (export is read-only)'
+    );
+    STORE = {};
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

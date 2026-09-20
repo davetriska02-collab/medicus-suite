@@ -1645,10 +1645,13 @@ function renderLabs() {
     det.appendChild(h('div', { class: 'lf-muted', text: 'No labs defined.' }));
     return det;
   }
+  // Approving a lab activates EVERY heading mapping it carries — including headings that identify other tests — so the
+  // review card must list them all, not just the mixed-group ones. A mapping the reviewer never saw must not exist.
+  const refLabel = (ref) => (ref.startsWith('inv:') ? (invById.get(ref.slice(4)) || {}).label : ref.slice(4)) || ref;
   for (const lab of labs) {
     const ov = S.overlay.labs.find((l) => l.id === lab.id);
     const needs = ov && ov.provenance.reviewed !== true;
-    const mixed = (lab.groupHeadings || []).filter((g) => !(g.identifies || []).length);
+    const heads = lab.groupHeadings || [];
     const block = h(
       'div',
       { class: 'inv-lab-block' },
@@ -1665,25 +1668,20 @@ function renderLabs() {
             'lf-btn-primary lf-btn-sm'
           )
         : null,
-      mixed.length
+      heads.length
         ? h(
             'ul',
             {},
-            mixed.map((g) =>
-              h(
-                'li',
-                {},
-                h('strong', { text: g.text }),
-                ' → may contain ' +
-                  ((g.mayContain || [])
-                    .map(
-                      (ref) => (ref.startsWith('inv:') ? (invById.get(ref.slice(4)) || {}).label : ref.slice(4)) || ref
-                    )
-                    .join(', ') || '—')
-              )
-            )
+            heads.map((g) => {
+              const identifies = (g.identifies || []).map((x) => (invById.get(x) || {}).label || x);
+              const may = (g.mayContain || []).map(refLabel);
+              const parts = [];
+              if (identifies.length) parts.push('identifies ' + identifies.join(', '));
+              if (may.length) parts.push('may contain ' + may.join(', '));
+              return h('li', {}, h('strong', { text: g.text }), ' → ' + (parts.join('; ') || '—'));
+            })
           )
-        : h('div', { class: 'lf-muted', text: 'No mixed-group headings.' })
+        : h('div', { class: 'lf-muted', text: 'No report headings.' })
     );
     det.appendChild(block);
   }

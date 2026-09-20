@@ -86,12 +86,15 @@
   }
 
   // ── Backup ─────────────────────────────────────────────────────────────────────
+  // Approvals are stripped at the source (stripApprovals): they are per machine and must never travel, and the reviewer
+  // name is personal data with no business in a backup or shared-folder file. Every import path force-inerts as well —
+  // belt and braces.
   async function labcatalogueExport() {
     const OV = need();
     let practice;
     let warning = null;
     try {
-      practice = await readOverlay();
+      practice = OV.stripApprovals(await readOverlay());
     } catch (e) {
       // A corrupt stored value must never block a whole-suite backup: export an empty overlay and say why.
       practice = OV.emptyOverlay();

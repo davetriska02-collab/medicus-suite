@@ -1047,5 +1047,105 @@ console.log('\n── dangling links (deleted tests must not poison a lab) ─�
   );
 }
 
+console.log('\n── approval cascade cannot activate foreign heading mappings (red-team 2026-09-20) ──');
+{
+  // A crafted import adds a plausible new test plus a NEW lab whose second heading maps a "Urea and electrolytes"-style
+  // wording onto a DIFFERENT built-in test. Approving the new test must NOT approve that lab as a side effect: the
+  // poisoned mapping was never shown to the reviewer, and once live it misfiles that analyte with heading confidence.
+  const evilLab = (headings) => ({
+    id: 'evil-lab',
+    name: 'Evil Lab',
+    identifiers: { performerOrg: 'EVIL1' },
+    groupHeadings: headings,
+    provenance: unreviewed,
+  });
+  const base = {
+    results: [newResult('practice-calpro-s', '900000000000777', { ...unreviewed })],
+    investigations: [
+      newInv('practice-calpro-surv', [{ result: 'practice-calpro-s', role: 'core' }], { ...unreviewed }),
+    ],
+  };
+  const o1 = OV.sanitiseOverlay({
+    ...base,
+    labs: [
+      evilLab([
+        { text: 'Calprotectin surveillance', identifies: ['practice-calpro-surv'] },
+        { text: 'Urea and electrolytes', identifies: ['lipids'] },
+      ]),
+    ],
+  });
+  const ap1 = OV.approveInvestigation(builtin, o1, 'practice-calpro-surv', 'test', '2026-09-20');
+  check(
+    ap1.approvedLabs.length === 0 &&
+      ap1.overlay.labs[0].provenance.reviewed === false &&
+      !OV.mergeCatalogue(builtin, ap1.overlay, {}).catalogue.labs.some((l) => l.id === 'evil-lab'),
+    'a lab heading mapping a wording onto a DIFFERENT test is never approved as a side effect'
+  );
+  const o2 = OV.sanitiseOverlay({
+    ...base,
+    labs: [
+      evilLab([{ text: 'Calprotectin surveillance', identifies: ['practice-calpro-surv'], mayContain: ['inv:ue'] }]),
+    ],
+  });
+  const ap2 = OV.approveInvestigation(builtin, o2, 'practice-calpro-surv', 'test', '2026-09-20');
+  check(ap2.approvedLabs.length === 0, 'a mayContain reference to a different test also blocks the cascade');
+  const o3 = OV.sanitiseOverlay({
+    ...base,
+    labs: [
+      evilLab([
+        {
+          text: 'Calprotectin surveillance',
+          identifies: ['practice-calpro-surv'],
+          mayContain: ['inv:practice-calpro-surv', 'res:practice-calpro-s'],
+        },
+      ]),
+    ],
+  });
+  const ap3 = OV.approveInvestigation(builtin, o3, 'practice-calpro-surv', 'test', '2026-09-20');
+  check(
+    ap3.approvedLabs.length === 1 && ap3.overlay.labs[0].provenance.reviewed === true,
+    'a lab whose headings reference ONLY the approved test (and its members) still cascades'
+  );
+}
+
+console.log('\n── duplicate ids reject (a hidden override must not ride an innocent copy) ──');
+{
+  check(
+    throwsWith(
+      () =>
+        OV.sanitiseOverlay({
+          results: [
+            newResult('adjusted-calcium', '900000000000123', { ...unreviewed }),
+            newResult('adjusted-calcium', '900000000000124', { ...unreviewed }, { override: true }),
+          ],
+        }),
+      /more than one entry with id "adjusted-calcium"/
+    ),
+    'two results under one id are rejected by the sanitiser'
+  );
+  check(
+    throwsWith(
+      () =>
+        OV.sanitiseOverlay({
+          investigations: [newInv('dup-inv', [], { ...unreviewed }), newInv('dup-inv', [], { ...unreviewed })],
+        }),
+      /more than one entry with id "dup-inv"/
+    ),
+    'two investigations under one id are rejected'
+  );
+}
+
+console.log('\n── stripApprovals: approvals (and reviewer names) never travel ──');
+{
+  const o = OV.sanitiseOverlay({ results: [newResult('r-appr', '900000000000123', reviewed())] });
+  const s = OV.stripApprovals(o);
+  const p = s.results[0].provenance;
+  check(
+    p.reviewed === false && !('reviewedBy' in p) && !('reviewedAt' in p) && p.source === 'practice',
+    'stripApprovals clears reviewed/reviewedBy/reviewedAt but leaves the source untouched'
+  );
+  check(o.results[0].provenance.reviewed === true, 'the input overlay is not mutated');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

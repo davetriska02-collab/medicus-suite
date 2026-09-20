@@ -39,6 +39,14 @@ their own rules, so no live behaviour changes.** The page says so on the page. D
 - **Robustness.** Deleting a test no longer leaves lab headings pointing at it (which used to make the whole lab entry
   invalid and silently block later additions); dangling heading links now heal; entries the merge excludes are listed under
   "catalogue problems" with a Remove button.
+- **Pre-merge red-team hardening** (review of 2026-09-20): (a) approving a test no longer cascade-approves a lab entry
+  carrying heading mappings the reviewer was never shown — only headings byte-identical to the shipped lab definition or
+  referencing exclusively the approved test ride the approval (a crafted profile could otherwise activate a heading
+  mapping a U&E-style wording onto a different test: the misfiled-analyte hazard); the lab review card now lists every
+  heading mapping, not just mixed-group ones. (b) Duplicate ids within a kind now reject at the sanitiser — a hidden
+  `override` copy could ride an innocent-looking duplicate through the approval stamp. (c) Approvals (and reviewer
+  names) are stripped from exports at the source (`stripApprovals`), and `mergeIntoOverlay` force-inerts its imported
+  side, so "approvals never travel" no longer rests solely on the importing machine. All three regression-tested.
 - **Tests.** New: `test-lab-catalogue-core.js`, `-corpus.js` (eight structure-only real-report fixtures in
   `fixtures/lab-catalogue/`), `-overlay.js`, `-import.js`, `-scan.js`, `test-labcatalogue-io.js`,
   `test-investigations-section.js`; practice-profile tests extended.

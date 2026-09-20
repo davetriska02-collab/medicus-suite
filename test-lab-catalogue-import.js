@@ -269,6 +269,25 @@ console.log('\n── merging into an existing overlay (local wins, idempotent) 
   );
 }
 
+console.log('\n── mergeIntoOverlay forces the imported side inert (no smuggled approvals) ──');
+{
+  const first = run([T('esr', 'ESR', ['Erythrocyte sedimentation rate'], ['ESR'], ['ESR'], true)]);
+  const crafted = JSON.parse(JSON.stringify(first.overlay));
+  for (const e of crafted.investigations.concat(crafted.results)) {
+    e.provenance = { ...e.provenance, reviewed: true, reviewedBy: 'Attacker', reviewedAt: '2026-09-20' };
+  }
+  const m = IMP.mergeIntoOverlay(OV.emptyOverlay(), crafted);
+  check(
+    m.overlay.investigations.every((i) => i.provenance.reviewed === false) &&
+      m.overlay.results.every((r) => r.provenance.reviewed === false),
+    'a pre-approved imported entry arrives unreviewed'
+  );
+  check(
+    m.overlay.investigations.every((i) => !('reviewedBy' in i.provenance)),
+    'and the foreign reviewer name is dropped'
+  );
+}
+
 console.log('\n── extension that only adds a lab wording still carries an approvable entry ──');
 {
   const bi = builtin.investigations.find((i) => i.id === 'crp');

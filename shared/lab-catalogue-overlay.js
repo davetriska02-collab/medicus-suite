@@ -262,6 +262,18 @@
     };
   }
 
+  // Duplicate ids within a kind REJECT: every id-keyed lookup (markReviewed, the settings page, the merge) reads the
+  // FIRST match, so a second entry under the same id is an invisible passenger — approval stamps would cascade onto a
+  // copy the reviewer never saw (e.g. a hidden override riding an innocent-looking duplicate).
+  function rejectDuplicateIds(list, what) {
+    const seen = new Set();
+    for (const e of list) {
+      if (seen.has(e.id)) fail(`${what} has more than one entry with id "${e.id}"`);
+      seen.add(e.id);
+    }
+    return list;
+  }
+
   // raw -> clean overlay. Never mutates `raw`. Unknown keys are dropped; type errors / over-limit values throw.
   function sanitiseOverlay(raw) {
     if (raw === undefined || raw === null) return emptyOverlay();
@@ -272,9 +284,12 @@
     return {
       schema: OVERLAY_SCHEMA,
       context: sanitiseContext(src.context),
-      results: arr(src.results, LIMITS.results, 'results').map(sanitiseResult),
-      investigations: arr(src.investigations, LIMITS.investigations, 'investigations').map(sanitiseInvestigation),
-      labs: arr(src.labs, LIMITS.labs, 'labs').map(sanitiseLab),
+      results: rejectDuplicateIds(arr(src.results, LIMITS.results, 'results').map(sanitiseResult), 'results'),
+      investigations: rejectDuplicateIds(
+        arr(src.investigations, LIMITS.investigations, 'investigations').map(sanitiseInvestigation),
+        'investigations'
+      ),
+      labs: rejectDuplicateIds(arr(src.labs, LIMITS.labs, 'labs').map(sanitiseLab), 'labs'),
       retired: strArr(src.retired, LIMITS.retired, 64, 'retired'),
       disabled: {
         results: strArr(dis.results, LIMITS.results, 64, 'disabled.results'),
@@ -307,6 +322,23 @@
         delete e.provenance.reviewedBy;
         delete e.provenance.reviewedAt;
         if (e.provenance.importedFrom === undefined) delete e.provenance.importedFrom;
+      });
+    }
+    return o;
+  }
+
+  // Strip approvals for EXPORT (backup / published profile): approvals are per machine and must never travel, and the
+  // reviewer's name is personal data that has no business in a shared file. Every import path force-inerts anyway —
+  // this makes the "approvals never travel" invariant true at the source rather than relying on the importing side.
+  // Unlike forceInert, the provenance source is left as-is: the importing machine decides what counts as imported.
+  function stripApprovals(overlay) {
+    const o = sanitiseOverlay(overlay);
+    for (const k of KINDS) {
+      o[k] = o[k].map((e) => {
+        const p = { ...e.provenance, reviewed: false };
+        delete p.reviewedBy;
+        delete p.reviewedAt;
+        return { ...e, provenance: p };
       });
     }
     return o;
@@ -379,12 +411,25 @@
       }
     }
     // Lab entries carrying headings that point at THIS investigation are part of the same decision: approve them too,
-    // but only when every heading in the entry points at something already live (built-in, approved, or this one) — a
-    // brand-new lab, or one with headings for other unapproved tests, is never approved as a side effect.
-    const live = new Set([
-      ...asArr(builtin && builtin.investigations).map((i) => i.id),
-      ...o.investigations.filter((i) => i.provenance.reviewed === true).map((i) => i.id),
-    ]);
+    // but ONLY when every heading the approval would newly activate references exclusively this investigation (and,
+    // for "res:" refs, its own member results). A heading is not "newly activated" if it is byte-identical to one the
+    // SHIPPED definition of that lab already carries — lab overrides written by saveInvestigation copy the shipped
+    // headings verbatim, and those mappings are live regardless of this approval. Anything else that maps some OTHER
+    // report wording onto some OTHER test — even a built-in one — was never shown to the reviewer, and activating it as
+    // a side effect is exactly the misfiled-analyte hazard this review gate exists to stop. Such labs stay inert until
+    // approved from their own review surface, where every heading mapping is listed.
+    const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+    const shippedHeading = (labId, g) =>
+      asArr(builtin && builtin.labs)
+        .filter((l) => l.id === labId)
+        .some((l) =>
+          asArr(l.groupHeadings).some(
+            (b) =>
+              b.text === g.text &&
+              sameSet(asArr(b.identifies), asArr(g.identifies)) &&
+              sameSet(asArr(b.mayContain), asArr(g.mayContain))
+          )
+        );
     const approvedLabs = [];
     for (const lab of o.labs) {
       if (lab.provenance.reviewed === true) continue;
@@ -392,8 +437,11 @@
       if (!heads.some((g) => asArr(g.identifies).includes(id))) continue;
       const ok = heads.every(
         (g) =>
-          asArr(g.identifies).every((x) => live.has(x)) &&
-          asArr(g.mayContain).every((ref) => !ref.startsWith('inv:') || live.has(ref.slice(4)))
+          shippedHeading(lab.id, g) ||
+          (asArr(g.identifies).every((x) => x === id) &&
+            asArr(g.mayContain).every((ref) =>
+              ref.startsWith('inv:') ? ref.slice(4) === id : !ref.startsWith('res:') || need.has(ref.slice(4))
+            ))
       );
       if (!ok) continue;
       lab.provenance = { ...lab.provenance, ...stamp };
@@ -1429,6 +1477,7 @@
     emptyOverlay,
     sanitiseOverlay,
     forceInert,
+    stripApprovals,
     markReviewed,
     summarise,
     setContext,

@@ -450,16 +450,19 @@
   }
 
   // Add an imported overlay onto an EXISTING overlay without ever replacing local work: entries whose id is already
-  // present locally are left alone; the rest are appended (still unreviewed).
+  // present locally are left alone; the rest are appended (still unreviewed). The imported side is FORCED INERT here,
+  // not just trusted to arrive inert: importOirTests already emits reviewed:false, but any future caller passing a
+  // crafted or foreign overlay must not be able to smuggle a pre-approved entry past the per-machine review gate.
   function mergeIntoOverlay(existing, imported) {
     const OV = overlayApi();
     const local = OV.sanitiseOverlay(existing);
+    const inert = OV.forceInert(imported);
     const next = JSON.parse(JSON.stringify(local));
     let added = 0;
     let skipped = 0;
     for (const kind of ['results', 'investigations', 'labs']) {
       const have = new Set(next[kind].map((e) => e.id));
-      for (const e of imported[kind] || []) {
+      for (const e of inert[kind] || []) {
         if (have.has(e.id)) {
           skipped++;
           continue;
@@ -469,7 +472,7 @@
         added++;
       }
     }
-    for (const id of imported.disabled ? imported.disabled.investigations : []) {
+    for (const id of inert.disabled ? inert.disabled.investigations : []) {
       if (!next.disabled.investigations.includes(id)) next.disabled.investigations.push(id);
     }
     return { overlay: OV.sanitiseOverlay(next), added, skipped };
