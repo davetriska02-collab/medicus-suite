@@ -1,0 +1,31 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-141",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "CALPROTECTIN (FAECAL)",
+      "specimen": {
+        "type": "Faeces"
+      },
+      "results": [
+        {
+          "description": "Faecal Calprotectin",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1002571000000102",
+            "description": "Faecal Calprotectin"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "ug/g faeces",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [],
+  "requests": ["Faecal Calprotectin", "Faecal Calprotectin", "CA 12-5"]
+}

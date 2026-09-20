@@ -1545,6 +1545,75 @@ function makeProfile(over = {}) {
     'labfiling replace: even a profile a clinician had enabled locally reverts to disabled — same id, republished content requires a fresh local review'
   );
 
+  // ── Lab catalogue (Phase B3): a publish can only ever deliver INERT entries ─────
+  console.log('\n--- labcatalogue merge / replace ---');
+  const LCIO = require('./shared/io/labcatalogue-io.js');
+  global.labcatalogueApplyPublished = LCIO.labcatalogueApplyPublished;
+  const lcBuiltin = require('./rules/lab-catalogue.json');
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(lcBuiltin)) });
+  const lcRes = (id, code, reviewed) => ({
+    id,
+    label: id.toUpperCase(),
+    valueKind: 'numeric',
+    codes: code ? [{ conceptId: code, role: 'primary' }] : [],
+    aliases: [{ text: id }],
+    provenance: { source: 'practice', reviewed },
+  });
+  const lcOverlay = (extra) =>
+    Object.assign(
+      { schema: 1, context: { icb: '', icbCode: '', borough: '', labs: [], orderingSystems: [] }, results: [], investigations: [], labs: [], retired: [], disabled: { results: [], investigations: [] } },
+      extra
+    );
+
+  reset();
+  store['labcatalogue.practice'] = lcOverlay({ results: [lcRes('mine', null, true)] });
+  const lcMerge = makeProfile({
+    profileVersion: 'lc-merge-1',
+    apply: { modules: { labcatalogue: 'merge' } },
+    envelope: {
+      modules: {
+        labcatalogue: {
+          practice: lcOverlay({
+            context: { icb: 'NHS South West London', icbCode: '', borough: 'Richmond', labs: [], orderingSystems: ['tquest'] },
+            results: [lcRes('mine', null, true), lcRes('theirs', '777000111', true)],
+          }),
+        },
+      },
+    },
+  });
+  const rLc1 = await PP.applyProfile(lcMerge);
+  check(rLc1.modulesApplied.includes('labcatalogue') && rLc1.errors.length === 0, 'labcatalogue merge applied without error');
+  const lcStored = store['labcatalogue.practice'];
+  check(lcStored.results.length === 2 && lcStored.results.some((r) => r.id === 'theirs'), 'labcatalogue merge: the published entry is added');
+  check(lcStored.results.find((r) => r.id === 'mine').provenance.reviewed === true, 'labcatalogue merge: a local entry with the same id is untouched (still approved)');
+  check(lcStored.results.find((r) => r.id === 'theirs').provenance.reviewed === false, 'labcatalogue merge: the newly-synced entry arrives UNREVIEWED regardless of the published value');
+  check(lcStored.context.icb === 'NHS South West London' && lcStored.context.borough === 'Richmond', 'labcatalogue merge: practice context (ICB / borough) is applied');
+
+  const rLc1b = await PP.applyProfile(makeProfile({ ...lcMerge, profileVersion: 'lc-merge-2' }));
+  check(!rLc1b.modulesApplied.includes('labcatalogue'), 'labcatalogue merge: re-applying an unchanged publish is a no-op');
+
+  reset();
+  store['labcatalogue.practice'] = lcOverlay({ results: [lcRes('local-approved', null, true)] });
+  await PP.applyProfile(
+    makeProfile({
+      profileVersion: 'lc-rep-1',
+      apply: { modules: { labcatalogue: 'replace' } },
+      envelope: { modules: { labcatalogue: { practice: lcOverlay({ results: [lcRes('policy-one', '666000111', true)] }) } } },
+    })
+  );
+  const lcRep = store['labcatalogue.practice'];
+  check(lcRep.results.length === 1 && lcRep.results[0].id === 'policy-one', 'labcatalogue replace: the published overlay is authoritative');
+  check(lcRep.results[0].provenance.reviewed === false, 'labcatalogue replace: even an entry published as approved arrives UNREVIEWED');
+
+  reset();
+  const lcSaved = global.labcatalogueApplyPublished;
+  delete global.labcatalogueApplyPublished;
+  const rLc3 = await PP.applyProfile(makeProfile({ profileVersion: 'lc-missing-1', apply: { modules: { labcatalogue: 'merge' } }, envelope: { modules: { labcatalogue: { practice: lcOverlay({}) } } } }));
+  check(rLc3.errors.some((e) => /labcatalogue: labcatalogueApplyPublished not available/.test(e)), 'labcatalogue: a context without the io helpers reports a module error rather than throwing');
+  global.labcatalogueApplyPublished = lcSaved;
+  delete global.fetch;
+
+
   // ── Summary ───────────────────────────────────────────────────────────────
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

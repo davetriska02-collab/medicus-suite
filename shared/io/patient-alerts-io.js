@@ -3,7 +3,7 @@
 // Exports and imports the Patient Alerts storage keys as a plain object.
 // Used by suite-wide backup and the per-module export card in Options.
 //
-// PRIVACY NOTE: from v3.263.16 the suite backup exports ONLY the practice
+// PRIVACY NOTE: from v3.264.1 the suite backup exports ONLY the practice
 // palette (`patientAlerts.types`). Per-patient flags (`patientAlerts.byPatient`)
 // are PHI and stay on the workstation — they are stripped from export and
 // skipped on import. Older backups that still carry byPatient are accepted

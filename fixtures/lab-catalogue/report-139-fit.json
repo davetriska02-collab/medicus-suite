@@ -1,0 +1,42 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-139",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "Quantitv faecal immunochem tst",
+      "specimen": {
+        "type": "Faeces"
+      },
+      "results": [
+        {
+          "description": "Quantitv faecal immunochem tst",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1049361000000101",
+            "description": "Quantitv faecal immunochem tst"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "ug/g faeces",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [],
+  "requests": [
+    "Bone Profile (Calcium Studies)",
+    "Liver Function",
+    "Thyroid Stimulating Hormone",
+    "Urea and Electrolytes WITH Potassium",
+    "C-Reactive Protein Blood",
+    "Full Blood Count",
+    "Erythrocyte Sedimentation Rate",
+    "HbA1C (Glycated Haemoglobin)",
+    "Coeliac Disease Antibodies",
+    "Faecal Immunochemical Test (Faeces)"
+  ]
+}

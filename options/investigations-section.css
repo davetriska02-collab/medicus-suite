@@ -1,0 +1,1028 @@
+/* © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. */
+/* Medicus Suite — Investigations (Lab Result Catalogue) options section. Reuses the .lf-* controls from labfiling-section.css. */
+
+/* The options content column is capped at 760px for the prose-heavy sections. This section is a dense list, so it may use
+   the width of the window (scoped: no other section is affected). */
+.opt-content:has(#sect-investigations.active) {
+  max-width: 1400px;
+}
+
+.inv-card {
+  margin-bottom: 10px;
+}
+
+/* ── Your practice: two or three lines ── */
+.inv-practice {
+  padding: 8px 12px;
+}
+.inv-practice-view {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.inv-practice-lines {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.inv-practice-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px 12px;
+}
+.inv-cell {
+  min-width: 0;
+}
+.inv-cell-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+  margin-bottom: 2px;
+}
+.inv-choice {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.inv-choice .lf-input {
+  min-width: 0;
+  padding: 4px 8px;
+}
+.inv-hide {
+  display: none !important;
+}
+.inv-sel {
+  flex: 1 1 auto;
+}
+.inv-txt {
+  flex: 1 1 auto;
+}
+.inv-org {
+  flex: 0 1 150px;
+}
+.inv-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inv-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.inv-chips:empty {
+  display: none;
+}
+.inv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 1px 3px 1px 7px;
+  color: var(--text-2);
+}
+.inv-chip-x {
+  background: none;
+  border: 0;
+  color: var(--text-4);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 3px;
+}
+.inv-chip-x:hover {
+  color: var(--red);
+}
+.inv-addrow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.inv-addrow .inv-choice {
+  flex: 1 1 200px;
+}
+.inv-practice-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.inv-practice-actions .lf-help {
+  margin: 0 auto 0 0;
+}
+
+/* ── Browse ── */
+.inv-browse-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.inv-search {
+  flex: 1 1 320px;
+  width: auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 5px 9px;
+}
+.inv-count {
+  margin: 0 0 6px;
+}
+.inv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── One compact card ── */
+.inv-item {
+  padding: 5px 9px;
+  border-radius: var(--r-md);
+}
+.inv-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.inv-name {
+  flex: 0 0 auto;
+  max-width: 240px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-req {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-req-k {
+  color: var(--text-4);
+  font-style: italic;
+}
+.inv-badges {
+  flex: 0 0 auto;
+  margin: 0;
+  flex-wrap: nowrap;
+}
+.inv-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+.inv-via {
+  font-size: 10.5px;
+  color: var(--accent);
+  margin-top: 2px;
+}
+.inv-open {
+  padding-bottom: 8px;
+}
+.inv-body {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.inv-sec {
+  display: flex;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.45;
+  min-width: 0;
+}
+.inv-sec > .lf-k {
+  flex: 0 0 110px;
+}
+.inv-sec > :not(.lf-k) {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.inv-headchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.inv-headchip {
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 0 6px;
+  font-size: 11px;
+}
+.inv-headlab {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--text-4);
+}
+
+/* ── Results inside the details: contained in the card; hover for the tooltip, click for everything ── */
+.inv-reslist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.inv-res {
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  padding: 2px 5px;
+  cursor: pointer;
+}
+.inv-res:hover,
+.inv-res:focus-visible {
+  background: var(--bg-deep);
+  border-color: var(--border);
+  outline: none;
+}
+.inv-res-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  min-width: 0;
+}
+.inv-res-name {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.inv-tag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.inv-tag-warn {
+  color: var(--amber);
+}
+.inv-code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.inv-more {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+.inv-lab {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.inv-res-full {
+  display: none;
+  margin: 4px 0 2px 8px;
+  font-size: 11px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.inv-res.open .inv-res-full {
+  display: block;
+}
+.inv-res.open .inv-lab {
+  display: none;
+}
+.inv-code-full {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  margin-left: 8px;
+}
+.inv-res-full .lf-k {
+  display: inline-block;
+  margin-right: 6px;
+}
+
+/* ── Import preview / labs / problems ── */
+.inv-preview {
+  margin-top: 10px;
+}
+.inv-details {
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.inv-details summary {
+  cursor: pointer;
+  color: var(--text-1);
+}
+.inv-details ul {
+  margin: 6px 0 6px 18px;
+  padding: 0;
+  line-height: 1.5;
+}
+.inv-import-collapsed {
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.inv-import-collapsed[open] {
+  padding-bottom: 0;
+}
+.inv-import-collapsed > .inv-card {
+  border: 0;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+  margin-bottom: 6px;
+}
+.inv-labs {
+  margin-top: 14px;
+}
+.inv-lab-block {
+  margin: 8px 0 8px 12px;
+}
+
+@media (max-width: 720px) {
+  .inv-top {
+    flex-wrap: wrap;
+  }
+  .inv-req {
+    flex-basis: 100%;
+    order: 3;
+  }
+}
+
+/* ── Editing ── */
+.inv-editor {
+  gap: 8px;
+}
+.inv-edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.inv-edit-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.inv-in {
+  flex: 1 1 200px;
+  min-width: 0;
+  padding: 4px 8px;
+}
+.inv-sel-sm {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 4px 6px;
+}
+.inv-edit-member {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 2px 4px;
+}
+.inv-edit-member .inv-res-name {
+  flex: 1 1 160px;
+}
+.inv-chip-locked {
+  opacity: 0.85;
+  border-style: dashed;
+}
+.inv-lock {
+  font-size: 9px;
+  padding: 0 4px;
+  cursor: help;
+}
+.inv-edit-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.inv-edit-foot .lf-help {
+  margin: 0 auto 0 0;
+  flex: 1 1 240px;
+}
+.inv-error {
+  color: var(--red);
+  font-size: 11.5px;
+  flex: 1 1 100%;
+  text-align: right;
+}
+.inv-res-edit {
+  margin: 4px 0 2px 8px;
+  padding: 6px 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inv-edit-result {
+  margin-top: 4px;
+}
+.inv-new-result {
+  padding-left: 2px;
+}
+
+/* ── One line per result (details and editor) ── */
+.inv-res-head {
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.inv-res-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-res-head > .inv-tag,
+.inv-res-head > .inv-code,
+.inv-res-head > .inv-more {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.inv-res-head > .inv-lab {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.inv-edit-member {
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+.inv-edit-member .inv-res-name,
+.inv-em-name {
+  flex: 0 1 200px;
+  min-width: 60px;
+  font-weight: 600;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-edit-member .inv-sel-sm {
+  flex: 0 0 auto;
+}
+.inv-em-any {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.inv-em-codes {
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-em-nocode {
+  color: var(--amber);
+}
+.inv-em-lab {
+  flex: 0 1 220px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Edit / review screen ── */
+.inv-help {
+  margin: 0 0 2px;
+}
+.inv-inline-label {
+  font-size: 11px;
+  color: var(--text-4);
+}
+.inv-review-note {
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.inv-changes {
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.inv-changes summary {
+  cursor: pointer;
+  color: var(--text-1);
+}
+.inv-changes ul {
+  margin: 4px 0 4px 18px;
+  padding: 0;
+  line-height: 1.5;
+}
+.inv-checked {
+  flex: 1 1 100%;
+  font-size: 11.5px;
+  justify-content: flex-end;
+}
+
+/* ── Learn from real reports ── */
+.inv-scan-tools {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+.inv-scan-gaps {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inv-scan-gap {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11.5px;
+  min-width: 0;
+}
+.inv-scan-gapname {
+  font-weight: 600;
+  color: var(--text-1);
+  flex: 0 0 auto;
+}
+.inv-scan-go {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+.inv-limit {
+  width: 70px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+.inv-scan-result {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inv-scan-row {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 5px 9px;
+  min-width: 0;
+}
+.inv-scan-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 12px;
+}
+.inv-scan-heading {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.inv-scan-arrow {
+  color: var(--text-4);
+}
+.inv-scan-meta {
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin: 2px 0 3px 22px;
+}
+.inv-scan-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-left: 22px;
+  min-width: 0;
+}
+.inv-scan-res {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inv-scan-nocode {
+  color: var(--amber);
+}
+
+/* ── Footer of the edit / review screens: the statement sits in line with the buttons ── */
+.inv-edit-foot {
+  align-items: center;
+}
+.inv-foot-note {
+  flex: 1 1 360px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.inv-foot-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.inv-scan-warn {
+  color: var(--amber);
+}
+
+/* ── The card as a flow: requested in Medicus -> comes back from the lab -> the results we look for; "never" guard ── */
+.inv-flow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px 26px;
+  min-width: 0;
+}
+.inv-panel {
+  position: relative;
+  min-width: 0;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--r-md);
+  padding: 7px 10px 9px;
+  background: var(--bg-deep);
+}
+.inv-panel-title {
+  margin: 0 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+}
+.inv-panel-cap {
+  font-size: 10.5px;
+  color: var(--text-4);
+  margin-bottom: 3px;
+}
+.inv-panel-sub {
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-decoration: underline;
+  color: var(--text-2);
+}
+.inv-panel-req {
+  grid-column: 1;
+  grid-row: 1;
+}
+.inv-panel-lab {
+  grid-column: 2;
+  grid-row: 1;
+  border-color: var(--green);
+  background: var(--green-dim);
+}
+.inv-panel-lab .inv-panel-title {
+  color: var(--green);
+}
+.inv-panel-never {
+  grid-column: 1;
+  grid-row: 2;
+  border-color: var(--red);
+  background: var(--red-dim, transparent);
+}
+.inv-panel-never .inv-panel-title {
+  color: var(--red);
+}
+.inv-panel-res {
+  grid-column: 2;
+  grid-row: 2;
+}
+/* the arrows: request -> lab (across), lab -> results (down) */
+.inv-panel-req::after,
+.inv-panel-lab::after {
+  position: absolute;
+  color: var(--text-3);
+  font-size: 18px;
+  line-height: 1;
+  pointer-events: none;
+}
+.inv-panel-req::after {
+  content: '→';
+  right: -22px;
+  top: 12px;
+}
+.inv-panel-lab::after {
+  content: '↓';
+  left: 50%;
+  bottom: -20px;
+}
+.inv-panel .inv-sec {
+  flex-direction: column;
+  gap: 2px;
+}
+.inv-panel .inv-sec > .lf-k {
+  flex: none;
+}
+.inv-panel .inv-sec > .lf-k:empty {
+  display: none;
+}
+.inv-panel .inv-edit-col {
+  width: 100%;
+}
+@media (max-width: 720px) {
+  .inv-flow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inv-panel-req,
+  .inv-panel-lab,
+  .inv-panel-never,
+  .inv-panel-res {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .inv-panel-req::after,
+  .inv-panel-lab::after {
+    display: none;
+  }
+}
+
+.inv-scan-h {
+  margin: 12px 0 2px;
+  font-size: 12.5px;
+  color: var(--text-1);
+}
+.inv-scan-choice {
+  min-width: 220px;
+  max-width: 100%;
+}
+.inv-panel {
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.inv-merge {
+  margin: 10px 0 2px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+  color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inv-merge .lf-link {
+  font-size: inherit;
+}
+.inv-kind-filter {
+  flex: 0 0 auto;
+}
+
+/* ── matching board: requested (left) / comes back from the lab (right) ── */
+.inv-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1.25fr);
+  gap: 0 8px;
+  align-items: start;
+  margin-top: 6px;
+}
+.inv-board-arrow {
+  align-self: center;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 18px;
+}
+.inv-board-col {
+  min-width: 0;
+}
+.inv-board-list {
+  max-height: 520px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inv-board-h {
+  margin-top: 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-4);
+}
+.inv-board-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 11.5px;
+  background: var(--bg-elev);
+}
+.inv-board-item.inv-drop-over {
+  border-color: var(--green);
+  background: var(--green-dim);
+}
+.inv-board-matched {
+  border-color: var(--green);
+}
+.inv-board-name {
+  font-weight: 600;
+  color: var(--text-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.inv-match-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--green);
+  border: 1px solid var(--green-line);
+  border-radius: var(--r-sm);
+  padding: 0 3px 0 6px;
+}
+.inv-orphan {
+  cursor: grab;
+  background: var(--bg-elev);
+}
+.inv-orphan-matched {
+  border-color: var(--green);
+}
+.inv-dragging {
+  opacity: 0.5;
+}
+.inv-drag-grip {
+  color: var(--text-4);
+}
+.inv-orphan-pick {
+  margin: 4px 0 0 22px;
+}
+.inv-board-filter {
+  margin: 4px 0;
+  max-width: 420px;
+}
+@media (max-width: 720px) {
+  .inv-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inv-board-arrow {
+    display: none;
+  }
+}
+
+/* ── matching board (single place to read, scan and match) ── */
+.inv-board-col {
+  min-width: 0;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--r-md);
+  padding: 7px 10px 9px;
+  background: var(--bg-deep);
+}
+.inv-board-right {
+  border-color: var(--green);
+  background: var(--green-dim);
+}
+.inv-board-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.inv-board-right .inv-board-title {
+  color: var(--green);
+}
+.inv-board-filter {
+  display: block;
+  flex: none;
+  width: 100%;
+  max-width: 460px;
+  margin: 8px 0 2px;
+}
+.inv-match {
+  margin-bottom: 12px;
+}
+.inv-match-status {
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+.inv-match .lf-v {
+  font-size: 12px;
+  margin-top: 6px;
+}
+.inv-scan-results .lf-muted {
+  font-size: 10.5px;
+}
+
+.inv-apply {
+  margin: 10px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-deep);
+  font-size: 11.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.inv-apply-title {
+  font-weight: 600;
+  color: var(--text-1);
+}
+.inv-apply-ok {
+  color: var(--green);
+}
+.inv-apply-bad {
+  text-align: left;
+  flex: none;
+}
+.inv-board-filter {
+  margin: 0 0 6px;
+}
+
+/* ── SNOMED codes: number + description, one code per line; pale green = counts towards QOF ── */
+.inv-codelist {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 4px 6px;
+  min-width: 0;
+}
+.inv-codeline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  min-width: 0;
+}
+.inv-code-id {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-1);
+  flex: 0 0 auto;
+}
+.inv-code-desc {
+  color: var(--text-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.inv-code-unit {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+.inv-code-qof {
+  background: var(--green-dim);
+  box-shadow: inset 2px 0 0 var(--green);
+}
+.inv-qof-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--green);
+  border: 1px solid var(--green-line);
+  border-radius: var(--r-sm);
+  padding: 0 4px;
+}
+.inv-nocode {
+  margin-left: 6px;
+}
+.inv-em-codelist {
+  flex: 1 1 100%;
+  margin: 0 0 2px 8px;
+}
+.inv-edit-member {
+  flex-wrap: wrap;
+}

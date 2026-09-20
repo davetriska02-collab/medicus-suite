@@ -99,6 +99,7 @@ const VALID_SCOPES = [
   'reception',
   'knowledge',
   'labfiling',
+  'labcatalogue',
   'notifications',
   'leaflets',
   'patientAlerts',
@@ -416,6 +417,25 @@ function previewEnvelope(envelope) {
     }
   } else {
     const m = missing('Lab filing');
+    if (m) lines.push(m);
+  }
+
+  if (mods.labcatalogue) {
+    const p = mods.labcatalogue.practice || {};
+    const n = (k) => (Array.isArray(p[k]) ? p[k].length : 0);
+    const ctx = p.context || {};
+    lines.push(
+      `Lab catalogue: ${n('results')} result${n('results') === 1 ? '' : 's'}, ${n('investigations')} investigation${n('investigations') === 1 ? '' : 's'}, ${n('labs')} lab definition${n('labs') === 1 ? '' : 's'}`
+    );
+    if (ctx.icb || ctx.borough) lines.push(`Practice context: ${[ctx.icb, ctx.borough].filter(Boolean).join(' — ')}`);
+    if (n('results') + n('investigations') + n('labs') > 0) {
+      lines.push(
+        'NOTE: all imported catalogue entries arrive UNREVIEWED and are ignored until you approve each one here.'
+      );
+    }
+    if (mods.labcatalogue.warning) lines.push(`(Source machine warning: ${mods.labcatalogue.warning})`);
+  } else {
+    const m = missing('Lab catalogue');
     if (m) lines.push(m);
   }
 

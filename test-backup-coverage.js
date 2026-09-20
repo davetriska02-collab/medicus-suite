@@ -461,7 +461,7 @@ const ALLOWLIST = new Set([
   // own health warning, so it is never backed up:
   'health.stripSnooze',
 
-  // Service-worker importScripts / module-load failures (v3.263.16):
+  // Service-worker importScripts / module-load failures (v3.264.1):
   // machine-local diagnostic list written by service-worker.js so the health
   // strip and Options → Suite health can show a missing stack. Restoring it
   // onto another machine would import a stale "this worker failed to load"

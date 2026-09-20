@@ -1,6 +1,6 @@
 # Ready for CSO sign-off — H-063–H-076 + txn-proxy open actions
 
-**Product at this pack:** v3.263.16 (docs increment; **not** a re-baseline).  
+**Product at this pack:** v3.264.1 (docs increment; **not** a re-baseline).  
 **Last signed CSO review:** v3.261.21 (2026-09-10, Dr D. Triska, GMC 6159481).  
 **This pack does not invent a signature or a sign-off date.** Every hazard below stays **Proposed** until Dr Dave signs.
 
