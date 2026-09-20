@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.2] — 2026-09-20
+
+### CSO sign-off recorded: H-063–H-077 Accepted (ALARP), CSN txn-proxy trio signed, DPIA v1.3 signed
+
+Docs-only release recording Dave's in-session sign-off ("Reviews and signed") of the CSO pack that shipped in v3.264.1 (`docs/CSO-SIGNOFF-PACK-H063-H076.md`). Signed: **Dr D. Triska (CSO), GMC 6159481, in session, 2026-09-20.** No code, rule or behaviour change.
+
+- **`docs/HAZARD-LOG.md` v3.68** — **H-063, H-064, H-065, H-066, H-067, H-068, H-069, H-070, H-071, H-072, H-073, H-074, H-075, H-076 and H-077** all move from Proposed to **Accepted (ALARP)** at their proposed residual scores (H-063: 4, H-064: 4, H-065: 5, H-066: 4, H-067: 4, H-068: 4, H-069: 3, H-070: 2, H-071: 4, H-072: 4, H-073: 4, H-074: 4, H-075: 4, H-076: 6, H-077: 5), controls as recorded including each hazard's later addenda. Open review items on H-072/H-073/H-074/H-075 carry forward as future review items, not conditions. H-071's write stays fail-closed until its dummy-patient capture. Product pin moved 3.261.21 → 3.264.1.
+- **`docs/CLINICAL-SAFETY-NOTICE.md` v3.83** — CSO signature on the v3.82 rewrite of §6 items 1/8/9 (optional Transactional API proxy) and the item 3 Select-all correction. Scope is that trio and the item 3 correction only — the 3.14 §6.2/6.3 posture rewrite and the v3.63–v3.81 PENDING addenda tail still await review.
+- **`docs/DPIA.md` v1.3 — SIGNED** (the document's first signature; versions 1.0–1.2 were never signed). Signed by Dr D. Triska as CSO / manufacturer DPO contact; approval is for the stated processing subject to the §6 practice-side controls.
+- **Txn-proxy consequence:** with H-077 + CSN §6 items 1/8/9 + DPIA §2.2 all signed, the remaining gate on `txn.integrationMode` `hybrid`/`transactional` is the practice-side processing record / DPA with Graysbrook (DPIA §2.2) — enabling remains a deliberate practice configuration act.
+- **`docs/cso-review-ledger.json`** — `last_cso_review_version` moved to **3.264.1 / 2026-09-20** for CLINICAL-SAFETY-NOTICE, HAZARD-LOG and DPIA (previously null for DPIA), each with a 3.264.1 incremental-review scope entry; PENDING notes covered by this sign-off rewritten as covered; the INTENDED-PURPOSE open actions (i)–(iii) from the 2026-07-28 signature are recorded closed.
+- **Not signed** (honestly scoped, exactly as the pack asked): H-060, H-061, the H-002 (w) / H-003 (k) U&E-restore addendum (hazard-log v3.66 / CSN v3.81), the CSN 3.14 write-path posture, and the remaining PENDING addenda tail. Not a re-baseline — the last full hazard re-baseline remains v3.115.0.
+- `docs/CSO-SIGNOFF-PACK-H063-H076.md` marked **SIGNED 2026-09-20**, with the "How to sign" section converted to a completed record.
+
 ## [v3.264.1] — 2026-09-20
 
 ### Five safety / hygiene increments (CSO pack, write kernel, executable write tests, PHI-at-rest, loud failures)
