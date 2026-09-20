@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <title>Medicus Suite — Settings</title>
     <link rel="stylesheet" href="labfiling-section.css" />
+    <link rel="stylesheet" href="investigations-section.css" />
     <style>
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -1277,6 +1278,7 @@
         <button class="nav-item" data-section="stackchan">StackChan</button>
         <button class="nav-item" data-section="queue">Queue rules</button>
         <button class="nav-item" data-section="labfiling">Lab Filing</button>
+        <button class="nav-item" data-section="investigations">Investigations</button>
         <button class="nav-item" data-section="reception">Reception</button>
         <button class="nav-item" data-section="quickactions">Quick Actions</button>
         <button class="nav-item" data-section="knowledge">Knowledge</button>
@@ -2425,6 +2427,17 @@
             acknowledged, before it can file.
           </p>
           <div id="lfMount"></div>
+        </section>
+
+        <!-- Investigations (Lab Result Catalogue) — rendered by investigations-section.js (module) -->
+        <section class="opt-section" id="sect-investigations">
+          <h1>Investigations <span class="module-badge">lab result catalogue</span></h1>
+          <p class="section-desc">
+            The practice's catalogue of investigations, the results each one is made of, and how your lab words them.
+            Built-in entries are safety-reviewed and can only be added to; anything you add or import arrives
+            <strong>awaiting review</strong> and stays inactive until approved here.
+          </p>
+          <div id="invMount"></div>
         </section>
 
         <!-- Outstanding Requests section — deep-links into the Triage Lens OIR editor -->
@@ -3879,6 +3892,14 @@
                 </div>
               </div>
               <div class="module-export-card">
+                <div class="mec-name">Lab catalogue</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="labcatalogue">Export</button>
+                  <button class="ghost" data-mod-import="labcatalogue">Import</button>
+                  <input type="file" class="mod-file-input" data-mod="labcatalogue" accept=".json" style="display: none" />
+                </div>
+              </div>
+              <div class="module-export-card">
                 <div class="mec-name">Notifications</div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="notifications">Export</button>
@@ -4053,6 +4074,12 @@
     <script src="../shared/lab-filing-utils.js"></script>
     <script src="../shared/presence-folder.js"></script>
     <script src="../shared/io/labfiling-io.js"></script>
+    <script src="../shared/lab-catalogue-core.js"></script>
+    <script src="../shared/lab-catalogue-overlay.js"></script>
+    <script src="../shared/lab-catalogue-import.js"></script>
+    <script src="../shared/lab-catalogue-scan.js"></script>
+    <script src="../shared/lab-allocate-core.js"></script>
+    <script src="../shared/io/labcatalogue-io.js"></script>
     <script src="../shared/io/notifications-io.js"></script>
     <script src="../shared/leaflets-utils.js"></script>
     <script src="../shared/io/leaflets-io.js"></script>
@@ -4083,5 +4110,6 @@
     <script src="options.js"></script>
     <script type="module" src="tabs-section.js"></script>
     <script type="module" src="labfiling-section.js"></script>
+    <script type="module" src="investigations-section.js"></script>
   </body>
 </html>

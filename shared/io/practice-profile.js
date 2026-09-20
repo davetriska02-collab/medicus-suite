@@ -1044,6 +1044,23 @@ const PracticeProfile = (() => {
       }
     }
 
+    // ── Lab catalogue (Phase B3) ─────────────────────────────────────────────────
+    // SAFETY: same doctrine as Lab Filing above. labcatalogueApplyPublished() (shared/io/labcatalogue-io.js) ALWAYS forces
+    // every incoming entry inert (provenance.reviewed:false) — a publish can add or replace practice lab DEFINITIONS, but an
+    // entry is ignored by every consumer until a person approves it locally. Merge: local wins on an id collision, context
+    // fills blanks only, disables/retired are unioned (recognise less, never silently more). Replace: the published overlay
+    // is authoritative and everything reverts to unreviewed for a fresh local review.
+    if (modMap.has('labcatalogue') && mods.labcatalogue && typeof mods.labcatalogue === 'object') {
+      try {
+        const apply = _io('labcatalogueApplyPublished');
+        if (!apply) throw new Error('labcatalogueApplyPublished not available in this context.');
+        const res = await apply(mods.labcatalogue, modMap.get('labcatalogue') === 'merge' ? 'merge' : 'replace');
+        if (res && res.applied) applied.push('labcatalogue');
+      } catch (e) {
+        errors.push(`labcatalogue: ${e.message}`);
+      }
+    }
+
     // ── Suite: practiceCode + feedbackEmail + practice feature packs ──────────
     // NEVER push display, tabOrder, hiddenTabs, letterhead, practiceAcceptedAt,
     // attestations, waitingRoomThresholds, rollupAlwaysExpanded, txn.*, or

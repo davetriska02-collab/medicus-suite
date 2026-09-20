@@ -1,0 +1,194 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-140",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "FBC",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "WBC",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022541000000102",
+            "description": "Total white cell count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Haemoglobin",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022431000000105",
+            "description": "Haemoglobin estimation"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "g/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Platelets",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022651000000100",
+            "description": "Platelet count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "RBC",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022451000000103",
+            "description": "Red blood cell (RBC) count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10¹²/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Haematocrit",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022291000000105",
+            "description": "Haematocrit"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "L/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "MCV",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022491000000106",
+            "description": "Mean corpuscular volume (MCV)"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "fL",
+          "resultValue": "1"
+        },
+        {
+          "description": "MCH",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022471000000107",
+            "description": "Mean corpusc. haemoglobin(MCH)"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "pg",
+          "resultValue": "1"
+        },
+        {
+          "description": "MCHC",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022481000000109",
+            "description": "Mean corpusc. Hb. conc. (MCHC)"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "g/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "RDW",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "993501000000105",
+            "description": "Red blood cell distribut width"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "%",
+          "resultValue": "1"
+        },
+        {
+          "description": "Mean platelet volume",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "993481000000101",
+            "description": "Mean platelet volume"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "fL",
+          "resultValue": "1"
+        },
+        {
+          "description": "Neutrophils",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022551000000104",
+            "description": "Neutrophil count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Lymphocytes",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022581000000105",
+            "description": "Lymphocyte count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Monocytes",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022591000000107",
+            "description": "Monocyte count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Eosinophils",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022561000000101",
+            "description": "Eosinophil count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Basophils",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022571000000108",
+            "description": "Basophil count"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "× 10⁹/L",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [],
+  "requests": [
+    "Full Blood Count",
+    "HbA1C (Glycated Haemoglobin)",
+    "Liver Function",
+    "Urea and Electrolytes WITH Potassium",
+    "Ferritin Blood",
+    "Folate Blood",
+    "Vitamin D (25-hydroxy)",
+    "Vitamin B12"
+  ]
+}

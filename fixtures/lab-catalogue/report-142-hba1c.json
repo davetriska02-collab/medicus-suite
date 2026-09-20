@@ -1,0 +1,43 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-142",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "HbA1c",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "HbA1c",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "999791000000106",
+            "description": "HbA1c levl - IFCC standardised"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/mol",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [],
+  "requests": [
+    "HbA1C (Glycated Haemoglobin)",
+    "Liver Function",
+    "Urine Albumin:Creatinine Ratio",
+    "Liver Function",
+    "Lipids Blood",
+    "Urine Albumin:Creatinine Ratio",
+    "Lipids Blood",
+    "Liver Function",
+    "Vitamin B12",
+    "Urine Albumin:Creatinine Ratio",
+    "Urine Albumin:Creatinine Ratio"
+  ]
+}
