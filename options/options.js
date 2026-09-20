@@ -1227,7 +1227,15 @@ async function applyEnvelope(envelope) {
     mods.labfiling && (() => labfilingImport(mods.labfiling)),
     mods.notifications && (() => notificationsImport(mods.notifications)),
     mods.leaflets && (() => leafletsImport(mods.leaflets)),
-    mods.patientAlerts && (() => patientAlertsImport(mods.patientAlerts)),
+    mods.patientAlerts &&
+      (async () => {
+        const res = await patientAlertsImport(mods.patientAlerts);
+        if (res && res.skippedByPatient) {
+          notes.push(
+            'Patient Alerts: per-patient flags were not restored (PHI stays off suite backups). Presets still imported.'
+          );
+        }
+      }),
     mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
     mods.phrases && (() => phrasesImport(mods.phrases)),
     mods.rota && (() => rotaImport(mods.rota)),
@@ -1258,13 +1266,16 @@ function downloadJson(obj, filename) {
 }
 
 function setBackupStatus(msg, isError) {
-  const el = document.getElementById('backupStatus');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = isError ? '#ef4444' : '#4ade80';
-  setTimeout(() => {
-    el.textContent = '';
-  }, 4000);
+  const targets = [document.getElementById('backupOutcome'), document.getElementById('backupStatus')].filter(Boolean);
+  for (const el of targets) {
+    el.textContent = msg || '';
+    el.style.display = msg ? 'block' : 'none';
+    el.style.color = isError ? '#ef4444' : '#166534';
+    el.style.background = isError ? 'rgba(239, 68, 68, 0.1)' : 'rgba(74, 222, 128, 0.12)';
+    el.style.border = '1px solid ' + (isError ? '#ef4444' : '#4ade80');
+    el.style.fontWeight = isError ? '600' : '500';
+    el.setAttribute('role', 'status');
+  }
 }
 
 // --- Pending import state ---
@@ -5401,8 +5412,25 @@ initPdcTallySection({
   }
 
   async function refreshHealth() {
-    const r = await chrome.storage.local.get('health.contracts');
+    const r = await chrome.storage.local.get(['health.contracts', 'suite.swLoadErrors']);
     const health = (r && r['health.contracts']) || {};
+    const swErrors = Array.isArray(r && r['suite.swLoadErrors']) ? r['suite.swLoadErrors'] : [];
+    const swBanner = document.getElementById('swLoadBanner');
+    if (swBanner) {
+      if (swErrors.length) {
+        const scripts = swErrors
+          .map((e) => (e && e.script) || 'module')
+          .filter((s, i, arr) => arr.indexOf(s) === i);
+        swBanner.style.display = 'block';
+        swBanner.textContent =
+          'Extension module failed to load — some tools may be missing. Failed: ' +
+          scripts.join(', ') +
+          '. Reload the extension after a repair; if it persists, tell Dave.';
+      } else {
+        swBanner.style.display = 'none';
+        swBanner.textContent = '';
+      }
+    }
     const contracts = DC.list();
 
     const degradedCount = contracts.filter((c) => health[c.id]?.status === 'degraded').length;
@@ -5447,7 +5475,7 @@ initPdcTallySection({
   // Snappier than a re-open: the canary writes this key directly from the
   // Medicus tab while Options may already be open in another tab.
   chrome.storage.onChanged?.addListener((changes) => {
-    if (changes['health.contracts']) refreshHealth();
+    if (changes['health.contracts'] || changes['suite.swLoadErrors']) refreshHealth();
   });
 })();
 

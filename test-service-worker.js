@@ -54,6 +54,10 @@ const stripped = src.replace(/try\s*\{[^{}]*importScripts[^{}]*\}\s*catch\s*\([^
 check(!stripped.includes('importScripts('),
   'no importScripts call exists outside a try/catch block');
 
+check(src.includes('function recordSwLoadError'), 'SW records importScripts failures instead of only warning');
+check(src.includes('flushSwLoadErrors()'), 'SW persists the load-error list after the import section');
+check(src.includes('suite.swLoadErrors'), 'SW writes suite.swLoadErrors for the health strip / Options banner');
+
 console.log('\n--- every practice-profile _io() dependency is importScripts\'d ---');
 
 // applyProfile() (shared/io/practice-profile.js) resolves several modules'

@@ -3253,14 +3253,23 @@
     // 2026-08-23 review fix: a bare truthiness test meant any junk value from a
     // restored backup ("no", 1, {}) re-enabled a machine-initiated write that
     // this release deliberately made opt-in. Require an explicit boolean true.
-    if (PREF('oirAutoTick', false) !== true) return;
-    const toTickVerdicts = verdicts.filter((v) => v.autoTick && rows[v.id]);
-    if (!toTickVerdicts.length) return;
-    const toTick = toTickVerdicts.map((v) => rows[v.id].box);
-    log('OIR auto-tick', { count: toTick.length });
-    tickRows(toTick);
-    if (PREF('oirAuditLog', true)) recordOirAudit(toTickVerdicts, taskUuid, 'auto');
-    showOirAutoTickToast(toTickVerdicts, taskUuid, toTick);
+    // Decision lives in shared/oir-write-core.js so Node can test it without
+    // this file. tickRows stays here — it needs the live checkbox nodes.
+    const OIR = (typeof window !== 'undefined' && window.OirWriteCore) || null;
+    const plan = OIR
+      ? OIR.shouldPerformAutoTick(PREF('oirAutoTick', false), verdicts, rows)
+      : PREF('oirAutoTick', false) === true
+        ? {
+            run: (verdicts || []).some((v) => v.autoTick && rows[v.id]),
+            verdicts: (verdicts || []).filter((v) => v.autoTick && rows[v.id]),
+            boxes: (verdicts || []).filter((v) => v.autoTick && rows[v.id]).map((v) => rows[v.id].box),
+          }
+        : { run: false, verdicts: [], boxes: [] };
+    if (!plan.run) return;
+    log('OIR auto-tick', { count: plan.boxes.length });
+    tickRows(plan.boxes);
+    if (PREF('oirAuditLog', true)) recordOirAudit(plan.verdicts, taskUuid, 'auto');
+    showOirAutoTickToast(plan.verdicts, taskUuid, plan.boxes);
   };
 
   // Read the outstanding-request rows from the card.
@@ -3325,31 +3334,10 @@
   // clinician reviews the full enumerated list and confirms once, via this bulk
   // dialog. Returns true if confirmed.
   const confirmBulkTickOff = (verdicts) => {
-    const lines = verdicts.map((v) => {
-      const date = v.elsewhereDate ? fmtOirDate(v.elsewhereDate) : 'date unknown';
-      let val = '';
-      if (v.matchedValue) {
-        const unit = v.matchedUnit ? ` ${v.matchedUnit}` : '';
-        const ab = v.matchedAbnormal ? ` ${v.matchedAbnormal.toUpperCase()}` : '';
-        val = ` — ${v.matchedObsName || v.name} ${v.matchedValue}${unit}${ab}`;
-      }
-      const shared =
-        v.sharedCount > 0
-          ? ` (also satisfies ${v.sharedCount} other request${v.sharedCount > 1 ? 's' : ''})`
-          : '';
-      return ` • ${v.name} — completed ${date}${val}${shared}`;
-    });
-    const n = verdicts.length;
-    const msg =
-      `Tick off ${n} request${n > 1 ? 's' : ''} found in the patient's record?\n\n` +
-      `These are NOT covered by this report, but matching results were found ` +
-      `elsewhere in the record:\n\n` +
-      lines.join('\n') +
-      `\n\nSource: the patient's observation history (Medicus lab record).\n\n` +
-      `Ticking off writes to Medicus server-side and removes ${n > 1 ? 'these' : 'this'} ` +
-      `from the outstanding list. This cannot be undone from here. Confirm only if you ` +
-      `are satisfied each result has been seen and acted on.\n\n` +
-      `OK = tick ${n > 1 ? 'them all' : 'it'} off    Cancel = leave outstanding`;
+    const OIR = (typeof window !== 'undefined' && window.OirWriteCore) || null;
+    const msg = OIR
+      ? OIR.buildBulkTickConfirmMessage(verdicts, fmtOirDate)
+      : `Tick off ${verdicts.length} request(s) found in the patient's record? Ticking writes to Medicus and cannot be undone from here.`;
     return confirm(msg);
   };
 
@@ -3430,11 +3418,14 @@
   // reuses the existing bar, removes it when nothing is pending.
   const updateBulkBar = (card, foundVerdicts, rows, taskUuid) => {
     let bar = card.querySelector('.ch-oir-bulk');
-    const pending = foundVerdicts.filter((v) => {
-      const box = rows[v.id] && rows[v.id].box;
-      if (!box) return false;
-      return box.type === 'checkbox' ? !box.checked : box.getAttribute('aria-checked') !== 'true';
-    });
+    const OIR = (typeof window !== 'undefined' && window.OirWriteCore) || null;
+    const pending = OIR
+      ? OIR.pendingBulkTickVerdicts(foundVerdicts, rows)
+      : foundVerdicts.filter((v) => {
+          const box = rows[v.id] && rows[v.id].box;
+          if (!box) return false;
+          return box.type === 'checkbox' ? !box.checked : box.getAttribute('aria-checked') !== 'true';
+        });
     if (!pending.length) {
       if (bar) bar.remove();
       return;

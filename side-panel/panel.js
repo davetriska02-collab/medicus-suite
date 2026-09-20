@@ -1724,18 +1724,24 @@ const HEALTH_SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
 async function fetchAndRenderHealthStrip() {
   if (!healthStripEl) return true;
   try {
-    const r = await chrome.storage.local.get(['health.contracts', HEALTH_SNOOZE_KEY]);
+    const r = await chrome.storage.local.get(['health.contracts', HEALTH_SNOOZE_KEY, 'suite.swLoadErrors']);
     const health = r['health.contracts'] || {};
+    const swErrors = Array.isArray(r['suite.swLoadErrors']) ? r['suite.swLoadErrors'] : [];
     const DC = window.DomContracts;
     const degradedIds = Object.keys(health)
       .filter((id) => health[id]?.status === 'degraded')
       .sort();
-    if (degradedIds.length === 0 || !DC) {
+    if ((degradedIds.length === 0 || !DC) && swErrors.length === 0) {
       healthStripEl.className = 'health-strip health-strip-hidden';
       healthStripEl.innerHTML = '';
       return true;
     }
-    const sig = degradedIds.join('|');
+    const swSig = swErrors
+      .map((e) => (e && e.script) || '')
+      .filter(Boolean)
+      .sort()
+      .join(',');
+    const sig = degradedIds.join('|') + (swErrors.length ? '|sw:' + swSig : '');
     const snooze = r[HEALTH_SNOOZE_KEY];
     if (snooze && snooze.sig === sig && typeof snooze.until === 'number' && Date.now() < snooze.until) {
       healthStripEl.className = 'health-strip health-strip-hidden';
@@ -1745,11 +1751,22 @@ async function fetchAndRenderHealthStrip() {
     // Several contracts can share one owning feature (e.g. the three queue-chip
     // contracts) — de-dupe so the strip reads "Queue chips degraded", not
     // "Queue chips, Queue chips, Queue chips degraded".
-    const features = degradedIds.map((id) => DC.get(id)?.feature || id).filter((f, i, arr) => arr.indexOf(f) === i);
+    const features =
+      DC && degradedIds.length
+        ? degradedIds.map((id) => DC.get(id)?.feature || id).filter((f, i, arr) => arr.indexOf(f) === i)
+        : [];
+    const swText = swErrors.length
+      ? 'Extension module failed to load — some tools may be missing.'
+      : '';
+    const degText =
+      features.length && DC
+        ? `Medicus may have changed — ${escStrip(features.join(', '))} degraded.`
+        : '';
+    const line = [swText, degText].filter(Boolean).join(' ') + ' Details in Options → Suite health.';
     healthStripEl.className = 'health-strip health-strip-amber';
     healthStripEl.innerHTML = `
       <span class="health-strip-icon">⚠</span>
-      <span class="health-strip-text">Medicus may have changed — ${escStrip(features.join(', '))} degraded. Details in Options → Suite health.</span>
+      <span class="health-strip-text">${line}</span>
       <button class="health-strip-goto">Details →</button>
       <button class="health-strip-dismiss" title="Dismiss for 7 days (reappears if anything new degrades)" aria-label="Dismiss health warning for 7 days">✕</button>
     `;
@@ -1770,7 +1787,7 @@ let healthPoller = makePoller(fetchAndRenderHealthStrip, HEALTH_POLL_MS, 'health
 // Snappier than the 30s poll: the canary writes this key directly, so react
 // to it immediately when the panel is open and watching.
 chrome.storage.onChanged.addListener((changes) => {
-  if (changes['health.contracts']) fetchAndRenderHealthStrip();
+  if (changes['health.contracts'] || changes['suite.swLoadErrors']) fetchAndRenderHealthStrip();
 });
 
 // ── Local bits strip (practice OS-sync — not GitHub, not Practice Profile) ────

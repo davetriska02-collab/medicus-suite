@@ -391,6 +391,26 @@
     return !!inFlightKey && inFlightKey === currentKey;
   }
 
+  // In-flight coalesce: reuse the same promise only when the route key
+  // matches and the caller is not bypassing cache. A late finish must
+  // clear only the promise it started — otherwise a newer fetch for a
+  // different date is wiped by the stale one.
+  function shouldReuseInFlight(inFlight, inFlightKey, currentKey, bypassCache) {
+    return !!inFlight && !bypassCache && inFlightKey === currentKey;
+  }
+
+  function beginInFlight(key, promise) {
+    return { inFlight: promise, inFlightKey: key || '' };
+  }
+
+  function finishInFlight(state, promise) {
+    state = state || {};
+    if (state.inFlight === promise) {
+      return { inFlight: null, inFlightKey: '' };
+    }
+    return { inFlight: state.inFlight || null, inFlightKey: state.inFlightKey || '' };
+  }
+
   var api = {
     todayISO: todayISO,
     emptyCounts: emptyCounts,
@@ -415,6 +435,9 @@
     sortedTypeEntries: sortedTypeEntries,
     buttonLabel: buttonLabel,
     shouldApplyFetch: shouldApplyFetch,
+    shouldReuseInFlight: shouldReuseInFlight,
+    beginInFlight: beginInFlight,
+    finishInFlight: finishInFlight,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

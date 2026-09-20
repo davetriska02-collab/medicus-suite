@@ -2,8 +2,8 @@
 
 **Document reference:** MS-DPO-DPIA-001
 **Product version:** 3.211.0 (§2 employee-data / rota section and the associated §5 rows added at this version; §2 Reception module and its §5 rows at 3.199.1; the remainder was written at 3.84.2)
-**Document version:** 1.2 (DRAFT — pending sign-off)
-**Date:** 2026-06-14; Reception module section added 2026-07-28; rota / employee-data section added 2026-08-02 (v1.2 — adds the rota surface: employee data, including Article 9 special-category staff health data, and the optional shared-drive replication of it)
+**Document version:** 1.3 (DRAFT — pending sign-off)
+**Date:** 2026-06-14; Reception module section added 2026-07-28; rota / employee-data section added 2026-08-02 (v1.2); Transactional API proxy section added 2026-09-20 (v1.3 — optional UK-proxy read path; **no DPO/CSO signature invented**)
 **Data controller:** The deploying GP practice (each practice is controller for
 its own patient data). Graysbrook Ltd is the software manufacturer.
 **Manufacturer DPO / contact:** Dr Dave Triska — [DPO CONTACT EMAIL]
@@ -15,9 +15,10 @@ its own patient data). Graysbrook Ltd is the software manufacturer.
 
 Medicus Suite processes special-category health data (patient-identifiable
 clinical information) on behalf of clinical users, so a DPIA is conducted as good
-practice. Note: the processing is **wholly client-side and local** — the
-software performs no external transmission of patient data — which materially
-limits the risk profile.
+practice. Note: the **default** processing is **wholly client-side and local**
+(`txn.integrationMode` = `session`). That materially limits the risk profile.
+The optional Transactional API path (off by default) is a deliberate exception
+and is assessed at §2.2.
 
 From v3.211.0 the suite also processes **employee** data in its rota surface,
 including Article 9 special-category health data about staff (sickness absence,
@@ -48,8 +49,9 @@ all already visible to the authorised clinician in the source record.
   clinician's workstation): the Request Monitor persists **initials only**;
   transient print/passport keys holding fuller data carry a 60-second TTL
   backstop (TF4). No patient data is held on any server.
-- **No external transmission of patient data.** By default, the only outbound
-  network call is a version check to `api.github.com` carrying no patient data.
+- **No external transmission of patient data, by default.** The only outbound
+  network call in `session` mode is a version check to `api.github.com` carrying
+  no patient data. The optional Transactional API path (§2.2) is the exception.
 - **Leaflets tab (optional, off by default).** With no API key configured, this
   tab searches a bundled local index and opens nhs.uk in a new browser tab —
   no new endpoint is contacted. If a user opts in by pasting an NHS Website
@@ -112,6 +114,45 @@ staff within a Medicus-enabled GP practice, as a memory aid / operational
 display, under each user's own credentials. Purpose: surface monitoring, QOF,
 and operational information already in Medicus to support (not replace) clinical
 and administrative work.
+
+### 2.2 Optional Transactional API proxy — added 2026-09-20 (DRAFT)
+
+This is the open action from the v3.202.0 INTENDED-PURPOSE signature: the
+optional Medicus Transactional API path had no controller/processor or transfer
+assessment. This section is the draft assessment. **It is not signed.** Until
+it is, practices must not set `txn.integrationMode` to `hybrid` or
+`transactional`.
+
+**Nature.** When — and only when — a practice sets `txn.integrationMode` to
+`hybrid` or `transactional` and supplies a proxy URL plus `txn.callerKey`,
+patient **reads** are routed through a Graysbrook-operated UK backend (a
+Supabase edge function) which signs a short-lived Medicus token and forwards
+the request to the official Medicus Transactional API. The GP Connect structured
+care record and demographics return by the same route. The path is **read-only**
+(`shared/txn-transport.js` throws on `isWrite`). Hybrid mode also returns the
+ordinary session bundle for comparison. Responses may be cached for 60 seconds
+on the workstation.
+
+**Roles.** The deploying practice remains **controller**. Graysbrook Ltd is
+**processor** for the proxy hop only (token sign + forward). Medicus Health Ltd
+remains the system of record. There is no manufacturer-held copy of the care
+record after the response is returned to the browser.
+
+**Transfer.** UK-to-UK. The proxy is described as UK-hosted. No international
+transfer is intended by this path.
+
+**Credential.** `txn.callerKey` is stored in `chrome.storage.local` on that
+device, read only by the service worker, and excluded from suite backups. It is
+not a Medicus username or password.
+
+**Lawful basis.** Unchanged Art.6(1)(e) / Art.9(2)(h) for direct care — the
+clinician is reading the same record they are already authorised to see in
+Medicus. The processor relationship for the proxy hop needs a practice-side
+processing record / DPA with Graysbrook before the path is enabled.
+
+**Mitigation posture.** Default off; read-only; SW-only credential; short-lived
+token; hazard **H-077** (Proposed). Enabling the path is a practice
+configuration act, not a silent update.
 
 ### 2.1 Reception module (guided phone capture) — added 2026-07-28
 
@@ -244,7 +285,8 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 | Patient data at rest in `chrome.storage.local` (plaintext) read by local malware | Low / Med | Identifiers in memory only; persisted data minimised to initials + TTL; same exposure as the browser profile itself | Low |
 | Wrong-patient display (IG + safety) | Low / Med | UUID-keyed cache + SPA-navigation invalidation; source-verification duty (H-001) | Low |
 | Malicious backup import degrading/altering data handling | Low / Med | Import hardening, type validation, preview warnings, size cap (F1/F7/NF1) | Low |
-| Patient data leaving the browser | — | None by design — no external patient-data transmission | N/A |
+| Patient data leaving the browser (default `session` mode) | — | None by design in the default configuration | N/A |
+| Patient data leaving the browser via the optional Transactional API proxy (`hybrid` / `transactional`) | Low / High if enabled without review | Default off; read-only; SW-only `txn.callerKey`; UK proxy; H-077 Proposed; practices must not enable until this DPIA increment and H-077 are signed | Med until signed; Low after sign-off with practice DPA |
 | Re-identification via desktop notifications | Low / Low | Notification text minimised; "clinic mode" mute (F2) | Low |
 | **Reception:** special-category (health) free text buffered in `chrome.storage.local` as a capture draft | Low / Med | Answers only (no name/NHS number/DOB written); 4 h TTL enforced on read; cleared on generate/discard; excluded from suite backups and CI-guarded (`test-backup-coverage.js`); local to the workstation, no server copy | Low |
 | **Reception:** a draft on a **shared front-desk workstation** seen or restored by the next member of staff | Med / Med | Restore is never automatic — explicit choice from a time-stamped banner, with the instruction to confirm it belongs to the current contact and discard otherwise (H-029, CSN limitation 34); TTL 4 h; practice shared-workstation controls (per-user profile/login, screen lock, end session at shift end) stated as a deploying-organisation responsibility | Med — residual sits with the practice's own workstation controls |
@@ -257,8 +299,10 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 
 ## 6. Outcome and sign-off
 
-Residual data-protection risk is **low** for the patient-data processing, driven
-principally by the local-only, zero-egress architecture. The Reception module is
+Residual data-protection risk is **low** for the default patient-data
+processing, driven principally by the local-only architecture. The optional
+Transactional API proxy is a separate residual (Medium until this increment is
+signed; then Low with a practice-side DPA) and is **off by default**. The Reception module is
 the one patient-data area carrying a **medium** residual, and it is medium for an
 environmental reason rather than a software one: a shared front-desk workstation,
 where the confidentiality of a locally-buffered draft is the confidentiality of
@@ -287,4 +331,6 @@ Approved for the stated processing, subject to those practice-side controls.
 | Doc version | Date | Author | Status | Change |
 |---|---|---|---|---|
 | 1.0 | 2026-06-14 | DT | DRAFT — pending sign-off | Initial DPIA at product v3.84.2. |
+| 1.2 | 2026-08-02 | Claude (drafted for DPO review) | DRAFT — pending sign-off | Rota / employee-data section (Article 9 staff health data; optional shared-drive replication). **No sign-off given.** |
+| 1.3 | 2026-09-20 | Grok (drafted for DPO/CSO review) | DRAFT — pending sign-off | Added §2.2 Optional Transactional API proxy (controller/processor, UK transfer, SW-only `txn.callerKey`, read-only, default off). Corrected §1 / §2 / §5 claims of unqualified zero egress. New §5 row for the proxy path. **No sign-off given. No signature invented.** Closes the draft of INTENDED-PURPOSE open action (ii); still needs a human DPO/CSO signature. |
 | 1.1 | 2026-07-28 | Claude (drafted for DPO review) | DRAFT — pending sign-off | Added §2.1 Reception module (special-category phone-capture text; transient `reception.captureDraft` persistence — 4 h TTL, never backed up, sensitive-pathway exclusion marked PLANNED; shared front-desk workstation processing; paste-into-Medicus flow with Medicus as system of record; planned reception booking marked as not shipped). Added the reception lawful-basis paragraph to §4 recording **no change of lawful basis**. Added five reception rows and one no-egress row to the §5 risk table. Corrected the §2 statement that the extension "writes nothing back to Medicus" (see CSN §6.1). Prepared as Phase 0 of `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md`. **No sign-off given.** |

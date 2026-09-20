@@ -3324,6 +3324,23 @@
             code change; they are just not re-checked against the live page every session. The explanation column says
             why, contract by contract.
           </p>
+          <div
+            id="swLoadBanner"
+            role="status"
+            aria-live="polite"
+            style="
+              display: none;
+              margin: 0 0 16px;
+              padding: 12px 14px;
+              border-radius: 8px;
+              border: 1px solid #d97706;
+              background: rgba(217, 119, 6, 0.1);
+              color: #92400e;
+              font-size: 13px;
+              line-height: 1.5;
+              font-weight: 600;
+            "
+          ></div>
           <div class="health-summary" id="healthSummary"></div>
           <div class="health-table-wrap" id="healthTableWrap"></div>
         </section>
@@ -3691,6 +3708,19 @@
               <button class="primary" id="importSuiteBtn">Import from file</button>
               <input type="file" id="importSuiteFile" accept=".json" style="display: none" />
             </div>
+            <div
+              id="backupOutcome"
+              role="status"
+              aria-live="assertive"
+              style="
+                display: none;
+                margin-top: 12px;
+                padding: 12px 14px;
+                border-radius: 8px;
+                font-size: 13px;
+                line-height: 1.5;
+              "
+            ></div>
           </div>
 
           <!-- Import preview -->
@@ -3921,8 +3951,8 @@
               <div class="module-export-card">
                 <div class="mec-name">Patient Alerts</div>
                 <div class="mec-note" style="font-size: 10px; color: var(--text-muted, #94a3b8); margin-bottom: 4px">
-                  Contains patient-identifiable data (names, NHS numbers, alert text) — handle the file accordingly.
-                  Import merges with what's already here.
+                  Exports the alert-type palette only. Per-patient flags stay on this workstation and are not backed
+                  up. Import merges presets; it will not restore patient flags from an older file.
                 </div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="patientAlerts">Export</button>

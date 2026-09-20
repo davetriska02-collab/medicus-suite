@@ -17,8 +17,11 @@
 //      "Booked" / "Submitted" / "Staged writes sent" on a write that did not
 //      all land.
 //
-// Pure functions only: no DOM, no chrome, no fetch. Keep this small — it is
-// a landed-id diff, not an identity-pin framework.
+// Pure functions only: no DOM, no chrome, no fetch. The original landed-id
+// diff is still the core. Identity pin/recheck (H-043) lives here too so
+// allocate / organise / filing / Companion / OIR / tidy writes share one
+// "pin then re-check, success is only what landed" kernel instead of each
+// canvas inventing its own.
 //
 // Dual-mode export (same doctrine as shared/extraction-health.js):
 //   Browser (classic script): window.WriteCore.<fn>(...)
@@ -91,6 +94,73 @@
     return true;
   }
 
+  // Normalise the fields a write may pin. Empty strings are omitted so
+  // assertUnmoved does not treat a blank pin as a required match.
+  function pinIdentity(fields) {
+    var src = fields && typeof fields === 'object' ? fields : {};
+    var out = {};
+    ['apiBase', 'date', 'patientId', 'appointmentId', 'taskUuid'].forEach(function (k) {
+      if (src[k] != null && src[k] !== '') out[k] = String(src[k]);
+    });
+    return out;
+  }
+
+  function recheckIdentity(pinned, live) {
+    return assertUnmoved(pinned, live);
+  }
+
+  function requireUnmoved(pinned, live, message) {
+    if (assertUnmoved(pinned, live)) return { ok: true };
+    return {
+      ok: false,
+      reason: message || 'The open record moved — nothing was written.',
+    };
+  }
+
+  function confirmLanded(wantIds, landedList) {
+    return diffWantedVsLanded(wantIds, landedList);
+  }
+
+  // Shared write wrapper: refuse if identity moved, run the write, then
+  // diff wanted vs what the caller says landed. Success is only allWritten.
+  function runConfirmedWrite(opts) {
+    opts = opts || {};
+    var gate = requireUnmoved(opts.pinned, opts.live, opts.movedMessage);
+    if (!gate.ok) {
+      return Promise.resolve({
+        ok: false,
+        moved: true,
+        reason: gate.reason,
+        outcome: confirmLanded(opts.wantIds || [], []),
+        result: null,
+      });
+    }
+    if (typeof opts.write !== 'function') {
+      return Promise.resolve({
+        ok: false,
+        moved: false,
+        reason: 'No write function',
+        outcome: confirmLanded(opts.wantIds || [], []),
+        result: null,
+      });
+    }
+    return Promise.resolve()
+      .then(function () {
+        return opts.write();
+      })
+      .then(function (result) {
+        var landed = typeof opts.landedFrom === 'function' ? opts.landedFrom(result) : result;
+        var outcome = confirmLanded(opts.wantIds || [], landed);
+        return {
+          ok: outcome.allWritten,
+          moved: false,
+          reason: outcome.allWritten ? null : opts.partialMessage || 'Not all writes landed',
+          outcome: outcome,
+          result: result,
+        };
+      });
+  }
+
   function finaliseConfirmCopy(outcome, noun) {
     var o = outcome || {};
     var wanted = typeof o.wanted === 'number' ? o.wanted : 0;
@@ -107,6 +177,11 @@
     diffWantedVsLanded: diffWantedVsLanded,
     diffFinaliseOutcome: diffFinaliseOutcome,
     assertUnmoved: assertUnmoved,
+    pinIdentity: pinIdentity,
+    recheckIdentity: recheckIdentity,
+    requireUnmoved: requireUnmoved,
+    confirmLanded: confirmLanded,
+    runConfirmedWrite: runConfirmedWrite,
     finaliseConfirmCopy: finaliseConfirmCopy,
   };
 

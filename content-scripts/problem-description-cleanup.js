@@ -204,6 +204,14 @@
   var recordPreference = preferredDescriptions.recordChoice;
   var resolvePreference = preferredDescriptions.resolvePreferred;
 
+  // W9 / W19 payload builders live in shared/tidy-write-core.js so the two
+  // write contracts can be tested without this panel. Same functions, same
+  // names, re-exported below for existing tests.
+  var tidyWrite =
+    typeof module !== 'undefined' && module.exports
+      ? require('../shared/tidy-write-core.js')
+      : window.TidyWriteCore;
+
   // ── Pure helpers, problem-specific (no window/document/fetch — unit-
   // testable via require()) ───────────────────────────────────────────────────
 
@@ -239,8 +247,7 @@
   // field (recordedByOrganisation's {organisationName,...}) can never be
   // mangled by it.
   function unwrapOptionValue(field) {
-    if (field && typeof field === 'object' && 'value' in field && 'label' in field) return field.value;
-    return field;
+    return tidyWrite.unwrapOptionValue(field);
   }
 
   // overrideOnsetDate (2026-08-20): the GP2GP-onset-date confirm path below
@@ -249,35 +256,7 @@
   // overrideAdditionalInformation above, for the same reason (every other
   // existing caller omits it, preserving their exact original behaviour).
   function buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation, overrideOnsetDate) {
-    var p = prefill || {};
-    var additionalInformation =
-      overrideAdditionalInformation !== undefined
-        ? overrideAdditionalInformation
-        : p.additionalInformation != null
-          ? p.additionalInformation
-          : null;
-    var onsetDate = overrideOnsetDate !== undefined ? overrideOnsetDate : p.onsetDate != null ? p.onsetDate : null;
-    var payload = {
-      onsetDate: onsetDate,
-      contextId: p.contextId != null ? p.contextId : null,
-      contextType: p.contextType != null ? p.contextType : null,
-      significance: p.significance != null ? unwrapOptionValue(p.significance) : null,
-      episode: p.episode != null ? unwrapOptionValue(p.episode) : null,
-      problemCode: newProblemCode,
-      additionalInformation: additionalInformation,
-      hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
-      confidentialFromThirdParties: !!p.confidentialFromThirdParties,
-      endDate: p.endDate != null ? p.endDate : null,
-      reasonEnded: p.reasonEnded != null ? unwrapOptionValue(p.reasonEnded) : null,
-      recordDate: p.recordDate != null ? p.recordDate : null,
-    };
-    if (p.recordedAtAnotherOrganisation) {
-      payload.recordedByOrganisation = unwrapRecordedByOrganisation(p.recordedByOrganisation);
-      payload.recordedByPractitioner = p.recordedByPractitioner != null ? p.recordedByPractitioner : null;
-    } else {
-      payload.recordedByStaff = p.recordedByStaff != null ? unwrapOptionValue(p.recordedByStaff) : null;
-    }
-    return payload;
+    return tidyWrite.buildEditProblemPayload(prefill, newProblemCode, overrideAdditionalInformation, overrideOnsetDate);
   }
 
   // Found live 2026-07-26, real example: a GP2GP-imported problem recorded
@@ -299,10 +278,7 @@
   // for a normally-recorded problem — both shapes are real, this must not
   // assume only one of them.
   function unwrapRecordedByOrganisation(org) {
-    if (org && org.value && typeof org.value === 'object' && org.value.organisationName != null) {
-      return org.value;
-    }
-    return org != null ? org : null;
+    return tidyWrite.unwrapRecordedByOrganisation(org);
   }
 
   // Builds the POST /clinical/note/change-note body from a FRESH
@@ -315,32 +291,7 @@
   // descriptionId} — the code to write (the PROBLEM's current code, not
   // searched/picked per journal entry).
   function buildChangeNotePayload(notePrefill, newCode) {
-    var p = notePrefill || {};
-    return {
-      noteId: p.noteId,
-      note: p.note,
-      noteSNOMEDct: newCode,
-      hiddenFromPatientFacingServices: !!p.hiddenFromPatientFacingServices,
-      confidentialFromThirdParties: !!p.confidentialFromThirdParties,
-      flagOnPatientBanner: !!p.flagOnPatientBanner,
-      // unwrapRecordedByOrganisation, NOT p.recordedByOrganisation verbatim
-      // (bug found live 2026-08-19, HAR from a note with
-      // recordedAtAnotherOrganisation:true): buildEditProblemPayload above
-      // already learned this the hard way — GET's own prefill shape is the
-      // WRAPPED {label, value:{organisationName, …}} form, and round-tripping
-      // that verbatim 400s. This payload builder was written later
-      // (2026-08-13) and never got the same fix, so both applyToJournal
-      // (code-sync) and applyGenericAdditionalInfoToJournal (text-sync) 400
-      // on any journal entry recorded at another organisation — exactly the
-      // shape this file's own unwrapRecordedByOrganisation exists to handle.
-      recordedByOrganisation: unwrapRecordedByOrganisation(p.recordedByOrganisation),
-      recordedByPractitioner: p.recordedByPractitioner != null ? p.recordedByPractitioner : null,
-      recordedByStaff: p.recordedByStaff != null ? p.recordedByStaff : null,
-      recordDate: p.recordDate != null ? p.recordDate : null,
-      flags: Array.isArray(p.flags) ? p.flags : [],
-      clinicalCaseId: (p.linkedClinicalCase && p.linkedClinicalCase.defaultClinicalCaseId) || null,
-      linkedProblemIds: Array.isArray(p.linkedProblemIds) ? p.linkedProblemIds : [],
-    };
+    return tidyWrite.buildChangeNotePayload(notePrefill, newCode);
   }
 
   // Turns a non-2xx API response into an error message that actually says

@@ -705,135 +705,44 @@
     var included = summary.items.filter(function (i) {
       return i.included;
     });
-    // The book this canvas was opened on is the ONLY book it may write to. If
-    // the SPA moved to another day or site underneath, refuse before anything.
-    var live = currentRoute();
     var WriteCore = window.WriteCore;
-    var moved =
-      WriteCore && typeof WriteCore.assertUnmoved === 'function'
-        ? !WriteCore.assertUnmoved(_openRoute, live)
-        : !_openRoute || !live || live.apiBase !== _openRoute.apiBase || live.date !== _openRoute.date;
-    if (moved) {
+    _writing = true;
+    _pending = { kind: 'finalise', summary: summary, writing: true, error: null };
+    render();
+    var result;
+    try {
+      result = await C.runFinaliseBatch({
+        WriteCore: WriteCore,
+        included: included,
+        openRoute: _openRoute,
+        currentRoute: currentRoute,
+        draft: _draft,
+        board: _board,
+        client: client(),
+      });
+    } finally {
+      _writing = false;
+    }
+    _draft = result.draft;
+    _board = result.board;
+    var outcome = result.outcome;
+    if (result.abortedBeforeWrite) {
       _pending = {
         kind: 'finalise',
         summary: summary,
         writing: false,
-        error:
-          'The Medicus book has moved to a different day or site since this canvas was opened — nothing was written. Close and reopen the canvas.',
+        error: result.failed,
       };
       render();
       return;
     }
-    _writing = true;
-    _pending = { kind: 'finalise', summary: summary, writing: true, error: null };
-    render();
-    var api = client();
-    var failed = null;
-    var landed = [];
-    try {
-      for (var i = 0; i < included.length; i++) {
-        var item = included[i];
-        var liveNow = currentRoute();
-        var hopMoved =
-          WriteCore && typeof WriteCore.assertUnmoved === 'function'
-            ? !WriteCore.assertUnmoved(_openRoute, liveNow)
-            : !_openRoute || !liveNow || liveNow.apiBase !== _openRoute.apiBase || liveNow.date !== _openRoute.date;
-        if (hopMoved) {
-          failed =
-            'The Medicus book has moved to a different day or site — remaining stay staged.';
-          break;
-        }
-        var appt = C.findAppointment(_board, item.id);
-        var mv = item.kind === 'move' ? _draft.moves[item.id] : null;
-        try {
-          if (item.kind === 'cancel') {
-            await api.commitCancel({
-              date: _openRoute.date,
-              appointmentId: item.id,
-              patientId: appt && appt.patientId,
-              reason: item.reason,
-              notify: !!item.notify,
-              pinned: {
-                apiBase: _openRoute.apiBase,
-                patientId: appt && appt.patientId,
-                appointmentId: item.id,
-                versionId: appt && appt.versionId,
-              },
-            });
-          } else if (item.kind === 'move') {
-            await api.commitMove({
-              date: _openRoute.date,
-              appointment: appt,
-              target: Object.assign({}, mv, { notify: !!item.notify }),
-              pinned: { apiBase: _openRoute.apiBase },
-            });
-          } else if (item.kind === 'stretch') {
-            await api.commitStretch({
-              date: _openRoute.date,
-              appointment: appt,
-              newDuration: item.duration,
-              pinned: { apiBase: _openRoute.apiBase },
-            });
-          }
-          _board = await api.fetchBoard(_openRoute.date);
-          if (!C.boardMatchesPin(_board, _openRoute)) {
-            failed =
-              'The book Medicus returned is a different day than the one this canvas opened — remaining stay staged.';
-            break;
-          }
-          var onBook = C.actionLandedOnBoard(_board, item, {
-            patientId: appt && appt.patientId,
-            target: mv,
-            diaryId: appt && appt.diaryId,
-            startDateTime: appt && appt.startDateTime,
-            duration: item.duration,
-          });
-          if (!onBook) {
-            failed =
-              'Medicus accepted the request but the book does not show that action. Check the diary before staging again.';
-            break;
-          }
-          if (item.kind === 'cancel') _draft = C.unstageCancel(_draft, item.id);
-          else if (item.kind === 'move') _draft = C.unstageMove(_draft, item.id);
-          else if (item.kind === 'stretch') _draft = C.unstageStretch(_draft, item.id);
-          landed.push({ id: item.id });
-        } catch (err) {
-          failed = (err && err.message) || 'Write failed.';
-          // A stretch that cancelled but could not rebook is NOT still staged:
-          // the source appointment is gone, so a retry can never write it. The
-          // error text (from the core) carries the rebook-them-now instruction.
-          if (err && err.stretchCancelWritten && !err.stretchRestored) {
-            _draft = C.unstageStretch(_draft, item.id);
-          }
-          // Show the board as Medicus now has it — never the pre-failure one.
-          try {
-            _board = await api.fetchBoard(_openRoute.date);
-          } catch (_) {}
-          break;
-        }
-      }
-    } finally {
-      _writing = false;
-    }
-    var wantIds = included.map(function (item) {
-      return item.id;
-    });
-    var outcome =
-      WriteCore && typeof WriteCore.diffWantedVsLanded === 'function'
-        ? WriteCore.diffWantedVsLanded(wantIds, landed)
-        : {
-            wanted: wantIds.length,
-            written: landed.length,
-            failed: Math.max(0, wantIds.length - landed.length),
-            allWritten: !failed && landed.length === wantIds.length,
-          };
-    if (failed) {
+    if (result.failed) {
       _pending = {
         kind: 'finalise',
         summary: C.summariseDraft(_draft, _board || { columns: [] }),
         writing: false,
         error:
-          failed +
+          result.failed +
           ' — ' +
           outcome.written +
           ' earlier ticked action' +

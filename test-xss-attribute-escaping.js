@@ -95,6 +95,12 @@ console.log('--- source guard: no quote-unsafe escHtml in attribute context ---'
     // — in the guard so the v3.203.0 escHtml-in-attribute class can't re-enter.
     'side-panel/modules/phrases/phrases.js',
     'options/options.js',
+    'side-panel/modules/patient-alerts/patient-alerts.js',
+    'side-panel/panel.js',
+    'content-scripts/task-actions-panel.js',
+    'content-scripts/appointment-organise-canvas.js',
+    'content-scripts/reception-quick-actions.js',
+    'duplicate-checker.js',
   ];
   for (const f of files) {
     const src = fs.readFileSync(path.join(__dirname, f), 'utf8');

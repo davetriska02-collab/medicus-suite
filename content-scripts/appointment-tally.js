@@ -627,7 +627,7 @@
       startVaxScanIfNeeded();
       return Promise.resolve();
     }
-    if (_inFlight && !bypassCache && _inFlightKey === key) return _inFlight;
+    if (T.shouldReuseInFlight(_inFlight, _inFlightKey, key, bypassCache)) return _inFlight;
     _loading = true;
     render();
     var url =
@@ -652,17 +652,17 @@
         _error = err && err.message ? err.message : 'Could not read the appointment book.';
       })
       .then(function () {
-        if (_inFlight === p) {
-          _inFlight = null;
-          _inFlightKey = '';
-        }
+        var finished = T.finishInFlight({ inFlight: _inFlight, inFlightKey: _inFlightKey }, p);
+        _inFlight = finished.inFlight;
+        _inFlightKey = finished.inFlightKey;
         if (!T.shouldApplyFetch(key, _routeKey)) return;
         _loading = false;
         render();
         startVaxScanIfNeeded();
       });
-    _inFlight = p;
-    _inFlightKey = key;
+    var started = T.beginInFlight(key, p);
+    _inFlight = started.inFlight;
+    _inFlightKey = started.inFlightKey;
     return p;
   }
 

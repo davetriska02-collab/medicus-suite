@@ -2,6 +2,51 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.263.16] — 2026-09-20
+
+### Five safety / hygiene increments (CSO pack, write kernel, executable write tests, PHI-at-rest, loud failures)
+
+Dave-go scoped build. Does **not** include recall-loop tracker, outstanding-results worklist, act-from-signing-queue, vaccination uptake dashboard, or booking-time Patient Alerts echo. Does **not** invent a CSO signature or move `last_cso_review_version` off 3.261.21.
+
+**1. CSO backlog H-063–H-076 + txn-proxy open actions**
+
+H-063–H-076 stay **Proposed**. Controls already in shipped code are listed as a review agenda in `docs/CSO-SIGNOFF-PACK-H063-H076.md` — ready for Dr Dave’s human sign-off, no dates invented.
+
+The v3.202.0 / v3.261.21 txn-proxy trio is **draft-closed**, still PENDING signature:
+
+- CSN doc **3.82**: §6 items 1 / 8 / 9 rewritten. Default `session` is local-only; `hybrid` / `transactional` is a read-only UK-proxy path. Item 8 no longer claims nothing is transmitted. Item 9 names `txn.callerKey` (SW-only, not a Medicus password). Item 3 Select-all wording corrected to current W22. Correction-pending sticker replaced by the rewrite itself.
+- DPIA **1.3** (still DRAFT): new §2.2 for the optional proxy; §1 / §2 / §5 no longer claim unqualified zero egress.
+- Hazard log **3.67**: new **H-077** (Proposed, 5×2=10 → 5×1=5) plus H-009 addendum for `txn.callerKey`.
+
+Practices must not enable hybrid/transactional until those three are signed.
+
+**2. Shared write kernel — incremental extraction**
+
+`shared/write-core.js` now owns identity pin / recheck / `requireUnmoved` / `confirmLanded` / `runConfirmedWrite` as well as the landed-id diff. New dual-mode cores (window + `require`):
+
+- `shared/oir-write-core.js` — W22 auto-tick opt-in + bulk-confirm copy (`content.js` still owns `tickRows`)
+- `shared/tidy-write-core.js` — W9 `edit-problem` vs W19 `change-note` payload builders (`problem-description-cleanup.js` delegates)
+- `shared/companion-write-core.js` — W2/W5 ready + identity gate + landed-id (`task-actions-panel.js` still POSTs)
+- `shared/appointment-organise-core.js` — `runFinaliseBatch` (W14–W16) with pin-recheck on every hop
+- `shared/appointment-tally-core.js` — in-flight key begin/reuse/finish so a stale finish cannot clear a newer key
+
+Not a big-bang rewrite of the 8k-line content.js.
+
+**3. Executable tests instead of grep-only locks**
+
+New/extended Node tests: `test-write-core.js` (pin + `runConfirmedWrite`), `test-oir-write-core.js`, `test-tidy-write-core.js`, `test-companion-write-core.js`, `test-appointment-organise-core.js` (`runFinaliseBatch`), `test-appointment-tally-core.js` (in-flight race). Allergy/nesting dual-mode IIFE pattern.
+
+**4. PHI-at-rest hygiene**
+
+- Patient Alerts: suite backup exports palette only (`byPatient` always `{}`); import skips incoming per-patient flags. Active alerts are **not** TTL-deleted (clinical risk). Idle identity fields (name / NHS / DOB) strip after 90 days with no open flags.
+- Duplicate-checker scan state: 7-day TTL (`shared/dup-checker-state.js`); stale practice identity lists are cleared on load.
+- XSS attribute-escaping CI now also covers patient-alerts, panel, Companion, organise canvas, reception quick-actions, duplicate-checker (`slots.js` stays on its own quote-escaping `escHtml`).
+
+**5. Silent failures made loud**
+
+- Options restore/import: `#backupOutcome` sits under the export/import buttons; `setBackupStatus` writes that banner **and** `#backupStatus` and no longer auto-clears after 4 s.
+- Service worker: every `importScripts` catch still `console.warn`s (existing lock) and now `recordSwLoadError` → `suite.swLoadErrors`. Options Suite-health `#swLoadBanner` and the panel health strip surface a missing stack instead of opening the toolbar silently.
+
 ## [v3.263.15] — 2026-09-19
 
 ### Backup restore — every suite/triage restore failed on `systemChips`

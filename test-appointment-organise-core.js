@@ -2209,6 +2209,107 @@ console.log('=== 4. commit cancel — paths, identity, empty other-ids ===');
     );
   }
 
+  console.log('--- runFinaliseBatch (W14–W16) ---');
+  {
+    const WriteCore = require('./shared/write-core.js');
+    const openRoute = { apiBase: API, date: '2026-08-16' };
+    const startBoard = core.parseBoard(sampleRaw());
+    const gone = JSON.parse(JSON.stringify(sampleRaw()));
+    gone.staffSchedules[0].schedule[0].entries = [];
+    const emptyBoard = core.parseBoard(gone);
+    const draft = core.setCancelReason(core.stageCancel(core.emptyDraft(), mouse.id), mouse.id, 'test cancel');
+    const summary = core.summariseDraft(draft, startBoard);
+    const included = summary.items.filter(function (i) {
+      return i.included;
+    });
+
+    const moved = await core.runFinaliseBatch({
+      WriteCore: WriteCore,
+      included: included,
+      openRoute: openRoute,
+      currentRoute: function () {
+        return { apiBase: API, date: '2026-08-17' };
+      },
+      draft: draft,
+      board: startBoard,
+      client: {
+        commitCancel: async function () {
+          throw new Error('must not write after move');
+        },
+        fetchBoard: async function () {
+          return startBoard;
+        },
+      },
+    });
+    check(moved.abortedBeforeWrite === true && moved.outcome.written === 0, 'W14 batch refuses when the book date moved');
+    check(/nothing was written/.test(moved.failed), 'moved-book copy says nothing was written');
+
+    let cancelCalls = 0;
+    const ok = await core.runFinaliseBatch({
+      WriteCore: WriteCore,
+      included: included,
+      openRoute: openRoute,
+      currentRoute: function () {
+        return openRoute;
+      },
+      draft: draft,
+      board: startBoard,
+      client: {
+        commitCancel: async function () {
+          cancelCalls += 1;
+        },
+        fetchBoard: async function () {
+          return emptyBoard;
+        },
+      },
+    });
+    check(cancelCalls === 1, 'W14 batch calls commitCancel once');
+    check(ok.outcome.allWritten === true && ok.landed[0].id === mouse.id, 'W14 success is the id the board no longer shows');
+    check(ok.draft.cancelIds.indexOf(mouse.id) === -1, 'landed cancel is unstaged');
+
+    const ghost = await core.runFinaliseBatch({
+      WriteCore: WriteCore,
+      included: included,
+      openRoute: openRoute,
+      currentRoute: function () {
+        return openRoute;
+      },
+      draft: draft,
+      board: startBoard,
+      client: {
+        commitCancel: async function () {},
+        fetchBoard: async function () {
+          return startBoard;
+        },
+      },
+    });
+    check(ghost.outcome.allWritten === false && ghost.outcome.written === 0, 'W14 settle-without-land is a failure');
+    check(/does not show that action/.test(ghost.failed), 'ghost write names the missing board confirmation');
+
+    let hops = 0;
+    const hopMoved = await core.runFinaliseBatch({
+      WriteCore: WriteCore,
+      included: [
+        { kind: 'cancel', id: mouse.id, reason: 'a', included: true, notify: false },
+        { kind: 'cancel', id: 'second', reason: 'b', included: true, notify: false },
+      ],
+      openRoute: openRoute,
+      currentRoute: function () {
+        hops += 1;
+        return hops === 1 ? openRoute : { apiBase: API, date: '2026-08-17' };
+      },
+      draft: draft,
+      board: startBoard,
+      client: {
+        commitCancel: async function () {},
+        fetchBoard: async function () {
+          return emptyBoard;
+        },
+      },
+    });
+    check(hopMoved.outcome.written === 0 && /remaining stay staged/.test(hopMoved.failed), 'mid-batch date change stops before any hop write');
+  }
+
   console.log('\n' + passed + ' passed, ' + failed + ' failed');
   if (failed) process.exitCode = 1;
 })().catch((err) => {

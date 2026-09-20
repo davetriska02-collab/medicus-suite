@@ -163,6 +163,9 @@ const FILE_TO_WIDS = {
   'shared/booking-core.js': ['W1', 'W2', 'W12', 'W15'],
   'shared/task-api.js': ['W4'],
   'content-scripts/task-actions-panel.js': ['W2', 'W5'],
+  'shared/companion-write-core.js': ['W2', 'W5'],
+  'shared/tidy-write-core.js': ['W9', 'W19'],
+  'shared/oir-write-core.js': ['W22'],
   'content-scripts/document-file-inline.js': ['W6'],
   'content-scripts/triage-lens/lab-file-button.js': ['W7'],
   'content-scripts/triage-lens/routine-rx-button.js': ['W8'],
@@ -199,6 +202,9 @@ const EXISTENCE_EVEN_WITHOUT_POST = [
   'content-scripts/privacy-officer-bulk-acknowledge.js',
   'content-scripts/eps-cancellation-bulk-discard.js',
   'content-scripts/triage-lens/content.js',
+  'shared/companion-write-core.js',
+  'shared/tidy-write-core.js',
+  'shared/oir-write-core.js',
 ];
 
 function findHits(absFile, re) {

@@ -392,11 +392,39 @@ console.log('\n--- source lock: injected widget ---');
     'Slots init does not let stale uiState clobber slots.hiddenTypes'
   );
   check(slotsSrc.includes('isCancelled'), 'Slots aggregate skips cancelled sessions like the tally');
-  check(js.includes('_inFlightKey'), 'tally load is keyed so a late fetch cannot paint the previous date');
+  check(js.includes('shouldReuseInFlight'), 'tally load uses shouldReuseInFlight so a matching in-flight is reused');
+  check(js.includes('beginInFlight'), 'tally load records the in-flight key via beginInFlight');
+  check(js.includes('finishInFlight'), 'tally load clears only its own in-flight via finishInFlight');
   check(js.includes('shouldApplyFetch'), 'tally load uses shouldApplyFetch so a stale in-flight date is discarded');
   check(core.shouldApplyFetch('a|2026-09-10', 'a|2026-09-10') === true, 'matching in-flight key applies');
   check(core.shouldApplyFetch('a|2026-09-10', 'a|2026-09-11') === false, 'date B in flight does not apply date A');
   check(core.shouldApplyFetch('', 'a|2026-09-10') === false, 'empty in-flight key does not apply');
+  check(
+    core.shouldReuseInFlight(Promise.resolve(), 'a|2026-09-10', 'a|2026-09-10', false) === true,
+    'same-key in-flight is reused when not bypassing cache'
+  );
+  check(
+    core.shouldReuseInFlight(Promise.resolve(), 'a|2026-09-10', 'a|2026-09-11', false) === false,
+    'different-key in-flight is not reused'
+  );
+  check(
+    core.shouldReuseInFlight(Promise.resolve(), 'a|2026-09-10', 'a|2026-09-10', true) === false,
+    'bypassCache does not reuse the in-flight'
+  );
+  check(core.shouldReuseInFlight(null, 'a|2026-09-10', 'a|2026-09-10', false) === false, 'no in-flight is not reused');
+  {
+    const pOld = Promise.resolve('old');
+    const pNew = Promise.resolve('new');
+    const started = core.beginInFlight('a|2026-09-11', pNew);
+    check(started.inFlight === pNew && started.inFlightKey === 'a|2026-09-11', 'beginInFlight records the new key');
+    const staleFinish = core.finishInFlight(started, pOld);
+    check(
+      staleFinish.inFlight === pNew && staleFinish.inFlightKey === 'a|2026-09-11',
+      'a late finish for the previous date does not clear the newer in-flight'
+    );
+    const ownFinish = core.finishInFlight(started, pNew);
+    check(ownFinish.inFlight === null && ownFinish.inFlightKey === '', 'the owning fetch clears its own in-flight');
+  }
   check(manifest.includes('shared/injector-runtime.js'), 'injector runtime is in the manifest');
   check(
     manifest.indexOf('shared/injector-runtime.js') < widgetIdx,

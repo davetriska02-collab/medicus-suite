@@ -15,6 +15,22 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 });
 
+// Load failures used to be console.warn only — the toolbar then opened with
+// a silent missing stack. Collect them and persist after the load section
+// so the health strip / Options banner can show them. Always write, even
+// empty, so a recovered worker clears a previous banner.
+var SW_LOAD_ERRORS_KEY = 'suite.swLoadErrors';
+var _swLoadErrors = [];
+function recordSwLoadError(script, err) {
+  var message = (err && err.message) || String(err || 'unknown error');
+  _swLoadErrors.push({ script: script || 'importScripts', message: message, at: new Date().toISOString() });
+}
+function flushSwLoadErrors() {
+  try {
+    chrome.storage.local.set({ 'suite.swLoadErrors': _swLoadErrors.slice() });
+  } catch (_) {}
+}
+
 // Load shared modules. Wrapped in try/catch so that an error in any module can
 // NEVER fail the service-worker registration (which would discard the worker
 // and the line above with it — the cause of "registration failed, status 2").
@@ -27,6 +43,7 @@ try {
   importScripts('shared/io/practice-profile.js');
 } catch (e) {
   console.warn('[Suite] importScripts failed:', e && e.message);
+  recordSwLoadError('shared bootstrap', e);
 }
 
 // Dependencies for the v2 practice profile engine.
@@ -35,76 +52,91 @@ try {
   importScripts('shared/knowledge-utils.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/knowledge-utils.js failed:', e && e.message);
+  recordSwLoadError('shared/knowledge-utils.js', e);
 }
 try {
   importScripts('shared/reception-pathway-utils.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/reception-pathway-utils.js failed:', e && e.message);
+  recordSwLoadError('shared/reception-pathway-utils.js', e);
 }
 try {
   importScripts('shared/io/sentinel-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/sentinel-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/sentinel-io.js', e);
 }
 try {
   importScripts('shared/io/triage-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/triage-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/triage-io.js', e);
 }
 try {
   importScripts('shared/io/submissions-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/submissions-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/submissions-io.js', e);
 }
 try {
   importScripts('shared/io/slot-counter-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/slot-counter-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/slot-counter-io.js', e);
 }
 try {
   importScripts('shared/io/capacity-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/capacity-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/capacity-io.js', e);
 }
 try {
   importScripts('shared/io/knowledge-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/knowledge-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/knowledge-io.js', e);
 }
 try {
   importScripts('shared/io/reception-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/reception-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/reception-io.js', e);
 }
 try {
   importScripts('shared/io/triage-alert-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/triage-alert-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/triage-alert-io.js', e);
 }
 try {
   importScripts('shared/io/referrals-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/referrals-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/referrals-io.js', e);
 }
 try {
   importScripts('shared/io/request-monitor-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/request-monitor-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/request-monitor-io.js', e);
 }
 try {
   importScripts('shared/allocation-groups-core.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/allocation-groups-core.js failed:', e && e.message);
+  recordSwLoadError('shared/allocation-groups-core.js', e);
 }
 try {
   importScripts('shared/io/allocation-groups-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/allocation-groups-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/allocation-groups-io.js', e);
 }
 try {
   importScripts('shared/lab-filing-utils.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/lab-filing-utils.js failed:', e && e.message);
+  recordSwLoadError('shared/lab-filing-utils.js', e);
 }
 try {
   // Dependency order matters: labfiling-io.js resolves LabFilingUtils at
@@ -113,11 +145,13 @@ try {
   importScripts('shared/io/labfiling-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/labfiling-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/labfiling-io.js', e);
 }
 try {
   importScripts('shared/io/suite-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/suite-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/suite-io.js', e);
 }
 try {
   // Dependency order matters: problem-description-cleanup-io.js resolves
@@ -127,26 +161,31 @@ try {
   importScripts('shared/preferred-descriptions.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/preferred-descriptions.js failed:', e && e.message);
+  recordSwLoadError('shared/preferred-descriptions.js', e);
 }
 try {
   importScripts('shared/io/problem-description-cleanup-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/problem-description-cleanup-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/problem-description-cleanup-io.js', e);
 }
 try {
   importScripts('shared/quiet-mode.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/quiet-mode.js failed:', e && e.message);
+  recordSwLoadError('shared/quiet-mode.js', e);
 }
 try {
   importScripts('shared/stackchan-bridge.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/stackchan-bridge.js failed:', e && e.message);
+  recordSwLoadError('shared/stackchan-bridge.js', e);
 }
 try {
   importScripts('shared/presence-folder.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/presence-folder.js failed:', e && e.message);
+  recordSwLoadError('shared/presence-folder.js', e);
 }
 
 // Transactional API integration (official Medicus API via our backend proxy).
@@ -166,7 +205,9 @@ try {
   );
 } catch (e) {
   console.warn('[Suite] importScripts txn modules failed:', e && e.message);
+  recordSwLoadError('txn modules', e);
 }
+flushSwLoadErrors();
 
 // Short-TTL cache for patient bundles (see shared/txn-bundle-cache.js). Clinical
 // trade-off: 60s of possible staleness is acceptable for a chip/summary read —

@@ -31,6 +31,7 @@ import {
   sanitiseTypes,
   searchStore,
   sortAlerts,
+  stripIdleIdentity,
   upsertAlert,
 } from './patient-alerts-core.js';
 
@@ -163,6 +164,14 @@ export { cleanup };
 async function loadState() {
   const r = await chrome.storage.local.get([STORE_KEY, TYPES_KEY, 'suite.letterhead']);
   _store = r[STORE_KEY] && typeof r[STORE_KEY] === 'object' ? r[STORE_KEY] : {};
+  {
+    const pruned = stripIdleIdentity(_store);
+    if (pruned.changed) {
+      _store = pruned.store;
+      _ignoreNextChange = true;
+      await chrome.storage.local.set({ [STORE_KEY]: _store });
+    }
+  }
   _typesCustomised = Array.isArray(r[TYPES_KEY]);
   _types = sanitiseTypes(r[TYPES_KEY]);
   // Author attribution (H-042 audit trail): the acting user's name from the
