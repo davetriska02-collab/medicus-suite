@@ -90,7 +90,7 @@ async function labfilingImport(data) {
       ) {
         delete pre.commitMode;
       }
-      const errs = LF.validateProfile(pre);
+      const errs = LF.validateProfile(pre, { lenientAllowComments: true });
       if (errs.length > 0) throw new Error(`labfiling.profiles["${(pre && pre.name) || '?'}"]: ${errs[0]}`);
       // Force inert: imported profiles arrive disabled, unreviewed, message off.
       const clean = LF.lockForReview(pre, 'import');

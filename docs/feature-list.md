@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.264.0
-**Generated:** 2026-09-20
+**Version:** v3.265.1
+**Generated:** 2026-09-22
 
 ## What it is
 
@@ -151,6 +151,8 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.265.1 (22 Sep)** — Lab Filing: a whitelisted lab comment must now explain the whole comment (no more partial / containing matches), entries need at least 6 words, and are refused rather than truncated (limit 2 000 characters)
+- **v3.265.0 (22 Sep)** — Outstanding Requests can now use the Lab Result Catalogue (opt-in Triage option "Matching engine", default off, practice-published, falls back to the current engine on any problem): recognises requests and reports by SNOMED code and the lab's own headings, same clearing rules and auto-tick opt-in. Investigations page: Edit and Details merged (codes and wordings editable in place), labs can be renamed, deleted imported tests stay deleted, matching-tool fixes
 - **v3.264.0 (20 Sep)** — Lab Result Catalogue + Options → Investigations page: coded per-practice catalogue of investigations/results/labs, inert-until-approved practice overlay, gated per-test review, "Match requests to lab reports" scan (names/headings/codes/units only — never values or patient/staff data). No existing feature acts on it yet
 - **v3.263.10 (19 Sep)** — StackChan desk-robot presence: LAN HTTP face commands from Sentinel / Request Monitor / Companion; firmware camera+mic off; Options Test face
 - **v3.263.9 (19 Sep)** — Restored ACE-I/ARB and thiazide post-initiation U&E, gated on a true medication-history start (batch dates cannot fire)

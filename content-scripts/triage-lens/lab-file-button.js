@@ -1112,6 +1112,15 @@
       toast('Could not save — extension utilities not loaded.', 'err');
       return;
     }
+    // A comment that may not be whitelisted (too short / generic, or over the length limit) is refused with the reason —
+    // never silently shortened or dropped, because the gate now needs the WHOLE comment explained.
+    const refused = ticked
+      .map((c) => ({ c, why: typeof LF.allowCommentProblem === 'function' ? LF.allowCommentProblem(c.residue) : '' }))
+      .filter((x) => x.why);
+    if (refused.length) {
+      toast('Not saved — ' + refused[0].c.residue.trim().slice(0, 40) + '… ' + refused[0].why + '.', 'err');
+      return;
+    }
     const byProfileId = new Map();
     ticked.forEach((c) => {
       c.targetProfiles.forEach((p) => {

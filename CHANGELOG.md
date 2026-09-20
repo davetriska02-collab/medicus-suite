@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.1] — 2026-09-22
+
+### Lab Filing: a whitelisted lab comment must now explain the WHOLE comment (H-073 review item)
+
+Closes the open review item recorded against H-073: `allowComments` used to excuse a comment if the comment contained the
+whitelisted phrase **or the phrase contained the comment**, with no minimum size. A whitelisted "normal" excused
+"not normal, please phone", and a whitelisted paragraph with a warning added before or after it was still excused. This
+only ever makes the filing gate stricter, so there is no switch: it applies as soon as the extension reloads.
+
+- **Whole-comment matching** (`shared/lab-filing-utils.js`, `_commentAllowedByProfile`): the whole comment residue must be
+  explained by the profile's whitelisted phrases — one phrase, or several that together make up the comment. A phrase that
+  is only part of the comment, or merely contains it, explains nothing. Case and spacing are ignored; an exact doubling
+  (saved before the doubled-comment fix) still explains the single-copy comment.
+- **Size floor:** an entry needs at least 6 words and 30 characters and cannot be made only of generic words ("normal",
+  "no action"…). `LF_ALLOW_MIN_WORDS` / `LF_ALLOW_MIN_CHARS` / `LF_ALLOW_GENERIC_TOKENS`. The matcher also ignores any such
+  entry that reaches it (older profile, restore, sync).
+- **No truncation:** the limit for a whitelisted comment is now 2 000 characters (was 500, silently truncating); an over-long
+  or too-short entry is **refused** with the reason — at Options → Lab Filing save, and in the filing screen's "whitelist
+  this comment" action — and dropped (never shortened) on import / sync / restore, which do not reject a whole profile over
+  one bad phrase (`validateProfile(p, { lenientAllowComments: true })`).
+- **Expect:** an existing whitelist entry that was only a fragment of the real comment, or a phrase joining two comments
+  into one entry, stops excusing a comment that carries only part of it — the result blocks again until the whole comment is
+  whitelisted (each comment as its own entry). The tick-box on the blocked card saves the full text.
+- **Docs:** `docs/HAZARD-LOG.md` H-073 description corrected (the comments are lab-generated, not Medicus-generated) and
+  mitigations (h)/(i) added — pending CSO review, document version unchanged; `docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`
+  records the agreed design for folding Lab Filing into the catalogue; `docs/feature-list.md` brought to the manifest version
+  (it had fallen a minor behind v3.265.0).
+- Tests: `test-lab-filing-utils.js` (216) — whole-comment rule with the real eGFR and AKI-risk notes, appended/prepended
+  warning, single generic word, reverse containment, tiling by several entries, size floor, validation, sanitise.
+
 ## [v3.265.0] — 2026-09-22
 
 ### Outstanding Requests can now use the Lab Result Catalogue (opt-in, default off) + catalogue fixes

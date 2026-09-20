@@ -294,7 +294,7 @@ check(
   merged.effective.analytes.includes('sodium') &&
     merged.effective.analytes.includes('creatinine') &&
     merged.effective.analytes.includes('potassium'),
-  "merge unions analytes across panels (bug fix 2026-09-17 — analytes was hardcoded to an empty array here, so unrecognisedAnalyteBlockers could never recognise anything from any profile through the live merge, which every real report scores through, even for a single matched profile)"
+  'merge unions analytes across panels (bug fix 2026-09-17 — analytes was hardcoded to an empty array here, so unrecognisedAnalyteBlockers could never recognise anything from any profile through the live merge, which every real report scores through, even for a single matched profile)'
 );
 check(LF.mergeProfilesForReport([], comboReport) === null, 'no profiles → null merge');
 check(
@@ -494,11 +494,15 @@ const ueWithCrpReport = {
 };
 const ueOnlyProfile = { name: 'U&E', analytes: ['sodium', 'potassium', 'creatinine'] };
 check(
-  LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) => /^CRP is not a recognised analyte/.test(r)),
-  "an in-range, lab-ranged analyte no profile ever declared blocks filing, named by its own result label"
+  LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) =>
+    /^CRP is not a recognised analyte/.test(r)
+  ),
+  'an in-range, lab-ranged analyte no profile ever declared blocks filing, named by its own result label'
 );
 check(
-  !LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some((r) => /^Sodium/.test(r) || /^Potassium/.test(r)),
+  !LF.unrecognisedAnalyteBlockers(ueWithCrpReport, ueOnlyProfile).some(
+    (r) => /^Sodium/.test(r) || /^Potassium/.test(r)
+  ),
   'a genuinely-covered analyte is not flagged'
 );
 check(
@@ -584,9 +588,9 @@ check(
 );
 check(
   LF.fileabilityBlockers(commentedReport, { level: 'none' }, someRules, {
-    allowComments: ['NICE NG203 ethnicity'],
+    allowComments: ['See NICE NG203 ethnicity-based interpretation guidance'],
   }).length === 0,
-  'the same comment is excused once the matched profile allow-lists it'
+  'the same comment is excused once the matched profile allow-lists the whole of it'
 );
 check(
   LF.fileabilityBlockers(commentedReport, { level: 'none' }, someRules, {
@@ -754,7 +758,7 @@ const lftProfileReal = { name: 'LFTs', match: ['alt', 'alp', 'bilirubin', 'album
 const trigResultWithHeading = { name: 'Triglycerides', specimen: 'Lipids' };
 check(
   LF.profilesOwningResult([ueProfileReal, lftProfileReal], trigResultWithHeading).length === 0,
-  "a Lipids-heading comment is owned by NOBODY when no profile covers Lipids — never falls back to U&E/LFT just because they matched the wider report"
+  'a Lipids-heading comment is owned by NOBODY when no profile covers Lipids — never falls back to U&E/LFT just because they matched the wider report'
 );
 const lipidsProfile = { name: 'Lipids', match: ['lipid'] };
 check(
@@ -814,8 +818,8 @@ console.log('\n--- allowComments owning-profile honesty ---');
     'legacy single-profile call still excuses via the passed profile (unit-test / single-panel path unchanged)'
   );
   check(
-    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion, [ueOnly, lipidsEmpty]).some(
-      (r) => /carries a comment/.test(r)
+    LF.fileabilityBlockers(comboCommented, { level: 'none' }, someRules, mergedUnion, [ueOnly, lipidsEmpty]).some((r) =>
+      /carries a comment/.test(r)
     ),
     'combined report: a U&E allow-list phrase does not excuse a Lipids-heading comment'
   );
@@ -1010,12 +1014,13 @@ check(
 );
 const provSp = LF.sanitiseProfile(
   withParams([{ analyte: 'k', high: 5 }], {
-    allowComments: ['  Insufficient historical data  ', ''],
+    allowComments: ['  Insufficient historical creatinine data to assess AKI risk  ', ''],
     updatedBy: 'dr.nair@example.nhs.uk',
   })
 );
 check(
-  provSp.allowComments.length === 1 && provSp.allowComments[0] === 'Insufficient historical data',
+  provSp.allowComments.length === 1 &&
+    provSp.allowComments[0] === 'Insufficient historical creatinine data to assess AKI risk',
   'sanitise trims and drops empty allowComments'
 );
 check(provSp.updatedBy === 'dr.nair@example.nhs.uk', 'sanitise preserves updatedBy');
@@ -1035,6 +1040,162 @@ check(
   LF.sanitiseProfile(withParams([{ analyte: 'k', high: 5 }], {})).paramsOverrideLabFlags === false,
   'paramsOverrideLabFlags defaults false'
 );
+
+// ── Whitelisted lab comments: the WHOLE comment must be explained (H-073 open review item, 2026-09-22) ─────────────
+console.log('\n--- allowComments: whole-comment matching, size floor, no truncation ---');
+{
+  // The lab's own boilerplate, as it arrives on the eGFR result (real text, ~600 characters).
+  const egfrNote =
+    'Please note: eGFR should no longer be corrected for ethnicity, as per NICE guidelines (NG203) 2021. ' +
+    'The eGFR calculation assumes a stable creatinine level. It is not valid if the creatinine levels are changing, ' +
+    'or in certain patient groups, such as the malnourished, amputees and pregnant women. Mildly reduced eGFR, this may ' +
+    'be appropriate for age and/or clinical history. If patient has other evidence of kidney disease, they have CKD ' +
+    'stage G2. Please refer to the SW London CKD pathway and the NICE CKD guideline for further advice and information ' +
+    'regarding assessment and coding.';
+  const reportWith = (comment) => ({
+    unmatched: false,
+    results: [
+      {
+        name: 'eGFR (MDRD)',
+        value: 76,
+        unit: 'ml/min/1.73 m2',
+        rawValue: '76',
+        text: 'eGFR (MDRD) 76 ml/min/1.73 m2 ' + comment,
+      },
+    ],
+  });
+  const blocks = (comment, allow) =>
+    LF.fileabilityBlockers(reportWith(comment), { level: 'none' }, someRules, { allowComments: allow }).some((r) =>
+      /carries a comment/.test(r)
+    );
+
+  check(
+    egfrNote.length > 500,
+    'the long G2 variant of the real eGFR note is longer than the old 500-character storage limit'
+  );
+  check(!blocks(egfrNote, [egfrNote]), 'the whole real note, whitelisted whole, excuses itself');
+  check(
+    blocks(egfrNote, [egfrNote.slice(0, 500)]),
+    'a note stored TRUNCATED at the old 500 characters no longer excuses the whole comment (this is what used to hide the truncation)'
+  );
+  check(
+    blocks(egfrNote + ' URGENT: creatinine rising, please repeat today', [egfrNote]),
+    'the whitelisted note with a warning APPENDED is not excused'
+  );
+  check(
+    blocks('URGENT: please phone the patient. ' + egfrNote, [egfrNote]),
+    'the whitelisted note with a warning PREPENDED is not excused'
+  );
+  check(
+    blocks('Result is not normal, please phone the patient today', ['normal']),
+    'a whitelisted single word ("normal") excuses nothing'
+  );
+  check(
+    blocks('Abnormal result please phone the patient today about this', ['normal', 'no action']),
+    'short generic entries excuse nothing, even when they appear inside the comment'
+  );
+  check(
+    !blocks(egfrNote + ' ' + 'Insufficient historical creatinine data to assess AKI risk', [
+      egfrNote,
+      'Insufficient historical creatinine data to assess AKI risk',
+    ]),
+    'two whitelisted notes that together make up the comment excuse it'
+  );
+  check(
+    blocks(egfrNote + ' ' + 'Insufficient historical creatinine data to assess AKI risk', [egfrNote]),
+    'but one note alone does not excuse a comment that also carries a different one'
+  );
+  check(
+    blocks('This is only part of the lab boilerplate text here', [
+      'This is only part of the lab boilerplate text here and continues with a lot more text after it',
+    ]),
+    'a whitelisted phrase that merely CONTAINS the comment explains nothing (the old reverse-containment test is gone)'
+  );
+  check(!blocks('  ' + egfrNote.toUpperCase() + '  ', ['  ' + egfrNote + '  ']), 'case and whitespace do not matter');
+
+  // What may be whitelisted at all
+  const why = (p) => LF.allowCommentProblem(p);
+  check(
+    why('normal') !== '' && why('no action required') !== '' && why('') !== '',
+    'a word or short generic phrase cannot be whitelisted'
+  );
+  check(
+    why('the result is normal and no further action is required') !== '',
+    'even 6+ words are refused when every word is generic'
+  );
+  check(
+    why('Insufficient historical creatinine data to assess AKI risk') === '',
+    'a real short lab comment (9 words) can be whitelisted'
+  );
+  check(why('consistent with category G1 - Normal eGFR') === '', 'a real 7-word lab comment can be whitelisted');
+  check(why(egfrNote) === '', 'the real 600-character note can be whitelisted');
+  check(why('x '.repeat(1001)) !== '', 'over 2000 characters is refused — never truncated');
+  const errsFor = (allow) =>
+    LF.validateProfile({
+      name: 'p',
+      match: ['x'],
+      analytes: ['a'],
+      filing: { normalOptionText: 'Normal', fileButtonText: 'File' },
+      allowComments: allow,
+    });
+  check(
+    errsFor(['normal']).some((e) => /allowComments\[0\]/.test(e) && /too short/.test(e)),
+    'saving a profile with "normal" whitelisted is refused, with the reason'
+  );
+  check(errsFor([egfrNote]).length === 0, 'saving a profile with the real note whitelisted is accepted');
+  check(
+    LF.validateProfile(
+      {
+        name: 'p',
+        match: ['x'],
+        analytes: ['a'],
+        filing: { normalOptionText: 'Normal', fileButtonText: 'File' },
+        allowComments: ['normal'],
+      },
+      { lenientAllowComments: true }
+    ).length === 0,
+    'import / sync / restore do NOT reject a whole profile over one bad phrase (lenient) …'
+  );
+  const cleaned = LF.sanitiseProfile({
+    name: 'p',
+    match: ['x'],
+    analytes: ['a'],
+    filing: { normalOptionText: 'Normal', fileButtonText: 'File' },
+    allowComments: ['normal', egfrNote, 'x '.repeat(1001)],
+  });
+  check(
+    cleaned.allowComments.length === 1 && cleaned.allowComments[0] === egfrNote,
+    '… the bad phrases are dropped by sanitise (never shortened) and the good one is kept in full'
+  );
+  // Nick's own stored entries (2026-09-22): the G1 eGFR note, and ONE entry that joins two AKI-risk comments together.
+  const g1 =
+    'Please note: eGFR should no longer be corrected for ethnicity, as per NICE guidelines (NG203) 2021. The eGFR calculation ' +
+    'assumes a stable creatinine level. It is not valid if the creatinine levels are changing, or in certain patient groups, ' +
+    'such as the malnourished, amputees and pregnant women. This eGFR is consistent with category G1 - Normal eGFR';
+  const akiA = 'Insufficient historical data to assess AKI risk';
+  const akiB = 'Insufficient historical creatinine data to assess AKI risk';
+  const stored = [akiA + ' ' + akiB, g1];
+  check(!blocks(g1, stored), 'the stored G1 eGFR note, whole, is still excused');
+  check(
+    blocks(g1, [akiA + ' ' + akiB, g1.replace(' This eGFR is consistent with category G1 - Normal eGFR', '')]),
+    'the same note stored with its last sentence removed is NOT excused (the old containment rule excused it)'
+  );
+  check(!blocks(akiA + ' ' + akiB, stored), 'a comment carrying both AKI-risk notes is excused by the joined entry');
+  check(
+    blocks(akiB, stored) && blocks(akiA, stored),
+    'but either AKI-risk note ALONE is no longer excused by the joined entry (the old reverse-containment rule excused it) — whitelist each separately'
+  );
+  check(
+    !blocks(akiB, [akiA, akiB]) && !blocks(akiA, [akiA, akiB]),
+    'entered separately, each note is excused on its own'
+  );
+  // an old doubled entry (saved before the doubled-comment fix) still explains the de-duplicated residue
+  const short = 'Insufficient historical creatinine data to assess AKI risk';
+  check(
+    !blocks(short, [short + ' ' + short]),
+    'an entry carrying an exact doubling still explains the single-copy comment'
+  );
+}
 
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
 if (failed > 0) process.exit(1);

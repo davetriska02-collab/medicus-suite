@@ -1026,7 +1026,7 @@ const PracticeProfile = (() => {
               // A malformed incoming entry is skipped, not fatal to the whole
               // merge — same "don't abort a valid batch over one bad row"
               // discipline as sentinelImport's skipInvalidCustomRules.
-              if (LFU.validateProfile(raw).length > 0) continue;
+              if (LFU.validateProfile(raw, { lenientAllowComments: true }).length > 0) continue;
               const clean = LFU.lockForReview(raw, 'import');
               if (!clean.id || takenIds.has(clean.id)) clean.id = LFU.generateProfileId(clean.name, takenIds);
               takenIds.add(clean.id);
