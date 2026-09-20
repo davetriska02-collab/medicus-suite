@@ -40,6 +40,7 @@ const NHS_ADD_ALLOWLIST = new Set([
   // identifiers, and some coincidentally pass the NHS Modulus-11 check.
   // These files carry terminology IDs only — no patient identifiers.
   'rules/document-types.json',
+  'rules/lab-code-info.json',
   'test-problem-description-cleanup.js',
   'test-snomed-retirement.js',
 ]);
