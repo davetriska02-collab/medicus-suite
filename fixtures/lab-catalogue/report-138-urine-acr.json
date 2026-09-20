@@ -1,0 +1,59 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-138",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "Urine ACR",
+      "specimen": {
+        "type": "Urine"
+      },
+      "results": [
+        {
+          "description": "Urine creatinine",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1003271000000106",
+            "description": "Urine creatinine"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Urine microalbumin",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1010251000000109",
+            "description": "Urine microalbumin"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mg/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Urine ACR",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1023491000000104",
+            "description": "Urine albumin:creatinine ratio"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mg/mmol",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [],
+  "requests": [
+    "Bone Profile (Calcium Studies)",
+    "Liver Function",
+    "Urea and Electrolytes WITH Potassium",
+    "Immunoglobulins (includes Electrophoresis)",
+    "Urine Albumin:Creatinine Ratio"
+  ]
+}

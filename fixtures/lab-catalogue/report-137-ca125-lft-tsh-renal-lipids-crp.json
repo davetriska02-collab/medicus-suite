@@ -1,0 +1,250 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-137",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "Se CA 125 level",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Se CA 125 level",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000461000000109",
+            "description": "Se CA 125 level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "ku/L",
+          "resultValue": "1"
+        }
+      ]
+    },
+    {
+      "description": "LFTs",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Albumin",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000821000000103",
+            "description": "Serum albumin"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "g/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Serum bilirubin level",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "999691000000104",
+            "description": "Serum bilirubin level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "µmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "ALP",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000621000000104",
+            "description": "Serum alkaline phosphatase"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "u/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "ALT",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1018251000000107",
+            "description": "Serum ALT level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "u/L",
+          "resultValue": "1"
+        }
+      ]
+    },
+    {
+      "description": "TSH",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "TSH",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1022791000000101",
+            "description": "Serum TSH level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mIU/L",
+          "resultValue": "1"
+        }
+      ]
+    },
+    {
+      "description": "Renal function tests",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Sodium",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000661000000107",
+            "description": "Serum sodium"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Potassium",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000651000000109",
+            "description": "Serum potassium"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Urea",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000951000000103",
+            "description": "Serum urea level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Creatinine",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000731000000107",
+            "description": "Serum creatinine"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "µmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "eGFR (MDRD)",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1020291000000106",
+            "description": "GFR calculated abbreviatd MDRD"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "ml/min/1.73 m²",
+          "resultValue": "1"
+        }
+      ]
+    },
+    {
+      "description": "Lipids",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Total cholesterol",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1005671000000105",
+            "description": "Serum cholesterol"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "HDL cholesterol",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1005681000000107",
+            "description": "Serum HDL cholesterol level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Se non HDL cholesterol level",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1006191000000106",
+            "description": "Se non HDL cholesterol level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Serum cholesterol/HDL ratio",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1015681000000109",
+            "description": "Serum cholesterol/HDL ratio"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultValue": "1"
+        },
+        {
+          "description": "Triglycerides",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1005691000000109",
+            "description": "Serum triglycerides"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Calculated LDL cholesterol lev",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1014501000000104",
+            "description": "Calculated LDL cholesterol lev"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [
+    {
+      "description": "CRP",
+      "resultType": "unit-value-result",
+      "resultCode": {
+        "conceptId": "1001371000000100",
+        "description": "Serum C reactive protein level"
+      },
+      "hasUnresolvedDegradedTypeCode": false,
+      "resultUnit": "mg/L",
+      "resultValue": "1"
+    }
+  ],
+  "requests": ["US Abdomen", "T.V. Pelvis"]
+}

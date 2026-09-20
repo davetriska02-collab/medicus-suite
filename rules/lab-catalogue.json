@@ -1,0 +1,2306 @@
+{
+  "schema": 1,
+  "description": "Lab Result Catalogue (Phase A seed) — coded results, investigations and a suggested lab definition. NOT yet read by any feature; see docs/plans/LAB-RESULT-CATALOGUE-DATA-MODEL-2026-09-19.md. Refsets are TRUD PCD cluster ids (attribute only, never panel membership); \"counts for QOF\" is derived from them, never stored here.",
+  "retired": [],
+  "results": [
+    {
+      "id": "adjusted-calcium",
+      "label": "Adjusted calcium",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "935051000000108",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["CALC_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "adjusted calcium"
+        },
+        {
+          "text": "corrected calcium"
+        },
+        {
+          "text": "adj calcium"
+        },
+        {
+          "text": "Adjusted calcium",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "albumin",
+      "label": "Albumin",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000821000000103",
+          "role": "primary",
+          "unit": "g/L",
+          "refsets": ["LFT_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "albumin"
+        },
+        {
+          "text": "serum albumin"
+        },
+        {
+          "text": "Albumin",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "alp",
+      "label": "Alkaline phosphatase",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000621000000104",
+          "role": "primary",
+          "unit": "u/L",
+          "refsets": ["LFT_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "alp"
+        },
+        {
+          "text": "alkaline phosphatase"
+        },
+        {
+          "text": "alk phos"
+        },
+        {
+          "text": "ALP",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "alt",
+      "label": "Alanine aminotransferase",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1018251000000107",
+          "role": "primary",
+          "unit": "u/L",
+          "refsets": ["LFT_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "alt"
+        },
+        {
+          "text": "alanine aminotransferase"
+        },
+        {
+          "text": "alanine transaminase"
+        },
+        {
+          "text": "ALT",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "ast",
+      "label": "Aspartate aminotransferase",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "ast"
+        },
+        {
+          "text": "aspartate aminotransferase"
+        },
+        {
+          "text": "aspartate transaminase"
+        }
+      ]
+    },
+    {
+      "id": "basophils",
+      "label": "Basophils",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022571000000108",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "basophils"
+        },
+        {
+          "text": "basophil"
+        },
+        {
+          "text": "Basophils",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "bilirubin-total",
+      "label": "Bilirubin (total)",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "999691000000104",
+          "role": "primary",
+          "unit": "µmol/L",
+          "refsets": ["LFT_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "bilirubin"
+        },
+        {
+          "text": "total bilirubin"
+        },
+        {
+          "text": "Serum bilirubin level",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "ca-125",
+      "label": "CA 125",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000461000000109",
+          "role": "primary",
+          "unit": "ku/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "ca 125"
+        },
+        {
+          "text": "ca125"
+        },
+        {
+          "text": "cancer antigen 125"
+        },
+        {
+          "text": "Se CA 125 level",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "calcium",
+      "label": "Calcium",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000691000000101",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["CALC_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "calcium"
+        },
+        {
+          "text": "serum calcium"
+        },
+        {
+          "text": "Calcium",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["adjusted", "corrected", "urine", "urinary", "ionised"]
+    },
+    {
+      "id": "cholesterol-hdl-ratio",
+      "label": "Cholesterol/HDL ratio",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1015681000000109",
+          "role": "primary",
+          "refsets": ["NDACHOLEST_COD", "TCHOLHDL_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "cholesterol hdl ratio"
+        },
+        {
+          "text": "chol hdl ratio"
+        },
+        {
+          "text": "Serum cholesterol/HDL ratio",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "creatinine",
+      "label": "Creatinine",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000731000000107",
+          "role": "primary",
+          "unit": "µmol/L",
+          "refsets": ["CRE_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "creatinine"
+        },
+        {
+          "text": "serum creatinine"
+        },
+        {
+          "text": "Creatinine",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "crp",
+      "label": "C-reactive protein",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1001371000000100",
+          "role": "primary",
+          "unit": "mg/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "crp"
+        },
+        {
+          "text": "c reactive protein"
+        },
+        {
+          "text": "CRP",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "egfr",
+      "label": "eGFR",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1020291000000106",
+          "role": "primary",
+          "unit": "ml/min/1.73 m²",
+          "refsets": ["EGFR_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "egfr"
+        },
+        {
+          "text": "estimated glomerular filtration rate"
+        },
+        {
+          "text": "gfr"
+        },
+        {
+          "text": "eGFR (MDRD)",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "eosinophils",
+      "label": "Eosinophils",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022561000000101",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "eosinophils"
+        },
+        {
+          "text": "eosinophil"
+        },
+        {
+          "text": "Eosinophils",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "faecal-calprotectin",
+      "label": "Faecal calprotectin",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1002571000000102",
+          "role": "primary",
+          "unit": "ug/g faeces",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "faecal calprotectin"
+        },
+        {
+          "text": "calprotectin"
+        },
+        {
+          "text": "Faecal Calprotectin",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "faecal-immunochemical-test",
+      "label": "Faecal immunochemical test (quantitative)",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1049361000000101",
+          "role": "primary",
+          "unit": "ug/g faeces",
+          "refsets": ["FAECIMM_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "faecal immunochemical test"
+        },
+        {
+          "text": "faecal haemoglobin"
+        },
+        {
+          "text": "f hb"
+        },
+        {
+          "text": "Quantitv faecal immunochem tst",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "ferritin",
+      "label": "Ferritin",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "ferritin"
+        }
+      ]
+    },
+    {
+      "id": "free-t3",
+      "label": "Free T3",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "free t3"
+        },
+        {
+          "text": "ft3"
+        }
+      ]
+    },
+    {
+      "id": "free-t4",
+      "label": "Free T4",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1016971000000106",
+          "role": "primary",
+          "unit": "pmol/L",
+          "refsets": ["TFT_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "free t4"
+        },
+        {
+          "text": "ft4"
+        },
+        {
+          "text": "free thyroxine"
+        },
+        {
+          "text": "Free T4",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "fsh",
+      "label": "Follicle stimulating hormone",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "fsh"
+        },
+        {
+          "text": "follicle stimulating hormone"
+        }
+      ]
+    },
+    {
+      "id": "ggt",
+      "label": "Gamma-glutamyl transferase",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "ggt"
+        },
+        {
+          "text": "gamma gt"
+        },
+        {
+          "text": "gamma glutamyl transferase"
+        }
+      ]
+    },
+    {
+      "id": "haematocrit",
+      "label": "Haematocrit",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022291000000105",
+          "role": "primary",
+          "unit": "L/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "haematocrit"
+        },
+        {
+          "text": "hct"
+        },
+        {
+          "text": "pcv"
+        },
+        {
+          "text": "Haematocrit",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "haemoglobin",
+      "label": "Haemoglobin",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022431000000105",
+          "role": "primary",
+          "unit": "g/L",
+          "refsets": ["FBC_COD", "HB_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "haemoglobin"
+        },
+        {
+          "text": "Haemoglobin",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["a1c", "glycated", "glycosylated", "faecal", "corpuscular"]
+    },
+    {
+      "id": "hba1c",
+      "label": "HbA1c",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "999791000000106",
+          "role": "primary",
+          "unit": "mmol/mol",
+          "refsets": ["IFCCHBAM_COD"]
+        },
+        {
+          "conceptId": "1049301000000100",
+          "role": "alternate",
+          "unit": "mmol/mol",
+          "refsets": ["IFCCHBAM_COD"]
+        },
+        {
+          "conceptId": "1049321000000109",
+          "role": "alternate",
+          "unit": "mmol/mol",
+          "refsets": ["IFCCHBAM_COD"]
+        },
+        {
+          "conceptId": "1019431000000105",
+          "role": "alternate",
+          "unit": "%",
+          "refsets": ["DCCTHBA1C_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "hba1c"
+        },
+        {
+          "text": "haemoglobin a1c"
+        },
+        {
+          "text": "glycated haemoglobin"
+        },
+        {
+          "text": "glycosylated haemoglobin"
+        },
+        {
+          "text": "HbA1c",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "hdl-cholesterol",
+      "label": "HDL cholesterol",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1005681000000107",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["HDLCCHOL_COD", "NDACHOLEST_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "hdl cholesterol"
+        },
+        {
+          "text": "hdl"
+        },
+        {
+          "text": "HDL cholesterol",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["non", "ratio"]
+    },
+    {
+      "id": "hepatitis-b-surface-antigen",
+      "label": "Hepatitis B surface antigen",
+      "valueKind": "coded",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "hepatitis b surface antigen"
+        },
+        {
+          "text": "hep b surface antigen"
+        },
+        {
+          "text": "hbsag"
+        }
+      ]
+    },
+    {
+      "id": "hepatitis-c",
+      "label": "Hepatitis C",
+      "valueKind": "coded",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "hepatitis c"
+        },
+        {
+          "text": "hep c"
+        }
+      ]
+    },
+    {
+      "id": "hiv-antigen-antibody",
+      "label": "HIV 1 & 2 antigen/antibody",
+      "valueKind": "coded",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "hiv 1 & 2 antigen antibody"
+        },
+        {
+          "text": "hiv 1&2 antigen antibody"
+        }
+      ]
+    },
+    {
+      "id": "ldl-cholesterol-calculated",
+      "label": "LDL cholesterol (calculated)",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1014501000000104",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["LDLCCHOL_COD", "NDACHOLEST_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "ldl cholesterol"
+        },
+        {
+          "text": "calculated ldl cholesterol"
+        },
+        {
+          "text": "ldl"
+        },
+        {
+          "text": "Calculated LDL cholesterol lev",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "lh",
+      "label": "Luteinising hormone",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "lh"
+        },
+        {
+          "text": "luteinising hormone"
+        },
+        {
+          "text": "luteinizing hormone"
+        }
+      ]
+    },
+    {
+      "id": "lymphocytes",
+      "label": "Lymphocytes",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022581000000105",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "lymphocytes"
+        },
+        {
+          "text": "lymphocyte"
+        },
+        {
+          "text": "Lymphocytes",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "magnesium",
+      "label": "Magnesium",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1001091000000103",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "magnesium"
+        },
+        {
+          "text": "Serum magnesium level",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "mch",
+      "label": "Mean corpuscular haemoglobin",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022471000000107",
+          "role": "primary",
+          "unit": "pg",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "mch"
+        },
+        {
+          "text": "mean corpuscular haemoglobin"
+        },
+        {
+          "text": "MCH",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["concentration", "mchc"]
+    },
+    {
+      "id": "mchc",
+      "label": "Mean corpuscular haemoglobin concentration",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022481000000109",
+          "role": "primary",
+          "unit": "g/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "mchc"
+        },
+        {
+          "text": "mean corpuscular haemoglobin concentration"
+        },
+        {
+          "text": "MCHC",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "mcv",
+      "label": "Mean corpuscular volume",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022491000000106",
+          "role": "primary",
+          "unit": "fL",
+          "refsets": ["FBC_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "mcv"
+        },
+        {
+          "text": "mean corpuscular volume"
+        },
+        {
+          "text": "MCV",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "monocytes",
+      "label": "Monocytes",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022591000000107",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "monocytes"
+        },
+        {
+          "text": "monocyte"
+        },
+        {
+          "text": "Monocytes",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "mpv",
+      "label": "Mean platelet volume",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "993481000000101",
+          "role": "primary",
+          "unit": "fL",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "mpv"
+        },
+        {
+          "text": "mean platelet volume"
+        },
+        {
+          "text": "Mean platelet volume",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "neutrophils",
+      "label": "Neutrophils",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022551000000104",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "neutrophils"
+        },
+        {
+          "text": "neutrophil"
+        },
+        {
+          "text": "Neutrophils",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "non-hdl-cholesterol",
+      "label": "Non-HDL cholesterol",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1006191000000106",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["NDACHOLEST_COD", "NONHDLCCHOL_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "non hdl cholesterol"
+        },
+        {
+          "text": "non hdl"
+        },
+        {
+          "text": "Se non HDL cholesterol level",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "oestradiol",
+      "label": "Oestradiol",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "oestradiol"
+        },
+        {
+          "text": "estradiol"
+        }
+      ]
+    },
+    {
+      "id": "phosphate",
+      "label": "Phosphate",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000701000000101",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["PHOSPHATE_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "phosphate"
+        },
+        {
+          "text": "inorganic phosphate"
+        },
+        {
+          "text": "serum phosphate"
+        },
+        {
+          "text": "Phosphate",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "platelets",
+      "label": "Platelets",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022651000000100",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "platelets"
+        },
+        {
+          "text": "platelet"
+        },
+        {
+          "text": "plt"
+        },
+        {
+          "text": "Platelets",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["mean", "volume"]
+    },
+    {
+      "id": "potassium",
+      "label": "Potassium",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000651000000109",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["UE_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "potassium"
+        },
+        {
+          "text": "Potassium",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "prolactin",
+      "label": "Prolactin",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "prolactin"
+        }
+      ]
+    },
+    {
+      "id": "psa",
+      "label": "Prostate specific antigen",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "psa"
+        },
+        {
+          "text": "prostate specific antigen"
+        }
+      ]
+    },
+    {
+      "id": "rbc",
+      "label": "Red blood cell count",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022451000000103",
+          "role": "primary",
+          "unit": "× 10¹²/L",
+          "refsets": ["FBC_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "rbc"
+        },
+        {
+          "text": "red blood cell count"
+        },
+        {
+          "text": "red cell count"
+        },
+        {
+          "text": "RBC",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "rdw",
+      "label": "Red cell distribution width",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "993501000000105",
+          "role": "primary",
+          "unit": "%",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "rdw"
+        },
+        {
+          "text": "red cell distribution width"
+        },
+        {
+          "text": "red blood cell distribution width"
+        },
+        {
+          "text": "RDW",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "rheumatoid-factor",
+      "label": "Rheumatoid factor",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "rheumatoid factor"
+        }
+      ]
+    },
+    {
+      "id": "sodium",
+      "label": "Sodium",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000661000000107",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["UE_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "sodium"
+        },
+        {
+          "text": "Sodium",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "syphilis-serology",
+      "label": "Syphilis serology",
+      "valueKind": "coded",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "syphilis"
+        },
+        {
+          "text": "treponema"
+        }
+      ]
+    },
+    {
+      "id": "testosterone",
+      "label": "Testosterone",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "testosterone"
+        }
+      ]
+    },
+    {
+      "id": "total-cholesterol",
+      "label": "Total cholesterol",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1005671000000105",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["CHOL2_COD", "CHOL_COD", "NDACHOLEST_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "total cholesterol"
+        },
+        {
+          "text": "cholesterol"
+        },
+        {
+          "text": "Total cholesterol",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["hdl", "ldl", "non", "ratio"]
+    },
+    {
+      "id": "triglycerides",
+      "label": "Triglycerides",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1005691000000109",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": ["TRIGLYC_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "triglycerides"
+        },
+        {
+          "text": "triglyceride"
+        },
+        {
+          "text": "Triglycerides",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "tsh",
+      "label": "TSH",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022791000000101",
+          "role": "primary",
+          "unit": "mIU/L",
+          "refsets": ["TFT_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "tsh"
+        },
+        {
+          "text": "thyroid stimulating hormone"
+        },
+        {
+          "text": "TSH",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["receptor", "antibody", "antibodies"]
+    },
+    {
+      "id": "urate",
+      "label": "Urate",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "urate"
+        },
+        {
+          "text": "uric acid"
+        }
+      ]
+    },
+    {
+      "id": "urea",
+      "label": "Urea",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1000951000000103",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "urea"
+        },
+        {
+          "text": "Urea",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary"]
+    },
+    {
+      "id": "urine-acr",
+      "label": "Urine albumin:creatinine ratio",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1023491000000104",
+          "role": "primary",
+          "unit": "mg/mmol",
+          "refsets": ["APCR_COD", "NDAALB_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "urine acr"
+        },
+        {
+          "text": "urine albumin creatinine ratio"
+        },
+        {
+          "text": "Urine ACR",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "urine-creatinine",
+      "label": "Urine creatinine",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1003271000000106",
+          "role": "primary",
+          "unit": "mmol/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "urine creatinine"
+        },
+        {
+          "text": "Urine creatinine",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "urine-microalbumin",
+      "label": "Urine microalbumin",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1010251000000109",
+          "role": "primary",
+          "unit": "mg/L",
+          "refsets": ["APCR_COD", "NDAALB_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "urine microalbumin"
+        },
+        {
+          "text": "urine albumin"
+        },
+        {
+          "text": "Urine microalbumin",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "vitamin-d",
+      "label": "Vitamin D (25-hydroxy)",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1001211000000100",
+          "role": "primary",
+          "unit": "nmol/L",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "vitamin d"
+        },
+        {
+          "text": "25 hydroxyvitamin d"
+        },
+        {
+          "text": "25 oh vitamin d"
+        },
+        {
+          "text": "Serum 25-HO vit D3 level",
+          "lab": "rj700-general-pathology"
+        }
+      ]
+    },
+    {
+      "id": "wbc",
+      "label": "White cell count",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "1022541000000102",
+          "role": "primary",
+          "unit": "× 10⁹/L",
+          "refsets": ["FBC_COD"]
+        }
+      ],
+      "aliases": [
+        {
+          "text": "wbc"
+        },
+        {
+          "text": "white cell count"
+        },
+        {
+          "text": "white blood cell count"
+        },
+        {
+          "text": "WBC",
+          "lab": "rj700-general-pathology"
+        }
+      ],
+      "excludeAliases": ["urine", "urinary", "csf", "pus"]
+    }
+  ],
+  "investigations": [
+    {
+      "id": "lipids",
+      "label": "Lipid profile",
+      "kind": "blood",
+      "legacyKey": "lipids",
+      "requestAliases": [
+        {
+          "text": "lipid",
+          "system": "any"
+        },
+        {
+          "text": "cholesterol",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["lipid", "lipid profile"],
+      "members": [
+        {
+          "result": "total-cholesterol",
+          "role": "core"
+        },
+        {
+          "result": "hdl-cholesterol",
+          "role": "core"
+        },
+        {
+          "result": "ldl-cholesterol-calculated",
+          "role": "core"
+        },
+        {
+          "result": "triglycerides",
+          "role": "core"
+        },
+        {
+          "result": "non-hdl-cholesterol",
+          "role": "core"
+        },
+        {
+          "result": "cholesterol-hdl-ratio",
+          "role": "optional"
+        }
+      ]
+    },
+    {
+      "id": "ue",
+      "label": "U&E",
+      "kind": "blood",
+      "legacyKey": "ue",
+      "requestAliases": [
+        {
+          "text": "electrolyte",
+          "system": "any"
+        },
+        {
+          "text": "u&e",
+          "system": "any"
+        },
+        {
+          "text": "urea electrolyte",
+          "system": "any"
+        },
+        {
+          "text": "creatinine + electrolyte",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["u&e", "urea and electrolytes", "electrolyte", "renal profile"],
+      "exclude": ["urine", "urinary"],
+      "members": [
+        {
+          "result": "sodium",
+          "role": "core"
+        },
+        {
+          "result": "potassium",
+          "role": "core"
+        },
+        {
+          "result": "urea",
+          "role": "core"
+        },
+        {
+          "result": "egfr",
+          "role": "core"
+        },
+        {
+          "result": "creatinine",
+          "role": "core"
+        }
+      ],
+      "note": "Blood urea and electrolytes. A urine electrolytes panel is excluded. Requests may say WITH or WITHOUT potassium; a report without potassium still clears the request (partial group clears)."
+    },
+    {
+      "id": "fbc",
+      "label": "Full blood count",
+      "kind": "blood",
+      "legacyKey": "fbc",
+      "requestAliases": [
+        {
+          "text": "full blood count",
+          "system": "any"
+        },
+        {
+          "text": "fbc",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["fbc", "full blood count"],
+      "exclude": ["a1c", "glycated", "glycosylated"],
+      "members": [
+        {
+          "result": "haemoglobin",
+          "role": "core"
+        },
+        {
+          "result": "haematocrit",
+          "role": "core"
+        },
+        {
+          "result": "wbc",
+          "role": "core"
+        },
+        {
+          "result": "platelets",
+          "role": "core"
+        },
+        {
+          "result": "neutrophils",
+          "role": "core"
+        },
+        {
+          "result": "mcv",
+          "role": "core"
+        },
+        {
+          "result": "rbc",
+          "role": "optional"
+        },
+        {
+          "result": "mch",
+          "role": "optional"
+        },
+        {
+          "result": "mchc",
+          "role": "optional"
+        },
+        {
+          "result": "rdw",
+          "role": "optional"
+        },
+        {
+          "result": "mpv",
+          "role": "optional"
+        },
+        {
+          "result": "lymphocytes",
+          "role": "optional"
+        },
+        {
+          "result": "monocytes",
+          "role": "optional"
+        },
+        {
+          "result": "eosinophils",
+          "role": "optional"
+        },
+        {
+          "result": "basophils",
+          "role": "optional"
+        }
+      ]
+    },
+    {
+      "id": "hba1c",
+      "label": "HbA1c",
+      "kind": "blood",
+      "legacyKey": "hba1c",
+      "requestAliases": [
+        {
+          "text": "hba1c",
+          "system": "any"
+        },
+        {
+          "text": "haemoglobin a1c",
+          "system": "any"
+        },
+        {
+          "text": "glycated haemoglobin",
+          "system": "any"
+        },
+        {
+          "text": "glycosylated haemoglobin",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"],
+      "members": [
+        {
+          "result": "hba1c",
+          "role": "core"
+        }
+      ],
+      "note": "HbA1c is a code family: only the IFCC concepts count for QOF (see the result's refsets)."
+    },
+    {
+      "id": "lft",
+      "label": "Liver function tests",
+      "kind": "blood",
+      "legacyKey": "lft",
+      "requestAliases": [
+        {
+          "text": "liver function",
+          "system": "any"
+        },
+        {
+          "text": "lft",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["lft", "liver function", "liver function test"],
+      "members": [
+        {
+          "result": "alt",
+          "role": "core"
+        },
+        {
+          "result": "bilirubin-total",
+          "role": "core"
+        },
+        {
+          "result": "alp",
+          "role": "shared"
+        },
+        {
+          "result": "albumin",
+          "role": "shared"
+        },
+        {
+          "result": "ggt",
+          "role": "optional"
+        },
+        {
+          "result": "ast",
+          "role": "optional"
+        }
+      ],
+      "note": "ALP and albumin are shared with the bone profile and are optional for clearing a request."
+    },
+    {
+      "id": "psa",
+      "label": "PSA",
+      "kind": "blood",
+      "legacyKey": "psa",
+      "requestAliases": [
+        {
+          "text": "prostate specific antigen",
+          "system": "any"
+        },
+        {
+          "text": "psa",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["psa", "prostate specific antigen"],
+      "members": [
+        {
+          "result": "psa",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "tft",
+      "label": "Thyroid function",
+      "kind": "blood",
+      "legacyKey": "tft",
+      "requestAliases": [
+        {
+          "text": "thyroid",
+          "system": "any"
+        },
+        {
+          "text": "tft",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["tft", "thyroid", "thyroid function"],
+      "members": [
+        {
+          "result": "tsh",
+          "role": "core",
+          "anchor": true
+        },
+        {
+          "result": "free-t4",
+          "role": "optional"
+        },
+        {
+          "result": "free-t3",
+          "role": "optional"
+        }
+      ],
+      "note": "UK labs reflex-test thyroid (TSH first), so a TSH-only report is the complete thyroid result."
+    },
+    {
+      "id": "free-t4",
+      "label": "Free T4",
+      "kind": "blood",
+      "requestAliases": [
+        {
+          "text": "free t4",
+          "system": "any"
+        },
+        {
+          "text": "ft4",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["free t4", "ft4"],
+      "members": [
+        {
+          "result": "free-t4",
+          "role": "core"
+        }
+      ],
+      "note": "Can be requested on its own or added on to thyroid function."
+    },
+    {
+      "id": "fit",
+      "label": "Faecal immunochemical test",
+      "kind": "faeces",
+      "legacyKey": "fit",
+      "requestAliases": [
+        {
+          "text": "faecal immunochemical",
+          "system": "any"
+        },
+        {
+          "text": "fit",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["fit", "faecal immunochemical", "faecal haemoglobin"],
+      "members": [
+        {
+          "result": "faecal-immunochemical-test",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "ferritin",
+      "label": "Ferritin",
+      "kind": "blood",
+      "legacyKey": "ferritin",
+      "requestAliases": [
+        {
+          "text": "ferritin",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["ferritin"],
+      "members": [
+        {
+          "result": "ferritin",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "bone-profile",
+      "label": "Bone profile",
+      "kind": "blood",
+      "legacyKey": "bone",
+      "requestAliases": [
+        {
+          "text": "bone profile",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["bone profile"],
+      "members": [
+        {
+          "result": "phosphate",
+          "role": "core"
+        },
+        {
+          "result": "adjusted-calcium",
+          "role": "core"
+        },
+        {
+          "result": "calcium",
+          "role": "shared"
+        },
+        {
+          "result": "alp",
+          "role": "shared"
+        },
+        {
+          "result": "albumin",
+          "role": "shared"
+        }
+      ],
+      "note": "Calcium, ALP and albumin are shared (also reported with LFTs / a lone calcium) and are optional for clearing a request."
+    },
+    {
+      "id": "rheumatoid-factor",
+      "label": "Rheumatoid factor",
+      "kind": "blood",
+      "legacyKey": "rheumatoid_factor",
+      "requestAliases": [
+        {
+          "text": "rheumatoid factor",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["rheumatoid factor"],
+      "members": [
+        {
+          "result": "rheumatoid-factor",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "hiv",
+      "label": "HIV",
+      "kind": "blood",
+      "legacyKey": "hiv",
+      "requestAliases": [
+        {
+          "text": "hiv",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["hiv 1 & 2 antigen antibody", "hiv 1&2 antigen antibody"],
+      "members": [
+        {
+          "result": "hiv-antigen-antibody",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "vitamin-d",
+      "label": "Vitamin D",
+      "kind": "blood",
+      "legacyKey": "vitamin_d",
+      "requestAliases": [
+        {
+          "text": "vitamin d",
+          "system": "any"
+        },
+        {
+          "text": "25 hydroxyvitamin d",
+          "system": "any"
+        },
+        {
+          "text": "25 oh vitamin d",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["vitamin d", "25 hydroxyvitamin d"],
+      "members": [
+        {
+          "result": "vitamin-d",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "urate",
+      "label": "Urate",
+      "kind": "blood",
+      "legacyKey": "urate",
+      "requestAliases": [
+        {
+          "text": "urate",
+          "system": "any"
+        },
+        {
+          "text": "uric acid",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["urate", "uric acid"],
+      "members": [
+        {
+          "result": "urate",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "crp",
+      "label": "C-reactive protein",
+      "kind": "blood",
+      "legacyKey": "crp",
+      "requestAliases": [
+        {
+          "text": "c reactive protein",
+          "system": "any"
+        },
+        {
+          "text": "crp",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["crp", "c reactive protein"],
+      "members": [
+        {
+          "result": "crp",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "hepatitis-c",
+      "label": "Hepatitis C",
+      "kind": "blood",
+      "legacyKey": "hepatitis_c",
+      "requestAliases": [
+        {
+          "text": "hepatitis c",
+          "system": "any"
+        },
+        {
+          "text": "hep c",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["hepatitis c", "hep c"],
+      "members": [
+        {
+          "result": "hepatitis-c",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "hepatitis-b",
+      "label": "Hepatitis B surface antigen",
+      "kind": "blood",
+      "legacyKey": "hepatitis_b",
+      "requestAliases": [
+        {
+          "text": "hepatitis b surface antigen",
+          "system": "any"
+        },
+        {
+          "text": "hep b surface antigen",
+          "system": "any"
+        },
+        {
+          "text": "hbsag",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["hepatitis b surface antigen", "hep b surface antigen", "hbsag"],
+      "members": [
+        {
+          "result": "hepatitis-b-surface-antigen",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "syphilis",
+      "label": "Syphilis",
+      "kind": "blood",
+      "legacyKey": "syphilis",
+      "requestAliases": [
+        {
+          "text": "syphilis",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["syphilis", "treponema"],
+      "members": [
+        {
+          "result": "syphilis-serology",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "calprotectin",
+      "label": "Faecal calprotectin",
+      "kind": "faeces",
+      "legacyKey": "calprotectin",
+      "requestAliases": [
+        {
+          "text": "faecal calprotectin",
+          "system": "any"
+        },
+        {
+          "text": "calprotectin",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["faecal calprotectin", "calprotectin"],
+      "members": [
+        {
+          "result": "faecal-calprotectin",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "fsh",
+      "label": "Follicle stimulating hormone",
+      "kind": "blood",
+      "legacyKey": "fsh",
+      "requestAliases": [
+        {
+          "text": "follicle stimulating hormone",
+          "system": "any"
+        },
+        {
+          "text": "fsh",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["fsh", "follicle stimulating hormone"],
+      "members": [
+        {
+          "result": "fsh",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "lh",
+      "label": "Luteinising hormone",
+      "kind": "blood",
+      "legacyKey": "lh",
+      "requestAliases": [
+        {
+          "text": "luteinising hormone",
+          "system": "any"
+        },
+        {
+          "text": "luteinizing hormone",
+          "system": "any"
+        },
+        {
+          "text": "lh",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["lh", "luteinising hormone", "luteinizing hormone"],
+      "members": [
+        {
+          "result": "lh",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "oestradiol",
+      "label": "Oestradiol",
+      "kind": "blood",
+      "legacyKey": "oestradiol",
+      "requestAliases": [
+        {
+          "text": "oestradiol",
+          "system": "any"
+        },
+        {
+          "text": "estradiol",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["oestradiol", "estradiol"],
+      "members": [
+        {
+          "result": "oestradiol",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "prolactin",
+      "label": "Prolactin",
+      "kind": "blood",
+      "legacyKey": "prolactin",
+      "requestAliases": [
+        {
+          "text": "prolactin",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["prolactin"],
+      "members": [
+        {
+          "result": "prolactin",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "testosterone",
+      "label": "Testosterone",
+      "kind": "blood",
+      "legacyKey": "testosterone",
+      "requestAliases": [
+        {
+          "text": "testosterone",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["testosterone"],
+      "members": [
+        {
+          "result": "testosterone",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "radiology-knee",
+      "label": "Knee X-ray",
+      "kind": "imaging",
+      "legacyKey": "radiology_knee",
+      "requestAliases": [
+        {
+          "text": "xr knee",
+          "system": "any"
+        },
+        {
+          "text": "knee",
+          "system": "any"
+        },
+        {
+          "text": "radiograph knee",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["knee"],
+      "members": []
+    },
+    {
+      "id": "magnesium",
+      "label": "Magnesium",
+      "kind": "blood",
+      "requestAliases": [
+        {
+          "text": "magnesium",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["magnesium"],
+      "members": [
+        {
+          "result": "magnesium",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "urine-acr",
+      "label": "Urine albumin:creatinine ratio",
+      "kind": "urine",
+      "requestAliases": [
+        {
+          "text": "urine albumin creatinine ratio",
+          "system": "any"
+        },
+        {
+          "text": "urine acr",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["urine acr", "urine albumin creatinine ratio"],
+      "members": [
+        {
+          "result": "urine-acr",
+          "role": "core"
+        },
+        {
+          "result": "urine-creatinine",
+          "role": "optional"
+        },
+        {
+          "result": "urine-microalbumin",
+          "role": "optional"
+        }
+      ]
+    },
+    {
+      "id": "ca-125",
+      "label": "CA 125",
+      "kind": "blood",
+      "requestAliases": [
+        {
+          "text": "ca 125",
+          "system": "any"
+        },
+        {
+          "text": "ca 12 5",
+          "system": "any"
+        },
+        {
+          "text": "ca125",
+          "system": "any"
+        }
+      ],
+      "headingAliases": ["ca 125"],
+      "members": [
+        {
+          "result": "ca-125",
+          "role": "core"
+        }
+      ]
+    }
+  ],
+  "labs": [
+    {
+      "id": "rj700-general-pathology",
+      "name": "General Pathology (RJ700)",
+      "identifiers": {
+        "performerOrg": "RJ700",
+        "department": "General Pathology"
+      },
+      "orderingSystem": "tquest",
+      "structured": true,
+      "note": "SUGGESTED definition, seeded from eight real reports (Sept 2026, SWL Pathology). Practices must review it against their own reports before relying on it.",
+      "groupHeadings": [
+        {
+          "text": "Bone profile",
+          "identifies": ["bone-profile"]
+        },
+        {
+          "text": "LFTs",
+          "identifies": ["lft"]
+        },
+        {
+          "text": "TSH",
+          "identifies": ["tft"]
+        },
+        {
+          "text": "FREE T4",
+          "identifies": ["free-t4"],
+          "mayContain": ["inv:tft"]
+        },
+        {
+          "text": "Renal function tests",
+          "identifies": ["ue"]
+        },
+        {
+          "text": "U&Es",
+          "identifies": ["ue"]
+        },
+        {
+          "text": "Lipids",
+          "identifies": ["lipids"]
+        },
+        {
+          "text": "FBC",
+          "identifies": ["fbc"]
+        },
+        {
+          "text": "HbA1c",
+          "identifies": ["hba1c"]
+        },
+        {
+          "text": "Urine ACR",
+          "identifies": ["urine-acr"]
+        },
+        {
+          "text": "Se CA 125 level",
+          "identifies": ["ca-125"]
+        },
+        {
+          "text": "CALPROTECTIN (FAECAL)",
+          "identifies": ["calprotectin"]
+        },
+        {
+          "text": "Quantitv faecal immunochem tst",
+          "identifies": ["fit"]
+        }
+      ]
+    }
+  ]
+}

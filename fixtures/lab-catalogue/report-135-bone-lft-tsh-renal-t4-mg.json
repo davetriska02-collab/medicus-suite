@@ -1,0 +1,223 @@
+{
+  "_comment": "Structure-only fixture derived from a scrubbed real report (2026-09). All values are placeholders; no dates, comments, reference ranges or patient/staff fields.",
+  "source": "corpus-135",
+  "performer": {
+    "organisationName": "RJ700",
+    "departmentName": "General Pathology"
+  },
+  "investigationGroups": [
+    {
+      "description": "Bone profile",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Albumin",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000821000000103",
+            "description": "Serum albumin"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "g/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "ALP",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000621000000104",
+            "description": "Serum alkaline phosphatase"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "u/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Calcium",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000691000000101",
+            "description": "Serum calcium"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Adjusted calcium",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "935051000000108",
+            "description": "Serum adjusted calcium conc"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Phosphate",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000701000000101",
+            "description": "Serum inorganic phosphate"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        }
+      ]
+    },
+    {
+      "description": "LFTs",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Serum bilirubin level",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "999691000000104",
+            "description": "Serum bilirubin level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "µmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "ALT",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1018251000000107",
+            "description": "Serum ALT level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "u/L",
+          "resultValue": "1"
+        }
+      ]
+    },
+    {
+      "description": "TSH",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "TSH",
+          "resultType": "text-result",
+          "resultCode": {
+            "conceptId": "1022791000000101",
+            "description": "Serum TSH level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultText": "This test has already been performed recently (within 14 days). Please contact the duty biochemist if you wish to discuss."
+        }
+      ]
+    },
+    {
+      "description": "Renal function tests",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Sodium",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000661000000107",
+            "description": "Serum sodium"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Potassium",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000651000000109",
+            "description": "Serum potassium"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Urea",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000951000000103",
+            "description": "Serum urea level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "mmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "Creatinine",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1000731000000107",
+            "description": "Serum creatinine"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "µmol/L",
+          "resultValue": "1"
+        },
+        {
+          "description": "eGFR (MDRD)",
+          "resultType": "text-result",
+          "resultCode": {
+            "conceptId": "1020291000000106",
+            "description": "GFR calculated abbreviatd MDRD"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultText": "EGFR not applicable in children"
+        }
+      ]
+    },
+    {
+      "description": "FREE T4",
+      "specimen": {
+        "type": "Blood"
+      },
+      "results": [
+        {
+          "description": "Free T4",
+          "resultType": "unit-value-result",
+          "resultCode": {
+            "conceptId": "1016971000000106",
+            "description": "Serum free T4 level"
+          },
+          "hasUnresolvedDegradedTypeCode": false,
+          "resultUnit": "pmol/L",
+          "resultValue": "1"
+        }
+      ]
+    }
+  ],
+  "ungroupedResults": [
+    {
+      "description": "Serum magnesium level",
+      "resultType": "unit-value-result",
+      "resultCode": {
+        "conceptId": "1001091000000103",
+        "description": "Serum magnesium level"
+      },
+      "hasUnresolvedDegradedTypeCode": false,
+      "resultUnit": "mmol/L",
+      "resultValue": "1"
+    }
+  ],
+  "requests": [
+    "Bone Profile (Calcium Studies)",
+    "Liver Function",
+    "Thyroid Stimulating Hormone",
+    "Urea and Electrolytes WITH Potassium",
+    "Magnesium Blood",
+    "HFE Gene Testing"
+  ]
+}

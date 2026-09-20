@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.0] — 2026-09-22
+
+### Lab Result Catalogue + the Investigations settings page (nothing acts on it yet)
+
+A single, coded, per-practice catalogue of investigations, lab results and labs, built to replace the free-text
+matching used by Outstanding Requests and Lab Filing (the "ALP fires on faecal calprotectin" class of bug). **This
+release adds the catalogue and its settings page only: Outstanding Requests, Lab Filing and every other feature still use
+their own rules, so no live behaviour changes.** The page says so on the page. Design: `docs/plans/LAB-RESULT-CATALOGUE-DATA-MODEL-2026-09-19.md`.
+
+- **Model + resolver (pure).** `shared/lab-catalogue-core.js`: results identified by SNOMED code first, then lab-scoped
+  wording; whole-token matching; a group can answer several requests; lab messages with no value are classified. Shipped
+  data `rules/lab-catalogue.json` (61 results, 29 tests, one suggested lab). Sample kinds: blood / urine / faeces / swab /
+  imaging / procedure / other.
+- **Practice overlay.** Everything a practice adds lives in one storage key, `labcatalogue.practice`
+  (`shared/lab-catalogue-overlay.js`, `shared/io/labcatalogue-io.js`). **Inert until reviewed**: entries that arrive by
+  backup restore, the shared practice profile or an import are excluded from the acting catalogue until a person approves
+  them on that machine (approvals never travel). Built-ins can be edited by a practice as a complete override that is itself
+  inert until approved and revertible. New backup scope `labcatalogue` (suite-envelope, options export/restore, preview) and
+  a practice-profile module; loaded in the service worker.
+- **Options → Investigations.** Practice context (ICB / borough / labs / ordering system), browse and search (tests,
+  wordings, headings, result names, SNOMED codes; by sample), edit or create a test, edit a result, delete, move a test into
+  another. Each test is laid out as requested-in-Medicus → comes-back-from-the-lab → SNOMED codes, with a "never matches"
+  guard. **Approval is gated**: only from the test's review screen, with the meaning of Approve stated beside the button; no
+  bulk approve.
+- **One "Match requests to lab reports" card.** One button reads the practice's Outstanding Requests tests (import) and then
+  the pending Investigation Results queue (read-only GETs via the existing allocation client; only test names, headings,
+  codes and units are kept — never values, patient or staff details). Lab groups are matched to requests with evidence
+  (candidates intersected across cards; sample must fit; unrecognised requests on a card count), or by drag-and-drop /
+  dropdown; nothing is ticked without evidence or a deliberate drag. Applying is one item at a time, additive and
+  unreviewed, and reports exactly what was added or why not.
+- **SNOMED codes with descriptions and QOF.** `rules/lab-code-info.json`, generated offline by
+  `scripts/build-lab-code-info.js` from the TRUD PCD refset files, gives each shipped code its SNOMED text and marks the
+  ones in a QOF cluster (IFCC HbA1c yes; DCCT % is PHSMI-only, no). It is a static lookup loaded once per page load — no
+  runtime QOF computation and no network call. Regenerate when TRUD publishes a new PCD release.
+- **Robustness.** Deleting a test no longer leaves lab headings pointing at it (which used to make the whole lab entry
+  invalid and silently block later additions); dangling heading links now heal; entries the merge excludes are listed under
+  "catalogue problems" with a Remove button.
+- **Pre-merge red-team hardening** (review of 2026-09-20): (a) approving a test no longer cascade-approves a lab entry
+  carrying heading mappings the reviewer was never shown — only headings byte-identical to the shipped lab definition or
+  referencing exclusively the approved test ride the approval (a crafted profile could otherwise activate a heading
+  mapping a U&E-style wording onto a different test: the misfiled-analyte hazard); the lab review card now lists every
+  heading mapping, not just mixed-group ones. (b) Duplicate ids within a kind now reject at the sanitiser — a hidden
+  `override` copy could ride an innocent-looking duplicate through the approval stamp. (c) Approvals (and reviewer
+  names) are stripped from exports at the source (`stripApprovals`), and `mergeIntoOverlay` force-inerts its imported
+  side, so "approvals never travel" no longer rests solely on the importing machine. All three regression-tested.
+- **Tests.** New: `test-lab-catalogue-core.js`, `-corpus.js` (eight structure-only real-report fixtures in
+  `fixtures/lab-catalogue/`), `-overlay.js`, `-import.js`, `-scan.js`, `test-labcatalogue-io.js`,
+  `test-investigations-section.js`; practice-profile tests extended.
+- Known, unrelated: `test-slots-auto-refresh.js` fails on main too.
+
 ## [v3.263.15] — 2026-09-19
 
 ### Backup restore — every suite/triage restore failed on `systemChips`
