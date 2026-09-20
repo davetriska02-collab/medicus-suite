@@ -470,12 +470,16 @@ function previewEnvelope(envelope) {
       }
     }
     const typeCount = Array.isArray(mods.patientAlerts.types) ? mods.patientAlerts.types.length : null;
-    lines.push(
-      `Patient Alerts: ${alerts} alert(s) across ${patients} patient(s)${typeCount != null ? `, ${typeCount} custom preset(s)` : ''}`
-    );
     if (patients > 0) {
       lines.push(
-        'WARNING: This backup contains PATIENT-IDENTIFIABLE DATA (names, NHS numbers, alert text). Importing merges it into this install — handle the file as a patient-identifiable document.'
+        `Patient Alerts: ${alerts} alert(s) across ${patients} patient(s)${typeCount != null ? `, ${typeCount} custom preset(s)` : ''} — per-patient flags in this older file are PHI and will NOT be restored`
+      );
+      lines.push(
+        'WARNING: This older backup still contains PATIENT-IDENTIFIABLE DATA (names, NHS numbers, alert text). Current suite backups omit that map; import will skip it and keep local flags.'
+      );
+    } else {
+      lines.push(
+        `Patient Alerts: presets only${typeCount != null ? ` (${typeCount} custom preset(s))` : ''} — per-patient flags are not in this backup`
       );
     }
   } else {

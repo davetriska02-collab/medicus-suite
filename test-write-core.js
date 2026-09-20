@@ -9,6 +9,11 @@ const {
   diffWantedVsLanded,
   diffFinaliseOutcome,
   assertUnmoved,
+  pinIdentity,
+  recheckIdentity,
+  requireUnmoved,
+  confirmLanded,
+  runConfirmedWrite,
   finaliseConfirmCopy,
 } = require('./shared/write-core.js');
 
@@ -202,5 +207,55 @@ console.log('--- finaliseConfirmCopy: never claims completion ---');
   );
 }
 
-console.log('\n' + passed + ' passed, ' + failed + ' failed');
-process.exit(failed ? 1 : 0);
+console.log('--- pinIdentity / requireUnmoved / confirmLanded ---');
+{
+  const pin = pinIdentity({ apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1', extra: 'drop' });
+  check(pin.apiBase === 'https://a.x' && pin.date === '2026-09-10' && pin.patientId === 'p1', 'pin keeps identity fields');
+  check(pin.extra === undefined, 'pin drops unknown fields');
+  check(pinIdentity({ apiBase: '', date: '2026-09-10' }).apiBase === undefined, 'blank apiBase is omitted');
+  check(recheckIdentity(pin, { apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1' }) === true, 'recheck is assertUnmoved');
+  const ok = requireUnmoved(pin, { apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1' });
+  check(ok.ok === true, 'requireUnmoved passes an unmoved pin');
+  const moved = requireUnmoved(pin, { apiBase: 'https://a.x', date: '2026-09-11', patientId: 'p1' });
+  check(moved.ok === false && /moved/.test(moved.reason), 'requireUnmoved refuses a date change');
+  const landed = confirmLanded(['a1'], [{ id: 'a1' }]);
+  check(landed.allWritten === true && landed.written === 1, 'confirmLanded is the landed-id diff');
+}
+
+console.log('--- runConfirmedWrite ---');
+(async function () {
+  const pin = pinIdentity({ apiBase: 'https://a.x', date: '2026-09-10' });
+  const moved = await runConfirmedWrite({
+    pinned: pin,
+    live: { apiBase: 'https://b.x', date: '2026-09-10' },
+    wantIds: ['a1'],
+    write: function () {
+      throw new Error('must not write after move');
+    },
+  });
+  check(moved.ok === false && moved.moved === true && moved.outcome.written === 0, 'moved pin never writes');
+  const partial = await runConfirmedWrite({
+    pinned: pin,
+    live: { apiBase: 'https://a.x', date: '2026-09-10' },
+    wantIds: ['a1', 'a2'],
+    write: function () {
+      return Promise.resolve([{ id: 'a1' }]);
+    },
+  });
+  check(partial.ok === false && partial.moved === false && partial.outcome.written === 1 && partial.outcome.failed === 1, 'partial land is not success');
+  const all = await runConfirmedWrite({
+    pinned: pin,
+    live: { apiBase: 'https://a.x', date: '2026-09-10' },
+    wantIds: ['a1'],
+    write: function () {
+      return [{ id: 'a1' }];
+    },
+  });
+  check(all.ok === true && all.outcome.allWritten === true, 'all landed ids are success');
+
+  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  process.exit(failed ? 1 : 0);
+})().catch(function (err) {
+  console.error(err);
+  process.exit(1);
+});

@@ -381,3 +381,34 @@ export function mergeStores(current, incoming) {
   }
   return out;
 }
+
+// Active alerts are never TTL-deleted (H-042 — a clinician-recorded flag
+// must not vanish). After IDENTITY_IDLE_MS with no update, strip name / NHS
+// / DOB so a stale store is not a practice identity list. Empty entries go.
+export const IDENTITY_IDLE_MS = 90 * 24 * 60 * 60 * 1000;
+
+export function stripIdleIdentity(store, nowMs, idleMs) {
+  const now = typeof nowMs === 'number' ? nowMs : Date.now();
+  const ttl = typeof idleMs === 'number' ? idleMs : IDENTITY_IDLE_MS;
+  const next = {};
+  let changed = false;
+  for (const [key, entry] of Object.entries(store || {})) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      changed = true;
+      continue;
+    }
+    const alerts = Array.isArray(entry.alerts) ? entry.alerts.filter(isValidAlert) : [];
+    if (alerts.length === 0) {
+      changed = true;
+      continue;
+    }
+    const updated = Date.parse(entry.updatedAt || '') || 0;
+    let patient = entry.patient;
+    if (updated && now - updated >= ttl && patient && (patient.name || patient.nhsNumber || patient.dob)) {
+      patient = { name: '', nhsNumber: null, dob: '' };
+      changed = true;
+    }
+    next[key] = patient === entry.patient ? { ...entry, alerts } : { ...entry, alerts, patient };
+  }
+  return { store: next, changed };
+}

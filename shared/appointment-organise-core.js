@@ -1990,6 +1990,151 @@
     };
   }
 
+  // W14–W16 Finalise batch. Identity is re-checked before the first write
+  // and on every hop. Success is only the ids actionLandedOnBoard confirms.
+  // The canvas owns overlay state; this owns the write loop so Node can
+  // execute it without a DOM.
+  async function runFinaliseBatch(opts) {
+    opts = opts || {};
+    var WriteCore = opts.WriteCore || (typeof window !== 'undefined' ? window.WriteCore : null);
+    var included = Array.isArray(opts.included) ? opts.included : [];
+    var openRoute = opts.openRoute;
+    var currentRoute =
+      typeof opts.currentRoute === 'function'
+        ? opts.currentRoute
+        : function () {
+            return openRoute;
+          };
+    var draft = opts.draft;
+    var board = opts.board;
+    var client = opts.client || {};
+    var findAppt = opts.findAppointment || findAppointment;
+    var assertUnmovedFn =
+      WriteCore && typeof WriteCore.assertUnmoved === 'function'
+        ? WriteCore.assertUnmoved
+        : function (p, l) {
+            return !!(p && l && String(p.apiBase) === String(l.apiBase) && String(p.date) === String(l.date));
+          };
+    var wantIds = included.map(function (item) {
+      return item.id;
+    });
+    function outcomeOf(landedList) {
+      if (WriteCore && typeof WriteCore.diffWantedVsLanded === 'function') {
+        return WriteCore.diffWantedVsLanded(wantIds, landedList);
+      }
+      var landedSet = Object.create(null);
+      (landedList || []).forEach(function (item) {
+        if (item && item.id) landedSet[item.id] = true;
+      });
+      var failedIds = wantIds.filter(function (id) {
+        return !landedSet[id];
+      });
+      return {
+        wanted: wantIds.length,
+        written: wantIds.length - failedIds.length,
+        failed: failedIds.length,
+        allWritten: failedIds.length === 0,
+        failedIds: failedIds,
+      };
+    }
+    var live = currentRoute();
+    if (!assertUnmovedFn(openRoute, live)) {
+      return {
+        abortedBeforeWrite: true,
+        failed:
+          'The Medicus book has moved to a different day or site since this canvas was opened — nothing was written. Close and reopen the canvas.',
+        landed: [],
+        draft: draft,
+        board: board,
+        outcome: outcomeOf([]),
+      };
+    }
+    var failed = null;
+    var landed = [];
+    var nextDraft = draft;
+    var nextBoard = board;
+    for (var i = 0; i < included.length; i++) {
+      var item = included[i];
+      var liveNow = currentRoute();
+      if (!assertUnmovedFn(openRoute, liveNow)) {
+        failed = 'The Medicus book has moved to a different day or site — remaining stay staged.';
+        break;
+      }
+      var appt = findAppt(nextBoard, item.id);
+      var mv = item.kind === 'move' && nextDraft && nextDraft.moves ? nextDraft.moves[item.id] : null;
+      try {
+        if (item.kind === 'cancel') {
+          await client.commitCancel({
+            date: openRoute.date,
+            appointmentId: item.id,
+            patientId: appt && appt.patientId,
+            reason: item.reason,
+            notify: !!item.notify,
+            pinned: {
+              apiBase: openRoute.apiBase,
+              patientId: appt && appt.patientId,
+              appointmentId: item.id,
+              versionId: appt && appt.versionId,
+            },
+          });
+        } else if (item.kind === 'move') {
+          await client.commitMove({
+            date: openRoute.date,
+            appointment: appt,
+            target: Object.assign({}, mv, { notify: !!item.notify }),
+            pinned: { apiBase: openRoute.apiBase },
+          });
+        } else if (item.kind === 'stretch') {
+          await client.commitStretch({
+            date: openRoute.date,
+            appointment: appt,
+            newDuration: item.duration,
+            pinned: { apiBase: openRoute.apiBase },
+          });
+        }
+        nextBoard = await client.fetchBoard(openRoute.date);
+        if (!boardMatchesPin(nextBoard, openRoute)) {
+          failed =
+            'The book Medicus returned is a different day than the one this canvas opened — remaining stay staged.';
+          break;
+        }
+        var onBook = actionLandedOnBoard(nextBoard, item, {
+          patientId: appt && appt.patientId,
+          target: mv,
+          diaryId: appt && appt.diaryId,
+          startDateTime: appt && appt.startDateTime,
+          duration: item.duration,
+        });
+        if (!onBook) {
+          failed =
+            'Medicus accepted the request but the book does not show that action. Check the diary before staging again.';
+          break;
+        }
+        if (item.kind === 'cancel') nextDraft = unstageCancel(nextDraft, item.id);
+        else if (item.kind === 'move') nextDraft = unstageMove(nextDraft, item.id);
+        else if (item.kind === 'stretch') nextDraft = unstageStretch(nextDraft, item.id);
+        landed.push({ id: item.id });
+      } catch (err) {
+        failed = (err && err.message) || 'Write failed.';
+        if (err && err.stretchCancelWritten && !err.stretchRestored) {
+          nextDraft = unstageStretch(nextDraft, item.id);
+        }
+        try {
+          nextBoard = await client.fetchBoard(openRoute.date);
+        } catch (_) {}
+        break;
+      }
+    }
+    return {
+      abortedBeforeWrite: false,
+      failed: failed,
+      landed: landed,
+      draft: nextDraft,
+      board: nextBoard,
+      outcome: outcomeOf(landed),
+    };
+  }
+
   var api = {
     PATHS: PATHS,
     CANCEL_PAYLOAD_KEYS: CANCEL_PAYLOAD_KEYS,
@@ -2074,6 +2219,7 @@
     verifyMoveForm: verifyMoveForm,
     keysOf: keysOf,
     createClient: createClient,
+    runFinaliseBatch: runFinaliseBatch,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

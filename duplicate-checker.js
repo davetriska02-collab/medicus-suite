@@ -59,8 +59,21 @@ function confirmPatientSwitch(uuid) {
 }
 
 const STATE_KEY = 'suite.dupChecker.state';
+const STATE_TTL_MS =
+  (typeof window !== 'undefined' && window.DupCheckerState && window.DupCheckerState.STATE_TTL_MS) ||
+  7 * 24 * 60 * 60 * 1000;
 
 // ── Persistence ───────────────────────────────────────────────────────────────
+function stateIsFresh(state, nowMs) {
+  if (typeof window !== 'undefined' && window.DupCheckerState) {
+    return window.DupCheckerState.stateIsFresh(state, nowMs, STATE_TTL_MS);
+  }
+  if (!state || !state.scanDate) return false;
+  var t = Date.parse(state.scanDate);
+  if (!t) return false;
+  return (typeof nowMs === 'number' ? nowMs : Date.now()) - t < STATE_TTL_MS;
+}
+
 function saveState(practiceCode, flagged, checkedUuids) {
   chrome.storage.local.set({
     [STATE_KEY]: {
@@ -73,7 +86,17 @@ function saveState(practiceCode, flagged, checkedUuids) {
 }
 
 function loadState() {
-  return new Promise((resolve) => chrome.storage.local.get(STATE_KEY, (r) => resolve(r[STATE_KEY] || null)));
+  return new Promise((resolve) => {
+    chrome.storage.local.get(STATE_KEY, (r) => {
+      const state = r[STATE_KEY] || null;
+      if (!state) return resolve(null);
+      if (!stateIsFresh(state)) {
+        chrome.storage.local.remove(STATE_KEY, () => resolve(null));
+        return;
+      }
+      resolve(state);
+    });
+  });
 }
 
 function clearState() {

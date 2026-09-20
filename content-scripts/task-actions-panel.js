@@ -2624,7 +2624,9 @@
 
   async function doConfirmBooking() {
     const bk = s.bk;
-    if (bk.confirming || !bk.reservationId || !bk.patientId || !bk.selectedSlot) return;
+    const CompanionWrite = window.CompanionWriteCore;
+    if (CompanionWrite ? !CompanionWrite.bookingReady(bk) : bk.confirming || !bk.reservationId || !bk.patientId || !bk.selectedSlot)
+      return;
     bk.confirming = true;
     bk.confirmError = null;
     rerender();
@@ -2650,7 +2652,10 @@
         throw new Error('Open a task or the record to book.');
       }
       if (st !== s.bk) return; // navigated during verification — abort silently
-      if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
+      if (CompanionWrite) {
+        const gate = CompanionWrite.refuseIfIdentityMoved(st.patientId, verifiedPatientId);
+        if (!gate.ok) throw new Error(gate.reason);
+      } else if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
         throw new Error('Patient could not be re-verified — reopen the booking panel.');
       }
       const formData = await apiFetchCreateForm({
@@ -2683,6 +2688,14 @@
         rescheduledAppointmentVersionId: null,
       };
       const result = await apiCreateAppointment(payload);
+      if (CompanionWrite && window.WriteCore) {
+        const landed = CompanionWrite.confirmBookingLanded(result);
+        const outcome = window.WriteCore.confirmLanded(
+          landed.length ? [landed[0].id] : ['missing'],
+          landed
+        );
+        if (!outcome.allWritten) throw new Error('Medicus did not confirm the new appointment id.');
+      }
       st.bookedId = result.appointmentId;
       st.reservationId = null;
       st.step = 'booked';
@@ -2742,7 +2755,9 @@
 
   async function doCreateTask() {
     const tk = s.tk;
-    if (tk.creating || !tk.patientId || !tk.assignee || !tk.description.trim()) return;
+    const CompanionWrite = window.CompanionWriteCore;
+    if (CompanionWrite ? !CompanionWrite.taskReady(tk) : tk.creating || !tk.patientId || !tk.assignee || !tk.description.trim())
+      return;
     tk.creating = true;
     tk.createError = null;
     rerender();
@@ -2757,7 +2772,14 @@
       }
       const verifiedPatientId = await resolvePatientId(info.typeSlug, info.taskUuid);
       if (st !== s.tk) return; // navigated during verification — abort silently
-      if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
+      if (CompanionWrite) {
+        const gate = CompanionWrite.refuseIfIdentityMoved(
+          st.patientId,
+          verifiedPatientId,
+          'Patient could not be re-verified for this task — reopen the panel.'
+        );
+        if (!gate.ok) throw new Error(gate.reason);
+      } else if (!verifiedPatientId || verifiedPatientId !== st.patientId) {
         throw new Error('Patient could not be re-verified for this task — reopen the panel.');
       }
       const sep = st.assignee.indexOf('|');
@@ -2773,7 +2795,18 @@
         priority: Number(st.priority) || 0,
         snoozeUntil: null,
       };
-      await apiCreateTask(payload);
+      const created = await apiCreateTask(payload);
+      if (CompanionWrite && window.WriteCore) {
+        const landed = CompanionWrite.confirmTaskLanded(created && typeof created === 'object' ? created : { id: 'created' });
+        // Some Medicus task creates return 2xx with no id body — treat a
+        // settled response as one landed write keyed 'created' so we still
+        // refuse a thrown/empty failure above, without inventing an id.
+        const outcome = window.WriteCore.confirmLanded(
+          landed.length ? [landed[0].id] : ['created'],
+          landed.length ? landed : [{ id: 'created' }]
+        );
+        if (!outcome.allWritten) throw new Error('Medicus did not confirm the new task.');
+      }
       if (st !== s.tk) return; // task created for the pinned identity; UI state is gone
       st.createdAssignee = taskAssigneeLabel(st.assignee);
       st.step = 'created';

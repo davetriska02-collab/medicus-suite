@@ -3,18 +3,16 @@
 // Exports and imports the Patient Alerts storage keys as a plain object.
 // Used by suite-wide backup and the per-module export card in Options.
 //
-// PRIVACY NOTE: unlike every other module's backup, this export contains
-// PATIENT-IDENTIFIABLE DATA (names, NHS numbers, and the alert text itself).
-// The envelope preview (shared/io/suite-envelope.js) surfaces this loudly
-// before import, and the Options card carries the same warning before export.
-// Treat exported files like any other patient-identifiable document.
+// PRIVACY NOTE: from v3.264.1 the suite backup exports ONLY the practice
+// palette (`patientAlerts.types`). Per-patient flags (`patientAlerts.byPatient`)
+// are PHI and stay on the workstation — they are stripped from export and
+// skipped on import. Older backups that still carry byPatient are accepted
+// but that map is not written. The key remains in PATIENT_ALERTS_KEYS so the
+// backup-coverage scanner still sees it as an IO-owned key.
 //
-// IMPORT SEMANTICS: MERGE (union), not replace. A shared file from a colleague
-// adds its patients/alerts/types to the local store; same-id items are
-// overwritten by the incoming copy. Import can therefore never silently delete
-// a locally-recorded alert — removing an alert is always an explicit in-module
-// action. (Suite-restore uses the same merge path: acceptable, since restoring
-// onto a fresh profile is a plain union with an empty store.)
+// IMPORT SEMANTICS for types: MERGE (union), not replace. A shared file from
+// a colleague adds its types to the local palette; same-id items are
+// overwritten by the incoming copy.
 
 'use strict';
 
@@ -89,7 +87,8 @@ function _paValidateStore(byPatient) {
 async function patientAlertsExport() {
   const r = await chrome.storage.local.get(PATIENT_ALERTS_KEYS);
   return {
-    byPatient: r['patientAlerts.byPatient'] ?? {},
+    // PHI — never leave the workstation via a suite backup.
+    byPatient: {},
     // types: null = "user never customised the palette" — import leaves the
     // receiving install on its own defaults instead of freezing today's
     // shipped list into their storage.
@@ -104,27 +103,12 @@ async function patientAlertsImport(data) {
   if (!data || typeof data !== 'object') throw new Error('Patient Alerts data must be an object.');
 
   const toSet = {};
+  const incomingByPatient =
+    data.byPatient && typeof data.byPatient === 'object' && !Array.isArray(data.byPatient) ? data.byPatient : null;
+  const skippedByPatient = !!(incomingByPatient && Object.keys(incomingByPatient).length);
 
-  if (data.byPatient !== undefined) {
-    _paValidateStore(data.byPatient);
-    const incoming = _paStripDangerous(data.byPatient);
-    const existingR = await chrome.storage.local.get('patientAlerts.byPatient');
-    const existing = _paStripDangerous(existingR['patientAlerts.byPatient'] || {});
-    const merged = { ...existing };
-    for (const [key, entry] of Object.entries(incoming)) {
-      const incAlerts = entry.alerts.filter(_paIsValidAlert);
-      if (incAlerts.length === 0) continue;
-      const cur = merged[key];
-      const curAlerts = cur && Array.isArray(cur.alerts) ? cur.alerts.filter(_paIsValidAlert) : [];
-      const incIds = new Set(incAlerts.map((a) => a.id));
-      merged[key] = {
-        patient: entry.patient || (cur && cur.patient) || { name: '', nhsNumber: null, dob: '' },
-        alerts: [...curAlerts.filter((a) => !incIds.has(a.id)), ...incAlerts],
-        updatedAt: entry.updatedAt || (cur && cur.updatedAt) || null,
-      };
-    }
-    toSet['patientAlerts.byPatient'] = merged;
-  }
+  // Per-patient flags are PHI and are never restored from a backup. An old
+  // envelope may still carry byPatient — ignore it, do not throw, do not write.
 
   if (data.types !== undefined && data.types !== null) {
     if (!Array.isArray(data.types)) {
@@ -148,6 +132,7 @@ async function patientAlertsImport(data) {
   if (Object.keys(toSet).length > 0) {
     await chrome.storage.local.set(toSet);
   }
+  return { skippedByPatient };
 }
 
 if (typeof module !== 'undefined' && module.exports) {

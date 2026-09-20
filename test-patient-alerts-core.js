@@ -42,7 +42,9 @@ const path = require('path');
     sanitiseTypes,
     searchStore,
     sortAlerts,
+    stripIdleIdentity,
     upsertAlert,
+    IDENTITY_IDLE_MS,
   } = await import(corePath);
 
   const NOW = '2026-07-18T10:00:00.000Z';
@@ -205,6 +207,28 @@ const path = require('path');
   );
   check(bothSame[UUID_A].alerts.length === 2, 'same patient in both: alerts union by id');
   check(mergeStores(null, null) && Object.keys(mergeStores(null, null)).length === 0, 'null inputs merge to empty');
+
+  console.log('\n--- stripIdleIdentity (PHI hygiene) ---');
+  {
+    const fresh = upsertAlert({}, pcA, makeAlert({ label: 'Active', severity: 'red' }, NOW), NOW);
+    const idle = {
+      [UUID_B]: {
+        patient: { name: 'Bob Test', nhsNumber: '9434765911', dob: '01 Jan 1980' },
+        alerts: [makeAlert({ label: 'Old', severity: 'amber' }, '2026-01-01T00:00:00.000Z')],
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    };
+    const now = Date.parse('2026-07-18T10:00:00.000Z');
+    const kept = stripIdleIdentity(fresh, now, IDENTITY_IDLE_MS);
+    check(kept.changed === false, 'fresh active flags are not rewritten');
+    check(kept.store[UUID_A].patient.name === 'Ann Test', 'fresh identity is kept');
+    const stripped = stripIdleIdentity(idle, now, IDENTITY_IDLE_MS);
+    check(stripped.changed === true, 'idle identity is rewritten');
+    check(stripped.store[UUID_B].alerts.length === 1, 'idle alerts are NOT deleted');
+    check(stripped.store[UUID_B].patient.name === '' && stripped.store[UUID_B].patient.nhsNumber == null, 'idle name/NHS/DOB are stripped');
+    const empty = stripIdleIdentity({ [UUID_A]: { patient: { name: 'x' }, alerts: [], updatedAt: NOW } }, now, IDENTITY_IDLE_MS);
+    check(empty.changed === true && !empty.store[UUID_A], 'empty patient entries are dropped');
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

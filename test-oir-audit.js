@@ -139,6 +139,7 @@ const documentStub = {
   body: makeEl('body'),
 };
 
+const OirWriteCore = require('./shared/oir-write-core.js');
 const sandbox = {
   chrome: chromeStub,
   document: documentStub,
@@ -150,6 +151,8 @@ const sandbox = {
   tickRows,
   log,
   _oirPatientCache: new Map(),
+  window: { OirWriteCore },
+  OirWriteCore,
 };
 
 vm.runInNewContext(

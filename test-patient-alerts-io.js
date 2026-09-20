@@ -87,18 +87,19 @@ const entryB = {
     'both storage keys are declared (backup-coverage guard reads these)'
   );
 
-  console.log('\n--- export → import round-trip ---');
+  console.log('\n--- export omits per-patient PHI ---');
   reset();
   store['patientAlerts.byPatient'] = { [UUID_A]: entryA };
   store['patientAlerts.types'] = [{ id: 'custom-1', label: 'Ward round', severity: 'info', description: '' }];
   const exported = await patientAlertsExport();
-  check(exported.byPatient[UUID_A].alerts[0].label === alertA.label, 'export captures the store');
+  check(Object.keys(exported.byPatient || {}).length === 0, 'export does not carry byPatient PHI');
   check(exported.types.length === 1, 'export captures the customised palette');
 
   reset(); // simulate a fresh profile
-  await patientAlertsImport(exported);
-  check(store['patientAlerts.byPatient'][UUID_A].alerts[0].id === 'pa-1', 'import restores alerts');
+  const res = await patientAlertsImport(exported);
+  check(!store['patientAlerts.byPatient'], 'import of a current backup does not write byPatient');
   check(store['patientAlerts.types'][0].id === 'custom-1', 'import restores the palette');
+  check(res.skippedByPatient === false, 'empty byPatient is not reported as skipped PHI');
 
   console.log('\n--- default (uncustomised) palette round-trip ---');
   reset();
@@ -109,26 +110,13 @@ const entryB = {
   await patientAlertsImport(exp2);
   check(!('patientAlerts.types' in store), 'null palette import writes nothing (defaults stay live)');
 
-  console.log('\n--- merge semantics: import can never silently delete ---');
+  console.log('\n--- import skips byPatient PHI and never deletes local flags ---');
   reset();
   store['patientAlerts.byPatient'] = { [UUID_A]: entryA };
-  await patientAlertsImport({ byPatient: { [UUID_B]: entryB } });
-  const merged = store['patientAlerts.byPatient'];
-  check(merged[UUID_A] && merged[UUID_B], 'incoming patients merge alongside local ones');
-  check(merged[UUID_A].alerts[0].id === 'pa-1', 'local alerts survive an import');
-
-  // Same patient in both: union by alert id, incoming wins on the same id.
-  await patientAlertsImport({
-    byPatient: {
-      [UUID_A]: { ...entryA, alerts: [{ ...alertA, label: 'Interpreter required — Ukrainian' }, alertB] },
-    },
-  });
-  const after = store['patientAlerts.byPatient'][UUID_A];
-  check(after.alerts.length === 2, 'same-patient import unions alerts by id');
-  check(
-    after.alerts.find((a) => a.id === 'pa-1').label === 'Interpreter required — Ukrainian',
-    'incoming copy wins on the same alert id'
-  );
+  const skip = await patientAlertsImport({ byPatient: { [UUID_B]: entryB } });
+  check(skip.skippedByPatient === true, 'older backup with byPatient is reported as skipped');
+  check(store['patientAlerts.byPatient'][UUID_A] && !store['patientAlerts.byPatient'][UUID_B], 'incoming patient flags are not written');
+  check(store['patientAlerts.byPatient'][UUID_A].alerts[0].id === 'pa-1', 'local alerts survive an import');
 
   console.log('\n--- palette merge ---');
   reset();
@@ -150,17 +138,9 @@ const entryB = {
     check(threw, msg);
   }
   await expectThrow(null, 'null data throws');
-  await expectThrow({ byPatient: [] }, 'array byPatient throws');
-  await expectThrow({ byPatient: { x: { alerts: 'nope' } } }, 'non-array alerts throws');
-  await expectThrow(
-    { byPatient: { x: { alerts: [{ id: 'a', label: '', severity: 'amber' }] } } },
-    'blank alert label throws'
-  );
-  await expectThrow(
-    { byPatient: { x: { alerts: [{ id: 'a', label: 'ok', severity: 'purple' }] } } },
-    'bad severity throws'
-  );
   await expectThrow({ types: [{ id: '', label: 'x', severity: 'red' }] }, 'typeless palette entry throws');
+  await patientAlertsImport({ byPatient: [] });
+  check(JSON.stringify(store['patientAlerts.byPatient']) === before, 'malformed byPatient is skipped, storage untouched');
   check(JSON.stringify(store['patientAlerts.byPatient']) === before, 'failed imports leave storage untouched');
 
   console.log('\n--- prototype-pollution defence ---');
