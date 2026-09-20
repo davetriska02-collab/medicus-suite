@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.266.0] — 2026-09-22
+
+### Investigations page: Lab Filing setup — practice normal ranges and autofiling enable, per result × lab × SNOMED code (nothing acts on it yet)
+
+Second step of folding Lab Filing into the catalogue (`docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`). **Lab Filing
+does not read any of this yet**; the page says so. No live behaviour changes.
+
+- **Data** (`shared/lab-catalogue-overlay.js`, overlay `filing.ranges`): one practice range per (result × lab × SNOMED code); the unit
+  is carried by the code and snapshotted — if the code's unit later changes, the code leaves the result or the lab is deleted, the
+  range stops acting and the page says why. The range is optional (autofiling can be enabled on the lab's own reference range). Each
+  entry has its own **filing approval**, separate from the approval of the result / test / lab (approving one never approves the
+  other); any change to the range or the enable flag withdraws it. An entry acts only when approved AND enabled
+  (`catalogue.filing.ranges`, absent when nothing acts, so an unconfigured catalogue is byte-for-byte the built-in one). Arrives
+  unapproved on restore / sync / merge (its enabled intent may travel), and backups carry no approval or reviewer name.
+  Deleting a result or lab deletes its ranges.
+- **Screen** (`options/investigations-section.js`): the results table gains a blue autofiling section — practice range min – max,
+  enable, filing approval with its own Approve button — per code line, for the lab chosen above the table. New list filters
+  "Autofiling enabled" / "Autofiling not enabled" and a card badge ("autofiling on" / "awaiting approval").
+- Tests: `test-lab-catalogue-filing.js` (50); additions to `test-labcatalogue-io.js` (merge / replace / export of ranges) and
+  `test-investigations-section.js`.
+
 ## [v3.265.2] — 2026-09-22
 
 ### Investigations page: test card layout (first step of folding Lab Filing into the catalogue)

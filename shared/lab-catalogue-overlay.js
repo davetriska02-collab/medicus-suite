@@ -40,6 +40,7 @@
     note: 1000,
     context: 120,
     retired: 5000,
+    filingRanges: 3000,
   };
   const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
   const PREFIX = 'labcatalogue.practice';
@@ -89,6 +90,8 @@
       labs: [],
       retired: [],
       disabled: { results: [], investigations: [] },
+      // Lab Filing setup (Phase E): practice normal ranges per RESULT x LAB x SNOMED CODE, each with its own filing approval.
+      filing: { ranges: [] },
     };
   }
 
@@ -280,6 +283,48 @@
   // Duplicate ids within a kind REJECT: every id-keyed lookup (markReviewed, the settings page, the merge) reads the
   // FIRST match, so a second entry under the same id is an invisible passenger — approval stamps would cascade onto a
   // copy the reviewer never saw (e.g. a hidden override riding an innocent-looking duplicate).
+  // ── Lab Filing setup: a practice normal range for one RESULT, at one LAB, for one SNOMED CODE ──────────────────────────
+  // The unit is carried by the code (HbA1c IFCC and NGSP are different codes), and is SNAPSHOTTED here: if the code's unit
+  // later changes, the range no longer means what it did and is excluded until it is set again. `reviewed` is the FILING
+  // approval — separate from the approval of the result / test that decides matching. `enabled` is "autofiling on for this".
+  // A range acts only when it is BOTH approved and enabled.
+  const filingKey = (r) => [r.result, r.lab, r.code].join('|');
+  function finiteOrNull(v, what) {
+    if (v === undefined || v === null || v === '') return null;
+    const n = typeof v === 'number' ? v : Number(String(v).trim());
+    if (!Number.isFinite(n) || Math.abs(n) > 1e9) fail(what + ' must be a number');
+    return n;
+  }
+  function sanitiseFilingRange(v, i) {
+    const w = 'filing.ranges[' + i + ']';
+    if (!isObj(v)) fail(w + ' must be an object');
+    const out = {
+      result: str(v.result, 64, w + '.result', true),
+      lab: str(v.lab, 64, w + '.lab', true),
+      code: str(v.code, 24, w + '.code', true),
+      unit: str(v.unit, 40, w + '.unit') || '',
+      low: finiteOrNull(v.low, w + '.low'),
+      high: finiteOrNull(v.high, w + '.high'),
+      enabled: v.enabled === true,
+    };
+    // the practice range is OPTIONAL (the lab's own reference range can do the work) — but an entry that neither sets a
+    // range nor enables autofiling says nothing
+    if (out.low === null && out.high === null && !out.enabled)
+      fail(w + ' needs a low and/or a high value, or autofiling enabled');
+    if (out.low !== null && out.high !== null && out.low > out.high) fail(w + ': low must not exceed high');
+    out.provenance = sanitiseProvenance(v.provenance);
+    return out;
+  }
+  function rejectDuplicateFilingKeys(list) {
+    const seen = new Set();
+    for (const e of list) {
+      const k = filingKey(e);
+      if (seen.has(k)) fail('filing.ranges has more than one range for ' + k.replace(/\|/g, ' / '));
+      seen.add(k);
+    }
+    return list;
+  }
+
   function rejectDuplicateIds(list, what) {
     const seen = new Set();
     for (const e of list) {
@@ -310,6 +355,13 @@
         results: strArr(dis.results, LIMITS.results, 64, 'disabled.results'),
         investigations: strArr(dis.investigations, LIMITS.investigations, 64, 'disabled.investigations'),
       },
+      filing: {
+        ranges: rejectDuplicateFilingKeys(
+          arr(isObj(src.filing) ? src.filing.ranges : undefined, LIMITS.filingRanges, 'filing.ranges').map(
+            sanitiseFilingRange
+          )
+        ),
+      },
     };
   }
 
@@ -339,6 +391,13 @@
         if (e.provenance.importedFrom === undefined) delete e.provenance.importedFrom;
       });
     }
+    // a filing range arrives with its FILING approval removed (its `enabled` intent may travel; it acts only once approved here)
+    o.filing.ranges = o.filing.ranges.map((r) => {
+      const p = { ...r.provenance, reviewed: false, source: 'imported' };
+      delete p.reviewedBy;
+      delete p.reviewedAt;
+      return { ...r, provenance: p };
+    });
     return o;
   }
 
@@ -356,6 +415,12 @@
         return { ...e, provenance: p };
       });
     }
+    o.filing.ranges = o.filing.ranges.map((r) => {
+      const p = { ...r.provenance, reviewed: false };
+      delete p.reviewedBy;
+      delete p.reviewedAt;
+      return { ...r, provenance: p };
+    });
     return o;
   }
 
@@ -384,11 +449,95 @@
       results: count('results'),
       investigations: count('investigations'),
       labs: count('labs'),
+      filing: {
+        total: asArr(o.filing && o.filing.ranges).length,
+        unreviewed: asArr(o.filing && o.filing.ranges).filter(
+          (e) => !(e && e.provenance && e.provenance.reviewed === true)
+        ).length,
+      },
       disabled: asArr(o.disabled && o.disabled.results).length + asArr(o.disabled && o.disabled.investigations).length,
     };
   }
 
   // ── Settings-page operations (pure: each returns a NEW overlay) ─────────────────────────────────────────────────
+
+  // ── Lab Filing setup operations (pure) ─────────────────────────────────────────────────────────────────────────────
+  // Set (create or change) a practice normal range: spec = { result, lab, code, low, high, enabled }. The result, lab and code
+  // must exist in the effective catalogue and the code must be one of the RESULT's own codes (that is where the unit comes
+  // from). ANY change withdraws the filing approval; a new range starts unapproved.
+  function setFilingRange(builtin, overlay, spec, today) {
+    const day = today || new Date().toISOString().slice(0, 10);
+    const o = safeClone(overlay);
+    if (!isObj(spec)) fail('a filing range must be an object');
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const res = asArr(cat.results).find((r) => r.id === spec.result);
+    if (!res) fail('unknown result "' + spec.result + '"');
+    if (!asArr(cat.labs).some((l) => l.id === spec.lab)) fail('unknown lab "' + spec.lab + '"');
+    const code = asArr(res.codes).find((c) => c.conceptId === spec.code);
+    if (!code) fail('code ' + spec.code + ' is not one of ' + res.label + "'s codes");
+    const cleared =
+      (spec.low === undefined || spec.low === null || spec.low === '') &&
+      (spec.high === undefined || spec.high === null || spec.high === '') &&
+      spec.enabled !== true;
+    const next = sanitiseFilingRange(
+      {
+        result: spec.result,
+        lab: spec.lab,
+        code: spec.code,
+        unit: code.unit || '',
+        low: spec.low,
+        high: spec.high,
+        enabled: cleared ? true : spec.enabled === true, // (a placeholder so a cleared entry passes validation, then is dropped below)
+        provenance: { source: 'practice', reviewed: false, createdAt: day },
+      },
+      0
+    );
+    if (cleared) next.enabled = false;
+    const key = filingKey(next);
+    const i = o.filing.ranges.findIndex((r) => filingKey(r) === key);
+    // nothing set and autofiling off = clear it
+    if (next.low === null && next.high === null && !next.enabled) {
+      if (i >= 0) o.filing.ranges.splice(i, 1);
+      return o;
+    }
+    if (i >= 0) {
+      const old = o.filing.ranges[i];
+      const same =
+        old.low === next.low && old.high === next.high && old.enabled === next.enabled && old.unit === next.unit;
+      if (same) return o; // nothing changed: the approval stands
+      next.provenance = { ...old.provenance, reviewed: false };
+      delete next.provenance.reviewedBy;
+      delete next.provenance.reviewedAt;
+      o.filing.ranges[i] = next;
+    } else {
+      if (o.filing.ranges.length >= LIMITS.filingRanges) fail('too many filing ranges');
+      o.filing.ranges.push(next);
+    }
+    return sanitiseOverlay(o);
+  }
+
+  function removeFilingRange(overlay, key) {
+    const o = safeClone(overlay);
+    const before = o.filing.ranges.length;
+    o.filing.ranges = o.filing.ranges.filter((r) => filingKey(r) !== key);
+    if (o.filing.ranges.length === before) fail('filing range "' + key + '" not found');
+    return o;
+  }
+
+  // The FILING approval of one range. It never touches the approval of the result, the test or the lab, and theirs never
+  // touches this.
+  function approveFilingRange(overlay, key, by, when) {
+    const o = safeClone(overlay);
+    const r = o.filing.ranges.find((x) => filingKey(x) === key);
+    if (!r) fail('filing range "' + key + '" not found');
+    r.provenance = {
+      ...r.provenance,
+      reviewed: true,
+      reviewedBy: by || 'unknown',
+      reviewedAt: when || new Date().toISOString().slice(0, 10),
+    };
+    return o;
+  }
 
   function setContext(overlay, ctx) {
     const o = safeClone(overlay);
@@ -1215,6 +1364,9 @@
         if (inv.members.length !== n) inv.provenance = { ...inv.provenance, reviewed: false };
       }
       stripFromLabs(o, 'res:' + id, null);
+      o.filing.ranges = o.filing.ranges.filter((r) => r.result !== id);
+    } else if (kind === 'labs') {
+      o.filing.ranges = o.filing.ranges.filter((r) => r.lab !== id);
     }
     return sanitiseOverlay(o);
   }
@@ -1242,6 +1394,7 @@
     });
     o.disabled.investigations = o.disabled.investigations.filter((x) => x !== id);
     stripFromLabs(o, 'inv:' + id, id);
+    o.filing.ranges = o.filing.ranges.filter((r) => !removedResults.includes(r.result));
     return { overlay: o, removedResults };
   }
 
@@ -1436,6 +1589,49 @@
       const names = (overlay.context && overlay.context.labNames) || {};
       for (const lab of cat.labs) if (names[lab.id]) lab.name = names[lab.id];
     }
+    // --- Lab Filing ranges: which practice ranges act (approved AND enabled, and still valid against this catalogue) ---
+    function attachFiling(cat) {
+      const out = [];
+      for (const r of overlay.filing.ranges) {
+        const key = filingKey(r);
+        const res = cat.results.find((x) => x.id === r.result);
+        const lab = cat.labs.find((x) => x.id === r.lab);
+        const code = res ? asArr(res.codes).find((c) => c.conceptId === r.code) : null;
+        let why = '';
+        if (!res) why = 'its result is gone';
+        else if (!lab) why = 'its lab is gone';
+        else if (!code) why = "that code is no longer one of the result's codes";
+        else if ((code.unit || '') !== r.unit)
+          why =
+            "the code's unit changed since the range was set (" +
+            (r.unit || 'none') +
+            ' -> ' +
+            (code.unit || 'none') +
+            ')';
+        if (why) {
+          problems.push({ kind: 'filing', id: key, reason: 'excluded — ' + why });
+          continue;
+        }
+        const reviewed = r.provenance.reviewed === true;
+        if (!includeUnreviewed && !(reviewed && r.enabled)) {
+          excluded.push({ kind: 'filing', id: key, reason: !reviewed ? 'unreviewed' : 'not enabled' });
+          continue;
+        }
+        out.push({
+          result: r.result,
+          lab: r.lab,
+          code: r.code,
+          unit: r.unit,
+          low: r.low,
+          high: r.high,
+          enabled: r.enabled,
+          reviewed,
+        });
+      }
+      // absent (not empty) when nothing acts, so a catalogue with no filing setup is byte-for-byte the built-in one
+      if (out.length) cat.filing = { ranges: out };
+      return cat;
+    }
     // --- disables + pruning -------------------------------------------------------------------------------------
     function applyDisables(cat) {
       const rmRes = new Set(overlay.disabled.results);
@@ -1485,7 +1681,7 @@
     applyDisables(cat);
     applyLabNames(cat);
     let v = LC.validateCatalogue(cat);
-    if (v.errors.length === 0) return { catalogue: cat, problems, excluded, warnings: v.warnings };
+    if (v.errors.length === 0) return { catalogue: attachFiling(cat), problems, excluded, warnings: v.warnings };
 
     // SLOW PATH (rare): one bad entry must not discard the rest. Add entries one at a time, keeping only those that validate.
     problems.length = problemMark;
@@ -1517,7 +1713,7 @@
       v = LC.validateCatalogue(cat);
     }
     applyLabNames(cat);
-    return { catalogue: cat, problems, excluded, warnings: v.warnings };
+    return { catalogue: attachFiling(cat), problems, excluded, warnings: v.warnings };
   }
 
   const api = {
@@ -1541,6 +1737,10 @@
     removeInvestigation,
     restoreDismissed,
     renameLab,
+    filingKey,
+    setFilingRange,
+    removeFilingRange,
+    approveFilingRange,
     removeEntry,
     setInvestigationDisabled,
     mergeCatalogue,

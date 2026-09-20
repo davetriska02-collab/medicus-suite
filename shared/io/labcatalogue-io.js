@@ -146,6 +146,11 @@
         taken[kind].add(e.id);
       }
     }
+    // a published filing range that is not already here is added (inert: unapproved); a local one is never changed
+    const haveRange = new Set(local.filing.ranges.map((r) => OV.filingKey(r)));
+    for (const r of incoming.filing.ranges) {
+      if (!haveRange.has(OV.filingKey(r))) next.filing.ranges.push(r);
+    }
     const union = (a, b) => [...new Set([...a, ...b])];
     next.retired = union(local.retired, incoming.retired);
     next.disabled = {

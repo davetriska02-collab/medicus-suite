@@ -1,6 +1,6 @@
 # Phase E — Lab Filing on the Lab Result Catalogue
 
-**Status:** DESIGN AGREED IN PRINCIPLE (Nick + virtual Dave, 2026-09-22) — nothing built. Depends on v3.265.0 (Phase D) being merged.
+**Status:** DESIGN AGREED IN PRINCIPLE (Nick + virtual Dave, 2026-09-22). BUILT so far: whitelist matching fix (v3.265.1), test-card layout (v3.265.2), per-result x lab x code ranges + enable + own approval, data and screen (v3.266.0). NOT built: safety guards / filing controls columns, the "never offer to file" strip, per lab-group comment whitelist, the adapter / union-only gate / shadow log, migration. Depends on v3.265.0 (Phase D) being merged.
 **Related:** `docs/plans/LAB-RESULT-CATALOGUE-DATA-MODEL-2026-09-19.md` (§5.1), `docs/plans/PHASE-D-OUTSTANDING-MATCHER-ON-CATALOGUE-2026-09-22.md`, hazards H-073, H-074, H-075 (existing); H-080 / H-081 proposed (below).
 
 ---

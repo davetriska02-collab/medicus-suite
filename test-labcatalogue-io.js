@@ -259,6 +259,49 @@ const overlayWith = (extra) => ({ ...OV.emptyOverlay(), ...extra });
     );
   }
 
+  console.log('\n--- practice-profile apply: MERGE, filing ranges ---');
+  {
+    const range = (over) => ({
+      result: 'alp',
+      lab: 'lab-a',
+      code: '111',
+      unit: 'u/L',
+      low: 30,
+      high: 130,
+      enabled: true,
+      provenance: { source: 'practice', reviewed: true, reviewedBy: 'Dr A', reviewedAt: '2026-09-22' },
+      ...(over || {}),
+    });
+    STORE = { [KEY]: overlayWith({ filing: { ranges: [range()] } }) };
+    const published = overlayWith({ filing: { ranges: [range({ low: 5, high: 9 }), range({ code: '222' })] } });
+    const r = await IO.labcatalogueApplyPublished({ practice: published }, 'merge', OPTS);
+    const st = STORE[KEY].filing.ranges;
+    check(r.applied === true && st.length === 2, 'a published range that is not here yet is added');
+    check(
+      st.find((x) => x.code === '111').low === 30 && st.find((x) => x.code === '111').provenance.reviewed === true,
+      'a range already here is left untouched (local wins; its approval stands)'
+    );
+    check(
+      st.find((x) => x.code === '222').provenance.reviewed === false,
+      'the newly added published range arrives UNAPPROVED — it acts only once approved on this machine'
+    );
+    const exp = await IO.labcatalogueExport();
+    check(
+      exp.practice.filing.ranges.every((x) => x.provenance.reviewed === false && !('reviewedBy' in x.provenance)),
+      'a backup carries no filing approval and no reviewer name'
+    );
+    STORE = { [KEY]: overlayWith({ filing: { ranges: [range()] } }) };
+    const rep = await IO.labcatalogueApplyPublished(
+      { practice: overlayWith({ filing: { ranges: [range()] } }) },
+      'replace',
+      OPTS
+    );
+    check(
+      rep.applied === true && STORE[KEY].filing.ranges[0].provenance.reviewed === false,
+      'replace: the published range arrives unapproved'
+    );
+  }
+
   console.log('\n--- practice-profile apply: REPLACE ---');
   {
     STORE = { [KEY]: overlayWith({ results: [res('local-approved', null, true)] }) };

@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.2
+**Version:** v3.266.0
 **Generated:** 2026-09-22
 
 ## What it is
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.266.0 (22 Sep)** — Investigations page: Lab Filing setup on the results table — practice normal range (per result, lab and SNOMED code), autofiling enable and its own approval, list filters and card badge. Lab Filing does not read it yet
 - **v3.265.2 (22 Sep)** — Investigations page: each test card is now two columns over a full-width "Never counts as this test" strip and one full-width results table (name, code, SNOMED description, unit, core/optional, wordings, lab), with Codes & wordings under the name
 - **v3.265.1 (22 Sep)** — Lab Filing: a whitelisted lab comment must now explain the whole comment (no more partial / containing matches), entries need at least 6 words, and are refused rather than truncated (limit 2 000 characters)
 - **v3.265.0 (22 Sep)** — Outstanding Requests can now use the Lab Result Catalogue (opt-in Triage option "Matching engine", default off, practice-published, falls back to the current engine on any problem): recognises requests and reports by SNOMED code and the lab's own headings, same clearing rules and auto-tick opt-in. Investigations page: Edit and Details merged (codes and wordings editable in place), labs can be renamed, deleted imported tests stay deleted, matching-tool fixes

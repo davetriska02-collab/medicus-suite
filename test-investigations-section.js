@@ -39,8 +39,12 @@ check(
 check(!/I have checked/.test(src) && !/approveBtn\.disabled/.test(src), 'no fiddly tick-box on the review screen');
 const approveButtons = src.match(/btn\(\s*'Approve( result)?',/g) || [];
 check(
-  approveButtons.length === 2 && /if \(st\.review\) buttons\.appendChild\(btn\('Approve/.test(src),
-  'the only Approve buttons are on the review screens (test and result)'
+  approveButtons.length === 3 && /if \(st\.review\) buttons\.appendChild\(btn\('Approve/.test(src),
+  'the only Approve buttons are on the review screens (test and result) and the filing approval of one range line'
+);
+check(
+  /OV\.approveFilingRange\(S\.overlay, key, REVIEWER\)/.test(src),
+  'the filing Approve goes through the pure approve helper, and only for the range line it sits on'
 );
 check(/'Delete'/.test(src) && /removeInvestigation/.test(src), 'a practice test can be deleted (card and edit screen)');
 check(/Read again/.test(src), 'the reading can be run again');
