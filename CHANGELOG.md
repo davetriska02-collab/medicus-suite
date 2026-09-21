@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.15] — 2026-09-21
+
+### Fixed — queue row identity fails closed: a staff/GP id can no longer become a task id
+
+`pickUuid` in `content-scripts/triage-lens/page-world.js` (the MAIN-world bridge that
+extracts each task-list row's identity) carried a fallback that, when the row's explicit
+identity fields (`taskUuid`/`taskId`/`uuid`/`id`) were missing or not UUID-shaped, scanned
+*every* string field whose key matched `/task|id|uuid/i` for a UUID. That pattern matches
+staff-shaped keys — `registeredGpId`, `actionedById`, `staffId` — so such a row could be
+cached under a **staff or registered-GP UUID** as its task id, mis-keying every downstream
+consumer (`_durableRowMap`, `_queueResultCache`, monitoring/result chips) onto the wrong
+task. The fallback is removed: the task identity now comes only from the row's own explicit
+identity fields and must be a well-formed UUID; a row without one gets no cached identity
+and is dropped (no chip is safer than a chip keyed to the wrong id). New
+`test-task-list-identity.js` locks the fail-closed behaviour.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip
