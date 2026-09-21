@@ -151,17 +151,20 @@ try {
   importScripts('shared/lab-catalogue-core.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/lab-catalogue-core.js failed:', e && e.message);
+  recordSwLoadError('shared/lab-catalogue-core.js', e);
 }
 try {
   // Dependency order: the overlay helpers resolve LabCatalogue (core) and the io file resolves the overlay helpers.
   importScripts('shared/lab-catalogue-overlay.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/lab-catalogue-overlay.js failed:', e && e.message);
+  recordSwLoadError('shared/lab-catalogue-overlay.js', e);
 }
 try {
   importScripts('shared/io/labcatalogue-io.js');
 } catch (e) {
   console.warn('[Suite] importScripts shared/io/labcatalogue-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/labcatalogue-io.js', e);
 }
 try {
   importScripts('shared/io/suite-io.js');

@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.14] — 2026-09-21
+
+### Lab-catalogue service-worker load failures now reach the health strip
+
+v3.264.0 (#435) added `importScripts` for `shared/lab-catalogue-core.js`, `shared/lab-catalogue-overlay.js`, and `shared/io/labcatalogue-io.js`. v3.264.1 (#434) then made every existing `importScripts` catch call `recordSwLoadError` so a missing stack shows on the panel health strip and Options → Suite health. Those three catalogue catches were already on the parent commit and were left as `console.warn` only, so a failed catalogue load stayed silent — the same gap #434 closed for every other module. Their catches now record too. `test-service-worker.js` locks the contract for every `importScripts` site, not only the ones that existed before #435.
+
 ## [v3.264.4] — 2026-09-21
 
 ### SMOK002 still NO DATA live (post-v3.264.3): status-first terms, honest evidence truncation, journal naming hardening
