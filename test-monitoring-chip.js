@@ -426,6 +426,133 @@ if (cmcMatch) {
       }
     }
 
+    // ================================================
+    // LAYER 6 — eval-memo stale-identity guard (fail closed). The REAL
+    // computeMonitoringChip wired to the REAL engine/eval-cache.js memo:
+    // if the page/patient token changes while the async fetch is awaiting
+    // (user navigated to another patient mid-eval), the freshly-computed
+    // evaluation must be DROPPED, never stored — a memo filed under the
+    // next patient's token is a wrong-patient result. And the memo GET must
+    // key off the token captured at eval start, never the post-await token,
+    // so another patient's memoised eval can't be served either.
+    // ================================================
+    console.log('Layer 6: eval-memo stale-identity guard — drop on mid-await token change, store when stable');
+
+    const evalCacheMod = require('./engine/eval-cache.js');
+    const TOKEN_A = 'record|https://x/patient/A';
+    const TOKEN_B = 'record|https://x/patient/B';
+    const memoPatientData = {
+      medications: [{ name: 'Methotrexate', startDate: '2022-01-01' }],
+      observations: [],
+    };
+    // The exact evalOpts computeMonitoringChip builds for this data — needed
+    // to reproduce the input hash for keyed assertions. `now` is
+    // day-bucketed inside computeInputHash, so a fresh ISO string matches.
+    const memoExpectedHash = () =>
+      evalCacheMod.computeInputHash(memoPatientData.medications, memoPatientData.observations, {
+        now: new Date().toISOString(),
+        problems: [],
+        patientContext: null,
+        observationHistory: [],
+        patientRegisters: null,
+        rules: [{ id: 'r1' }],
+      });
+
+    function makeMemoSandbox(fetchPatientDataImpl) {
+      const state = { token: TOKEN_A, evalCalls: 0 };
+      const memo = evalCacheMod.createEvalCache();
+      const sandbox = {
+        console,
+        log: () => {},
+        pageType: () => 'record',
+        findSystemChip: () => ({ enabled: true }),
+        loadMonitoringRules: async () => [{ id: 'r1' }],
+        selectMonitoringDue: (chips) => ({ __selected: true, chips }),
+        monitoringToken: () => state.token,
+        _monEvalCache: memo,
+        window: {
+          SentinelEvalCache: evalCacheMod,
+          SentinelDataFetcher: { fetchPatientData: fetchPatientDataImpl(state) },
+          SentinelRules: {
+            evaluatePatient: () => {
+              state.evalCalls++;
+              return [{ type: 'drug-monitoring', status: 'overdue' }];
+            },
+          },
+        },
+      };
+      vm.createContext(sandbox);
+      vm.runInContext(
+        cmcMatch[0] + '\nthis.computeMonitoringChip = computeMonitoringChip;',
+        sandbox,
+        { filename: 'monitoring-chip-memo-extract.js' }
+      );
+      return { sandbox, state, memo };
+    }
+
+    // (a) REGRESSION: token flips while fetchPatientData is awaiting —
+    //     the eval itself still resolves (runMonitoringChip's render guard
+    //     owns discarding the paint) but NOTHING may be stored in the memo:
+    //     not under the start token, not under the new one.
+    {
+      const h = makeMemoSandbox((state) => async () => {
+        state.token = TOKEN_B; // user navigated to another patient mid-await
+        return memoPatientData;
+      });
+      const r = await h.sandbox.computeMonitoringChip();
+      check(r && r.__selected === true, 'mid-await token change: evaluation still resolves');
+      check(h.state.evalCalls === 1, 'mid-await token change: evaluatePatient ran (memo miss, real eval)');
+      check(
+        h.memo.size === 0,
+        `mid-await token change: memo NOT stored under ANY token — fail closed (size=${h.memo.size})`
+      );
+    }
+
+    // (b) The memo GET keys off the START token: a memo already stored for
+    //     patient B (same input hash) must NOT be served — nor overwritten —
+    //     when an eval that STARTED on patient A completes after a mid-await
+    //     flip to B. (Keying the get off the post-await token did exactly
+    //     that before the guard.)
+    {
+      const h = makeMemoSandbox((state) => async () => {
+        state.token = TOKEN_B;
+        return memoPatientData;
+      });
+      const seeded = [{ type: 'drug-monitoring', status: 'in_date' }];
+      h.memo.set(TOKEN_B, memoExpectedHash(), seeded);
+      const r = await h.sandbox.computeMonitoringChip();
+      check(
+        h.state.evalCalls === 1,
+        "seeded other-patient memo: evaluatePatient still ran — B's memo was not served for A's eval"
+      );
+      check(
+        r && r.chips && r.chips[0] && r.chips[0].status === 'overdue',
+        "seeded other-patient memo: result is the fresh eval, not B's memoised value"
+      );
+      const bEntry = h.memo.get(TOKEN_B, memoExpectedHash());
+      check(
+        h.memo.size === 1 && bEntry === seeded,
+        "seeded other-patient memo: B's own entry is untouched (the dropped eval overwrote nothing)"
+      );
+    }
+
+    // (c) CONTROL: stable token — stored under the start token, and a second
+    //     identical run is served from the memo without re-evaluating.
+    {
+      const h = makeMemoSandbox(() => async () => memoPatientData);
+      await h.sandbox.computeMonitoringChip();
+      check(h.memo.size === 1, 'stable token: memo stored');
+      check(
+        h.memo.get(TOKEN_A, memoExpectedHash()) !== undefined,
+        'stable token: memo keyed under the token captured at eval start'
+      );
+      const r2 = await h.sandbox.computeMonitoringChip();
+      check(
+        h.state.evalCalls === 1 && r2 && r2.__selected === true,
+        `stable token: second identical run served from the memo — no re-evaluation (evalCalls=${h.state.evalCalls})`
+      );
+    }
+
     console.log(`\n${passed} passed, ${failed} failed`);
     process.exit(failed === 0 ? 0 : 1);
   })();

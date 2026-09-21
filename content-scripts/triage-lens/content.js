@@ -1922,6 +1922,17 @@
     const engine = window.SentinelRules;
     if (!fetcher || typeof fetcher.fetchPatientData !== 'function') return null;
     if (!engine || typeof engine.evaluatePatient !== 'function') return null;
+    // Stale-identity guard for the eval memo (fail closed) — capture the
+    // page/patient token BEFORE any await below. If the user navigates to a
+    // different patient while loadMonitoringRules/fetchPatientData is in
+    // flight, a monitoringToken() re-read AFTER the awaits is the NEXT
+    // patient's token — keying the memo get/set off it would file this
+    // patient's evaluation under the other patient's token. Captured once
+    // here; the set below additionally drops (never stores) the memo when
+    // the live token no longer matches. Only resolved when the memo module
+    // exists — the non-cached path never touches monitoringToken here.
+    const cache = (typeof window !== 'undefined' && window.SentinelEvalCache) || null;
+    const evalToken = cache ? monitoringToken() : null;
     // Item 1.1 leg C (TRIAGE-LENS-2026-07-02.md): from here on, EVERY
     // could-not-evaluate path THROWS rather than returning null. Contract:
     // null now means ONLY "successfully evaluated, nothing due" (a definitive
@@ -1968,11 +1979,10 @@
     // stale all-clear — a changed result/med/problem yields a different hash and
     // forces a real re-evaluation. See engine/eval-cache.js.
     let chips;
-    const cache = (typeof window !== 'undefined' && window.SentinelEvalCache) || null;
     let inputHash = null;
     if (cache) {
       inputHash = cache.computeInputHash(data.medications, data.observations, { ...evalOpts, rules });
-      const cached = _monEvalCache.get(monitoringToken(), inputHash);
+      const cached = _monEvalCache.get(evalToken, inputHash);
       if (cached !== undefined) return selectMonitoringDue(cached);
     }
     try {
@@ -1981,7 +1991,15 @@
       log('monitoring evaluatePatient failed', e);
       throw e;
     }
-    if (cache && inputHash != null) _monEvalCache.set(monitoringToken(), inputHash, chips);
+    // Fail closed: store the memo ONLY when the page/patient token is still
+    // the one captured at eval start. A mid-await navigation means this
+    // evaluation belongs to the PREVIOUS patient — dropping it costs one
+    // re-evaluation on the next tick; storing it under either token risks a
+    // wrong-patient memo. (runMonitoringChip's own token guard already
+    // discards the RENDER; this guards the stored state.)
+    if (cache && inputHash != null && monitoringToken() === evalToken) {
+      _monEvalCache.set(evalToken, inputHash, chips);
+    }
     return selectMonitoringDue(chips);
   };
 
