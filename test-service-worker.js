@@ -58,6 +58,31 @@ check(src.includes('function recordSwLoadError'), 'SW records importScripts fail
 check(src.includes('flushSwLoadErrors()'), 'SW persists the load-error list after the import section');
 check(src.includes('suite.swLoadErrors'), 'SW writes suite.swLoadErrors for the health strip / Options banner');
 
+// v3.264.0 (#435) added the lab-catalogue imports; v3.264.1 (#434) recorded
+// every then-existing catch. The rebase left the three new catches as
+// console.warn only, so a missing catalogue stack never reached the health
+// strip. Walk forward from each importScripts( to its catch.
+const uncoveredImports = [];
+const importRe = /importScripts\(/g;
+let importMatch;
+while ((importMatch = importRe.exec(src))) {
+  const after = src.slice(importMatch.index, importMatch.index + 1200);
+  const catchAt = after.search(/catch\s*\(/);
+  const catchBody = catchAt === -1 ? '' : after.slice(catchAt, catchAt + 500);
+  const end = catchBody.indexOf('}');
+  const body = end === -1 ? catchBody : catchBody.slice(0, end);
+  if (!body.includes('recordSwLoadError')) {
+    const fileMatch = after.match(/importScripts\(\s*'([^']+)'/);
+    uncoveredImports.push(fileMatch ? fileMatch[1] : 'importScripts@' + importMatch.index);
+  }
+}
+check(
+  uncoveredImports.length === 0,
+  uncoveredImports.length === 0
+    ? 'every importScripts catch calls recordSwLoadError'
+    : `importScripts catch missing recordSwLoadError: ${uncoveredImports.join(', ')}`
+);
+
 console.log('\n--- every practice-profile _io() dependency is importScripts\'d ---');
 
 // applyProfile() (shared/io/practice-profile.js) resolves several modules'
