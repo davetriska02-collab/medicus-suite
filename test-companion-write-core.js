@@ -2,6 +2,9 @@
 // Run with: node test-companion-write-core.js
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+
 const C = require('./shared/companion-write-core.js');
 const WriteCore = require('./shared/write-core.js');
 
@@ -100,6 +103,35 @@ console.log('--- landed-id confirmation ---');
   check(taskOk.allWritten === true, 'W5 success is the confirmed task id');
   const taskMiss = WriteCore.confirmLanded(['t1'], C.confirmTaskLanded({}));
   check(taskMiss.allWritten === false, 'W5 without taskId is not success');
+  // 2xx-shaped bodies with no id must not land — a settled response is not
+  // proof the task exists (never-claim-completion).
+  check(C.confirmTaskLanded(null).length === 0, 'W5 null body lands nothing');
+  check(C.confirmTaskLanded({ success: true }).length === 0, 'W5 2xx body without an id lands nothing');
+  check(C.confirmTaskLanded({ id: 't2' }).length === 1, 'W5 plain id still lands');
+}
+
+console.log('--- W5 caller: task-actions-panel never fakes a landed id ---');
+{
+  // v3.264.17: doCreateTask used to substitute { id: 'created' } when the
+  // create response had no id, so WriteCore.confirmLanded always passed and
+  // the UI claimed "Task created" on an unconfirmed write. Lock the fix at
+  // source level: no faked id, and a 2xx-without-id goes to the dedicated
+  // 'unconfirmed' step whose copy claims nothing and warns about duplicates.
+  const tapSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-actions-panel.js'), 'utf8');
+  check(!/id:\s*'created'/.test(tapSrc), "no faked { id: 'created' } landed entry anywhere in task-actions-panel.js");
+  check(/step = 'unconfirmed'/.test(tapSrc), "2xx-without-id routes to the 'unconfirmed' step");
+  check(/step === 'unconfirmed'/.test(tapSrc), "taskSectionHtml renders the 'unconfirmed' step");
+
+  const unconfirmedFn = tapSrc.match(/function renderTaskUnconfirmed\(\)\s*\{[\s\S]*?\n  \}/);
+  check(!!unconfirmedFn, 'renderTaskUnconfirmed found in task-actions-panel.js');
+  if (unconfirmedFn) {
+    check(/Tasks list/.test(unconfirmedFn[0]), 'unconfirmed copy points the user at the Tasks list');
+    check(/duplicate/.test(unconfirmedFn[0]), 'unconfirmed copy states the consequence (retry may duplicate)');
+    check(
+      !/Task created|\bDone\b|\bSent\b|\bSubmitted\b|\bBooked\b/.test(unconfirmedFn[0]),
+      'unconfirmed copy never claims completion'
+    );
+  }
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

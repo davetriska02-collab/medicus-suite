@@ -2,6 +2,36 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.17] — 2026-09-21
+
+### Service-worker startup awaits its alarm chains
+
+The `onInstalled` / `onStartup` handlers fired their startup tasks
+(`startPolling`, `initialiseRequestMonitor`, `initialiseUpdateChecker`,
+`_schedulePpAlarm`) without awaiting them. `chrome.alarms.create` is async,
+and an MV3 service worker can be suspended once its event handlers settle —
+so a suspension racing an unresolved chain could silently drop the
+`slots-poll`, `request-monitor-poll` or `pp-check` alarm until the next
+install/startup. Both handlers now `Promise.all` every startup task before
+settling (independent tasks still start concurrently; the
+migrate → initialiseTriage → applyPracticeProfile ordering is unchanged).
+`test-service-worker.js` locks this behaviourally: the extracted handlers are
+run with gated stub tasks and must stay pending until the last alarm task
+settles.
+
+### Companion task create: 2xx without an id is no longer "Task created"
+
+`doCreateTask` in the Companion panel substituted a fake landed id when the
+create-task response was 2xx with no id in the body, so the landed-diff always
+passed and the UI claimed "Task created" on a write Medicus never confirmed —
+a completion claim on an unconfirmed write (the never-claim-completion rule).
+A 2xx without a task id now lands on a dedicated amber "Not confirmed" state
+that claims nothing, tells the user to check the patient's Tasks list before
+retrying (a blind retry can duplicate the task), and persists until they act.
+`test-companion-write-core.js` locks the fix: no faked landed id in the
+caller, id-less bodies land nothing, and the unconfirmed copy never claims
+completion.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip

@@ -253,7 +253,7 @@
       assignee: '', // "type|value"
       priority: 0,
       description: '',
-      step: 'form', // 'form' | 'created'
+      step: 'form', // 'form' | 'created' | 'unconfirmed'
       creating: false,
       createError: null,
       createdAssignee: null,
@@ -1967,6 +1967,18 @@
     `;
   }
 
+  // Medicus returned 2xx but no task id — the write may or may not have
+  // landed, so this claims neither. States the consequence (a retry can
+  // duplicate the task) and persists until the user acts; never times out.
+  function renderTaskUnconfirmed() {
+    return `
+      <div class="ms-tap-section-body">
+        <div class="ms-tap-warn"><strong>Not confirmed.</strong> Medicus accepted the request but did not confirm the new task. Open the patient's Tasks list to check whether it exists before trying again — retrying may create a duplicate.</div>
+        <button class="ms-tap-btn-ghost" id="ms-tap-tk-again">Back to the task form</button>
+      </div>
+    `;
+  }
+
   function taskSectionHtml() {
     const tk = s.tk;
     let body = '';
@@ -1977,6 +1989,8 @@
         body = `<div class="ms-tap-section-body"><div class="ms-tap-error">${esc(tk.error)}</div></div>`;
       } else if (tk.step === 'created') {
         body = renderTaskCreated();
+      } else if (tk.step === 'unconfirmed') {
+        body = renderTaskUnconfirmed();
       } else {
         body = renderTaskForm();
       }
@@ -2796,18 +2810,27 @@
         snoozeUntil: null,
       };
       const created = await apiCreateTask(payload);
-      if (CompanionWrite && window.WriteCore) {
-        const landed = CompanionWrite.confirmTaskLanded(created && typeof created === 'object' ? created : { id: 'created' });
-        // Some Medicus task creates return 2xx with no id body — treat a
-        // settled response as one landed write keyed 'created' so we still
-        // refuse a thrown/empty failure above, without inventing an id.
-        const outcome = window.WriteCore.confirmLanded(
-          landed.length ? [landed[0].id] : ['created'],
-          landed.length ? landed : [{ id: 'created' }]
-        );
-        if (!outcome.allWritten) throw new Error('Medicus did not confirm the new task.');
+      // A 2xx that settles is NOT proof the task landed — success is only a
+      // confirmed task id in the response body. This path used to invent a
+      // fake landed id when the body had no id, so the landed-diff always
+      // passed and the UI claimed "Task created" on an unconfirmed write
+      // (the never-claim-completion rule). No id now goes to the
+      // 'unconfirmed' step, which tells the user to check the Tasks list
+      // before retrying instead of claiming completion.
+      const body = created && typeof created === 'object' ? created : null;
+      const landed = CompanionWrite
+        ? CompanionWrite.confirmTaskLanded(body)
+        : body && (body.taskId || body.id)
+          ? [{ id: String(body.taskId || body.id) }]
+          : [];
+      const confirmed = window.WriteCore
+        ? window.WriteCore.confirmLanded(landed.length ? [landed[0].id] : ['task-id'], landed).allWritten
+        : landed.length > 0;
+      if (st !== s.tk) return; // pinned identity's write settled; UI state is gone
+      if (!confirmed) {
+        st.step = 'unconfirmed';
+        return;
       }
-      if (st !== s.tk) return; // task created for the pinned identity; UI state is gone
       st.createdAssignee = taskAssigneeLabel(st.assignee);
       st.step = 'created';
     } catch (err) {
