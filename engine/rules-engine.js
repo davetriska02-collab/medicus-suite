@@ -315,6 +315,30 @@
   // alert off a urine value. Text matches are rejected when the observation
   // name contains any exclude term; exact-SNOMED matches bypass excludes
   // (a code is specimen-specific already).
+  //
+  // Bare "hr" is the heart-rate abbreviation on the ADHD/atomoxetine/guanfacine
+  // pulse tests. Substring matching also hits prothrombin, thrombin, throat,
+  // chronic, threshold — a recent INR ("Prothrombin time") then becomes the
+  // latest "pulse" and the pulse row shows in date. Word-boundary keeps a
+  // real "HR" / "resting hr" token. Longer terms stay substrings so "lft"
+  // still matches "LFTs" and "u&e" still matches "U&Es (...)".
+  function observationTermHits(text, term) {
+    const hay = String(text || '').toLowerCase();
+    const t = String(term || '').toLowerCase();
+    if (!t) return false;
+    if (t === 'hr') return /\bhr\b/.test(hay);
+    return hay.includes(t);
+  }
+
+  // observation-bundle groups are either an alias array (every shipped group
+  // except DM037's renal slot) or { match, exclude } when a bare analyte must
+  // not be satisfied by another specimen. Callers still see `aliases`.
+  function observationBundleGroup(group) {
+    if (Array.isArray(group)) return { match: group, exclude: undefined };
+    if (group && Array.isArray(group.match)) return { match: group.match, exclude: group.exclude };
+    return { match: [], exclude: undefined };
+  }
+
   function filterMatchingObservations(observations, testSpec) {
     if (!Array.isArray(observations)) return [];
     const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
@@ -322,7 +346,7 @@
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
-        if (!testSpec.match.some((m) => obsLower.includes(String(m).toLowerCase()))) return false;
+        if (!testSpec.match.some((m) => observationTermHits(obsLower, m))) return false;
         if (excludeTerms && excludeTerms.some((e) => obsLower.includes(e))) return false;
         return true;
       }
@@ -362,10 +386,9 @@
       if (!group) return;
       const nameLower = String(group.name || '').toLowerCase();
       const groupLower = String(group.group || '').toLowerCase();
-      const matches = testSpec.match.some((m) => {
-        const term = String(m).toLowerCase();
-        return nameLower.includes(term) || groupLower.includes(term);
-      });
+      const matches = testSpec.match.some(
+        (m) => observationTermHits(nameLower, m) || observationTermHits(groupLower, m)
+      );
       if (!matches) return;
       if (excludeTerms && excludeTerms.some((e) => nameLower.includes(e) || groupLower.includes(e))) return;
       (group.history || []).forEach((h) => {
@@ -388,7 +411,7 @@
     const matchPriority = (obs) => {
       if (!obs.name || !Array.isArray(testSpec.match)) return 999;
       const obsLower = String(obs.name).toLowerCase();
-      const idx = testSpec.match.findIndex((m) => obsLower.includes(String(m).toLowerCase()));
+      const idx = testSpec.match.findIndex((m) => observationTermHits(obsLower, m));
       return idx < 0 ? 999 : idx;
     };
     matches.sort((a, b) => {
@@ -2803,17 +2826,19 @@
         if (!_diagInWindow) status = 'overdue';
       }
     } else if (check.kind === 'observation-bundle') {
-      // observation-bundle: checks that EACH observation group (array of name aliases)
-      // has a matching result within the QOF window. Used by DM037 to verify all 8
-      // care processes were recorded this QOF year.
+      // observation-bundle: checks that EACH observation group (alias array, or
+      // { match, exclude }) has a matching result within the QOF window. Used by
+      // DM037 to verify all 8 care processes were recorded this QOF year.
       const bundleGroups = check.observations || [];
       const _useFloorB = rule.useQofYearFloor !== false;
       const _withinDaysB = check.withinDays || 365;
       const _qofStartB = qofYearStart(now);
       const _rollingCutoffB = new Date(now);
       _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
-      const bundleResults = bundleGroups.map((aliases) => {
-        const obs = findLatestObservation(data.observations, { match: aliases });
+      const bundleResults = bundleGroups.map((group) => {
+        const spec = observationBundleGroup(group);
+        const aliases = spec.match;
+        const obs = findLatestObservation(data.observations, { match: aliases, exclude: spec.exclude });
         if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
         const obsDate = new Date(obs.date);
         const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
@@ -2894,7 +2919,7 @@
       const matchTerms = check.observation || [];
       const candidates = (data.observationHistory || []).filter((entry) => {
         const name = normStr(entry.name);
-        return matchTerms.some((m) => name.includes(normStr(m)));
+        return matchTerms.some((m) => observationTermHits(name, m));
       });
       const historyEntry =
         candidates.length === 0

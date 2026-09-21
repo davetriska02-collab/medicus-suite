@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.7] — 2026-09-21
+
+### Urine specimens and bare "hr" no longer mark bloods or pulse as in date
+
+Substring observation matching was treating the wrong result as the monitoring check.
+
+**1. Serum analyte checks now reject urine and urinary names** (audit H4, already applied to thiazide and denosumab). A newer "Urine potassium" / "Urinary sodium" / "Urine creatinine" / "Urine albumin:creatinine ratio" was winning the latest-date headline and showing the blood test in date. Exclude `["urine", "urinary"]` is now on carbamazepine sodium, lithium calcium, amiodarone urea/creatinine, finerenone potassium, ciclosporin creatinine, and the still-disabled digoxin rule, and the existing thiazide and denosumab excludes also list `urinary` (`urinary` does not contain the substring `urine`). Serum names (Sodium, Corrected calcium, Serum creatinine, Urea and electrolytes) still match. Exact SNOMED matches still bypass the exclude.
+
+**2. DM037's eGFR/creatinine care process uses the same exclude.** A urine creatinine or urine ACR was completing the blood renal slot as well as, for a urine ACR, the ACR slot. Serum creatinine and eGFR still count. The bundle group may now be `{ match, exclude }` as well as an alias array.
+
+**3. Pulse match term `hr` is a whole word.** It was a substring, so "Prothrombin time" (and throat, thrombin, chronic) counted as a heart rate and could hide an overdue pulse on guanfacine, atomoxetine, and the ADHD stimulant rules. "HR", "Heart rate", and "Resting heart rate" still match. Longer terms such as `lft` / `u&e` stay substrings.
+
+Tests: `test-matching-false-signals.js` (urine vs serum on each rule, prothrombin vs HR) and `test-hf009-four-pillar.js` (DM037 urine creatinine / urine ACR stay 7/8; serum creatinine reaches 8/8).
+
 ## [v3.264.4] — 2026-09-21
 
 ### SMOK002 still NO DATA live (post-v3.264.3): status-first terms, honest evidence truncation, journal naming hardening
