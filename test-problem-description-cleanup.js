@@ -57,6 +57,7 @@ const {
   computeAdditionalInfoFindings,
   stripAllKnownGenericText,
   codeQualityConcernExists,
+  resolveJournalSyncPatientId,
 } = require('./content-scripts/problem-description-cleanup.js');
 const genericAdditionalInfoText = require('./rules/generic-additional-info-text.json');
 const MSProblemTextLinking = require('./shared/problem-text-linking.js');
@@ -2273,6 +2274,22 @@ console.log('--- apiErrorMessage: non-2xx responses surface the server reason, n
   );
 }
 
+console.log('\n--- resolveJournalSyncPatientId: fail-closed journal patient identity ---');
+{
+  // The journal duplicate check — and therefore every "Apply to journal"
+  // write target — may only be keyed by the problem edit form's OWN
+  // patientId. A form that doesn't name its patient must yield null
+  // (refuse), never a guess from cached state or the current URL.
+  check(
+    resolveJournalSyncPatientId({ patientId: 'pat-123' }) === 'pat-123',
+    'edit-form patientId is used when present'
+  );
+  check(resolveJournalSyncPatientId({}) === null, 'form WITHOUT a patientId yields null — refuse, never guess');
+  check(resolveJournalSyncPatientId({ patientId: '' }) === null, 'empty-string patientId yields null');
+  check(resolveJournalSyncPatientId({ patientId: null }) === null, 'null patientId yields null');
+  check(resolveJournalSyncPatientId(null) === null, 'missing prefill yields null');
+}
+
 console.log('\n--- v3.227.1 review-fix source locks (two-step confirm / retry survival / empty-string strip) ---');
 {
   const fs = require('fs');
@@ -2315,6 +2332,27 @@ console.log('\n--- v3.227.1 review-fix source locks (two-step confirm / retry su
       stripBody
     ),
     'the falsy || chain over cleaned values is gone'
+  );
+  // Stale-patient guard (v3.264.18): the journal duplicate check must never
+  // fall back to the last cached patient (_lastPatientId) or the current URL
+  // when the edit form doesn't name its patient — those can both name a
+  // DIFFERENT patient after an SPA navigation, handing "Apply to journal"
+  // wrong-patient entryIds to write to.
+  check(
+    !/journalPatientId = prefill\.patientId \|\|/.test(src),
+    'the journal patient fallback chain (prefill || _lastPatientId || URL) is gone'
+  );
+  check(
+    src.includes('var journalPatientId = resolveJournalSyncPatientId(prefill);'),
+    'the journal patient id comes from resolveJournalSyncPatientId(prefill) alone'
+  );
+  check(
+    src.includes('st.journalIdentityUnconfirmed = true;'),
+    'a form without a patient id sets the visible refusal flag instead of guessing'
+  );
+  check(
+    /if \(st\.journalIdentityUnconfirmed\) \{[\s\S]{0,800}Journal duplicate check skipped/.test(src),
+    'journalMatchesHtml renders the refusal visibly — silence would read as "no duplicates found"'
   );
 }
 
