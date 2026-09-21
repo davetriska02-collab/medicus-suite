@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.21] — 2026-09-21
+
+### Fixed — alert-library urine results no longer mark blood monitoring in date
+
+PR #447 added the audit-H4 `['urine','urinary']` test-level excludes to
+`rules/drug-rules.json`, but the alert library's own drug-monitoring entries
+(evaluated through the same substring matcher — always-on in pre-flight, and
+copied verbatim into custom rules when added from Sentinel options) still
+matched bare analyte names against any specimen. In `rules/alert-library.json`:
+`nice-lithium-monitoring`'s Calcium slot, `pincer-9`'s (metformin) U&E/eGFR
+slot with its bare `creatinine`, and `pincer-10`'s (loop diuretic) U&E slot
+with its bare `electrolytes` now carry the same exclude, so a urine calcium,
+urine creatinine/ACR, or urine-electrolytes result can no longer satisfy or
+headline the blood check. The lithium Calcium slot also gains the `ca2+` match
+term, bringing it into lock-step with `drug-rules.json` `lithium-maintenance`.
+Serum names and exact-SNOMED matches still count. A practice that already
+added these library entries as custom rules keeps its stored copy — re-add
+from the library (or edit the custom rule) to pick up the exclude.
+`test-matching-false-signals.js` pins all three library entries.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip
