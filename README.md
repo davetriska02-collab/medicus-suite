@@ -88,9 +88,15 @@ complete write list and its controls are in
 [`docs/CLINICAL-SAFETY-NOTICE.md`](docs/CLINICAL-SAFETY-NOTICE.md) §6.1;
 the frozen scope is in [`docs/INTENDED-PURPOSE.md`](docs/INTENDED-PURPOSE.md).
 
-There is no telemetry. By default the only external endpoint the extension
-contacts is `api.github.com` for update checks; no patient data is included
-in those requests.
+There is no telemetry. The daily update check calls `api.github.com` and
+sends no patient data. Other hosts the extension can contact, depending on
+settings, include `api.nhs.uk` (Leaflets, below), a practice-configured
+`*.supabase.co` host (the Transactional API proxy, below, and task-presence
+heartbeats of a task id plus a staff label from
+`content-scripts/task-presence.js` when `presence-config.json` is present),
+`termbrowser.nhs.uk` (a SNOMED concept id during problem-description
+cleanup), `youtube-nocookie.com` (Note board playlist, off by default), and
+a StackChan device on the practice LAN (below, off by default).
 
 The **Leaflets** tab (NHS patient information) is a second, optional
 exception, and it is off by default. With no API key configured in

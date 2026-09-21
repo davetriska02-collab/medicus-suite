@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.13] — 2026-09-21
+
+### Living docs: the extension contacts more than GitHub
+
+`README.md` and `SECURITY.md` said the only external endpoint was
+`api.github.com`, and the security policy said the extension does not create
+or modify patient records. The code also calls `api.nhs.uk`,
+`termbrowser.nhs.uk`, a practice-configured `*.supabase.co` host (Transactional
+API proxy and task-presence heartbeats), `youtube-nocookie.com`, and an
+optional StackChan device, and it has the user-initiated Medicus writes listed
+in `docs/CLINICAL-SAFETY-NOTICE.md` §6.1. Those two living sentences now name
+the hosts. Signed CSN, DPIA, intended-purpose, and disclaimer text are
+unchanged.
+
 ## [v3.264.12] — 2026-09-21
 
 ### Fixed — scheduling and patient API caches kept every payload for the page lifetime
