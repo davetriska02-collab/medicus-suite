@@ -68,6 +68,12 @@ check(aStage && aStage(3)    === 'A2', 'aStage(3)    === A2  (3 is A2)');
 check(aStage && aStage(30)   === 'A2', 'aStage(30)   === A2  (≤30 → A2)');
 check(aStage && aStage(30.1) === 'A3', 'aStage(30.1) === A3  (>30 → A3)');
 
+console.log('\n--- aStage() below-limit comparator ("<X" lab reports) ---');
+check(aStage && aStage(3, true)    === 'A1', 'aStage(3, belowLimit)    === A1  (a "<3" report is normal → A1)');
+check(aStage && aStage(2.9, true)  === 'A1', 'aStage(2.9, belowLimit)  === A1  (below-limit under 3 stays A1)');
+check(aStage && aStage(10, true)   === 'A2', 'aStage(10, belowLimit)   === A2  (ambiguous "<10" keeps the limit stage)');
+check(aStage && aStage(30, true)   === 'A2', 'aStage(30, belowLimit)   === A2  ("<30" keeps A2 — A1 not proven)');
+
 // ── 2. trends.js — egfrBands / acrBands ──────────────────────────────────────
 
 // egfrBands is declared inside renderRenal() — extract it as a literal
