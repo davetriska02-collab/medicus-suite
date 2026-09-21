@@ -152,5 +152,56 @@ console.log('--- options diagnostics probe escapes url and error ---');
   );
 }
 
+console.log('--- triage options kind text is escaped ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/options.js'), 'utf8');
+  check(
+    !src.includes('${KIND_LABEL[rule.kind] || rule.kind}'),
+    'request-rule kind fallback is not interpolated raw'
+  );
+  check(
+    src.includes('${escHtml(KIND_LABEL[rule.kind] || rule.kind)}'),
+    'request-rule kind text goes through escHtml'
+  );
+  check(
+    !src.includes("${KIND_LABEL[cfg.kind] || cfg.kind || 'INFO'}"),
+    'system-chip kind fallback is not interpolated raw'
+  );
+  check(
+    src.includes("${escHtml(KIND_LABEL[cfg.kind] || cfg.kind || 'INFO')}"),
+    'system-chip kind text goes through escHtml'
+  );
+  check(
+    !src.includes('${KIND_LABEL[r.kind]}'),
+    'preview kind text is not an unescaped KIND_LABEL lookup'
+  );
+  check(
+    src.includes("${escHtml(KIND_LABEL[r.kind] || r.kind || '')}"),
+    'preview kind text goes through escHtml, including an unknown kind'
+  );
+  check(
+    !src.includes('tl-rule-kind-${_rrKind}'),
+    'result-rule kind class is not a raw interpolation'
+  );
+  check(
+    src.includes('${escHtml(KIND_LABEL[_rrKind] || _rrKind)}'),
+    'result-rule kind text goes through escHtml'
+  );
+}
+
+console.log('--- patient alerts current-patient NHS is escaped ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'side-panel/modules/patient-alerts/patient-alerts.js'), 'utf8');
+  check(!/NHS \$\{fmtNhs\(/.test(src), 'no NHS template interpolates fmtNhs without esc');
+  check(
+    /NHS \$\{esc\(fmtNhs\(_pc\.nhsNumber\)\)\}/.test(src),
+    'current-patient NHS line uses esc(fmtNhs(...))'
+  );
+  check(
+    /NHS \$\{esc\(fmtNhs\(p\.nhsNumber\)\)\}/.test(src),
+    'browse-list NHS line still uses esc(fmtNhs(...))'
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
