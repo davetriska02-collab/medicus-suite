@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.5] — 2026-09-21
+
+### Privileged HTML: escape imported triage `kind` and the current-patient NHS line
+
+A restored triage config is not limited to the four chip kinds. `sanitiseTriageConfigForImport` only checks that `rules` and `resultRules` are arrays, and a practice-profile replace writes `triagelens.config` through as stored. The Triage Lens options page (an extension-origin frame) then printed an unknown `kind` as HTML text: `KIND_LABEL[kind] || kind`. A `kind` containing a tag would run in the options page. Known kinds (`red` / `amber` / `green` / `info`) still render with the same labels. Result-rule badges were already forced to those three labels; their text and class now go through the same escaper so a later edit cannot reopen the sink.
+
+Patient Alerts already escaped the NHS number on the browse list. The current-patient card did not. `fmtNhs` returns the original string when it is not exactly 10 digits, and that string comes from the open record. It is now escaped the same way. No matching or storage change.
+
 ## [v3.264.4] — 2026-09-21
 
 ### SMOK002 still NO DATA live (post-v3.264.3): status-first terms, honest evidence truncation, journal naming hardening
