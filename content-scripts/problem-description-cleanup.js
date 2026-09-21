@@ -889,6 +889,24 @@
     return !!((st && looksOutdated(st.currentDescription)) || (st && st.retiredInfo) || (st && st.legacyReadCode));
   }
 
+  // Fail-closed patient identity for the journal duplicate check — and
+  // therefore for every downstream "Apply to journal" / text-sync write,
+  // since those only ever target entryIds found by that check. ONLY the
+  // problem's own edit-form prefill may name the patient: the form was
+  // fetched by problemId, so its patientId is authoritative for THIS
+  // problem. The old fallbacks (_lastPatientId — the module's last CACHED
+  // patient — then the current URL) could each name a DIFFERENT patient
+  // after an SPA navigation, and a journal fetched for the wrong patient
+  // hands applyToJournal wrong-patient entryIds to write to. The confirmed
+  // edit-problem prefill carries patientId
+  // (docs/learnings-problem-description-cleanup.md), so a missing one is an
+  // anomaly: refuse (null) rather than guess. The caller surfaces the
+  // refusal visibly (st.journalIdentityUnconfirmed → journalMatchesHtml)
+  // instead of silently showing no matches.
+  function resolveJournalSyncPatientId(prefill) {
+    return (prefill && prefill.patientId) || null;
+  }
+
   // ── Node test hook ────────────────────────────────────────────────────────────
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -944,6 +962,7 @@
       computeAdditionalInfoFindings,
       stripAllKnownGenericText,
       codeQualityConcernExists,
+      resolveJournalSyncPatientId,
     };
     return;
   }
@@ -1742,6 +1761,17 @@
   // Per-row write state lives in st.journalApply[entryId], not the
   // problem-level st.saving/st.saved (see rowState's own comment on why).
   function journalMatchesHtml(problemId, st) {
+    // The journal duplicate check was REFUSED because the edit form did not
+    // name its patient (see resolveJournalSyncPatientId) — say so, visibly.
+    // Silence here would read as "no duplicates found", which is a
+    // different, wrong claim.
+    if (st.journalIdentityUnconfirmed) {
+      return (
+        '<div class="ms-pdc-journal-matches-section">' +
+        '<div class="ms-pdc-journal-matches-warning">⚠ Journal duplicate check skipped — this problem’s edit form did not identify its patient, so no journal entry can be safely matched or synced. Review the Journal tab manually if needed.</div>' +
+        '</div>'
+      );
+    }
     if (!st.journalMatches || !st.journalMatches.length) return '';
     var normalise = (window.MSProblemTextLinking && window.MSProblemTextLinking.normaliseText) || String;
     var currentNormalised = normalise(st.currentDescription);
@@ -2850,9 +2880,19 @@
       // rest of the panel, same discipline as the relationship check just
       // above.
       st.journalMatches = null;
+      st.journalIdentityUnconfirmed = false;
       try {
-        var journalPatientId = prefill.patientId || _lastPatientId || (getPatientInfo() || {}).patientId;
-        if (journalPatientId && window.MSJournalProblemMatching && window.MSProblemTextLinking) {
+        // Edit-form patientId ONLY — never the last cached patient or the
+        // current URL (see resolveJournalSyncPatientId's own comment). A
+        // null here means the check is refused outright: no journal fetch,
+        // no matches, so no "Apply to journal" button can ever target a
+        // possibly-wrong patient's entry — and the refusal is rendered
+        // visibly by journalMatchesHtml rather than passing as "no
+        // duplicates found".
+        var journalPatientId = resolveJournalSyncPatientId(prefill);
+        if (!journalPatientId) {
+          st.journalIdentityUnconfirmed = true;
+        } else if (window.MSJournalProblemMatching && window.MSProblemTextLinking) {
           var journalPayload = await apiFetch(
             '/clinical/data/patient-journal/overview/' + encodeURIComponent(journalPatientId)
           );
