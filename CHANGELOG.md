@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.6] — 2026-09-21
+
+### Frailty chip no longer fires on Fallopian, Fallot, or fallen arches
+
+The record/detail HUD frailty signature matched problem names with a raw substring, and the term `fall` is a prefix of **fallopian**, **Fallot**, and **fallen**. Amber fires at a single recent hit (`frailtyHitsAmber` is 1), so one of those problem names was enough to show the frailty chip. `fall` now matches only the whole words `fall`, `falls`, and `falling`. The other frailty terms are unchanged, including substring `falls` and `confusion` (so "confusional" still counts).
+
 ## [v3.264.5] — 2026-09-21
 
 ### Privileged HTML: escape imported triage `kind` and the current-patient NHS line
