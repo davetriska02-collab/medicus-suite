@@ -453,12 +453,32 @@ function sourceLineHtml() {
 // ── BP ─────────────────────────────────────────────────────────────────────────
 function buildBpModel(data) {
   const history = data.observationHistory || [];
-  const row = history.find((o) => BP_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
-
-  let pairs = (row?.history || [])
-    .map((h) => ({ date: h.date, bp: parseBp(h.rawValue) }))
-    .filter((p) => p.bp)
-    .reverse();
+  // Merge ALL BP-matching rows, not just the first hit. A patient can carry
+  // several rows whose names all match BP_NAMES — the synthesised
+  // "Blood pressure" row (paired sys/dia dashboard rows), display-term
+  // variants like "O/E - blood pressure reading", and journal-coded rows —
+  // and a first-hit find() silently dropped every reading outside whichever
+  // row came first (2026-09-21 live-consult miss: a same-day 119/86 under a
+  // second display name never rendered). Rows whose rawValues aren't
+  // "sys/dia" (e.g. the bare "Systolic blood pressure" row, which also
+  // substring-matches) contribute nothing because parseBp rejects them.
+  // Same-date collisions keep the FIRST row's reading — the synthesised
+  // "Blood pressure" row is ordered first by normaliseObservationHistory, so
+  // the dashboard stays authoritative.
+  const bpRows = history.filter((o) => BP_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
+  const seenDates = new Set();
+  let pairs = [];
+  bpRows.forEach((row) => {
+    (row.history || []).forEach((h) => {
+      const bp = parseBp(h.rawValue);
+      if (!bp || seenDates.has(h.date)) return;
+      seenDates.add(h.date);
+      pairs.push({ date: h.date, bp });
+    });
+  });
+  // Oldest-first, matching the previous single-row `.reverse()` of the
+  // newest-first history contract.
+  pairs.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   // Fallback: merge separate systolic/diastolic rows
   if (pairs.length === 0) {
