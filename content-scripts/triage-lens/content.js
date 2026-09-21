@@ -1369,6 +1369,19 @@
     'pressure sore', 'pressure ulcer', 'malnutrition', 'weight loss', 'sarcopenia'
   ];
 
+  // Amber frailty fires at a single hit (frailtyHitsAmber defaults to 1), and the
+  // matcher used to be a raw substring. "fall" is a prefix of fallopian, Fallot
+  // and fallen (fallen arches), so those problem names lit the chip. Match the
+  // fall-words we mean; every other term stays on the substring test (so
+  // "confusional" still hits "confusion").
+  function problemNameMatchesFrailtyTerm(name, term) {
+    const n = String(name || '').toLowerCase();
+    const t = String(term || '').toLowerCase();
+    if (!n || !t) return false;
+    if (t === 'fall') return /\b(?:fall|falls|falling)\b/.test(n);
+    return n.includes(t);
+  }
+
   const HIGH_RISK_DRUGS = [
     { match: /methotrexate/i, name: 'Methotrexate', monitoring: 'FBC/LFT/U&E q12wk' },
     { match: /lithium/i, name: 'Lithium', monitoring: 'Level + U&E + TFT q3mo' },
@@ -1466,7 +1479,7 @@
 
     // ---- RISK TILE ----
     const recentProblems = d.problems.filter(p => p.date && monthsAgo(p.date) !== null && monthsAgo(p.date) <= 18);
-    const frailtyHits = recentProblems.filter(p => FRAILTY_TERMS.some(t => p.name.toLowerCase().includes(t)));
+    const frailtyHits = recentProblems.filter(p => FRAILTY_TERMS.some(t => problemNameMatchesFrailtyTerm(p.name, t)));
     if (frailtyHits.length >= TH('frailtyHitsRed')) {
       sig.risk.level = bumpLevel(sig.risk.level, 'red');
       sig.risk.items.push({ severity: 'red', text: `Frailty signature: ${frailtyHits.length} recent symptoms`, detail: frailtyHits.map(h => h.name).join(', ') });
