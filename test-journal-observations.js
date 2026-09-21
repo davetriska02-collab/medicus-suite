@@ -111,6 +111,79 @@ console.log('\n--- parseJournalObservations: FLAT top-level observation items (l
   check(ex && ex.date === '2026-09-21', 'flat entry without its own observationDate falls back to the day-group date');
 }
 
+console.log('\n--- parseJournalObservations: generic-name promotion (v3.264.4 naming hardening) ---');
+{
+  // The rules engine matches observation NAMES only, so a flat item whose
+  // coded term lives in `value` under a generic wrapper name ("Journal
+  // observation") is invisible to every indicator (SMOK002 live NO DATA,
+  // 2026-09-21). The parser promotes the value to the name in that case.
+  const day = {
+    title: 'Mon 21 Sep 2026',
+    items: [
+      {
+        type: 'observation',
+        title: 'Journal observation',
+        data: { entryType: 'observation', value: 'Ex-smoker', observationDate: '21 Sep 2026' },
+      },
+      {
+        type: 'observation',
+        title: 'Journal observation',
+        data: { entryType: 'observation', value: '119/86', observationDate: '21 Sep 2026' },
+      },
+      {
+        type: 'observation',
+        data: { entryType: 'observation', type: 'Smoking status', value: 'Ex-smoker', observationDate: '21 Sep 2026' },
+      },
+    ],
+  };
+  const out = JO.parseJournalObservations({ patientJournalRecords: [day] }, { now: NOW });
+  const names = out.map((o) => o.name);
+  check(names.includes('Ex-smoker'), 'generic wrapper name + coded-term value → value promoted to name');
+  const promoted = out.find((o) => o.name === 'Ex-smoker');
+  check(
+    promoted && promoted.value === 'Ex-smoker' && promoted.date === '2026-09-21',
+    'promoted entry keeps value + date'
+  );
+  check(
+    names.includes('Journal observation'),
+    'generic name + bare numeric value (BP "119/86") is NOT promoted — a reading is not a name'
+  );
+  check(names.includes('Smoking status'), 'a real coded name is never overridden by the value');
+
+  // Nested path gets the same hardening.
+  const nested = {
+    title: 'Mon 21 Sep 2026',
+    items: [
+      {
+        type: 'encounter',
+        data: {
+          consultationTopics: [
+            {
+              headings: [
+                {
+                  entries: [
+                    {
+                      entryType: 'observation',
+                      type: 'Observation',
+                      value: 'Ex-smoker',
+                      observationDate: '21 Sep 2026',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  };
+  const nOut = JO.parseJournalObservations({ patientJournalRecords: [nested] }, { now: NOW });
+  check(
+    nOut.length === 1 && nOut[0].name === 'Ex-smoker',
+    'nested entry with generic "Observation" type also promotes the value'
+  );
+}
+
 console.log('\n--- parseJournalObservations: windowing + de-dupe ---');
 {
   const stale = {

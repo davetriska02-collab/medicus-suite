@@ -107,6 +107,26 @@
 
     var result = [];
 
+    // Generic wrapper names carry no coded meaning — Medicus labels a
+    // standalone flat item with a UI wrapper title when the coded term lives
+    // in `value` instead. The rules engine matches observation NAMES only
+    // (filterMatchingObservations), so an entry named "Journal observation"
+    // with value "Ex-smoker" is invisible to every indicator (the SMOK002
+    // live NO DATA report, 2026-09-21).
+    var GENERIC_NAME_RE = /^(?:journal\s+)?(?:observation|entry)s?$/i;
+
+    // Naming hardening: promote the coded term out of `value` when the
+    // resolved name is absent/generic and the value reads as a term (has
+    // letters — never a bare numeric/BP reading — and is short enough to be
+    // a coded display name, not free text).
+    function resolveName(name, value) {
+      var n = name == null ? '' : String(name).trim();
+      var v = typeof value === 'string' ? value.trim() : '';
+      var generic = !n || GENERIC_NAME_RE.test(n);
+      if (generic && v && v.length <= 80 && /[a-z]/i.test(v)) return v;
+      return n || null;
+    }
+
     function pushEntry(name, value, entryDate) {
       if (!name || !entryDate || entryDate < cutoff) return;
       var isoDate = entryDate.toISOString().split('T')[0];
@@ -134,7 +154,11 @@
           if (item.type === 'observation') {
             var fd = item.data || {};
             if (fd.entryType && fd.entryType !== 'observation') continue;
-            pushEntry(fd.type || item.title || null, fd.value, parseDisplayDate(fd.observationDate) || groupDate);
+            pushEntry(
+              resolveName(fd.type || item.title || null, fd.value),
+              fd.value,
+              parseDisplayDate(fd.observationDate) || groupDate
+            );
             continue;
           }
           // Nested consultation-coded entries (the original path).
@@ -149,7 +173,11 @@
                 // Skip entries missing a type name, or that aren't observations
                 // (e.g. medications, problems, notes).
                 if (!entry.type || entry.entryType !== 'observation') continue;
-                pushEntry(entry.type, entry.value, parseDisplayDate(entry.observationDate) || groupDate);
+                pushEntry(
+                  resolveName(entry.type, entry.value),
+                  entry.value,
+                  parseDisplayDate(entry.observationDate) || groupDate
+                );
               }
             }
           }

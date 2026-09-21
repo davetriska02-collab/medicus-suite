@@ -943,7 +943,12 @@
         facts.push({
           label: 'Observation',
           value: 'not found in record',
-          detail: `we looked for: ${(check.observation || []).slice(0, 4).join(', ')}`,
+          // Truncation must be VISIBLE (same convention as the drug-monitoring
+          // evidence path): without the ellipsis the panel asserts "we looked
+          // for: <first four>" as if that were the whole list, hiding the
+          // status terms a clinician actually expects (SMOK002 live report,
+          // 2026-09-21) — a lie by omission on a clinical evidence panel.
+          detail: `we looked for: ${(check.observation || []).slice(0, 4).join(', ')}${(check.observation || []).length > 4 ? '…' : ''}`,
         });
       }
       if (check.thresholdSystolic && check.thresholdDiastolic) {
@@ -970,7 +975,7 @@
       facts.push({
         label: 'Medication',
         value: ctx.matchedMed || 'not prescribed',
-        detail: `we looked for: ${(check.medicationMatch || []).slice(0, 4).join(', ')}`,
+        detail: `we looked for: ${(check.medicationMatch || []).slice(0, 4).join(', ')}${(check.medicationMatch || []).length > 4 ? '…' : ''}`,
       });
     } else if (check.kind === 'medication-all-of') {
       (ctx.allOfResults || []).forEach((g) => {

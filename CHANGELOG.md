@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.4] — 2026-09-21
+
+### SMOK002 still NO DATA live (post-v3.264.3): status-first terms, honest evidence truncation, journal naming hardening
+
+Live follow-up to v3.264.3 — SMOK002 still read **NO DATA** on an SMI patient with a freshly coded Ex-smoker, and the evidence panel claimed "we looked for: smoking status, tobacco use, smoking cessation, nicotine dependence" as if that were the whole list.
+
+**1. Evidence truncation is now visible.** `buildQofIndicatorEvidence`'s observation and medication "we looked for" lines did `slice(0, 4)` with NO ellipsis (unlike the drug-monitoring evidence path, which has one), so the panel asserted the first four terms were the entire search list — hiding the status terms (`ex-smoker`, `never smoked`, `current smoker`) that were already in every `qof-smok002-*` rule after the four process terms. A lie by omission on a clinical evidence panel; both lines now append `…` when truncated.
+
+**2. SMOK002 term lists are widened and reordered status-first** (all 9 register variants): `ex-smoker, never smoked, current smoker, smoker, non-smoker, never smoked tobacco, tobacco smoker, smoking tobacco, quit smoking` and THEN the process terms (`smoking status, tobacco use, smoking cessation, nicotine dependence`). Clinicians code SNOMED/EMIS **status** display names, so those lead the list — and lead the evidence preview. The bare `smoker` term also covers display-name variants (`Ex smoker` unhyphenated, `Former smoker`, `Cigarette smoker`). Because bare `smoker` would also match `Passive smoker` — exposure, NOT the patient's own status (the same distinction `shared/smoking-status.js` draws with `PASSIVE_RE`) — the rules gain `observationExclude: ["passive"]` so a lone passive-smoking entry can never mark the indicator achieved.
+
+**3. Journal→observation naming hardening.** A flat journal `observation` item whose coded term lives in `value` under a generic wrapper name (`"Journal observation"` / `"Observation"` / missing) produced an observation the rules engine can never match — it matches NAMES only. `parseJournalObservations` now promotes the value to the name when the resolved name is absent/generic and the value reads as a coded term (has letters, ≤ 80 chars — a bare `119/86` reading is never promoted). Applied to both the flat and nested paths; real coded names are never overridden.
+
+Tests: `test-qof-status-terms.js` grows to 51 checks (status-first ordering + passive exclude on all 9 variants, unhyphenated/`Never smoked tobacco`/`Non-smoker` matches, lone `Passive smoker` stays no_data, evidence detail carries the status terms + a visible ellipsis); `test-journal-observations.js` grows to 34 (generic-name promotion flat + nested, numeric values never promoted, coded names never overridden).
+
 ## [v3.264.3] — 2026-09-21
 
 ### Live-consult fixes: journal observations now ingest (BP, alcohol, smoking status)
