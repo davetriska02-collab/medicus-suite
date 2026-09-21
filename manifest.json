@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.264.2",
+  "version": "3.264.3",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -64,6 +64,7 @@
         "shared/event-ledger.js",
         "shared/txn-shadow-summary.js",
         "shared/smoking-status.js",
+        "shared/journal-observations.js",
         "content-scripts/sentinel.js",
         "content-scripts/referrals-discovery.js",
         "content-scripts/api-discovery.js",

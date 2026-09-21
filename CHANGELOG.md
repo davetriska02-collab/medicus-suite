@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.3] — 2026-09-21
+
+### Live-consult fixes: journal observations now ingest (BP, alcohol, smoking status)
+
+Three misses reported from a live consult, one root cause: observations coded straight into the journal never reached the suite's data path.
+
+**1. Standalone journal observations now ingest (the root cause).** The patient-journal overview payload carries observations coded OUTSIDE a consultation as flat top-level `observation` items (confirmed live 2026-07-02 — `docs/learnings-patient-journal-api.md` lists `observation` among the 11 top-level `item.type` values, 89 occurrences in the full-entry scan). `fetchJournalObservations` walked ONLY `encounter` items' nested `consultationTopics → headings → entries`, so a standalone "Journal Observation" — exactly what a clinician codes mid-consult (`Blood pressure 119/86`, `Teetotaller`, `Ex-smoker`) — was silently dropped, while the same reading coded inside an encounter (`O/E - blood pressure reading`) came through. Parsing now lives in a new pure, unit-tested `shared/journal-observations.js` (`parseJournalObservations`), which walks BOTH shapes; `content-scripts/sentinel.js` keeps only the fetch + fail-loud (audit H5) semantics.
+
+**2. Journal observations now reach `observationHistory` too (one ingest path).** The journal augment previously appended to `data.observations` only, so history consumers — Trends `buildBpModel`, Sentinel brief/passport BP lines, trend rules — could never see a journal-coded BP. `mergeJournalObsIntoHistory` (same new shared file) folds the journal entries into `data.observationHistory`: exact-name groups merge (same-date dashboard points stay authoritative), new groups append (a new `Blood pressure` group unshifts to the front, matching `normaliseObservationHistory`'s synthesised-row convention so first-hit consumers land on it).
+
+**3. Trends `buildBpModel` merges ALL BP-matching rows.** It used `history.find()` — first BP-matching row only — so readings under a second display name (`O/E - blood pressure reading`, or a journal-coded row) never rendered on the BP chart. It now collects pairs from every BP-matching row, de-duplicated by date (first row — the synthesised dashboard row — wins collisions), oldest-first as before. Bare `Systolic blood pressure` rows still contribute nothing (`parseBp` rejects non-pairs) and the sys/dia fallback pairing is unchanged.
+
+**4. MH007 recognises teetotal/non-drinker statuses.** A journal-coded `Teetotaller` is a valid alcohol-consumption record, but `qof-mh007`'s term list only matched consumption/AUDIT-C wordings — so the chip stayed **OVERDUE** on a stale "5 / day" from the previous QOF year even though the status had just been recoded. Added `teetotal`, `non-drinker`, `non drinker` to the rule's observation terms (`teetotal` also covers `Teetotaller`/`Teetotal`).
+
+**5. SMOK002 NO DATA** was the same ingestion gap — `ex-smoker` was already in its term list; fix 1 delivers the evidence. Pinned end-to-end in tests.
+
+Tests: `test-journal-observations.js` (29 checks — flat + nested parsing, windowing, de-dupe, history merge, sentinel/manifest wiring), `test-qof-status-terms.js` (15 — MH007 teetotaller clears the stale overdue, window semantics unchanged, SMOK002 journal ex-smoker achieves), `test-trends-bp-merge.js` (14 — multi-row merge, date de-dupe, single-row + fallback regressions, journal→history→chart end-to-end).
+
+Residual (not verifiable from static code): the flat observation item's `data` field names (`type`/`value`/`observationDate`) mirror the confirmed nested-entry shape but have not themselves been captured live — if a live flat item differs, the parser skips it defensively (never throws) and the nested path is unaffected. Pulse "mmHg" display in Medicus is host-app noise — ignored per report.
+
 ## [v3.264.2] — 2026-09-20
 
 ### CSO sign-off recorded: H-063–H-077 Accepted (ALARP), CSN txn-proxy trio signed, DPIA v1.3 signed

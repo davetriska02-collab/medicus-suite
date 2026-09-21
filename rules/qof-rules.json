@@ -1605,7 +1605,10 @@
           "alcohol intake",
           "alcohol units",
           "audit-c",
-          "audit c score"
+          "audit c score",
+          "teetotal",
+          "non-drinker",
+          "non drinker"
         ],
         "withinDays": 365
       },
@@ -1615,7 +1618,7 @@
       },
       "points": 3,
       "source": "QOF 26/27 MH007 (NICE IND82)",
-      "notes": "Alcohol is often questionnaire-coded (AUDIT-C) — validate the term list against real Medicus journal labels before enabling."
+      "notes": "Alcohol is often questionnaire-coded (AUDIT-C) — validate the term list against real Medicus journal labels before enabling. 2026-09-21 (live consult): a journal-coded 'Teetotaller' status is a valid alcohol-consumption record but matched none of the terms, so MH007 stayed OVERDUE on a stale units/day entry from the previous QOF year — added teetotal/non-drinker status terms ('teetotal' also covers 'Teetotaller'/'Teetotal')."
     },
     {
       "id": "qof-mh012",

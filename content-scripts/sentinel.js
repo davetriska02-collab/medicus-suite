@@ -268,19 +268,21 @@
     return `https://${siteCode}.api.${location.hostname}`;
   }
 
-  // Fetch encounter-coded observations from the patient journal overview endpoint.
+  // Fetch coded observations from the patient journal overview endpoint.
   // The investigation dashboard misses entries coded inside consultations (e.g. asthma annual
-  // review, smoking status, depression questionnaire scores). This function fills that gap
-  // for indicators like AST015 whose evidence lives exclusively in the journal.
+  // review, smoking status, depression questionnaire scores) AND standalone journal
+  // observations coded outside a consultation (BP "119/86", "Teetotaller", "Ex-smoker" —
+  // the 2026-09-21 live-consult gap). This function fills that gap for indicators like
+  // AST015/MH007/SMOK002 whose evidence lives exclusively in the journal.
+  //
+  // Parsing lives in shared/journal-observations.js (pure, unit-tested) — this
+  // function owns only the fetch + failure semantics.
   //
   // Returns an array of { name, value, date (ISO YYYY-MM-DD), source: 'journal' } objects,
   // filtered to the last 400 days and de-duplicated against existingObs by name+date.
   async function fetchJournalObservations(patientId, existingObs) {
     const apiOrigin = getMedicusApiOrigin();
     if (!apiOrigin || !patientId) return [];
-
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 400);
 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -297,68 +299,15 @@
       if (!resp.ok) throw new Error(`journal fetch HTTP ${resp.status}`);
       const d = await resp.json();
 
-      const monthIndex = {
-        Jan: 0,
-        Feb: 1,
-        Mar: 2,
-        Apr: 3,
-        May: 4,
-        Jun: 5,
-        Jul: 6,
-        Aug: 7,
-        Sep: 8,
-        Oct: 9,
-        Nov: 10,
-        Dec: 11,
-      };
-
-      // Parse "DD Mon YYYY" (entry.observationDate) or "DayName DD Mon YYYY" (record.title)
-      function parseDisplayDate(str) {
-        if (!str) return null;
-        const parts = str.trim().split(' ').filter(Boolean);
-        // "20 Apr 2026" → [20, Apr, 2026]  or  "Mon 11 May 2026" → [Mon, 11, May, 2026]
-        const dayStr = parts.length === 3 ? parts[0] : parts[1];
-        const monStr = parts.length === 3 ? parts[1] : parts[2];
-        const yearStr = parts.length === 3 ? parts[2] : parts[3];
-        if (!dayStr || !monStr || !yearStr) return null;
-        const mon = monthIndex[monStr];
-        if (mon === undefined) return null;
-        const d = new Date(parseInt(yearStr), mon, parseInt(dayStr));
-        return isNaN(d.getTime()) ? null : d;
+      // Shared pure parser — walks BOTH nested encounter entries and flat
+      // top-level observation items (see shared/journal-observations.js).
+      // Treated like a fetch failure when absent so the panel's
+      // journalAugmentFailed warning fires rather than a silent no_data.
+      const JO = window.JournalObservations;
+      if (!JO || typeof JO.parseJournalObservations !== 'function') {
+        throw new Error('journal parser unavailable');
       }
-
-      // Build a Set of "name|date" keys already present in the investigation dashboard
-      const existingKeys = new Set((existingObs || []).map((o) => `${(o.name || '').toLowerCase()}|${o.date || ''}`));
-
-      const result = [];
-      for (const record of d.patientJournalRecords || []) {
-        const groupDate = parseDisplayDate(record.title);
-        for (const item of record.items || []) {
-          // Only encounter items contain consultation-coded observations
-          if (item.type !== 'encounter') continue;
-          for (const topic of item.data?.consultationTopics || []) {
-            for (const heading of topic.headings || []) {
-              for (const entry of heading.entries || []) {
-                // Skip entries missing a type name, or entries that aren't observations (e.g. medications, problems).
-                if (!entry.type || entry.entryType !== 'observation') continue;
-                const entryDate = parseDisplayDate(entry.observationDate) || groupDate;
-                if (!entryDate || entryDate < cutoff) continue;
-                const isoDate = entryDate.toISOString().split('T')[0];
-                const nameKey = `${entry.type.toLowerCase()}|${isoDate}`;
-                if (existingKeys.has(nameKey)) continue; // already in investigation dashboard
-                existingKeys.add(nameKey); // de-dupe within journal results too
-                result.push({
-                  name: entry.type,
-                  value: typeof entry.value === 'string' ? entry.value : '',
-                  date: isoDate,
-                  source: 'journal',
-                });
-              }
-            }
-          }
-        }
-      }
-      return result;
+      return JO.parseJournalObservations(d, { existingObs, windowDays: 400 });
     } catch (e) {
       // Rethrow so callers can distinguish "journal unavailable" from "no
       // journal codes" (audit H5). evaluateAndPublish catches this and stamps
@@ -535,7 +484,21 @@
             try {
               const journalObs = await fetchJournalObservations(_patientId, data.observations || []);
               if (gen !== _evalGen) return; // navigation superseded us during the journal fetch
-              if (journalObs.length) data.observations = [...(data.observations || []), ...journalObs];
+              if (journalObs.length) {
+                data.observations = [...(data.observations || []), ...journalObs];
+                // One ingest path: fold the same journal entries into
+                // observationHistory too, so history consumers (Trends
+                // buildBpModel, brief/passport BP lines, trend rules) see a
+                // journal-coded BP/status instead of only the dashboard's
+                // series (2026-09-21 live-consult gap).
+                if (window.JournalObservations) {
+                  data.observationHistory = window.JournalObservations.mergeJournalObsIntoHistory(
+                    data.observationHistory || [],
+                    journalObs,
+                    window.SentinelNormalisers && window.SentinelNormalisers.parseObservationValue
+                  );
+                }
+              }
             } catch (journalErr) {
               // Journal augmentation is best-effort; never block the chip. Record
               // the failure so the side panel can surface a non-blocking warning —
