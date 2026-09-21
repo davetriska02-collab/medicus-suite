@@ -118,5 +118,69 @@ check(
   'a "Smoking status" observation also satisfies (name-based matching unchanged)'
 );
 
+console.log('\n--- SMOK002: widened, status-first term list (2026-09-21 live report, v3.264.4) ---');
+// Clinicians code STATUS terms (SNOMED/EMIS display names: Ex-smoker, Never
+// smoked, Current smoker…), not process terms — so the status terms must lead
+// the list. They also lead the evidence panel's "we looked for" preview
+// (first four terms), which is what the live report called "bang wrong".
+const allSmok002 = qof.rules.filter((r) => /^qof-smok002-/.test(r.id));
+check(allSmok002.length === 9, `all 9 SMOK002 register variants present (got ${allSmok002.length})`);
+allSmok002.forEach((r) => {
+  const terms = r.check.observation;
+  const firstFour = terms.slice(0, 4);
+  check(
+    firstFour.includes('ex-smoker') && firstFour.includes('never smoked') && firstFour.includes('current smoker'),
+    `${r.id}: status terms lead the list (first four: ${firstFour.join(', ')})`
+  );
+  check(
+    ['smoking status', 'tobacco use', 'smoking cessation', 'nicotine dependence'].every((t) => terms.includes(t)),
+    `${r.id}: process terms are kept`
+  );
+  check(
+    (r.check.observationExclude || []).includes('passive'),
+    `${r.id}: "passive" exclude guards the bare "smoker" term (Passive smoker ≠ patient status)`
+  );
+});
+
+check(
+  smokStatus([{ name: 'Ex smoker', value: '', date: '2026-09-21', source: 'journal' }]) === 'achieved',
+  'unhyphenated "Ex smoker" matches (bare "smoker" term covers display-name variants)'
+);
+check(
+  smokStatus([{ name: 'Never smoked tobacco', value: '', date: '2026-09-21' }]) === 'achieved',
+  '"Never smoked tobacco" matches'
+);
+check(smokStatus([{ name: 'Non-smoker', value: '', date: '2026-09-21' }]) === 'achieved', '"Non-smoker" matches');
+check(
+  smokStatus([{ name: 'Passive smoker', value: '', date: '2026-09-21' }]) === 'no_data',
+  'a lone "Passive smoker" entry does NOT satisfy — exposure is not the patient\'s own status'
+);
+
+console.log('\n--- SMOK002: evidence panel does not lie by omission ---');
+// The no-data evidence shows the first four terms; with 13 terms the
+// truncation must be VISIBLE (ellipsis) and the visible terms must be the
+// status terms clinicians expect — not only the four process terms.
+{
+  const chips = engine.evaluateQofIndicatorRule(
+    smok002,
+    {
+      medications: [],
+      observations: [],
+      problems: [{ label: chdReg.problemMatch[0] }],
+      patientContext: {},
+      _registerLookup: { CHD: chdReg },
+    },
+    NOW
+  );
+  const obsFact = ((chips[0] && chips[0].evidence && chips[0].evidence.facts) || []).find(
+    (f) => f.label === 'Observation'
+  );
+  check(!!obsFact, 'no-data chip carries an Observation evidence fact');
+  const detail = (obsFact && obsFact.detail) || '';
+  check(detail.includes('ex-smoker'), `evidence "we looked for" includes ex-smoker (got: ${detail})`);
+  check(detail.includes('never smoked'), 'evidence "we looked for" includes never smoked');
+  check(detail.includes('…'), 'evidence shows an ellipsis when the term list is truncated');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

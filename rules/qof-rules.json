@@ -2233,13 +2233,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2261,13 +2270,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2289,13 +2307,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2317,13 +2344,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2345,13 +2381,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2373,13 +2418,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2401,13 +2455,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2429,13 +2492,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
@@ -2457,13 +2529,22 @@
       "check": {
         "kind": "observation-recent",
         "observation": [
+          "ex-smoker",
+          "never smoked",
+          "current smoker",
+          "smoker",
+          "non-smoker",
+          "never smoked tobacco",
+          "tobacco smoker",
+          "smoking tobacco",
+          "quit smoking",
           "smoking status",
           "tobacco use",
           "smoking cessation",
-          "nicotine dependence",
-          "ex-smoker",
-          "never smoked",
-          "current smoker"
+          "nicotine dependence"
+        ],
+        "observationExclude": [
+          "passive"
         ],
         "withinDays": 365
       },
