@@ -660,6 +660,107 @@ if (runStartupFn) {
     'runStartupTask does not warn on a successful async function');
 }
 
+console.log('\n--- onInstalled / onStartup: handlers stay pending until every alarm task settles ---');
+
+// MV3 can suspend the service worker once its event handlers have settled.
+// chrome.alarms.create is async, so a startup handler that fires alarm tasks
+// without awaiting them can be cut short before the slots-poll,
+// request-monitor-poll or pp-check alarm exists. Behavioural lock: run both
+// listener bodies with stubbed startup tasks and prove the handler's promise
+// does not settle while any task is still pending — and that every task ran.
+{
+  const onInstalledBlock = src.match(/chrome\.runtime\.onInstalled\.addListener\(async \(\) => \{[\s\S]*?\n\}\);/);
+  const onStartupBlock = src.match(/chrome\.runtime\.onStartup\.addListener\(async \(\) => \{[\s\S]*?\n\}\);/);
+  check(!!onInstalledBlock, 'onInstalled listener block extracted (and is async)');
+  check(!!onStartupBlock, 'onStartup listener block extracted (and is async)');
+
+  const drain = () => new Promise(r => setTimeout(r, 5));
+
+  function buildStartupSandbox() {
+    const calls = [];
+    // One controllable gate per alarm-creating task; everything else resolves
+    // immediately. If the handler settles while any gate is open, the await
+    // chain is broken.
+    const gates = {};
+    const gated = (name) => () => {
+      calls.push(name);
+      return new Promise((resolve) => { gates[name] = resolve; });
+    };
+    const immediate = (name) => () => { calls.push(name); return Promise.resolve(); };
+    const sandbox = {
+      Promise,
+      console: { warn() {}, log() {} },
+      chrome: {
+        runtime: {
+          onInstalled: { addListener(fn) { sandbox._installed = fn; } },
+          onStartup: { addListener(fn) { sandbox._startup = fn; } },
+        },
+        storage: { local: { remove: async (key) => { calls.push('remove:' + key); } } },
+      },
+      startPolling: gated('startPolling'),
+      _schedulePpAlarm: gated('_schedulePpAlarm'),
+      initialiseRequestMonitor: gated('initialiseRequestMonitor'),
+      initialiseUpdateChecker: gated('initialiseUpdateChecker'),
+      runMigration: immediate('runMigration'),
+      migrateTriageLensConfig: immediate('migrateTriageLensConfig'),
+      initialiseTriage: immediate('initialiseTriage'),
+      pollRequestMonitor: immediate('pollRequestMonitor'),
+      applyPracticeProfile: immediate('applyPracticeProfile'),
+      calls,
+      gates,
+    };
+    return sandbox;
+  }
+
+  async function runHandlerSettlementCase(label, block, handlerKey, expectedGates) {
+    const sandbox = buildStartupSandbox();
+    vm.runInNewContext(runStartupFn[0] + '\n' + block, sandbox);
+    const handler = sandbox[handlerKey];
+    check(typeof handler === 'function', `${label} handler registered`);
+    if (typeof handler !== 'function') return;
+
+    let settled = false;
+    const done = handler().then(() => { settled = true; });
+    await drain();
+    check(!settled, `${label} handler is still pending while alarm tasks are pending`);
+    for (const name of expectedGates) {
+      check(sandbox.calls.includes(name), `${label} runs ${name}`);
+    }
+    // Release the gates one at a time — the handler must hold until the LAST one.
+    for (let i = 0; i < expectedGates.length; i++) {
+      const name = expectedGates[i];
+      check(typeof sandbox.gates[name] === 'function', `${label} ${name} gate is open`);
+      if (typeof sandbox.gates[name] === 'function') sandbox.gates[name]();
+      await drain();
+      const isLast = i === expectedGates.length - 1;
+      check(settled === isLast,
+        isLast
+          ? `${label} handler settles once every alarm task has settled`
+          : `${label} handler still pending after ${name} alone settles`);
+    }
+    await done;
+  }
+
+  await runHandlerSettlementCase('onInstalled', onInstalledBlock && onInstalledBlock[0], '_installed',
+    ['startPolling', 'initialiseRequestMonitor', 'initialiseUpdateChecker', '_schedulePpAlarm']);
+  await runHandlerSettlementCase('onStartup', onStartupBlock && onStartupBlock[0], '_startup',
+    ['startPolling', 'initialiseRequestMonitor', 'initialiseUpdateChecker', '_schedulePpAlarm']);
+
+  // onStartup must also still clear the stale popout id and apply the profile.
+  {
+    const sandbox = buildStartupSandbox();
+    vm.runInNewContext(runStartupFn[0] + '\n' + (onStartupBlock ? onStartupBlock[0] : ''), sandbox);
+    if (typeof sandbox._startup === 'function') {
+      const done = sandbox._startup();
+      await drain();
+      for (const g of Object.keys(sandbox.gates)) sandbox.gates[g]();
+      await done;
+      check(sandbox.calls.includes('remove:popout.windowId'), 'onStartup clears the stale popout window id');
+      check(sandbox.calls.includes('applyPracticeProfile'), 'onStartup applies the practice profile');
+    }
+  }
+}
+
 console.log('\n--- RM_CONFIG_KEYS allowlist: state keys are absent ----------------');
 
 // The comment in the source explains that state/notifMap/authError must NOT

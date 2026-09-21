@@ -845,10 +845,20 @@ async function _maybeShowUpdateNotification(version) {
 // Needed by _maybeShowUpdateNotification (matches suite.practiceProfile key in practice-profile.js)
 const META_KEY = 'suite.practiceProfile';
 
-// Start polling on install/startup
+// Start polling on install/startup.
+//
+// EVERY startup task's promise is awaited before the handler settles.
+// chrome.alarms.create is async, and an MV3 service worker can be suspended
+// once its event handlers have settled — a fire-and-forget alarm chain that
+// hasn't resolved by then can be cut short, silently dropping the slots-poll,
+// request-monitor-poll or pp-check alarm until the next install/startup.
+// Independent tasks still start immediately (concurrently); only the
+// migrate → initialiseTriage → applyPracticeProfile chain is ordered.
 chrome.runtime.onInstalled.addListener(async () => {
-  runStartupTask('startPolling', startPolling);
-  runStartupTask('runMigration', runMigration);
+  const startupTasks = [
+    runStartupTask('startPolling', startPolling),
+    runStartupTask('runMigration', runMigration),
+  ];
   // migrateTriageLensConfig + initialiseTriage must fully settle before
   // applyPracticeProfile runs: both eventually write 'triagelens.config', and on
   // a fresh install (nothing in that key yet) initialiseTriage does an
@@ -860,20 +870,25 @@ chrome.runtime.onInstalled.addListener(async () => {
   // after it.
   await runStartupTask('migrateTriageLensConfig', migrateTriageLensConfig);
   await runStartupTask('initialiseTriage', initialiseTriage);
-  runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
-  runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
-  runStartupTask('schedulePpAlarm', _schedulePpAlarm);
-  applyPracticeProfile();
+  startupTasks.push(
+    runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor())),
+    runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker),
+    runStartupTask('schedulePpAlarm', _schedulePpAlarm),
+    runStartupTask('applyPracticeProfile', applyPracticeProfile)
+  );
+  await Promise.all(startupTasks);
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  runStartupTask('startPolling', startPolling);
-  runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor()));
-  runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker);
-  runStartupTask('schedulePpAlarm', _schedulePpAlarm);
-  // Clear stale popout window ID on browser restart
-  chrome.storage.local.remove('popout.windowId');
-  applyPracticeProfile();
+chrome.runtime.onStartup.addListener(async () => {
+  await Promise.all([
+    runStartupTask('startPolling', startPolling),
+    runStartupTask('initialiseRequestMonitor', () => initialiseRequestMonitor().then(() => pollRequestMonitor())),
+    runStartupTask('initialiseUpdateChecker', initialiseUpdateChecker),
+    runStartupTask('schedulePpAlarm', _schedulePpAlarm),
+    // Clear stale popout window ID on browser restart
+    runStartupTask('clearStalePopoutId', () => chrome.storage.local.remove('popout.windowId')),
+    runStartupTask('applyPracticeProfile', applyPracticeProfile),
+  ]);
 });
 
 async function applyPracticeProfile() {
