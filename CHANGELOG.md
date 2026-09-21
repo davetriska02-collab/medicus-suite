@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.16] — 2026-09-21
+
+### Governance documents corrected to match the shipped code (DPIA, CSN, CSCR, disclaimer)
+
+Follow-up to v3.264.13, which corrected the *living* README/SECURITY sentences
+and deliberately left the governance documents alone. Four of them still
+claimed memory-only identity handling, unshipped reception booking, a
+no-writes/read-only architecture, and GitHub-only network egress — all
+overtaken by code. Corrected additively (signed text retained with dated
+pointers; dated correction addenda added; **no signature invented — every
+addendum is marked PENDING CSO/DPO sign-off**):
+
+- `docs/DPIA.md` (signed v1.3): new §2.3 correction addendum (v1.4 DRAFT) —
+  Patient Alerts persists patient name/NHS number/DOB per flagged patient
+  (90-day idle strip, excluded from backups since v3.264.1); full outbound-host
+  inventory replaces the "only outbound call is api.github.com" claim; the two
+  §2.1 "PLANNED (not yet shipped)" statements corrected — phase B (sensitive
+  pathways never draft-saved) shipped v3.200.0 and phase D (reception booking,
+  H-051) shipped v3.202.0, both 2026-07-28, before the v1.3 signature.
+- `docs/CLINICAL-SAFETY-NOTICE.md` (doc v3.84): new §5 item 9 enumerates every
+  non-Medicus host the extension can contact (`api.github.com`,
+  `termbrowser.nhs.uk`, opt-in `api.nhs.uk`, opt-in `*.supabase.co` ×2, opt-in
+  `www.youtube-nocookie.com`, opt-in StackChan LAN origin) — §5 previously
+  named only the GitHub check. PENDING CSO review; does not move
+  last_cso_review_version.
+- `docs/CLINICAL-SAFETY-CASE-REPORT.md` (unsigned v3.84.2 draft): correction
+  note — §3/§5 "read-only … writes nothing … only outbound call is GitHub"
+  corrected against CSN §6.1 (W1–W24) and the host inventory.
+- `docs/sentinel-DISCLAIMER.txt` (binding terms): v3.264.16 correction addendum
+  — §1 "writes nothing / sends nothing / stores no patient data persistently",
+  §7 data-handling absolutes, the superseded §3 frozen statement (now
+  INTENDED-PURPOSE v3.261.21), and the v3.159.0 leaflets claim all corrected;
+  users must be notified per §13/§15 once signed.
+- `docs/cso-review-ledger.json`: PENDING CSO REVIEW notes recorded for the CSN
+  v3.84 and DPIA v1.4 increments.
+
+No code change. Every corrected claim was verified against the code
+(`manifest.json` host_permissions; `shared/update-checker.js`;
+`service-worker.js` termbrowser relay; `shared/txn-transport.js` write-throw;
+`content-scripts/task-presence.js`; `shared/stackchan-bridge.js`;
+`side-panel/modules/patient-alerts/patient-alerts-core.js`;
+`shared/io/patient-alerts-io.js`; `side-panel/modules/reception/reception.js`).
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip

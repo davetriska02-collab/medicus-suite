@@ -2,7 +2,7 @@
 
 **Document reference:** MS-DPO-DPIA-001
 **Product version:** 3.211.0 (§2 employee-data / rota section and the associated §5 rows added at this version; §2 Reception module and its §5 rows at 3.199.1; the remainder was written at 3.84.2)
-**Document version:** 1.3 (SIGNED 2026-09-20 — Dr D. Triska, CSO / manufacturer DPO contact, GMC 6159481, in session; practice-side controls per §6 remain with each deploying practice as controller)
+**Document version:** 1.3 (SIGNED 2026-09-20 — Dr D. Triska, CSO / manufacturer DPO contact, GMC 6159481, in session; practice-side controls per §6 remain with each deploying practice as controller). **Correction addendum §2.3 drafted 2026-09-21 as document version 1.4 — DRAFT, PENDING DPO/CSO SIGN-OFF; no signature invented. The v1.3 signed text below is retained unaltered; dated correction pointers are added beside statements §2.3 corrects.**
 **Date:** 2026-06-14; Reception module section added 2026-07-28; rota / employee-data section added 2026-08-02 (v1.2); Transactional API proxy section added 2026-09-20 (v1.3 — optional UK-proxy read path); v1.3 signed 2026-09-20 (the document's first signature — versions 1.0–1.2 were never signed, and no earlier signature is invented)
 **Data controller:** The deploying GP practice (each practice is controller for
 its own patient data). Graysbrook Ltd is the software manufacturer.
@@ -44,7 +44,11 @@ all already visible to the authorised clinician in the source record.
 
 **Data flows / storage.**
 - Patient-identifiable context (name, NHS number, DOB) is held **in memory only**
-  and is **not persisted** (`SECURITY-AUDIT.md §5`).
+  and is **not persisted** (`SECURITY-AUDIT.md §5`). *(CORRECTION 2026-09-21 —
+  no longer accurate as an absolute: see §2.3 item 1. Patient Alerts has
+  persisted patient name / NHS number / DOB alongside each per-patient flag
+  since v3.175.0, and a small set of TTL-bounded local working copies also
+  exists. PENDING sign-off.)*
 - A minimised subset is held in `chrome.storage.local` (browser-local, on the
   clinician's workstation): the Request Monitor persists **initials only**;
   transient print/passport keys holding fuller data carry a 60-second TTL
@@ -52,6 +56,13 @@ all already visible to the authorised clinician in the source record.
 - **No external transmission of patient data, by default.** The only outbound
   network call in `session` mode is a version check to `api.github.com` carrying
   no patient data. The optional Transactional API path (§2.2) is the exception.
+  *(CORRECTION 2026-09-21 — the "only outbound network call" sentence is no
+  longer accurate: the shipped extension can contact the enumerated host set at
+  §2.3 item 2 (`api.github.com`, `api.nhs.uk`, `termbrowser.nhs.uk`,
+  `*.supabase.co`, `www.youtube-nocookie.com`, an optional user-granted
+  StackChan LAN origin). None of these carries patient-identifiable data; each
+  beyond the GitHub check is opt-in or, in one case
+  (`termbrowser.nhs.uk`), carries SNOMED concept IDs only. PENDING sign-off.)*
 - **Leaflets tab (optional, off by default).** With no API key configured, this
   tab searches a bundled local index and opens nhs.uk in a new browser tab —
   no new endpoint is contacted. If a user opts in by pasting an NHS Website
@@ -213,7 +224,12 @@ therefore bounded on every axis:
   `chrome.storage.local` at all. This is phase B of
   `docs/plans/RECEPTION-FEEDBACK-2026-07-28.md`; until it ships, the 4-hour TTL
   above is the only bound on that content and practices enabling a mental-health
-  pathway should be told so.
+  pathway should be told so. *(CORRECTION 2026-09-21 — phase B **shipped at
+  v3.200.0 on 2026-07-28**, before this document's v1.3 signature: `sensitive`
+  pathways are never draft-saved, never offered for restore, and any
+  pre-existing draft is cleared on entry
+  (`side-panel/modules/reception/reception.js`). See §2.3 item 3. PENDING
+  sign-off.)*
 
 **Shared front-desk workstation processing.** Unlike the clinical modules, the
 reception surface runs on a **workstation shared between staff across a shift**.
@@ -243,7 +259,84 @@ SMS/email to the patient. It introduces no new data category and no new
 recipient beyond the patient themselves; its risk is wrong-patient booking,
 assessed as a clinical-safety hazard (H-043 and the hazard entry required before
 that phase ships) rather than a data-protection one. This DPIA is to be revisited
-when it ships.
+when it ships. *(CORRECTION 2026-09-21 — phase D **shipped at v3.202.0 on
+2026-07-28**, before this document's v1.3 signature: reception in-panel
+appointment search + booking, under hazard **H-051** (signed ALARP at
+v3.202.1). The data-protection analysis in this paragraph was borne out —
+write into Medicus, no new data category, Medicus sends its own confirmation —
+but the "not shipped" and "to be revisited when it ships" statements were
+already false at signature. §2.3 item 3 is that revisit. PENDING sign-off.)*
+
+### 2.3 Correction addendum — 2026-09-21 (document version 1.4 — DRAFT, PENDING DPO/CSO SIGN-OFF)
+
+This addendum corrects three factual claims in the signed v1.3 text that no
+longer match — or at the moment of signature already did not match — the
+shipped code. Per the additive-honesty convention, the signed text above is
+retained unaltered with dated pointers; this section states the current facts,
+each verified against the code at product v3.264.16. **No signature is
+invented; this addendum is not in force until the DPO/CSO signs it.** It makes
+no new risk assessment and changes no lawful-basis analysis.
+
+**1. Patient identity IS persisted by one feature (correcting §2 "in memory
+only ... not persisted").** Patient Alerts (shipped v3.175.0) stores its
+per-patient flags in `chrome.storage.local` under `patientAlerts.byPatient`,
+keyed by patient UUID, and each entry carries the patient's **name, NHS number
+and DOB** as display metadata
+(`side-panel/modules/patient-alerts/patient-alerts-core.js`). Bounds already
+in the code: identity fields are stripped from any entry not updated for **90
+days** (`IDENTITY_IDLE_MS`, applied on every load via `stripIdleIdentity`), and
+since v3.264.1 `patientAlerts.byPatient` is **excluded from suite backups**
+(stripped on export, skipped on import — `shared/io/patient-alerts-io.js`), so
+a backup file cannot carry the identity list to another machine. In addition,
+the TTL-bounded local working copies enumerated in
+`docs/CLINICAL-SAFETY-NOTICE.md` §6 item 8 hold patient data transiently:
+print/passport payloads (60-second clear backstop), the reception capture
+draft (4-hour TTL, answers only), the last Sweep run (2 hours), and the
+duplicate-checker scan state (7 days). The Request Monitor initials-only claim
+is unchanged. The §5 risk row "Patient data at rest in `chrome.storage.local`"
+already covers this at-rest exposure class; its "identifiers in memory only"
+mitigation wording is corrected by this item to "identifiers persisted only by
+Patient Alerts (90-day idle strip, never backed up) and TTL-bounded working
+copies".
+
+**2. Live outbound-host inventory (correcting §2 "the only outbound network
+call").** The complete set of hosts the shipped extension can contact, from
+`manifest.json` `host_permissions` and the code:
+
+| Host | Trigger | Data carried |
+|---|---|---|
+| `*.medicus.health` / `*.api.england.medicus.health` | Default; the user's own authenticated Medicus session | Patient data the user is already authorised to see; the enumerated user-initiated writes (CSN §6.1, W1–W24) |
+| `api.github.com` (download links restricted to `github.com` / `*.githubusercontent.com`) | Default; daily release check (`shared/update-checker.js`) | No patient data |
+| `api.nhs.uk` | **Opt-in** (user pastes an NHS Website Content API key) — Leaflets | The selected condition/medicine name only; never a patient identifier |
+| `termbrowser.nhs.uk` | Default when the "Clean up code" widget checks SNOMED concept retirement (service-worker relay, host-locked — `service-worker.js`, added 2026-07-29) | SNOMED concept IDs only; never patient identifiers |
+| `*.supabase.co` | **Opt-in ×2**: (a) Transactional API proxy (§2.2 — read-only, `shared/txn-transport.js` throws on any write); (b) task-presence store (practice's **own** Supabase project, `content-scripts/task-presence.js`) | (a) patient reads per §2.2; (b) staff presence beats only — site, task UUID, staff id, initials/display label, timestamps; no patient identifiers |
+| `www.youtube-nocookie.com` | **Opt-in** — Note board playlist iframe (CSP `frame-src`) | Sanitised playlist id only |
+| User-granted LAN origin (`optional_host_permissions`) | **Opt-in** — StackChan desk robot (Options → StackChan; per-origin grant) | Severity-class commands only; `shared/stackchan-bridge.js` strips patient fields by blocklist |
+
+Link-outs (nhs.uk, NICE/CKS, qrisk.org, etc.) are ordinary user navigations in
+new tabs, not extension fetches; the task-presence "native" layer listens on
+the Medicus page's **own** Pusher websocket and opens no connection of its own;
+the in-app feedback channel composes a mailto and transmits nothing itself.
+
+**3. Reception phases B and D both shipped 2026-07-28 (correcting the two §2.1
+"PLANNED (not yet shipped)" statements, and discharging the §6 revisit
+trigger).** Phase B (`sensitive` pathways never draft-saved) shipped at
+v3.200.0; phase D (reception in-panel appointment search + booking) shipped at
+v3.202.0 under hazard H-051 (signed ALARP at v3.202.1). Both were live well
+before the v1.3 signature of 2026-09-20; the "PLANNED" wording was carried
+forward unrefreshed from the 2026-07-28 v1.1 draft. Consequences already
+stated in the signed text and not re-assessed here: the §5 row "highly
+sensitive pathways buffered like any other capture" records its own residual
+as "Med until phase B ships, then Low" — phase B has shipped, so that row's
+own stated post-ship residual (**Low**) applies, subject to sign-off of this
+addendum; and §6's "next scheduled revisit ... when phase D and phase B ship"
+is discharged by this addendum, which is that revisit.
+
+**Sign-off (addendum v1.4):**
+**DPO / accountable person:** _____________________ (Dr Dave Triska, CSO /
+manufacturer DPO contact, GMC 6159481) **Date:** ____________
+*(Wet-ink/in-session signature required; drafted by an automated agent, no
+signature invented.)*
 
 ## 3. Consultation
 
@@ -272,7 +365,9 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 - **Data minimisation:** patient identifiers in memory only; persisted data
   reduced to initials / TTL-bounded; no server-side storage; no analytics or
   telemetry. Minimisation is treated as a patient-safety property and is
-  regression-tested (F2 / TF1).
+  regression-tested (F2 / TF1). *(CORRECTION 2026-09-21 — see §2.3 item 1:
+  Patient Alerts persists identity per flagged patient, 90-day idle strip,
+  never backed up. PENDING sign-off.)*
 - **Access control:** runs only under the authenticated user's own Medicus
   session; no independent credential store; restricted to `*.medicus.health`.
 - **Retention:** browser-local only; cleared with the browser profile / on
@@ -326,12 +421,15 @@ Approved for the stated processing, subject to those practice-side controls.
 **DPO / accountable person:** Dr Dave Triska (CSO / manufacturer DPO contact, GMC 6159481) — signed in session, 2026-09-20 (document version 1.3, product v3.264.1; recorded per `docs/CSO-SIGNOFF-PACK-H063-H076.md` — "Reviews and signed")
 **Review:** at each minor/major release and on any change to data flows.
 **Next scheduled revisit:** when reception appointment booking (phase D) and the
-`sensitive`-pathway autosave exclusion (phase B) ship.
+`sensitive`-pathway autosave exclusion (phase B) ship. *(CORRECTION 2026-09-21 —
+both shipped 2026-07-28 (v3.202.0 / v3.200.0); the §2.3 correction addendum is
+that revisit and awaits sign-off.)*
 
 ## 7. Document history
 
 | Doc version | Date | Author | Status | Change |
 |---|---|---|---|---|
+| 1.4 | 2026-09-21 | Claude (drafted for DPO/CSO review) | DRAFT — PENDING sign-off | Correction addendum §2.3 (product v3.264.16): (1) corrected the §2 "identifiers in memory only / not persisted" claim — Patient Alerts (`patientAlerts.byPatient`, since v3.175.0) persists patient name/NHS number/DOB per flagged patient in `chrome.storage.local`, bounded by a 90-day idle identity strip and excluded from suite backups since v3.264.1; TTL-bounded working copies (print/passport 60 s, reception draft 4 h, Sweep run 2 h, duplicate-checker scan state 7 d) also enumerated. (2) Corrected the §2 "only outbound network call is api.github.com" claim with the full manifest/code host inventory (`api.nhs.uk`, `termbrowser.nhs.uk`, `*.supabase.co` ×2 paths, `www.youtube-nocookie.com`, optional StackChan LAN origin). (3) Corrected the two §2.1 "PLANNED (not yet shipped)" statements — phase B shipped v3.200.0 and phase D (reception booking, H-051) shipped v3.202.0, both on 2026-07-28, before the v1.3 signature; §6's revisit trigger discharged by this addendum. Signed v1.3 text retained unaltered with dated correction pointers. **No sign-off given. No signature invented.** |
 | 1.0 | 2026-06-14 | DT | DRAFT — pending sign-off | Initial DPIA at product v3.84.2. |
 | 1.2 | 2026-08-02 | Claude (drafted for DPO review) | DRAFT — pending sign-off | Rota / employee-data section (Article 9 staff health data; optional shared-drive replication). **No sign-off given.** |
 | 1.3 | 2026-09-20 | DT | SIGNED 2026-09-20 | **First signature on this document** (versions 1.0–1.2 were never signed). Signed: Dr D. Triska (CSO / manufacturer DPO contact, GMC 6159481), in session, 2026-09-20, alongside H-077 and CSN §6 items 1/8/9 — see `docs/CSO-SIGNOFF-PACK-H063-H076.md` and `docs/cso-review-ledger.json` (product v3.264.1). Approval is for the stated processing, subject to the practice-side controls named in §6 (each deploying practice remains controller; the txn-proxy path additionally needs a practice-side processing record / DPA with Graysbrook before it is enabled). Closes INTENDED-PURPOSE open action (ii). |
