@@ -73,6 +73,18 @@
     return isFinite(n) ? n : NaN;
   }
 
+  // Calendar day of a local Date. parseDisplayDate builds local midnight
+  // (`new Date(y, m, d)`). toISOString() then shifts that instant to UTC, so
+  // during British Summer Time every journal date is stored as the previous
+  // day — 21 Sep becomes 20 Sep, and a 1 Apr code lands in the previous QOF
+  // year. Dashboard dates are already YYYY-MM-DD, so the shift also breaks
+  // same-day de-dupe and draws a second trend point.
+  function localIsoDate(d) {
+    var m = d.getMonth() + 1;
+    var day = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+  }
+
   // parseJournalObservations(payload, opts) → [{ name, value, date, source: 'journal' }]
   //
   // payload: the raw /clinical/data/patient-journal/overview/{patientId} JSON.
@@ -129,7 +141,7 @@
 
     function pushEntry(name, value, entryDate) {
       if (!name || !entryDate || entryDate < cutoff) return;
-      var isoDate = entryDate.toISOString().split('T')[0];
+      var isoDate = localIsoDate(entryDate);
       var nameKey = String(name).toLowerCase() + '|' + isoDate;
       if (existingKeys[nameKey]) return; // already in the investigation dashboard
       existingKeys[nameKey] = true; // de-dupe within journal results too
