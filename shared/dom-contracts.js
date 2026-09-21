@@ -168,7 +168,15 @@
         'content-scripts/triage-lens/content.js:3641,3691 (decorateOneRow de-dupe guard; refreshQueueChips sweep)',
       pageMatch: /\/tasks\/[^/]+\/task-list/,
       anchor: '.ag-row',
-      target: ['.ch-queue-chips', '.ch-q-mon', '.ch-q-result', '.ch-q-pending', '.ch-q-repeat', '.ch-q-carry', '.ch-q-pulse'],
+      target: [
+        '.ch-queue-chips',
+        '.ch-q-mon',
+        '.ch-q-result',
+        '.ch-q-pending',
+        '.ch-q-repeat',
+        '.ch-q-carry',
+        '.ch-q-pulse',
+      ],
       legacy: [],
       runtime: true,
       mirrorOf: 'content.js',
@@ -294,11 +302,11 @@
     {
       id: 'quick-actions.internal-comment',
       description:
-        'The task overview\'s "Internal comment" <textarea> — the box the GP → reception quick-actions composer injects directly above (parent.insertBefore) and appends its composed sentence into. findCommentBox() scans visible textareas, prefers one whose aria-label/placeholder matches /comment/i, and otherwise falls back to one whose nearby preceding text matches /internal\\s*comment/i; textareas inside the widget itself or a dialog/modal are excluded.',
+        'The task overview\'s "Internal comment" <textarea> — the box the GP → reception quick-actions composer injects directly above (parent.insertBefore) and appends its composed sentence into. findCommentBox() scans visible textareas (excluding the widget itself and dialogs/modals) through three tiers, strongest signal first: aria-label/placeholder matching /internal\\s*comment/i, then nearby preceding "Internal comment" label text, then a generic /comment/i hint. A tier only wins with exactly ONE match — 2+ candidates in the winning tier is ambiguous and fails closed (null) rather than guessing (H-049: a wrong-field write is worse than no write).',
       feature: 'Quick-actions composer — host + write target',
       degradation:
-        'findCommentBox() returns null and the composer silently never appears (it is presence-gated by design), so the GP falls back to typing the reception instruction free-hand — no wrong write, but the feature is invisibly absent.',
-      source: 'content-scripts/reception-quick-actions.js:200-217 (findCommentBox)',
+        'findCommentBox() returns null and the composer silently never appears (it is presence-gated by design) — both when nothing matches and when the match is ambiguous — so the GP falls back to typing the reception instruction free-hand; if the widget is already open, the insert path shows a visible "not found" / "more than one comment box" error instead of writing into a guessed box. No wrong write, but the feature can be invisibly absent.',
+      source: 'content-scripts/reception-quick-actions.js (findCommentBox)',
       pageMatch:
         /\/([0-9a-f]{4,})\/tasks\/data\/([^/]+)\/overview\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
       anchor: 'h1, h2, h3, h4, h5, h6, strong, b, legend',

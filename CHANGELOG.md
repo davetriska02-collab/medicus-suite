@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.19] — 2026-09-21
+
+### Fixed — quick-actions comment-box discovery no longer guesses between candidates
+
+`findCommentBox()` in `content-scripts/reception-quick-actions.js` returned the FIRST visible textarea whose aria-label/placeholder contained `/comment/i` — with two plausible comment boxes on screen (or one weakly-hinted box next to the labelled one) the widget's clinical free-text sentence could land in the wrong field. H-049's premise is that a wrong-field write is worse than no write. Discovery now runs three tiers, strongest signal first — aria-label/placeholder naming "internal comment", then a nearby "Internal comment" sibling label, then the generic `/comment/i` hint — and a tier only wins with exactly ONE match. Two or more candidates in the winning tier is ambiguous and fails closed: no widget at inject time (the existing presence-gate degradation), and a visible "more than one comment box on screen — could not tell which is the Internal comment" error at insert time instead of a write into a guessed box. A `ch-debug` console.warn names the ambiguous tier for diagnosis. The `quick-actions.internal-comment` DOM-contract description is updated to match.
+
+Tests: `test-reception-comment-discovery.js` (new — vm-extracts the real discovery functions and drives them against fake textareas), `test-reception-quick-actions-ui.js` §5 (source-grep pins on the unique-match wiring).
+
+### Fixed — Patient Alerts: unusable `updatedAt` no longer retains patient identity forever
+
+`stripIdleIdentity()` in `side-panel/modules/patient-alerts/patient-alerts-core.js` read `Date.parse(entry.updatedAt || '') || 0` and then gated the identity strip on `updated &&` — so an entry whose `updatedAt` was missing or unparseable was never considered idle, and its name/NHS number/DOB stayed cached indefinitely. PHI hygiene now fails closed: an unknowable age counts as already expired and the identity is stripped on the next load. Within scope per triage: the alerts themselves are still NEVER deleted on a timer (H-042 — a clinician-recorded flag must not vanish); only the identity metadata is stripped.
+
+Tests: `test-patient-alerts-core.js` (missing and garbage `updatedAt` → identity stripped, alerts kept).
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip

@@ -225,9 +225,46 @@ const path = require('path');
     const stripped = stripIdleIdentity(idle, now, IDENTITY_IDLE_MS);
     check(stripped.changed === true, 'idle identity is rewritten');
     check(stripped.store[UUID_B].alerts.length === 1, 'idle alerts are NOT deleted');
-    check(stripped.store[UUID_B].patient.name === '' && stripped.store[UUID_B].patient.nhsNumber == null, 'idle name/NHS/DOB are stripped');
-    const empty = stripIdleIdentity({ [UUID_A]: { patient: { name: 'x' }, alerts: [], updatedAt: NOW } }, now, IDENTITY_IDLE_MS);
+    check(
+      stripped.store[UUID_B].patient.name === '' && stripped.store[UUID_B].patient.nhsNumber == null,
+      'idle name/NHS/DOB are stripped'
+    );
+    const empty = stripIdleIdentity(
+      { [UUID_A]: { patient: { name: 'x' }, alerts: [], updatedAt: NOW } },
+      now,
+      IDENTITY_IDLE_MS
+    );
     check(empty.changed === true && !empty.store[UUID_A], 'empty patient entries are dropped');
+
+    // Fail closed on unusable timestamps (v3.264.19): a missing or garbage
+    // updatedAt means the entry's age is unknowable, so the identity must be
+    // stripped NOW — not retained forever, which is what the old
+    // `Date.parse(...) || 0` + truthiness guard silently did. The alerts
+    // themselves must still survive (H-042 — never TTL-delete a flag).
+    const alertB = makeAlert({ label: 'Flag', severity: 'red' }, '2026-01-01T00:00:00.000Z');
+    const noStamp = {
+      [UUID_B]: { patient: { name: 'No Stamp', nhsNumber: '9434765911', dob: '1970-01-01' }, alerts: [alertB] },
+    };
+    const strippedNoStamp = stripIdleIdentity(noStamp, now, IDENTITY_IDLE_MS);
+    check(strippedNoStamp.changed === true, 'missing updatedAt: entry is rewritten');
+    check(
+      strippedNoStamp.store[UUID_B].patient.name === '' && strippedNoStamp.store[UUID_B].patient.nhsNumber == null,
+      'missing updatedAt: identity is stripped (fail closed)'
+    );
+    check(strippedNoStamp.store[UUID_B].alerts.length === 1, 'missing updatedAt: alerts are NOT deleted');
+    const garbageStamp = {
+      [UUID_B]: {
+        patient: { name: 'Bad Stamp', nhsNumber: '9434765911', dob: '1970-01-01' },
+        alerts: [alertB],
+        updatedAt: 'not-a-date',
+      },
+    };
+    const strippedGarbage = stripIdleIdentity(garbageStamp, now, IDENTITY_IDLE_MS);
+    check(
+      strippedGarbage.changed === true && strippedGarbage.store[UUID_B].patient.name === '',
+      'unparseable updatedAt: identity is stripped (fail closed)'
+    );
+    check(strippedGarbage.store[UUID_B].alerts.length === 1, 'unparseable updatedAt: alerts are NOT deleted');
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);
