@@ -247,24 +247,70 @@
     return promise;
   }
 
+  // Keep identical to shared/cache-bound.js boundMap. This file is a classic
+  // content script and cannot import that ES module. test-cache-bound.js fails
+  // if the two copies drift.
+  function boundMap(store, opts) {
+    const o = opts || {};
+    const now = typeof o.now === 'number' ? o.now : Date.now();
+    const ttlMs = o.ttlMs;
+    const maxEntries = o.maxEntries;
+    const timeKey = o.timeKey || 'at';
+    if (!store || typeof store.delete !== 'function') return store;
+
+    if (typeof ttlMs === 'number' && ttlMs >= 0) {
+      for (const [key, value] of store) {
+        const at = value && value[timeKey];
+        // Age >= ttl is a miss. Matches the previous `< ttl` freshness check.
+        if (typeof at !== 'number' || now - at >= ttlMs) store.delete(key);
+      }
+    }
+
+    if (typeof maxEntries === 'number' && maxEntries >= 0 && store.size > maxEntries) {
+      const ranked = [];
+      for (const [key, value] of store) {
+        const at = value && typeof value[timeKey] === 'number' ? value[timeKey] : 0;
+        ranked.push([at, key]);
+      }
+      ranked.sort((a, b) => a[0] - b[0]);
+      const excess = store.size - maxEntries;
+      for (let i = 0; i < excess; i++) store.delete(ranked[i][1]);
+    }
+    return store;
+  }
+
   // Resolve an encounter UUID to its patient UUID via the encounter overview endpoint.
   // Used when the page is on a consultation/encounter view where only the encounter
   // UUID appears in the URL. Cached separately from patient data because the mapping
   // is stable for the lifetime of the encounter.
   const ENCOUNTER_PATIENT_CACHE = new Map();
   const ENCOUNTER_PATIENT_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  // UUID-only. Same order of magnitude as content.js _taskPatientCache (400).
+  const ID_CACHE_MAX = 400;
+
+  function readIdCache(store, key, ttlMs) {
+    boundMap(store, { now: Date.now(), ttlMs, maxEntries: ID_CACHE_MAX, timeKey: 'at' });
+    const entry = store.get(key);
+    return entry ? entry.patientUuid : null;
+  }
+
+  function writeIdCache(store, key, patientUuid, ttlMs) {
+    const now = Date.now();
+    store.set(key, { at: now, patientUuid });
+    boundMap(store, { now, ttlMs, maxEntries: ID_CACHE_MAX, timeKey: 'at' });
+  }
 
   async function resolveEncounterToPatient(apiBase, encounterUuid) {
     if (!encounterUuid) return null;
     const k = `${apiBase}|${encounterUuid}`;
-    const entry = ENCOUNTER_PATIENT_CACHE.get(k);
-    if (entry && (Date.now() - entry.at) < ENCOUNTER_PATIENT_TTL_MS) return entry.patientUuid;
+    const hit = readIdCache(ENCOUNTER_PATIENT_CACHE, k, ENCOUNTER_PATIENT_TTL_MS);
+    if (hit) return hit;
     try {
       const data = await safeFetch(`${apiBase}/clinical/data/encounter/overview/${encounterUuid}`);
       const patientUuid = data?.patient?.id
         || data?.consultationTopics?.[0]?.patientId
         || null;
-      if (patientUuid) ENCOUNTER_PATIENT_CACHE.set(k, { at: Date.now(), patientUuid });
+      if (patientUuid) writeIdCache(ENCOUNTER_PATIENT_CACHE, k, patientUuid, ENCOUNTER_PATIENT_TTL_MS);
       return patientUuid;
     } catch (e) {
       return null;
@@ -282,8 +328,8 @@
   async function resolveTaskToPatient(apiBase, taskTypeSlug, taskUuid) {
     if (!taskTypeSlug || !taskUuid) return null;
     const k = `${apiBase}|${taskTypeSlug}|${taskUuid}`;
-    const entry = TASK_PATIENT_CACHE.get(k);
-    if (entry && (Date.now() - entry.at) < TASK_PATIENT_TTL_MS) return entry.patientUuid;
+    const hit = readIdCache(TASK_PATIENT_CACHE, k, TASK_PATIENT_TTL_MS);
+    if (hit) return hit;
     try {
       const data = await safeFetch(`${apiBase}/tasks/data/${taskTypeSlug}/overview/${taskUuid}`);
       const patientUuid = data?.data?.patient?.id
@@ -291,7 +337,7 @@
         || data?.patient?.id
         || data?.patientId
         || null;
-      if (patientUuid) TASK_PATIENT_CACHE.set(k, { at: Date.now(), patientUuid });
+      if (patientUuid) writeIdCache(TASK_PATIENT_CACHE, k, patientUuid, TASK_PATIENT_TTL_MS);
       return patientUuid;
     } catch (e) {
       return null;
@@ -302,6 +348,9 @@
 
   const CACHE = new Map();
   const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+  // Six endpoints per patient. 240 covers a 40-patient sweep inside the TTL
+  // without retaining every record opened earlier in the tab.
+  const PATIENT_CACHE_MAX = 240;
   const IN_FLIGHT = new Map(); // key -> Promise (dedup concurrent fetches)
 
   function cacheKey(apiBase, uuid, endpoint) {
@@ -309,18 +358,15 @@
   }
 
   function getCached(apiBase, uuid, endpoint) {
-    const k = cacheKey(apiBase, uuid, endpoint);
-    const entry = CACHE.get(k);
-    if (!entry) return null;
-    if (Date.now() - entry.at > CACHE_TTL_MS) {
-      CACHE.delete(k);
-      return null;
-    }
-    return entry.data;
+    boundMap(CACHE, { now: Date.now(), ttlMs: CACHE_TTL_MS, maxEntries: PATIENT_CACHE_MAX, timeKey: 'at' });
+    const entry = CACHE.get(cacheKey(apiBase, uuid, endpoint));
+    return entry ? entry.data : null;
   }
 
   function setCached(apiBase, uuid, endpoint, data) {
-    CACHE.set(cacheKey(apiBase, uuid, endpoint), { at: Date.now(), data });
+    const now = Date.now();
+    CACHE.set(cacheKey(apiBase, uuid, endpoint), { at: now, data });
+    boundMap(CACHE, { now, ttlMs: CACHE_TTL_MS, maxEntries: PATIENT_CACHE_MAX, timeKey: 'at' });
   }
 
   function clearCache() { CACHE.clear(); }
@@ -392,7 +438,8 @@
     fetchMedicationHistory,
     fetchAll,
     clearCache,
-    CACHE_TTL_MS
+    CACHE_TTL_MS,
+    boundMap
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
