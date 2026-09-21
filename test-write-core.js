@@ -109,7 +109,10 @@ console.log('--- diffFinaliseOutcome: parity with allergy-canvas cases ---');
 }
 
 console.log('--- assertUnmoved ---');
-check(assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://a.x', date: '2026-09-10' }), 'same book pin is unmoved');
+check(
+  assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://a.x', date: '2026-09-10' }),
+  'same book pin is unmoved'
+);
 check(
   !assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, { apiBase: 'https://a.x', date: '2026-09-11' }),
   'date change is moved'
@@ -124,6 +127,23 @@ check(
   'missing live date is moved (fail-closed)'
 );
 check(!assertUnmoved({ apiBase: 'https://a.x', date: '2026-09-10' }, {}), 'empty live is moved');
+check(!assertUnmoved({}, { apiBase: 'https://a.x', date: '2026-09-10' }), 'empty pin is moved (nothing was pinned)');
+check(
+  !assertUnmoved({ patientId: 'p1', taskUuid: 'task-a' }, { patientId: 'p1', taskUuid: 'task-b' }),
+  'same patient on a different task is moved'
+);
+check(
+  !assertUnmoved({ patientId: 'p1', appointmentId: 'appt-a' }, { patientId: 'p1', appointmentId: 'appt-b' }),
+  'same patient on a different appointment is moved'
+);
+check(
+  assertUnmoved(
+    { patientId: 'p1', taskUuid: 'task-a', appointmentId: 'appt-a' },
+    { patientId: 'p1', taskUuid: 'task-a', appointmentId: 'appt-a' }
+  ),
+  'matching task and appointment stay unmoved'
+);
+check(!assertUnmoved({ taskUuid: 'task-a' }, { patientId: 'p1' }), 'a pinned task with no live task uuid is moved');
 
 console.log('--- finaliseConfirmCopy: pinned strings ---');
 check(
@@ -210,10 +230,22 @@ console.log('--- finaliseConfirmCopy: never claims completion ---');
 console.log('--- pinIdentity / requireUnmoved / confirmLanded ---');
 {
   const pin = pinIdentity({ apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1', extra: 'drop' });
-  check(pin.apiBase === 'https://a.x' && pin.date === '2026-09-10' && pin.patientId === 'p1', 'pin keeps identity fields');
+  check(
+    pin.apiBase === 'https://a.x' && pin.date === '2026-09-10' && pin.patientId === 'p1',
+    'pin keeps identity fields'
+  );
+  const taskPin = pinIdentity({ patientId: 'p1', taskUuid: 'task-a', appointmentId: 'appt-a' });
+  check(taskPin.taskUuid === 'task-a' && taskPin.appointmentId === 'appt-a', 'pin keeps task and appointment ids');
+  check(
+    !recheckIdentity(taskPin, { patientId: 'p1', taskUuid: 'task-b', appointmentId: 'appt-a' }),
+    'recheck refuses a task change on the same patient'
+  );
   check(pin.extra === undefined, 'pin drops unknown fields');
   check(pinIdentity({ apiBase: '', date: '2026-09-10' }).apiBase === undefined, 'blank apiBase is omitted');
-  check(recheckIdentity(pin, { apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1' }) === true, 'recheck is assertUnmoved');
+  check(
+    recheckIdentity(pin, { apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1' }) === true,
+    'recheck is assertUnmoved'
+  );
   const ok = requireUnmoved(pin, { apiBase: 'https://a.x', date: '2026-09-10', patientId: 'p1' });
   check(ok.ok === true, 'requireUnmoved passes an unmoved pin');
   const moved = requireUnmoved(pin, { apiBase: 'https://a.x', date: '2026-09-11', patientId: 'p1' });
@@ -234,6 +266,17 @@ console.log('--- runConfirmedWrite ---');
     },
   });
   check(moved.ok === false && moved.moved === true && moved.outcome.written === 0, 'moved pin never writes');
+  let taskWrites = 0;
+  const taskMoved = await runConfirmedWrite({
+    pinned: pinIdentity({ patientId: 'p1', taskUuid: 'task-a' }),
+    live: { patientId: 'p1', taskUuid: 'task-b' },
+    wantIds: ['n1'],
+    write: function () {
+      taskWrites += 1;
+      return [{ id: 'n1' }];
+    },
+  });
+  check(taskMoved.ok === false && taskMoved.moved === true && taskWrites === 0, 'task change never writes');
   const partial = await runConfirmedWrite({
     pinned: pin,
     live: { apiBase: 'https://a.x', date: '2026-09-10' },
@@ -242,7 +285,10 @@ console.log('--- runConfirmedWrite ---');
       return Promise.resolve([{ id: 'a1' }]);
     },
   });
-  check(partial.ok === false && partial.moved === false && partial.outcome.written === 1 && partial.outcome.failed === 1, 'partial land is not success');
+  check(
+    partial.ok === false && partial.moved === false && partial.outcome.written === 1 && partial.outcome.failed === 1,
+    'partial land is not success'
+  );
   const all = await runConfirmedWrite({
     pinned: pin,
     live: { apiBase: 'https://a.x', date: '2026-09-10' },

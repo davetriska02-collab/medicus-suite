@@ -79,19 +79,26 @@
   // Confirm copy for a Finalise (or any write) outcome. Never claims
   // completion on a partial — canvases must not invent their own success
   // sentence.
-  // Book/site/patient pin: refuse a write if the live identity moved.
+  // Fields a write may pin. assertUnmoved compares every one that is present.
+  // appointmentId and taskUuid are identity, not decoration: a same-patient
+  // pin on a different appointment or task is a moved identity.
+  var IDENTITY_FIELDS = ['apiBase', 'date', 'patientId', 'appointmentId', 'taskUuid'];
+
+  // Refuse a write unless every pinned identity field is still the live one.
+  // A pin that names no identity field is not "unmoved" — nothing was pinned,
+  // so the write fails closed. A blank field is omitted (not a required match).
   function assertUnmoved(pinned, live) {
     if (!pinned || !live) return false;
-    if (pinned.apiBase) {
-      if (!live.apiBase || String(pinned.apiBase) !== String(live.apiBase)) return false;
+    var checked = 0;
+    for (var i = 0; i < IDENTITY_FIELDS.length; i++) {
+      var key = IDENTITY_FIELDS[i];
+      var pinnedValue = pinned[key];
+      if (pinnedValue == null || pinnedValue === '') continue;
+      checked += 1;
+      var liveValue = live[key];
+      if (liveValue == null || liveValue === '' || String(pinnedValue) !== String(liveValue)) return false;
     }
-    if (pinned.date) {
-      if (!live.date || String(pinned.date) !== String(live.date)) return false;
-    }
-    if (pinned.patientId) {
-      if (!live.patientId || String(pinned.patientId) !== String(live.patientId)) return false;
-    }
-    return true;
+    return checked > 0;
   }
 
   // Normalise the fields a write may pin. Empty strings are omitted so
@@ -99,7 +106,7 @@
   function pinIdentity(fields) {
     var src = fields && typeof fields === 'object' ? fields : {};
     var out = {};
-    ['apiBase', 'date', 'patientId', 'appointmentId', 'taskUuid'].forEach(function (k) {
+    IDENTITY_FIELDS.forEach(function (k) {
       if (src[k] != null && src[k] !== '') out[k] = String(src[k]);
     });
     return out;
