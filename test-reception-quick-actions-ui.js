@@ -78,6 +78,13 @@ check(/highlight\(submit\)/.test(src), "the card's Submit control is highlighted
 // Append-only write: the textarea is only ever assigned through appendToComment.
 check(/QA\.appendToComment\(ta\.value,/.test(src), 'the comment write goes through QA.appendToComment(ta.value, …)');
 
+// Insert requires a pinned task UUID. A missing pin must not fall through
+// into whatever comment box is now on screen.
+check(
+  /!info \|\| !s\.taskUuid \|\| info\.taskUuid !== s\.taskUuid/.test(src),
+  'insert refuses when the task pin is missing or different'
+);
+
 // The insert must not scroll-jack: focus() after an insert uses preventScroll.
 check(/ta\.focus\(\{ preventScroll: true \}\)/.test(src), 'post-insert focus() uses { preventScroll: true }');
 

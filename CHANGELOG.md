@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.8] — 2026-09-21
+
+### Write gates fail closed when the identity proof is missing
+
+Three checks that were supposed to stop a mutation from landing on the wrong record treated a missing proof as permission to continue.
+
+**1. Shared write kernel.** `assertUnmoved` compared apiBase, date and patientId, and ignored `appointmentId` and `taskUuid` even though `pinIdentity` stores both. A same-patient pin on a different appointment or task passed. A pin object with no identity fields also passed. Every pinned identity field is now compared, and a pin that names none of them refuses the write.
+
+**2. Transactional proxy.** `txn-transport` refused only when the caller set `isWrite`. A known write path (`create-note`, `create-observation`, `create-document`, `create-outbound-referral`, `create-encounter`, `mark-patient-as-arrived`) or a PUT/PATCH/DELETE sent with the flag omitted went out as a read, including the read retry loop. Those calls are now refused before any proxy request. Read POSTs (`find-patient`, `match-patient`, and the other non-mutating POSTs) are unchanged.
+
+**3. Reception quick-actions insert.** The task re-check skipped itself when no task UUID had been pinned, so Insert could append into the comment box of whatever task was on screen. Insert now requires the pinned UUID and refuses when it is missing or different.
+
 ## [v3.264.7] — 2026-09-21
 
 ### Urine specimens and bare "hr" no longer mark bloods or pulse as in date

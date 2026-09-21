@@ -18,6 +18,20 @@
   const RETRYABLE_STATUSES = new Set([502, 503, 504, 429]);
   const MAX_ATTEMPTS = 3;
 
+  // Transactional endpoints that mutate the record. The typed client sets
+  // isWrite on these, but the transport is the choke point — a caller that
+  // forgets the flag (or sends PUT/PATCH/DELETE) must still be refused
+  // before any proxy call, and must not fall through into the read retry loop.
+  const TXN_WRITE_PATH_RE =
+    /\/(?:create-note|create-observation|create-document|create-outbound-referral|create-encounter|mark-patient-as-arrived)(?:[/?#]|$)/;
+
+  function callIsTxnWrite(method, path, isWrite) {
+    if (isWrite) return true;
+    const verb = String(method || '').toUpperCase();
+    if (verb === 'PUT' || verb === 'PATCH' || verb === 'DELETE') return true;
+    return TXN_WRITE_PATH_RE.test(String(path || ''));
+  }
+
   // createProxyTransport({
   //   proxyUrl,             // e.g. https://<proj>.supabase.co/functions/v1
   //   getCallerCredential,  // async () => string (SECRET; SW-side)
@@ -51,10 +65,12 @@
       // "Data flow and egress") declares this path read-only for patient
       // data. That must be enforced here — the one choke point every proxy
       // call passes through — not merely asserted by the absence of a
-      // caller. A future feature wanting a transactional write needs a CSN
-      // §6.1 W-row and a deliberate removal of this refusal, which is
-      // regression-guarded by test-txn-modules.js.
-      if (isWrite) {
+      // caller. isWrite is necessary but not sufficient: a known write path
+      // or a mutating verb is refused even when the caller omits the flag,
+      // so the call cannot be retried as if it were a read. A future feature
+      // wanting a transactional write needs a CSN §6.1 W-row and a deliberate
+      // removal of this refusal, which is regression-guarded by test-txn-modules.js.
+      if (callIsTxnWrite(method, path, isWrite)) {
         const err = new Error('txn transport is read-only: write refused (intended-purpose data-flow boundary)');
         err.isWrite = true;
         err.refusedWrite = true;
