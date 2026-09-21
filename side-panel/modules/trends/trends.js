@@ -112,11 +112,62 @@ function gStage(e) {
   if (e >= 15) return 'G4';
   return 'G5';
 }
-function aStage(a) {
+function aStage(a, belowLimit) {
   if (a == null || !Number.isFinite(a)) return null;
-  if (a < 3) return 'A1';
+  // A lab "<X" report parses to the numeric limit X — the comparator is
+  // stripped by parseObservationValue (engine/normalisers.js) and survives
+  // only in rawValue. The true value is BELOW X, so "<3" (the standard
+  // below-detection ACR report, mg/mmol) is definitively A1, not A2. A limit
+  // above 3 (e.g. "<10") is ambiguous between A1 and A2 and keeps the stage
+  // of the limit itself — never claim a lower stage that isn't proven.
+  if (a < 3 || (belowLimit && a <= 3)) return 'A1';
   if (a <= 30) return 'A2';
   return 'A3';
+}
+
+// True when a raw result string carries a below-limit comparator ("<3",
+// "≤0.5"). The numeric `value` on history points has the comparator stripped,
+// so rawValue is the only place the direction survives.
+function isBelowLimit(rawValue) {
+  return /^\s*[<≤]/.test(String(rawValue == null ? '' : rawValue));
+}
+
+// Collect chart points from ALL rows matching `matches`, not just the first
+// name hit — the non-BP twin of buildBpModel's multi-row merge (a reading
+// recorded under a second display name was silently dropped by find()). Two
+// rules keep this a safe de-duplication rather than a re-match:
+//   - The FIRST matching row stays authoritative: it labels the series (unit)
+//     and wins same-date collisions. Dashboard rows precede journal-created
+//     groups in observationHistory, so the dashboard stays authoritative.
+//   - Extra rows fold in ONLY when their unit is IDENTICAL to the first
+//     row's. Merging across units (HbA1c mmol/mol + %, or a unit-less
+//     journal group) would draw one line across two scales — worse than
+//     dropping the row.
+// Points are returned oldest-first (the chart contract).
+function collectSeriesPoints(history, matches) {
+  const rows = (history || []).filter(matches);
+  if (!rows.length) return { row: null, pts: [] };
+  const first = rows[0];
+  const firstUnit = String(first.unit || '')
+    .trim()
+    .toLowerCase();
+  const seenDates = new Set();
+  const pts = [];
+  rows.forEach((row) => {
+    if (row !== first) {
+      const unit = String(row.unit || '')
+        .trim()
+        .toLowerCase();
+      if (!firstUnit || unit !== firstUnit) return;
+    }
+    (row.history || []).forEach((h) => {
+      if (!Number.isFinite(h.value) || seenDates.has(h.date)) return;
+      seenDates.add(h.date);
+      pts.push({ date: h.date, value: h.value, belowLimit: isBelowLimit(h.rawValue) });
+    });
+  });
+  pts.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  return { row: first, pts };
 }
 
 // ── Module state ───────────────────────────────────────────────────────────────
@@ -581,24 +632,23 @@ function renderBp(m) {
 function buildRenalModel(data) {
   const history = data.observationHistory || [];
 
-  const acrRow = history.find((o) => ACR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
-  const acrPts = (acrRow?.history || [])
-    .filter((h) => Number.isFinite(h.value))
-    .reverse()
-    .map((h) => ({ date: h.date, value: h.value }));
+  const acr = collectSeriesPoints(history, (o) => ACR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
+  const acrRow = acr.row;
+  const acrPts = acr.pts;
 
-  const egfrRow = history.find((o) => EGFR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
-  const egfrPts = (egfrRow?.history || [])
-    .filter((h) => Number.isFinite(h.value))
-    .reverse()
-    .map((h) => ({ date: h.date, value: h.value }));
+  const egfr = collectSeriesPoints(history, (o) => EGFR_NAMES.some((n) => (o.name || '').toLowerCase().includes(n)));
+  const egfrRow = egfr.row;
+  const egfrPts = egfr.pts;
 
-  const latestAcr = acrPts.length ? acrPts[acrPts.length - 1].value : null;
-  const prevAcr = acrPts.length > 1 ? acrPts[acrPts.length - 2].value : null;
+  const latestAcrPt = acrPts.length ? acrPts[acrPts.length - 1] : null;
+  const prevAcrPt = acrPts.length > 1 ? acrPts[acrPts.length - 2] : null;
+  const latestAcr = latestAcrPt ? latestAcrPt.value : null;
+  const prevAcr = prevAcrPt ? prevAcrPt.value : null;
   const latestEgfr = egfrPts.length ? egfrPts[egfrPts.length - 1].value : null;
 
   const gs = gStage(latestEgfr);
-  const as = aStage(latestAcr);
+  const as = aStage(latestAcr, latestAcrPt?.belowLimit);
+  const prevAs = prevAcrPt ? aStage(prevAcr, prevAcrPt.belowLimit) : null;
   const kdigoFreq = gs && as ? KDIGO[gs]?.[as] : null;
 
   const referralFlag = latestAcr != null && latestAcr >= 70;
@@ -606,8 +656,8 @@ function buildRenalModel(data) {
   const crossingFlag =
     prevAcr != null &&
     latestAcr != null &&
-    aStage(prevAcr) !== as &&
-    ['A1', 'A2', 'A3'].indexOf(as) > ['A1', 'A2', 'A3'].indexOf(aStage(prevAcr));
+    prevAs !== as &&
+    ['A1', 'A2', 'A3'].indexOf(as) > ['A1', 'A2', 'A3'].indexOf(prevAs);
 
   const acrSeries = [
     {
@@ -633,6 +683,7 @@ function buildRenalModel(data) {
     acrPts,
     egfrPts,
     latestAcr,
+    latestAcrBelow: !!latestAcrPt?.belowLimit,
     latestEgfr,
     gs,
     as,
@@ -692,7 +743,7 @@ function renderRenal(m) {
     <div class="acrt-head">
       ${
         rm.latestAcr != null
-          ? `<div class="acrt-val"><span class="acrt-num">${rm.latestAcr > 100 ? '>100' : rm.latestAcr.toFixed(1)}</span> <span class="acrt-unit">${esc(rm.acrUnit)} ACR</span> <span class="acrt-stage acrt-${rm.as?.toLowerCase()}">${esc(rm.as || '')}</span></div>`
+          ? `<div class="acrt-val"><span class="acrt-num">${rm.latestAcr > 100 ? '>100' : (rm.latestAcrBelow ? '&lt;' : '') + rm.latestAcr.toFixed(1)}</span> <span class="acrt-unit">${esc(rm.acrUnit)} ACR</span> <span class="acrt-stage acrt-${rm.as?.toLowerCase()}">${esc(rm.as || '')}</span></div>`
           : `<div class="acrt-val acrt-no-val">No ACR data</div>`
       }
       ${
@@ -960,15 +1011,10 @@ function renderDoac(m) {
 // ── Observations (HbA1c / Cholesterol / Weight) ────────────────────────────────
 function seriesFor(metric, data) {
   const history = data.observationHistory || [];
-  const row = history.find((o) => {
+  const { row, pts } = collectSeriesPoints(history, (o) => {
     const name = (o.name || '').toLowerCase();
     return metric.match.some((n) => name.includes(n)) && !metric.exclude.some((x) => name.includes(x));
   });
-  const pts = (row?.history || [])
-    .filter((h) => Number.isFinite(h.value))
-    .slice()
-    .reverse()
-    .map((h) => ({ date: h.date, value: h.value }));
   return { pts, unit: row?.unit || metric.unit };
 }
 
