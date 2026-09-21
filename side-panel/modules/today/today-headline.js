@@ -219,5 +219,62 @@ function capitalise(s) {
   return typeof s === 'string' && s.length ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
+// Gaps on a stored sweep.lastRun that block a clear reading. A batch that
+// stopped early, an appointment with no patient id, or a row that could not
+// be read was never evaluated — Sweep already says that absence is not a
+// clear result. Today must not say otherwise.
+function sweepRunGaps(lastRun) {
+  if (!lastRun || typeof lastRun !== 'object') {
+    return { checked: 0, remaining: 0, skipped: 0, unread: 0, bounded: false };
+  }
+  const results = Array.isArray(lastRun.results) ? lastRun.results : [];
+  const checked =
+    typeof lastRun.processedCount === 'number'
+      ? lastRun.processedCount
+      : typeof lastRun.totalCount === 'number'
+        ? lastRun.totalCount
+        : 0;
+  const total = typeof lastRun.totalCount === 'number' ? lastRun.totalCount : null;
+  const remaining = total != null && total > checked ? total - checked : 0;
+  const skippedListed = Array.isArray(lastRun.skippedEntries) ? lastRun.skippedEntries.length : 0;
+  const skippedCount =
+    typeof lastRun.missingUuidCount === 'number' && lastRun.missingUuidCount > 0 ? lastRun.missingUuidCount : 0;
+  const skipped = Math.max(skippedCount, skippedListed);
+  const unread = results.filter((r) => r && r.error).length;
+  return {
+    checked,
+    remaining,
+    skipped,
+    unread,
+    bounded: remaining > 0 || skipped > 0 || unread > 0,
+  };
+}
+
+// Zero action-needed rows, worded as what was checked. Names every gap.
+// Never claims the list is clear, finished, or that monitoring is complete.
+function sweepNoActionSentence({ checked = 0, remaining = 0, skipped = 0, unread = 0 } = {}) {
+  const n = typeof checked === 'number' && checked > 0 ? checked : 0;
+  const who = `${n} ${n === 1 ? 'patient' : 'patients'}`;
+  const gaps = [];
+  if (remaining > 0) gaps.push(`${remaining} not checked yet`);
+  if (skipped > 0) {
+    gaps.push(`${skipped} appointment${skipped === 1 ? '' : 's'} not identified, so not checked`);
+  }
+  if (unread > 0) gaps.push(`${unread} could not be read`);
+  const base = `No action-needed alerts among ${who} checked`;
+  return gaps.length ? `${base} — ${gaps.join('; ')}` : base;
+}
+
 // Exported for tests / reuse — not called internally beyond buildHeadline.
-export { waitingClause, demandClause, slotsClause, capacityClause, triageClause, sweepClause, pluralPatients, pluralRequests };
+export {
+  waitingClause,
+  demandClause,
+  slotsClause,
+  capacityClause,
+  triageClause,
+  sweepClause,
+  pluralPatients,
+  pluralRequests,
+  sweepRunGaps,
+  sweepNoActionSentence,
+};

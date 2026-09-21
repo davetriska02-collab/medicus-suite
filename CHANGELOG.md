@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.9] — 2026-09-21
+
+### Today: a partial sweep no longer reads as clear
+
+Recent Alerts painted **all clear ✓** in green whenever the morning sweep had zero action-needed rows — including when the run stopped early, skipped appointments it could not identify, or could not read a patient. The Sweep card used the same green treatment. Those gaps now stay neutral and name who was not checked. A finished run with nothing action-needed still says how many patients were checked, and does not say the list is clear. An empty alert log no longer turns green when that sweep found checks due.
+
 ## [v3.264.8] — 2026-09-21
 
 ### Write gates fail closed when the identity proof is missing
