@@ -17,6 +17,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const JO = require('./shared/journal-observations.js');
 
 let passed = 0,
@@ -235,6 +236,68 @@ console.log('\n--- parseJournalObservations: windowing + de-dupe ---');
     JO.parseJournalObservations({ patientJournalRecords: [{ items: [{ type: 'observation' }] }] }, { now: NOW })
       .length === 0,
     'flat item with no data is skipped, never throws'
+  );
+}
+
+console.log('\n--- parseJournalObservations: local calendar date under Europe/London (BST) ---');
+{
+  // CI runs in UTC, where local midnight and UTC midnight are the same day,
+  // so the shift is invisible. Re-run the parser with TZ=Europe/London:
+  // 21 Sep 2026 and 1 Apr 2026 are both BST; 15 Jan 2026 is GMT.
+  const script = `
+    const JO = require(${JSON.stringify(require.resolve('./shared/journal-observations.js'))});
+    const NOW = '2026-09-21T12:00:00Z';
+    function parse(title, item) {
+      return JO.parseJournalObservations(
+        { patientJournalRecords: [{ title, items: [item] }] },
+        { now: NOW }
+      );
+    }
+    function obs(type, value, observationDate) {
+      const data = { entryType: 'observation', type, value };
+      if (observationDate) data.observationDate = observationDate;
+      return { type: 'observation', data };
+    }
+    const sep = parse('Mon 21 Sep 2026', obs('Blood pressure', '119/86', '21 Sep 2026'));
+    if (!sep[0] || sep[0].date !== '2026-09-21') {
+      console.error('sep shifted to ' + (sep[0] && sep[0].date));
+      process.exit(1);
+    }
+    const apr = parse('Wed 01 Apr 2026', obs('Ex-smoker', '', '01 Apr 2026'));
+    if (!apr[0] || apr[0].date !== '2026-04-01') {
+      console.error('1 Apr shifted to ' + (apr[0] && apr[0].date));
+      process.exit(1);
+    }
+    const jan = parse('Thu 15 Jan 2026', obs('Ex-smoker', '', '15 Jan 2026'));
+    if (!jan[0] || jan[0].date !== '2026-01-15') {
+      console.error('15 Jan shifted to ' + (jan[0] && jan[0].date));
+      process.exit(1);
+    }
+    const fallback = parse('Mon 21 Sep 2026', obs('Teetotaller', ''));
+    if (!fallback[0] || fallback[0].date !== '2026-09-21') {
+      console.error('day-group date shifted to ' + (fallback[0] && fallback[0].date));
+      process.exit(1);
+    }
+    const dup = JO.parseJournalObservations(
+      { patientJournalRecords: [{ title: 'Mon 21 Sep 2026', items: [obs('Blood pressure', '119/86', '21 Sep 2026')] }] },
+      { now: NOW, existingObs: [{ name: 'Blood pressure', date: '2026-09-21' }] }
+    );
+    if (dup.some((o) => o.name === 'Blood pressure')) {
+      console.error('same-day dashboard row was not de-duped: ' + JSON.stringify(dup));
+      process.exit(1);
+    }
+  `;
+  const child = spawnSync(process.execPath, ['-e', script], {
+    env: { ...process.env, TZ: 'Europe/London' },
+    encoding: 'utf8',
+  });
+  if (child.status !== 0) {
+    const detail = `${child.stdout || ''}${child.stderr || ''}`.trim();
+    if (detail) console.error(detail);
+  }
+  check(
+    child.status === 0,
+    'Europe/London keeps 21 Sep, 1 Apr (QOF boundary), 15 Jan, the day-group date, and same-day de-dupe'
   );
 }
 

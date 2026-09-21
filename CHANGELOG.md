@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.10] — 2026-09-21
+
+### Journal observation dates stay on the calendar day (BST)
+
+`parseJournalObservations` turned `observationDate` / day-group titles into a local-midnight `Date`, then stored `toISOString().split('T')[0]`. In `Europe/London` during British Summer Time that midnight is 23:00 the previous day in UTC, so every journal observation was dated one day early. A 21 Sep BP was stored as 20 Sep (same-day dashboard de-dupe missed, Trends drew a second point) and a 1 Apr code — QOF year start, always inside BST — was stored as 31 Mar, the previous QOF year. Dates are now the local calendar day (`YYYY-MM-DD` from year/month/date), which matches the dashboard's date keys in both GMT and BST.
+
+Tests: `test-journal-observations.js` re-runs the parser under `TZ=Europe/London` for 21 Sep, the 1 Apr QOF boundary, a January GMT date, the day-group fallback, and same-day de-dupe.
+
 ## [v3.264.4] — 2026-09-21
 
 ### SMOK002 still NO DATA live (post-v3.264.3): status-first terms, honest evidence truncation, journal naming hardening
