@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.12] — 2026-09-21
+
+### Fixed — scheduling and patient API caches kept every payload for the page lifetime
+
+`shared/medicus-api.js` stored each scheduling overview for five minutes, but only deleted an entry when that same day was read again, and the map had no cap. `engine/api-client.js` did the same for patient endpoint JSON (60s) and for encounter/task→patient id maps (5 min): expiry was checked only for the key in hand, so every other patient's payload stayed in the tab heap. Reads and writes now drop expired siblings and cap what remains (scheduling 160, patient payloads 240, id maps 400). A miss refetches. Nothing is returned past the existing TTL, and a miss is not treated as an all-clear.
+
+Tests: `test-cache-bound.js`.
+
 ## [v3.264.11] — 2026-09-21
 
 ### Patient-data CI guard: large diffs and quoted paths no longer skip the NHS scan
