@@ -360,8 +360,10 @@ async function runTests() {
   check(noActionResult && /Smith, John/.test(noActionResult), 'buildAdminSummaryText: patient name in header');
 
   // NHS number fallback when no name
-  const nhsFallback = sentinelBuildAdminSummaryText && sentinelBuildAdminSummaryText([], { nhsNumber: '9876543210' });
-  check(nhsFallback && /NHS 9876543210/.test(nhsFallback), 'buildAdminSummaryText: NHS number fallback when no name');
+  // Checksum-invalid (valid check digit would be 0). The assertion still
+  // requires the supplied number to be echoed; only the check digit changed.
+  const nhsFallback = sentinelBuildAdminSummaryText && sentinelBuildAdminSummaryText([], { nhsNumber: '9876543211' });
+  check(nhsFallback && /NHS 9876543211/.test(nhsFallback), 'buildAdminSummaryText: NHS number fallback when no name');
 
   // Unknown patient
   const unknownResult = sentinelBuildAdminSummaryText && sentinelBuildAdminSummaryText([], null);
@@ -383,7 +385,7 @@ async function runTests() {
         },
         { type: 'qof-indicator', status: 'not_met', indicatorCode: 'CHD001', indicatorName: 'BP in CHD' },
       ],
-      { name: 'Jones, Alice', nhsNumber: '1111111111', dateOfBirth: '15-Mar-1955', age: '71', gender: 'Female' }
+      { name: 'Jones, Alice', nhsNumber: '1111111112', dateOfBirth: '15-Mar-1955', age: '71', gender: 'Female' }
     );
   check(
     withActions && withActions.startsWith('Appointments needed — Jones, Alice'),
