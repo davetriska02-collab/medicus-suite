@@ -37,7 +37,10 @@ const FIXTURE_MODEL = {
     ageYears: 78,
     sex: 'Female',
     dob: '1948-03-12',
-    nhsNumber: '9000000009',
+    // Checksum-invalid on purpose (Modulus-11 check digit would be 9) so the
+    // patient-data CI guard does not treat this synthetic fixture as an NHS
+    // number. Still 10 digits — the summary formatter only regroups 3-3-4.
+    nhsNumber: '9000000008',
     namedGP: 'Dr A. Patel',
     isDeceased: false,
     testPatient: false,

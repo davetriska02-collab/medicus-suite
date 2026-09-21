@@ -224,6 +224,7 @@
         {
           "name": "U&E / Sodium",
           "match": ["u&e", "urea and electrolytes", "renal profile", "sodium"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["1019331000000106"],
           "intervalDays": 182,
           "dueSoonDays": 21
@@ -243,7 +244,7 @@
         }
       ],
       "source": "BNF / MHRA / NICE CG137 / shared care",
-      "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception. 2026-08-18 (The Keeper): added UK brand Curatil PR (BNF carbamazepine medicinal forms) — a brand-only script previously never fired this rule.",
+      "notes": "FBC: haematological toxicity risk (aplastic anaemia, agranulocytosis — rare but serious; check at baseline, 4 weeks, 6 months, then 6-monthly). LFT: hepatotoxicity risk; check same schedule. U&E/Sodium: enzyme-induction can cause SIADH and hyponatraemia — sodium should be monitored 6-monthly; risk heightened in the elderly and on concurrent diuretics. Carbamazepine level: narrow therapeutic index (target typically 4–12 mg/L); useful if toxicity suspected, poor seizure control, or dose change. Lipid profile: CYP enzyme induction raises LDL and total cholesterol — annual check. For women of childbearing age, ensure adequate contraception (enzyme inducer reduces hormonal contraceptive efficacy) and consider folic acid supplementation (teratogenicity risk — neural tube defects); refer to specialist before conception. 2026-08-18 (The Keeper): added UK brand Curatil PR (BNF carbamazepine medicinal forms) — a brand-only script previously never fired this rule. Bare 'sodium' carries the audit-H4 exclude ['urine','urinary'] so a urine sodium cannot mark the serum check in date.",
       "sharedCare": true
     },
     {
@@ -281,13 +282,14 @@
         {
           "name": "Calcium",
           "match": ["calcium", "ca2+", "corrected calcium"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["390967006"],
           "intervalDays": 180,
           "dueSoonDays": 21
         }
       ],
       "source": "BNF / NICE CG185 / shared care",
-      "notes": "Level should be 12 hours post-dose. Take sample before next dose if compliance unclear.",
+      "notes": "Level should be 12 hours post-dose. Take sample before next dose if compliance unclear. Bare 'calcium' carries the audit-H4 exclude ['urine','urinary'] so a urine calcium cannot mark the serum calcium check in date.",
       "sharedCare": true
     },
     {
@@ -324,13 +326,14 @@
         {
           "name": "U&E / Creatinine",
           "match": ["u&e", "urea and electrolytes", "renal profile", "urea", "electrolytes", "creatinine"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["1019331000000106"],
           "intervalDays": 182,
           "dueSoonDays": 21
         }
       ],
       "source": "BNF / MHRA Drug Safety Update / NICE CG185 (amiodarone monitoring) / BSR shared care",
-      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness. CSO FLAG (drugs-002, 2026-07-25 Keeper, PLAUSIBLE/apply): U&E monitoring at 6-monthly intervals added per BNF/NICE CG185 (amiodarone can cause hypothyroidism-associated hyponatraemia and has occasional direct renal effects; 6-monthly U&E is standard shared-care practice). VERIFIER-A confirmed the clinical rationale from BNF and shared-care protocol summaries; primary-source PDF 403 this run. CSO to review this addition before next PR merge — if local shared-care protocol omits U&E, notes can be updated to reflect that.",
+      "notes": "Pulmonary toxicity is the principal monitoring concern. Patient should report new cough or breathlessness. CSO FLAG (drugs-002, 2026-07-25 Keeper, PLAUSIBLE/apply): U&E monitoring at 6-monthly intervals added per BNF/NICE CG185 (amiodarone can cause hypothyroidism-associated hyponatraemia and has occasional direct renal effects; 6-monthly U&E is standard shared-care practice). VERIFIER-A confirmed the clinical rationale from BNF and shared-care protocol summaries; primary-source PDF 403 this run. CSO to review this addition before next PR merge — if local shared-care protocol omits U&E, notes can be updated to reflect that. Bare 'urea'/'creatinine'/'electrolytes' carry the audit-H4 exclude ['urine','urinary'] so a urine specimen cannot mark the blood U&E in date.",
       "sharedCare": false
     },
     {
@@ -1245,13 +1248,14 @@
         {
           "name": "U&E (serum potassium + eGFR)",
           "match": ["u&e", "urea and electrolytes", "renal profile", "potassium", "egfr"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["1019331000000106"],
           "intervalDays": 120,
           "dueSoonDays": 21
         }
       ],
       "source": "BNF / NICE TA877 (finerenone for CKD in T2DM, 2023) / finerenone SmPC (Kerendia, Bayer) / MHRA",
-      "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia — serum potassium and eGFR at baseline, at 4 weeks after initiation, and then every 4 months (120d) during maintenance. Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) — finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11: BNF/NICE TA877 corroborated; primary SmPC PDF 403 this run.",
+      "notes": "Finerenone (Kerendia) is a non-steroidal mineralocorticoid receptor antagonist licensed for CKD in T2DM (NICE TA877). Primary monitoring concern is hyperkalaemia — serum potassium and eGFR at baseline, at 4 weeks after initiation, and then every 4 months (120d) during maintenance. Withhold if serum K+ >5.5 mmol/L before starting; restart only when K+ <5.0 mmol/L. Reduce or withhold if eGFR falls to <25 mL/min/1.73m² or K+ consistently >5.5 mmol/L. Contraindicated with strong CYP3A4 inhibitors (itraconazole, ketoconazole, clarithromycin, ritonavir). Dispensing-practice note: ensure patients receive branded Kerendia (not generic preparations of spironolactone etc.) — finerenone is structurally distinct from spironolactone and eplerenone. Added 2026-07-11: BNF/NICE TA877 corroborated; primary SmPC PDF 403 this run. Bare 'potassium' carries the audit-H4 exclude ['urine','urinary'] so a urine potassium cannot mark the serum check in date.",
       "sharedCare": false
     },
     {
@@ -1338,6 +1342,7 @@
         {
           "name": "U&E",
           "match": ["u&e", "urea and electrolytes", "renal profile", "creatinine"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["1019331000000106"],
           "intervalDays": 56,
           "dueSoonDays": 14
@@ -1358,7 +1363,7 @@
         }
       ],
       "source": "BNF ciclosporin — Monitoring of patient parameters (systemic use). 2026-09-18 (The Keeper, drug-013).",
-      "notes": "BNF systemic ciclosporin: monitor LFT, serum potassium, magnesium, lipids, BP and creatinine. In RA, creatinine every 2 weeks for 3 months, monthly for 3 months, then every 4–8 weeks when stable. Sentinel encodes 56 days (8 weeks) — the BNF upper bound of that stable range — as the maintenance chip; CSO may tighten to 28 days via Options if local shared care prefers the 4-weekly end. Intensified initiation monitoring is not enforced. Ophthalmic brands (Ikervis, Verkazia, Cequa, Vevizye) and any 'eye drop' string are excluded — they are topical dry-eye products and must not raise blood-test chips. Systemic brands: Neoral, Capimune, Capsorin, Deximune, Vanquoral, Sandimmun. Shared-care / specialist-initiated.",
+      "notes": "BNF systemic ciclosporin: monitor LFT, serum potassium, magnesium, lipids, BP and creatinine. In RA, creatinine every 2 weeks for 3 months, monthly for 3 months, then every 4–8 weeks when stable. Sentinel encodes 56 days (8 weeks) — the BNF upper bound of that stable range — as the maintenance chip; CSO may tighten to 28 days via Options if local shared care prefers the 4-weekly end. Intensified initiation monitoring is not enforced. Ophthalmic brands (Ikervis, Verkazia, Cequa, Vevizye) and any 'eye drop' string are excluded — they are topical dry-eye products and must not raise blood-test chips. Bare 'creatinine' carries the audit-H4 exclude ['urine','urinary'] so a urine creatinine or urine ACR cannot mark the serum U&E in date. Systemic brands: Neoral, Capimune, Capsorin, Deximune, Vanquoral, Sandimmun. Shared-care / specialist-initiated.",
       "sharedCare": true
     },
     {
@@ -1530,7 +1535,7 @@
         {
           "name": "U&E (sodium/potassium/renal)",
           "match": ["u&e", "urea and electrolytes", "renal profile", "sodium", "potassium"],
-          "exclude": ["urine"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["1019331000000106"],
           "intervalDays": 365,
           "dueSoonDays": 30
@@ -1544,7 +1549,7 @@
         }
       ],
       "source": "NICE CKS Hypertension (thiazide-like diuretics) / indapamide SmPC / NICE NG136 annual review",
-      "notes": "Sodium falls can be asymptomatic — CKS calls regular monitoring essential, more frequent in the elderly. Annual interval is a conservative synthesis of CKS 'regular intervals' + the NG136 annual review; no single-source interval exists. Combo brands (co-amilozide, co-tenidone etc.) carry hidden thiazide content. The bare 'sodium'/'potassium' observation terms carry the audit-H4 test-level exclude ['urine'] so a urine-specimen result (e.g. 'Urine sodium') can never satisfy or headline the blood U&E; exact-SNOMED matches bypass the exclude because the code is specimen-specific already. Post-initiation U&E at ~2-4 weeks fires only when startDateSource=medication-history (restored 2026-09-11 after the #403 withdrawal; CSO green-light). Added 2026-08-22 (The Keeper gap analysis, gap-drug-01).",
+      "notes": "Sodium falls can be asymptomatic — CKS calls regular monitoring essential, more frequent in the elderly. Annual interval is a conservative synthesis of CKS 'regular intervals' + the NG136 annual review; no single-source interval exists. Combo brands (co-amilozide, co-tenidone etc.) carry hidden thiazide content. The bare 'sodium'/'potassium' observation terms carry the audit-H4 test-level exclude ['urine','urinary'] so a urine-specimen result (e.g. 'Urine sodium' or 'Urinary sodium') can never satisfy or headline the blood U&E; exact-SNOMED matches bypass the exclude because the code is specimen-specific already. Post-initiation U&E at ~2-4 weeks fires only when startDateSource=medication-history (restored 2026-09-11 after the #403 withdrawal; CSO green-light). Added 2026-08-22 (The Keeper gap analysis, gap-drug-01).",
       "sharedCare": false
     },
     {
@@ -1589,7 +1594,7 @@
         {
           "name": "Calcium (before each 6-monthly dose)",
           "match": ["calcium", "corrected calcium", "adjusted calcium", "bone profile"],
-          "exclude": ["urine"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["390967006"],
           "intervalDays": 182,
           "dueSoonDays": 21
@@ -1597,14 +1602,14 @@
         {
           "name": "U&E / eGFR",
           "match": ["u&e", "urea and electrolytes", "renal profile", "egfr", "creatinine"],
-          "exclude": ["urine"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["1019331000000106"],
           "intervalDays": 365,
           "dueSoonDays": 30
         }
       ],
       "source": "MHRA DSU Sept 2014 (fatal hypocalcaemia) / Prolia SmPC / SPS biosimilar brand set (Nov 2025–Apr 2026)",
-      "notes": "Hypocalcaemia risk rises steeply with renal impairment. The 182-day calcium chip also proxies on-time dosing — delayed denosumab causes rebound vertebral fractures. Xgeva 120mg (oncology, 4-weekly) is secondary-care administered: specialist schedule prevails, chip is a backstop. Denosumab must now be prescribed BY BRAND (SPS): keep this brand list current every Keeper run. Calcium and creatinine observation terms carry the audit-H4 test-level exclude ['urine'] so urine-specimen results never satisfy the blood tests; calcium matching runs against observations only, so 'calcium channel blocker' medication text cannot hit it. Added 2026-08-22 (The Keeper gap analysis, gap-drug-02).",
+      "notes": "Hypocalcaemia risk rises steeply with renal impairment. The 182-day calcium chip also proxies on-time dosing — delayed denosumab causes rebound vertebral fractures. Xgeva 120mg (oncology, 4-weekly) is secondary-care administered: specialist schedule prevails, chip is a backstop. Denosumab must now be prescribed BY BRAND (SPS): keep this brand list current every Keeper run. Calcium and creatinine observation terms carry the audit-H4 test-level exclude ['urine','urinary'] so urine-specimen results never satisfy the blood tests; calcium matching runs against observations only, so 'calcium channel blocker' medication text cannot hit it. Added 2026-08-22 (The Keeper gap analysis, gap-drug-02).",
       "sharedCare": true
     },
     {
@@ -1789,13 +1794,14 @@
         {
           "name": "U&E / eGFR",
           "match": ["urea", "electrolytes", "egfr", "creatinine", "renal function", "u&e"],
+          "exclude": ["urine", "urinary"],
           "snomed": ["166717003", "80274001"],
           "intervalDays": 365,
           "dueSoonDays": 30
         }
       ],
       "source": "BNF Digoxin monograph (monitoring: U&E/eGFR at least annually; dose reduction required if eGFR <30 per STOPP v3 B1). 2026-08-01 (The Keeper, alert-C005 RED): gap identified by direct code inspection — no digoxin monitoring rule existed in drug-rules.json; stopp-start.js encodes the STOPP v3 B1 eGFR<30 dose-criterion (fail-closed when eGFR unknown) but provides no proactive annual monitoring chip. Lanoxin confirmed only UK-licensed brand (dm+d/BNF).",
-      "notes": "DISABLED PENDING CSO ACTIVATION (enabled:false). The Keeper identified this gap on 2026-08-01 (alert-C005, RED): digoxin is a high-risk drug with a narrow therapeutic index and renal-dose sensitivity but had no entry in Sentinel drug-monitoring rules. Lanoxin (GlaxoSmithKline/Aspen) is the only UK-licensed brand (Lanoxin-PG is the 25 mcg/5 ml paediatric liquid, same brand family). Annual U&E/eGFR monitoring is required to detect toxicity risk from renal impairment. CSO must review the monitoring interval and confirm this rule is appropriate for this practice before enabling. STOPP v3 B1 separately flags digoxin use when eGFR<30 — that criterion is in engine/stopp-start.js and fires independently of this rule.",
+      "notes": "DISABLED PENDING CSO ACTIVATION (enabled:false). The Keeper identified this gap on 2026-08-01 (alert-C005, RED): digoxin is a high-risk drug with a narrow therapeutic index and renal-dose sensitivity but had no entry in Sentinel drug-monitoring rules. Lanoxin (GlaxoSmithKline/Aspen) is the only UK-licensed brand (Lanoxin-PG is the 25 mcg/5 ml paediatric liquid, same brand family). Annual U&E/eGFR monitoring is required to detect toxicity risk from renal impairment. Bare 'urea'/'creatinine' carry the audit-H4 exclude ['urine','urinary'] so a urine specimen cannot mark the blood check in date when this rule is enabled. CSO must review the monitoring interval and confirm this rule is appropriate for this practice before enabling. STOPP v3 B1 separately flags digoxin use when eGFR<30 — that criterion is in engine/stopp-start.js and fires independently of this rule.",
       "sharedCare": false
     },
     {
