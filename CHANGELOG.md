@@ -16,6 +16,20 @@ Substring observation matching was treating the wrong result as the monitoring c
 
 Tests: `test-matching-false-signals.js` (urine vs serum on each rule, prothrombin vs HR) and `test-hf009-four-pillar.js` (DM037 urine creatinine / urine ACR stay 7/8; serum creatinine reaches 8/8).
 
+## [v3.264.6] — 2026-09-21
+
+### Frailty chip no longer fires on Fallopian, Fallot, or fallen arches
+
+The record/detail HUD frailty signature matched problem names with a raw substring, and the term `fall` is a prefix of **fallopian**, **Fallot**, and **fallen**. Amber fires at a single recent hit (`frailtyHitsAmber` is 1), so one of those problem names was enough to show the frailty chip. `fall` now matches only the whole words `fall`, `falls`, and `falling`. The other frailty terms are unchanged, including substring `falls` and `confusion` (so "confusional" still counts).
+
+## [v3.264.5] — 2026-09-21
+
+### Privileged HTML: escape imported triage `kind` and the current-patient NHS line
+
+A restored triage config is not limited to the four chip kinds. `sanitiseTriageConfigForImport` only checks that `rules` and `resultRules` are arrays, and a practice-profile replace writes `triagelens.config` through as stored. The Triage Lens options page (an extension-origin frame) then printed an unknown `kind` as HTML text: `KIND_LABEL[kind] || kind`. A `kind` containing a tag would run in the options page. Known kinds (`red` / `amber` / `green` / `info`) still render with the same labels. Result-rule badges were already forced to those three labels; their text and class now go through the same escaper so a later edit cannot reopen the sink.
+
+Patient Alerts already escaped the NHS number on the browse list. The current-patient card did not. `fmtNhs` returns the original string when it is not exactly 10 digits, and that string comes from the open record. It is now escaped the same way. No matching or storage change.
+
 ## [v3.264.4] — 2026-09-21
 
 ### SMOK002 still NO DATA live (post-v3.264.3): status-first terms, honest evidence truncation, journal naming hardening
@@ -14439,7 +14453,6 @@ submitted labels).
   existing installs; refreshed the defaults-config lock; updated
   `test-result-severity.js` for the new Hb threshold.
 
-
 ## [v3.99.0] — 2026-06-16
 
 ### Whole-suite Practice appraisal: the gap-to-9 fixes
@@ -18704,7 +18717,6 @@ Introduces the Condor tab — a new practice operational intelligence module.
 - `side-panel/modules/condor/condor.css` — full layout and component styles (card, pill, bar, SVG helpers)
 - `side-panel/panel.html` / `pop-out/pop-out.html` — Condor nav tab added
 - `side-panel/panel.js` / `pop-out/pop-out.js` — MODULES registry entries added
-
 
 ## [v3.34.0] — 2026-06-08
 
