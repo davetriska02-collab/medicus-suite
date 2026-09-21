@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.11] — 2026-09-21
+
+### Patient-data CI guard: large diffs and quoted paths no longer skip the NHS scan
+
+`scripts/check-no-patient-data.js` reads `git diff` through `execFileSync`, whose default stdout cap is 1 MiB. A larger patch threw `ENOBUFS`, and the empty catch treated that as an empty diff — the NHS-number scan was skipped and the job still printed clean. The guard now reads up to 64 MiB and, if the diff still cannot be read, fails closed.
+
+Quoted paths (`+++ "b/foo bar.js"`, git's C-quoting) were not parsed, so `curFile` stayed on the previous file. An allowlisted file earlier in the same diff (the guard's own test, a terminology JSON) exempted every added line of the quoted file. New-file headers also carry a trailing tab (`+++ b/path\t`); that tab was part of the path, so a newly added allowlisted file never matched `NHS_ADD_ALLOWLIST`. Unparsed `+++` lines are now scanned, and they never inherit an allowlist exemption. The tab is stripped before the allowlist check.
+
+Synthetic fixtures that are not terminology dumps no longer carry checksum-valid 10-digit numbers: `test-knowledge-utils.js` (shape-only PHI warning), `test-record-summary.js`, and `test-chip-instructions.js`. The assertions still require the same shape or the same echoed number. The allowlist was not widened.
+
 ## [v3.264.10] — 2026-09-21
 
 ### Journal observation dates stay on the calendar day (BST)
