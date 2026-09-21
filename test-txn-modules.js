@@ -115,6 +115,47 @@ test('txn-transport: REFUSES isWrite before any network call — the read-only b
   assert.equal(fetchCalls, 0, 'a refused write must never reach the network');
 });
 
+test('txn-transport: REFUSES known write paths and mutating verbs even when isWrite is omitted', async () => {
+  let fetchCalls = 0;
+  const transport = TxnTransport.createProxyTransport({
+    proxyUrl: 'https://proj.supabase.co/functions/v1',
+    getCallerCredential: async () => 'caller-key',
+    fetchFn: async () => {
+      fetchCalls++;
+      return { ok: true, text: async () => '{}' };
+    },
+  });
+  const refused = [
+    { method: 'POST', path: '/transactional-api/create-note', body: { patientId: 'p1' } },
+    { method: 'POST', path: '/transactional-api/create-observation', body: {}, isWrite: false },
+    {
+      method: 'POST',
+      path: '/transactional-api/mark-patient-as-arrived',
+      body: { appointmentId: 'a1' },
+      isWrite: false,
+    },
+    { method: 'PUT', path: '/transactional-api/patient/p1/demographics', body: {}, isWrite: false },
+    { method: 'PATCH', path: '/transactional-api/ping', isWrite: false },
+    { method: 'DELETE', path: '/transactional-api/ping', isWrite: false },
+  ];
+  for (const req of refused) {
+    await assert.rejects(
+      () => transport(req),
+      (e) => e.refusedWrite === true && e.isWrite === true && /read-only/.test(e.message)
+    );
+  }
+  assert.equal(fetchCalls, 0, 'a write path without isWrite must never reach the network');
+
+  const read = await transport({
+    method: 'POST',
+    path: '/transactional-api/find-patient',
+    body: { query: 'x' },
+    isWrite: false,
+  });
+  assert.deepEqual(read, {});
+  assert.equal(fetchCalls, 1, 'a non-mutating POST still reaches the proxy');
+});
+
 test('record-provider: session mode uses session client; hybrid falls back on txn read failure', async () => {
   const sessionOnly = createRecordProvider({
     mode: 'session',

@@ -16,7 +16,7 @@
 
 'use strict';
 
-import { buildHeadline } from './today-headline.js';
+import { buildHeadline, sweepRunGaps, sweepNoActionSentence } from './today-headline.js';
 import { hasEnabledRules, buildBreaches } from '../slots/slots-alert-core.js';
 import { isActionNeeded } from '../sweep/sweep-core.js';
 import { windowTaskList, ledgerSeriesForDay, demandBaseline, baselineLine } from '../submissions/submissions-core.js';
@@ -804,21 +804,22 @@ function buildSweepBody() {
     `;
   }
 
-  const { timeStr, actionNeeded, checked } = prov;
+  const { timeStr, actionNeeded, checked, gaps } = prov;
   const plural = checked === 1 ? 'patient' : 'patients';
   const alertWord = actionNeeded === 1 ? 'alert' : 'alerts';
-  // Single clear provenance line: when, how many checked, how many alerts.
-  const tone = actionNeeded > 0 ? 'today-sweep-result--action' : 'today-sweep-result--clear';
+  // Green only when every booked patient was checked and none needed action.
+  // A partial batch, an unidentified appointment, or an unread row stays neutral.
+  const tone = actionNeeded > 0 ? 'today-sweep-result--action' : gaps.bounded ? '' : 'today-sweep-result--clear';
 
   // Plain-English headline (GP panel feedback): a bare "N alerts" count reads
   // as a stat to skim past, not a thing to act on. Say it as a sentence so the
-  // action-needed fact carries its own weight. The 0 case stays neutral — it
-  // must never imply "all clear" beyond what was actually checked.
+  // action-needed fact carries its own weight. The 0 case names who was checked
+  // and any gap — it does not claim the list is clear.
   const actionVerb = actionNeeded === 1 ? 'has' : 'have';
   const headlineText =
     actionNeeded > 0
       ? `${actionNeeded} of ${checked} booked ${plural} ${actionVerb} checks due — open the sweep for names`
-      : `No action-needed alerts among ${checked} checked`;
+      : sweepNoActionSentence(gaps);
 
   return `
     <div class="today-sweep-summary">
@@ -834,7 +835,7 @@ function buildSweepBody() {
 
 // Derive the single provenance summary from sweep.lastRun, or null when no
 // sweep has run this session. Shared by the Sweep card and the Recent Alerts
-// empty state so "ran, all clear" can never be confused with "never ran".
+// empty state so a run that found nothing is not confused with one that never ran.
 function sweepProvenance() {
   const lastRun = _sweepData?.lastRun;
   if (!lastRun) return null;
@@ -844,9 +845,8 @@ function sweepProvenance() {
   const actionNeeded = results.filter(
     (r) => Array.isArray(r.chips) && r.chips.some((c) => isActionNeeded(c.status))
   ).length;
-  // Patients actually checked this run (fall back to total when offset absent).
-  const checked = typeof lastRun.processedCount === 'number' ? lastRun.processedCount : (lastRun.totalCount ?? 0);
-  return { timeStr, actionNeeded, checked, lastRun };
+  const gaps = sweepRunGaps(lastRun);
+  return { timeStr, actionNeeded, checked: gaps.checked, lastRun, gaps };
 }
 
 function buildNoCodeMsg() {
@@ -859,17 +859,18 @@ function buildNoCodeMsg() {
 function buildAlertsBody() {
   if (!_alertsData) return '<span class="today-loading">Loading…</span>';
   if (_alertsData.length === 0) {
-    // Back the "no alerts" claim with sweep provenance so a clinician can tell
-    // "ran, all clear" from "nothing has checked yet".
+    // Back an empty alert log with sweep provenance. A sweep that found nothing
+    // is not the same as a sweep that never ran, and a partial run is not a
+    // finished one. Green only when the sweep covered everyone it listed.
     const prov = sweepProvenance();
     if (prov && prov.actionNeeded === 0) {
-      const plural = prov.checked === 1 ? 'patient' : 'patients';
-      return `<span class="today-empty today-empty--green">No alerts — sweep ${esc(prov.timeStr)} checked ${prov.checked} ${plural}, all clear ✓</span>`;
+      const cls = prov.gaps.bounded ? 'today-empty' : 'today-empty today-empty--green';
+      return `<span class="${cls}">Sweep ${esc(prov.timeStr)} — ${esc(sweepNoActionSentence(prov.gaps))}</span>`;
     }
     if (!prov) {
       return '<span class="today-empty">No alerts logged · no sweep run yet today</span>';
     }
-    return '<span class="today-empty today-empty--green">No alerts logged today</span>';
+    return `<span class="today-empty">No alerts logged · sweep ${esc(prov.timeStr)} found ${prov.actionNeeded} with checks due</span>`;
   }
 
   // Decision C: sub-rag returns '' so label doubling is avoided;

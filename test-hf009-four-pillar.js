@@ -250,6 +250,40 @@ const ALL_8 = [
   assert(chips[0].status === 'no_data', 'DM037: 0/8 → no_data');
 }
 
+// Urine creatinine / urine ACR must not complete the blood eGFR/creatinine slot.
+{
+  const withoutEgfr = ALL_8.filter((o) => o.name !== 'eGFR');
+  const urineCr = engine.evaluateQofIndicatorRule(
+    dm037,
+    dm037Data([...withoutEgfr, recentObs('Urine creatinine')]),
+    NOW
+  );
+  assert(urineCr[0] && urineCr[0].status === 'not_met', 'DM037: urine creatinine does not complete the renal slot');
+  assert(
+    urineCr[0] && urineCr[0].valueText === '7/8 care processes',
+    `DM037: urine creatinine stays 7/8 (got: ${urineCr[0] && urineCr[0].valueText})`
+  );
+  const urineAcr = engine.evaluateQofIndicatorRule(
+    dm037,
+    dm037Data([...withoutEgfr, recentObs('Urine albumin:creatinine ratio')]),
+    NOW
+  );
+  assert(
+    urineAcr[0] && urineAcr[0].valueText === '7/8 care processes',
+    `DM037: urine ACR does not also complete eGFR (got: ${urineAcr[0] && urineAcr[0].valueText})`
+  );
+  const serumCr = engine.evaluateQofIndicatorRule(
+    dm037,
+    dm037Data([...withoutEgfr, recentObs('Serum creatinine')]),
+    NOW
+  );
+  assert(serumCr[0] && serumCr[0].status === 'achieved', 'DM037: serum creatinine still completes the renal slot');
+  assert(
+    serumCr[0] && serumCr[0].valueText === '8/8 care processes',
+    `DM037: serum creatinine → 8/8 (got: ${serumCr[0] && serumCr[0].valueText})`
+  );
+}
+
 // Observation dated before QOF year floor (before 1 Apr 2026) does NOT count.
 {
   // 7 in-window + 1 old → should be 7/8 not_met
