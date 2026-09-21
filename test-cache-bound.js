@@ -39,11 +39,13 @@ function extractFn(src) {
   return '';
 }
 
-function dedent(s) {
-  const lines = s.split('\n');
-  const indents = lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length);
-  const min = Math.min.apply(null, indents);
-  return lines.map((l) => (l.trim() ? l.slice(min) : '')).join('\n');
+function normalizeFn(fn) {
+  const lines = fn.split('\n');
+  const body = lines.slice(1, -1);
+  const indents = body.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length);
+  const min = indents.length ? Math.min.apply(null, indents) : 0;
+  const inner = body.map((l) => (l.trim() ? l.slice(min) : '')).join('\n');
+  return lines[0].trim() + '\n' + inner + '\n}';
 }
 
 function remember(bound, store, key, at, opts) {
@@ -74,7 +76,7 @@ function remember(bound, store, key, at, opts) {
   check(typeof boundMap === 'function', 'cache-bound.js exports boundMap');
   check(typeof apiClient.boundMap === 'function', 'api-client.js exports the same helper');
   check(
-    dedent(extractFn(cacheSrc)) === dedent(extractFn(clientSrc)),
+    normalizeFn(extractFn(cacheSrc)) === normalizeFn(extractFn(clientSrc)),
     'the classic-script copy of boundMap matches shared/cache-bound.js'
   );
 
