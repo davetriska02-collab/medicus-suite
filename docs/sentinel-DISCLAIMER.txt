@@ -339,6 +339,93 @@ End of disclaimer.
 ================================================================================
 
 
+--- v3.264.16 correction addendum (2026-09-21) — PENDING CSO / AUTHOR SIGN-OFF ---
+
+This addendum corrects statements in the body above and in earlier addenda that
+are false against the shipped code at v3.264.16. Per the additive-honesty
+convention the original text is retained unaltered; this addendum states the
+current facts, each verified against the code. Because this document is binding
+terms of use, a change to its substance requires users to be notified and to
+accept the revised terms (sections 13 and 15) — that notification is a human
+(CSO/author) action which this addendum does not perform. NO SIGNATURE IS
+INVENTED; this addendum awaits sign-off.
+
+1. SECTION 1 ("passive, read-only ... performs no action on any patient record
+   or any external system; writes nothing, sends nothing, submits nothing,
+   modifies nothing"). FALSE against current code. The software has a defined,
+   enumerated set of USER-INITIATED WRITE PATHS into Medicus — W1-W24 as of
+   v3.264.16: appointment booking (including a reception booking panel, hazard
+   H-051), general-task creation, inbound-document and normal-lab filing,
+   routine-prescription re-assignment, bulk task reassignment, contact /
+   allergy / problem-list / duplicate-entry tidying, and others — each listed
+   in full, with its trigger and controls, at docs/CLINICAL-SAFETY-NOTICE.md
+   SECTION 6.1 (CI-guarded by test-write-path-inventory.js). Every write is
+   triggered by a user on the record in front of them, confirmed at the point
+   of commit, and executed under the user's own Medicus session so Medicus's
+   validation, access control and audit trail apply. There is no automatic,
+   scheduled or background write. Medicus remains the system of record.
+
+2. SECTION 1 ("transmits no data outside the user's local browser") and
+   SECTION 7 ("No patient data is transmitted to any external service").
+   OUT OF DATE as absolutes. The shipped outbound host set (manifest
+   host_permissions + code) is: *.medicus.health / *.api.england.medicus.health
+   (the user's own authenticated session — reads and the section 6.1 writes);
+   api.github.com (daily patient-data-free version check); api.nhs.uk (opt-in
+   Leaflets API key — the selected condition/medicine name only);
+   termbrowser.nhs.uk (SNOMED concept-retirement checks via a host-locked
+   service-worker relay — SNOMED concept IDs only, never patient identifiers);
+   *.supabase.co (two OPT-IN paths: the read-only Medicus Transactional API
+   proxy, assessed and signed at DPIA section 2.2 / hazard H-077, and the
+   practice's own task-presence store carrying staff presence beats only —
+   site, task UUID, staff id/initials, timestamps); www.youtube-nocookie.com
+   (opt-in Note-board playlist iframe, sanitised playlist id only); and an
+   optional user-granted StackChan LAN origin (severity-class face commands
+   only, patient fields stripped by blocklist). In the DEFAULT configuration
+   no patient data leaves the browser; the sole patient-data egress path is
+   the opt-in Transactional API proxy, which a practice must deliberately
+   configure (DPIA section 2.2).
+
+3. SECTION 1 ("stores no patient data persistently") and SECTION 7 ("Settings
+   stored in chrome.storage.local contain no patient data"). FALSE as
+   absolutes. Patient Alerts (since v3.175.0) persists its per-patient flags
+   in chrome.storage.local keyed by patient UUID, with the patient's name,
+   NHS number and DOB as display metadata; identity fields are stripped after
+   90 days without update, and the store is excluded from suite backups (from
+   v3.264.1). Short-lived, TTL-bounded local working copies also exist by
+   design: print/passport payloads (60-second clear backstop), the reception
+   capture draft (4-hour TTL, answers only, never on sensitive pathways),
+   the last Sweep run (2 hours), and duplicate-checker scan state (7 days).
+   All are workstation-local; none is held on any server. See DPIA section
+   2.3 item 1 and CLINICAL-SAFETY-NOTICE section 6 item 8.
+
+4. SECTION 3 (frozen intended-purpose statement: "does not write to the
+   patient record, ... does not transmit any data outside the user's
+   browser"). SUPERSEDED. The statement reproduced at section 3 is the
+   v3.16.0 freeze (May 2026). It was superseded by the re-frozen statement of
+   v3.202.0 (signed 2026-07-28) and again by v3.261.21 (signed 2026-09-10),
+   both of which correct the no-write and zero-egress claims. The statement
+   in force is in docs/INTENDED-PURPOSE.md; section 3 above is retained as
+   the historical text this disclaimer originally bound to.
+
+5. v3.159.0 ADDENDUM (Leaflets: "the only network activity is the user's own
+   browser navigating to an nhs.uk page"). OUT OF DATE: since the optional
+   NHS Website Content API integration, a user who pastes an api.nhs.uk key
+   opts in to direct GET requests to api.nhs.uk carrying the selected
+   condition/medicine name only — never a patient identifier. With no key
+   configured, the original description stands.
+
+6. SECTION 7 ("Sentinel acts as neither a data controller nor a data
+   processor ... because no personal data is moved outside the rendering of
+   the existing Medicus session"). The reasoning clause is out of date. The
+   current controller/processor analysis is in docs/DPIA.md: the deploying
+   practice is controller; Graysbrook Ltd is processor for the opt-in
+   Transactional API proxy hop only (DPIA section 2.2, signed 2026-09-20).
+   This addendum does not itself alter roles; it corrects the stale premise.
+
+Sign-off (correction addendum): _____________________ (Dr Dave Triska,
+CSO / author, GMC 6159481)   Date: ____________
+
+
 --- v1.1.0 addendum ---
 
 Custom drug-monitoring rules authored through the built-in form builder remain within the stated intended purpose of this software. Custom rules use the same passive threshold-based display engine as the bundled rules: they re-display values already present in the patient record, indicate whether those values fall within the user-configured interval, and produce no clinical recommendation. The form builder does not expose arbitrary clinical decision logic. All constraints documented in the intended-purpose statement above apply without modification to custom-authored rules.

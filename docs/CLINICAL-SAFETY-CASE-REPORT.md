@@ -37,6 +37,45 @@ standard. Conformance is therefore claimed as *alignment*, not certification.
 > single source of truth) is recommended before the next external reliance on
 > this report.
 
+> **Correction note — added 2026-09-21 (product v3.264.16) — PENDING CSO
+> SIGN-OFF.** Two claims in the frozen v3.84.2 text below are false against the
+> shipped code and are corrected here additively (the frozen text is retained
+> with dated markers; nothing is silently rewritten):
+>
+> 1. **§3 "read-only ... writes nothing to the record" and §5 "Read-only /
+>    local-only by construction — cannot alter a record".** The product has a
+>    defined, enumerated set of **user-initiated write paths into Medicus** —
+>    W1–W24 as of v3.264.16, including appointment booking, task creation,
+>    document/lab filing, bulk task reassignment, contact/allergy/problem-list
+>    tidying — each listed with its trigger and controls at
+>    `docs/CLINICAL-SAFETY-NOTICE.md` **§6.1** (the living inventory,
+>    CI-guarded by `test-write-path-inventory.js`). None is automatic,
+>    scheduled or background; Medicus remains the system of record (CSN §6
+>    items 2–3, CSO-signed in part on 2026-09-20). "Read-only by construction"
+>    has not been true since the booking and task widgets shipped (the
+>    superseded intended-purpose statement records the same correction —
+>    `docs/INTENDED-PURPOSE.md`, re-frozen v3.261.21, signed 2026-09-10).
+> 2. **§3 "transmits no patient data outside the browser" and §5 "the only
+>    outbound call is a patient-data-free GitHub version check".** The shipped
+>    host set is wider (manifest `host_permissions` + code):
+>    `*.medicus.health` / `*.api.england.medicus.health` (the user's own
+>    session — reads and the §6.1 writes), `api.github.com` (daily version
+>    check), `api.nhs.uk` (opt-in Leaflets key; condition/medicine name only),
+>    `termbrowser.nhs.uk` (SNOMED concept-retirement checks via a host-locked
+>    service-worker relay; concept IDs only), `*.supabase.co` (two opt-in
+>    paths: the read-only Transactional API proxy — DPIA §2.2, H-077, signed
+>    2026-09-20 — and the practice's own task-presence store, staff beats
+>    only), `www.youtube-nocookie.com` (opt-in Note playlist iframe), and an
+>    optional user-granted StackChan LAN origin (severity-class commands
+>    only). In the default `session` configuration, no **patient** data leaves
+>    the browser; when a practice enables `hybrid`/`transactional`, patient
+>    reads leave via the UK proxy as assessed at DPIA §2.2. The full
+>    per-host inventory with data carried is DPIA §2.3 item 2.
+>
+> The §9 declaration below remains the declaration made against v3.84.2 and is
+> not re-issued here; this note is an open action for CSO attention alongside
+> the full-resync action recorded in the currency note above.
+
 ## 1. Purpose and scope
 
 This Clinical Safety Case Report (CSCR) presents the argument and supporting
@@ -76,7 +115,10 @@ alongside the Medicus EPR. It reads data already present in the clinician's
 authenticated Medicus session, applies arithmetic threshold checks and
 reorganisation, and re-displays the result in a side panel and on-page overlays.
 It writes nothing to the record, transmits no patient data outside the browser,
-and performs no runtime AI inference. The frozen intended-purpose statement,
+and performs no runtime AI inference. *(CORRECTED 2026-09-21 — "read-only",
+"writes nothing" and "transmits no patient data" are false against current
+code; see the correction note above and CSN §6.1. The "no runtime AI
+inference" claim stands.)* The frozen intended-purpose statement,
 intended users, intended environment, contraindications, and "what this is not"
 list are in `INTENDED-PURPOSE.md`.
 
@@ -117,6 +159,11 @@ The complete register, with causes, controls, and per-hazard acceptability, is i
 - **Read-only / local-only by construction** — cannot alter a record or transmit
   patient data (the only outbound call is a patient-data-free GitHub version
   check). Architecture, not policy, is the control (`VISION.md`, `SECURITY-AUDIT.md §5`).
+  *(CORRECTED 2026-09-21 — see the correction note above: the product has
+  enumerated user-initiated write paths (CSN §6.1) and a wider outbound host
+  set; the architectural control that survives is "no automatic/background
+  write, no patient-data egress in the default configuration", not
+  "read-only".)*
 - **Fail-safe display semantics** — no data renders as "no data," never as a
   false "clear"; demographic filters fail open so safety alerts are not silently
   suppressed; result-queue rules are escalate-only.
