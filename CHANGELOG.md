@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.20] — 2026-09-21
+
+### Trends: a "<3" ACR report stages A1, and non-BP charts stop dropping second-name rows
+
+**ACR below-limit staging.** A lab ACR reported as `<3` mg/mmol — the standard below-detection report — parses to the numeric limit 3 (`parseObservationValue` strips the comparator; it survives only in `rawValue`), so `aStage(3)` staged it **A2** ("3–30") when the true value is below 3 and therefore **A1** (normal). `buildRenalModel` now reads the comparator back out of `rawValue`: `<3` (and any `<X` with X ≤ 3) stages A1 on both the latest and previous readings (staging pill, KDIGO cell, category-crossing banner), and the headline figure shows `<3.0` rather than a bare `3.0`. Nothing else moves: a measured 3.0 is still A2, and an ambiguous `<10` keeps the limit's stage — a lower stage is never claimed unproven.
+
+**Non-BP series: safe multi-row merge.** The non-BP series builders (`seriesFor` for HbA1c/cholesterol/weight, `buildRenalModel`'s ACR/eGFR rows) used `history.find()` — first name-matching row only — so a reading recorded under a second display name was silently dropped, the same defect `buildBpModel` fixed for BP in v3.264.3. Blindly merging every matching row would draw one line across two value scales (HbA1c mmol/mol + %, or a unit-less journal-created group), so the new `collectSeriesPoints` applies a safe de-duplication instead: the first matching row stays authoritative (labels the series, wins same-date collisions — dashboard rows precede journal groups in `observationHistory`), and extra rows fold in only when their unit is identical to the first row's. Series matching (the name/exclude lists) is unchanged, and the DOAC CrCl inputs (`doac-core.js` creatinine/weight) are deliberately untouched.
+
+Tests: `test-trends-acr-below-limit.js`, `test-trends-series-merge.js`; `test-clinical-thresholds-sync.js` now pins the below-limit staging branch.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip
