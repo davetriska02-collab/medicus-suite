@@ -313,8 +313,8 @@ function renderCurrent() {
           (a) => `
         <span class="pa-chip-group">
           ${severityChip(a)}
-          <button class="pa-chip-act" data-act="alert-edit" data-id="${esc(a.id)}" title="Edit this alert">&#x270E;</button>
-          <button class="pa-chip-act" data-act="alert-del" data-key="${esc(found.key)}" data-id="${esc(a.id)}" title="Remove this alert">&#x2715;</button>
+          <button class="pa-chip-act" data-act="alert-edit" data-id="${esc(a.id)}" title="Edit this alert" aria-label="Edit this alert">&#x270E;</button>
+          <button class="pa-chip-act" data-act="alert-del" data-key="${esc(found.key)}" data-id="${esc(a.id)}" title="Remove this alert" aria-label="Remove this alert">&#x2715;</button>
         </span>`
         )
         .join('')}</div>
@@ -418,7 +418,7 @@ function renderPalette() {
       <select class="pa-type-sev" data-act="type-sev" data-idx="${i}">
         ${SEVERITIES.map((s) => `<option value="${s}" ${t.severity === s ? 'selected' : ''}>${SEVERITY_LABEL[s]}</option>`).join('')}
       </select>
-      <button class="pa-row-del" data-act="type-del" data-idx="${i}" title="Delete this preset">&#x2715;</button>
+      <button class="pa-row-del" data-act="type-del" data-idx="${i}" title="Delete this preset" aria-label="Delete this preset">&#x2715;</button>
     </div>`
     )
     .join('');

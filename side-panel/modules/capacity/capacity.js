@@ -500,10 +500,10 @@ function renderControls(preset) {
         <select class="cap-preset-select" id="capPresetSelect">
           ${state.presets.map((p) => `<option value="${escAttr(p.id)}" ${p.id === state.activePresetId ? 'selected' : ''}>${escHtml(p.name)} · ${presetSummary(p)}</option>`).join('')}
         </select>
-        <button class="ghost-btn" id="capEditPreset" title="Edit this preset">✎</button>
-        <button class="ghost-btn" id="capNewPreset" title="New preset">+</button>
-        <button class="ghost-btn" id="capExportPresets" title="Export presets">⬆</button>
-        <button class="ghost-btn" id="capImportPresets" title="Import presets">⬇</button>
+        <button class="ghost-btn" id="capEditPreset" title="Edit this preset" aria-label="Edit this preset">✎</button>
+        <button class="ghost-btn" id="capNewPreset" title="New preset" aria-label="New preset">+</button>
+        <button class="ghost-btn" id="capExportPresets" title="Export presets" aria-label="Export presets">⬆</button>
+        <button class="ghost-btn" id="capImportPresets" title="Import presets" aria-label="Import presets">⬇</button>
         <input type="file" id="capImportFile" accept=".json" style="display:none" />
       </div>
 
@@ -511,7 +511,7 @@ function renderControls(preset) {
         <button class="cap-mode-btn${state.viewMode === 'day' ? ' active' : ''}"   data-mode="day">Day</button>
         <button class="cap-mode-btn${state.viewMode === 'week' ? ' active' : ''}"  data-mode="week">Week</button>
         <button class="cap-mode-btn${state.viewMode === 'month' ? ' active' : ''}" data-mode="month">Month</button>
-        <button class="icon-btn" id="capRefresh" title="Refresh" style="margin-left:auto">↻</button>
+        <button class="icon-btn" id="capRefresh" title="Refresh" aria-label="Refresh" style="margin-left:auto">↻</button>
       </div>
     </div>
   `;
@@ -609,9 +609,9 @@ function renderDayView(preset) {
 
   return `
     <div class="cap-day-header">
-      <button class="cap-nav-btn" id="capDayPrev" title="Previous day">◀</button>
+      <button class="cap-nav-btn" id="capDayPrev" title="Previous day" aria-label="Previous day">◀</button>
       <div class="cap-day-title">${escHtml(formatDateLong(date))}</div>
-      <button class="cap-nav-btn" id="capDayNext" title="Next day">▶</button>
+      <button class="cap-nav-btn" id="capDayNext" title="Next day" aria-label="Next day">▶</button>
     </div>
     <div class="cap-date-presets">
       <button class="preset-btn${date === todayISO() ? ' active' : ''}" data-date="${todayISO()}">Today</button>
@@ -685,9 +685,9 @@ function renderWeekView(preset) {
 
   return `
     <div class="cap-week-header">
-      <button class="cap-nav-btn" id="capWeekPrev" title="Previous week">◀</button>
+      <button class="cap-nav-btn" id="capWeekPrev" title="Previous week" aria-label="Previous week">◀</button>
       <div class="cap-week-title">Week of ${escHtml(formatDateLong(start))}</div>
-      <button class="cap-nav-btn" id="capWeekNext" title="Next week">▶</button>
+      <button class="cap-nav-btn" id="capWeekNext" title="Next week" aria-label="Next week">▶</button>
     </div>
     <div class="cap-week-meta">
       <button class="ghost-btn" id="capThisWeek">This week</button>
@@ -774,9 +774,9 @@ function renderMonthView(preset) {
 
   return `
     <div class="cap-month-header">
-      <button class="cap-nav-btn" id="capMonthPrev" title="Previous month">◀</button>
+      <button class="cap-nav-btn" id="capMonthPrev" title="Previous month" aria-label="Previous month">◀</button>
       <div class="cap-month-title">${escHtml(monthLabel)}</div>
-      <button class="cap-nav-btn" id="capMonthNext" title="Next month">▶</button>
+      <button class="cap-nav-btn" id="capMonthNext" title="Next month" aria-label="Next month">▶</button>
     </div>
     <div class="cap-month-meta">
       <button class="ghost-btn" id="capThisMonth">This month</button>
@@ -1101,7 +1101,7 @@ function renderLookaheadSettings() {
   return `
     <div class="module-wrap cap-module cap-editor-page">
       <div class="cap-editor-header">
-        <button class="cap-nav-btn" id="capLookaheadBack" title="Back">◀</button>
+        <button class="cap-nav-btn" id="capLookaheadBack" title="Back" aria-label="Back">◀</button>
         <div class="cap-editor-title">Look-ahead settings</div>
         <span style="width:30px"></span>
       </div>
@@ -1364,9 +1364,9 @@ function renderEditor() {
   return `
     <div class="module-wrap cap-module cap-editor-page">
       <div class="cap-editor-header">
-        <button class="cap-nav-btn" id="capEditorBack" title="Back">◀</button>
+        <button class="cap-nav-btn" id="capEditorBack" title="Back" aria-label="Back">◀</button>
         <div class="cap-editor-title">${editing ? 'Edit preset' : 'New preset'}</div>
-        ${editing ? `<button class="cap-nav-btn cap-danger" id="capEditorDelete" title="Delete preset">✕</button>` : '<span style="width:30px"></span>'}
+        ${editing ? `<button class="cap-nav-btn cap-danger" id="capEditorDelete" title="Delete preset" aria-label="Delete preset">✕</button>` : '<span style="width:30px"></span>'}
       </div>
 
       <div class="cap-form">
