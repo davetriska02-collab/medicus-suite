@@ -1064,7 +1064,7 @@
   display: grid;
   grid-template-columns:
     minmax(150px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1.1fr) minmax(200px, 2fr) minmax(70px, 0.5fr)
-    minmax(170px, 1.3fr) minmax(80px, 0.6fr) minmax(130px, 1fr);
+    minmax(170px, 1.3fr) minmax(200px, 1.5fr);
   column-gap: 0;
   row-gap: 0;
   align-items: stretch;
@@ -1196,4 +1196,111 @@
   align-items: flex-start;
   justify-content: center;
   gap: 4px;
+}
+
+.inv-rt-fguards {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 3px;
+  font-size: 11.5px;
+}
+.inv-filing-labbar {
+  margin: 4px 0 6px;
+}
+.inv-filing-controls {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 2px 0;
+  align-items: center;
+}
+.inv-fc-in {
+  max-width: 250px;
+}
+/* the lab-comment strip: autofiling colour, full width under the results */
+.inv-filing-strip {
+  margin: 12px 0;
+  padding: 8px 10px 10px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  font-size: 12px;
+}
+.inv-filing-strip-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.inv-filing-group {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--accent);
+}
+.inv-filing-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.inv-filing-allowed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.inv-filing-allow-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 4px);
+  background: var(--bg-deep);
+}
+.inv-guards-edit .inv-rt-num {
+  width: 64px;
+}
+
+/* ── autofiling for a test: one bar, one switch, one approval ── */
+.inv-af-bar {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.inv-af-switch {
+  font-weight: 600;
+}
+.inv-af-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.inv-af-wording summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.inv-af-badge {
+  cursor: pointer;
+  font: inherit;
+}
+.inv-af-badge:hover {
+  filter: brightness(0.96);
+  text-decoration: underline;
+}
+.inv-unapproved {
+  border-color: var(--amber);
+}
+.inv-unapproved-note {
+  font-size: 10.5px;
+  color: var(--amber);
 }

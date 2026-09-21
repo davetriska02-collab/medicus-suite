@@ -41,6 +41,9 @@
     context: 120,
     retired: 5000,
     filingRanges: 3000,
+    filingGuards: 3000,
+    filingGroups: 1500,
+    filingScreen: 1,
   };
   const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
   const PREFIX = 'labcatalogue.practice';
@@ -91,7 +94,7 @@
       retired: [],
       disabled: { results: [], investigations: [] },
       // Lab Filing setup (Phase E): practice normal ranges per RESULT x LAB x SNOMED CODE, each with its own filing approval.
-      filing: { ranges: [] },
+      filing: { ranges: [], guards: [], groups: [], screen: [] },
     };
   }
 
@@ -286,8 +289,8 @@
   // ── Lab Filing setup: a practice normal range for one RESULT, at one LAB, for one SNOMED CODE ──────────────────────────
   // The unit is carried by the code (HbA1c IFCC and NGSP are different codes), and is SNAPSHOTTED here: if the code's unit
   // later changes, the range no longer means what it did and is excluded until it is set again. `reviewed` is the FILING
-  // approval — separate from the approval of the result / test that decides matching. `enabled` is "autofiling on for this".
-  // A range acts only when it is BOTH approved and enabled.
+  // approval — separate from the approval of the result / test that decides matching. Whether autofiling is ON is not a
+  // property of a result: Medicus files a whole report group at once, so the on/off switch lives on the group entry.
   const filingKey = (r) => [r.result, r.lab, r.code].join('|');
   function finiteOrNull(v, what) {
     if (v === undefined || v === null || v === '') return null;
@@ -305,25 +308,141 @@
       unit: str(v.unit, 40, w + '.unit') || '',
       low: finiteOrNull(v.low, w + '.low'),
       high: finiteOrNull(v.high, w + '.high'),
-      enabled: v.enabled === true,
     };
-    // the practice range is OPTIONAL (the lab's own reference range can do the work) — but an entry that neither sets a
-    // range nor enables autofiling says nothing
-    if (out.low === null && out.high === null && !out.enabled)
-      fail(w + ' needs a low and/or a high value, or autofiling enabled');
+    if (out.low === null && out.high === null) fail(w + ' needs a low and/or a high value');
     if (out.low !== null && out.high !== null && out.low > out.high) fail(w + ': low must not exceed high');
     out.provenance = sanitiseProvenance(v.provenance);
     return out;
   }
-  function rejectDuplicateFilingKeys(list) {
+  // Guards are per RESULT x LAB (a trend limit or a medicine exclusion is about the analyte, not about one code).
+  const TREND_DIRECTIONS = ['any', 'up', 'down'];
+  const filingGuardKey = (g) => [g.result, g.lab].join('|');
+  function cleanTerms(v, what, minLen, maxItems) {
+    return strArr(v, maxItems, 80, what)
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .map((x) => {
+        if (x.length < minLen) fail(what + ' entry "' + x + '" is too short');
+        return x;
+      });
+  }
+  function sanitiseFilingGuard(v, i) {
+    const w = 'filing.guards[' + i + ']';
+    if (!isObj(v)) fail(w + ' must be an object');
+    const trend = finiteOrNull(v.trendMaxDeltaPct, w + '.trendMaxDeltaPct');
+    if (trend !== null && trend <= 0) fail(w + '.trendMaxDeltaPct must be more than 0');
+    const dir =
+      v.trendDirection === undefined || v.trendDirection === null || v.trendDirection === '' ? 'any' : v.trendDirection;
+    if (!TREND_DIRECTIONS.includes(dir)) fail(w + '.trendDirection must be one of ' + TREND_DIRECTIONS.join(', '));
+    const out = {
+      result: str(v.result, 64, w + '.result', true),
+      lab: str(v.lab, 64, w + '.lab', true),
+      trendMaxDeltaPct: trend,
+      // which way it moved: 'any' (a change either way), 'up' (an increase) or 'down' (a decrease). An eGFR that rises is good news,
+      // a creatinine that falls is; the opposite movements are what must never be filed automatically.
+      trendDirection: trend === null ? 'any' : dir,
+      excludeIfMeds: cleanTerms(v.excludeIfMeds, w + '.excludeIfMeds', 2, 50),
+      overrideLabFlag: v.overrideLabFlag === true,
+    };
+    if (out.trendMaxDeltaPct === null && !out.excludeIfMeds.length && !out.overrideLabFlag) fail(w + ' sets no guard');
+    out.provenance = sanitiseProvenance(v.provenance);
+    return out;
+  }
+
+  // Lab comments arrive per lab-defined REPORT GROUP (a heading), as one package for the group's results — so both the comment
+  // whitelist and "never offer to file when the comment says…" are per lab x group heading, never per result.
+  const filingGroupKey = (g) => [g.lab, core().norm(g.heading)].join('|');
+  function filingUtils() {
+    let U = null;
+    if (typeof module !== 'undefined' && module.exports && typeof require === 'function') {
+      try {
+        U = require('./lab-filing-utils.js');
+      } catch (_) {
+        /* fall through to the global */
+      }
+    }
+    U = U || global.LabFilingUtils || null;
+    if (!U || typeof U.allowCommentProblem !== 'function') fail('the lab filing helpers are not loaded');
+    return U;
+  }
+  function sanitiseFilingGroup(v, i) {
+    const w = 'filing.groups[' + i + ']';
+    if (!isObj(v)) fail(w + ' must be an object');
+    const U = filingUtils();
+    const allow = strArr(v.allowComments, 100, 2000, w + '.allowComments').map((x) => x.trim());
+    allow.forEach((x) => {
+      const why = U.allowCommentProblem(x);
+      if (why) fail('The comment "' + x.slice(0, 40) + '…" ' + why);
+    });
+    const out = {
+      lab: str(v.lab, 64, w + '.lab', true),
+      heading: str(v.heading, LIMITS.text, w + '.heading', true),
+      allowComments: [...new Set(allow)],
+      suppressIfText: [...new Set(cleanTerms(v.suppressIfText, w + '.suppressIfText', 3, 50))],
+      // autofiling ON for this report group (Medicus files a group, never a single result)
+      enabled: v.enabled === true,
+    };
+    if (!out.allowComments.length && !out.suppressIfText.length && !out.enabled) fail(w + ' sets nothing');
+    out.provenance = sanitiseProvenance(v.provenance);
+    return out;
+  }
+
+  // The wording of Medicus's own filing screen (the "normal" option under Filing notes, and the File button). It is Medicus's,
+  // not a lab's, so there is ONE setting for the practice. It never changes what is written to the record: the macro finds the
+  // controls on the live screen by their visible text, so this only has to match what Medicus shows.
+  const FILING_DEFAULT_NORMAL_OPTION = 'Normal result, no action required';
+  const FILING_DEFAULT_FILE_BUTTON = 'File results';
+  const filingScreenKey = () => 'screen';
+  function sanitiseFilingScreen(v, i) {
+    const w = 'filing.screen[' + i + ']';
+    if (!isObj(v)) fail(w + ' must be an object');
+    const out = {
+      normalOptionText: (str(v.normalOptionText, 120, w + '.normalOptionText') || '').trim(),
+      fileButtonText: (str(v.fileButtonText, 120, w + '.fileButtonText') || '').trim(),
+    };
+    if (!out.normalOptionText && !out.fileButtonText) fail(w + ' sets nothing');
+    out.provenance = sanitiseProvenance(v.provenance);
+    return out;
+  }
+
+  function rejectDuplicateKeys(list, keyFn, what) {
     const seen = new Set();
     for (const e of list) {
-      const k = filingKey(e);
-      if (seen.has(k)) fail('filing.ranges has more than one range for ' + k.replace(/\|/g, ' / '));
+      const k = keyFn(e);
+      if (seen.has(k)) fail('filing.' + what + ' has more than one entry for ' + k.replace(/\|/g, ' / '));
       seen.add(k);
     }
     return list;
   }
+  const rejectDuplicateFilingKeys = (list) => rejectDuplicateKeys(list, filingKey, 'ranges');
+
+  // the collections the Lab Filing setup lives in
+  const FILING_KINDS = {
+    ranges: { key: filingKey, sanitise: sanitiseFilingRange, limit: 'filingRanges' },
+    guards: { key: filingGuardKey, sanitise: sanitiseFilingGuard, limit: 'filingGuards' },
+    groups: { key: filingGroupKey, sanitise: sanitiseFilingGroup, limit: 'filingGroups' },
+    screen: { key: filingScreenKey, sanitise: sanitiseFilingScreen, limit: 'filingScreen' },
+  };
+  function sanitiseFiling(raw) {
+    const src = isObj(raw) ? raw : {};
+    const out = {};
+    for (const [name, k] of Object.entries(FILING_KINDS)) {
+      let list = arr(src[name], LIMITS[k.limit], 'filing.' + name);
+      // (a range saved by v3.266.0 with no bounds only said "enabled": that switch is now on the group, so it is dropped, not fatal)
+      if (name === 'ranges')
+        list = list.filter(
+          (r) => (isObj(r) && r.low != null && r.low !== '') || (isObj(r) && r.high != null && r.high !== '')
+        );
+      out[name] = rejectDuplicateKeys(list.map(k.sanitise), k.key, name);
+    }
+    return out;
+  }
+  const clearApproval = (e) => {
+    const p = { ...e.provenance, reviewed: false };
+    delete p.reviewedBy;
+    delete p.reviewedAt;
+    return { ...e, provenance: p };
+  };
 
   function rejectDuplicateIds(list, what) {
     const seen = new Set();
@@ -355,13 +474,7 @@
         results: strArr(dis.results, LIMITS.results, 64, 'disabled.results'),
         investigations: strArr(dis.investigations, LIMITS.investigations, 64, 'disabled.investigations'),
       },
-      filing: {
-        ranges: rejectDuplicateFilingKeys(
-          arr(isObj(src.filing) ? src.filing.ranges : undefined, LIMITS.filingRanges, 'filing.ranges').map(
-            sanitiseFilingRange
-          )
-        ),
-      },
+      filing: sanitiseFiling(src.filing),
     };
   }
 
@@ -391,13 +504,15 @@
         if (e.provenance.importedFrom === undefined) delete e.provenance.importedFrom;
       });
     }
-    // a filing range arrives with its FILING approval removed (its `enabled` intent may travel; it acts only once approved here)
-    o.filing.ranges = o.filing.ranges.map((r) => {
-      const p = { ...r.provenance, reviewed: false, source: 'imported' };
-      delete p.reviewedBy;
-      delete p.reviewedAt;
-      return { ...r, provenance: p };
-    });
+    // Lab Filing setup arrives with its FILING approval removed (its intent — enabled, ranges, guards, whitelisted comments —
+    // may travel; it acts only once approved on this machine)
+    for (const name of Object.keys(FILING_KINDS)) {
+      o.filing[name] = o.filing[name].map((r) => {
+        const e = clearApproval(r);
+        e.provenance = { ...e.provenance, source: 'imported' };
+        return e;
+      });
+    }
     return o;
   }
 
@@ -415,12 +530,7 @@
         return { ...e, provenance: p };
       });
     }
-    o.filing.ranges = o.filing.ranges.map((r) => {
-      const p = { ...r.provenance, reviewed: false };
-      delete p.reviewedBy;
-      delete p.reviewedAt;
-      return { ...r, provenance: p };
-    });
+    for (const name of Object.keys(FILING_KINDS)) o.filing[name] = o.filing[name].map(clearApproval);
     return o;
   }
 
@@ -449,12 +559,13 @@
       results: count('results'),
       investigations: count('investigations'),
       labs: count('labs'),
-      filing: {
-        total: asArr(o.filing && o.filing.ranges).length,
-        unreviewed: asArr(o.filing && o.filing.ranges).filter(
-          (e) => !(e && e.provenance && e.provenance.reviewed === true)
-        ).length,
-      },
+      filing: (() => {
+        const all = Object.keys(FILING_KINDS).flatMap((k) => asArr(o.filing && o.filing[k]));
+        return {
+          total: all.length,
+          unreviewed: all.filter((e) => !(e && e.provenance && e.provenance.reviewed === true)).length,
+        };
+      })(),
       disabled: asArr(o.disabled && o.disabled.results).length + asArr(o.disabled && o.disabled.investigations).length,
     };
   }
@@ -516,26 +627,225 @@
     return sanitiseOverlay(o);
   }
 
-  function removeFilingRange(overlay, key) {
+  // A practice normal range for one code of one result at one lab: spec = { result, lab, code, low, high }. Blank = cleared.
+  // (Redefined here so the range no longer carries an on/off flag.)
+  function setFilingRange(builtin, overlay, spec, today) {
+    const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
-    const before = o.filing.ranges.length;
-    o.filing.ranges = o.filing.ranges.filter((r) => filingKey(r) !== key);
-    if (o.filing.ranges.length === before) fail('filing range "' + key + '" not found');
-    return o;
+    if (!isObj(spec)) fail('a filing range must be an object');
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const res = asArr(cat.results).find((r) => r.id === spec.result);
+    if (!res) fail('unknown result "' + spec.result + '"');
+    if (!asArr(cat.labs).some((l) => l.id === spec.lab)) fail('unknown lab "' + spec.lab + '"');
+    const code = asArr(res.codes).find((c) => c.conceptId === spec.code);
+    if (!code) fail('code ' + spec.code + ' is not one of ' + res.label + "'s codes");
+    const blank = (v) => v === undefined || v === null || v === '';
+    const key = filingKey({ result: spec.result, lab: spec.lab, code: spec.code });
+    if (blank(spec.low) && blank(spec.high)) {
+      o.filing.ranges = o.filing.ranges.filter((r) => filingKey(r) !== key);
+      return o;
+    }
+    return upsertFiling(o, 'ranges', { result: spec.result, lab: spec.lab, code: spec.code }, () =>
+      sanitiseFilingRange(
+        {
+          result: spec.result,
+          lab: spec.lab,
+          code: spec.code,
+          unit: code.unit || '',
+          low: spec.low,
+          high: spec.high,
+          provenance: { source: 'practice', reviewed: false, createdAt: day },
+        },
+        0
+      )
+    );
   }
 
-  // The FILING approval of one range. It never touches the approval of the result, the test or the lab, and theirs never
-  // touches this.
-  function approveFilingRange(overlay, key, by, when) {
+  // Guards, per RESULT x LAB: spec = { result, lab, trendMaxDeltaPct, trendDirection, excludeIfMeds, overrideLabFlag }.
+  function setFilingGuards(builtin, overlay, spec, today) {
+    const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
-    const r = o.filing.ranges.find((x) => filingKey(x) === key);
-    if (!r) fail('filing range "' + key + '" not found');
+    if (!isObj(spec)) fail('guards must be an object');
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    if (!asArr(cat.results).some((r) => r.id === spec.result)) fail('unknown result "' + spec.result + '"');
+    if (!asArr(cat.labs).some((l) => l.id === spec.lab)) fail('unknown lab "' + spec.lab + '"');
+    const key = filingGuardKey(spec);
+    const empty =
+      finiteOrNull(spec.trendMaxDeltaPct, 'trendMaxDeltaPct') === null &&
+      !cleanTerms(spec.excludeIfMeds, 'excludeIfMeds', 2, 50).length &&
+      spec.overrideLabFlag !== true;
+    if (empty) {
+      o.filing.guards = o.filing.guards.filter((g) => filingGuardKey(g) !== key);
+      return o;
+    }
+    return upsertFiling(o, 'guards', spec, () =>
+      sanitiseFilingGuard({ ...spec, provenance: { source: 'practice', reviewed: false, createdAt: day } }, 0)
+    );
+  }
+
+  // A lab report GROUP, per LAB x group heading: spec = { lab, heading, enabled, allowComments, suppressIfText }. The heading must
+  // be one the lab really sends. Every whitelisted comment must pass allowCommentProblem. Medicus files a group at once, so the
+  // autofiling on/off switch is here, alongside the comment rules.
+  function setFilingGroup(builtin, overlay, spec, today) {
+    const day = today || new Date().toISOString().slice(0, 10);
+    const o = safeClone(overlay);
+    if (!isObj(spec)) fail('a lab group must be an object');
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const lab = asArr(cat.labs).find((l) => l.id === spec.lab);
+    if (!lab) fail('unknown lab "' + spec.lab + '"');
+    const LC = core();
+    const known = asArr(lab.groupHeadings).some((g) => LC.norm(g.text) === LC.norm(spec.heading));
+    if (!known) fail('"' + spec.heading + '" is not a report group heading recorded for ' + lab.name);
+    const key = filingGroupKey(spec);
+    const empty =
+      spec.enabled !== true &&
+      !asArr(spec.allowComments).some((x) => String(x || '').trim()) &&
+      !cleanTerms(spec.suppressIfText, 'suppressIfText', 3, 50).length;
+    if (empty) {
+      o.filing.groups = o.filing.groups.filter((g) => filingGroupKey(g) !== key);
+      return o;
+    }
+    return upsertFiling(o, 'groups', spec, () =>
+      sanitiseFilingGroup({ ...spec, provenance: { source: 'practice', reviewed: false, createdAt: day } }, 0)
+    );
+  }
+
+  // The Medicus filing-screen wording (one setting for the whole practice): spec = { normalOptionText, fileButtonText }. Text equal
+  // to the standard wording (or blank) is not stored at all — the default applies and there is nothing to approve.
+  function setFilingScreen(overlay, spec, today) {
+    const day = today || new Date().toISOString().slice(0, 10);
+    const o = safeClone(overlay);
+    if (!isObj(spec)) fail('the filing-screen wording must be an object');
+    const opt = String(spec.normalOptionText || '').trim();
+    const btnText = String(spec.fileButtonText || '').trim();
+    const next = {
+      normalOptionText: opt === FILING_DEFAULT_NORMAL_OPTION ? '' : opt,
+      fileButtonText: btnText === FILING_DEFAULT_FILE_BUTTON ? '' : btnText,
+    };
+    if (!next.normalOptionText && !next.fileButtonText) {
+      o.filing.screen = [];
+      return o;
+    }
+    return upsertFiling(o, 'screen', {}, () =>
+      sanitiseFilingScreen({ ...next, provenance: { source: 'practice', reviewed: false, createdAt: day } }, 0)
+    );
+  }
+
+  // shared: create / change one entry. ANY change withdraws that entry's approval; nothing changed keeps it.
+  function upsertFiling(o, kind, spec, build) {
+    const K = FILING_KINDS[kind];
+    const key = K.key(spec);
+    const i = o.filing[kind].findIndex((e) => K.key(e) === key);
+    const next = build();
+    if (i >= 0) {
+      const old = o.filing[kind][i];
+      const same = JSON.stringify({ ...old, provenance: 0 }) === JSON.stringify({ ...next, provenance: 0 });
+      if (same) return o;
+      next.provenance = clearApproval(old).provenance;
+      o.filing[kind][i] = next;
+    } else {
+      if (o.filing[kind].length >= LIMITS[K.limit]) fail('too many filing entries');
+      o.filing[kind].push(next);
+    }
+    return sanitiseOverlay(o);
+  }
+
+  function removeFiling(overlay, kind, key) {
+    const K = FILING_KINDS[kind];
+    if (!K) fail('unknown filing kind "' + kind + '"');
+    const o = safeClone(overlay);
+    const before = o.filing[kind].length;
+    o.filing[kind] = o.filing[kind].filter((e) => K.key(e) !== key);
+    if (o.filing[kind].length === before) fail('filing ' + kind + ' "' + key + '" not found');
+    return o;
+  }
+  const removeFilingRange = (overlay, key) => removeFiling(overlay, 'ranges', key);
+
+  // The FILING approval of one entry (kind: 'ranges' | 'guards' | 'groups' | 'screen'). It never touches the approval of the
+  // result, the test or the lab, and theirs never touches this.
+  function approveFiling(overlay, kind, key, by, when) {
+    const K = FILING_KINDS[kind];
+    if (!K) fail('unknown filing kind "' + kind + '"');
+    const o = safeClone(overlay);
+    const r = o.filing[kind].find((x) => K.key(x) === key);
+    if (!r) fail('filing ' + kind + ' "' + key + '" not found');
     r.provenance = {
       ...r.provenance,
       reviewed: true,
       reviewedBy: by || 'unknown',
       reviewedAt: when || new Date().toISOString().slice(0, 10),
     };
+    return o;
+  }
+  const approveFilingRange = (overlay, key, by, when) => approveFiling(overlay, 'ranges', key, by, when);
+
+  // ── Autofiling for a TEST at a LAB: what it covers, whether it is on, and what still needs approving ──────────────────
+  // Medicus files a report group at once, so "autofiling" is one switch for the report groups (lab headings) that identify the
+  // test. It rests on: those group entries, the practice ranges and guards of the test's results at that lab, and the Medicus
+  // wording if the practice has changed it. `merged` is the effective catalogue including unreviewed entries.
+  function filingStateForTest(merged, overlay, invId, labId) {
+    const LC = core();
+    const inv = asArr(merged.investigations).find((i) => i.id === invId);
+    const lab = asArr(merged.labs).find((l) => l.id === labId);
+    const out = { headings: [], groups: [], enabled: false, approved: false, pending: [] };
+    if (!inv || !lab) return out;
+    out.headings = asArr(lab.groupHeadings)
+      .filter((g) => asArr(g.identifies).includes(invId))
+      .map((g) => g.text);
+    const ids = new Set(asArr(inv.members).map((m) => m.result));
+    for (const h of out.headings) {
+      const e =
+        overlay.filing.groups.find((g) => filingGroupKey(g) === filingGroupKey({ lab: labId, heading: h })) || null;
+      out.groups.push({ heading: h, entry: e });
+    }
+    out.enabled = out.headings.length > 0 && out.groups.every((g) => g.entry && g.entry.enabled === true);
+    const need = [];
+    for (const g of out.groups) if (g.entry) need.push(['groups', filingGroupKey(g.entry), g.entry, g.heading]);
+    for (const r of overlay.filing.ranges)
+      if (r.lab === labId && ids.has(r.result)) need.push(['ranges', filingKey(r), r, r.code]);
+    for (const g of overlay.filing.guards)
+      if (g.lab === labId && ids.has(g.result)) need.push(['guards', filingGuardKey(g), g, g.result]);
+    for (const sc of overlay.filing.screen) need.push(['screen', filingScreenKey(sc), sc, 'screen']);
+    out.pending = need
+      .filter(([, , e]) => !(e.provenance && e.provenance.reviewed === true))
+      .map(([kind, key, , label]) => ({ kind, key, label }));
+    out.approved = out.enabled && out.pending.length === 0;
+    void LC;
+    return out;
+  }
+
+  // Switch autofiling on / off for a test at a lab: every report group that identifies it. Turning it on creates the group entry
+  // (unapproved) if there is none; a group left with nothing set is removed.
+  function setFilingForTest(builtin, overlay, invId, labId, enabled, today) {
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const st = filingStateForTest(merged, overlay, invId, labId);
+    if (!st.headings.length) fail('this lab has no report group heading recorded for this test yet');
+    let o = safeClone(overlay);
+    for (const g of st.groups) {
+      const cur = g.entry || {};
+      o = setFilingGroup(
+        builtin,
+        o,
+        {
+          lab: labId,
+          heading: g.heading,
+          enabled: enabled === true,
+          allowComments: cur.allowComments || [],
+          suppressIfText: cur.suppressIfText || [],
+        },
+        today
+      );
+    }
+    return o;
+  }
+
+  // Approve everything autofiling for a test at a lab rests on that is still awaiting approval — the report groups, the ranges and
+  // guards of its results at that lab, and the Medicus wording if changed. Called from the test's own review screen only.
+  function approveFilingForTest(builtin, overlay, invId, labId, by, when) {
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const st = filingStateForTest(merged, overlay, invId, labId);
+    let o = safeClone(overlay);
+    for (const p of st.pending) o = approveFiling(o, p.kind, p.key, by, when);
     return o;
   }
 
@@ -1365,8 +1675,9 @@
       }
       stripFromLabs(o, 'res:' + id, null);
       o.filing.ranges = o.filing.ranges.filter((r) => r.result !== id);
+      o.filing.guards = o.filing.guards.filter((r) => r.result !== id);
     } else if (kind === 'labs') {
-      o.filing.ranges = o.filing.ranges.filter((r) => r.lab !== id);
+      for (const name of Object.keys(FILING_KINDS)) o.filing[name] = o.filing[name].filter((r) => r.lab !== id);
     }
     return sanitiseOverlay(o);
   }
@@ -1395,6 +1706,7 @@
     o.disabled.investigations = o.disabled.investigations.filter((x) => x !== id);
     stripFromLabs(o, 'inv:' + id, id);
     o.filing.ranges = o.filing.ranges.filter((r) => !removedResults.includes(r.result));
+    o.filing.guards = o.filing.guards.filter((r) => !removedResults.includes(r.result));
     return { overlay: o, removedResults };
   }
 
@@ -1589,47 +1901,64 @@
       const names = (overlay.context && overlay.context.labNames) || {};
       for (const lab of cat.labs) if (names[lab.id]) lab.name = names[lab.id];
     }
-    // --- Lab Filing ranges: which practice ranges act (approved AND enabled, and still valid against this catalogue) ---
+    // --- Lab Filing setup: which entries act (APPROVED, and still valid against this catalogue) ---
     function attachFiling(cat) {
-      const out = [];
-      for (const r of overlay.filing.ranges) {
-        const key = filingKey(r);
+      const filing = {};
+      const LCn = core();
+      const usable = (name, list, check) => {
+        const good = [];
+        for (const e of list) {
+          const key = FILING_KINDS[name].key(e);
+          const why = check(e);
+          if (why) {
+            problems.push({ kind: 'filing', id: name + ':' + key, reason: 'excluded — ' + why });
+            continue;
+          }
+          const reviewed = e.provenance.reviewed === true;
+          if (!includeUnreviewed && !reviewed) {
+            excluded.push({ kind: 'filing', id: name + ':' + key, reason: 'unreviewed' });
+            continue;
+          }
+          const { provenance, ...rest } = e;
+          void provenance;
+          good.push({ ...rest, reviewed });
+        }
+        if (good.length) filing[name] = good;
+      };
+      usable('ranges', overlay.filing.ranges, (r) => {
         const res = cat.results.find((x) => x.id === r.result);
         const lab = cat.labs.find((x) => x.id === r.lab);
         const code = res ? asArr(res.codes).find((c) => c.conceptId === r.code) : null;
-        let why = '';
-        if (!res) why = 'its result is gone';
-        else if (!lab) why = 'its lab is gone';
-        else if (!code) why = "that code is no longer one of the result's codes";
-        else if ((code.unit || '') !== r.unit)
-          why =
+        if (!res) return 'its result is gone';
+        if (!lab) return 'its lab is gone';
+        if (!code) return "that code is no longer one of the result's codes";
+        if ((code.unit || '') !== r.unit)
+          return (
             "the code's unit changed since the range was set (" +
             (r.unit || 'none') +
             ' -> ' +
             (code.unit || 'none') +
-            ')';
-        if (why) {
-          problems.push({ kind: 'filing', id: key, reason: 'excluded — ' + why });
-          continue;
-        }
-        const reviewed = r.provenance.reviewed === true;
-        if (!includeUnreviewed && !(reviewed && r.enabled)) {
-          excluded.push({ kind: 'filing', id: key, reason: !reviewed ? 'unreviewed' : 'not enabled' });
-          continue;
-        }
-        out.push({
-          result: r.result,
-          lab: r.lab,
-          code: r.code,
-          unit: r.unit,
-          low: r.low,
-          high: r.high,
-          enabled: r.enabled,
-          reviewed,
-        });
-      }
+            ')'
+          );
+        return '';
+      });
+      usable('guards', overlay.filing.guards, (g) =>
+        !cat.results.some((x) => x.id === g.result)
+          ? 'its result is gone'
+          : !cat.labs.some((x) => x.id === g.lab)
+            ? 'its lab is gone'
+            : ''
+      );
+      usable('groups', overlay.filing.groups, (g) => {
+        const lab = cat.labs.find((x) => x.id === g.lab);
+        if (!lab) return 'its lab is gone';
+        return asArr(lab.groupHeadings).some((h) => LCn.norm(h.text) === LCn.norm(g.heading))
+          ? ''
+          : 'the lab no longer has that report group heading';
+      });
+      usable('screen', overlay.filing.screen, () => '');
       // absent (not empty) when nothing acts, so a catalogue with no filing setup is byte-for-byte the built-in one
-      if (out.length) cat.filing = { ranges: out };
+      if (Object.keys(filing).length) cat.filing = filing;
       return cat;
     }
     // --- disables + pruning -------------------------------------------------------------------------------------
@@ -1741,6 +2070,20 @@
     setFilingRange,
     removeFilingRange,
     approveFilingRange,
+    setFilingGuards,
+    setFilingGroup,
+    setFilingScreen,
+    filingStateForTest,
+    setFilingForTest,
+    approveFilingForTest,
+    TREND_DIRECTIONS,
+    approveFiling,
+    removeFiling,
+    FILING_DEFAULT_NORMAL_OPTION,
+    FILING_DEFAULT_FILE_BUTTON,
+    filingGuardKey,
+    filingGroupKey,
+    filingScreenKey,
     removeEntry,
     setInvestigationDisabled,
     mergeCatalogue,

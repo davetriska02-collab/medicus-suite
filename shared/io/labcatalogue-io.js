@@ -146,10 +146,15 @@
         taken[kind].add(e.id);
       }
     }
-    // a published filing range that is not already here is added (inert: unapproved); a local one is never changed
-    const haveRange = new Set(local.filing.ranges.map((r) => OV.filingKey(r)));
-    for (const r of incoming.filing.ranges) {
-      if (!haveRange.has(OV.filingKey(r))) next.filing.ranges.push(r);
+    // published Lab Filing setup that is not already here is added (inert: unapproved); a local entry is never changed
+    for (const [kind, keyOf] of [
+      ['ranges', OV.filingKey],
+      ['guards', OV.filingGuardKey],
+      ['groups', OV.filingGroupKey],
+      ['screen', OV.filingScreenKey],
+    ]) {
+      const have = new Set(local.filing[kind].map((e) => keyOf(e)));
+      for (const e of incoming.filing[kind]) if (!have.has(keyOf(e))) next.filing[kind].push(e);
     }
     const union = (a, b) => [...new Set([...a, ...b])];
     next.retired = union(local.retired, incoming.retired);

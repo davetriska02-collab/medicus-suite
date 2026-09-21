@@ -1,5 +1,9 @@
-// Medicus Suite — Lab Result Catalogue: Lab Filing setup data (practice normal ranges per result x lab x SNOMED code,
-// each with its own FILING approval). Phase E, first data step. Nothing reads these yet.
+// Medicus Suite — Lab Result Catalogue: Lab Filing setup data (Phase E). Nothing reads these yet.
+//   ranges  — a practice normal range per RESULT x LAB x SNOMED CODE (the unit is carried by the code)
+//   guards  — trend limit (with direction), medicines, lab-flag override, per RESULT x LAB
+//   groups  — lab comments (whitelist + never-file phrases) AND the autofiling on/off switch, per LAB x report GROUP heading
+//   screen  — the wording of Medicus's own filing screen (one setting for the practice)
+// Autofiling is switched on and approved for a TEST at a LAB: Medicus files a whole report group, never a single result.
 // Run with: node test-lab-catalogue-filing.js
 
 'use strict';
@@ -31,38 +35,35 @@ const snapshot = JSON.stringify(builtin);
 const LAB = 'rj700-general-pathology';
 const ALP = { result: 'alp', lab: LAB, code: '1000621000000104' }; // u/L
 const KEY = OV.filingKey(ALP);
+const GKEY = OV.filingGuardKey({ result: 'alp', lab: LAB });
 const acting = (ov) => OV.mergeCatalogue(builtin, ov, {});
 const inc = (ov) => OV.mergeCatalogue(builtin, ov, { includeUnreviewed: true });
-const set = (ov, extra) =>
-  OV.setFilingRange(builtin, ov, { ...ALP, low: 30, high: 130, enabled: true, ...(extra || {}) }, '2026-09-22');
+const range = (ov, extra) =>
+  OV.setFilingRange(builtin, ov, { ...ALP, low: 30, high: 130, ...(extra || {}) }, '2026-09-22');
+const NOTE = 'Insufficient historical creatinine data to assess AKI risk';
+const all = (ov) => ['ranges', 'guards', 'groups', 'screen'].flatMap((k) => ov.filing[k]);
 
 console.log('--- shape / sanitise ---');
 {
   const e = OV.emptyOverlay();
-  check(Array.isArray(e.filing.ranges) && e.filing.ranges.length === 0, 'an empty overlay has an empty filing section');
   check(
-    OV.sanitiseOverlay({ schema: 1 }).filing.ranges.length === 0,
+    ['ranges', 'guards', 'groups', 'screen'].every((k) => Array.isArray(e.filing[k]) && e.filing[k].length === 0),
+    'an empty overlay has an empty filing section'
+  );
+  check(
+    OV.sanitiseOverlay({ schema: 1 }).filing.groups.length === 0,
     'an overlay saved before this existed reads as having none'
   );
-  const m = acting(e);
   check(
-    JSON.stringify(m.catalogue) === snapshot,
+    JSON.stringify(acting(e).catalogue) === snapshot,
     'with no filing setup the effective catalogue is byte-for-byte the built-in one'
   );
-  const ok = {
-    result: 'alp',
-    lab: LAB,
-    code: '1000621000000104',
-    unit: 'u/L',
-    low: 30,
-    high: 130,
-    enabled: true,
-    provenance: { source: 'practice', reviewed: false },
-  };
-  const s = OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: '30', high: '130', junk: 'x' }] } }).filing.ranges[0];
+  const ok = { ...ALP, unit: 'u/L', low: 30, high: 130, provenance: { source: 'practice', reviewed: false } };
+  const s = OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: '30', high: '130', junk: 'x', enabled: true }] } })
+    .filing.ranges[0];
   check(
-    s.low === 30 && s.high === 130 && !('junk' in s),
-    'numbers typed as text are read as numbers; unknown keys are dropped'
+    s.low === 30 && s.high === 130 && !('junk' in s) && !('enabled' in s),
+    'numbers typed as text are read as numbers; unknown keys (and the old per-range "enabled") are dropped'
   );
   check(
     throwsWith(() => OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: 'abc' }] } }), /low must be a number/),
@@ -76,28 +77,21 @@ console.log('--- shape / sanitise ---');
     'low above high is rejected'
   );
   check(
-    throwsWith(
-      () => OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: null, high: null, enabled: false }] } }),
-      /needs a low and\/or a high value, or autofiling enabled/
-    ),
-    'an entry with no range AND autofiling off says nothing, so it is rejected'
-  );
-  check(
-    OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: null, high: null, enabled: true }] } }).filing.ranges[0]
-      .enabled === true,
-    "autofiling can be enabled with NO practice range (the lab's own reference range does the work)"
-  );
-  check(
     OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: null, high: 5 }] } }).filing.ranges[0].low === null,
     'a one-sided range is fine'
   );
   check(
-    throwsWith(() => OV.sanitiseOverlay({ filing: { ranges: [ok, { ...ok }] } }), /more than one range/),
+    throwsWith(() => OV.sanitiseOverlay({ filing: { ranges: [ok, { ...ok }] } }), /more than one (range|entry)/),
     'two ranges for the same result / lab / code are rejected'
   );
   check(
     throwsWith(() => OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: 1e12 }] } }), /must be a number/),
     'an absurd number is rejected'
+  );
+  check(
+    OV.sanitiseOverlay({ filing: { ranges: [{ ...ok, low: null, high: null, enabled: true }] } }).filing.ranges
+      .length === 0,
+    'a v3.266.0 range that only said "enabled" (no bounds) is dropped on read, never fatal — the switch is on the group now'
   );
   const evil = JSON.parse(
     '{"filing":{"ranges":[{"result":"alp","lab":"' +
@@ -110,27 +104,24 @@ console.log('--- shape / sanitise ---');
 
 console.log('\n--- setting a range ---');
 {
-  const one = set(OV.emptyOverlay());
+  const one = range(OV.emptyOverlay());
   const r = one.filing.ranges[0];
-  check(
-    r.unit === 'u/L' && r.low === 30 && r.high === 130 && r.enabled === true,
-    "a range is stored with the code's unit (snapshot)"
-  );
+  check(r.unit === 'u/L' && r.low === 30 && r.high === 130, "a range is stored with the code's unit (snapshot)");
   check(r.provenance.reviewed === false && r.provenance.source === 'practice', 'a new range starts UNAPPROVED');
   check(
-    throwsWith(() => set(OV.emptyOverlay(), { result: 'nope' }), /unknown result/),
+    throwsWith(() => range(OV.emptyOverlay(), { result: 'nope' }), /unknown result/),
     'an unknown result is refused'
   );
   check(
-    throwsWith(() => set(OV.emptyOverlay(), { lab: 'nope' }), /unknown lab/),
+    throwsWith(() => range(OV.emptyOverlay(), { lab: 'nope' }), /unknown lab/),
     'an unknown lab is refused'
   );
   check(
-    throwsWith(() => set(OV.emptyOverlay(), { code: '999' }), /not one of/),
+    throwsWith(() => range(OV.emptyOverlay(), { code: '999' }), /not one of/),
     "a code that is not one of the result's own codes is refused"
   );
   check(
-    throwsWith(() => set(OV.emptyOverlay(), { low: 200, high: 100 }), /must not exceed/),
+    throwsWith(() => range(OV.emptyOverlay(), { low: 200, high: 100 }), /must not exceed/),
     'low above high is refused'
   );
   const hb = OV.setFilingRange(builtin, OV.emptyOverlay(), {
@@ -139,7 +130,6 @@ console.log('\n--- setting a range ---');
     code: '999791000000106',
     low: null,
     high: 47,
-    enabled: false,
   });
   const hb2 = OV.setFilingRange(builtin, hb, {
     result: 'hba1c',
@@ -149,25 +139,17 @@ console.log('\n--- setting a range ---');
     high: 47,
   });
   check(hb2.filing.ranges.length === 2, 'each code of a result has its own range (HbA1c has several)');
-  check(OV.sanitiseOverlay(one) && JSON.stringify(builtin) === snapshot, 'the built-in catalogue is never touched');
-}
-
-console.log('\n--- enable-only entries and clearing ---');
-{
-  const on = OV.setFilingRange(builtin, OV.emptyOverlay(), { ...ALP, low: null, high: null, enabled: true });
-  check(on.filing.ranges.length === 1 && on.filing.ranges[0].low === null, 'an enable-only entry is stored');
-  const cleared = OV.setFilingRange(builtin, on, { ...ALP, low: '', high: '', enabled: false });
-  check(cleared.filing.ranges.length === 0, 'a blank range with autofiling off removes the entry');
+  check(range(one, { low: '', high: '' }).filing.ranges.length === 0, 'blank boxes clear the range');
   check(
-    OV.setFilingRange(builtin, OV.emptyOverlay(), { ...ALP, low: '', high: '', enabled: false }).filing.ranges
-      .length === 0,
-    'clearing something that was never set does nothing'
+    range(OV.emptyOverlay(), { low: '', high: '' }).filing.ranges.length === 0,
+    'clearing something never set does nothing'
   );
+  check(JSON.stringify(builtin) === snapshot, 'the built-in catalogue is never touched');
 }
 
-console.log('\n--- approval: separate, and withdrawn by any change ---');
+console.log('\n--- range approval: separate, withdrawn by any change ---');
 {
-  const one = set(OV.emptyOverlay());
+  const one = range(OV.emptyOverlay());
   check(acting(one).catalogue.filing === undefined, 'an unapproved range does NOT act');
   check(
     acting(one).excluded.some((x) => x.kind === 'filing' && x.reason === 'unreviewed'),
@@ -182,26 +164,17 @@ console.log('\n--- approval: separate, and withdrawn by any change ---');
   const a = acting(ap).catalogue.filing;
   check(
     a && a.ranges.length === 1 && a.ranges[0].low === 30 && a.ranges[0].unit === 'u/L',
-    'an approved AND enabled range acts, carrying its unit'
+    'an approved range acts, carrying its unit'
   );
-  const off = OV.setFilingRange(builtin, OV.approveFilingRange(set(OV.emptyOverlay(), { enabled: false }), KEY, 'x'), {
-    ...ALP,
-    low: 30,
-    high: 130,
-    enabled: false,
-  });
   check(
-    acting(off).catalogue.filing === undefined && acting(off).excluded.some((x) => x.reason === 'not enabled'),
-    'approved but NOT enabled does not act'
+    range(ap).filing.ranges[0].provenance.reviewed === true,
+    'saving with nothing changed leaves the approval standing'
   );
-  const same = OV.setFilingRange(builtin, ap, { ...ALP, low: 30, high: 130, enabled: true });
-  check(same.filing.ranges[0].provenance.reviewed === true, 'saving with nothing changed leaves the approval standing');
   for (const [what, ch] of [
     ['the low', { low: 31 }],
     ['the high', { high: 131 }],
-    ['the enabled flag', { enabled: false }],
   ]) {
-    const edited = OV.setFilingRange(builtin, ap, { ...ALP, low: 30, high: 130, enabled: true, ...ch });
+    const edited = range(ap, ch);
     check(
       edited.filing.ranges[0].provenance.reviewed === false && !('reviewedBy' in edited.filing.ranges[0].provenance),
       'changing ' + what + ' withdraws the approval'
@@ -211,36 +184,11 @@ console.log('\n--- approval: separate, and withdrawn by any change ---');
     throwsWith(() => OV.approveFilingRange(OV.emptyOverlay(), KEY, 'x'), /not found/),
     'approving something that is not there is an error'
   );
-  // separate tokens, both ways
-  const withResult = OV.sanitiseOverlay({
-    ...ap,
-    results: [
-      {
-        id: 'alp',
-        label: 'Alkaline phosphatase',
-        valueKind: 'numeric',
-        codes: [],
-        aliases: [{ text: 'alp' }],
-        provenance: { source: 'practice', reviewed: false },
-      },
-    ],
-  });
-  check(
-    withResult.filing.ranges[0].provenance.reviewed === true,
-    'the approval of a range does not depend on the result / test approval state'
-  );
-  const approvedResult = OV.markReviewed(withResult, 'results', 'alp', 'Dr Test');
-  check(
-    OV.setFilingRange(builtin, OV.emptyOverlay(), { ...ALP, low: 30, high: 130, enabled: true }).filing.ranges[0]
-      .provenance.reviewed === false && approvedResult.filing.ranges[0].provenance.reviewed === true,
-    'approving a result or test never approves a range, and approving a range never approves them'
-  );
 }
 
 console.log('\n--- unit safety ---');
 {
-  const ap = OV.approveFilingRange(set(OV.emptyOverlay()), KEY, 'x');
-  // the same code later carries a different unit (an override of the result)
+  const ap = OV.approveFilingRange(range(OV.emptyOverlay()), KEY, 'x');
   const changed = OV.sanitiseOverlay({
     ...ap,
     results: [
@@ -279,80 +227,387 @@ console.log('\n--- unit safety ---');
     ],
   });
   check(
-    acting(gone).problems.some((p) => p.kind === 'filing' && /no longer one of/.test(p.reason)),
+    acting(gone).problems.some((p) => /no longer one of/.test(p.reason)),
     'a range for a code that is no longer on the result is excluded, with the reason'
   );
-  const lab = OV.sanitiseOverlay({ ...ap, filing: { ranges: [{ ...ap.filing.ranges[0], lab: 'gone-lab' }] } });
+  const lab = OV.sanitiseOverlay({
+    ...ap,
+    filing: { ...ap.filing, ranges: [{ ...ap.filing.ranges[0], lab: 'gone-lab' }] },
+  });
   check(
     acting(lab).problems.some((p) => /its lab is gone/.test(p.reason)),
     'a range for a lab that no longer exists is excluded, with the reason'
   );
 }
 
-console.log('\n--- inert on the way in, approvals stripped on the way out ---');
+console.log('\n--- safety guards: per result x lab, with the DIRECTION of a trend ---');
 {
-  const ap = OV.approveFilingRange(set(OV.emptyOverlay()), KEY, 'Dr Test');
-  const inert = OV.forceInert(ap);
+  const G = { result: 'alp', lab: LAB };
+  const g1 = OV.setFilingGuards(builtin, OV.emptyOverlay(), {
+    ...G,
+    trendMaxDeltaPct: '20',
+    trendDirection: 'down',
+    excludeIfMeds: [' lithium ', 'methotrexate'],
+    overrideLabFlag: true,
+  });
+  const g = g1.filing.guards[0];
   check(
-    inert.filing.ranges[0].provenance.reviewed === false && inert.filing.ranges[0].enabled === true,
-    'a restored / synced range arrives unapproved (its enabled intent travels)'
+    g.trendMaxDeltaPct === 20 &&
+      g.trendDirection === 'down' &&
+      g.excludeIfMeds.join() === 'lithium,methotrexate' &&
+      g.overrideLabFlag === true,
+    'a trend limit with its direction, medicine exclusions and the lab-flag override are stored, tidied'
   );
-  check(!('reviewedBy' in inert.filing.ranges[0].provenance), '…with no approver name');
-  const out = OV.stripApprovals(ap);
   check(
-    out.filing.ranges[0].provenance.reviewed === false && !('reviewedBy' in out.filing.ranges[0].provenance),
-    'an export carries no approval and no reviewer name'
+    OV.setFilingGuards(builtin, OV.emptyOverlay(), { ...G, trendMaxDeltaPct: 20 }).filing.guards[0].trendDirection ===
+      'any',
+    'a trend limit with no direction means a change either way'
   );
-  check(ap.filing.ranges[0].provenance.reviewed === true, 'neither mutates its input');
   check(
-    OV.summarise(ap).filing.total === 1 &&
-      OV.summarise(ap).filing.unreviewed === 0 &&
-      OV.summarise(inert).filing.unreviewed === 1,
-    'summarise counts them'
+    OV.setFilingGuards(builtin, OV.emptyOverlay(), { ...G, excludeIfMeds: ['lithium'] }).filing.guards[0]
+      .trendDirection === 'any',
+    'a direction without a limit is meaningless and is stored as "any"'
   );
-}
-
-console.log('\n--- tidy-up ---');
-{
-  const ap = set(OV.emptyOverlay());
-  check(OV.removeFilingRange(ap, KEY).filing.ranges.length === 0, 'a range can be removed');
   check(
-    throwsWith(() => OV.removeFilingRange(ap, 'x|y|z'), /not found/),
-    'removing one that is not there is an error'
+    throwsWith(
+      () => OV.setFilingGuards(builtin, OV.emptyOverlay(), { ...G, trendMaxDeltaPct: 20, trendDirection: 'sideways' }),
+      /trendDirection must be one of/
+    ),
+    'an unknown direction is refused'
   );
-  const own = OV.sanitiseOverlay({
+  check(
+    g.provenance.reviewed === false && acting(g1).catalogue.filing === undefined,
+    'new guards start unapproved and do not act'
+  );
+  const ap = OV.approveFiling(g1, 'guards', GKEY, 'Dr Test');
+  check(acting(ap).catalogue.filing.guards[0].trendDirection === 'down', 'approved guards act, direction included');
+  check(
+    OV.setFilingGuards(builtin, ap, {
+      ...G,
+      trendMaxDeltaPct: 20,
+      trendDirection: 'up',
+      excludeIfMeds: ['lithium', 'methotrexate'],
+      overrideLabFlag: true,
+    }).filing.guards[0].provenance.reviewed === false,
+    'changing only the direction withdraws the approval'
+  );
+  check(
+    OV.setFilingGuards(builtin, ap, {
+      ...G,
+      trendMaxDeltaPct: 20,
+      trendDirection: 'down',
+      excludeIfMeds: ['lithium', 'methotrexate'],
+      overrideLabFlag: true,
+    }).filing.guards[0].provenance.reviewed === true,
+    'saving with nothing changed keeps the approval'
+  );
+  check(
+    OV.setFilingGuards(builtin, ap, { ...G, trendMaxDeltaPct: '', excludeIfMeds: [], overrideLabFlag: false }).filing
+      .guards.length === 0,
+    'no guard set clears the entry'
+  );
+  check(
+    throwsWith(() => OV.setFilingGuards(builtin, OV.emptyOverlay(), { ...G, trendMaxDeltaPct: 0 }), /more than 0/),
+    'a zero trend limit is refused'
+  );
+  check(
+    throwsWith(
+      () => OV.setFilingGuards(builtin, OV.emptyOverlay(), { ...G, result: 'nope', trendMaxDeltaPct: 5 }),
+      /unknown result/
+    ),
+    'an unknown result is refused'
+  );
+  const mine = OV.sanitiseOverlay({
     results: [
       {
         id: 'mine',
         label: 'Mine',
         valueKind: 'numeric',
-        codes: [{ conceptId: '123456789', role: 'primary', unit: 'g/L' }],
+        codes: [],
         aliases: [{ text: 'mine' }],
         provenance: { source: 'practice', reviewed: false },
       },
     ],
+  });
+  const withGuard = OV.setFilingGuards(builtin, mine, { result: 'mine', lab: LAB, trendMaxDeltaPct: 10 });
+  check(
+    withGuard.filing.guards.length === 1 && OV.removeEntry(withGuard, 'results', 'mine').filing.guards.length === 0,
+    'deleting a result deletes its guards'
+  );
+}
+
+console.log('\n--- lab groups: comments and the autofiling switch, per lab x report group heading ---');
+{
+  const spec = {
+    lab: LAB,
+    heading: 'LFTs',
+    allowComments: [NOTE],
+    suppressIfText: ['telephone result', 'call patient'],
+  };
+  const g1 = OV.setFilingGroup(builtin, OV.emptyOverlay(), spec);
+  const g = g1.filing.groups[0];
+  check(
+    g.allowComments[0] === NOTE && g.suppressIfText.length === 2 && g.enabled === false,
+    'whitelisted comments and block phrases are stored per lab and group; autofiling starts OFF'
+  );
+  check(g.provenance.reviewed === false && acting(g1).catalogue.filing === undefined, 'unapproved: does not act');
+  const key = OV.filingGroupKey({ lab: LAB, heading: 'lfts' });
+  check(
+    key === OV.filingGroupKey({ lab: LAB, heading: ' LFTs ' }),
+    'the group key ignores case and spacing of the heading'
+  );
+  const ap = OV.approveFiling(g1, 'groups', key, 'Dr Test');
+  check(acting(ap).catalogue.filing.groups[0].allowComments.length === 1, 'approved: acts');
+  check(
+    OV.setFilingGroup(builtin, ap, { ...spec, suppressIfText: ['telephone result'] }).filing.groups[0].provenance
+      .reviewed === false,
+    'any change withdraws the approval'
+  );
+  check(
+    OV.setFilingGroup(builtin, ap, { ...spec, enabled: true }).filing.groups[0].provenance.reviewed === false,
+    'switching autofiling on withdraws the approval too'
+  );
+  check(
+    OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'LFTs', enabled: true }).filing.groups[0]
+      .enabled === true,
+    'a group can be switched on with no comment settings at all'
+  );
+  check(
+    throwsWith(
+      () => OV.setFilingGroup(builtin, OV.emptyOverlay(), { ...spec, allowComments: ['normal'] }),
+      /too short/
+    ),
+    'a whitelisted comment that is too short / generic is refused (the same rule as Lab Filing)'
+  );
+  check(
+    throwsWith(
+      () => OV.setFilingGroup(builtin, OV.emptyOverlay(), { ...spec, allowComments: ['x '.repeat(1001)] }),
+      /2000|characters/
+    ),
+    'an over-long whitelisted comment is refused, not truncated'
+  );
+  check(
+    throwsWith(
+      () => OV.setFilingGroup(builtin, OV.emptyOverlay(), { ...spec, heading: 'Not a real group' }),
+      /not a report group heading/
+    ),
+    'the heading must be one the lab really sends'
+  );
+  check(
+    throwsWith(
+      () => OV.setFilingGroup(builtin, OV.emptyOverlay(), { ...spec, suppressIfText: ['ok'], allowComments: [] }),
+      /too short/
+    ),
+    'a block phrase of one or two letters is refused'
+  );
+  check(
+    OV.setFilingGroup(builtin, ap, { lab: LAB, heading: 'LFTs', allowComments: [], suppressIfText: [], enabled: false })
+      .filing.groups.length === 0,
+    'nothing set (and off) clears the group'
+  );
+  const myLab = OV.sanitiseOverlay({
     labs: [
       {
         id: 'mylab',
         name: 'My lab',
         identifiers: { performerOrg: 'ZZ9' },
-        groupHeadings: [],
+        groupHeadings: [{ text: 'My panel', identifies: ['lft'], mayContain: [] }],
         provenance: { source: 'practice', reviewed: false },
       },
     ],
   });
-  const withRanges = OV.setFilingRange(
+  const both = OV.setFilingGroup(
     builtin,
-    OV.setFilingRange(builtin, own, { result: 'mine', lab: 'mylab', code: '123456789', low: 1, high: 2 }),
-    { result: 'mine', lab: LAB, code: '123456789', low: 1, high: 2 }
+    OV.setFilingGroup(builtin, myLab, { lab: 'mylab', heading: 'My panel', suppressIfText: ['call patient'] }),
+    spec
   );
-  check(withRanges.filing.ranges.length === 2, 'ranges can be set on a practice result and lab');
+  const gone = OV.removeEntry(both, 'labs', 'mylab');
   check(
-    OV.removeEntry(withRanges, 'results', 'mine').filing.ranges.length === 0,
-    'deleting a result deletes its ranges'
+    both.filing.groups.length === 2 && gone.filing.groups.length === 1 && gone.filing.groups[0].lab === LAB,
+    "deleting a lab deletes that lab's group settings only"
   );
-  const noLab = OV.removeEntry(withRanges, 'labs', 'mylab').filing.ranges;
-  check(noLab.length === 1 && noLab[0].lab === LAB, "deleting a lab deletes that lab's ranges only");
+}
+
+console.log('\n--- Medicus filing-screen wording: one setting, defaults not stored ---');
+{
+  check(
+    OV.FILING_DEFAULT_NORMAL_OPTION === 'Normal result, no action required' &&
+      OV.FILING_DEFAULT_FILE_BUTTON === 'File results',
+    'the defaults are the standard Medicus wording'
+  );
+  const same = OV.setFilingScreen(OV.emptyOverlay(), {
+    normalOptionText: 'Normal result, no action required',
+    fileButtonText: 'File results',
+  });
+  check(same.filing.screen.length === 0, 'text equal to the standard wording is not stored — nothing to approve');
+  const c1 = OV.setFilingScreen(OV.emptyOverlay(), {
+    normalOptionText: ' Normal - no action ',
+    fileButtonText: 'File results',
+  });
+  check(
+    c1.filing.screen.length === 1 &&
+      c1.filing.screen[0].normalOptionText === 'Normal - no action' &&
+      c1.filing.screen[0].fileButtonText === '',
+    'a changed wording is stored trimmed; the untouched one stays the default'
+  );
+  check(!('lab' in c1.filing.screen[0]), 'it belongs to no lab');
+  check(acting(c1).catalogue.filing === undefined, 'unapproved: does not act');
+  const ap = OV.approveFiling(c1, 'screen', OV.filingScreenKey(), 'Dr Test');
+  check(acting(ap).catalogue.filing.screen[0].normalOptionText === 'Normal - no action', 'approved: acts');
+  check(
+    OV.setFilingScreen(ap, { normalOptionText: 'Something else', fileButtonText: '' }).filing.screen[0].provenance
+      .reviewed === false,
+    'a change withdraws the approval'
+  );
+  check(
+    OV.setFilingScreen(ap, { normalOptionText: '', fileButtonText: '' }).filing.screen.length === 0,
+    'back to the defaults removes it'
+  );
+}
+
+console.log('\n--- autofiling for a TEST at a LAB: one switch, one approval ---');
+{
+  const LFT = 'lft';
+  const merged = (ov) => inc(ov).catalogue;
+  const state = (ov) => OV.filingStateForTest(merged(ov), ov, LFT, LAB);
+  const e0 = OV.emptyOverlay();
+  const s0 = state(e0);
+  check(
+    s0.headings.length > 0 &&
+      s0.headings.includes('LFTs') &&
+      s0.enabled === false &&
+      s0.approved === false &&
+      s0.pending.length === 0,
+    'the report group(s) that identify the test are found; nothing is on or pending yet'
+  );
+  check(
+    OV.filingStateForTest(merged(e0), e0, 'no-such-test', LAB).headings.length === 0,
+    'an unknown test has no groups'
+  );
+  check(
+    throwsWith(
+      () => OV.setFilingForTest(builtin, e0, 'ferritin', 'not-a-lab', true),
+      /no report group heading|unknown/
+    ),
+    'a test with no group at that lab cannot be switched on'
+  );
+  const on = OV.setFilingForTest(builtin, e0, LFT, LAB, true);
+  const s1 = state(on);
+  check(
+    s1.enabled === true && s1.approved === false && s1.pending.length === s1.headings.length,
+    'switching it on creates the group entries, unapproved, and lists them as pending'
+  );
+  check(acting(on).catalogue.filing === undefined, '…and nothing acts');
+  // ranges / guards of the test's results at the lab join the pending set
+  let o = range(on); // alp is a member of lft
+  o = OV.setFilingGuards(builtin, o, { result: 'alp', lab: LAB, trendMaxDeltaPct: 20, trendDirection: 'up' });
+  const s2 = state(o);
+  check(
+    s2.pending.some((p) => p.kind === 'ranges') &&
+      s2.pending.some((p) => p.kind === 'guards') &&
+      s2.pending.some((p) => p.kind === 'groups'),
+    'the group, the range and the guards of its results are all awaiting approval'
+  );
+  // ranges of a result NOT in the test do not belong
+  const other = OV.setFilingRange(builtin, on, {
+    result: 'hba1c',
+    lab: LAB,
+    code: '999791000000106',
+    low: null,
+    high: 47,
+  });
+  check(
+    !state(other).pending.some((p) => p.kind === 'ranges'),
+    'a range for a result that is not in the test is not part of its approval'
+  );
+  const ap = OV.approveFilingForTest(builtin, o, LFT, LAB, 'Dr Test', '2026-09-22');
+  const s3 = state(ap);
+  check(
+    s3.pending.length === 0 && s3.enabled === true && s3.approved === true,
+    'one approval covers the groups, ranges and guards of the test at that lab'
+  );
+  const a = acting(ap).catalogue.filing;
+  check(
+    a.groups.length >= 1 && a.ranges.length === 1 && a.guards.length === 1 && a.groups.every((g) => g.enabled === true),
+    'and they all act'
+  );
+  check(
+    all(ap).every((e) => e.provenance.reviewed === true && e.provenance.reviewedBy === 'Dr Test'),
+    'each records who approved'
+  );
+  // any later change reopens it
+  const edited = range(ap, { high: 140 });
+  check(
+    state(edited).approved === false &&
+      state(edited).pending.length === 1 &&
+      state(edited).pending[0].kind === 'ranges',
+    'changing one range reopens ONLY that item'
+  );
+  const edGroup = OV.setFilingGroup(builtin, ap, {
+    lab: LAB,
+    heading: 'LFTs',
+    enabled: true,
+    allowComments: [NOTE],
+    suppressIfText: [],
+  });
+  check(
+    state(edGroup).approved === false && state(edGroup).pending.some((p) => p.kind === 'groups'),
+    'changing a lab comment reopens the group'
+  );
+  const off = OV.setFilingForTest(builtin, ap, LFT, LAB, false);
+  check(
+    state(off).enabled === false && !(acting(off).catalogue.filing && acting(off).catalogue.filing.groups),
+    'switching it off turns the groups off: nothing about them acts any more'
+  );
+  // the Medicus wording joins the set once changed
+  const withScreen = OV.setFilingScreen(ap, { normalOptionText: 'Normal', fileButtonText: '' });
+  check(
+    state(withScreen).pending.some((p) => p.kind === 'screen') &&
+      OV.approveFilingForTest(builtin, withScreen, LFT, LAB, 'x').filing.screen[0].provenance.reviewed === true,
+    'a changed Medicus wording is part of the approval'
+  );
+  // shared results: approving via another test also approves the shared range (it is one range)
+  const bone = OV.filingStateForTest(merged(ap), ap, 'bone-profile', LAB);
+  check(
+    bone.pending.every((p) => p.kind !== 'ranges'),
+    'ALP is shared with the Bone profile: its (already approved) range is not pending there'
+  );
+}
+
+console.log('\n--- inert on the way in, no approvals on the way out ---');
+{
+  let o = range(OV.emptyOverlay());
+  o = OV.setFilingGuards(builtin, o, { result: 'alp', lab: LAB, trendMaxDeltaPct: 20 });
+  o = OV.setFilingGroup(builtin, o, { lab: LAB, heading: 'LFTs', enabled: true, allowComments: [NOTE] });
+  o = OV.setFilingScreen(o, { fileButtonText: 'File it' });
+  o = OV.approveFilingForTest(builtin, o, 'lft', LAB, 'Dr Test');
+  check(all(o).length === 4 && all(o).every((e) => e.provenance.reviewed === true), 'all four kinds can be approved');
+  check(
+    all(OV.forceInert(o)).every((e) => e.provenance.reviewed === false && !('reviewedBy' in e.provenance)),
+    'a restore / sync arrives with every filing approval removed'
+  );
+  check(OV.forceInert(o).filing.groups[0].enabled === true, '…but the switch itself (the intent) travels');
+  check(
+    all(OV.stripApprovals(o)).every((e) => e.provenance.reviewed === false && !('reviewedBy' in e.provenance)),
+    'a backup carries no approval of any kind'
+  );
+  check(OV.summarise(o).filing.total === 4 && OV.summarise(o).filing.unreviewed === 0, 'summarise counts all four');
+  check(all(OV.sanitiseOverlay(JSON.parse(JSON.stringify(o)))).length === 4, 'it survives a save / load round trip');
+  const noHeading = OV.sanitiseOverlay({
+    ...o,
+    filing: { ...o.filing, groups: [{ ...o.filing.groups[0], heading: 'Gone panel' }] },
+  });
+  check(
+    acting(noHeading).problems.some((p) => /no longer has that report group heading/.test(p.reason)),
+    'a group whose heading is no longer recorded is excluded, with the reason'
+  );
+  const legacyLabs = OV.sanitiseOverlay({
+    filing: { ranges: [], labs: [{ lab: LAB, fileButtonText: 'x', provenance: {} }] },
+  });
+  check(
+    legacyLabs.filing.screen.length === 0 && !('labs' in legacyLabs.filing),
+    'the short-lived per-lab wording is ignored, not fatal'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

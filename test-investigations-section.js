@@ -40,11 +40,36 @@ check(!/I have checked/.test(src) && !/approveBtn\.disabled/.test(src), 'no fidd
 const approveButtons = src.match(/btn\(\s*'Approve( result)?',/g) || [];
 check(
   approveButtons.length === 3 && /if \(st\.review\) buttons\.appendChild\(btn\('Approve/.test(src),
-  'the only Approve buttons are on the review screens (test and result) and the filing approval of one range line'
+  'the only Approve buttons are on the review screens (test and result) and ONE filing approval, in the autofiling bar of the test'
 );
 check(
-  /OV\.approveFilingRange\(S\.overlay, key, REVIEWER\)/.test(src),
-  'the filing Approve goes through the pure approve helper, and only for the range line it sits on'
+  /OV\.approveFilingForTest\(S\.builtin, S\.overlay, st\.id, fLab, REVIEWER\)/.test(src) &&
+    !/OV\.approveFiling\(/.test(src) &&
+    !/OV\.approveFilingRange\(/.test(src),
+  'autofiling is approved once, for the test at a lab, through the pure helper — there is no per-result, per-range or per-group approve button'
+);
+check(
+  !/inv-rt-fenable|inv-rt-fapproval|'Enable autofiling'|'Filing approval'/.test(src),
+  'there is no per-result "enable autofiling" or approval column (Medicus files a whole report group)'
+);
+check(
+  /Direction of the change/.test(src) && /trendDirection: st\.dir/.test(src),
+  'the trend guard says which way it moved (changed / increased / decreased)'
+);
+check(
+  /Autofiling on for this test group from ' \+ fLabName/.test(src) &&
+    /const fLabName = fLab \? labWords\(fLab\) : ''/.test(src),
+  'the autofiling switch names the lab in words ("… from SWL pathology"), never by its code'
+);
+check(
+  /S\.scrollToAutofiling = true/.test(src) && /inv-af-badge/.test(src),
+  'the list badge opens the test at its autofiling bar'
+);
+check(
+  !/filingLabEntry|OV\.setFilingLabControls/.test(src) &&
+    /OV\.setFilingScreen/.test(src) &&
+    /Medicus filing-screen wording/.test(src),
+  'the filing-screen wording is one practice-wide, pre-filled setting (not per lab)'
 );
 check(/'Delete'/.test(src) && /removeInvestigation/.test(src), 'a practice test can be deleted (card and edit screen)');
 check(/Read again/.test(src), 'the reading can be run again');

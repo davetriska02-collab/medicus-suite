@@ -359,6 +359,10 @@ console.log('\n--- wiring: manifest, defaults, options, content script ---');
       pos('engine/outstanding-match-catalogue.js') > pos('shared/lab-catalogue-core.js'),
     'the content-script group loads core, overlay, io and the engine, in dependency order'
   );
+  check(
+    manifest.content_scripts.some((g) => g.js.includes('shared/lab-filing-utils.js')),
+    'the lab filing helpers are loaded in the same pages (the overlay validates whitelisted lab comments with them)'
+  );
   const tl = manifest.content_scripts.find((g) => g.js.includes('content-scripts/triage-lens/content.js'));
   const groupIdx = manifest.content_scripts.indexOf(group);
   check(

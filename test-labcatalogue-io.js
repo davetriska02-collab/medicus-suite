@@ -302,6 +302,67 @@ const overlayWith = (extra) => ({ ...OV.emptyOverlay(), ...extra });
     );
   }
 
+  console.log('\n--- practice-profile apply: MERGE, guards / lab comments / filing-screen wording ---');
+  {
+    const prov = (reviewed) => ({ source: 'practice', reviewed, ...(reviewed ? { reviewedBy: 'Dr A' } : {}) });
+    const NOTE = 'Insufficient historical creatinine data to assess AKI risk';
+    const filing = (extra) => ({
+      ranges: [],
+      guards: [
+        {
+          result: 'alp',
+          lab: 'lab-a',
+          trendMaxDeltaPct: 20,
+          excludeIfMeds: [],
+          overrideLabFlag: false,
+          provenance: prov(true),
+        },
+      ],
+      groups: [{ lab: 'lab-a', heading: 'LFTs', allowComments: [NOTE], suppressIfText: [], provenance: prov(true) }],
+      screen: [{ normalOptionText: 'Normal', fileButtonText: '', provenance: prov(true) }],
+      ...(extra || {}),
+    });
+    STORE = {
+      [KEY]: overlayWith({
+        filing: filing({
+          guards: [
+            {
+              result: 'alp',
+              lab: 'lab-a',
+              trendMaxDeltaPct: 5,
+              excludeIfMeds: [],
+              overrideLabFlag: false,
+              provenance: prov(true),
+            },
+          ],
+          groups: [],
+          screen: [],
+        }),
+      }),
+    };
+    await IO.labcatalogueApplyPublished({ practice: overlayWith({ filing: filing() }) }, 'merge', OPTS);
+    const st = STORE[KEY].filing;
+    check(
+      st.guards.length === 1 && st.guards[0].trendMaxDeltaPct === 5 && st.guards[0].provenance.reviewed === true,
+      'a local guard is never changed by a publish (its approval stands)'
+    );
+    check(
+      st.groups.length === 1 && st.screen.length === 1,
+      'published lab-comment settings and filing-screen wording are added'
+    );
+    check(
+      st.groups[0].provenance.reviewed === false && st.screen[0].provenance.reviewed === false,
+      '…unapproved: they act only once approved on this machine'
+    );
+    const exp = await IO.labcatalogueExport();
+    check(
+      ['ranges', 'guards', 'groups', 'screen'].every((k) =>
+        exp.practice.filing[k].every((x) => x.provenance.reviewed === false && !('reviewedBy' in x.provenance))
+      ),
+      'a backup carries no approval of any kind'
+    );
+  }
+
   console.log('\n--- practice-profile apply: REPLACE ---');
   {
     STORE = { [KEY]: overlayWith({ results: [res('local-approved', null, true)] }) };

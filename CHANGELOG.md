@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.0] — 2026-09-22
+
+### Investigations page: Lab Filing setup — safety guards, lab comments, one autofiling switch + approval per test (nothing acts on it yet)
+
+Finishes the setup screens of Phase E (`docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`). **Lab Filing does not read any
+of this yet**; the page says so. No live behaviour changes.
+
+- **Autofiling is switched on and approved for a TEST at a LAB — never per result** (Medicus files a whole report group at once). One bar at
+  the top of the results ("Autofiling on for this test group from <lab name>") holds the switch and ONE Approve, which covers the report
+  group(s) that identify the test, the practice ranges and safety guards of its results at that lab, the group's lab-comment settings and
+  the Medicus wording if changed. Changing any of them reopens only that item. The list badge ("autofiling — awaiting approval") opens the
+  test at that bar; approval is only ever given there. Replaces the per-code "enable" and "approval" columns of v3.266.0.
+- **Safety guards** (per result × lab, a column beside the range; click to edit): never offer to file if it has **changed / increased /
+  decreased** by more than X% since the last result (direction matters — a rising eGFR or falling creatinine is good news); medicines that
+  stop it; whether the practice range overrides the lab's own high / low flag.
+- **Lab comments** (per lab × report-group heading, a strip under the results): "never offer to file when the comment says…" phrases, and
+  the whole lab comments you allow through (same size / no-truncation rule as the Lab Filing whitelist fix, v3.265.1).
+- **Medicus filing-screen wording is one practice-wide setting, not a lab's:** pre-filled with the standard wording ("Normal result, no
+  action required", "File results"), stored and approved only if changed. It never changes what is written to the record — the macro finds
+  these controls by their visible text.
+- **Data** (`shared/lab-catalogue-overlay.js`, overlay `filing.{ranges,guards,groups,screen}`): each entry withdraws its approval on any
+  change; everything arrives unapproved on restore / sync / merge (intent such as the switch may travel), backups carry no approval or
+  reviewer name; deleting a result or lab deletes its entries; a range whose code's unit changed, or a group whose heading is gone, stops
+  acting and the page says why. The short-lived per-lab wording and per-code enable of v3.266.0 are ignored on read, never fatal.
+- Tests: `test-lab-catalogue-filing.js` (90), `test-labcatalogue-io.js` (62), `test-investigations-section.js` (59), plus a manifest guard that
+  the lab-filing helpers load wherever the catalogue does.
+
 ## [v3.266.1] — 2026-09-22
 
 ### Investigations page: a tidier results table, in plainer words
