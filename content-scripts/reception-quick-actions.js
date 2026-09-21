@@ -202,11 +202,15 @@
   }
 
   // ── Finding the Internal-comment textarea ─────────────────────────────────────
-  // Presence-gated: no comment box on this task type → no widget, silently. The
-  // discovery order mirrors lab-file-button.js's field lookup (aria-label /
-  // placeholder hint first), then falls back to nearby "Internal comment" label
-  // text, because Medicus renders the label as a sibling node rather than a
-  // <label for>. See the quick-actions.internal-comment DOM contract.
+  // Presence-gated: no comment box on this task type → no widget, silently.
+  // Discovery runs three tiers, strongest signal first: (1) aria-label /
+  // placeholder naming "internal comment", (2) nearby "Internal comment" label
+  // text (Medicus renders the label as a sibling node rather than a <label for>),
+  // (3) a generic /comment/i aria-label/placeholder hint. A tier only wins with
+  // exactly ONE match — two candidates in the same tier is AMBIGUOUS and fails
+  // closed (null) instead of guessing, because this widget writes clinical free
+  // text (H-049) and a wrong-field write is worse than no write. See the
+  // quick-actions.internal-comment DOM contract.
 
   var COMMENT_HINT_RE = /comment/i;
   var INTERNAL_COMMENT_RE = /internal\s*comment/i;
@@ -240,22 +244,48 @@
     return false;
   }
 
+  // True after a findCommentBox() call that FAILED CLOSED on an ambiguous match
+  // (2+ candidates in the winning tier). Lets the insert path say "couldn't tell
+  // which box" instead of the misleading "not found — scroll to it".
+  var _findAmbiguous = false;
+
+  function ambiguousFind(tier, matches) {
+    _findAmbiguous = true;
+    try {
+      if (localStorage.getItem('ch-debug') === '1') {
+        // eslint-disable-next-line no-console
+        console.warn(
+          '[MSQA] comment-box discovery ambiguous — ' +
+            matches.length +
+            ' textareas matched the ' +
+            tier +
+            ' tier; failing closed (no widget, no write).'
+        );
+      }
+    } catch (e) {
+      /* ignore */
+    }
+    return null;
+  }
+
   function findCommentBox() {
+    _findAmbiguous = false;
     if (!getTaskInfo()) return null;
     var all = document.querySelectorAll('textarea');
-    var candidates = [];
+    var strong = [];
+    var labelled = [];
+    var weak = [];
     for (var i = 0; i < all.length; i++) {
       var ta = all[i];
       if (ta.closest && ta.closest(EXCLUDE_SEL)) continue;
       if (!visible(ta)) continue;
-      candidates.push(ta);
+      if (INTERNAL_COMMENT_RE.test(hintOf(ta))) strong.push(ta);
+      else if (labelledInternalComment(ta)) labelled.push(ta);
+      else if (COMMENT_HINT_RE.test(hintOf(ta))) weak.push(ta);
     }
-    for (var j = 0; j < candidates.length; j++) {
-      if (COMMENT_HINT_RE.test(hintOf(candidates[j]))) return candidates[j];
-    }
-    for (var k = 0; k < candidates.length; k++) {
-      if (labelledInternalComment(candidates[k])) return candidates[k];
-    }
+    if (strong.length) return strong.length === 1 ? strong[0] : ambiguousFind('internal-comment hint', strong);
+    if (labelled.length) return labelled.length === 1 ? labelled[0] : ambiguousFind('internal-comment label', labelled);
+    if (weak.length) return weak.length === 1 ? weak[0] : ambiguousFind('generic comment hint', weak);
     return null;
   }
 
@@ -542,7 +572,12 @@
     //    can be detached, and writing into a detached node loses the text silently.
     var ta = findCommentBox();
     if (!ta || !ta.isConnected) {
-      showNotice('Internal comment box not found — scroll to it and try again.', 'err');
+      showNotice(
+        _findAmbiguous
+          ? 'More than one comment box on screen — could not tell which is the Internal comment, so nothing was written. Type it into the box directly.'
+          : 'Internal comment box not found — scroll to it and try again.',
+        'err'
+      );
       return;
     }
 

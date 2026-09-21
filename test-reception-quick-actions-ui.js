@@ -147,5 +147,32 @@ check(
 );
 
 // ============================================================
+// 5. Ambiguous comment-box discovery fails closed (v3.264.19)
+// ============================================================
+// findCommentBox must never guess between multiple plausible comment boxes —
+// a wrong-field write is worse than no write (H-049). Behaviour is driven in
+// test-reception-comment-discovery.js; these greps pin the wiring the vm
+// extraction there depends on.
+console.log('\n5. ambiguous comment-box discovery fails closed');
+
+check(/function ambiguousFind\(/.test(src), 'ambiguousFind() exists (the fail-closed path)');
+check(
+  /strong\.length === 1 \? strong\[0\] : ambiguousFind\(/.test(src),
+  'the internal-comment-hint tier requires a UNIQUE match'
+);
+check(
+  /labelled\.length === 1 \? labelled\[0\] : ambiguousFind\(/.test(src),
+  'the internal-comment-label tier requires a UNIQUE match'
+);
+check(
+  /weak\.length === 1 \? weak\[0\] : ambiguousFind\(/.test(src),
+  'the generic /comment/i hint tier requires a UNIQUE match'
+);
+check(
+  src.includes('could not tell which is the Internal comment'),
+  'the insert path surfaces a VISIBLE ambiguity error (not the misleading "not found")'
+);
+
+// ============================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
