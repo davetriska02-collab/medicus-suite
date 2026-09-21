@@ -68,10 +68,14 @@ export function createModuleLoader({
     setCleanup(null);
     if (prevCleanup) try { prevCleanup(); } catch (e) { console.error(e); }
 
-    // Update nav
-    document.querySelectorAll('.nav-tab').forEach(t =>
-      t.classList.toggle('active', t.dataset.module === name)
-    );
+    // Update nav — aria-current mirrors the visual .active state so assistive
+    // tech announces which tab is selected (kept in one place for both shells).
+    document.querySelectorAll('.nav-tab').forEach(t => {
+      const isActive = t.dataset.module === name;
+      t.classList.toggle('active', isActive);
+      if (isActive) t.setAttribute('aria-current', 'page');
+      else t.removeAttribute('aria-current');
+    });
     setActive(name);
     container.innerHTML = '';
 

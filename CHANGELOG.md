@@ -2,6 +2,27 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.22] — 2026-09-21
+
+### Accessibility — shell nav and glyph-only buttons get accessible names
+
+Small a11y batch from the Suite review triage queue:
+
+- The pop-out Settings button (`#popoutSettingsBtn`) was icon-only with only a
+  `title`; it now carries `aria-label="Settings"`, matching the side panel's.
+- Capacity Forecast and Patient Alerts glyph-only buttons (✎ ✕ ◀ ▶ ⬆ ⬇ ↻ + —
+  preset edit/new/export/import, refresh, day/week/month navigation, back,
+  delete, and the alert/preset edit/remove chips) now each carry an
+  `aria-label`, so assistive tech announces more than a bare glyph.
+- The selected nav tab now exposes its state to assistive tech via
+  `aria-current="page"` — set statically on the boot-active tab in BOTH
+  `side-panel/panel.html` and `pop-out/pop-out.html`, and kept in step with
+  the `.active` class in the shared `side-panel/module-loader.js` (the single
+  toggle both shells use).
+
+No visual change. New static guard `test-shell-a11y.js` source-greps all three
+contracts so a regression fails CI.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip
