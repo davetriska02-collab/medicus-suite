@@ -212,6 +212,27 @@
     return { mode: 'practice', assigneeId: '', slug: slug };
   }
 
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // ---- Queue task-list row identity ----
+  // FAIL CLOSED: the task identity may only come from the row's own explicit
+  // identity fields, and must be a well-formed UUID. There is deliberately NO
+  // generic "any key that smells like an id" fallback — a loose key scan
+  // (/task|id|uuid/i) matched staff-shaped fields like registeredGpId /
+  // actionedById and cached a STAFF UUID as the task id, mis-keying every
+  // downstream consumer (_durableRowMap, _queueResultCache, monitoring chips).
+  // A row without a valid task UUID gets no identity and is dropped by the
+  // caller — no chip is safer than a chip keyed to the wrong task.
+  function pickUuid(item) {
+    if (!item || typeof item !== 'object') return null;
+    var pref = ['taskUuid', 'taskId', 'uuid', 'id'];
+    for (var i = 0; i < pref.length; i++) {
+      var v = item[pref[i]];
+      if (typeof v === 'string' && UUID_RE.test(v)) return v;
+    }
+    return null;
+  }
+
   // Node tests require this file for the helper only. MAIN-world behaviour is
   // unchanged: chrome content scripts have no `module`, so we fall through.
   if (typeof module !== 'undefined' && module.exports) {
@@ -221,6 +242,7 @@
       currentTaskListSlug: currentTaskListSlug,
       PRESENCE_LIST_CH_RE: PRESENCE_LIST_CH_RE,
       reauthorisePrescriptionIdFromUrl: reauthorisePrescriptionIdFromUrl,
+      pickUuid: pickUuid,
       isRxSigningSlug: isRxSigningSlug,
       rxListScopeFromTaskListUrl: rxListScopeFromTaskListUrl,
       encodeRxListScopeAttr: encodeRxListScopeAttr,
@@ -233,7 +255,6 @@
   window.__chPageWorld = true;
   if (window.__chPresenceTestHook) window.__chPresenceDecision = presenceEmitDecision;
 
-  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var TL_RE = new RegExp('/tasks/data/([^/?]+)/task-list');
   var SUMMARY_RE =
     /\/clinical\/data\/clinical-summary\/summary\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
@@ -262,20 +283,8 @@
   }
 
   // ---- Queue task-list ----
-  function pickUuid(item) {
-    if (!item || typeof item !== 'object') return null;
-    var pref = ['taskUuid', 'taskId', 'uuid', 'id'];
-    for (var i = 0; i < pref.length; i++) {
-      var v = item[pref[i]];
-      if (typeof v === 'string' && UUID_RE.test(v)) return v;
-    }
-    for (var k in item) {
-      if (/patient/i.test(k)) continue;
-      var val = item[k];
-      if (typeof val === 'string' && UUID_RE.test(val) && /task|id|uuid/i.test(k)) return val;
-    }
-    return null;
-  }
+  // (pickUuid — the row-identity extractor — is defined above the Node export
+  // block so tests can require it; it fails closed on any non-UUID identity.)
 
   function stampRxListScope(u) {
     try {
