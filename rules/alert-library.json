@@ -218,9 +218,9 @@
           "exclude": []
         },
         "tests": [
-          { "name": "U&E / eGFR", "match": ["u&e","urea and electrolytes","renal profile","egfr","creatinine"], "intervalDays": 365, "dueSoonDays": 30 }
+          { "name": "U&E / eGFR", "match": ["u&e","urea and electrolytes","renal profile","egfr","creatinine"], "exclude": ["urine","urinary"], "intervalDays": 365, "dueSoonDays": 30 }
         ],
-        "notes": "PINCER #9. Metformin is contraindicated when eGFR <30 mL/min/1.73m² and should be used with caution <45. Annual renal function monitoring is essential. Stop/withhold during acute illness, dehydration, or before iodinated contrast.",
+        "notes": "PINCER #9. Metformin is contraindicated when eGFR <30 mL/min/1.73m² and should be used with caution <45. Annual renal function monitoring is essential. Stop/withhold during acute illness, dehydration, or before iodinated contrast. Bare 'creatinine' carries the audit-H4 exclude ['urine','urinary'] so a urine creatinine or urine ACR cannot mark the annual renal check in date (same class as PR #447 on drug-rules.json).",
         "source": "PINCER #9"
       }
     },
@@ -242,9 +242,9 @@
           "exclude": []
         },
         "tests": [
-          { "name": "U&E", "match": ["u&e","urea and electrolytes","renal profile","electrolytes"], "intervalDays": 180, "dueSoonDays": 21 }
+          { "name": "U&E", "match": ["u&e","urea and electrolytes","renal profile","electrolytes"], "exclude": ["urine","urinary"], "intervalDays": 180, "dueSoonDays": 21 }
         ],
-        "notes": "PINCER #10. Loop diuretics cause electrolyte loss — especially hypokalaemia and hyponatraemia. 6-monthly U&E is the minimum; more frequent if frail, high dose, or renal impairment.",
+        "notes": "PINCER #10. Loop diuretics cause electrolyte loss — especially hypokalaemia and hyponatraemia. 6-monthly U&E is the minimum; more frequent if frail, high dose, or renal impairment. Bare 'electrolytes' carries the audit-H4 exclude ['urine','urinary'] so a urine-electrolytes result cannot mark the blood U&E in date (same class as PR #447 on drug-rules.json).",
         "source": "PINCER #10"
       }
     },
@@ -368,9 +368,9 @@
           { "name": "Lithium level", "match": ["lithium level","serum lithium"], "intervalDays": 90, "dueSoonDays": 14 },
           { "name": "U&E", "match": ["u&e","urea and electrolytes","renal profile"], "intervalDays": 180, "dueSoonDays": 21 },
           { "name": "TFT", "match": ["tft","thyroid function"], "intervalDays": 180, "dueSoonDays": 21 },
-          { "name": "Calcium", "match": ["calcium","corrected calcium"], "intervalDays": 180, "dueSoonDays": 21 }
+          { "name": "Calcium", "match": ["calcium","ca2+","corrected calcium"], "exclude": ["urine","urinary"], "intervalDays": 180, "dueSoonDays": 21 }
         ],
-        "notes": "NICE CG185. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion.",
+        "notes": "NICE CG185. Level should be taken 12 hours post-dose. Target 0.6–1.0 mmol/L (or 0.4–0.8 mmol/L in elderly). Symptoms of toxicity: coarse tremor, polyuria, vomiting, confusion. Calcium test kept in lock-step with drug-rules.json lithium-maintenance: bare 'calcium' carries the audit-H4 exclude ['urine','urinary'] so a urine calcium cannot mark the serum calcium check in date, and 'ca2+' matches the abbreviated result name.",
         "source": "NICE CG185"
       }
     },

@@ -239,5 +239,65 @@ console.log('\n--- pulse "hr" is a word, not a substring of prothrombin ---');
   }
 }
 
+// The alert library's drug-monitoring entries run through the same
+// evaluateDrugRule path (preflight treats the full library as always-on, and
+// sentinel-options copies entries verbatim into custom rules), so its bare
+// analyte terms need the same audit-H4 urine/urinary excludes as
+// drug-rules.json. PR #447 fixed drug-rules.json; this section pins the
+// alert-library twins.
+console.log('\n--- H4 on alert-library monitoring: urine must not satisfy a serum check ---');
+{
+  const alertLibrary = require(path.join(__dirname, 'rules', 'alert-library.json'));
+  function libraryRule(libId) {
+    const entry = (alertLibrary.library || []).find((e) => e.libId === libId);
+    return entry ? { ...entry.rule, id: entry.rule.id || entry.libId } : null;
+  }
+  function libraryMonitoringRow(libId, testName, medName, observations) {
+    const rule = libraryRule(libId);
+    const chips = engine.evaluateDrugRule(
+      rule,
+      {
+        medications: [{ name: medName, source: 'repeat' }],
+        observations,
+        problems: [],
+        patientContext: { ageYears: 50, sex: 'F' },
+      },
+      MON_NOW
+    );
+    const chip = chips[0];
+    return (chip && chip.tests && chip.tests.find((t) => t.name === testName)) || null;
+  }
+  const cases = [
+    ['nice-lithium-monitoring', 'Calcium', 'Priadel 400mg tablets', 'Urine calcium', 'Corrected calcium'],
+    ['nice-lithium-monitoring', 'Calcium', 'Priadel 400mg tablets', 'Urinary calcium', 'Serum calcium'],
+    ['pincer-9', 'U&E / eGFR', 'Metformin 500mg tablets', 'Urine creatinine', 'Serum creatinine'],
+    ['pincer-9', 'U&E / eGFR', 'Metformin 500mg tablets', 'Urine albumin:creatinine ratio', 'Creatinine'],
+    ['pincer-10', 'U&E', 'Furosemide 40mg tablets', 'Urine electrolytes', 'Urea and electrolytes'],
+  ];
+  for (const [libId, testName, med, urineName, serumName] of cases) {
+    const urineOnly = libraryMonitoringRow(libId, testName, med, [{ name: urineName, value: '1', date: RECENT }]);
+    assert(
+      urineOnly && urineOnly.status === 'no_data',
+      `${libId} ${testName}: "${urineName}" alone → ${urineOnly && urineOnly.status} (must be no_data)`
+    );
+    const mixed = libraryMonitoringRow(libId, testName, med, [
+      { name: serumName, value: '1', date: OLD },
+      { name: urineName, value: '99', date: RECENT },
+    ]);
+    assert(
+      mixed && mixed.status !== 'in_date' && mixed.latestObs && mixed.latestObs.name === serumName,
+      `${libId} ${testName}: newer "${urineName}" must not headline older "${serumName}" (status ${mixed && mixed.status}, obs ${mixed && mixed.latestObs && mixed.latestObs.name})`
+    );
+    const serum = libraryMonitoringRow(libId, testName, med, [{ name: serumName, value: '1', date: RECENT }]);
+    assert(serum && serum.status === 'in_date', `${libId} ${testName}: "${serumName}" still in date`);
+  }
+  // Lock-step with drug-rules.json lithium-maintenance: the abbreviated result
+  // name "Ca2+" satisfies the library's lithium calcium slot too.
+  const abbrev = libraryMonitoringRow('nice-lithium-monitoring', 'Calcium', 'Priadel 400mg tablets', [
+    { name: 'Ca2+', value: '2.4 mmol/L', date: RECENT },
+  ]);
+  assert(abbrev && abbrev.status === 'in_date', 'nice-lithium-monitoring Calcium: "Ca2+" counts as a serum calcium');
+}
+
 console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
 if (failed > 0) process.exit(1);
