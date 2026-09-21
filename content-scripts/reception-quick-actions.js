@@ -520,7 +520,10 @@
   function doInsert() {
     // 1. Same task? (H-043 / audit C1 discipline — task-inline.js:469.)
     var info = getTaskInfo();
-    if (!info || (s.taskUuid && info.taskUuid !== s.taskUuid)) {
+    // A missing pin is not a pass. Insert only when the task we composed
+    // against is still the task on screen (H-043). Otherwise the sentence
+    // would land in whichever comment box is now visible.
+    if (!info || !s.taskUuid || info.taskUuid !== s.taskUuid) {
       s.action = '';
       s.who = '';
       s.when = '';

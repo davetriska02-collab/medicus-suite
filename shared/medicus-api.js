@@ -6,9 +6,15 @@
 'use strict';
 
 import { nextWorkingDayISO as calendarNextWorkingDayISO } from './uk-calendar.js';
+import { boundMap } from './cache-bound.js';
 
-const _cache = new Map(); // dateISO -> { data, fetchedAt }
+const _cache = new Map(); // `${siteId}|${dateISO}` -> { data, fetchedAt }
 const CACHE_TTL_MS = 5 * 60 * 1000;
+// Capacity's widest horizon is 84 days, plus a visible month (~31). 160 keeps
+// that working set and still stops a long calendar browse from retaining every
+// day-book for the life of the side panel. Expired entries used to stay until
+// that exact key was read again.
+const SCHEDULE_CACHE_MAX = 160;
 
 // F8: Practice code format guard — must match the same 4–8 hex-char pattern as
 // practice-code.js (SITE_CODE_RE). Defined here as a local constant because
@@ -30,8 +36,10 @@ export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = f
   // prevent building fetch requests to unexpected hosts.
   if (!_isValidSiteId(siteId)) throw new Error(`Invalid practice code format: ${siteId}`);
   const cacheKey = `${siteId}|${dateISO}`;
+  const now = Date.now();
+  boundMap(_cache, { now, ttlMs: CACHE_TTL_MS, maxEntries: SCHEDULE_CACHE_MAX, timeKey: 'fetchedAt' });
   const cached = _cache.get(cacheKey);
-  if (!bypassCache && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+  if (!bypassCache && cached) {
     return cached.data;
   }
 
@@ -42,7 +50,9 @@ export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = f
     throw new Error(`API error ${r.status}`);
   }
   const data = await r.json();
-  _cache.set(cacheKey, { data, fetchedAt: Date.now() });
+  const fetchedAt = Date.now();
+  _cache.set(cacheKey, { data, fetchedAt });
+  boundMap(_cache, { now: fetchedAt, ttlMs: CACHE_TTL_MS, maxEntries: SCHEDULE_CACHE_MAX, timeKey: 'fetchedAt' });
   return data;
 }
 

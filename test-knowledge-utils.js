@@ -73,7 +73,10 @@ check(KU.findSimilar('Referral criteria', [{ id: 'x', title: 'Referral criteria'
 
 // ── phiWarnings ───────────────────────────────────────────────────────────────
 console.log('\n--- phiWarnings ---');
-check(KU.phiWarnings([{ title: 'Patient John', body: 'NHS no 943 476 5919' }]).length === 1,
+// 3-3-4 shape, Modulus-11 INVALID (the real check digit would be 9).
+// phiWarnings matches shape, not the checksum. A valid number here is
+// synthetic but trips scripts/check-no-patient-data.js on the next edit.
+check(KU.phiWarnings([{ title: 'Patient John', body: 'NHS no 943 476 5918' }]).length === 1,
    'NHS-number-shaped digits flagged');
 check(KU.phiWarnings([{ title: 'DN SPA', body: 'Phone 01234 567890 option 2' }]).length === 0,
    '11-digit phone number not flagged');

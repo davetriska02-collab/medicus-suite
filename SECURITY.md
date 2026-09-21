@@ -56,9 +56,17 @@ Out of scope:
 - **Software bill of materials.** Vendored runtime libraries and their CVE
   disposition are tracked in [`docs/SOUP.md`](docs/SOUP.md); checksums are pinned
   in `vendor-versions.json` and verified on every CI run.
-- **Data minimisation.** The extension contacts only `api.github.com` (update
-  checks, no patient data) besides the user's own Medicus session. It does not
-  create, modify, or transmit patient records to any external server.
+- **Data minimisation.** Besides the user's own Medicus session, the daily
+  update check contacts `api.github.com` and includes no patient data in that
+  request. The extension can also call `api.nhs.uk` (Leaflets, only after an
+  API key is set), `termbrowser.nhs.uk` (a SNOMED concept id during
+  problem-description cleanup), a practice-configured `*.supabase.co` host
+  (the Transactional API proxy when that mode is enabled, and task-presence
+  heartbeats of a task id plus a staff label when `presence-config.json` is
+  present), `youtube-nocookie.com` (Note board playlist, off by default), and
+  a StackChan device on the practice LAN when that option is on.
+  User-initiated writes into the Medicus record are enumerated in
+  [`docs/CLINICAL-SAFETY-NOTICE.md`](docs/CLINICAL-SAFETY-NOTICE.md) §6.1.
 
 ## Backup data minimisation
 

@@ -401,6 +401,83 @@ async function runTests() {
     check(h.severity === null && /Nothing needs you/.test(h.text), 'capacity clear → quiet');
   }
 
+  // ── Sweep coverage: a partial run must not read as clear ────────────────
+  console.log('\n--- sweep coverage gaps ---');
+  {
+    const { sweepRunGaps, sweepNoActionSentence } = await import(modPath);
+    const partial = sweepRunGaps({
+      processedCount: 12,
+      totalCount: 40,
+      results: [],
+      missingUuidCount: 0,
+      skippedEntries: [],
+    });
+    check(partial.bounded === true && partial.remaining === 28, 'stopped-early sweep is bounded');
+    const partialSentence = sweepNoActionSentence(partial);
+    check(
+      /12 patients checked/.test(partialSentence),
+      `partial sentence names who was checked (got: ${partialSentence})`
+    );
+    check(/28 not checked yet/.test(partialSentence), `partial sentence names the remainder (got: ${partialSentence})`);
+    check(!/all clear/i.test(partialSentence), 'partial sentence does not say all clear');
+    check(!/✓/.test(partialSentence), 'partial sentence has no completion tick');
+
+    const skipped = sweepRunGaps({
+      processedCount: 8,
+      totalCount: 8,
+      missingUuidCount: 2,
+      skippedEntries: [{ time: '09:00' }],
+      results: [],
+    });
+    check(skipped.skipped === 2 && skipped.bounded === true, 'unidentified appointments count as a gap');
+    const skippedSentence = sweepNoActionSentence(skipped);
+    check(
+      /not identified, so not checked/.test(skippedSentence),
+      `skipped sentence names the gap (got: ${skippedSentence})`
+    );
+
+    const unread = sweepRunGaps({
+      processedCount: 5,
+      totalCount: 5,
+      results: [{ error: 'could not read' }, { chips: [] }],
+    });
+    check(unread.unread === 1 && unread.bounded === true, 'a row that could not be read is a gap');
+    check(/could not be read/.test(sweepNoActionSentence(unread)), 'unread sentence names the gap');
+
+    const finished = sweepRunGaps({
+      processedCount: 6,
+      totalCount: 6,
+      missingUuidCount: 0,
+      skippedEntries: [],
+      results: [{ chips: [] }, { chips: [] }],
+    });
+    check(finished.bounded === false, 'a finished run with no gaps is not bounded');
+    const finishedSentence = sweepNoActionSentence(finished);
+    check(
+      finishedSentence === 'No action-needed alerts among 6 patients checked',
+      `finished sentence stays bounded to who was checked (got: ${finishedSentence})`
+    );
+    check(!/all clear/i.test(finishedSentence), 'finished sentence does not say all clear');
+
+    const { readFileSync } = await import('node:fs');
+    const todaySrc = readFileSync(new URL('side-panel/modules/today/today.js', `file://${process.cwd()}/`), 'utf8');
+    check(!/all clear/i.test(todaySrc), 'Today module does not print an all-clear');
+    check(/sweepNoActionSentence\(gaps\)/.test(todaySrc), 'Sweep card uses the shared sentence');
+    check(/sweepNoActionSentence\(prov\.gaps\)/.test(todaySrc), 'Recent Alerts empty state uses the shared sentence');
+    check(
+      /gaps\.bounded \? '' : 'today-sweep-result--clear'/.test(todaySrc),
+      'green clear tone is withheld when coverage has a gap'
+    );
+    check(
+      /prov\.gaps\.bounded \? 'today-empty' : 'today-empty today-empty--green'/.test(todaySrc),
+      'Recent Alerts green is withheld when coverage has a gap'
+    );
+    check(
+      /found \$\{prov\.actionNeeded\} with checks due/.test(todaySrc),
+      'empty alert log points at a sweep that found checks due'
+    );
+  }
+
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---`);
   if (failed > 0) process.exitCode = 1;
 }

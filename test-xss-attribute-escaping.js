@@ -130,7 +130,7 @@ console.log('--- escAttr coverage ---');
   {
     const src = fs.readFileSync(path.join(__dirname, 'side-panel/modules/slots/slots.js'), 'utf8');
     check(
-      /function escHtml/.test(src) && src.includes('.replace(/"/g, \'&quot;\')'),
+      /function escHtml/.test(src) && src.includes(".replace(/\"/g, '&quot;')"),
       'slots.js escHtml quote-escapes (used in attributes)'
     );
   }
@@ -142,14 +142,41 @@ console.log('--- options diagnostics probe escapes url and error ---');
   const probe = src.match(/debugProbeBtn[\s\S]*?debugProbeResults[\s\S]*?\n\}\);/);
   check(!!probe, 'debug probe handler found');
   check(probe && probe[0].includes('escHtml(p.url)'), 'probe line escapes p.url with escHtml');
-  check(
-    probe && probe[0].includes('escHtml(e.message)'),
-    'probe error line escapes e.message with escHtml'
-  );
+  check(probe && probe[0].includes('escHtml(e.message)'), 'probe error line escapes e.message with escHtml');
   check(
     probe && !probe[0].includes('${p.url}') && !probe[0].includes('${e.message}'),
     'probe does not interpolate raw p.url / e.message into innerHTML'
   );
+}
+
+console.log('--- triage options kind text is escaped ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/options.js'), 'utf8');
+  check(!src.includes('${KIND_LABEL[rule.kind] || rule.kind}'), 'request-rule kind fallback is not interpolated raw');
+  check(src.includes('${escHtml(KIND_LABEL[rule.kind] || rule.kind)}'), 'request-rule kind text goes through escHtml');
+  check(
+    !src.includes("${KIND_LABEL[cfg.kind] || cfg.kind || 'INFO'}"),
+    'system-chip kind fallback is not interpolated raw'
+  );
+  check(
+    src.includes("${escHtml(KIND_LABEL[cfg.kind] || cfg.kind || 'INFO')}"),
+    'system-chip kind text goes through escHtml'
+  );
+  check(!src.includes('${KIND_LABEL[r.kind]}'), 'preview kind text is not an unescaped KIND_LABEL lookup');
+  check(
+    src.includes("${escHtml(KIND_LABEL[r.kind] || r.kind || '')}"),
+    'preview kind text goes through escHtml, including an unknown kind'
+  );
+  check(!src.includes('tl-rule-kind-${_rrKind}'), 'result-rule kind class is not a raw interpolation');
+  check(src.includes('${escHtml(KIND_LABEL[_rrKind] || _rrKind)}'), 'result-rule kind text goes through escHtml');
+}
+
+console.log('--- patient alerts current-patient NHS is escaped ---');
+{
+  const src = fs.readFileSync(path.join(__dirname, 'side-panel/modules/patient-alerts/patient-alerts.js'), 'utf8');
+  check(!/NHS \$\{fmtNhs\(/.test(src), 'no NHS template interpolates fmtNhs without esc');
+  check(/NHS \$\{esc\(fmtNhs\(_pc\.nhsNumber\)\)\}/.test(src), 'current-patient NHS line uses esc(fmtNhs(...))');
+  check(/NHS \$\{esc\(fmtNhs\(p\.nhsNumber\)\)\}/.test(src), 'browse-list NHS line still uses esc(fmtNhs(...))');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

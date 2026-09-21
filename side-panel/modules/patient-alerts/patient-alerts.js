@@ -301,7 +301,7 @@ function renderCurrent() {
   const alerts = found ? sortAlerts(found.entry.alerts) : [];
   const name = _pc.displayName || _pc.patientName || _pc.name || 'Unnamed patient';
   const meta = [
-    _pc.nhsNumber ? `NHS ${fmtNhs(_pc.nhsNumber)}` : '',
+    _pc.nhsNumber ? `NHS ${esc(fmtNhs(_pc.nhsNumber))}` : '',
     _pc.dateOfBirth || _pc.dobRaw ? `DOB ${esc(_pc.dateOfBirth || _pc.dobRaw)}` : '',
   ]
     .filter(Boolean)
