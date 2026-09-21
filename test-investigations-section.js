@@ -196,16 +196,39 @@ console.log('\n── layout: two columns on top; the never strip and the result
   );
   check(
     /'inv-restable'/.test(src) &&
-      /'SNOMED description'/.test(src) &&
-      /'Core \/ optional'/.test(src) &&
-      /'Wordings'/.test(src),
-    'the results are ONE table: name, code, SNOMED description, unit, core/optional, wordings, lab'
+      /'How it counts'/.test(src) &&
+      /'Also called'/.test(src) &&
+      !/'SNOMED description'/.test(src) &&
+      !/\['Lab', 'lab'\]/.test(src),
+    'the results are ONE table: name, code, how it counts, also called, unit — no description column and no lab column (the lab is chosen once above the table)'
   );
   check(
     /gridRow = span > 1/.test(src) && /'shared by ' \+ usedBy/.test(src),
     'each code is its own line, name / role / wordings span them, and a result shared by several tests says so'
   );
 }
+
+check(
+  /\['Also called', 'words'\],\s*\['Unit', 'unit'\],\s*\['Practice normal range/.test(src),
+  'the Unit column sits immediately before the practice range it defines'
+);
+check(
+  /a\.lab \|\| LC\.norm\(a\.text\) !== LC\.norm\(r\.label\)/.test(src),
+  'a wording that only repeats the result’s own name is not listed again (lab-tagged wordings always are)'
+);
+
+check(
+  /\['core', 'Core to the lab group'\]/.test(src) && !/Identifies the test/.test(src),
+  'the role is called "Core to the lab group" everywhere'
+);
+check(
+  !/c\.unit \? h\('span', \{ class: 'lf-muted', text: c\.unit \}\) : null/.test(src),
+  'the unit is not repeated after the practice range boxes (it is listed just before them)'
+);
+check(
+  /\.inv-rt-words \{\s*flex-direction: column;/.test(read('options/investigations-section.css')),
+  'the "also called" names stack one to a line'
+);
 
 console.log('\n── Edit and Details are one screen ──');
 check(
@@ -214,9 +237,10 @@ check(
 );
 check(
   /function resultEditorParts/.test(src) &&
-    /'Codes & wordings'/.test(src) &&
-    /r \? resultEditorParts\(r\) : null/.test(src),
-  "each result in a test's edit screen has a Codes & wordings button that edits the result's own codes and wordings in place"
+    /const clickToEdit/.test(src) &&
+    !/'Codes & wordings'/.test(src) &&
+    /Click a code or an “also called” name to add or edit it/.test(src),
+  'a result is edited by clicking its code or its "also called" cell (no separate button), and the panel says so'
 );
 check(
   /S\.open\.delete\(S\.editing\)/.test(src),

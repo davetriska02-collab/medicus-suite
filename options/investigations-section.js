@@ -664,11 +664,15 @@ const VALUE_OPTIONS = [
   ['numeric', 'Number'],
   ['text', 'Text'],
 ];
+// What each result does for the test. core = the results the matcher looks for; shared = also belongs to another test (used to
+// tell them apart, never needed); optional = may be there, never needed.
 const ROLE_OPTIONS = [
-  ['core', 'core'],
-  ['shared', 'shared'],
-  ['optional', 'optional'],
+  ['core', 'Core to the lab group'],
+  ['shared', 'Shared with another test'],
+  ['optional', 'May be present'],
 ];
+const ENOUGH_ALONE =
+  'Tick if this result on its own is enough to recognise the test. If nothing is ticked, the test needs at least two of its "Core to the lab group" results to be present (or its only one, if it has just one).';
 
 // Headings for labs the practice does not use are kept (and saved back untouched) but not shown.
 function labVisible(labId) {
@@ -994,13 +998,13 @@ function renderEditor(st, done) {
     )
   );
 
-  // results — one line each: name, role, any-one, codes, lab wording
   const newSpec = (m) => st.newResults.find((x) => 'new:' + x.label === m.result);
   // ONE full-width table of the results (a result is one thing, shared by every test that uses it). Each code is its own line
-  // (code | SNOMED description | unit); name, core/optional, wordings, lab and the actions span all of a result's code lines.
+  // (code | unit); name, how it counts and "also called" span all of a result's code lines.
   // The autofiling columns (practice range, safety guards, filing controls, enable) join at the right, in their own colour.
   const rows = h('div', { class: 'inv-restable' });
-  const COLS = { name: 1, code: 2, desc: 3, unit: 4, role: 5, words: 6, lab: 7, range: 8, enable: 9, approval: 10 };
+  // Unit sits at the END of the matching columns, right beside the practice range it defines.
+  const COLS = { name: 1, code: 2, role: 3, words: 4, unit: 5, range: 6, enable: 7, approval: 8 };
   const fLab = currentFilingLab();
   const fLabName = fLab ? labShort(fLab) : '';
   const cell = (cls, col, row, span, ...kids) => {
@@ -1013,11 +1017,9 @@ function renderEditor(st, done) {
     [
       ['Name', 'name'],
       ['Code', 'code'],
-      ['SNOMED description', 'desc'],
+      ['How it counts', 'role'],
+      ['Also called', 'words'],
       ['Unit', 'unit'],
-      ['Core / optional', 'role'],
-      ['Wordings', 'words'],
-      ['Lab', 'lab'],
       ['Practice normal range (min – max)', 'range'],
       ['Enable autofiling', 'enable'],
       ['Filing approval', 'approval'],
@@ -1069,14 +1071,7 @@ function renderEditor(st, done) {
     on.addEventListener('change', submit);
     const approved = !!(e && e.provenance && e.provenance.reviewed === true);
     return [
-      f(
-        'inv-rt-frange',
-        COLS.range,
-        lo,
-        h('span', { text: '–' }),
-        hi,
-        c.unit ? h('span', { class: 'lf-muted', text: c.unit }) : null
-      ),
+      f('inv-rt-frange', COLS.range, lo, h('span', { text: '–' }), hi),
       f('inv-rt-fenable', COLS.enable, h('label', { class: 'lf-check' }, on, ' on')),
       f(
         'inv-rt-fapproval',
@@ -1103,6 +1098,22 @@ function renderEditor(st, done) {
   const filingCellsNoCode = (row) => [
     cell('inv-rt-f inv-rt-frange', COLS.range, row, 1, h('span', { class: 'lf-muted', text: 'needs a code first' })),
   ];
+  // Clicking a code or an "also called" cell opens (or closes) that result's own editor, full width under its rows.
+  const clickToEdit = (el, parts, tip) => {
+    if (!parts) return el;
+    el.classList.add('inv-rt-click');
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.title = (tip ? tip + '\n\n' : '') + 'Click to add or edit this result\u2019s codes and other names';
+    el.addEventListener('click', parts.toggle);
+    el.addEventListener('keydown', (e) => {
+      if (e.target === el && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        parts.toggle();
+      }
+    });
+    return el;
+  };
   let cursor = 2;
   st.members.forEach((m, i) => {
     const isNew = m.result.startsWith('new:');
@@ -1134,14 +1145,13 @@ function renderEditor(st, done) {
         h(
           'div',
           { class: 'inv-rt-actions' },
-          parts ? parts.button : null,
           h('button', {
             type: 'button',
-            class: 'inv-chip-x',
-            title: 'Remove this result from the test',
-            'aria-label': 'Remove ' + nameText,
+            class: 'lf-btn lf-btn-sm lf-btn-danger inv-rt-remove',
+            title: 'Remove from this test — the result stays in the catalogue and in other tests',
+            'aria-label': 'Remove ' + nameText + ' from this test',
             onclick: () => (st.members.splice(i, 1), redraw()),
-            text: '×',
+            text: 'Remove',
           })
         )
       )
@@ -1151,22 +1161,19 @@ function renderEditor(st, done) {
         const info = codeInfoFor(c);
         const q = info.qof ? ' inv-code-qof' : '';
         rows.appendChild(
-          cell(
-            'inv-rt-code' + q,
-            COLS.code,
-            start + k,
-            1,
-            h('span', { class: 'inv-code-id', text: c.conceptId }),
-            info.qof ? h('span', { class: 'inv-qof-tag', text: 'QOF' }) : null
-          )
-        );
-        rows.appendChild(
-          cell(
-            'inv-rt-desc' + q,
-            COLS.desc,
-            start + k,
-            1,
-            h('span', { class: info.desc ? '' : 'lf-muted', text: info.desc || 'no description recorded' })
+          clickToEdit(
+            cell(
+              'inv-rt-code' + q,
+              COLS.code,
+              start + k,
+              1,
+              h('span', { class: 'inv-code-id', text: c.conceptId }),
+              info.qof ? h('span', { class: 'inv-qof-tag', text: 'QOF' }) : null
+            ),
+            parts,
+            [c.conceptId, info.desc, info.qof ? 'Counts towards QOF (' + info.qofClusters.join(', ') + ')' : '']
+              .filter(Boolean)
+              .join('\n')
           )
         );
         rows.appendChild(
@@ -1183,18 +1190,19 @@ function renderEditor(st, done) {
     } else {
       const none = isNew && ns && ns.code ? ns.code : '';
       rows.appendChild(
-        cell(
-          'inv-rt-code',
-          COLS.code,
-          start,
-          1,
-          none
-            ? h('span', { class: 'inv-code-id', text: none })
-            : h('span', { class: 'inv-tag inv-tag-warn', text: 'no code yet' })
+        clickToEdit(
+          cell(
+            'inv-rt-code',
+            COLS.code,
+            start,
+            1,
+            none
+              ? h('span', { class: 'inv-code-id', text: none })
+              : h('span', { class: 'inv-tag inv-tag-warn', text: 'no code yet — matched by name only' })
+          ),
+          parts,
+          ''
         )
-      );
-      rows.appendChild(
-        cell('inv-rt-desc', COLS.desc, start, 1, h('span', { class: 'lf-muted', text: 'matched by name only' }))
       );
       rows.appendChild(cell('inv-rt-unit', COLS.unit, start, 1, h('span', { class: 'lf-muted', text: '—' })));
       filingCellsNoCode(start).forEach((x) => rows.appendChild(x));
@@ -1206,36 +1214,27 @@ function renderEditor(st, done) {
         start,
         n,
         role,
-        h(
-          'label',
-          { class: 'lf-check inv-em-any', title: 'Any one of the "any one" results is enough to recognise the test' },
-          anchor,
-          ' any one'
-        )
+        h('label', { class: 'lf-check inv-em-any', title: ENOUGH_ALONE }, anchor, ' enough on its own')
       )
     );
-    const words = r ? r.aliases : [];
+    // The result's name is itself one of its names, so an unlabelled name that just repeats it adds nothing here (lab-tagged
+    // ones always show). The full list is in the editor that opens when you click a code or an "also called" name.
+    const words = r ? r.aliases.filter((a) => a.lab || LC.norm(a.text) !== LC.norm(r.label)) : [];
     rows.appendChild(
-      cell(
-        'inv-rt-words',
-        COLS.words,
-        start,
-        n,
-        ...(words.length
-          ? words.map((a) =>
-              h('span', { class: 'inv-chip inv-chip-ro', text: (a.lab ? labShort(a.lab) + ': ' : '') + a.text })
-            )
-          : [h('span', { class: 'lf-muted', text: '—' })])
-      )
-    );
-    const labs = [...new Set(words.filter((a) => a.lab).map((a) => labShort(a.lab)))];
-    rows.appendChild(
-      cell(
-        'inv-rt-lab',
-        COLS.lab,
-        start,
-        n,
-        labs.length ? labs.join(', ') : h('span', { class: 'lf-muted', text: 'Any' })
+      clickToEdit(
+        cell(
+          'inv-rt-words',
+          COLS.words,
+          start,
+          n,
+          ...(words.length
+            ? words.map((a) =>
+                h('span', { class: 'inv-chip inv-chip-ro', text: (a.lab ? labShort(a.lab) + ': ' : '') + a.text })
+              )
+            : [h('span', { class: 'lf-muted', text: '—' })])
+        ),
+        parts,
+        ''
       )
     );
     if (parts) {
@@ -1262,7 +1261,7 @@ function renderEditor(st, done) {
     return h(
       'div',
       { class: 'inv-edit-line inv-filing-lab' },
-      h('span', { class: 'inv-inline-label', text: 'Autofiling setup for lab:' }),
+      h('span', { class: 'inv-inline-label', text: 'Lab for the ranges and autofiling below:' }),
       pick
     );
   };
@@ -1324,7 +1323,7 @@ function renderEditor(st, done) {
   pRes.appendChild(
     editorRow(
       '',
-      'Core results identify the test. Use “Codes & wordings” on a result to edit its codes and wordings. ' +
+      'Click a code or an “also called” name to add or edit it. The results marked “Core to the lab group” are what the matcher looks for. ' +
         QOF_LEGEND,
       st.members.length ? filingLabLine() : null,
       st.members.length ? rows : h('span', { class: 'lf-muted', text: 'None yet.' }),
@@ -1336,7 +1335,7 @@ function renderEditor(st, done) {
         memText,
         dl,
         memRole,
-        h('label', { class: 'lf-check' }, memAnchor, ' any one'),
+        h('label', { class: 'lf-check', title: ENOUGH_ALONE }, memAnchor, ' enough on its own'),
         btn('Add', addMember, 'lf-btn-sm')
       ),
       newBox
@@ -1454,22 +1453,17 @@ function renderEditor(st, done) {
 
 // One result's editor (codes and wordings; name and value type). Everything is editable. Used by every test that
 // includes the result — the line below says how many.
-// A "Codes & wordings" button that opens the result editor in place, inside the test's edit screen.
+// Opens / closes a result's own editor in place, inside the test's edit screen (clicked from its code or "also called" cell).
 function resultEditorParts(r) {
   const holder = h('div', { class: 'inv-em-resedit' });
-  const open = btn(
-    'Codes & wordings',
-    () => {
-      if (holder.firstChild) {
-        holder.textContent = '';
-        return;
-      }
-      holder.appendChild(renderResultEditor(r, () => (holder.textContent = '')));
-    },
-    'lf-btn-sm inv-edit-result',
-    'Edit this result’s SNOMED codes and wordings (shared by every test that uses it)'
-  );
-  return { button: open, holder };
+  const toggle = () => {
+    if (holder.firstChild) {
+      holder.textContent = '';
+      return;
+    }
+    holder.appendChild(renderResultEditor(r, () => (holder.textContent = '')));
+  };
+  return { toggle, holder };
 }
 
 function renderResultEditor(r, done) {
@@ -1517,7 +1511,10 @@ function renderResultEditor(r, done) {
         h('div', { class: 'inv-edit-line' }, code, unit, btn('Add code', addCode, 'lf-btn-sm'))
       )
     );
-    const word = input({ placeholder: 'A wording the lab (or anyone) uses for this result', 'aria-label': 'Wording' });
+    const word = input({
+      placeholder: 'Another name the lab or your GP system uses for this result',
+      'aria-label': 'Other name',
+    });
     const wlab = h(
       'select',
       { class: 'lf-input inv-sel-sm' },
@@ -1533,14 +1530,14 @@ function renderResultEditor(r, done) {
     word.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), addWord()));
     w.appendChild(
       editorRow(
-        'Wordings',
+        'Also called',
         null,
         chipsEl(
           st.aliases,
           (i) => (st.aliases.splice(i, 1), redraw()),
           (a) => (a.lab ? `${labShort(a.lab)}: ` : '') + a.text
         ),
-        h('div', { class: 'inv-edit-line' }, word, wlab, btn('Add wording', addWord, 'lf-btn-sm'))
+        h('div', { class: 'inv-edit-line' }, word, wlab, btn('Add name', addWord, 'lf-btn-sm'))
       )
     );
     const persist = async (approve) => {
@@ -1571,7 +1568,7 @@ function renderResultEditor(r, done) {
       h('span', {
         class: 'inv-foot-note',
         text: st.review
-          ? "Clicking 'Approve result' means I am approving this result's codes and wordings. This saves changes above and makes this result active for the features that use this catalogue."
+          ? "Clicking 'Approve result' means I am approving this result's codes and other names. This saves changes above and makes this result active for the features that use this catalogue."
           : `Used by ${plural(usedBy.length, 'test')}${
               usedBy.length
                 ? ': ' +
@@ -2299,7 +2296,7 @@ async function applyTicked() {
       x.headings ? plural(x.headings, 'heading') : '',
       x.codes ? plural(x.codes, 'code') : '',
       x.members ? plural(x.members, 'result') : '',
-      x.aliases ? plural(x.aliases, 'wording') : '',
+      x.aliases ? plural(x.aliases, 'other name') : '',
       x.labs ? plural(x.labs, 'new lab') : '',
     ]
       .filter(Boolean)

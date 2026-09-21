@@ -2,6 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.266.1] — 2026-09-22
+
+### Investigations page: a tidier results table, in plainer words
+
+Layout and wording only — no data or behaviour changes.
+
+- **Less duplication.** The SNOMED-description and Lab columns are gone (the description was only ever a label for imports; it
+  survives as a hover on the code, with its QOF note; the lab is chosen once above the table — "Lab for the ranges and autofiling
+  below"). An unlabelled "also called" name that only repeats the result's own name is no longer listed again. Unit sits just
+  before the practice range it defines, and is not repeated after it.
+- **Click to edit.** A code or an "also called" cell opens that result's own editor under its rows (click again to close); the
+  Codes & wordings buttons are gone and the panel says how to edit. Remove is a real "Remove" button under the name, with a tooltip
+  that says the result stays in the catalogue and in other tests.
+- **Plainer words.** "Core / optional" → **How it counts**: *Core to the lab group* / *Shared with another test* / *May be present*;
+  "any one" → **enough on its own** (with a tooltip explaining the rule); "Wordings" → **Also called** (result editor: "Add name").
+  "Also called" names stack one to a line.
+- Tests: `test-investigations-section.js` (54).
+
 ## [v3.266.0] — 2026-09-22
 
 ### Investigations page: Lab Filing setup — practice normal ranges and autofiling enable, per result × lab × SNOMED code (nothing acts on it yet)

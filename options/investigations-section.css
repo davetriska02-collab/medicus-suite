@@ -1063,8 +1063,8 @@
 .inv-restable {
   display: grid;
   grid-template-columns:
-    minmax(150px, 1.2fr) minmax(120px, 0.9fr) minmax(150px, 1.5fr) minmax(60px, 0.5fr) minmax(110px, 0.9fr)
-    minmax(150px, 1.6fr) minmax(70px, 0.6fr) minmax(170px, 1.3fr) minmax(80px, 0.6fr) minmax(130px, 1fr);
+    minmax(150px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1.1fr) minmax(200px, 2fr) minmax(70px, 0.5fr)
+    minmax(170px, 1.3fr) minmax(80px, 0.6fr) minmax(130px, 1fr);
   column-gap: 0;
   row-gap: 0;
   align-items: stretch;
@@ -1124,7 +1124,25 @@
   overflow: hidden;
 }
 .inv-chip-ro {
-  cursor: default;
+  cursor: inherit;
+}
+/* a code or an "also called" cell is the way in to editing that result */
+.inv-rt-click {
+  cursor: pointer;
+}
+.inv-rt-click:hover {
+  background: var(--bg-hover);
+}
+.inv-rt-click.inv-code-qof:hover {
+  background: var(--green-dim);
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.inv-rt-remove:hover {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+.inv-rt-remove {
+  min-height: 28px;
 }
 .inv-rt-edit {
   min-width: 0;
@@ -1138,7 +1156,7 @@
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
-.inv-rt-hf:nth-child(8) {
+.inv-rt-hf:nth-child(6) {
   border-left: 1.5px solid var(--accent);
 }
 .inv-rt-f {
@@ -1169,4 +1187,13 @@
   background: var(--accent-dim, rgba(37, 99, 235, 0.06));
   font-size: 11.5px;
   color: var(--text-2);
+}
+
+/* "also called" names stack, one to a line, instead of stretching across the column */
+.inv-rt-words {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
 }
