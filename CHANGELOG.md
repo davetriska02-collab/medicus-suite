@@ -2,6 +2,13 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.18] — 2026-09-21
+
+### Fixed — two stale-patient-identity races now fail closed (patient-misattribution risk)
+
+- **Monitoring eval memo could be stored under the next patient's token.** `computeMonitoringChip` (`content-scripts/triage-lens/content.js`) keyed its evaluation memo (`engine/eval-cache.js`) by `monitoringToken()` read *after* its awaits — so when the user navigated to another patient while `fetchPatientData` was in flight, the just-finished evaluation was filed under the NEW patient's page token (and the memo *get* could conversely serve another patient's memoised eval whose input hash collided by content). The token is now captured once before any await; the memo get keys off it, and the set is dropped entirely — never stored — if the live token no longer matches at completion. Costs one re-evaluation on the next tick; a wrong-patient memo is impossible. `test-monitoring-chip.js` Layer 6 simulates the mid-await token flip against the real eval-cache and locks all three legs (drop on flip, no cross-patient get, stable-token memoisation still works).
+- **Journal "Apply to journal" no longer guesses the patient from cached state.** The journal duplicate check in `content-scripts/problem-description-cleanup.js` resolved its patient as `prefill.patientId || _lastPatientId || URL` — so an edit-problem form that anomalously lacked `patientId` fell back to the module's last *cached* patient (or the current URL), either of which can name a different patient after an SPA navigation; matches found in that wrong patient's journal then handed `applyToJournal` wrong-patient entryIds to write to. New `resolveJournalSyncPatientId(prefill)` uses the edit form's own `patientId` alone (authoritative: the form was fetched by problemId, and the confirmed prefill carries it — `docs/learnings-problem-description-cleanup.md`); when it's missing the check is refused outright — no journal fetch, no matches, so no Apply button can exist — and the panel says so visibly ("Journal duplicate check skipped…") instead of passing the refusal off as "no duplicates found". `test-problem-description-cleanup.js` covers the no-patient-id form and source-locks the fallback chain's removal.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip
