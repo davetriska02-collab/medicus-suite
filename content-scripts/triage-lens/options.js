@@ -449,7 +449,7 @@
       row.className = 'tl-rule-row' + (rule.enabled ? '' : ' tl-rule-disabled');
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''}>
-        <span class="tl-rule-kind tl-rule-kind-${escAttr(rule.kind)}">${KIND_LABEL[rule.kind] || rule.kind}</span>
+        <span class="tl-rule-kind tl-rule-kind-${escAttr(rule.kind)}">${escHtml(KIND_LABEL[rule.kind] || rule.kind)}</span>
         <span>
           <span class="tl-rule-label">${escHtml(rule.label)}</span>
           <span class="tl-rule-meta">  ${rule.builtin ? '· built-in ' : ''}${rule.notes ? ' · ' + escHtml(rule.notes.slice(0, 50)) : ''}</span>
@@ -1217,7 +1217,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
               : '';
           return `
       <div class="tl-preview-match">
-        <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${KIND_LABEL[r.kind]}</span>
+        <span class="tl-rule-kind tl-rule-kind-${escAttr(r.kind)}">${escHtml(KIND_LABEL[r.kind] || r.kind || '')}</span>
         <span class="tl-rule-label">${escHtml(r.label)}${qSuffix}</span>
         <span class="tl-rule-meta">${r.actions.length} action${r.actions.length === 1 ? '' : 's'}</span>${reqNote}
       </div>`;
@@ -1518,7 +1518,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       row.className = 'tl-rule-row' + (cfg.enabled === false ? ' tl-rule-disabled' : '');
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${cfg.enabled !== false ? 'checked' : ''}>
-        <span class="tl-rule-kind tl-rule-kind-${escAttr(cfg.kind || 'info')}">${KIND_LABEL[cfg.kind] || cfg.kind || 'INFO'}</span>
+        <span class="tl-rule-kind tl-rule-kind-${escAttr(cfg.kind || 'info')}">${escHtml(KIND_LABEL[cfg.kind] || cfg.kind || 'INFO')}</span>
         <span>
           <span class="tl-rule-label">${escHtml(cfg.label || '')}</span>
           <span class="tl-rule-meta">  · ${escHtml(meta.desc)}</span>
@@ -2129,7 +2129,7 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
               : '';
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${rule.enabled ? 'checked' : ''} aria-label="Enable ${escAttr(rule.label)}">
-        <span class="tl-rule-kind tl-rule-kind-${_rrKind}">${KIND_LABEL[_rrKind] || _rrKind.toUpperCase()}</span>
+        <span class="tl-rule-kind tl-rule-kind-${escAttr(_rrKind)}">${escHtml(KIND_LABEL[_rrKind] || _rrKind)}</span>
         <span>
           ${_rrDir ? `<span class="tl-rr-dir" title="${_rrDirTitle}">${_rrDir}</span> ` : ''}<span class="tl-rule-label">${escHtml(rule.label)}</span>
           ${!rule.enabled ? '<span class="tl-rr-unreviewed" title="Not yet enabled. Review this rule\'s analyte match strings and thresholds, then tick the box to let it fire.">Unreviewed</span>' : ''}
