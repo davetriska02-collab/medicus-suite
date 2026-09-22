@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.27] — 2026-09-22
+
+### Nav — shells agree after Sweep, Submissions is not a second Monitoring
+
+3.264.16 and 3.264.26 were already claimed by open PRs, so this patch is 3.264.27.
+
+- **Pop-out strip labels** match the side panel: Monitoring (was "Monitor", which read as the removed Note TV) and Submissions (was "Subs").
+- **Submissions icon** is an inbox in both shells. It had been the same trace glyph as Monitoring, so the two tabs were indistinguishable when the strip was scrolled.
+- **Default order.** On the panel, Record follows Sweep (it was after Leaflets). Leaflets sits before Rota in both shells. Signing stays between Reception and Sweep. The custom-flags tab stays after Rota manager on the panel, and after Record on the pop-out — those two positions are not moved. A saved `suite.tabOrder` is unchanged. Digits 1–9 still land on Slots through Signing. Flag and book-signing labels are unchanged here (draft #459).
+- **All tabs menu** uses the accessible name ("Capacity Forecast", "Pre-clinic Sweep", "Patient Alerts"), and drops the em-dash gloss that is there for screen readers.
+- **g-chord** now reaches Signing (`i`), Patient Alerts (`p`), Phrases (`h`) and Rota (`o`). `g` then `t` or `b` still does nothing, so muscle memory for the removed Today tab and Note/TV board does not open a different module.
+
+Tests: `test-nav-ia.js`; `test-tab-order.js` covers the menu-label helper.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor

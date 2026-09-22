@@ -14,6 +14,7 @@ import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
 import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
+import { navMenuLabelText } from './tab-order.js';
 import { initSetup, setSetupActiveModule } from './setup/setup.js';
 import { openRotaTab } from './modules/rota/rota-open.js';
 import { TAB_HELP } from '../shared/tab-help.js';
@@ -156,7 +157,7 @@ let _helpCloseHandler = null;
 // Keyboard-shortcuts reference appended to every "?" help popover (see
 // wireKeyboardNav below) — one copy, not duplicated per tab. The "g" row's
 // title carries the full chord map so it's discoverable on hover without
-// cluttering the fixed-width popover with 14 lines.
+// cluttering the fixed-width popover with one line per tab.
 function buildKeyboardHelpSectionHTML() {
   const chordList = Object.entries(G_CHORD_MAP)
     .map(([key, mod]) => `${key}=${TAB_HELP[mod]?.title || mod}`)
@@ -251,13 +252,23 @@ function wireHelpButton() {
 let allTabsOpen = false;
 let _allTabsCloseHandler = null;
 
+// The strip label is the short uppercase one ("Forecast", "Sweep", "Pt Alerts").
+// This menu is the overflow escape hatch at panel width, so it uses the
+// accessible name ("Capacity Forecast", "Pre-clinic Sweep", "Patient Alerts").
+// An em-dash gloss stays on the button for screen readers; it is too long for
+// a menu row.
+function navMenuLabel(tab) {
+  const fallback = tab.querySelector('span:not(.nav-badge)')?.textContent || tab.dataset.module || '';
+  return navMenuLabelText(tab.getAttribute('aria-label'), fallback);
+}
+
 function buildAllTabsPopoverHTML() {
   const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter((t) => !t.classList.contains('nav-tab-hidden'));
   const rows = tabs
     .map((t) => {
       const mod = t.dataset.module || '';
       const icon = t.querySelector('svg')?.outerHTML || '';
-      const label = t.querySelector('span:not(.nav-badge)')?.textContent || t.getAttribute('aria-label') || mod;
+      const label = navMenuLabel(t) || mod;
       const isActive = t.classList.contains('active');
       return `<button class="alltabs-item${isActive ? ' active' : ''}" role="menuitem" data-module="${escStrip(mod)}">
         <span class="alltabs-item-icon" aria-hidden="true">${icon}</span>
@@ -395,10 +406,13 @@ function wireTabNavShortcuts() {
 // letter, one keeps it and the rest are reassigned a letter from elsewhere in
 // their name so every entry stays mnemonic. Collisions and their resolutions:
 //   s* → slots keeps 's'; sentinel → 'm' (Monitoring), submissions → 'u',
-//        sweep → 'w'
+//        sweep → 'w', signing → 'i' (signIng)
 //   c* → capacity keeps 'c'
-//   r* → referrals keeps 'r'; record → 'd', reception → 'e'
-//   trends → 'n' (t is unused after Today tab removal)
+//   r* → referrals keeps 'r'; record → 'd', reception → 'e', rota → 'o' (rOta)
+//   p* → patient-alerts keeps 'p'; phrases → 'h' (pHrases)
+//   trends → 'n'
+// 't' and 'b' stay unbound on purpose: they were Today and the Note/TV board.
+// Binding them to a surviving tab would send that muscle memory to the wrong place.
 const G_CHORD_MAP = {
   s: 'slots',
   m: 'sentinel',
@@ -412,6 +426,10 @@ const G_CHORD_MAP = {
   e: 'reception',
   d: 'record',
   n: 'trends',
+  i: 'signing',
+  p: 'patient-alerts',
+  h: 'phrases',
+  o: 'rota',
 };
 
 const G_CHORD_TIMEOUT_MS = 1500;
