@@ -106,7 +106,6 @@ const VALID_SCOPES = [
   'problemDescriptionCleanup',
   'phrases',
   'rota',
-  'board',
   'allocationGroups',
   'stackchan',
 ];
@@ -300,11 +299,7 @@ function previewEnvelope(envelope) {
   if (mods.slots) {
     const hiddenCount = (mods.slots.hiddenTypes || []).length;
     const alertCount = (mods.slots.alertRules || []).length;
-    const vax = mods.slots.vaxTally || {};
-    const vaxOn = ['flu', 'covid', 'rsv'].filter((k) => vax[k]).length;
-    lines.push(
-      `Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s), ${vaxOn} vaccine tally toggle(s)`
-    );
+    lines.push(`Slot Counter: ${hiddenCount} hidden type(s), ${alertCount} alert rule(s)`);
   } else {
     const m = missing('Slot Counter');
     if (m) lines.push(m);
@@ -540,20 +535,6 @@ function previewEnvelope(envelope) {
     );
   } else {
     const m = missing('Allocation groups');
-    if (m) lines.push(m);
-  }
-
-  if (mods.board) {
-    const cfg = mods.board.config || {};
-    const profile = cfg.activeProfileId || 'waiting-room';
-    const msg = cfg.profiles && cfg.profiles.find && cfg.profiles.find((p) => p && p.id === profile);
-    const widgets = (msg && msg.widgets) || [];
-    lines.push(
-      `Note board: ${profile} profile` +
-        (widgets.length ? `, ${widgets.length} widget${widgets.length === 1 ? '' : 's'}` : '')
-    );
-  } else {
-    const m = missing('Note board');
     if (m) lines.push(m);
   }
 

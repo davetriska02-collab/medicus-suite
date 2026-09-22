@@ -7,7 +7,6 @@ const fs = require('fs');
 const path = require('path');
 
 const files = {
-  'content-scripts/appointment-tally.js': 'appointment-tally',
   'content-scripts/appointment-organise-canvas.js': 'appointment-organise',
   'content-scripts/lab-allocate-canvas.js': 'lab-allocate',
   'content-scripts/rx-allocate-canvas.js': 'rx-allocate',
@@ -66,9 +65,8 @@ for (const [f, id] of Object.entries(files)) {
 const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
 assert(manifest.includes('shared/injector-runtime.js'), 'manifest loads injector-runtime.js');
 assert(manifest.includes('shared/write-core.js'), 'manifest loads write-core.js');
+assert(!manifest.includes('appointment-tally'), 'appointment-book tally is not in the manifest');
 const runtimeIdx = manifest.indexOf('shared/injector-runtime.js');
-const tallyIdx = manifest.indexOf('content-scripts/appointment-tally.js');
-assert(runtimeIdx !== -1 && runtimeIdx < tallyIdx, 'injector-runtime loads before tally');
 assert(runtimeIdx < manifest.indexOf('content-scripts/problem-nesting.js'), 'injector-runtime loads before problem-nesting');
 assert(
   runtimeIdx < manifest.indexOf('content-scripts/document-codes-to-problems.js'),
@@ -99,4 +97,4 @@ assert(writeCoreIdx !== -1 && writeCoreIdx < allergyIdx, 'write-core loads befor
   }
 }
 
-console.log('test-appointment-book-chrome: ok');
+console.log('appointment-book-chrome: OK');

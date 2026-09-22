@@ -144,7 +144,6 @@ function makeHarness({ code = 'abc123' } = {}) {
   const consumers = [
     ['side-panel/panel.js', 'panel-wr-strip'],
     ['side-panel/modules/sentinel/sentinel.js', 'sentinel-wr'],
-    ['side-panel/modules/today/today.js', 'today-wr'],
   ];
   for (const [file, label] of consumers) {
     const src = fs.readFileSync(path.join(__dirname, file), 'utf8');

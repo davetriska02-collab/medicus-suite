@@ -8,7 +8,7 @@
 // Storage keys:
 //   suite.requestMonitor.enabled       boolean — feature toggle (default false)
 //   suite.requestMonitor.assigneeId    string  — team UUID (e.g. Triage Doctor)
-//   suite.requestMonitor.pollSeconds   number  — poll interval, min 30 (default 60)
+//   suite.requestMonitor.pollSeconds   number  — poll interval, min 120 (default 300)
 //   suite.requestMonitor.notifyEnabled boolean — desktop notifications (default false)
 //   suite.requestMonitor.notifySound   boolean — sound on notification (default false)
 //   suite.requestMonitor.urgentAgeAmberHours number — breach-risk strip amber threshold (default 2)
@@ -89,13 +89,13 @@
   const DEFAULTS = {
     enabled: false,
     assigneeId: '',
-    pollSeconds: 60,
+    pollSeconds: 300,
     notifyEnabled: false,
     notifySound: false,
     urgentAgeAmberHours: 2,
     urgentAgeRedHours: 4,
   };
-  const MIN_POLL_SECONDS = 30;
+  const MIN_POLL_SECONDS = 120;
 
   // Four buckets the monitor watches. taskType + status → API filter values.
   const BUCKETS = [

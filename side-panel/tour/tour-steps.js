@@ -84,22 +84,6 @@ export const TOUR_STEPS = [
     body: 'When patients wait, queues build, demand thresholds trip — or the open patient carries one of your practice’s own flags (interpreter needed, safeguarding; set them in Pt Alerts) — a strip appears under the tab bar, on every tab.',
   },
   {
-    id: 'today',
-    addedIn: 4,
-    module: 'today',
-    target: ['.today-module'],
-    title: 'Today — your morning at a glance',
-    body: 'One screen shows waiting patients, triage load, demand counts, available slots and the pre-clinic sweep result so you can start clinic fully briefed.',
-  },
-  {
-    id: 'today-headline',
-    addedIn: 6,
-    module: 'today',
-    target: ['.today-headline'],
-    title: 'One line: what needs you now',
-    body: 'A plain-English summary of the cards below — worst thing first, quiet when nothing is outstanding — always stamped with when it was last checked.',
-  },
-  {
     id: 'slots',
     addedIn: 2,
     module: 'slots',

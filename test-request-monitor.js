@@ -137,12 +137,12 @@ global.chrome = {
   for (const k of Object.keys(mockStore)) delete mockStore[k];
   const cfg = await RM.getConfig();
   assert(cfg.enabled === false, 'getConfig: enabled defaults to false');
-  assert(cfg.pollSeconds === 60, 'getConfig: pollSeconds defaults to 60');
+  assert(cfg.pollSeconds === 300, 'getConfig: pollSeconds defaults to 300');
   assert(cfg.notifyEnabled === false, 'getConfig: notifyEnabled defaults to false');
 
   await RM.setConfig({ pollSeconds: 5 });
   const cfg2 = await RM.getConfig();
-  assert(cfg2.pollSeconds === 30, 'getConfig: pollSeconds floored to MIN_POLL_SECONDS (30)');
+  assert(cfg2.pollSeconds === 120, 'getConfig: pollSeconds floored to MIN_POLL_SECONDS (120)');
 
   await RM.setConfig({ enabled: true, assigneeId: 'uuid', pollSeconds: 120 });
   const cfg3 = await RM.getConfig();

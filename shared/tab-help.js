@@ -18,11 +18,6 @@
 'use strict';
 
 export const TAB_HELP = {
-  today: {
-    title: 'Today',
-    what: 'A morning overview of the practice: waiting room, triage load, demand and free slots, all on one screen.',
-    firstStep: 'Read it top to bottom before clinic to see what the day looks like.',
-  },
   slots: {
     title: 'Slots',
     what: 'Counts of free appointment slots by type for any chosen date.',
@@ -106,12 +101,6 @@ export const TAB_HELP = {
     title: 'Rota',
     what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',
     firstStep: 'Glance at duty cover for AM and PM, then open the Rota manager (new tab) to fix any gap.',
-  },
-  board: {
-    title: 'Note',
-    what: 'A configurable display board for a waiting-room TV or a staff-room monitor. You add boards and set the words. Public profiles show only counts, wait bands and the message you type — never patient names.',
-    firstStep:
-      'Pick a style, add or rename a board, set the words and when the room looks busy, optionally paste a practice YouTube playlist, then open it on the computer already plugged into the TV and press Fullscreen (or F).',
   },
   'rota-app': {
     title: 'Rota manager',

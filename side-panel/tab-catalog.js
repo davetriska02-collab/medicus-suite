@@ -15,7 +15,6 @@
 'use strict';
 
 export const TAB_CATALOG = [
-  { id: 'today', name: 'Today', blurb: 'Your morning at a glance — waiting room, demand, slots, sweep.' },
   { id: 'slots', name: 'Slots', blurb: 'Taken and free appointment counts by type for any date.' },
   { id: 'sentinel', name: 'Monitoring', blurb: 'Per-patient alerts: drug monitoring, QOF and vaccines.' },
   {
@@ -47,11 +46,6 @@ export const TAB_CATALOG = [
     blurb: 'Today’s duty cover, leave, uncovered sessions and staffing warnings.',
   },
   {
-    id: 'board',
-    name: 'Note',
-    blurb: 'TV and monitor display — waiting-room tempo, request ticker, ops overview.',
-  },
-  {
     id: 'rota-app',
     name: 'Rota manager',
     blurb: 'Opens the full rota in a new tab — patterns, leave, duty fairness and cover.',
@@ -74,20 +68,19 @@ export const TAB_CATALOG = [
 ];
 
 // One-tap starting points; users fine-tune afterwards. Every preset keeps
-// Today (the home tab) and Knowledge/About-level basics reachable.
+// Slots (the default home tab) and Knowledge/About-level basics reachable.
 export const ROLE_PRESETS = [
   {
     id: 'gp',
     label: 'GP / clinician',
     show: [
-      'today',
+      'slots',
       'sentinel',
       'record',
       'patient-alerts',
       'trends',
       'sweep',
       'signing',
-      'slots',
       'knowledge',
       'leaflets',
       'phrases',
@@ -96,13 +89,12 @@ export const ROLE_PRESETS = [
   {
     id: 'reception',
     label: 'Reception',
-    show: ['today', 'reception', 'patient-alerts', 'slots', 'submissions', 'knowledge', 'leaflets', 'board'],
+    show: ['slots', 'reception', 'patient-alerts', 'submissions', 'knowledge', 'leaflets'],
   },
   {
     id: 'manager',
     label: 'Practice manager',
     show: [
-      'today',
       'slots',
       'capacity',
       'submissions',
@@ -110,7 +102,6 @@ export const ROLE_PRESETS = [
       'referrals',
       'rota',
       'rota-app',
-      'board',
       'knowledge',
     ],
   },
