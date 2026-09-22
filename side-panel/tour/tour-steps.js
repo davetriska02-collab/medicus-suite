@@ -161,7 +161,7 @@ export const TOUR_STEPS = [
     addedIn: 3,
     target: ['#paletteBtn'],
     title: 'One keystroke to anywhere',
-    body: 'Press Ctrl+K (or click here) for the command palette: jump to any tab, change theme or text size, open the right settings section, or replay this tour.',
+    body: 'Press Ctrl or Cmd+K (or click here) for the command palette: jump to any tab, change theme or text size, open settings, or choose Keyboard shortcuts for the full key list.',
   },
   {
     id: 'header-controls',

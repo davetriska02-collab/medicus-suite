@@ -18,7 +18,14 @@
 
 'use strict';
 
-import { rankCommands, pushRecent, patientScopedCommands, PATIENT_COMMAND_IDS } from './palette-core.js';
+import {
+  rankCommands,
+  pushRecent,
+  patientScopedCommands,
+  PATIENT_COMMAND_IDS,
+  omitRetiredCommands,
+  shortcutSheet,
+} from './palette-core.js';
 import { startTour } from '../tour/tour.js';
 import { openRotaTab } from '../modules/rota/rota-open.js';
 
@@ -29,6 +36,7 @@ let _commands = [];
 let _filtered = [];
 let _selected = 0;
 let _hotkeyHandler = null;
+let _showingSheet = false;
 
 function loadRecents() {
   try {
@@ -133,9 +141,11 @@ function buildCommands(hasPatient) {
     });
   });
 
-  // Rota (full app) opens as a browser tab; the pop-out has no nav tab for it,
-  // so the palette is how the floating window reaches it. Same focus-or-create
-  // helper the panel's 'rota-app' tab uses.
+  // Full-tab launchers the pop-out has no nav button for. The panel already
+  // reaches these by clicking its own tabs (which become "Go to …" above), so
+  // the open:* rows exist only when that tab is absent. Same helpers the
+  // panel's click handler uses — rota focuses an existing tab; duplicates
+  // opens duplicate-checker.html.
   if (!document.querySelector('.nav-tab[data-module="rota-app"]')) {
     cmds.push({
       id: 'open:rota',
@@ -144,6 +154,16 @@ function buildCommands(hasPatient) {
       keywords: 'rota staff duty leave cover sessions template',
       icon: GENERIC_ICONS.doc,
       run: () => openRotaTab(),
+    });
+  }
+  if (!document.querySelector('.nav-tab[data-module="duplicate-checker"]')) {
+    cmds.push({
+      id: 'open:duplicate-checker',
+      label: 'Open Duplicate Problem Checker',
+      group: 'Open',
+      keywords: 'duplicate duplicates gp2gp problems checker',
+      icon: GENERIC_ICONS.doc,
+      run: () => chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') }),
     });
   }
 
@@ -237,9 +257,9 @@ function buildCommands(hasPatient) {
   // mode above, which mutes notifications; Zen hides chrome, never signal.
   cmds.push({
     id: 'zen:toggle',
-    label: 'Focus mode: toggle',
+    label: 'Focus mode: toggle (Ctrl/Cmd+.)',
     group: 'View',
-    keywords: 'zen focus declutter hide chrome distraction free minimal full screen',
+    keywords: 'zen focus declutter hide chrome distraction free minimal full screen shortcut ctrl cmd',
     icon: GENERIC_ICONS.window,
     run: () => window.ZenMode?.toggle(),
   });
@@ -294,6 +314,16 @@ function buildCommands(hasPatient) {
     icon: GENERIC_ICONS.help,
     run: () => startTour(),
   });
+  cmds.push({
+    id: 'help:shortcuts',
+    label: 'Keyboard shortcuts',
+    group: 'Help',
+    keywords: 'keys hotkeys cheat sheet ctrl cmd chord palette help',
+    icon: GENERIC_ICONS.help,
+    // runCommand shows the sheet instead of closing. The function is a no-op
+    // so a stale recents replay cannot navigate away.
+    run: () => {},
+  });
 
   // Setup checklist — panel-only (setupHost does not exist in the pop-out)
   if (document.getElementById('setupHost')) {
@@ -324,7 +354,7 @@ function buildCommands(hasPatient) {
     }
   }
 
-  return cmds;
+  return omitRetiredCommands(cmds);
 }
 
 // Click a nav tab by module name, if it exists in this shell (record/trends/
@@ -368,7 +398,17 @@ function waitForEnabled(selector, timeoutMs) {
 }
 
 // Wire the global hotkey + launcher button. Call once per page.
+function labelPaletteButton() {
+  const btn = document.getElementById('paletteBtn');
+  if (!btn) return;
+  const total = document.querySelectorAll('.nav-tab').length;
+  const where = total ? `jump to any of the ${total} tabs` : 'jump to any tab';
+  btn.title = `${where} · Command palette (Ctrl/Cmd+K). Shortcuts lists every key.`;
+  btn.setAttribute('aria-label', `Command palette — ${where} (Ctrl/Cmd+K)`);
+}
+
 export function initPalette() {
+  labelPaletteButton();
   const btn = document.getElementById('paletteBtn');
   btn?.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -399,6 +439,7 @@ export function openPalette() {
   // re-checks _layer so a since-closed palette is a no-op).
   _commands = buildCommands(false);
   _selected = 0;
+  _showingSheet = false;
   detectPatientContext().then((hasPatient) => {
     if (!hasPatient || !_layer) return;
     _commands = buildCommands(true);
@@ -424,7 +465,8 @@ export function openPalette() {
       <div class="suite-palette-hints">
         <span><kbd class="suite-palette-kbd">↑↓</kbd> select</span>
         <span><kbd class="suite-palette-kbd">↵</kbd> run</span>
-        <span><kbd class="suite-palette-kbd">ctrl</kbd>+<kbd class="suite-palette-kbd">k</kbd> toggle</span>
+        <span><kbd class="suite-palette-kbd">Ctrl</kbd>/<kbd class="suite-palette-kbd">Cmd</kbd>+<kbd class="suite-palette-kbd">K</kbd></span>
+        <button type="button" class="suite-palette-hintbtn" data-palette-shortcuts>Shortcuts</button>
       </div>
     </div>`;
   document.body.appendChild(_layer);
@@ -432,6 +474,14 @@ export function openPalette() {
   const input = _layer.querySelector('.suite-palette-input');
 
   _layer.addEventListener('click', (e) => {
+    if (e.target.closest('[data-palette-shortcuts]')) {
+      _showingSheet = !_showingSheet;
+      if (input) input.value = '';
+      _selected = 0;
+      renderList('');
+      input?.focus();
+      return;
+    }
     if (!e.target.closest('.suite-palette')) {
       closePalette();
       return;
@@ -451,6 +501,7 @@ export function openPalette() {
   });
 
   input.addEventListener('input', () => {
+    if (input.value.trim()) _showingSheet = false;
     _selected = 0;
     renderList(input.value);
   });
@@ -461,10 +512,12 @@ export function openPalette() {
       closePalette();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
+      if (!_filtered.length) return;
       _selected = Math.min(_selected + 1, _filtered.length - 1);
       paintSelection();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      if (!_filtered.length) return;
       _selected = Math.max(_selected - 1, 0);
       paintSelection();
     } else if (e.key === 'Enter') {
@@ -482,11 +535,20 @@ export function closePalette() {
   _layer = null;
   _filtered = [];
   _selected = 0;
+  _showingSheet = false;
 }
 
 function runCommand(cmd) {
   if (!cmd) return;
   saveRecents(pushRecent(loadRecents(), cmd.id));
+  if (cmd.id === 'help:shortcuts') {
+    _showingSheet = true;
+    const input = _layer?.querySelector('.suite-palette-input');
+    if (input) input.value = '';
+    renderList('');
+    input?.focus();
+    return;
+  }
   closePalette();
   try {
     cmd.run();
@@ -495,10 +557,72 @@ function runCommand(cmd) {
   }
 }
 
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function paletteShell() {
+  return document.getElementById('suiteContent') ? 'panel' : 'popout';
+}
+
+function liveTabsForSheet() {
+  return Array.from(document.querySelectorAll('.nav-tab')).map((tab) => {
+    const id = tab.dataset.module || '';
+    const name = tab.querySelector('span:not(.nav-badge)')?.textContent?.trim() || tab.getAttribute('aria-label') || id;
+    const jumpable = !tab.classList.contains('nav-tab-hidden') && id !== 'rota-app' && id !== 'duplicate-checker';
+    return { id, name, jumpable };
+  });
+}
+
+function shortcutSheetHTML() {
+  const model = shortcutSheet(paletteShell(), liveTabsForSheet());
+  const rows = model.shortcuts
+    .map(
+      (s) =>
+        `<div class="suite-palette-sheet-row"><span class="suite-palette-sheet-keys">${escHtml(s.keys)}</span><span>${escHtml(s.action)}</span></div>`
+    )
+    .join('');
+  const chords = model.chords
+    .map((c) => {
+      const hidden = c.available ? '' : ' <span class="suite-palette-sheet-muted">(hidden)</span>';
+      return `<span class="suite-palette-sheet-chord"><kbd class="suite-palette-kbd">${escHtml(c.key)}</kbd> ${escHtml(c.name)}${hidden}</span>`;
+    })
+    .join('');
+  const noLetter = model.noLetter.length
+    ? `<p class="suite-palette-sheet-note">No letter: ${escHtml(model.noLetter.map((t) => t.name).join(', '))}. Use the palette, or 1–9 when that tab is among the first nine visible.</p>`
+    : '';
+  const chordBlock = chords
+    ? `<div class="suite-palette-sheet-h">g then</div><div class="suite-palette-sheet-chords">${chords}</div>`
+    : '';
+  const notes = [model.typingNote, model.note]
+    .filter(Boolean)
+    .map((n) => `<p class="suite-palette-sheet-note">${escHtml(n)}</p>`)
+    .join('');
+  return `<div class="suite-palette-sheet">${rows}${chordBlock}${noLetter}${notes}</div>`;
+}
+
 function renderList(query) {
   if (!_layer) return;
-  _filtered = rankCommands(_commands, query, loadRecents());
   const list = _layer.querySelector('.suite-palette-list');
+  const hintBtn = _layer.querySelector('[data-palette-shortcuts]');
+  const showSheet = _showingSheet && !String(query || '').trim();
+  if (hintBtn) hintBtn.textContent = showSheet ? 'Commands' : 'Shortcuts';
+  const input = _layer.querySelector('.suite-palette-input');
+  if (input) input.placeholder = showSheet ? 'Type to return to commands…' : 'Type a tab, setting or action…';
+  if (showSheet) {
+    _filtered = [];
+    list.setAttribute('role', 'document');
+    list.setAttribute('aria-label', 'Keyboard shortcuts');
+    list.innerHTML = shortcutSheetHTML();
+    return;
+  }
+  list.setAttribute('role', 'listbox');
+  list.setAttribute('aria-label', 'Commands');
+  _filtered = rankCommands(_commands, query, loadRecents());
   if (_filtered.length === 0) {
     list.innerHTML = `<div class="suite-palette-empty">No matching commands</div>`;
     return;
