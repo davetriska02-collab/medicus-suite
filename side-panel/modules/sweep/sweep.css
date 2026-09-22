@@ -1136,7 +1136,19 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-4);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+.sweep-worklist-col-note {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-4);
+  margin: 0 0 6px;
+}
+.sweep-section-note {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+  margin: 0 0 8px;
 }
 .sweep-worklist-empty {
   font-size: 11px;

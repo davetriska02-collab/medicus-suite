@@ -30,6 +30,12 @@ const LIVE_SNAPSHOT_CAVEAT =
   (typeof window !== 'undefined' && window.Provenance && window.Provenance.CAVEATS.LIVE_SNAPSHOT_NOT_COMPLETE) ||
   'Live snapshot, not a complete record. Verify against the patient record before acting.';
 
+// Queue drug-monitoring chips (queue.monitoringDueRed / Amber) ship disabled
+// because each row fetches. Record and detail chips ship on. No options hash
+// opens the Baseline chips tab, so empty states name the click path.
+const QUEUE_MONITORING_SWITCH =
+  'Options → Triage Lens → Baseline chips → Queue, the rows named High-risk drug monitoring';
+
 const STATUS_COLOUR = {
   overdue: 'red',
   not_met: 'red',
@@ -809,7 +815,7 @@ function renderCoverageDrilldown() {
 
   return `
     <div class="sent-cov-drilldown" id="sentCoverageDrilldown" ${_coverageExpanded ? '' : 'hidden'}>
-      <p class="sent-cov-note">What Sentinel actually checks — every rule the engine can fire, straight from the rule files. A medicine or QOF area not listed here has no monitoring rule and will never produce a chip.</p>
+      <p class="sent-cov-note">What Monitoring actually checks — every rule the engine can fire, straight from the rule files. Drug-monitoring rules and QOF indicators are separate lists. A medicine or QOF area not listed here has no rule and will never produce a chip.</p>
       <section class="sent-cov-section">
         <h4 class="sent-cov-h">Drug-monitoring rules <span class="sent-cov-count">${v.drug.rules.length}</span></h4>
         <ul class="sent-cov-list">${drugItems || '<li class="sent-cov-empty">No drug-monitoring rules loaded.</li>'}</ul>
@@ -1178,20 +1184,26 @@ function render(payload) {
     setDynamic(
       statusBlock(
         'idle',
-        'Monitoring idle — no record open',
-        'Open a patient in Medicus and Sentinel checks their drug and QOF monitoring here. The waiting room above is not a monitoring result.'
+        'No record open',
+        `Open a patient in Medicus. This tab then lists that record's drug monitoring and QOF separately. The waiting room above is not a monitoring result. Drug-monitoring chips on the task queue stay off until you enable them: ${QUEUE_MONITORING_SWITCH}.`
       )
     );
     return;
   }
   if (state === 'not-mounted') {
     setDynamic(
-      statusBlock('idle', 'Navigate to a patient record', 'Sentinel activates on patient record and triage task pages.')
+      statusBlock(
+        'idle',
+        'Open a patient record',
+        `Monitoring reads the record open in Medicus. It does not scan the task queue from here. Drug-monitoring chips on the task queue stay off until you enable them: ${QUEUE_MONITORING_SWITCH}.`
+      )
     );
     return;
   }
   if (state === 'no-chips') {
-    setDynamic(statusBlock('idle', 'Loading patient data…', 'This panel refreshes automatically.'));
+    setDynamic(
+      statusBlock('idle', 'Reading the open record…', 'This panel refreshes automatically. A blank list here is not an all-clear.')
+    );
     return;
   }
   if (state === 'error') {
@@ -1346,7 +1358,11 @@ function render(payload) {
   // so moving them out of "QOF Indicators" can't read as "we've stopped chasing
   // QOF" (a concern raised across the staff-appraisal personas).
   const typeCaptionMap = {
-    'safety-monitoring': 'Clinical safety flags — not QOF payment items',
+    'safety-monitoring': 'Clinical safety flags. Listed apart from QOF payment items.',
+    'drug-monitoring': 'Bloods and checks for the medicine. Listed apart from QOF.',
+    'qof-indicator': 'Contract indicators for this QOF year. Listed apart from drug-monitoring bloods.',
+    'qof-process-indicator': 'QOF process measures. Listed apart from drug-monitoring bloods.',
+    'qof-register': 'Disease-register membership. Listed apart from overdue blood tests.',
   };
 
   const groupsHtml = typeOrder
@@ -1398,11 +1414,11 @@ function render(payload) {
     visibleChips.length === 0
       ? `<div class="sent-empty">${
           currentFilter === 'action'
-            ? 'No items needing action.'
+            ? 'Nothing in this list needs action.'
             : currentFilter === 'clear'
-              ? 'No items in date.'
-              : 'No chips for this patient.'
-        }<span class="sent-empty-caveat">${escHtml(NO_ALERT_CAVEAT)}</span></div>`
+              ? 'Nothing in this list is in date.'
+              : 'No drug-monitoring or QOF chips for this patient.'
+        }<span class="sent-empty-caveat">${escHtml(NO_ALERT_CAVEAT)}</span><span class="sent-empty-hint">Drug monitoring and QOF are separate lists. A chip on the task queue is drug monitoring only, and those queue chips stay off until ${escHtml(QUEUE_MONITORING_SWITCH)}.</span></div>`
       : '';
 
   // Per-module extraction breakdown (informational, H-005 transparency). Shows
@@ -1936,9 +1952,9 @@ function renderChip(chip) {
 // When NOTHING is action-needed the whole card goes loudly green (allClear)
 // instead of disappearing.
 const BRIEF_GROUPS = [
-  ['meds', 'Meds', 'Meds monitoring'],
-  ['qof', 'QOF', 'QOF'],
-  ['general', 'Gen', 'General'],
+  ['meds', 'Meds', 'Drug monitoring'],
+  ['qof', 'QOF', 'QOF indicators'],
+  ['general', 'Other', 'Other checks'],
 ];
 
 // Per-group RAG pill for the brief header. Text labels + tooltip carry the
@@ -2013,7 +2029,7 @@ function renderBriefCard(brief) {
     // honest — it reports the checks run, it does not assert absolute safety.
     const bodyHtml = `
     <div class="sent-brief-body" id="sentBriefBody">
-      <div class="sent-brief-allclear">&#10003; Nothing to do — meds monitoring, QOF and vaccines all clear</div>
+      <div class="sent-brief-allclear">&#10003; Nothing due in drug monitoring, QOF or vaccines. Read each line on its own. They are separate checks.</div>
       ${trendLines}
     </div>`;
     return `<div class="${cardClass}">${headerHtml}${bodyHtml}</div>`;
@@ -2129,7 +2145,7 @@ function scaffoldHtml() {
     <div class="sent-header">
       <div class="sent-header-row">
         <div class="sent-header-id">
-          <div class="mod-eyebrow">Clinical Monitoring</div>
+          <div class="mod-eyebrow">Drug monitoring and QOF</div>
           <div class="mod-title">Monitoring</div>
         </div>
         <div class="sent-header-meta">
@@ -2137,6 +2153,9 @@ function scaffoldHtml() {
         </div>
       </div>
     </div>
+    <p class="sent-orient">
+      This tab lists two separate checks for the open record: drug monitoring (the bloods and checks for a medicine) and QOF (the contract indicators). A QOF row that is in date still leaves the drug-monitoring line to read on its own. Open Evidence on a chip for the result and the date. On the patient page, Monitoring due is the drug-monitoring chip only.
+    </p>
     <div id="sentBriefSlot"></div>
     <div class="sent-actionbar" role="toolbar" aria-label="Patient actions">
       <button class="sent-action-btn" id="sentApptSummaryBtn" disabled title="Copyable list of the appointments this patient is due, for admin to book">${toolIcon(TOOL_ICONS.calendar)}<span>Appointments</span></button>
@@ -2146,7 +2165,7 @@ function scaffoldHtml() {
       <div class="sent-overflow-wrap">
         <button class="sent-action-btn" id="sentOverflowBtn" title="More tools" aria-haspopup="menu" aria-expanded="false">${toolIcon(TOOL_ICONS.more)}<span>More</span></button>
         <div class="sent-overflow-menu" id="sentOverflowMenu" hidden role="menu" aria-label="More tools">
-          <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Open the extension's settings page">Monitoring settings</button>
+          <button class="sent-menu-item" id="sentSettingsBtn" role="menuitem" title="Opens Monitoring settings (rule overrides). Queue row chips are a different page: Options → Triage Lens → Baseline chips.">Monitoring settings</button>
           <button class="sent-menu-item" id="sentExportLogBtn" role="menuitem" disabled title="Download this patient's rule-evaluation trace as JSON. Contains patient-identifiable data — handle per your practice's IG policy">Export evaluation log</button>
           <div class="sent-menu-sep" role="separator"></div>
           <button class="sent-menu-item" id="sentTourBtn" role="menuitem" title="Step through the suite walkthrough again">Replay the guided tour</button>

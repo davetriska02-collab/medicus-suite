@@ -626,7 +626,19 @@ function chipSummaryHtml(chips) {
   if (actionChips.length === 0) return '';
   return actionChips
     .map((c) => {
-      const label = esc(c.drugName || c.indicatorCode || c.label || c.displayName || c.ruleId || '');
+      const raw = c.drugName || c.indicatorCode || c.label || c.displayName || c.ruleId || '';
+      // QOF codes (HYP008) and drug names sat in the same chip with no kind,
+      // so a contract indicator read as clinical monitoring. Safety-surveillance
+      // items reuse the qof-indicator shape and must stay labelled Safety.
+      const kind =
+        c.category === 'safety-monitoring'
+          ? 'Safety '
+          : c.type === 'qof-indicator' || c.type === 'qof-process-indicator'
+            ? 'QOF '
+            : c.type === 'qof-register'
+              ? 'Register '
+              : '';
+      const label = esc(kind + raw);
       const statusLabel = esc(
         {
           overdue: 'OVERDUE',
@@ -677,7 +689,7 @@ function patientRowHtml(row, apiBase, siteId, selectable, source) {
   if (amberCount > 0) badgeParts.push(`<span class="sweep-badge sweep-badge-amber">${amberCount} amber</span>`);
 
   const hiddenNote = row.hasHiddenActionChips
-    ? `<div class="sweep-row-hidden-note">Includes alerts you have hidden in the Sentinel panel.</div>`
+    ? `<div class="sweep-row-hidden-note">Includes alerts you have hidden in the Monitoring tab.</div>`
     : '';
 
   const chipHtml = chipSummaryHtml(row.chips);
@@ -907,7 +919,7 @@ function renderWorklistPanel(worklist, siteId) {
     <details class="sweep-worklist-panel" open>
       <summary class="sweep-worklist-summary">
         Clinic prep worklist
-        <span class="sweep-worklist-sub">${total} patient line${total === 1 ? '' : 's'} across bloods, checks, jabs and reviews</span>
+        <span class="sweep-worklist-sub">${total} patient line${total === 1 ? '' : 's'} across bloods, checks, jabs and QOF</span>
       </summary>
       <div class="sweep-worklist-body">
         <p class="sweep-worklist-note">
@@ -916,18 +928,22 @@ function renderWorklistPanel(worklist, siteId) {
         <div class="sweep-worklist-cols">
           <div class="sweep-worklist-col">
             <div class="sweep-worklist-col-head">Bloods (${worklist.bloods.length})</div>
+            <p class="sweep-worklist-col-note">Drug-monitoring blood tests</p>
             ${worklistColHtml(worklist.bloods, siteId)}
           </div>
           <div class="sweep-worklist-col">
             <div class="sweep-worklist-col-head">Checks (${worklist.checks.length})</div>
+            <p class="sweep-worklist-col-note">Weight, BP and other drug-monitoring checks</p>
             ${worklistColHtml(worklist.checks, siteId)}
           </div>
           <div class="sweep-worklist-col">
             <div class="sweep-worklist-col-head">Vaccines (${worklist.vaccines.length})</div>
+            <p class="sweep-worklist-col-note">Vaccinations due</p>
             ${worklistColHtml(worklist.vaccines, siteId)}
           </div>
           <div class="sweep-worklist-col">
-            <div class="sweep-worklist-col-head">Reviews (${worklist.reviews.length})</div>
+            <div class="sweep-worklist-col-head">QOF (${worklist.reviews.length})</div>
+            <p class="sweep-worklist-col-note">Contract indicators for this QOF year</p>
             ${worklistColHtml(worklist.reviews, siteId)}
           </div>
         </div>
@@ -1094,7 +1110,7 @@ function renderResults(args) {
       : '';
 
   const printWorklistBtn = worklistHasItems
-    ? `<button class="sweep-print-worklist-btn" type="button" title="Open a printable clinic-prep list — bloods, checks, jabs and reviews due today">Print prep list</button>`
+    ? `<button class="sweep-print-worklist-btn" type="button" title="Open a printable clinic-prep list: bloods, checks, jabs and QOF indicators due today">Print prep list</button>`
     : '';
 
   // Batch toolbar — only shown when there are action rows to select
@@ -1127,7 +1143,7 @@ function renderResults(args) {
       ${errorRows.length > 0 ? `<div class="sweep-section-head sweep-section-head-error">Errors (${errorCount})</div>${errorHtml}` : ''}
       ${
         actionRows.length > 0
-          ? `<div class="sweep-section-head sweep-section-head-action-wrap">${`<span>Action needed (${actionCount})</span>${batchToolbar}`}</div>${actionHtml}`
+          ? `<div class="sweep-section-head sweep-section-head-action-wrap">${`<span>Action needed (${actionCount})</span>${batchToolbar}`}</div><p class="sweep-section-note">Each chip is drug monitoring or a QOF indicator. QOF chips are marked QOF. Open the Monitoring tab on that patient and choose Evidence for the result and the date.</p>${actionHtml}`
           : ''
       }
       ${clearSection}
@@ -1715,7 +1731,7 @@ export async function init(el) {
       <div class="sweep-header">
         <h2 class="sweep-title">Pre-clinic Monitoring Sweep</h2>
         <div class="sweep-intro">
-          Checks the selected day's booked patients against the Sentinel rules engine before clinic starts, so overdue monitoring is visible up front. Pick a day and tick one or more clinicians, or leave All.
+          Checks the selected day's booked patients against the monitoring rules before clinic starts. Action needed can include drug-monitoring bloods and QOF indicators together. The QOF points panel is contract income. Open the Monitoring tab on a patient and choose Evidence for the result and the date behind a chip. Pick a day and tick one or more clinicians, or leave All.
         </div>
         <div class="sweep-disclaimer-top">
           <strong>Supplementary tool only.</strong> Verify every alert in the source record before acting. ${NO_ALERT_CAVEAT} Results are a point-in-time snapshot, kept for 2 hours so you can resume; re-run to refresh.

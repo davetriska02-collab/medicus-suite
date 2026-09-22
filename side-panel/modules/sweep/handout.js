@@ -65,7 +65,7 @@ function patientHtml(p, showClinician) {
     )
     .join('');
   const hiddenNote = p.hasHiddenActionChips
-    ? `<div class="hidden-note">Some alerts for this patient are hidden in the Sentinel panel — a clinician should review the record.</div>`
+    ? `<div class="hidden-note">Some alerts for this patient are hidden in the Monitoring tab. A clinician should review the record.</div>`
     : '';
   return `
     <div class="patient">

@@ -28,6 +28,12 @@
 .sent-header-id {
   min-width: 0;
 }
+.sent-orient {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin: 0 0 10px;
+}
 
 .sent-header-meta {
   display: flex;
@@ -725,6 +731,13 @@
   color: var(--text-4);
   letter-spacing: 0.02em;
 }
+.sent-empty-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
 
 /* J: Idle state — canon empty-state design */
 .sent-idle-state {
@@ -1025,6 +1038,18 @@
 }
 
 /* F: Chevron affordance — replaces ⓘ on chip-head */
+.sent-chip-evidence {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-4);
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+.sent-chip-clickable:hover .sent-chip-evidence,
+.sent-chip-open .sent-chip-evidence {
+  color: var(--accent);
+}
 .sent-chip-chevron {
   font-size: 9px;
   color: var(--text-4);
