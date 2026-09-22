@@ -59,7 +59,7 @@ async function render() {
   const model = r['sentinel.passport'];
 
   if (!model || !model.patient) {
-    content.innerHTML = `<div class="empty">No health summary found. Open a patient record in Medicus, then click "Print patient summary" in the Sentinel panel.</div>`;
+    content.innerHTML = `<div class="empty">No health summary found. Open a patient record in Medicus, then click Print summary in the Monitoring tab.</div>`;
     return;
   }
 

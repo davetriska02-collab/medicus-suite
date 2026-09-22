@@ -76,6 +76,14 @@
     return `<button class="sent-chip-dismiss" data-dismiss-rule="${escAttr(ruleId)}" data-dismiss-until=""${statusAttr} title="Hide this alert" aria-label="Hide this alert">×</button>`;
   }
 
+  // Visible name for the click-to-expand evidence panel. The chevron alone
+  // (aria-hidden, and it rotates when open) does not tell a clinician that
+  // the result and date live behind the chip.
+  function evidenceMark(hasEvidence) {
+    if (!hasEvidence) return '';
+    return `<span class="sent-chip-evidence">Evidence</span><span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>`;
+  }
+
   function formatDate(s) {
     if (!s) return '';
     try {
@@ -168,7 +176,7 @@
       ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr((chip.ruleId || '') + '|' + (chip.drugName || ''))}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
-    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    const evChevron = evidenceMark(!!chip.evidence);
     // Glossary tooltip (U1): explain the drug class. "DMARD" routes to the glossary
     // (data-tip-key); any other class shows its own literal name. title= fallback.
     let drugClassTip = '';
@@ -263,7 +271,7 @@
       ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
-    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    const evChevron = evidenceMark(!!chip.evidence);
     // Glossary tooltip (U1): the QOF code (e.g. AST015) is opaque jargon — decorate
     // it with the human-readable indicatorName via data-tip (+ title fallback) so a
     // click/hover explains the code. Inert/harmless if tooltip.js is not loaded.
@@ -409,7 +417,7 @@
       ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
-    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    const evChevron = evidenceMark(!!chip.evidence);
     // Glossary tooltip (U1): explain the combo label. The classic "triple whammy"
     // routes to the glossary; otherwise use the chip's own notes as the explanation.
     const comboLabel = String(chip.label || chip.ruleId || '');
@@ -449,7 +457,7 @@
       ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
-    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    const evChevron = evidenceMark(!!chip.evidence);
     // Surface the evidence facts (Allergy / matched drug set / cross-sensitivity
     // note) inline, in addition to the click-to-expand evidence panel, so the
     // key safety detail is visible without an extra click.
@@ -488,7 +496,7 @@
       ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
-    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    const evChevron = evidenceMark(!!chip.evidence);
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">
@@ -515,7 +523,7 @@
       ? ` data-rule-id="${escAttr(chip.ruleId || '')}" data-evidence-key="${escAttr(chip.ruleId || '')}" tabindex="0" role="button" aria-expanded="false"`
       : '';
     // F: Chevron at end of chip-head instead of ⓘ next to name
-    const evChevron = chip.evidence ? `<span class="sent-chip-chevron" aria-hidden="true">&#9658;</span>` : '';
+    const evChevron = evidenceMark(!!chip.evidence);
     return `
       <div class="sent-chip sent-chip-${col}${chip.evidence ? ' sent-chip-clickable' : ''}"${titleAttr}${evAttrs}>
         <div class="sent-chip-head">

@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.29] — 2026-09-22
+
+### Monitoring: drug monitoring and QOF are named as separate checks
+
+The Monitoring tab, Sweep, and the shared chip renderer now say where a clinician looks, and what each list is. No rule, match list, or threshold changed.
+
+- **Monitoring tab** — the heading is "Drug monitoring and QOF". A line under it says the two lists are separate, that a QOF row in date still leaves the drug-monitoring line to read, and that Evidence on a chip is the result and the date. Section captions repeat that split. Empty states name the click path for the queue chips that ship off: Options → Triage Lens → Baseline chips → Queue, the rows named High-risk drug monitoring.
+- **Chips** — when a chip has evidence, the word Evidence sits beside the arrow.
+- **Sweep** — QOF chips in the action list are prefixed QOF (safety-surveillance items stay Safety). The prep column previously labelled Reviews is QOF, with a note that it is the contract indicators. The print list matches.
+
+Tests: `test-sentinel-discoverability.js`.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor
