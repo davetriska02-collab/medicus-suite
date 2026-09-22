@@ -411,7 +411,9 @@ function buildRestingState() {
         weight — so a slow drift is easy to see, not just the latest number.
       </p>
       <p class="trends-rest-step">
-        <strong>First step:</strong> open a patient in Medicus, then pick a metric.
+        <strong>First step:</strong> open a patient in Medicus. Tabs for blood pressure, renal
+        function, HbA1c, cholesterol and weight appear once results can be read. DOAC appears only
+        when a current anticoagulant is on the regimen.
       </p>
     </div>`;
 }
@@ -448,6 +450,74 @@ function sourceLineHtml() {
   if (!lastData) return '';
   const label = feedSourceLabel(lastData) === 'API' ? 'API feed' : 'session';
   return `<div class="trends-source">Data: ${esc(label)}</div>`;
+}
+
+// ── Date honesty ───────────────────────────────────────────────────────────────
+// Captions name dates that are actually on the chart. They never draw a
+// first–last span, which reads as if every day in between had a reading.
+// Non-ISO dates are not ordered: a guessed "earliest" would be worse than
+// saying only that dated readings are present.
+
+function readingSpanLabel(dates, fmt) {
+  const seen = [];
+  (dates || []).forEach((d) => {
+    if (d == null || d === '') return;
+    const s = String(d);
+    if (!seen.includes(s)) seen.push(s);
+  });
+  if (!seen.length) return '';
+  const iso = seen.every((d) => /^\d{4}-\d{2}-\d{2}/.test(d));
+  if (!iso) return `${seen.length} dated reading${seen.length === 1 ? '' : 's'} on the chart`;
+  seen.sort();
+  const earliest = fmt(seen[0]);
+  const latest = fmt(seen[seen.length - 1]);
+  if (seen.length === 1 || earliest === latest) return `recorded ${earliest}`;
+  return `earliest ${earliest} · latest ${latest} · these dates only`;
+}
+
+function chartSpacingNote(dateCount) {
+  if (!(dateCount >= 2)) return '';
+  return 'Spacing follows the order of readings, not the days between them. Days with no reading are not on the chart.';
+}
+
+function fixedAxisCaption(lo, hi, unit) {
+  const u = unit ? ` ${unit}` : '';
+  return `Axis ${lo}–${hi}${u}. A result outside that is drawn on the edge, not at its value.`;
+}
+
+function acrUnitCaution(unit) {
+  if (/mg\/mmol/i.test(String(unit || ''))) return '';
+  return `Stage cut-offs on this chart are mg/mmol. The loaded unit is ${unit || 'missing'}.`;
+}
+
+function chartDateFoot(dates) {
+  const span = readingSpanLabel(dates, fmtDate);
+  const seen = new Set();
+  (dates || []).forEach((d) => {
+    if (d == null || d === '') return;
+    seen.add(String(d));
+  });
+  const note = chartSpacingNote(seen.size);
+  return (
+    (span ? `<div class="trends-date-span">${esc(span)}</div>` : '') +
+    (note ? `<div class="trends-date-note">${esc(note)}</div>` : '')
+  );
+}
+
+function unloadedTrendsHtml() {
+  return `<div class="trends-msg">Trends has not loaded results.<br><span class="trends-hint">This is not a blank record. Open the patient in Medicus and load the investigation dashboard, then return to this tab.</span></div>`;
+}
+
+function missingSeriesHtml(name, where) {
+  const hint =
+    where === 'sibling'
+      ? 'If a result exists, load the investigation dashboard in Medicus.'
+      : 'If a result exists, load the investigation dashboard in Medicus. Other metrics are on the tabs above.';
+  return `<div class="trends-msg trends-msg-inline">No ${esc(name)} readings in the loaded results.<br><span class="trends-hint">${hint}</span></div>`;
+}
+
+function crclMissingHtml() {
+  return `<div class="trends-msg trends-msg-inline">Not enough paired creatinine and weight readings to draw a CrCl trend.<br><span class="trends-hint">The chart stays blank until both are in the loaded results.</span></div>`;
 }
 
 // ── BP ─────────────────────────────────────────────────────────────────────────
@@ -529,13 +599,9 @@ function computeAge(pc) {
 }
 
 function renderBp(m) {
-  if (m.state === 'no-data' || !lastData) {
-    return `<div class="trends-msg">No blood pressure readings found for this patient.<br><span class="trends-hint">BP history is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
-  }
+  if (m.state === 'no-data' || !lastData) return unloadedTrendsHtml();
   const bm = buildBpModel(lastData);
-  if (!bm.pairs.length) {
-    return `<div class="trends-msg">No blood pressure readings found for this patient.<br><span class="trends-hint">BP history is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
-  }
+  if (!bm.pairs.length) return missingSeriesHtml('blood pressure');
 
   const latest = bm.pairs[bm.pairs.length - 1];
   const t = bm.target;
@@ -566,12 +632,15 @@ function renderBp(m) {
       </div>
       <div class="bpt-registers">${registersHtml}</div>
       ${paedNote}
+      <div class="trends-section-lbl">Blood pressure (mmHg)</div>
       ${lineChart({ series: bm.series, targets, yMin: 40, yMax: 200, unit: 'mmHg', title: 'Blood pressure trend' })}
       <div class="bpt-legend">
         <span class="bpt-key bpt-k-sys">Systolic</span>
         <span class="bpt-key bpt-k-dia">Diastolic</span>
         ${targets.length ? `<span class="bpt-key bpt-k-tgt">Target</span>` : ''}
       </div>
+      <div class="trends-date-note">${esc(fixedAxisCaption(40, 200, 'mmHg'))}</div>
+      ${chartDateFoot(bm.pairs.map((p) => p.date))}
       ${t ? `<div class="bpt-foot">Default NICE/QOF thresholds — verify any personalised target in Medicus.</div>` : ''}
       <div class="bpt-count">${bm.pairs.length} reading${bm.pairs.length !== 1 ? 's' : ''}</div>
     </div>`;
@@ -648,13 +717,11 @@ function buildRenalModel(data) {
 }
 
 function renderRenal(m) {
-  if (m.state === 'no-data' || !lastData) {
-    return `<div class="trends-msg">No ACR or eGFR data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
-  }
+  if (m.state === 'no-data' || !lastData) return unloadedTrendsHtml();
   const rm = buildRenalModel(lastData);
   const dm = buildDoacModel(lastData);
   if (!rm.acrPts.length && !rm.egfrPts.length && !dm.onDoac) {
-    return `<div class="trends-msg">No ACR or eGFR data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
+    return `<div class="trends-msg">No ACR or eGFR readings in the loaded results.<br><span class="trends-hint">If results exist, load the investigation dashboard in Medicus. Blood pressure, HbA1c, cholesterol and weight are on the other tabs.</span></div>`;
   }
 
   const banners = [];
@@ -704,8 +771,9 @@ function renderRenal(m) {
     </div>`
       : '';
 
+  const acrCaution = acrUnitCaution(rm.acrUnit);
   const acrChart = rm.acrPts.length
-    ? `<div class="acrt-section-lbl">ACR trend (mg/mmol) — values above 100 plotted at 100</div>` +
+    ? `<div class="acrt-section-lbl">ACR trend (${esc(rm.acrUnit)}) — values above 100 plotted at 100</div>` +
       lineChart({
         series: rm.acrSeries,
         bands: rm.acrBands,
@@ -714,10 +782,10 @@ function renderRenal(m) {
         unit: rm.acrUnit,
         title: 'ACR trend',
       }) +
-      `<div class="acrt-band-legend"><span class="acrt-band-a1">A1 &lt;3</span><span class="acrt-band-a2">A2 3–30</span><span class="acrt-band-a3">A3 &gt;30</span></div>`
-    : dm.onDoac
-      ? ''
-      : `<div class="trends-msg" style="padding:10px 12px">No ACR readings available.</div>`;
+      (acrCaution ? `<div class="trends-date-note">${esc(acrCaution)}</div>` : '') +
+      `<div class="acrt-band-legend"><span class="acrt-band-a1">A1 &lt;3</span><span class="acrt-band-a2">A2 3–30</span><span class="acrt-band-a3">A3 &gt;30</span></div>` +
+      chartDateFoot(rm.acrPts.map((p) => p.date))
+    : missingSeriesHtml('ACR', 'sibling');
 
   const egfrBands = [
     { lo: 90, hi: 200, cls: 'tc-g1' },
@@ -728,7 +796,7 @@ function renderRenal(m) {
     { lo: 0, hi: 15, cls: 'tc-g5' },
   ];
   const egfrChart = rm.egfrPts.length
-    ? `<div class="acrt-section-lbl">eGFR trend (mL/min/1.73m²)</div>` +
+    ? `<div class="acrt-section-lbl">eGFR trend (${esc(rm.egfrUnit)})</div>` +
       lineChart({
         series: [{ cls: 'tc-egfr', label: 'eGFR', points: rm.egfrPts }],
         bands: egfrBands,
@@ -736,8 +804,10 @@ function renderRenal(m) {
         yMax: 120,
         unit: rm.egfrUnit,
         title: 'eGFR trend',
-      })
-    : '';
+      }) +
+      `<div class="trends-date-note">${esc(fixedAxisCaption(0, 120, rm.egfrUnit))}</div>` +
+      chartDateFoot(rm.egfrPts.map((p) => p.date))
+    : missingSeriesHtml('eGFR', 'sibling');
 
   const crclChart =
     dm.onDoac && dm.crclPts.length
@@ -759,8 +829,12 @@ function renderRenal(m) {
           yMax: 120,
           unit: 'mL/min',
           title: 'Creatinine clearance trend',
-        })
-      : '';
+        }) +
+        `<div class="trends-date-note">${esc(fixedAxisCaption(0, 120, 'mL/min'))}</div>` +
+        chartDateFoot(dm.crclPts.map((p) => p.date))
+      : dm.onDoac
+        ? crclMissingHtml()
+        : '';
 
   const countBits = [
     rm.acrPts.length ? `${rm.acrPts.length} ACR reading${rm.acrPts.length !== 1 ? 's' : ''}` : '',
@@ -826,9 +900,7 @@ function doacRenalCard(dm) {
 
 // ── DOAC view ──────────────────────────────────────────────────────────────────
 function renderDoac(m) {
-  if (m.state === 'no-data' || !lastData) {
-    return `<div class="trends-msg">No DOAC data for this patient.<br><span class="trends-hint">The DOAC view appears once a current apixaban, rivaroxaban, edoxaban or dabigatran is in the regimen.</span></div>`;
-  }
+  if (m.state === 'no-data' || !lastData) return unloadedTrendsHtml();
   const dm = buildDoacModel(lastData);
   if (!dm.onDoac) {
     return `<div class="trends-msg">This patient is not on a current DOAC.<br><span class="trends-hint">The DOAC view is only shown when apixaban, rivaroxaban, edoxaban or dabigatran is on the regimen.</span></div>`;
@@ -911,7 +983,7 @@ function renderDoac(m) {
     <p class="doac-formula">SPS/EHRA bands are a prompt to consider frequency — Sentinel still flags the annual U&amp;E. This view never hides a due test.</p>`;
 
   const crclChart = dm.crclPts.length
-    ? `<div class="acrt-section-lbl">CrCl trend (Cockcroft-Gault, mL/min)</div>` +
+    ? `<div class="acrt-section-lbl">CrCl trend (Cockcroft-Gault, mL/min) — not eGFR</div>` +
       lineChart({
         series: [
           {
@@ -925,8 +997,10 @@ function renderDoac(m) {
         yMax: 120,
         unit: 'mL/min',
         title: 'Creatinine clearance trend',
-      })
-    : `<div class="trends-msg trends-msg-inline">Not enough paired creatinine and weight readings to draw a CrCl trend.</div>`;
+      }) +
+      `<div class="trends-date-note">${esc(fixedAxisCaption(0, 120, 'mL/min'))}</div>` +
+      chartDateFoot(dm.crclPts.map((p) => p.date))
+    : crclMissingHtml();
 
   const creatChart = dm.creatPts.length
     ? `<div class="acrt-section-lbl">Creatinine (${esc(dm.creatUnit)})</div>` +
@@ -934,8 +1008,9 @@ function renderDoac(m) {
         series: [{ cls: 'tc-creat', label: 'Creatinine', points: dm.creatPts }],
         unit: dm.creatUnit,
         title: 'Creatinine trend',
-      })
-    : '';
+      }) +
+      chartDateFoot(dm.creatPts.map((p) => p.date))
+    : missingSeriesHtml('creatinine', 'sibling');
 
   const countBits = [
     `${dm.doacs.length} DOAC`,
@@ -978,21 +1053,15 @@ function round(v) {
 
 function renderObs(m) {
   const metric = OBS_METRICS.find((x) => x.key === activeView()) || OBS_METRICS[0];
-  if (m.state === 'no-data' || !lastData) {
-    return `<div class="trends-msg">No observation data found for this patient.<br><span class="trends-hint">Data is available once the investigation dashboard has been loaded in Medicus.</span></div>`;
-  }
+  if (m.state === 'no-data' || !lastData) return unloadedTrendsHtml();
   const { pts, unit } = seriesFor(metric, lastData);
-  if (!pts.length) {
-    return `<div class="trends-msg trends-msg-inline">No ${esc(metric.label)} readings recorded for this patient.</div>`;
-  }
+  if (!pts.length) return missingSeriesHtml(metric.label);
 
   const latest = pts[pts.length - 1];
   const prev = pts.length > 1 ? pts[pts.length - 2] : null;
   const delta = prev ? latest.value - prev.value : null;
   const arrow = delta == null ? '' : delta > 0 ? '▲' : delta < 0 ? '▼' : '▬';
   const deltaCls = delta == null ? '' : delta > 0 ? 'trends-up' : delta < 0 ? 'trends-down' : 'trends-flat';
-  const first = pts[0],
-    last = pts[pts.length - 1];
   const chart = lineChart({
     series: [{ cls: 'tc-trend', label: metric.label, points: pts }],
     unit,
@@ -1004,11 +1073,12 @@ function renderObs(m) {
       <div class="trends-val">
         <span class="trends-num">${esc(round(latest.value))}</span>
         <span class="trends-unit">${esc(unit)}</span>
-        ${delta != null ? `<span class="trends-delta ${deltaCls}">${arrow} ${esc(round(Math.abs(delta)))}</span>` : ''}
+        ${delta != null ? `<span class="trends-delta ${deltaCls}" title="Change from the previous recorded reading">${arrow} ${esc(round(Math.abs(delta)))} vs previous reading</span>` : ''}
       </div>
-      <div class="trends-latest-date">latest ${esc(fmtDate(latest.date))}</div>
+      <div class="trends-latest-date">latest recorded ${esc(fmtDate(latest.date))}</div>
     </div>
     <div class="trends-section-lbl">${esc(metric.label)} (${esc(unit)})</div>
     ${chart}
-    <div class="trends-count">${pts.length} reading${pts.length !== 1 ? 's' : ''} · ${esc(fmtDate(first.date))} – ${esc(fmtDate(last.date))}</div>`;
+    <div class="trends-count">${pts.length} reading${pts.length !== 1 ? 's' : ''}</div>
+    ${chartDateFoot(pts.map((p) => p.date))}`;
 }

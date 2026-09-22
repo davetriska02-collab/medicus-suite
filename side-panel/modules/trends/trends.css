@@ -326,12 +326,23 @@
 
 .trends-section-lbl {
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-4);
-  padding: 6px 12px 2px;
+  color: var(--text-2);
+  padding: 8px 12px 2px;
   text-transform: none;
   letter-spacing: 0;
+}
+.trends-date-span,
+.trends-date-note {
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
+  padding: 2px 12px 0;
+}
+.trends-date-note {
+  padding-bottom: 6px;
 }
 .trends-count {
   font-family: var(--mono);
@@ -590,10 +601,10 @@
 
 .acrt-section-lbl {
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text-4);
-  padding: 6px 12px 2px;
+  color: var(--text-2);
+  padding: 8px 12px 2px;
   text-transform: none;
   letter-spacing: 0;
 }
