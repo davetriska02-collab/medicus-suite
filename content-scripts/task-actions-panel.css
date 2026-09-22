@@ -521,6 +521,7 @@
 #ms-tap-widget .ms-tap-section-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 10px 14px;
   cursor: pointer;
@@ -528,6 +529,15 @@
   font-weight: 600;
   font-size: 13px;
   color: var(--text-2);
+}
+
+#ms-tap-widget .ms-tap-section-hint {
+  flex: 1 0 100%;
+  margin-left: 16px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-3);
 }
 
 #ms-tap-widget .ms-tap-section-header:hover {

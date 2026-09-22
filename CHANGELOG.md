@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.26] — 2026-09-22
+
+### Write paths say where to compose, and what is still left to do in Medicus
+
+Companion booking and create-task, the GP → reception composer, Signing Queue, and Reception capture already had the writes. The entry copy did not say where to start, or that a sentence in the suite is not yet on the task.
+
+- **Reception instruction** (on the Medicus task) — while the composer is closed, the strip says to compose there: insert into the comment, then submit in Medicus, and that reception sees nothing until that submit. The same consequence stays on step 2 while the composer is open, including before Insert. The insert flash says it too. The pending warning is unchanged and still has no timer. No new submit, and no completion claim.
+- **Companion** — “Book appointment” and “Create task” say the form is where you compose, and that nothing is written until Confirm booking / Create task. After a booking or task that this panel has already recorded as done, that line is not shown.
+- **Signing Queue** — the honest line still says this panel never writes. It now also says to authorise each request on its page in Medicus, and that this list does not sign or submit it.
+- **Reception capture** — the tab says the summary is composed in Guided capture and that the clinician sees nothing until it is pasted into the Medicus task and submitted there. The summary screen numbers those two steps. Copying says the paste is still to do. The booking card numbers choose-slot then Confirm booking, and says Confirm booking is the write.
+
+Tests: `test-reception-quick-actions-ui.js`, `test-write-path-discoverability.js`.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor

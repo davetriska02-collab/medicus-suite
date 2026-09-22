@@ -18,8 +18,12 @@
   color: var(--text-1);
 }
 .rcp-subtitle {
+  display: block;
   font-size: 12px;
   color: var(--text-3);
+}
+.rcp-subtitle + .rcp-subtitle {
+  margin-top: 4px;
 }
 
 .rcp-card {
@@ -986,6 +990,28 @@
   font-size: 11px;
   color: var(--text-4);
   line-height: 1.45;
+}
+.rcp-bk-steps {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.rcp-handoff {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+.rcp-handoff div + div {
+  margin-top: 4px;
+  font-weight: 500;
 }
 
 .rcp-bk-row {

@@ -78,6 +78,17 @@
   color: #6b7280;
 }
 
+/* Collapsed entry point — the two-step handoff is invisible while the body
+   is closed, so the strip itself says where to compose and that reception
+   sees nothing until Medicus's own submit. */
+#ms-qa-widget .ms-qa-where {
+  flex: 1 0 100%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #374151;
+}
+
 /* Header pill while inserted text awaits the card's own Submit — lives in the
    always-visible strip so it survives scrolling and collapse. No timer: it is
    cleared only when the un-submitted state stops being real. */

@@ -611,6 +611,8 @@ export function createBookingPanel(opts) {
   function renderBrowse() {
     const canSearch = !!st.selectedTypeId && !st.searching && st.phase === 'ready';
     return `
+      <div class="rcp-bk-steps">1. Choose a type and find a slot. 2. Press Confirm booking on the next step.
+        Nothing is written until then.</div>
       ${renderTypeRow()}
       ${renderModeRow()}
       <div class="rcp-bk-actions">
@@ -663,7 +665,8 @@ export function createBookingPanel(opts) {
         <button type="button" class="rcp-btn rcp-btn-small" id="rcpBkBack"${st.committing ? ' disabled' : ''}>Back</button>
         <button type="button" class="rcp-btn rcp-btn-primary rcp-btn-small" id="rcpBkConfirm"${st.patientTicked && !st.committing ? '' : ' disabled'}>${st.committing ? 'Booking&hellip;' : 'Confirm booking'}</button>
       </div>
-      <div class="rcp-bk-fineprint">The patient shown in Medicus is checked again the moment you press Confirm. If it has changed, nothing is booked.</div>`;
+      <div class="rcp-bk-fineprint">Pressing Confirm booking is the write. The patient shown in Medicus is checked
+        again at that moment — if it has changed, nothing is booked.</div>`;
   }
 
   function renderBooked() {

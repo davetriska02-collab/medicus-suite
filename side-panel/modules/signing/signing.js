@@ -626,7 +626,8 @@ function honestStateHtml() {
     : '';
   return `Monitoring shown is what is <strong>recorded</strong>, not what is true. Combination alerts are the
         practice's configured Monitoring rules, re-shown here.${qofBit} No flag &ne; safe to sign — verify in the record
-        before authorising. This panel never writes to Medicus.`;
+        before authorising. This panel never writes to Medicus.
+        Authorise each request on its page in Medicus — this list does not sign or submit it.`;
 }
 
 function renderAll() {
