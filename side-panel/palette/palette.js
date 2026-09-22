@@ -28,6 +28,7 @@ import {
 } from './palette-core.js';
 import { startTour } from '../tour/tour.js';
 import { openRotaTab } from '../modules/rota/rota-open.js';
+import { openDuplicateCheckerTab } from '../../pop-out/duplicate-open.js';
 
 const RECENTS_KEY = 'suite.palette.recents';
 
@@ -143,9 +144,8 @@ function buildCommands(hasPatient) {
 
   // Full-tab launchers the pop-out has no nav button for. The panel already
   // reaches these by clicking its own tabs (which become "Go to …" above), so
-  // the open:* rows exist only when that tab is absent. Same helpers the
-  // panel's click handler uses — rota focuses an existing tab; duplicates
-  // opens duplicate-checker.html.
+  // the open:* rows exist only when that tab is absent. Rota focuses an
+  // existing tab; duplicates uses pop-out/duplicate-open.js.
   if (!document.querySelector('.nav-tab[data-module="rota-app"]')) {
     cmds.push({
       id: 'open:rota',
@@ -163,7 +163,7 @@ function buildCommands(hasPatient) {
       group: 'Open',
       keywords: 'duplicate duplicates gp2gp problems checker',
       icon: GENERIC_ICONS.doc,
-      run: () => chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') }),
+      run: () => openDuplicateCheckerTab(),
     });
   }
 
@@ -598,7 +598,7 @@ function shortcutSheetHTML() {
   const chordBlock = chords
     ? `<div class="suite-palette-sheet-h">g then</div><div class="suite-palette-sheet-chords">${chords}</div>`
     : '';
-  const notes = [model.typingNote, model.note]
+  const notes = [model.unboundNote, model.typingNote, model.note]
     .filter(Boolean)
     .map((n) => `<p class="suite-palette-sheet-note">${escHtml(n)}</p>`)
     .join('');

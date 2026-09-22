@@ -148,16 +148,15 @@ export function omitRetiredCommands(commands) {
   });
 }
 
-// Second key of a "g" chord → module. Preference is the module's own
-// data-module first letter; where two or more modules share a first letter,
-// one keeps it and the rest take a letter from elsewhere in the name.
+// g-chord letters. These match the nav chord map: do not invent new letters.
 //   s* → slots keeps 's'; sentinel → 'm' (Monitoring), submissions → 'u',
-//        sweep → 'w'
+//        sweep → 'w', signing → 'i' (signIng)
 //   c* → capacity keeps 'c'
-//   r* → referrals keeps 'r'; record → 'd', reception → 'e'
-//   trends → 'n' (t is unused — the Today tab was removed)
-// Signing, Rota, Phrases and Patient Alerts have no letter. Panel.js is the
-// only shell that listens for the chord; the pop-out must not advertise it.
+//   r* → referrals keeps 'r'; record → 'd', reception → 'e', rota → 'o' (rOta)
+//   p* → patient-alerts keeps 'p'; phrases → 'h' (pHrases)
+//   trends → 'n'
+// 't' and 'b' stay unbound: they were Today and the Note/TV board.
+// The pop-out does not listen for digits or g-chords.
 export const G_CHORD_MAP = Object.freeze({
   s: 'slots',
   m: 'sentinel',
@@ -171,6 +170,10 @@ export const G_CHORD_MAP = Object.freeze({
   e: 'reception',
   d: 'record',
   n: 'trends',
+  i: 'signing',
+  p: 'patient-alerts',
+  h: 'phrases',
+  o: 'rota',
 });
 
 // Shipped shell shortcuts. `keys` names both modifiers whenever the listener
@@ -192,13 +195,14 @@ export const SHELL_SHORTCUTS = Object.freeze([
   {
     id: 'digits',
     keys: '1–9',
-    action: 'Jump to that place among the visible tabs (the first nine only)',
+    action: 'In the default order, open Slots through Signing. A custom tab order follows the visible strip',
     shells: ['panel'],
   },
   {
     id: 'chord',
     keys: 'g, then a letter',
-    action: 'Jump to a named tab. The letter is not always the first letter of the tab name — the map is below',
+    action:
+      'Jump to a named tab. Signing is i, Patient Alerts is p, Phrases is h, Rota is o. g then t or b does nothing',
     shells: ['panel'],
   },
   {
@@ -228,7 +232,7 @@ export const SHELL_SHORTCUTS = Object.freeze([
 ]);
 
 const POPOUT_SHORTCUT_NOTE =
-  'Number jumps, tab cycling and g-then-letter work in the docked side panel. This window has the command palette and focus mode.';
+  'This window has no digit jumps and no g-chords. Use Ctrl/Cmd+K. Tab cycling is in the docked side panel.';
 
 /**
  * Cheat-sheet model for the current shell.
@@ -263,5 +267,6 @@ export function shortcutSheet(shell, tabs) {
     noLetter: noLetter.map((t) => ({ id: t.id, name: t.name || t.id })),
     note: which === 'popout' ? POPOUT_SHORTCUT_NOTE : '',
     typingNote: which === 'panel' ? 'Number keys, g, / and ? stay quiet while the cursor is in a text field.' : '',
+    unboundNote: which === 'panel' ? 'g then t or b does nothing. Those letters were Today and the Note TV board.' : '',
   };
 }

@@ -10,7 +10,8 @@ The command palette already opens with Ctrl+K or Cmd+K. The button, the ? help, 
 
 - **Shortcuts sheet** in the palette — the footer button, and a Keyboard shortcuts command. It lists only the keys that exist in this window. The pop-out does not claim the side panel’s number jumps, tab cycle or `g` chords. Pressing `g` in the side panel shows the letter map.
 - **Ctrl/Cmd** on the palette button, palette footer, ? help, All-tabs hint, focus-mode button and the tour’s palette step.
-- **Pop-out** can open the Duplicate Problem Checker (`open:duplicate-checker`), the same full-tab path the panel’s Duplicates tab uses. Rota manager already had this fallback.
+- **Pop-out** can open the Duplicate Problem Checker. The opener lives in `pop-out/duplicate-open.js` and the palette shows it only when that tab is absent. Rota manager already had this fallback.
+- **Shortcut sheet** documents the nav chords already in use: digits 1–9 are Slots through Signing; `g` reaches Signing (`i`), Patient Alerts (`p`), Phrases (`h`) and Rota (`o`). `g` then `t` or `b` does nothing. The pop-out has no digit or `g` cycling; it uses Ctrl/Cmd+K.
 - **Today, the appointment-book tally and Note TV stay removed.** The palette has no command that opens them, and a retired-id filter drops those commands if they are re-added.
 
 ## [v3.264.15] — 2026-09-22

@@ -167,7 +167,7 @@ function buildKeyboardHelpSectionHTML() {
     <div class="help-popover-kbd-list">
       <span><kbd class="help-popover-kbd">Ctrl</kbd>/<kbd class="help-popover-kbd">Cmd</kbd>+<kbd class="help-popover-kbd">K</kbd> command palette</span>
       <span><kbd class="help-popover-kbd">Ctrl</kbd>/<kbd class="help-popover-kbd">Cmd</kbd>+<kbd class="help-popover-kbd">Alt</kbd>+<kbd class="help-popover-kbd">←/→</kbd> cycle tabs</span>
-      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> first nine visible tabs</span>
+      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> Slots through Signing</span>
       <span title="${escStrip(chordList)}"><kbd class="help-popover-kbd">g</kbd> then a letter — listed tabs only</span>
       <span><kbd class="help-popover-kbd">/</kbd> focus search</span>
       <span><kbd class="help-popover-kbd">?</kbd> this help</span>
@@ -392,8 +392,8 @@ function wireTabNavShortcuts() {
 // or while any shell-level overlay (command palette, tour, tab chooser, or this
 // panel's own help/all-tabs/display popovers) is open — see isOverlayOpen().
 
-// Letter → tab lives in palette-core.js (G_CHORD_MAP) so the palette cheat
-// sheet and this listener cannot drift. t is unused — the Today tab is gone.
+// Letter → tab lives in palette-core.js (G_CHORD_MAP), including Signing (i),
+// Patient Alerts (p), Phrases (h) and Rota (o). g then t or b stays unbound.
 const G_CHORD_TIMEOUT_MS = 1500;
 let _gChordArmed = false;
 let _gChordTimer = null;

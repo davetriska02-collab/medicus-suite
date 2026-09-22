@@ -156,6 +156,14 @@ function check(cond, msg) {
   check(RETIRED_COMMAND_IDS.includes('open:board'), 'open:board is on the retired-id list');
   check(!Object.values(G_CHORD_MAP).includes('today'), 'g-chord map has no Today tab');
   check(!Object.values(G_CHORD_MAP).includes('board'), 'g-chord map has no Note tab');
+  check(!('t' in G_CHORD_MAP) && !('b' in G_CHORD_MAP), 'g-t and g-b stay unbound');
+  check(
+    G_CHORD_MAP.i === 'signing' &&
+      G_CHORD_MAP.p === 'patient-alerts' &&
+      G_CHORD_MAP.h === 'phrases' &&
+      G_CHORD_MAP.o === 'rota',
+    'g-chords reach Signing, Patient Alerts, Phrases and Rota'
+  );
 
   const catalogUrl = pathToFileURL(path.join(__dirname, 'side-panel', 'tab-catalog.js')).href;
   const { TAB_CATALOG } = await import(catalogUrl);
@@ -184,15 +192,19 @@ function check(cond, msg) {
   const monChord = panelSheet.chords.find((c) => c.id === 'sentinel');
   check(slotsChord && slotsChord.available && slotsChord.key === 's', 'visible Slots chord is offered');
   check(monChord && monChord.available === false, 'a hidden chord target is not claimed as available');
+  const signingChord = panelSheet.chords.find((c) => c.id === 'signing');
+  check(signingChord && signingChord.key === 'i' && signingChord.available, 'Signing chord is i and available');
   check(
-    panelSheet.noLetter.some((t) => t.id === 'signing'),
-    'a jumpable tab with no letter is named on the sheet'
+    !panelSheet.noLetter.some((t) => t.id === 'signing'),
+    'Signing is not listed as a tab with no letter'
   );
+  check(/t or b does nothing/.test(panelSheet.unboundNote), 'sheet says g-t and g-b do nothing');
+  check(/Slots through Signing/.test(panelSheet.shortcuts.find((s) => s.id === 'digits').action), 'digits 1–9 are Slots through Signing');
 
   const popSheet = shortcutSheet('popout', [{ id: 'slots', name: 'Slots', jumpable: true }]);
   check(!popSheet.shortcuts.some((s) => s.id === 'cycle'), 'pop-out sheet does not claim tab cycling');
   check(popSheet.chords.length === 0, 'pop-out sheet has no g-chord map');
-  check(/docked side panel/.test(popSheet.note), 'pop-out sheet points letter jumps at the side panel');
+  check(/no digit jumps/.test(popSheet.note) && /Ctrl\/Cmd\+K/.test(popSheet.note), 'pop-out sheet says no digits or g-chords; use Ctrl/Cmd+K');
 
   const paletteSrc = fs.readFileSync(path.join(__dirname, 'side-panel', 'palette', 'palette.js'), 'utf8');
   check(
@@ -209,8 +221,17 @@ function check(cond, msg) {
     'palette exposes the shortcuts sheet'
   );
   check(
-    paletteSrc.includes('open:duplicate-checker') && paletteSrc.includes('data-module="duplicate-checker"'),
+    paletteSrc.includes('open:duplicate-checker') &&
+      paletteSrc.includes('data-module="duplicate-checker"') &&
+      paletteSrc.includes('openDuplicateCheckerTab'),
     'pop-out fallback opens the duplicate checker only when that tab is absent'
+  );
+  check(!paletteSrc.includes('Task Presence'), 'palette.js on this branch does not add Settings: Task Presence');
+  const dupSrc = fs.readFileSync(path.join(__dirname, 'pop-out', 'duplicate-open.js'), 'utf8');
+  check(dupSrc.includes('duplicate-checker.html'), 'duplicate fallback opens the existing checker page');
+  check(
+    !/board\.html|modules\/today|appointment-tally|open:board|openBoardTab/.test(dupSrc),
+    'duplicate fallback does not reopen removed surfaces'
   );
   check(paletteSrc.includes('Ctrl/Cmd'), 'palette labels name Ctrl and Cmd');
 
