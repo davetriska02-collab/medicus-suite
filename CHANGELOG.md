@@ -2,6 +2,17 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.23] — 2026-09-22
+
+### First-run copy no longer points at Today or the Note TV board
+
+The load cut in v3.264.15 removed the Today tab, the appointment-book tally, and the Note / TV board. Two leftover sentences still sent people there.
+
+- **Get set up** no longer collapses to “Setup can wait. The TV board is below” on a `board` tab. That tab is gone. The checklist says the bar still shows every tab until you press Choose tabs and start from **GP / clinician**. The default tab set is unchanged.
+- **Slots → Alert thresholds** no longer says the warning also appears on “Today's Slots card”. The amber/red warning is on the Slots tab.
+
+The guided tour steps already omit those surfaces; `test-tour-steps.js` now fails if a step names them again.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor

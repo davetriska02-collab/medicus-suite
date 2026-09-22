@@ -16,8 +16,8 @@
 // Exported:
 //   initSetup(hostEl)  — wire host, evaluate on boot; called by panel.js
 //   openSetup()        — force-show (called by palette command / CustomEvent)
-//   setSetupActiveModule(name) — collapse the checklist on Note so the TV
-//     board is not buried under Get set up
+//   setSetupActiveModule(name) — panel tab-switch hook. The Note/TV board
+//     used to collapse the checklist; that tab is gone, so this is a no-op.
 
 'use strict';
 
@@ -40,9 +40,6 @@ let _stepStatus = {
   triage: { done: false, optional: true },
 };
 let _visible = false;
-// Which panel tab is open — Note collapses the checklist so the companion
-// (the thing you came here for) is not buried under Get set up.
-let _activeModule = null;
 // Session-only: once the mandatory practice code is detected the card collapses
 // to a thin strip; the user can Expand it for the rest of this session. Never
 // persisted — a fresh panel load starts collapsed again if the code is present.
@@ -229,7 +226,7 @@ function renderTabsStep() {
   const { done, visible, total } = _stepStatus.tabs;
   const detail = done
     ? `<span class="setup-step-meta">Showing ${visible} of ${total} tabs</span>`
-    : `<span class="setup-step-detail">Pick the tabs you actually use — a GP rarely needs Reception; reception rarely needs Slots. Everything stays reachable via Ctrl+K, and your choice is never overwritten by practice-pushed config.</span>`;
+    : `<span class="setup-step-detail">The bar still shows every tab until you choose. Press Choose tabs and start from GP / clinician; hidden tabs stay reachable via Ctrl+K.</span>`;
   return `
     <li class="setup-step${done ? ' setup-step--done' : ''}">
       ${stepIcon(done)}
@@ -260,15 +257,6 @@ function renderTriageStep() {
 
 // Thin one-line strip shown once the practice code (the mandatory first step) is
 // ready, instead of the full multi-step card dominating the module body.
-function renderNoteDeferStrip() {
-  return `
-    <div class="setup-card setup-card--collapsed setup-card--note-defer" role="region" aria-label="Suite setup">
-      <span class="setup-collapsed-text">Setup can wait. The TV board is below</span>
-      <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
-      <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
-    </div>`;
-}
-
 function renderCollapsedStrip() {
   const remaining = remainingStepCount();
   const optionalLabel = remaining === 0 ? 'all steps done' : `${remaining} optional step${remaining === 1 ? '' : 's'}`;
@@ -277,13 +265,19 @@ function renderCollapsedStrip() {
   // full card never auto-shows. Surface "Choose tabs" directly on it (one click,
   // no Expand) so the recommended tab choice isn't buried. Reuses the
   // .setup-choose-tabs class the full card wires, so no extra event wiring.
+  // The strip is often the only setup surface once a practice code is present.
+  // Name the existing preset without changing which tabs are shown.
+  const stripText = _stepStatus.tabs.done ? 'Practice code set' : 'Code set · GP / clinician';
+  const stripTitle = _stepStatus.tabs.done
+    ? `Practice code set · ${optionalLabel}`
+    : 'The bar still shows every tab. Press Choose tabs and start from GP / clinician.';
   const chooseTabs = _stepStatus.tabs.done
     ? ''
-    : `<button class="ghost-btn setup-choose-tabs" aria-label="Choose your tabs">Choose tabs</button>`;
+    : `<button class="ghost-btn setup-choose-tabs" aria-label="Choose your tabs and start from GP / clinician" title="The bar still shows every tab. Start from GP / clinician.">Choose tabs</button>`;
   return `
     <div class="setup-card setup-card--collapsed" role="region" aria-label="Suite setup">
       <span class="setup-collapsed-icon setup-step-icon--done" aria-hidden="true">&#10003;</span>
-      <span class="setup-collapsed-text" title="Practice code set &middot; ${esc(optionalLabel)}">Practice code set</span>
+      <span class="setup-collapsed-text" title="${esc(stripTitle)}">${esc(stripText)}</span>
       ${chooseTabs}
       <button class="ghost-btn setup-expand" aria-label="Expand setup checklist">Expand</button>
       <button class="ghost-btn setup-dismiss" aria-label="Dismiss setup checklist">Dismiss</button>
@@ -443,11 +437,7 @@ async function runConnectionTest() {
 
 function renderInto(host) {
   if (!host) return;
-  // Note is a TV remote. The full Get set up card buries the board, so on
-  // that tab we collapse to a thin strip until the user expands or dismisses.
-  if (_activeModule === 'board' && !_setupState.dismissedAt && !_expanded) {
-    host.innerHTML = renderNoteDeferStrip();
-  } else if (_stepStatus.practiceCode.done && !_setupState.dismissedAt && !_expanded) {
+  if (_stepStatus.practiceCode.done && !_setupState.dismissedAt && !_expanded) {
     host.innerHTML = renderCollapsedStrip();
   } else {
     host.innerHTML = renderCard();
@@ -473,14 +463,12 @@ function hide() {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Called from panel.js whenever the user switches tabs. On Note, collapse
- * the checklist so the companion stays on screen.
+ * Called from panel.js whenever the user switches tabs. The Note/TV board
+ * used to collapse this checklist so it did not cover the board. That tab
+ * is gone, so there is no tab-specific setup state left to apply.
  */
-export function setSetupActiveModule(name) {
-  _activeModule = name;
-  if (!_host || !_visible || _tourActive) return;
-  renderInto(_host);
-  wireEvents();
+export function setSetupActiveModule(_name) {
+  // The Note/TV board tab is gone, so a tab switch no longer changes this card.
 }
 
 /**

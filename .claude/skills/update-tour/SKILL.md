@@ -17,8 +17,7 @@ maintenance procedure.
 |---|---|---|---|
 | `welcome` | — | — (`center: true`) | Orientation / replay affordance |
 | `nav-tabs` | — | `.nav-tabs` | Module tabs + drag-to-reorder (`panel.html`) |
-| `alert-strips` | — | `#wrStrip`, `#rmStrip`, `#subRagStrip` (`centerFallback`) | Global alert strips (hidden unless firing — hence the fallback) |
-| `today` | `today` | `.today-module` | Morning command centre (waiting room, triage, demand, slots, sweep) |
+| `alert-strips` | — | `#wrStrip`, `#rmStrip`, `#subRagStrip`, `#paStrip` (`centerFallback`) | Global alert strips (hidden unless firing — hence the fallback) |
 | `slots` | `slots` | `#suiteContent .module-wrap` | Live slot counts |
 | `monitoring-intro` | `sentinel` | `.sent-header` | Sentinel chips concept |
 | `waiting-room` | `sentinel` | `.wr-pinned`, `#wrStrip` | Live waiting-room block (`renderWaitingRoomBlock()`) |
@@ -31,6 +30,9 @@ maintenance procedure.
 | `popout` | — | `#popoutBtn` | Floating window |
 | `settings` | — | `#settingsBtn` | Options page + backups |
 | `finish` | — | — (`center: true`) | Replay paths |
+
+The Today tab, the appointment-book tally, and the Note / TV board were removed
+in v3.264.15. Do not add a step that points at them.
 
 Engine contract (enforced by `tour.js`):
 

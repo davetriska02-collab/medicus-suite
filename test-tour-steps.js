@@ -139,6 +139,21 @@ function collectSources() {
     ok(`at least one step is tagged addedIn ${TOUR_VERSION} (the "What's new" pass has content)`);
   else fail(`no step has addedIn === TOUR_VERSION (${TOUR_VERSION}) — version bumped without tagging?`);
 
+  // Removed in v3.264.15. A step that names them sends a first-run user
+  // looking for a tab or board that is no longer in the suite.
+  const REMOVED_SURFACE = [/TV board/i, /Note board/i, /Today tab/i, /Today's Slots/i, /appointment tally/i];
+  let removedOk = true;
+  for (const s of TOUR_STEPS) {
+    const copy = `${s.title || ''} ${s.body || ''}`;
+    for (const re of REMOVED_SURFACE) {
+      if (re.test(copy)) {
+        fail(`step '${s.id}' still points at a removed surface (${re})`);
+        removedOk = false;
+      }
+    }
+  }
+  if (removedOk) ok('no tour step points at Today, the appointment tally, or the Note/TV board');
+
   // ── 2. Selector tokens still rendered somewhere ──────────────────────────
   const sources = collectSources().map((f) => ({ f, text: fs.readFileSync(f, 'utf8') }));
   let selectorsOk = true;

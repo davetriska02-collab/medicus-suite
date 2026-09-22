@@ -34,6 +34,20 @@ check(missing('board/board.js'), 'Note TV board.js gone');
 check(missing('board.html'), 'board.html gone');
 check(missing('side-panel/modules/condor/condor-data.js'), 'condor TV fetch layer gone');
 
+console.log('\nFirst-run copy does not point at removed surfaces');
+const setupSrc = read('side-panel/setup/setup.js');
+check(!setupSrc.includes('The TV board is below'), 'setup checklist does not tell the user a TV board is below');
+check(setupSrc.includes('GP / clinician'), 'setup checklist points at the existing GP / clinician preset');
+check(
+  setupSrc.includes('still shows every tab'),
+  'setup checklist says the bar still shows every tab until you choose'
+);
+check(!setupSrc.includes('renderNoteDeferStrip'), 'setup checklist no longer renders the Note defer strip');
+check(!setupSrc.includes("=== 'board'"), 'setup checklist does not special-case the removed Note tab');
+const slotsSrc = read('side-panel/modules/slots/slots.js');
+check(!slotsSrc.includes("Today's Slots"), 'slots alert copy does not mention the removed Today card');
+check(!slotsSrc.includes('appointment-book tally'), 'slots comments do not say the removed tally writes hidden types');
+
 console.log('\nNav / registration');
 for (const shell of ['side-panel/panel.html', 'pop-out/pop-out.html']) {
   const html = read(shell);
