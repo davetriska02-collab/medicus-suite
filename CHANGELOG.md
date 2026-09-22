@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.264.26] — 2026-09-22
+## [v3.264.32] — 2026-09-22
 
 ### Findability — custom flags, task presence, book-signing right-hand view
 

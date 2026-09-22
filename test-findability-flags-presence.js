@@ -1,5 +1,5 @@
 // Medicus Suite — findability of custom flags, task presence, and the
-// book-signing right-hand view (v3.264.26).
+// book-signing right-hand view (v3.264.32).
 // Run with: node test-findability-flags-presence.js
 //
 // Labels and empty states only. The strip still hides when no flags are
@@ -88,7 +88,7 @@ check(/Command palette: Settings: Task Presence/.test(presence), 'Change look na
 check(/k === 'book-signing'/.test(presence), 'presence still refuses the book-signing column');
 
 console.log('\n--- version ---');
-check(/"version": "3.264.26"/.test(manifest), 'manifest is 3.264.26');
+check(/"version": "3.264.32"/.test(manifest), 'manifest is 3.264.32');
 
 console.log(`\n${pass} passed, ${failures} failed`);
 if (failures) process.exit(1);
