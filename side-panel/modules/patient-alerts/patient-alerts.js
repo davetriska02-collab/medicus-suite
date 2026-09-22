@@ -80,8 +80,8 @@ export async function init(el) {
   container.innerHTML = `
     <div class="pa-module">
       <div class="pa-head">
-        <h2 class="pa-title">Patient Alerts</h2>
-        <span class="pa-subtitle">Your practice's own per-patient flags — shown here and on the Monitoring banner whenever that patient is open in Medicus.</span>
+        <h2 class="pa-title">Custom flags</h2>
+        <span class="pa-subtitle">Practice notes for the patient open in Medicus. They show on the strip under the tabs and on the Monitoring banner. Code anything clinical in the Medicus record as usual.</span>
       </div>
       <div id="paCurrent"></div>
       <div id="paBrowse"></div>
@@ -291,7 +291,7 @@ function renderCurrent() {
     host.innerHTML = `
       <div class="pa-card pa-card-idle">
         <div class="pa-card-label">Current patient</div>
-        <p class="pa-idle-text">No patient identified — open a patient record in Medicus and their alerts appear here automatically.</p>
+        <p class="pa-idle-text">No patient is open in Medicus. Open a record there, then use Add flag. Flags you add show on this card, on the strip under the tabs, and on the Monitoring banner.</p>
       </div>`;
     return;
   }
@@ -313,8 +313,8 @@ function renderCurrent() {
           (a) => `
         <span class="pa-chip-group">
           ${severityChip(a)}
-          <button class="pa-chip-act" data-act="alert-edit" data-id="${esc(a.id)}" title="Edit this alert">&#x270E;</button>
-          <button class="pa-chip-act" data-act="alert-del" data-key="${esc(found.key)}" data-id="${esc(a.id)}" title="Remove this alert">&#x2715;</button>
+          <button class="pa-chip-act" data-act="alert-edit" data-id="${esc(a.id)}" title="Edit this flag" aria-label="Edit this flag">&#x270E;</button>
+          <button class="pa-chip-act" data-act="alert-del" data-key="${esc(found.key)}" data-id="${esc(a.id)}" title="Remove this flag" aria-label="Remove this flag">&#x2715;</button>
         </span>`
         )
         .join('')}</div>
@@ -326,15 +326,15 @@ function renderCurrent() {
               .join('')}</ul>`
           : ''
       }`
-    : `<p class="pa-none">No alerts recorded for this patient.</p>`;
+    : `<p class="pa-none">No custom flags recorded for this patient. Use Add flag below. Code clinical concerns in the Medicus record as usual.</p>`;
 
   // Adding needs a resolvable UUID — the stable storage key. NHS-only views can
   // still DISPLAY alerts (matched by NHS number) but not create them.
   const addHtml = _formOpen
     ? formHtml(alerts)
     : key
-      ? `<button class="pa-btn pa-btn-primary" data-act="add-open">+ Add alert</button>`
-      : `<p class="pa-hint">This view doesn't expose a stable patient ID — open the patient's full record to add an alert.</p>`;
+      ? `<button class="pa-btn pa-btn-primary" data-act="add-open">+ Add flag</button>`
+      : `<p class="pa-hint">This view doesn't expose a stable patient ID — open the patient's full record in Medicus to add a flag.</p>`;
 
   host.innerHTML = `
     <div class="pa-card pa-card-current">
@@ -359,12 +359,12 @@ function formHtml(existingAlerts) {
     <div class="pa-form">
       ${
         editing
-          ? `<div class="pa-form-title">Edit alert</div>`
+          ? `<div class="pa-form-title">Edit flag</div>`
           : `<label class="pa-field"><span>Quick add</span>
         <select id="paPreset"><option value="">Choose a preset&hellip;</option>${presetOptions}</select>
       </label>`
       }
-      <label class="pa-field"><span>Alert text</span>
+      <label class="pa-field"><span>Flag text</span>
         <input type="text" id="paLabel" maxlength="120" placeholder="e.g. Interpreter required — Polish" value="${esc(editing ? editing.label : '')}" />
       </label>
       <label class="pa-field"><span>Severity</span>
@@ -374,7 +374,7 @@ function formHtml(existingAlerts) {
         <input type="text" id="paNote" maxlength="500" placeholder="Context another practice user should know" value="${esc(editing ? editing.note : '')}" />
       </label>
       <div class="pa-form-actions">
-        <button class="pa-btn pa-btn-primary" data-act="form-save">${editing ? 'Save changes' : 'Add alert'}</button>
+        <button class="pa-btn pa-btn-primary" data-act="form-save">${editing ? 'Save changes' : 'Add flag'}</button>
         <button class="pa-btn" data-act="form-cancel">Cancel</button>
         <span class="pa-form-err" id="paFormErr"></span>
       </div>
@@ -393,7 +393,7 @@ function renderBrowse() {
         <div class="pa-row-head">
           <span class="pa-row-name">${esc(p.name || 'Unnamed patient')}</span>
           <span class="pa-row-meta">${p.nhsNumber ? `NHS ${esc(fmtNhs(p.nhsNumber))}` : ''}${p.dob ? ` &middot; DOB ${esc(p.dob)}` : ''}</span>
-          <button class="pa-row-del" data-act="pat-del" data-key="${esc(key)}" title="Remove this patient and all their alerts">Remove</button>
+          <button class="pa-row-del" data-act="pat-del" data-key="${esc(key)}" title="Remove this patient and all their flags">Remove</button>
         </div>
         <div class="pa-chip-row">${entry.alerts.map((a) => severityChip(a)).join('')}</div>
       </div>`;
@@ -402,8 +402,8 @@ function renderBrowse() {
   host.innerHTML = `
     <div class="pa-card">
       <div class="pa-card-label">All flagged patients (${results.length})</div>
-      <input type="search" id="paSearch" class="pa-search" placeholder="Search by name, NHS number or alert&hellip;" value="${esc(_query)}" />
-      ${rows || `<p class="pa-none">${_query ? 'No matches.' : 'No patients flagged yet. Open a patient and add the first alert above.'}</p>`}
+      <input type="search" id="paSearch" class="pa-search" placeholder="Search by name, NHS number or flag&hellip;" value="${esc(_query)}" />
+      ${rows || `<p class="pa-none">${_query ? 'No matches.' : 'No patients flagged yet. Open a patient in Medicus and use Add flag on the card above.'}</p>`}
     </div>`;
 }
 
@@ -418,14 +418,14 @@ function renderPalette() {
       <select class="pa-type-sev" data-act="type-sev" data-idx="${i}">
         ${SEVERITIES.map((s) => `<option value="${s}" ${t.severity === s ? 'selected' : ''}>${SEVERITY_LABEL[s]}</option>`).join('')}
       </select>
-      <button class="pa-row-del" data-act="type-del" data-idx="${i}" title="Delete this preset">&#x2715;</button>
+      <button class="pa-row-del" data-act="type-del" data-idx="${i}" title="Delete this preset" aria-label="Delete this preset">&#x2715;</button>
     </div>`
     )
     .join('');
   host.innerHTML = `
     <details class="pa-card pa-palette">
-      <summary class="pa-card-label pa-palette-summary">Alert presets (${_types.length})${_typesCustomised ? '' : ' — defaults'}</summary>
-      <p class="pa-hint">Quick-add presets offered on the alert form. Fully customisable — edit, delete, or add anything your practice needs. Presets only seed new alerts; editing one never changes alerts already recorded.</p>
+      <summary class="pa-card-label pa-palette-summary">Flag presets (${_types.length})${_typesCustomised ? '' : ' — defaults'}</summary>
+      <p class="pa-hint">Quick-add presets offered on the flag form. Fully customisable — edit, delete, or add anything your practice needs. Presets only seed new flags; editing one never changes flags already recorded.</p>
       ${rows}
       <button class="pa-btn" data-act="type-add">+ Add preset</button>
     </details>`;
@@ -455,7 +455,7 @@ function onClick(e) {
     renderCurrent();
     container.querySelector('#paLabel')?.focus();
   } else if (act === 'alert-del') {
-    if (!confirm('Remove this alert?')) return;
+    if (!confirm('Remove this flag?')) return;
     const key = btn.dataset.key;
     const removed = (_store[key]?.alerts || []).find((a) => a.id === btn.dataset.id) || null;
     _store = removeAlert(_store, key, btn.dataset.id, new Date().toISOString());
@@ -465,7 +465,7 @@ function onClick(e) {
     const key = btn.dataset.key;
     const entry = _store[key];
     const n = entry?.patient?.name || 'this patient';
-    if (!confirm(`Remove ${n} and all their alerts?`)) return;
+    if (!confirm(`Remove ${n} and all their flags?`)) return;
     // One ledger event per removed flag — a whole-patient wipe must not be
     // less audited than removing the same flags one by one.
     (entry?.alerts || []).forEach((a) => recordFlagEvent('flag-removed', key, a));

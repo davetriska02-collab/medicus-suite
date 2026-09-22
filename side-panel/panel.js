@@ -1899,9 +1899,9 @@ async function fetchAndRenderPaStrip() {
     paStripEl.className = `pa-strip pa-strip--${level}`;
     paStripEl.innerHTML = `
       <span class="pa-strip-icon">&#x2691;</span>
-      <span class="pa-strip-label">PATIENT${name ? ` · ${escStrip(name)}` : ''}${fromBackgroundTab ? ' · OTHER TAB' : ''}</span>
+      <span class="pa-strip-label">FLAG${name ? ` · ${escStrip(name)}` : ''}${fromBackgroundTab ? ' · OTHER TAB' : ''}</span>
       ${pills}${more}
-      <button class="pa-strip-goto" title="Open the Patient Alerts tab">Manage &rarr;</button>
+      <button class="pa-strip-goto" title="Open the Flags tab">Open flags</button>
     `;
     paStripEl.querySelector('.pa-strip-goto')?.addEventListener('click', () => switchModule('patient-alerts'));
     return true;

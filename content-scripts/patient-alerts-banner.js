@@ -92,7 +92,7 @@
     el.appendChild(icon);
     var lead = document.createElement('span');
     lead.className = 'pa-page-banner-lead';
-    lead.textContent = 'Practice alerts:';
+    lead.textContent = 'Custom flags:';
     el.appendChild(lead);
     // Flag pills — textContent only (user-authored labels, never innerHTML).
     for (var i = 0; i < summary.all.length && i < 5; i++) {
@@ -108,7 +108,7 @@
       el.appendChild(more);
     }
     el.title =
-      'Recorded by this practice in Medicus Suite (Pt Alerts tab) — not part of the clinical record. Manage in the side panel.';
+      'Practice custom flags in Medicus Suite (Flags tab). Code anything clinical in the Medicus record as usual. Open the Flags tab in the side panel to change them.';
     return el;
   }
 

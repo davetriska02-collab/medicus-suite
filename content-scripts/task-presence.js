@@ -935,7 +935,7 @@
   }
 
   function occupancyLookHint() {
-    return 'Change colour, size and highlight. Saved for this machine.';
+    return 'Change colour, size and highlight. Saved for this machine. Command palette: Settings: Task Presence.';
   }
 
   function splitOccupiedQuiet(full) {
