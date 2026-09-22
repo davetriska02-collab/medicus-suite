@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.30] — 2026-09-22
+
+### Results queue: say what the chips and the bar mean
+
+Clinicians working the investigation results queue could not tell a blank row from a normal result, or an outline Under-prioritised chip from the urgent result. The bar now says that in plain words, on the screen.
+
+- **Status bar** — counts read urgent / to review / nothing flagged / couldn't check. The line “A row with no chip has not been assessed as normal.” is always visible. **Next urgent** jumps to the next urgent row (keyboard `n`). **Dim other rows** / **Show all rows** names the focus toggle and its undo. **How to read** (and `?`) explains chips, priority, and the green tick. **Open result rules** opens Suite settings on Result rules.
+- **Chips** — a failed check says “Couldn't check”. A skipped unit says “Unit mismatch”. The green tick’s accessible name says it files nothing.
+- **Chip popover and detail banner** — empty detail tells you to open the task. Under-prioritised and Unmatched patient are explained there. The detail banner is labelled “Results queue”.
+- **Triage Lens** — gear buttons have names and open Triage Lens settings. “No flags” on a record is not described as a results-queue all-clear. Baseline chips list result chips under **Results queue**, separate from the task-priority chip. Queue drug-monitoring chips are unchanged and still off.
+
+No triage rule, severity maths, or shipped chip label in `defaults.json` changed.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor

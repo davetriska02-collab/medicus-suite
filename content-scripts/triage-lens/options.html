@@ -234,6 +234,10 @@
           Baseline chips that fire on built-in conditions (age extremes, task age, status, frailty, polypharmacy, etc.).
           Edit the label, severity, or attach actions — same machinery as user rules. Variables in
           <code>{braces}</code> are substituted with live values when the chip renders.
+          <br /><br />
+          <strong>Results queue</strong> chips flag the investigation itself. The task-priority chip only repeats the
+          task’s own High or Urgent label. <strong>Under-prioritised</strong> is different: an urgent result is sitting
+          on a lower priority. Open that result — it is not the urgent chip.
         </div>
         <div class="tl-rule-list" id="systemChipList"></div>
       </section>
@@ -391,7 +395,8 @@
         >
         <label class="tl-field tl-field-inline"
           ><input type="checkbox" data-pref="queueStatusBar" checked /><span
-            >Show the live triage status bar (counts + jump-to-alert) on the queue</span
+            >Show the results-queue bar (urgent / to review counts, next urgent, and a note that no chip is not a normal
+            result)</span
           ></label
         >
         <label class="tl-field tl-field-inline"
@@ -401,8 +406,8 @@
         >
         <label class="tl-field tl-field-inline"
           ><input type="checkbox" data-pref="queueKeyboardNav" checked /><span
-            >Keyboard triage on the queue (j/k move, Enter opens, Space opens pulse why, n jumps to
-            next red/amber)</span>
+            >Keyboard triage on the queue (j/k move, Enter opens, Space opens pulse why, n jumps to the next urgent
+            row, ? explains the bar)</span>
           ></label
         >
         <label class="tl-field tl-field-inline"
@@ -492,8 +497,8 @@
           lithium, digoxin, TSH and HbA1c — plus key microbiology text rules (MSU, blood culture, bowel screening). They
           are <strong>not</strong> a complete results-interpretation system: an analyte with no rule (for example
           ferritin, B12/folate or LFTs) simply shows the lab's own flag, so
-          <strong>an absent chip is not a clinical all-clear</strong>. Add your own rule for anything else your practice
-          wants flagged. <br /><br />
+          <strong>an absent chip is not a clinical all-clear</strong>. The bar on the results queue says the same thing
+          in plain text. Add your own rule for anything else your practice wants flagged. <br /><br />
           <em>Viewing or editing this screen changes nothing in the queue until you tick a rule on.</em>
         </div>
         <div class="tl-toolbar">
@@ -501,7 +506,8 @@
         </div>
         <div class="tl-rule-list" id="resultRuleList"></div>
         <div class="tl-empty" id="resultRuleListEmpty" style="display: none">
-          No result rules configured. Add one manually or import via the LLM tool in the editor.
+          No result rules yet. Use New result rule, or open Import rules from LLM below. Imported rules stay off until
+          you turn them on.
         </div>
 
         <details
@@ -1129,6 +1135,18 @@
             <strong>Note</strong> — shows informational text in a popover (monitoring reminders, red-flag checklists).
           </li>
         </ul>
+        <h3>Results queue</h3>
+        <p>
+          On the investigation results queue, chips name what to open first. A filled urgent chip is the result.
+          <strong>Under-prioritised</strong> (outline) means that result is on a lower task priority — open it; do not
+          mix it up with the urgent chip. Click a chip for the values.
+        </p>
+        <p>
+          The bar at the top counts urgent and to-review rows and jumps to the next one.
+          <strong>A row with no chip has not been assessed as normal.</strong> Open it. A green tick means nothing was
+          found that blocks filing. It does not file. <strong>How to read</strong> on the bar explains the rest, and
+          <strong>?</strong> opens it from the keyboard.
+        </p>
         <h3>Safety</h3>
         <p>
           This is display-only. It surfaces existing record entries with provenance — no synthesis, no inference of
