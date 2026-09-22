@@ -2226,6 +2226,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 }
 .suite-palette-hints {
   display: flex;
+  align-items: center;
   gap: 12px;
   padding: 7px 12px;
   border-top: 1px solid var(--border);
@@ -2233,6 +2234,65 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   font-size: 9px;
   color: var(--text-4);
   letter-spacing: 0.04em;
+}
+.suite-palette-hintbtn {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  cursor: pointer;
+}
+.suite-palette-hintbtn:hover,
+.suite-palette-hintbtn:focus-visible {
+  text-decoration: underline;
+}
+.suite-palette-sheet-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+.suite-palette-sheet-keys {
+  flex: 0 0 9.2em;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+.suite-palette-sheet-h {
+  margin: 8px 4px 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+.suite-palette-sheet-chords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 0 4px;
+}
+.suite-palette-sheet-chord {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.suite-palette-sheet-muted {
+  color: var(--text-4);
+}
+.suite-palette-sheet-note {
+  margin: 8px 4px 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-4);
 }
 
 /* ── First-run setup checklist card ─────────────────────────────────────────
@@ -3064,6 +3124,12 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   font-size: 11px;
   color: var(--text-2);
 }
+.help-popover-kbd-list > span.help-popover-kbd-note {
+  display: block;
+  white-space: normal;
+  line-height: 1.35;
+  color: var(--text-3);
+}
 .help-popover-kbd {
   font-family: var(--mono);
   font-size: 9px;
@@ -3086,8 +3152,10 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   bottom: 14px;
   z-index: 9999;
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(300px, calc(100vw - 28px));
   padding: 6px 10px;
   background: var(--bg-elev);
   border: 1px solid var(--border-hi);
@@ -3116,6 +3184,16 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
   padding: 1px 5px;
+}
+.kbdnav-chord-map {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+}
+.kbdnav-chord-map span {
+  font-size: 10px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 /* ── Quick Leaflet popover (panel shell — see quick-leaflet/quick-leaflet.js) ─ */

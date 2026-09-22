@@ -12,6 +12,7 @@ import {
 import { recordTaskLists } from './modules/submissions/submissions-ledger.js';
 import { initTour, maybeAutoStartTour } from './tour/tour.js';
 import { initPalette } from './palette/palette.js';
+import { G_CHORD_MAP } from './palette/palette-core.js';
 import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup, setSetupActiveModule } from './setup/setup.js';
@@ -164,13 +165,14 @@ function buildKeyboardHelpSectionHTML() {
   return `<div class="help-popover-row">
     <span class="help-popover-lbl">Keyboard shortcuts</span>
     <div class="help-popover-kbd-list">
-      <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">k</kbd> command palette</span>
-      <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">alt</kbd>+<kbd class="help-popover-kbd">←/→</kbd> cycle tabs</span>
-      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> jump to tab</span>
-      <span title="${escStrip(chordList)}"><kbd class="help-popover-kbd">g</kbd> then a letter — jump to tab</span>
+      <span><kbd class="help-popover-kbd">Ctrl</kbd>/<kbd class="help-popover-kbd">Cmd</kbd>+<kbd class="help-popover-kbd">K</kbd> command palette</span>
+      <span><kbd class="help-popover-kbd">Ctrl</kbd>/<kbd class="help-popover-kbd">Cmd</kbd>+<kbd class="help-popover-kbd">Alt</kbd>+<kbd class="help-popover-kbd">←/→</kbd> cycle tabs</span>
+      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> Slots through Signing</span>
+      <span title="${escStrip(chordList)}"><kbd class="help-popover-kbd">g</kbd> then a letter — listed tabs only</span>
       <span><kbd class="help-popover-kbd">/</kbd> focus search</span>
       <span><kbd class="help-popover-kbd">?</kbd> this help</span>
-      <span><kbd class="help-popover-kbd">esc</kbd> close popovers</span>
+      <span><kbd class="help-popover-kbd">Esc</kbd> close popovers</span>
+      <span class="help-popover-kbd-note">Full letter map: command palette, then Keyboard shortcuts.</span>
     </div>
   </div>`;
 }
@@ -268,7 +270,7 @@ function buildAllTabsPopoverHTML() {
   return `<div class="alltabs-popover" id="allTabsPopover" role="menu" aria-label="All tabs">
     <div class="alltabs-title">Jump to a tab</div>
     <div class="alltabs-list">${rows}</div>
-    <div class="alltabs-hint">Ctrl+Alt+← / → switches tabs</div>
+    <div class="alltabs-hint">Ctrl/Cmd+Alt+← / → switches tabs</div>
   </div>`;
 }
 
@@ -390,47 +392,28 @@ function wireTabNavShortcuts() {
 // or while any shell-level overlay (command palette, tour, tab chooser, or this
 // panel's own help/all-tabs/display popovers) is open — see isOverlayOpen().
 
-// Second key of a "g" chord → module to jump to. Preference is the module's
-// own data-module first letter; where two or more modules share a first
-// letter, one keeps it and the rest are reassigned a letter from elsewhere in
-// their name so every entry stays mnemonic. Collisions and their resolutions:
-//   s* → slots keeps 's'; sentinel → 'm' (Monitoring), submissions → 'u',
-//        sweep → 'w'
-//   c* → capacity keeps 'c'
-//   r* → referrals keeps 'r'; record → 'd', reception → 'e'
-//   trends → 'n' (t is unused after Today tab removal)
-const G_CHORD_MAP = {
-  s: 'slots',
-  m: 'sentinel',
-  r: 'referrals',
-  c: 'capacity',
-  a: 'activity',
-  u: 'submissions',
-  k: 'knowledge',
-  l: 'leaflets',
-  w: 'sweep',
-  e: 'reception',
-  d: 'record',
-  n: 'trends',
-};
-
+// Letter → tab lives in palette-core.js (G_CHORD_MAP), including Signing (i),
+// Patient Alerts (p), Phrases (h) and Rota (o). g then t or b stays unbound.
 const G_CHORD_TIMEOUT_MS = 1500;
 let _gChordArmed = false;
 let _gChordTimer = null;
 let _gChordIndicatorEl = null;
 
-// Transient "g …" indicator — the chord has no other visible cue, so this is
-// the discoverability affordance the panel ask calls for. Styled to emulate
-// the existing kbd-token + floating-popover patterns (suite-palette-kbd,
+// Transient chord map. The letters are not guessable (Monitoring is m, not s),
+// so the indicator lists them instead of a bare "g …". Styled to emulate the
+// existing kbd-token + floating-popover patterns (suite-palette-kbd,
 // help-popover) rather than inventing a new visual language.
 function showGChordIndicator() {
   if (!_gChordIndicatorEl) {
     _gChordIndicatorEl = document.createElement('div');
     _gChordIndicatorEl.className = 'kbdnav-chord-indicator';
     _gChordIndicatorEl.setAttribute('aria-live', 'polite');
-    _gChordIndicatorEl.innerHTML = '<kbd>g</kbd> …';
     document.body.appendChild(_gChordIndicatorEl);
   }
+  const rows = Object.entries(G_CHORD_MAP)
+    .map(([key, mod]) => `<span><kbd>${escStrip(key)}</kbd> ${escStrip(TAB_HELP[mod]?.title || mod)}</span>`)
+    .join('');
+  _gChordIndicatorEl.innerHTML = `<span class="kbdnav-chord-title"><kbd>g</kbd> then</span><span class="kbdnav-chord-map">${rows}</span>`;
   _gChordIndicatorEl.classList.add('kbdnav-chord-indicator-visible');
 }
 
@@ -584,11 +567,11 @@ updateNavOverflow();
   if (!btn) return;
   const total = document.querySelectorAll('.nav-tab').length;
   if (!total) return;
-  btn.title = `Jump to any of the ${total} tabs · Command palette (Ctrl+K)`;
+  btn.title = `Jump to any of the ${total} tabs · Command palette (Ctrl/Cmd+K)`;
   // The bare count badge ("15") read as a mystery number to the appraisal panel;
   // name it for assistive tech and tooltip so it can't be mistaken for an unread
   // count. (Practice appraisal U2, 2026-06-21.)
-  btn.setAttribute('aria-label', `Command palette — jump to any of the ${total} tabs (Ctrl+K)`);
+  btn.setAttribute('aria-label', `Command palette — jump to any of the ${total} tabs (Ctrl/Cmd+K)`);
   let badge = btn.querySelector('.palette-count');
   if (!badge) {
     badge = document.createElement('span');

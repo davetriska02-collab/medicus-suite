@@ -58,7 +58,9 @@
     document.querySelectorAll('#zenBtn').forEach((b) => {
       b.classList.toggle('active', !!on);
       b.setAttribute('aria-pressed', String(!!on));
-      b.title = on ? 'Exit focus mode (Esc)' : 'Focus mode — declutter chrome (Ctrl+.)';
+      const label = on ? 'Exit focus mode (Esc)' : 'Focus mode — declutter chrome (Ctrl/Cmd+.)';
+      b.title = label;
+      b.setAttribute('aria-label', on ? 'Exit focus mode' : 'Focus mode (Ctrl/Cmd+.)');
     });
   }
 
