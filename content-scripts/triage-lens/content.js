@@ -76,11 +76,29 @@
   font-size: 11px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.3;
-  max-width: 420px;
+  max-width: 520px;
+  flex-wrap: wrap;
   position: fixed;
   top: 56px;
   right: 16px;
   z-index: 99990;
+}
+.ch-q-status-note {
+  flex: 1 0 100%;
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.ch-q-status-help {
+  flex: 1 0 100%;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #e2e8f0;
+}
+.ch-q-status-help-text {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.45;
 }
 .ch-q-status-btn {
   flex-shrink: 0;
@@ -2148,7 +2166,7 @@
       return '<span class="ch-chip ch-chip-not-assessed" title="Could not read: ' +
         escapeHtml(missingCards.join(', ')) + '">Not fully assessed</span>';
     }
-    return '<span class="ch-chip ch-chip-info">No flags</span>';
+    return '<span class="ch-chip ch-chip-info" title="No keyword flags on this record. This is not a results-queue all-clear — on the results queue, a row with no chip has not been assessed as normal.">No flags</span>';
   };
 
   // Pure: the grey footer line naming which cards could not be read this pass.
@@ -2175,7 +2193,7 @@
   };
 
   const detailList = (items) => {
-    if (!items.length) return '<div class="ch-detail-empty">No flags</div>';
+    if (!items.length) return '<div class="ch-detail-empty">Nothing in this group.</div>';
     return items.map(it => `
       <div class="ch-detail-row ch-${it.severity}">
         <div class="ch-detail-text">${escapeHtml(it.text)}</div>
@@ -2759,6 +2777,21 @@
     armActionMenuDismissal();
   };
 
+  // Suite settings, with a section hash so the gear and the queue bar land on
+  // the page that explains the chips — openOptionsPage() cannot carry a hash.
+  const openSuiteSection = (hash) => {
+    const suffix = hash || '';
+    try {
+      if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+        window.open(chrome.runtime.getURL('options/options.html' + suffix), '_blank');
+        return;
+      }
+      if (!suffix && typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.openOptionsPage) {
+        chrome.runtime.openOptionsPage();
+      }
+    } catch (e) { console.warn('[TL] settings open failed', e); }
+  };
+
   const renderHUD = (data, signals, requestSignals) => {
     lastSignals = signals;
     const hud = ensureHudEl();
@@ -2795,10 +2828,10 @@
       <header class="ch-head">
         <div class="ch-title">Triage Lens <span class="ch-ver">v${VERSION}</span></div>
         <div class="ch-actions">
-          ${pipSupported() ? `<button class="ch-btn" data-act="${inPip() ? 'unpip' : 'pip'}" title="${inPip() ? 'Return to tab' : 'Pop out (always-on-top)'}">${inPip() ? '↙' : '↗'}</button>` : ''}
-          <button class="ch-btn" data-act="refresh" title="Re-scan">↻</button>
-          <button class="ch-btn" data-act="settings" title="Open settings">⚙</button>
-          <button class="ch-btn" data-act="min" title="Minimise">${minimised ? '▢' : '_'}</button>
+          ${pipSupported() ? `<button class="ch-btn" data-act="${inPip() ? 'unpip' : 'pip'}" title="${inPip() ? 'Return to tab' : 'Pop out (always-on-top)'}" aria-label="${inPip() ? 'Return Triage Lens to the tab' : 'Pop Triage Lens out, always on top'}">${inPip() ? '↙' : '↗'}</button>` : ''}
+          <button class="ch-btn" data-act="refresh" title="Re-scan" aria-label="Re-scan this record">↻</button>
+          <button class="ch-btn" data-act="settings" title="Open Triage Lens settings" aria-label="Open Triage Lens settings">⚙</button>
+          <button class="ch-btn" data-act="min" title="${minimised ? 'Restore Triage Lens' : 'Minimise Triage Lens'}" aria-label="${minimised ? 'Restore Triage Lens' : 'Minimise Triage Lens'}">${minimised ? '▢' : '_'}</button>
         </div>
       </header>
       <div class="ch-body">
@@ -2817,7 +2850,7 @@
           ${tile('safeguarding', 'Safeguarding', signals.safeguarding, missingCards)}
         </div>
         <div class="ch-detail" id="ch-detail">
-          <div class="ch-detail-head">Click a tile for detail</div>
+          <div class="ch-detail-head">Click a group to see what was found</div>
         </div>` : ''}
         ${showFoot ? `<div class="ch-foot">
           ${data.registers.length} registers · ${data.problems.length} problems · ${data.meds.repeats.length} repeats · ${data.docs.length} recent docs
@@ -2853,15 +2886,7 @@
     const focusBtn = hud.querySelector('[data-act="focus-tab"]');
     if (focusBtn) focusBtn.addEventListener('click', focusSourceTab);
     const settingsBtn = hud.querySelector('[data-act="settings"]');
-    if (settingsBtn) settingsBtn.addEventListener('click', () => {
-      try {
-        if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.openOptionsPage) {
-          chrome.runtime.openOptionsPage();
-        } else if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
-          window.open(chrome.runtime.getURL('options/options.html'), '_blank');
-        }
-      } catch (e) { console.warn('[TL] settings open failed', e); }
-    });
+    if (settingsBtn) settingsBtn.addEventListener('click', () => openSuiteSection('#sect-triage'));
 
     // Rule chip click handlers — open action menu
     hud.querySelectorAll('[data-rule-id]').forEach(el => {
@@ -5422,7 +5447,7 @@
   // from both a filled clinical chip and the plain meta/outline chips.
   const RESULT_ERROR_CHIP_HTML =
     '<span class="ch-chip ch-chip-meta ch-chip-error" role="note" ' +
-    'title="Medicus Suite couldn’t check this result — will retry">?</span>';
+    'title="Medicus Suite couldn’t check this result — will retry">Couldn\'t check</span>';
 
   // "Unit mismatch" chip (item 3.1, TRIAGE-LENS-2026-07-02.md) — fixed markup, NOT
   // routed through getSystemChip/renderSystemChipHtmlMemo, same reasoning as
@@ -5435,7 +5460,7 @@
   // changes severity, only which rules were consulted.
   const UNIT_MISMATCH_CHIP_HTML =
     '<span class="ch-chip ch-chip-meta ch-chip-unit-mismatch" role="note" ' +
-    'title="One or more rules were skipped: reported unit does not match the rule’s expected unit — see detail">unit?</span>';
+    'title="One or more rules were skipped: reported unit does not match the rule’s expected unit — see detail">Unit mismatch</span>';
 
   // "Unclassified qualitative positive" chip (Part B, item 3.2, TRIAGE-LENS-2026-07-02.md)
   // — a non-numeric result (e.g. "Positive", "Detected") that no lab flag and no text
@@ -5478,6 +5503,7 @@
   // in the selector list.
   const FILEABLE_CHIP_HTML =
     '<span class="ch-chip ch-chip-fileable ch-q-fileable" role="note" ' +
+    'aria-label="All results within normal limits. Marker only — nothing is filed." ' +
     'title="Every result is within normal limits and nothing was found that blocks auto-filing. ' +
     'This is a marker only, nothing is filed automatically — file from the task’s lab-filing action.">✓</span>';
 
@@ -5711,7 +5737,8 @@
     if (!hasDetail && !mismatches.length) {
       const empty = document.createElement('div');
       empty.className = 'ch-result-popover-empty';
-      empty.textContent = 'No detail available.';
+      empty.textContent =
+        'No extra detail for this chip. Open the task and read the result. A chip is a prompt, not a decision to file or to skip.';
       el.appendChild(empty);
       return el;
     }
@@ -5738,6 +5765,36 @@
     return el;
   };
 
+  // Process notes for chips whose meaning is not in the analyte lines. Copy only —
+  // reads flags evaluateReportSeverity already set. priorityDisplay is quoted
+  // only when it looks like a priority word, so a stray value is never shown.
+  const appendResultPopoverNotes = (popover, entry, showError) => {
+    if (!popover || showError || !entry) return;
+    const sev = entry.sev && typeof entry.sev === 'object' ? entry.sev : null;
+    if (!sev) return;
+    const add = (text) => {
+      const line = document.createElement('div');
+      line.className = 'ch-result-popover-note';
+      line.textContent = text;
+      popover.appendChild(line);
+    };
+    if (sev.misprioritised) {
+      const raw = typeof entry.priorityDisplay === 'string' ? entry.priorityDisplay.trim() : '';
+      const pri = /^[A-Za-z][A-Za-z \-]{0,30}$/.test(raw) ? raw : '';
+      add(
+        pri
+          ? 'Under-prioritised: an urgent result is on a task marked "' + pri + '". Open the result. This outline chip is not the urgent result chip.'
+          : 'Under-prioritised: an urgent result is on a lower task priority (not High, Urgent, or Immediate). Open the result. This outline chip is not the urgent result chip.'
+      );
+    }
+    if (sev.unmatched) {
+      add('Unmatched patient: this report is not linked to a patient record. Do not file it as if it were.');
+    }
+    if (popover.querySelector('.ch-result-popover-note') && popover.querySelector('.ch-result-popover-empty')) {
+      popover.querySelector('.ch-result-popover-empty').remove();
+    }
+  };
+
   // Toggle: clicking the SAME open anchor again closes it; clicking any other chip (or
   // a fresh open) closes whatever was open and opens the new one. `taskUuid` is read
   // fresh from _queueResultCache at click time (not a stale closure), so a detail
@@ -5756,6 +5813,7 @@
     const detail = !showError && entry && Array.isArray(entry.detail) ? entry.detail : [];
     const unitMismatches = !showError && entry && Array.isArray(entry.unitMismatches) ? entry.unitMismatches : [];
     const popover = buildResultDetailPopoverEl(detail, showError, unitMismatches);
+    appendResultPopoverNotes(popover, entry, showError);
     const r = anchorEl.getBoundingClientRect();
     popover.style.position = 'fixed';
     popover.style.top = (r.bottom + 4) + 'px';
@@ -6047,6 +6105,10 @@
     }
     const level = sev && sev.level === 'red' ? 'red' : 'amber';
     el.classList.add(DETAIL_VERDICT_CLASS + '-' + level);
+    const kicker = document.createElement('div');
+    kicker.className = DETAIL_VERDICT_CLASS + '-kicker';
+    kicker.textContent = 'Results queue';
+    el.appendChild(kicker);
     const headline = buildDetailVerdictHeadline(sev);
     if (headline) {
       const h = document.createElement('div');
@@ -6080,6 +6142,20 @@
       const n = unitMismatches.length;
       note.textContent = (n === 1 ? '1 rule skipped' : n + ' rules skipped') + ': unit mismatch — see chip';
       el.appendChild(note);
+    }
+    if (sev && sev.misprioritised) {
+      const pri = document.createElement('div');
+      pri.className = DETAIL_VERDICT_CLASS + '-priority';
+      pri.textContent =
+        'Under-prioritised: this urgent result is on a lower task priority. Open it. This is not the same as the urgent chip.';
+      el.appendChild(pri);
+    }
+    if (sev && sev.unmatched) {
+      const un = document.createElement('div');
+      un.className = DETAIL_VERDICT_CLASS + '-priority';
+      un.textContent =
+        'Unmatched patient: this report is not linked to a patient record. Do not file it as if it were.';
+      el.appendChild(un);
     }
     return el;
   };
@@ -6302,6 +6378,14 @@
   const QUEUE_FOCUS_CLASS = 'ch-q-focus-alerts';
   const QUEUE_STATUS_TOOLTIP =
     'Triage Lens flags urgent / abnormal results. A row with no flag has not been assessed as normal — open and review every result.';
+  const QUEUE_STATUS_NOTE = 'A row with no chip has not been assessed as normal.';
+  const QUEUE_STATUS_HELP_TEXT =
+    'Urgent is a result to open first. To review means abnormal, or a result that needs a look. ' +
+    'Under-prioritised (outline) means that urgent result is on a lower task priority. Open it. It is not the urgent chip. ' +
+    'Next urgent jumps to the next urgent row (keyboard n). Dim other rows only fades the rest. It does not remove or file anything. ' +
+    'Click a chip for the values. A green tick means nothing was found that blocks filing. It does not file. ' +
+    'A dashed chip starting with ? is an unclassified result. Open it. ' +
+    'A row with no chip has not been assessed as normal.';
 
   // Module state — session-local, deliberately NOT reset by refreshQueueChips
   // (only by runQueue on a genuine queue re-entry, or the focus toggle itself).
@@ -6309,6 +6393,7 @@
   let _queueStatusLastRed = 0; // last-rendered red/amber totals, to detect a
   let _queueStatusLastAmber = 0; // "material" severity change that should reset the cycle
   let _queueFocusAlertsOn = false; // OFF by default (plan item 1.2)
+  let _queueStatusHelpOn = false; // "How to read" panel, session-local like the focus toggle
   let _queueStatusBarRafPending = false;
 
   // Practice-features gate for the WHOLE queue status bar (counts + jump
@@ -6369,14 +6454,38 @@
     _queueStatusJumpPos = target;
   };
 
+  const syncQueueStatusFocusBtn = (btn) => {
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
+    if (btn.classList) btn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
+    btn.textContent = _queueFocusAlertsOn ? 'Show all rows' : 'Dim other rows';
+    const tip = _queueFocusAlertsOn
+      ? 'Other rows are dimmed. Press to show every row again. Nothing is hidden or filed.'
+      : 'Dim rows that are not urgent or to review. Urgent and review rows stay bright. Nothing is hidden or filed.';
+    btn.title = tip;
+    btn.setAttribute('aria-label', tip);
+  };
+
+  const syncQueueStatusHelp = (el) => {
+    if (!el) return;
+    const help = el.querySelector('.ch-q-status-help');
+    const btn = el.querySelector('.ch-q-status-helpbtn');
+    if (help) help.hidden = !_queueStatusHelpOn;
+    if (btn) btn.setAttribute('aria-expanded', String(_queueStatusHelpOn));
+  };
+
+  const toggleQueueStatusHelp = () => {
+    _queueStatusHelpOn = !_queueStatusHelpOn;
+    const el = typeof document !== 'undefined' ? document.getElementById(QUEUE_STATUS_BAR_ID) : null;
+    if (el) syncQueueStatusHelp(el);
+  };
+
   const onQueueStatusFocusClick = (e) => {
     _queueFocusAlertsOn = !_queueFocusAlertsOn;
     applyQueueFocusClass();
-    const btn = e && e.currentTarget;
-    if (btn) {
-      btn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
-      if (btn.classList) btn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
-    }
+    const fromEvent = e && e.currentTarget;
+    const el = typeof document !== 'undefined' ? document.getElementById(QUEUE_STATUS_BAR_ID) : null;
+    syncQueueStatusFocusBtn((el && el.querySelector('.ch-q-status-focus')) || fromEvent);
   };
 
   // ---- Keyboard triage (item 4.6, TRIAGE-LENS-2026-07-02.md) ----
@@ -6554,7 +6663,8 @@
         applyQueueKbdCursor();
       }
     } else if (key === '?') {
-      log('queue keyboard shortcuts: j/k (or arrows) move, Enter opens, Space why-pulse, n jumps to next red/amber');
+      if (e.preventDefault) e.preventDefault();
+      toggleQueueStatusHelp();
     }
   };
 
@@ -6594,10 +6704,41 @@
     const focusBtn = document.createElement('button');
     focusBtn.type = 'button';
     focusBtn.className = 'ch-q-status-btn ch-q-status-focus';
-    focusBtn.setAttribute('aria-pressed', 'false');
-    focusBtn.textContent = 'Focus alerts';
     focusBtn.addEventListener('click', onQueueStatusFocusClick);
     el.appendChild(focusBtn);
+    syncQueueStatusFocusBtn(focusBtn);
+
+    const helpBtn = document.createElement('button');
+    helpBtn.type = 'button';
+    helpBtn.className = 'ch-q-status-btn ch-q-status-helpbtn';
+    helpBtn.textContent = 'How to read';
+    helpBtn.title = 'What the result chips, the priority flag, and this bar mean';
+    helpBtn.setAttribute('aria-expanded', 'false');
+    helpBtn.setAttribute('aria-controls', 'ch-q-status-help');
+    helpBtn.addEventListener('click', toggleQueueStatusHelp);
+    el.appendChild(helpBtn);
+
+    const note = document.createElement('p');
+    note.className = 'ch-q-status-note';
+    note.textContent = QUEUE_STATUS_NOTE;
+    el.appendChild(note);
+
+    const help = document.createElement('div');
+    help.id = 'ch-q-status-help';
+    help.className = 'ch-q-status-help';
+    help.hidden = true;
+    const helpText = document.createElement('p');
+    helpText.className = 'ch-q-status-help-text';
+    helpText.textContent = QUEUE_STATUS_HELP_TEXT;
+    const rulesBtn = document.createElement('button');
+    rulesBtn.type = 'button';
+    rulesBtn.className = 'ch-q-status-btn';
+    rulesBtn.textContent = 'Open result rules';
+    rulesBtn.title = 'Suite settings — the rules that raise investigation-result chips';
+    rulesBtn.addEventListener('click', () => openSuiteSection('#sect-result-rules'));
+    help.appendChild(helpText);
+    help.appendChild(rulesBtn);
+    el.appendChild(help);
 
     document.body.appendChild(el);
     return el;
@@ -6637,11 +6778,11 @@
       });
     const counts = computeQueueTriageCounts(_durableRowMap, _queueResultCache, visible, now);
 
-    const parts = [counts.red + ' red', counts.amber + ' amber'];
-    if (counts.clear > 0) parts.push(counts.clear + ' clear');
-    if (counts.error > 0) parts.push(counts.error + ' ?');
+    const parts = [counts.red + ' urgent', counts.amber + ' to review'];
+    if (counts.clear > 0) parts.push(counts.clear + ' nothing flagged');
+    if (counts.error > 0) parts.push(counts.error + " couldn't check");
     let text = parts.join(' · ');
-    if (counts.checking > 0) text += (text ? ' · ' : '') + 'checking ' + counts.checking + '…';
+    if (counts.checking > 0) text += (text ? ' · ' : '') + 'still checking ' + counts.checking + '…';
 
     const countsEl = el.querySelector('.ch-q-status-counts');
     if (countsEl) countsEl.textContent = text;
@@ -6663,18 +6804,22 @@
       const hasRed = redIdx.length > 0;
       const hasAmber = amberIdx.length > 0;
       jumpBtn.disabled = !hasRed && !hasAmber;
-      jumpBtn.textContent = hasRed ? '▶ red' : hasAmber ? '▶ amber' : '▶ red';
+      jumpBtn.textContent = hasRed ? 'Next urgent' : hasAmber ? 'Next to review' : 'Next urgent';
+      const jumpTip = hasRed
+        ? 'Jump to the next urgent result on screen. Keyboard: n.'
+        : hasAmber
+          ? 'No urgent rows on screen. Jump to the next row to review. Keyboard: n.'
+          : 'No urgent or review rows on screen yet.';
+      jumpBtn.title = jumpTip;
+      jumpBtn.setAttribute('aria-label', jumpTip);
     }
 
     // Sync the focus button's visual/ARIA state from the session-local toggle on
     // every render — covers the bar being torn down and recreated (leave/re-enter
     // the queue) while `_queueFocusAlertsOn` stayed true, which the click handler
     // alone would never re-apply to a brand-new button element.
-    const focusBtn = el.querySelector('.ch-q-status-focus');
-    if (focusBtn) {
-      focusBtn.setAttribute('aria-pressed', String(_queueFocusAlertsOn));
-      if (focusBtn.classList) focusBtn.classList.toggle('ch-q-status-btn-active', _queueFocusAlertsOn);
-    }
+    syncQueueStatusFocusBtn(el.querySelector('.ch-q-status-focus'));
+    syncQueueStatusHelp(el);
   };
 
   // rAF-coalesced wrapper: refreshQueueChips fires on every grid mutation and the

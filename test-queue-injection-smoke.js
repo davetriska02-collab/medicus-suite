@@ -474,6 +474,10 @@ const parts = [
     'buildResultDetailPopoverEl'
   ),
   extract(
+    /const appendResultPopoverNotes = \(popover, entry, showError\) => \{[\s\S]*?\n {2}\};/,
+    'appendResultPopoverNotes'
+  ),
+  extract(
     /const toggleResultDetailPopover = \(anchorEl, taskUuid, isError\) => \{[\s\S]*?\n {2}\};/,
     'toggleResultDetailPopover'
   ),
@@ -499,6 +503,8 @@ const parts = [
   extract(/const QUEUE_STATUS_FLASH_CLASS = .*;/, 'QUEUE_STATUS_FLASH_CLASS'),
   extract(/const QUEUE_FOCUS_CLASS = .*;/, 'QUEUE_FOCUS_CLASS'),
   extract(/const QUEUE_STATUS_TOOLTIP =[\s\S]*?;/, 'QUEUE_STATUS_TOOLTIP'),
+  extract(/const QUEUE_STATUS_NOTE =[\s\S]*?;/, 'QUEUE_STATUS_NOTE'),
+  extract(/const QUEUE_STATUS_HELP_TEXT =[\s\S]*?;/, 'QUEUE_STATUS_HELP_TEXT'),
   extract(
     /let _queueStatusJumpPos = null;[\s\S]*?let _queueStatusBarRafPending = false;/,
     '_queueStatus* module state'
@@ -513,6 +519,9 @@ const parts = [
     'FOCUS_ALERTS_PACK_KEY / _focusAlertsPackOn'
   ),
   extract(/const onQueueStatusJumpClick = \(\) => \{[\s\S]*?\n {2}\};/, 'onQueueStatusJumpClick'),
+  extract(/const syncQueueStatusFocusBtn = \(btn\) => \{[\s\S]*?\n {2}\};/, 'syncQueueStatusFocusBtn'),
+  extract(/const syncQueueStatusHelp = \(el\) => \{[\s\S]*?\n {2}\};/, 'syncQueueStatusHelp'),
+  extract(/const toggleQueueStatusHelp = \(\) => \{[\s\S]*?\n {2}\};/, 'toggleQueueStatusHelp'),
   extract(/const onQueueStatusFocusClick = \(e\) => \{[\s\S]*?\n {2}\};/, 'onQueueStatusFocusClick'),
   extract(/const ensureQueueStatusBarEl = \(\) => \{[\s\S]*?\n {2}\};/, 'ensureQueueStatusBarEl'),
   extract(/const removeQueueStatusBar = \(\) => \{[\s\S]*?\n {2}\};/, 'removeQueueStatusBar'),
@@ -1308,6 +1317,7 @@ if (sandbox) {
       /ch-chip-meta/.test(errHtml) && /ch-chip-error/.test(errHtml),
       `error entry: inner chip carries ch-chip-meta + ch-chip-error (grey outline family) (got: ${errHtml})`
     );
+    check(/Couldn't check/.test(errHtml), 'error entry: the chip says "Couldn\'t check", not a bare question mark');
     check(
       !/ch-chip-red|ch-chip-amber|ch-chip-green/.test(errHtml),
       'error entry: chip carries NO clinical severity fill class — never mistaken for a graded result'
@@ -1694,8 +1704,13 @@ if (sandbox) {
     );
     const countsEl1 = bar1 && bar1.querySelector('.ch-q-status-counts');
     check(
-      countsEl1 && countsEl1.textContent === '1 red · 0 amber',
-      `bar text with only a red present, zero everything else: "1 red · 0 amber", zero segments omitted (got: ${countsEl1 && countsEl1.textContent})`
+      countsEl1 && countsEl1.textContent === '1 urgent · 0 to review',
+      `bar text with only a red present, zero everything else: "1 urgent · 0 to review", zero segments omitted (got: ${countsEl1 && countsEl1.textContent})`
+    );
+    const note1 = bar1 && bar1.querySelector('.ch-q-status-note');
+    check(
+      note1 && /not been assessed as normal/.test(note1.textContent || ''),
+      'bar shows the honesty line on screen, not only in the tooltip'
     );
     check(
       !bar1.classes.includes('ch-q-status--checking'),
@@ -1722,8 +1737,8 @@ if (sandbox) {
     check(bar3 === bar1, 'update-in-place: still the SAME node reference after the underlying counts changed');
     const countsEl3 = bar3.querySelector('.ch-q-status-counts');
     check(
-      countsEl3.textContent === '1 red · 0 amber · 1 ?',
-      `bar text updates in place to include the new "?" segment, clear stays omitted (got: ${countsEl3.textContent})`
+      countsEl3.textContent === "1 urgent · 0 to review · 1 couldn't check",
+      `bar text updates in place to include the couldn't-check segment, nothing-flagged stays omitted (got: ${countsEl3.textContent})`
     );
 
     // ---- "still checking" — a known row with no live cache entry ----
@@ -1736,8 +1751,8 @@ if (sandbox) {
     const bar4 = sandbox.document.getElementById('ch-q-status-bar');
     const countsEl4 = bar4.querySelector('.ch-q-status-counts');
     check(
-      countsEl4.textContent === '1 red · 0 amber · 1 ? · checking 1…',
-      `"checking" segment appended last, with the ellipsis (got: ${countsEl4.textContent})`
+      countsEl4.textContent === "1 urgent · 0 to review · 1 couldn't check · still checking 1…",
+      `"still checking" segment appended last, with the ellipsis (got: ${countsEl4.textContent})`
     );
     check(
       bar4.classes.includes('ch-q-status--checking'),
@@ -1937,8 +1952,8 @@ if (sandbox) {
     const jumpBtn = sandbox.document.getElementById('ch-q-status-bar').querySelector('.ch-q-status-jump');
     check(!jumpBtn.disabled, 'reds present: jump button is enabled');
     check(
-      jumpBtn.textContent === '▶ red',
-      'reds present (even alongside an amber): button reads "▶ red", never mixes lists'
+      jumpBtn.textContent === 'Next urgent',
+      'reds present (even alongside an amber): button reads "Next urgent", never mixes lists'
     );
 
     sandbox.onQueueStatusJumpClick();
@@ -2447,8 +2462,28 @@ if (sandbox) {
     state = sandbox.__popoverState();
     check(
       state.el.querySelectorAll('.ch-result-popover-empty').length === 1 &&
-        state.el.querySelectorAll('.ch-result-popover-line').length === 0,
-      'popover: no cached detail → explicit "No detail available." message, no fabricated lines'
+        state.el.querySelectorAll('.ch-result-popover-line').length === 0 &&
+        /Open the task and read the result/.test(state.el.textContent),
+      'popover: no cached detail → empty message tells the clinician to open the task, no fabricated lines'
+    );
+    sandbox.closeResultDetailPopover();
+
+    // Under-prioritised is a process flag. The popover must say so, and must
+    // not invent a value line when none was cached.
+    sandbox._queueResultCache.set(rowId, {
+      sev: { ...redSev, misprioritised: true },
+      priorityDisplay: 'Routine',
+      ts: Date.now(),
+    });
+    sandbox.toggleResultDetailPopover(anchor, rowId, false);
+    state = sandbox.__popoverState();
+    check(
+      /Under-prioritised/.test(state.el.textContent) && /Routine/.test(state.el.textContent),
+      'popover: under-prioritised names the task priority and says to open the result'
+    );
+    check(
+      state.el.querySelectorAll('.ch-result-popover-empty').length === 0,
+      'popover: the priority note stands in for the empty line'
     );
     sandbox.closeResultDetailPopover();
 
@@ -3198,7 +3233,7 @@ if (sandbox) {
     let html = injectedSpan ? injectedSpan.innerHTML : '';
     let unitChipCount = (html.match(/ch-chip-unit-mismatch/g) || []).length;
     check(unitChipCount === 1, `"unit?" chip renders exactly once alongside the severity chip (got ${unitChipCount})`);
-    check(/>unit\?</.test(html), '"unit?" chip label is the literal text "unit?"');
+    check(/>Unit mismatch</.test(html), '"Unit mismatch" chip label is the literal text "Unit mismatch"');
     check(
       /class="ch-chip ch-chip-meta ch-chip-unit-mismatch"/.test(html),
       '"unit?" chip carries the ch-chip-meta family class (outline, never a clinical fill)'

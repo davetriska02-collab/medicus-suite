@@ -514,6 +514,14 @@
   border-left-color: var(--border-hi);
   color: var(--text-4);
 }
+.ch-detail-verdict-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
 .ch-detail-verdict-headline {
   font-weight: 600;
   margin-bottom: 2px;
@@ -534,6 +542,11 @@
   font-style: italic;
   font-size: 11px;
   margin-top: 2px;
+}
+.ch-detail-verdict-priority {
+  color: var(--text-2);
+  font-size: 11px;
+  margin-top: 4px;
 }
 
 /* ---- Result / monitoring chips injected into Medicus queue rows ----
@@ -725,7 +738,8 @@
   font-size: 11px;
   font-family: var(--sans);
   line-height: 1.3;
-  max-width: 420px;
+  max-width: 520px;
+  flex-wrap: wrap;
   position: fixed;
   top: 56px;
   right: 16px;
@@ -740,6 +754,25 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.ch-q-status-note {
+  flex: 1 0 100%;
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+.ch-q-status-help {
+  flex: 1 0 100%;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.ch-q-status-help-text {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 .ch-q-status-spinner {
   display: none;
@@ -1619,6 +1652,13 @@
   color: var(--text-5);
   font-style: italic;
   font-size: 11px;
+}
+.ch-result-popover-note {
+  color: var(--text-2);
+  font-size: 11px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover);
 }
 /* ---- Result-rule guidance actions (item 2.7, TRIAGE-LENS-2026-07-02.md) ----
    Click-to-fire link/snippet/note shortcuts a result rule can carry (same schema as
