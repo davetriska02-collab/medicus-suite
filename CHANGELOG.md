@@ -2,7 +2,7 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.264.26] — 2026-09-22
+## [v3.264.31] — 2026-09-22
 
 ### Write paths say where to compose, and what is still left to do in Medicus
 
