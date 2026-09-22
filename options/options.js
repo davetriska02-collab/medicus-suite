@@ -78,7 +78,17 @@ const IN_PAGE_ANCHORS = {
   'request-monitor': 'suite',
   'quiet-mode': 'notifications',
   'practice-profile': 'backup',
+  'baseline-chips-queue': 'queue',
 };
+
+// Point the Triage Lens iframe at a hash it already understands. Does not
+// write chip enabled flags or thresholds.
+function pointTriageFrame(hash) {
+  const frame = document.getElementById('triageFrame');
+  if (!frame) return;
+  const next = `../content-scripts/triage-lens/options.html#${hash}`;
+  if (frame.getAttribute('src') !== next) frame.src = next;
+}
 
 function showOptionsSection(navId, scrollToId) {
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
@@ -105,6 +115,7 @@ function activateSectionFromHash() {
   const raw = m[1];
   if (IN_PAGE_ANCHORS[raw]) {
     showOptionsSection(IN_PAGE_ANCHORS[raw], raw);
+    if (raw === 'baseline-chips-queue') pointTriageFrame('baseline-chips-queue');
     return;
   }
   const navId = SECTION_ALIASES[raw] || raw;

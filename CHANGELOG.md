@@ -6,13 +6,14 @@ All notable changes to Medicus Suite are documented here.
 
 ### Settings: buried switches are named, linked, and honest about the default
 
-Options only. No clinical thresholds and no new behaviour. Request Monitor still defaults to off, and its poll default stays 300 seconds (5 minutes).
+Settings labels and one deep link into the Triage Lens page Options already embeds. No clinical thresholds and no new behaviour. Request Monitor still defaults to off, and its poll default stays 300 seconds (5 minutes). Queue monitoring chips still ship off.
 
 - **Find bar** on every Settings page jumps to Request Monitor, Quiet mode, Monitoring chips, the practice profile, and Practice features. Those three buried blocks have in-page anchors (`#sect-request-monitor`, `#sect-quiet-mode`, `#sect-practice-profile`) that open the right nav section.
 - **Request Monitor** is named that, not "Triage request monitor", and the page says it is off until you turn it on. The poll field shows 300.
 - **Quiet mode** is the heading. Clinic mode stays the alias, and the sentence that quiet mode mutes desktop pop-ups and sounds only is unchanged.
 - **Monitoring chips** replace the "Sentinel chips — always shown" row. The table cannot turn chips off; quiet mode does not hide them; the extra Sentinel alert library stays behind Accept for this practice.
 - **Default paint.** Desktop notifications and their sound start off and stay off if Request Monitor config is missing. The toolbar badge starts on. Signing Queue flags start off. The other practice packs start on, matching the grandfathered default.
+- **Queue chips that ship off** keep the path Options → Triage Lens → Baseline chips → Queue. `#sect-baseline-chips-queue` opens that row. The row stays off until someone enables it. Thresholds are unchanged.
 
 ## [v3.264.15] — 2026-09-22
 

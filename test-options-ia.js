@@ -51,6 +51,29 @@ check(
   'find bar does not reintroduce Today, Note TV, or the appointment tally'
 );
 
+console.log('\n--- queue chips that ship off: named path and anchor ---');
+check(
+  /Options → Triage Lens → Baseline chips → Queue/.test(html),
+  'the off queue-chip control keeps the #461 path name'
+);
+check(/id="sect-baseline-chips-queue"/.test(html), 'suite page has a stable anchor for that path');
+check(/href="#sect-baseline-chips-queue"/.test(html), 'find bar and the section link to that anchor');
+check(
+  /'baseline-chips-queue':\s*'queue'/.test(js),
+  'the suite hash opens Queue rules, which hosts the Triage Lens iframe'
+);
+check(/pointTriageFrame\('baseline-chips-queue'\)/.test(js), 'the suite hash points the iframe at the same anchor');
+const triageJs = fs.readFileSync(path.join(__dirname, 'content-scripts/triage-lens/options.js'), 'utf8');
+check(
+  /row\.id = 'baseline-chips-queue'/.test(triageJs) && /meta\.id === 'queue\.monitoringDueRed'/.test(triageJs),
+  'the anchor sits on the queue monitoring row that ships off'
+);
+check(/location\.hash === '#baseline-chips-queue'/.test(triageJs), 'the iframe opens Baseline chips for that hash');
+check(/activateTab\('systemChips'\)/.test(triageJs), 'that hash selects the Baseline chips tab');
+const defaults = JSON.parse(fs.readFileSync(path.join(__dirname, 'defaults.json'), 'utf8'));
+check(defaults.systemChips['queue.monitoringDueRed'].enabled === false, 'queue.monitoringDueRed still ships off');
+check(defaults.systemChips['queue.monitoringDueAmber'].enabled === false, 'queue.monitoringDueAmber still ships off');
+
 console.log('\n--- Request Monitor: name, off-by-default, 5-minute poll ---');
 check(/<h2[^>]*>Request Monitor<\/h2>/.test(html), 'heading says Request Monitor');
 check(!/Triage request monitor/.test(html), 'old "Triage request monitor" heading is gone');

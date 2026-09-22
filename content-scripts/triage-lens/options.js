@@ -321,6 +321,17 @@
       const oirTab = $('#tlTabs .tl-tab[data-tab="oir"]');
       if (oirTab) oirTab.style.display = 'none';
       activateTab('rules');
+    } else if (location.hash === '#baseline-chips-queue') {
+      // Suite Settings deep link: Options → Triage Lens → Baseline chips → Queue.
+      // Same embedding as #triageLens (hide the duplicate result/OIR tabs) then
+      // open Baseline chips. Chip enabled flags are not written here.
+      const rrTab = $('#tlTabs .tl-tab[data-tab="resultRules"]');
+      if (rrTab) rrTab.style.display = 'none';
+      const oirTab = $('#tlTabs .tl-tab[data-tab="oir"]');
+      if (oirTab) oirTab.style.display = 'none';
+      activateTab('systemChips');
+      const queueRow = document.getElementById('baseline-chips-queue');
+      if (queueRow) queueRow.scrollIntoView({ block: 'start' });
     }
     // Keep every open instance of this page (the two Suite-Settings iframes plus
     // any standalone tab) in sync. Each instance loads CONFIG into memory once and
@@ -1516,6 +1527,9 @@ a rule that silently fails to fire misses a clinical signal. Test it using the L
       const cfg = getSysChipResolved(meta.id);
       const row = document.createElement('div');
       row.className = 'tl-rule-row' + (cfg.enabled === false ? ' tl-rule-disabled' : '');
+      // Stable target for Options → Triage Lens → Baseline chips → Queue.
+      // Lands on the queue rows that ship off. Does not change enabled.
+      if (meta.id === 'queue.monitoringDueRed') row.id = 'baseline-chips-queue';
       row.innerHTML = `
         <input type="checkbox" class="tl-rule-toggle" ${cfg.enabled !== false ? 'checked' : ''}>
         <span class="tl-rule-kind tl-rule-kind-${escAttr(cfg.kind || 'info')}">${escHtml(KIND_LABEL[cfg.kind] || cfg.kind || 'INFO')}</span>
