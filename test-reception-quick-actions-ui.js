@@ -45,6 +45,15 @@ check(src.includes('writes text only — books nothing'), 'header states "writes
 check(/not yet submitted/i.test(src), 'the un-submitted state is named ("not yet submitted")');
 check(src.includes('reception sees nothing'), 'pending reminder states the consequence ("reception sees nothing")');
 check(src.includes('Pick an action first'), 'disabled Insert explains itself ("Pick an action first")');
+check(src.includes('Compose here. 1. Insert into the comment.'), 'collapsed strip says where to compose (step 1)');
+check(
+  src.includes('2. Submit in Medicus — until you do, reception sees nothing.'),
+  'collapsed strip names step 2 and the consequence'
+);
+check(
+  src.includes('” below. Until you do, reception sees nothing.'),
+  'open step 2 states the consequence before insert, not only after'
+);
 
 // ============================================================
 // 2. No completion claim in any UI string literal

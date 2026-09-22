@@ -1893,6 +1893,11 @@
         <div class="ms-tap-section-header" id="ms-tap-bk-toggle" role="button" tabindex="0" aria-expanded="${bk.open}">
           <span class="ms-tap-chevron">${bk.open ? '▾' : '▸'}</span>
           <span>Book appointment for this patient</span>
+          ${
+            bk.step === 'booked'
+              ? ''
+              : '<span class="ms-tap-section-hint">Compose the booking here. Nothing is written until you press Confirm booking.</span>'
+          }
         </div>
         ${body}
       </div>
@@ -1986,6 +1991,11 @@
         <div class="ms-tap-section-header" id="ms-tap-tk-toggle" role="button" tabindex="0" aria-expanded="${tk.open}">
           <span class="ms-tap-chevron">${tk.open ? '▾' : '▸'}</span>
           <span>Create task for this patient</span>
+          ${
+            tk.step === 'created'
+              ? ''
+              : '<span class="ms-tap-section-hint">Compose the task here. Nothing is created until you press Create task.</span>'
+          }
         </div>
         ${body}
       </div>

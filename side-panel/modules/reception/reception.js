@@ -312,6 +312,8 @@ export async function init(el) {
       <div class="rcp-head">
         <h2 class="rcp-title">Reception</h2>
         <span class="rcp-subtitle">Ask the caller a set of standard questions — a clinician always reviews and decides.</span>
+        <span class="rcp-subtitle">The summary is composed in Guided capture.
+          Paste it into the Medicus task and submit there — until you do, the clinician sees nothing.</span>
       </div>
       <div class="rcp-card" id="rcpPatientCard"><div class="rcp-card-title">Patient</div><div class="rcp-card-body rcp-muted">Looking for an open patient record…</div></div>
       <div class="rcp-card" id="rcpFirstAvailCard"><div class="rcp-card-body" id="rcpFirstAvailBody"></div></div>
@@ -1563,6 +1565,9 @@ function renderOutput(text, pathway, opts) {
   // The capture is finished: the booking card belongs to the form, not the
   // summary view. Tearing it down here also releases any reservation still held.
   destroyBookingCard();
+  const copiedMsg =
+    'Copied. Paste it into the Medicus task and submit there — ' +
+    'until you do, the clinician sees nothing.';
   body.innerHTML = `
     <div class="rcp-output">
       <div class="rcp-output-head">
@@ -1570,16 +1575,21 @@ function renderOutput(text, pathway, opts) {
       </div>
       <textarea class="rcp-output-text" id="rcpOutputText" readonly rows="16"></textarea>
       <div class="rcp-form-actions">
-        <button class="rcp-btn rcp-btn-primary" id="rcpCopy">Copy to clipboard</button>
+        <button class="rcp-btn rcp-btn-primary" id="rcpCopy">1. Copy summary</button>
         <button class="rcp-btn" id="rcpNewCapture">New capture</button>
         <span class="rcp-form-msg" id="rcpCopyMsg"></span>
+      </div>
+      <div class="rcp-handoff" role="note">
+        <div>1. Copy the summary.</div>
+        <div>2. Paste it into the Medicus task for this patient, then submit there.
+          Until you do, the clinician sees nothing.</div>
+        <div>Check you are on the right patient before pasting.</div>
       </div>
       ${
         opts?.identityChanged
           ? `<div class="rcp-error">The record open in Medicus has changed since this capture started. The summary above is headed with the patient the capture began on — if you paste it into the record now open, it goes in the wrong patient's notes.</div>`
           : ''
       }
-      <div class="rcp-fineprint">Paste into the Medicus triage entry / task for this patient. Double-check you're on the right patient before pasting.</div>
     </div>`;
   const ta = body.querySelector('#rcpOutputText');
   ta.value = text;
@@ -1588,7 +1598,7 @@ function renderOutput(text, pathway, opts) {
     try {
       await navigator.clipboard.writeText(ta.value);
       if (m) {
-        m.textContent = 'Copied.';
+        m.textContent = copiedMsg;
         m.className = 'rcp-form-msg rcp-form-msg-ok';
       }
     } catch (_) {
@@ -1596,7 +1606,7 @@ function renderOutput(text, pathway, opts) {
       ta.select();
       const ok = document.execCommand && document.execCommand('copy');
       if (m) {
-        m.textContent = ok ? 'Copied.' : 'Copy failed — select the text and copy manually.';
+        m.textContent = ok ? copiedMsg : 'Copy failed — select the text and copy manually.';
         m.className = ok ? 'rcp-form-msg rcp-form-msg-ok' : 'rcp-form-msg';
       }
     }

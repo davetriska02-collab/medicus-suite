@@ -400,7 +400,7 @@
       '</div>' +
       '<div class="ms-qa-step2">2.&nbsp;Then press “' +
       esc(submitName) +
-      '” below.</div>' +
+      '” below. Until you do, reception sees nothing.</div>' +
       '<div class="ms-qa-notice" id="ms-qa-notice" role="status" aria-live="polite"></div>' +
       (s.pending
         ? '<div class="ms-qa-pending" role="status">Not yet submitted — press “' +
@@ -422,6 +422,10 @@
       '<span class="ms-qa-title">Reception instruction</span>' +
       '<span class="ms-qa-muted">writes text only — books nothing</span>' +
       (s.pending ? '<span class="ms-qa-pill">not yet submitted</span>' : '') +
+      (s.open
+        ? ''
+        : '<span class="ms-qa-where">Compose here. 1. Insert into the comment. ' +
+          '2. Submit in Medicus — until you do, reception sees nothing.</span>') +
       '</div>' +
       (s.open ? bodyHtml() : '')
     );
@@ -583,7 +587,9 @@
       : '';
 
     showNotice(
-      'Text added to the internal comment below. Read it, then press “' + (submitName || 'Submit') + '”.',
+      'Text added to the internal comment below. Read it, then press “' +
+        (submitName || 'Submit') +
+        '”. Until you do, reception sees nothing.',
       'ok'
     );
   }
