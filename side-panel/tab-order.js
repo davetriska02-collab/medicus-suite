@@ -40,4 +40,13 @@ function reconcileTabOrder(defaultIds, storedOrder) {
   return result;
 }
 
-export { reconcileTabOrder, STORAGE_KEY };
+// Label for the "All tabs" overflow menu. The strip shows a short uppercase
+// name; the menu shows the accessible name, with any em-dash gloss dropped so
+// the row stays scannable ("Patient Alerts", not the full screen-reader gloss).
+function navMenuLabelText(ariaLabel, fallback) {
+  const aria = String(ariaLabel || '').split('—')[0].trim();
+  if (aria) return aria;
+  return String(fallback || '').trim();
+}
+
+export { reconcileTabOrder, navMenuLabelText, STORAGE_KEY };

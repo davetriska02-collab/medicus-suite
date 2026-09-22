@@ -32,10 +32,11 @@ const path = require('path');
     `file://${path.resolve(__dirname)}/`
   ).href;
 
-  let reconcileTabOrder, STORAGE_KEY;
+  let reconcileTabOrder, navMenuLabelText, STORAGE_KEY;
   try {
     const mod = await import(tabOrderPath);
     reconcileTabOrder = mod.reconcileTabOrder;
+    navMenuLabelText  = mod.navMenuLabelText;
     STORAGE_KEY       = mod.STORAGE_KEY;
   } catch (e) {
     console.error('FATAL: could not import tab-order.js:', e.message);
@@ -108,6 +109,23 @@ const path = require('path');
     check(eq(out.slice(0, 3), ['referrals', 'sweep', 'slots']),
       'pop-out honours stored order for the ids it does have');
   }
+
+  // All-tabs menu label: accessible name, em-dash gloss dropped.
+  check(typeof navMenuLabelText === 'function', 'navMenuLabelText is a function');
+  check(
+    navMenuLabelText('Capacity Forecast', 'Forecast') === 'Capacity Forecast',
+    'menu label uses the accessible name, not the strip abbreviation'
+  );
+  check(
+    navMenuLabelText('Patient Alerts — per-patient custom flags', 'Pt Alerts') === 'Patient Alerts',
+    'menu label drops the em-dash gloss'
+  );
+  check(
+    navMenuLabelText('Signing Queue — repeat requests with monitoring context', 'Signing') === 'Signing Queue',
+    'signing menu label keeps "Signing Queue" and drops the gloss'
+  );
+  check(navMenuLabelText('', 'Sweep') === 'Sweep', 'blank aria-label falls back to the strip label');
+  check(navMenuLabelText('   ', 'Rota') === 'Rota', 'whitespace-only aria-label falls back to the strip label');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

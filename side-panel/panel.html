@@ -96,8 +96,10 @@
               stroke="currentColor"
               stroke-width="2"
               stroke-linecap="round"
+              stroke-linejoin="round"
             >
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+              <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
             </svg>
             <span>Submissions</span>
           </button>
@@ -186,6 +188,38 @@
             </svg>
             <span>Sweep</span>
           </button>
+          <button class="nav-tab" data-module="record" aria-label="Patient Record (live)">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M19 5v14H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2h12z" />
+              <path d="M9 8h6M9 12h6M9 16h3" />
+            </svg>
+            <span>Record</span>
+          </button>
+          <button class="nav-tab" data-module="patient-alerts" aria-label="Patient Alerts — per-patient custom flags">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+              <line x1="4" y1="22" x2="4" y2="15" />
+            </svg>
+            <span>Pt Alerts</span>
+          </button>
           <button class="nav-tab" data-module="knowledge" aria-label="Practice Knowledge">
             <svg
               width="14"
@@ -217,22 +251,6 @@
               <line x1="12" y1="8" x2="12.01" y2="8" />
             </svg>
             <span>Leaflets</span>
-          </button>
-          <button class="nav-tab" data-module="record" aria-label="Patient Record (live)">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M19 5v14H8a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2h12z" />
-              <path d="M9 8h6M9 12h6M9 16h3" />
-            </svg>
-            <span>Record</span>
           </button>
           <button class="nav-tab" data-module="rota" aria-label="Rota">
             <svg
@@ -270,22 +288,6 @@
             </svg>
             <span>Rota manager</span>
           </button>
-          <button class="nav-tab" data-module="patient-alerts" aria-label="Patient Alerts — per-patient custom flags">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-              <line x1="4" y1="22" x2="4" y2="15" />
-            </svg>
-            <span>Pt Alerts</span>
-          </button>
           <button class="nav-tab" data-module="phrases" aria-label="Phrases — reusable message blocks">
             <svg
               width="14"
@@ -320,6 +322,7 @@
             </svg>
             <span>Duplicates</span>
           </button>
+
         </div>
         <div class="nav-actions">
           <span class="nav-scroll-indicator nav-scroll-left" aria-hidden="true">‹</span>
