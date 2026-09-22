@@ -7,10 +7,11 @@
 // (suite-palette-*). Pure scoring/ranking logic is in palette-core.js.
 //
 // Commands are built fresh on every open:
-//   - navigation commands are read from the live .nav-tab DOM, so they
-//     automatically respect the context (panel vs pop-out), custom tab order
-//     and any future tabs — running one simply clicks the real tab, reusing
-//     all existing nav behaviour (full-tab launchers included);
+//   - navigation commands take their label and icon from the live .nav-tab
+//     DOM (panel vs pop-out, hidden tabs included) and are listed in section
+//     order (tab-sections.js). Slots and Monitoring stay ungrouped. Running
+//     one clicks the real tab. Rota manager and Duplicates are off the strip;
+//     both shells get an open:* command in Practice;
 //   - everything else is a small static registry below.
 //
 // Recents ('suite.palette.recents', localStorage) hold command ids only —
@@ -21,6 +22,8 @@
 import { rankCommands, pushRecent, patientScopedCommands, PATIENT_COMMAND_IDS } from './palette-core.js';
 import { startTour } from '../tour/tour.js';
 import { openRotaTab } from '../modules/rota/rota-open.js';
+import { openDuplicateCheckerTab } from '../duplicate-checker-open.js';
+import { orderedMenuIds, paletteGroupFor } from '../tab-sections.js';
 
 const RECENTS_KEY = 'suite.palette.recents';
 
@@ -96,7 +99,11 @@ const GENERIC_ICONS = {
 // Options sections (ids match options.html sect-* / options.js deep-linking).
 const OPTIONS_SECTIONS = [
   ['suite', 'Suite', 'practice code feedback email global signing soft flags QOF review'],
-  ['practice-features', 'Practice features', 'signing soft flags QOF review packs allocate canvases contacts routine-rx quick actions'],
+  [
+    'practice-features',
+    'Practice features',
+    'signing soft flags QOF review packs allocate canvases contacts routine-rx quick actions',
+  ],
   ['notifications', 'Notifications', 'alerts sounds desktop quiet clinic mode mute'],
   ['slots', 'Slot Counter', 'appointments'],
   ['capacity', 'Capacity Forecast', 'forecast'],
@@ -118,33 +125,61 @@ const OPTIONS_SECTIONS = [
 function buildCommands(hasPatient) {
   const cmds = [];
 
-  // Navigation — one command per nav tab in this context.
-  document.querySelectorAll('.nav-tab').forEach((tab) => {
+  // Navigation — one command per tab in this shell, in section order.
+  // Hidden tabs (suite.hiddenTabs) stay reachable here — the palette is the
+  // escape hatch that makes hiding a tab de-cluttering, not lock-out.
+  const tabsById = new Map([...document.querySelectorAll('.nav-tab')].map((tab) => [tab.dataset.module, tab]));
+  const placed = new Set();
+
+  function pushNav(tab) {
+    placed.add(tab.dataset.module);
     const label = tab.getAttribute('aria-label') || tab.querySelector('span')?.textContent || tab.dataset.module;
-    // Hidden tabs (suite.hiddenTabs) stay reachable here — the palette is the
-    // escape hatch that makes hiding a tab de-cluttering, not lock-out.
     cmds.push({
       id: `nav:${tab.dataset.module}`,
       label: `Go to ${label}`,
-      group: 'Tab',
+      group: paletteGroupFor(tab.dataset.module),
       keywords: tab.dataset.module + (tab.classList.contains('nav-tab-hidden') ? ' hidden' : ''),
       icon: tab.querySelector('svg')?.outerHTML || GENERIC_ICONS.doc,
       run: () => tab.click(),
     });
-  });
+  }
 
-  // Rota (full app) opens as a browser tab; the pop-out has no nav tab for it,
-  // so the palette is how the floating window reaches it. Same focus-or-create
-  // helper the panel's 'rota-app' tab uses.
-  if (!document.querySelector('.nav-tab[data-module="rota-app"]')) {
-    cmds.push({
-      id: 'open:rota',
-      label: 'Open Rota manager',
-      group: 'Open',
-      keywords: 'rota staff duty leave cover sessions template',
-      icon: GENERIC_ICONS.doc,
-      run: () => openRotaTab(),
-    });
+  function offStripIcon(id) {
+    const svg = document.getElementById('offStripLaunchers')?.content?.querySelector(`[data-module="${id}"] svg`);
+    return svg?.outerHTML || GENERIC_ICONS.doc;
+  }
+
+  for (const id of orderedMenuIds()) {
+    const tab = tabsById.get(id);
+    if (tab) {
+      pushNav(tab);
+      continue;
+    }
+    // Full-tab launchers have no strip button. Same commands in panel and pop-out.
+    if (id === 'rota-app') {
+      placed.add(id);
+      cmds.push({
+        id: 'open:rota',
+        label: 'Open Rota manager',
+        group: paletteGroupFor('rota-app'),
+        keywords: 'rota manager rota-app staff duty leave cover sessions template',
+        icon: offStripIcon('rota-app'),
+        run: () => openRotaTab(),
+      });
+    } else if (id === 'duplicate-checker') {
+      placed.add(id);
+      cmds.push({
+        id: 'open:duplicates',
+        label: 'Open Duplicates',
+        group: paletteGroupFor('duplicate-checker'),
+        keywords: 'duplicate-checker duplicates duplicate problem checker gp2gp scan',
+        icon: offStripIcon('duplicate-checker'),
+        run: () => openDuplicateCheckerTab(),
+      });
+    }
+  }
+  for (const tab of tabsById.values()) {
+    if (!placed.has(tab.dataset.module)) pushNav(tab);
   }
 
   // Pop out — panel only (the button doesn't exist in the pop-out window).
@@ -510,7 +545,7 @@ function renderList(query) {
            role="option" aria-selected="${i === _selected}">
         <span class="suite-palette-icon">${c.icon}</span>
         <span class="suite-palette-label">${c.label}</span>
-        <span class="suite-palette-group">${c.group}</span>
+        ${c.group ? `<span class="suite-palette-group">${c.group}</span>` : ''}
       </div>`
     )
     .join('');

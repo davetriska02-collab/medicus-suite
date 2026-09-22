@@ -2930,7 +2930,7 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 8px;
-  width: 210px;
+  width: 236px;
   max-width: 78vw;
   max-height: 72vh;
   overflow-y: auto;
@@ -2949,7 +2949,23 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
 .alltabs-list {
   display: flex;
   flex-direction: column;
+}
+.alltabs-group {
+  display: flex;
+  flex-direction: column;
   gap: 1px;
+}
+.alltabs-group + .alltabs-group {
+  margin-top: 2px;
+}
+.alltabs-section {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 10px 6px 4px;
 }
 .alltabs-item {
   display: flex;

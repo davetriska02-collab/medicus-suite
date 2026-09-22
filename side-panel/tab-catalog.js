@@ -46,6 +46,8 @@ export const TAB_CATALOG = [
     blurb: 'Today’s duty cover, leave, uncovered sessions and staffing warnings.',
   },
   {
+    // Off the strip. Still in this catalog and the Practice manager preset;
+    // opened from All tabs and the command palette.
     id: 'rota-app',
     name: 'Rota manager',
     blurb: 'Opens the full rota in a new tab — patterns, leave, duty fairness and cover.',
@@ -61,6 +63,7 @@ export const TAB_CATALOG = [
     blurb: 'Reusable message blocks you compose, copy and paste into Medicus yourself.',
   },
   {
+    // Off the strip, same as Rota manager. The Everything preset still shows it.
     id: 'duplicate-checker',
     name: 'Duplicates',
     blurb: 'Practice-wide scan for GP2GP duplicate-record import errors, with per-patient drill-down.',

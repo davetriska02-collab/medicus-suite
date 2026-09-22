@@ -25,7 +25,10 @@ const FALLBACK_ICON =
 
 // Reuse the real nav icon for each tab so the chooser teaches the iconography.
 function iconFor(id) {
-  return document.querySelector(`.nav-tab[data-module="${id}"] svg`)?.outerHTML || FALLBACK_ICON;
+  const live = document.querySelector(`.nav-tab[data-module="${id}"] svg`);
+  if (live) return live.outerHTML;
+  const off = document.getElementById('offStripLaunchers')?.content?.querySelector(`[data-module="${id}"] svg`);
+  return off?.outerHTML || FALLBACK_ICON;
 }
 
 async function persist() {

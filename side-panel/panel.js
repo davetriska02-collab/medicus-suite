@@ -16,6 +16,8 @@ import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup, setSetupActiveModule } from './setup/setup.js';
 import { openRotaTab } from './modules/rota/rota-open.js';
+import { openDuplicateCheckerTab } from './duplicate-checker-open.js';
+import { OFF_STRIP_IDS, digitJumpCaption, renderTabMenuHTML } from './tab-sections.js';
 import { TAB_HELP } from '../shared/tab-help.js';
 import { STATUS_RANK } from './modules/sentinel/sentinel-core.js';
 import {
@@ -142,9 +144,8 @@ const MODULES = {
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
 };
 // NOTE: 'rota-app' and 'duplicate-checker' are deliberately absent. They open
-// a full application in a browser tab; the nav click handler returns before
-// switchModule is reached, and the boot guard (`m in MODULES`) then correctly
-// refuses to restore the panel into them.
+// a full page (All tabs → Practice, and the command palette), not a panel
+// module. The boot guard (`m in MODULES`) refuses to restore the panel into them.
 
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
@@ -161,12 +162,18 @@ function buildKeyboardHelpSectionHTML() {
   const chordList = Object.entries(G_CHORD_MAP)
     .map(([key, mod]) => `${key}=${TAB_HELP[mod]?.title || mod}`)
     .join(', ');
+  // 1–9 follows the visible strip. Rota manager and Duplicates are not on it,
+  // so they are not numbered. The title is the live map (1 Slots, 2 Monitoring, …).
+  const jumpCaption =
+    digitJumpCaption(
+      jumpableTabs().map((t) => t.querySelector('span:not(.nav-badge)')?.textContent?.trim() || t.dataset.module)
+    ) || 'Strip order';
   return `<div class="help-popover-row">
     <span class="help-popover-lbl">Keyboard shortcuts</span>
     <div class="help-popover-kbd-list">
       <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">k</kbd> command palette</span>
       <span><kbd class="help-popover-kbd">ctrl</kbd>+<kbd class="help-popover-kbd">alt</kbd>+<kbd class="help-popover-kbd">←/→</kbd> cycle tabs</span>
-      <span><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> jump to tab</span>
+      <span title="${escStrip(jumpCaption)}"><kbd class="help-popover-kbd">1</kbd>–<kbd class="help-popover-kbd">9</kbd> jump along the strip</span>
       <span title="${escStrip(chordList)}"><kbd class="help-popover-kbd">g</kbd> then a letter — jump to tab</span>
       <span><kbd class="help-popover-kbd">/</kbd> focus search</span>
       <span><kbd class="help-popover-kbd">?</kbd> this help</span>
@@ -250,26 +257,52 @@ function wireHelpButton() {
 
 let allTabsOpen = false;
 let _allTabsCloseHandler = null;
+let _hiddenTabIds = new Set();
+
+function navTabMenuEntry(tab) {
+  const mod = tab.dataset.module || '';
+  return {
+    id: mod,
+    icon: tab.querySelector('svg')?.outerHTML || '',
+    label: tab.querySelector('span:not(.nav-badge)')?.textContent?.trim() || tab.getAttribute('aria-label') || mod,
+    active: tab.classList.contains('active'),
+    hidden: tab.classList.contains('nav-tab-hidden') || _hiddenTabIds.has(mod),
+  };
+}
+
+function offStripMenuEntries() {
+  const root = document.getElementById('offStripLaunchers')?.content;
+  if (!root) return [];
+  return [...root.querySelectorAll('[data-module]')].map((el) => {
+    const mod = el.dataset.module || '';
+    return {
+      id: mod,
+      icon: el.querySelector('svg')?.outerHTML || '',
+      label: el.querySelector('span')?.textContent?.trim() || el.getAttribute('aria-label') || mod,
+      active: false,
+      hidden: _hiddenTabIds.has(mod),
+    };
+  });
+}
 
 function buildAllTabsPopoverHTML() {
-  const tabs = Array.from(document.querySelectorAll('.nav-tab')).filter((t) => !t.classList.contains('nav-tab-hidden'));
-  const rows = tabs
-    .map((t) => {
-      const mod = t.dataset.module || '';
-      const icon = t.querySelector('svg')?.outerHTML || '';
-      const label = t.querySelector('span:not(.nav-badge)')?.textContent || t.getAttribute('aria-label') || mod;
-      const isActive = t.classList.contains('active');
-      return `<button class="alltabs-item${isActive ? ' active' : ''}" role="menuitem" data-module="${escStrip(mod)}">
-        <span class="alltabs-item-icon" aria-hidden="true">${icon}</span>
-        <span class="alltabs-item-label">${escStrip(label)}</span>
-      </button>`;
-    })
-    .join('');
+  const entries = [...document.querySelectorAll('.nav-tab')].map(navTabMenuEntry).concat(offStripMenuEntries());
+  const rows = renderTabMenuHTML(entries, escStrip);
   return `<div class="alltabs-popover" id="allTabsPopover" role="menu" aria-label="All tabs">
     <div class="alltabs-title">Jump to a tab</div>
     <div class="alltabs-list">${rows}</div>
     <div class="alltabs-hint">Ctrl+Alt+← / → switches tabs</div>
   </div>`;
+}
+
+function activateAllTabsItem(mod) {
+  const tab = document.querySelector(`.nav-tab[data-module="${mod}"]`);
+  if (tab) {
+    tab.click();
+    return;
+  }
+  if (mod === 'rota-app') openRotaTab();
+  else if (mod === 'duplicate-checker') openDuplicateCheckerTab();
 }
 
 function renderAllTabsPopover() {
@@ -281,18 +314,17 @@ function renderAllTabsPopover() {
   btn?.classList.toggle('active', allTabsOpen);
   if (!allTabsOpen) return;
 
-  // Clicking a row drives the real nav tab (reuses its switch + active logic).
+  // A strip row clicks that tab. Rota manager and Duplicates open their full page.
   host.querySelectorAll('.alltabs-item').forEach((item) => {
     item.addEventListener('click', () => {
       const mod = item.dataset.module;
-      const tab = document.querySelector(`.nav-tab[data-module="${mod}"]`);
       allTabsOpen = false;
       if (_allTabsCloseHandler) {
         document.removeEventListener('click', _allTabsCloseHandler);
         _allTabsCloseHandler = null;
       }
       renderAllTabsPopover();
-      tab?.click();
+      activateAllTabsItem(mod);
     });
   });
 
@@ -340,14 +372,13 @@ function isTypingTarget(el) {
 
 // Visible, jumpable nav tabs in current DOM order — shared by the Ctrl/Cmd+Alt
 // cycler below and by wireKeyboardNav's digit-jump / "g" chord (item 6.1/6.2):
-// hidden tabs (suite.hiddenTabs) and full-tab launchers (rota manager,
-// duplicates) are excluded from all three.
+// hidden tabs (suite.hiddenTabs) and off-strip launchers (rota manager,
+// duplicates) are excluded from all three. 1–9 is this list, so demoting those
+// two does not renumber Slots … Signing.
 function jumpableTabs() {
+  const skip = new Set(OFF_STRIP_IDS);
   return Array.from(document.querySelectorAll('.nav-tab')).filter(
-    (t) =>
-      !t.classList.contains('nav-tab-hidden') &&
-      t.dataset.module !== 'rota-app' &&
-      t.dataset.module !== 'duplicate-checker'
+    (t) => !t.classList.contains('nav-tab-hidden') && !skip.has(t.dataset.module)
   );
 }
 
@@ -582,7 +613,8 @@ updateNavOverflow();
 (function initPaletteHint() {
   const btn = document.getElementById('paletteBtn');
   if (!btn) return;
-  const total = document.querySelectorAll('.nav-tab').length;
+  const offStrip = document.getElementById('offStripLaunchers')?.content?.querySelectorAll('[data-module]').length || 0;
+  const total = document.querySelectorAll('.nav-tab').length + offStrip;
   if (!total) return;
   btn.title = `Jump to any of the ${total} tabs · Command palette (Ctrl+K)`;
   // The bare count badge ("15") read as a mystery number to the appraisal panel;
@@ -637,7 +669,7 @@ document.querySelectorAll('.nav-tab').forEach((tab) => {
     }
     const mod = tab.dataset.module;
     if (mod === 'duplicate-checker') {
-      chrome.tabs.create({ url: chrome.runtime.getURL('duplicate-checker.html') });
+      openDuplicateCheckerTab();
       return;
     }
     if (mod === 'rota-app') {
@@ -1736,13 +1768,9 @@ async function fetchAndRenderHealthStrip() {
       DC && degradedIds.length
         ? degradedIds.map((id) => DC.get(id)?.feature || id).filter((f, i, arr) => arr.indexOf(f) === i)
         : [];
-    const swText = swErrors.length
-      ? 'Extension module failed to load — some tools may be missing.'
-      : '';
+    const swText = swErrors.length ? 'Extension module failed to load — some tools may be missing.' : '';
     const degText =
-      features.length && DC
-        ? `Medicus may have changed — ${escStrip(features.join(', '))} degraded.`
-        : '';
+      features.length && DC ? `Medicus may have changed — ${escStrip(features.join(', '))} degraded.` : '';
     const line = [swText, degText].filter(Boolean).join(' ') + ' Details in Options → Suite health.';
     healthStripEl.className = 'health-strip health-strip-amber';
     healthStripEl.innerHTML = `
@@ -1807,7 +1835,9 @@ async function fetchAndRenderLocalBitsStrip() {
 fetchAndRenderLocalBitsStrip();
 chrome.storage.onChanged.addListener((changes) => {
   if (Object.keys(changes).some((k) => k.startsWith('suite.localBits.'))) {
-    window.LocalBits?.getState().then(renderLocalBitsStrip).catch(() => {});
+    window.LocalBits?.getState()
+      .then(renderLocalBitsStrip)
+      .catch(() => {});
   }
 });
 
@@ -2075,6 +2105,7 @@ document.addEventListener('visibilitychange', () => {
 // Hidden tabs disappear from the nav but stay reachable via the Ctrl+K palette.
 function applyTabVisibility(raw) {
   const hidden = new Set(sanitiseHiddenTabs(raw));
+  _hiddenTabIds = hidden;
   document.querySelectorAll('.nav-tab').forEach((t) => {
     t.classList.toggle('nav-tab-hidden', hidden.has(t.dataset.module));
   });

@@ -2,6 +2,21 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.33] — 2026-09-22
+
+### Tab grouping, scheme A — sections in the menu and palette
+
+The strip stays a flat row, in the same order as v3.264.15. Slots and Monitoring stay positions 1 and 2, ungrouped, and are not renamed. There are no strip parent buttons.
+
+The All-tabs menu and the command palette (panel and pop-out) label the other tabs in four sections, same names in both:
+
+- **With the patient** — Record, Trends, Sweep, Signing, Pt Alerts, Phrases
+- **Desk** — Reception, Submissions
+- **Practice** — Forecast, Activity, Referrals, Rota, Rota manager, Duplicates
+- **Reference** — Knowledge, Leaflets
+
+Rota manager and Duplicates leave the strip. They stay in the tab catalog, the All-tabs menu (unless hidden), and the command palette (`Open Rota manager`, `Open Duplicates`) in both shells. The compact Rota tab still has its **Open full rota** button, and the Practice manager preset is unchanged. Digits 1–9 still follow the strip, so they still start Slots, Monitoring, Trends, Forecast, Submissions, Activity, Referrals, Reception, Signing. The help shortcut line says "jump along the strip" and its tooltip lists that live map.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor

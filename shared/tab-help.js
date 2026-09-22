@@ -6,9 +6,9 @@
 // help, NOT clinical decision support. Keep copy concise and clinically careful.
 //
 // Every tab id in side-panel/tab-catalog.js's TAB_CATALOG must have an entry
-// here, including the panel-only tabs (duplicate-checker, rota-app) — see
-// CLAUDE.md "Panel-only tabs (intentional exceptions)". test-tab-help-coverage.js
-// enforces this against both panel.html and pop-out.html's data-module set.
+// here, including the off-strip launchers (duplicate-checker, rota-app) — see
+// CLAUDE.md "Off-strip launchers". test-tab-help-coverage.js enforces this
+// against both panel.html and pop-out.html's data-module set.
 //
 // Consumed as a plain ES module (`import { TAB_HELP } from '../shared/tab-help.js'`)
 // by side-panel/panel.js and pop-out/pop-out.js — same pattern as

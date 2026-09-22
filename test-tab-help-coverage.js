@@ -6,8 +6,8 @@
 // (previously duplicated per shell; converged in the top-10 plan batch A).
 // This guard mirrors test-tab-catalog.js / test-tour-steps.js: it parses the
 // real data-module set out of BOTH panel.html and pop-out.html and fails CI
-// if any tab — including the panel-only tabs (duplicate-checker, rota-app; see
-// CLAUDE.md "Panel-only tabs (intentional exceptions)") — has no TAB_HELP
+// if any tab — including the off-strip launchers (duplicate-checker, rota-app; see
+// CLAUDE.md "Off-strip launchers") — has no TAB_HELP
 // entry, or if an entry's copy is too thin to be useful.
 
 'use strict';
