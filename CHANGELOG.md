@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.15] — 2026-09-22
+
+### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor
+
+Dave-go scoped build to reduce background Medicus API load. Slot Counter, journal, signing and presence are unchanged.
+
+- **Today tab removed** — module, nav registration, tour steps, and all its timers (waiting room, demand, triage load, slots, 30-minute multi-day capacity scan via `fetchManyDates`). Panel and pop-out boot default to **Slots**.
+- **Appointment-book tally removed** — `content-scripts/appointment-tally.js`, `shared/appointment-tally-core.js`, manifest wiring, and `slots.vaxTally` from Slot Counter backup IO.
+- **Note / TV board removed** — `board.html`, `board/board.js`, companion side-panel module, `shared/io/board-io.js`, Condor TV fetch layer (`condor-data.js` / `condor-index-core.js`), palette opener, and suite backup scope.
+- **Request Monitor** — default poll **300 s** (was 60 s), minimum **120 s** (was 30 s). The `#rmStrip` reads `suite.requestMonitor.state` only; it no longer falls back to a panel-side `pollAll` (no double-fetch of the four triage task lists).
+
+Tests: `test-suite-load-cut.js`; updates to tab catalog, tour, appointments-feed, appointment-book-chrome, request-monitor, backup-coverage.
+
 ## [v3.264.14] — 2026-09-21
 
 ### Lab-catalogue service-worker load failures now reach the health strip

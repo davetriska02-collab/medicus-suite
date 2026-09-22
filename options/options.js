@@ -1112,7 +1112,6 @@ async function doFullExport() {
     problemDescriptionCleanup,
     phrases,
     rota,
-    board,
     allocationGroups,
     stackchan,
   ] = await Promise.all([
@@ -1135,7 +1134,6 @@ async function doFullExport() {
     problemDescriptionCleanupExport(),
     phrasesExport(),
     rotaExport(),
-    boardExport(),
     allocationGroupsExport(),
     stackchanExport(),
   ]);
@@ -1162,7 +1160,6 @@ async function doFullExport() {
       problemDescriptionCleanup,
       phrases,
       rota,
-      board,
       allocationGroups,
       stackchan,
       suite,
@@ -1192,7 +1189,6 @@ async function doModuleExport(scope) {
     problemDescriptionCleanup: () => problemDescriptionCleanupExport(),
     phrases: () => phrasesExport(),
     rota: () => rotaExport(),
-    board: () => boardExport(),
     allocationGroups: () => allocationGroupsExport(),
     stackchan: () => stackchanExport(),
   };
@@ -1244,7 +1240,6 @@ async function applyEnvelope(envelope) {
     mods.problemDescriptionCleanup && (() => problemDescriptionCleanupImport(mods.problemDescriptionCleanup)),
     mods.phrases && (() => phrasesImport(mods.phrases)),
     mods.rota && (() => rotaImport(mods.rota)),
-    mods.board && (() => boardImport(mods.board)),
     mods.allocationGroups && (() => allocationGroupsImport(mods.allocationGroups)),
     mods.stackchan && (() => stackchanImport(mods.stackchan)),
     mods.suite && (() => suiteImport(mods.suite)),
@@ -2747,7 +2742,7 @@ function toggleRmConditional() {
     const cfg = await window.RequestMonitor.getConfig();
     if (rmEnabled) rmEnabled.checked = !!cfg.enabled;
     if (rmAssigneeId) rmAssigneeId.value = cfg.assigneeId || '';
-    if (rmPollSeconds) rmPollSeconds.value = cfg.pollSeconds || 60;
+    if (rmPollSeconds) rmPollSeconds.value = cfg.pollSeconds || 300;
     if (rmNotifyEnabled) rmNotifyEnabled.checked = !!cfg.notifyEnabled;
     if (rmNotifySound) rmNotifySound.checked = !!cfg.notifySound;
     toggleRmConditional();
@@ -2768,7 +2763,7 @@ rmSaveBtn?.addEventListener('click', async () => {
   }
   const enabled = !!rmEnabled?.checked;
   let pollSeconds = parseInt(rmPollSeconds?.value, 10);
-  if (isNaN(pollSeconds) || pollSeconds < 30) pollSeconds = 60;
+  if (isNaN(pollSeconds) || pollSeconds < 120) pollSeconds = 300;
   if (pollSeconds > 600) pollSeconds = 600;
 
   // Validate UUID if enabling. `assigneeId` is the extracted value, so this only

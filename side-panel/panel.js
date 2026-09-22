@@ -118,7 +118,6 @@ function renderDisplayPopover() {
 // ── Module registry ───────────────────────────────────────────────────────────
 
 const MODULES = {
-  today: { js: () => import('./modules/today/today.js'), css: './modules/today/today.css' },
   slots: { js: () => import('./modules/slots/slots.js'), css: './modules/slots/slots.css' },
   capacity: { js: () => import('./modules/capacity/capacity.js'), css: './modules/capacity/capacity.css' },
   submissions: {
@@ -141,7 +140,6 @@ const MODULES = {
   },
   phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
-  board: { js: () => import('./modules/board/board.js'), css: './modules/board/board.css' },
 };
 // NOTE: 'rota-app' and 'duplicate-checker' are deliberately absent. They open
 // a full application in a browser tab; the nav click handler returns before
@@ -400,9 +398,8 @@ function wireTabNavShortcuts() {
 //        sweep → 'w'
 //   c* → capacity keeps 'c'
 //   r* → referrals keeps 'r'; record → 'd', reception → 'e'
-//   t* → today keeps 't'; trends → 'n'
+//   trends → 'n' (t is unused after Today tab removal)
 const G_CHORD_MAP = {
-  t: 'today',
   s: 'slots',
   m: 'sentinel',
   r: 'referrals',
@@ -415,7 +412,6 @@ const G_CHORD_MAP = {
   e: 'reception',
   d: 'record',
   n: 'trends',
-  b: 'board',
 };
 
 const G_CHORD_TIMEOUT_MS = 1500;
@@ -952,7 +948,7 @@ async function fetchAndRenderStrip(bypassCache = false) {
   if (document.visibilityState !== 'visible') return true;
   try {
     // Shared memoised fetcher (audit M10): coalesces this strip's poll with the
-    // Sentinel/Today modules' waiting-room fetches of the same endpoint.
+    // Sentinel module's waiting-room fetches of the same endpoint.
     // Practice code is re-resolved inside on every call, so user changes still
     // take effect immediately.
     const { raw, code } = await window.AppointmentsFeed.fetchRaw({ module: 'panel-wr-strip', bypassCache });
@@ -1342,7 +1338,7 @@ updateSentinelBadge();
 
 const rmStripEl = document.getElementById('rmStrip');
 let rmPoller = null;
-let rmPollSeconds = 60;
+let rmPollSeconds = 300;
 
 let _rmFetchInFlight = null;
 
@@ -1371,7 +1367,7 @@ async function _doFetchAndRenderRmStrip() {
     if (rmPoller) rmPoller.start(rmPollSeconds * 1000);
   }
 
-  const { code, source } = await window.PracticeCode.resolve();
+  const { code } = await window.PracticeCode.resolve();
   if (!code) {
     rmStripEl.className = 'rm-strip';
     rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">No practice code</span>`;
@@ -1379,36 +1375,21 @@ async function _doFetchAndRenderRmStrip() {
     return true;
   }
 
-  // SINGLE-POLLER (audit H10, 2026-07-18): the service worker's alarm already
-  // runs pollAll and persists suite.requestMonitor.state — the panel used to
-  // run a SECOND full poll cycle (8 GETs/min instead of 4, ~1,900 wasted
-  // requests/day) with racing state writes that could double-fire or swallow
-  // "fresh item" notifications. Render from the SW's state when it is fresh
-  // (within 2 poll periods); fall back to a direct poll only when the SW's
-  // state is stale/absent, so a broken SW degrades to the old behaviour
-  // rather than a dead strip.
+  // SINGLE-POLLER (audit H10): the service worker alarm owns pollAll and writes
+  // suite.requestMonitor.state. The strip reads that cache only — never a second
+  // panel-side fetch of the four triage task lists.
   let result = null;
   try {
     const stR = await chrome.storage.local.get('suite.requestMonitor.state');
     const st = stR['suite.requestMonitor.state'];
-    const freshMs = Math.max(rmPollSeconds, cfg.pollSeconds || rmPollSeconds) * 2000;
-    if (st && st.buckets && typeof st.lastPoll === 'number' && Date.now() - st.lastPoll < freshMs) {
+    if (st && st.buckets) {
       result = { buckets: st.buckets, error: st.error || null };
     }
   } catch (_) {
-    /* fall through to the direct poll */
+    /* fall through */
   }
-  try {
-    if (!result) {
-      result = await window.RequestMonitor.pollAll(code, cfg.assigneeId, {
-        fetch: (url, init) => window.ApiDiag.fetch({ module: 'request-monitor', url, code, codeSource: source, init }),
-      });
-    }
-  } catch (e) {
-    rmStripEl.className = 'rm-strip';
-    rmStripEl.innerHTML = `<span class="rm-strip-icon">⚠</span><span class="rm-strip-label">Triage:</span><span class="rm-strip-error">${escStrip(e.message)}</span>`;
-    reportAlert('triage', null);
-    return false;
+  if (!result) {
+    result = { buckets: {}, error: 'Waiting for background poll…' };
   }
 
   renderRmStrip(result, code, cfg.assigneeId);
@@ -2159,7 +2140,7 @@ wireKeyboardNav();
   // Guard: must be a real MODULES key, and not a hidden tab.
   const hiddenSet = new Set(sanitiseHiddenTabs(r['suite.hiddenTabs']));
   const usable = (m) => m && m in MODULES && MODULES[m] !== null && !hiddenSet.has(m);
-  let startMod = usable(saved) ? saved : usable('today') ? 'today' : null;
+  let startMod = usable(saved) ? saved : usable('slots') ? 'slots' : null;
   if (!startMod) {
     // Every preferred candidate hidden — first visible nav tab wins.
     for (const t of document.querySelectorAll('.nav-tab')) {
@@ -2169,7 +2150,7 @@ wireKeyboardNav();
       }
     }
   }
-  switchModule(startMod || 'today');
+  switchModule(startMod || 'slots');
 
   // ── Guided tour (first-run suite walkthrough) ───────────────────────────────
   // The tour can switch tabs as it walks the suite; give it the module loader.

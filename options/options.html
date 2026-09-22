@@ -1571,8 +1571,8 @@
 
               <div class="field">
                 <label class="field-label" for="rmPollSeconds">Poll interval (seconds)</label>
-                <input type="number" id="rmPollSeconds" min="30" max="600" placeholder="60" style="max-width: 120px" />
-                <span class="field-help">Minimum 30. Lower values mean fresher counts but more API calls.</span>
+                <input type="number" id="rmPollSeconds" min="120" max="600" placeholder="300" style="max-width: 120px" />
+                <span class="field-help">Minimum 120 (2 minutes). Default 300 (5 minutes).</span>
               </div>
 
               <div class="field">
@@ -3996,14 +3996,6 @@
                 </div>
               </div>
               <div class="module-export-card">
-                <div class="mec-name">Note board</div>
-                <div class="mec-actions">
-                  <button class="ghost" data-mod-export="board">Export</button>
-                  <button class="ghost" data-mod-import="board">Import</button>
-                  <input type="file" class="mod-file-input" data-mod="board" accept=".json" style="display: none" />
-                </div>
-              </div>
-              <div class="module-export-card">
                 <div class="mec-name">StackChan</div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="stackchan">Export</button>
@@ -4120,7 +4112,6 @@
     <script src="../shared/io/pdc-contribute.js"></script>
     <script src="../shared/io/knowledge-sync.js"></script>
     <script src="../shared/io/rota-io.js"></script>
-    <script src="../shared/io/board-io.js"></script>
     <script src="../shared/stackchan-bridge.js"></script>
     <script src="../shared/io/stackchan-io.js"></script>
     <script src="../shared/quiet-mode.js"></script>

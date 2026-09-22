@@ -76,8 +76,8 @@ function check(cond, msg) {
       : `unknown ids in presets: ${badPresetRefs.join(', ')}`
   );
   check(
-    ROLE_PRESETS.every((p) => p.show.includes('today') && p.show.length >= 3),
-    'every preset keeps the Today home tab and at least 3 tabs'
+    ROLE_PRESETS.every((p) => p.show.includes('slots') && p.show.length >= 3),
+    'every preset keeps the Slots home tab and at least 3 tabs'
   );
   const allPreset = ROLE_PRESETS.find((p) => p.id === 'all');
   check(!!allPreset && hiddenFromPreset('all').length === 0, "'all' preset hides nothing");
@@ -108,11 +108,11 @@ function check(cond, msg) {
     check(!r3.blocked && r3.hidden.join(',') === 'slots', 'toggle ignores unknown ids');
 
     // hiding the last visible tab is BLOCKED and leaves the set unchanged
-    const allButOne = catalogIds.filter((id) => id !== 'today');
-    const r4 = toggleTabVisibility(allButOne, 'today');
+    const allButOne = catalogIds.filter((id) => id !== 'slots');
+    const r4 = toggleTabVisibility(allButOne, 'slots');
     check(
       r4.blocked && r4.hidden.length === allButOne.length,
-      'toggle blocks hiding the final visible tab (never lock-out)'
+      'toggle blocks hiding the final visible tab (never lock-out; home=slots)'
     );
 
     // turning ON is always allowed even from a near-empty visible state

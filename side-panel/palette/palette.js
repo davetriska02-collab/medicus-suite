@@ -21,7 +21,6 @@
 import { rankCommands, pushRecent, patientScopedCommands, PATIENT_COMMAND_IDS } from './palette-core.js';
 import { startTour } from '../tour/tour.js';
 import { openRotaTab } from '../modules/rota/rota-open.js';
-import { openBoardTab } from '../../board/board-open.js';
 
 const RECENTS_KEY = 'suite.palette.recents';
 
@@ -173,16 +172,6 @@ function buildCommands(hasPatient) {
       run: () => import('../quick-leaflet/quick-leaflet.js').then((m) => m.openQuickLeaflet()),
     });
   }
-
-  // Note display board — full-tab kiosk (waiting-room TV / ops monitor).
-  cmds.push({
-    id: 'open:board',
-    label: 'Open Note display board',
-    group: 'Open',
-    keywords: 'note vestaboard board tv monitor waiting room ticker ops display kiosk',
-    icon: GENERIC_ICONS.display,
-    run: () => openBoardTab(),
-  });
 
   // Display preferences — applied live everywhere via display-prefs.js.
   const display = [

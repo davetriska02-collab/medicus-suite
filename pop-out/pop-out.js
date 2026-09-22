@@ -17,7 +17,6 @@ let switchSeq = 0;
 // ── Module registry (mirrors panel.js; no WR/RM strips — they stay in the docked panel) ──
 
 const MODULES = {
-  today: { js: () => import('../side-panel/modules/today/today.js'), css: '../side-panel/modules/today/today.css' },
   slots: { js: () => import('../side-panel/modules/slots/slots.js'), css: '../side-panel/modules/slots/slots.css' },
   capacity: {
     js: () => import('../side-panel/modules/capacity/capacity.js'),
@@ -75,10 +74,6 @@ const MODULES = {
   rota: {
     js: () => import('../side-panel/modules/rota/rota.js'),
     css: '../side-panel/modules/rota/rota.css',
-  },
-  board: {
-    js: () => import('../side-panel/modules/board/board.js'),
-    css: '../side-panel/modules/board/board.css',
   },
 };
 
@@ -395,7 +390,7 @@ _updatePopoutQuietPill();
   applyTabVisibility(rh['suite.hiddenTabs']);
   const hiddenSet = new Set(sanitiseHiddenTabs(rh['suite.hiddenTabs']));
   const usable = (m) => m && m in MODULES && MODULES[m] && !hiddenSet.has(m);
-  let startMod = usable(saved) ? saved : usable('today') ? 'today' : null;
+  let startMod = usable(saved) ? saved : usable('slots') ? 'slots' : null;
   if (!startMod) {
     for (const t of document.querySelectorAll('.nav-tab')) {
       if (usable(t.dataset.module)) {
@@ -404,5 +399,5 @@ _updatePopoutQuietPill();
       }
     }
   }
-  switchModule(startMod || 'today');
+  switchModule(startMod || 'slots');
 })();

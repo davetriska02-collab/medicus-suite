@@ -60,7 +60,6 @@ const APP_DIRS = [
   'content-scripts',
   'sentinel-options',
   'rota',
-  'board',
 ];
 const APP_FILES = [
   // Top-level JS
