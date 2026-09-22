@@ -2,6 +2,19 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.26] — 2026-09-22
+
+### Trends: date captions and empty states say only what was loaded
+
+The observation footer drew `earliest – latest`, which reads as a covered window, and the chart spaces points by reading order. A tab with no payload used the same sentence as a metric that was loaded and empty ("No blood pressure readings found"). Missing ACR (while a DOAC chart was showing) and missing eGFR were omitted entirely.
+
+- Date feet name the earliest and latest ISO dates and say **these dates only**. One date is not stretched into a span. Dates that are not `YYYY-MM-DD` are counted and not ordered. A second line says spacing follows reading order, and days with no reading are not on the chart.
+- Blood pressure, eGFR and CrCl state their fixed axis and that a result outside it is drawn on the edge, not at its value. ACR still says values above 100 are plotted at 100. If the loaded ACR unit is not mg/mmol, the chart says the stage cut-offs are mg/mmol and names the loaded unit. It does not convert.
+- Unloaded results say the record was not read, and point at the investigation dashboard. An empty metric says it is absent from the loaded results and points at the other tabs. A missing ACR, eGFR or creatinine chart keeps its slot. The change from the previous reading is labelled. Chart headings are a readable size.
+- Chart maths, targets and staging are unchanged.
+
+Tests: `test-trends-findability.js`.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor
