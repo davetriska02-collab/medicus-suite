@@ -183,8 +183,8 @@ export async function init(el) {
   }
 
   // Restore persisted view state (expanded staff rows, showExcluded flag).
-  // slots.hiddenTypes is the live source of truth (the appointment-book tally
-  // writes that key). Do not let a stale suite.uiState.slots copy clobber it.
+  // slots.hiddenTypes is the live source of truth. Do not let a stale
+  // suite.uiState.slots copy clobber it.
   const savedUi = await loadUiState('slots');
   if (savedUi) {
     if (!stored['slots.hiddenTypes'] && Array.isArray(savedUi.hiddenTypes))
@@ -540,9 +540,8 @@ function visibleTotal(byType, hiddenTypes) {
 // ── Alert levels ──────────────────────────────────────────────────────────────
 // One source of truth for "is this type running dry?" — consumed by the alert
 // ribbon, the hero label, and the type pills, so they can never disagree.
-// The evaluation itself lives in the pure, Node-testable slots-alert-core.js
-// (item 9 — shared with the Today "Slots Today" card so both surfaces read
-// the exact same threshold logic); these are thin wrappers over module state.
+// The evaluation itself lives in the pure, Node-testable slots-alert-core.js;
+// these are thin wrappers over module state.
 
 // 'red' (zero left), 'amber' (at/below threshold), or null for a single type.
 function typeAlertLevel(typeName, count) {
@@ -800,7 +799,7 @@ function renderAlertEditor(d) {
         <button class="ghost-btn slots-alert-editor-close" id="slotsAlertEditorClose" aria-label="Close">✕</button>
       </div>
       <p class="slots-alert-editor-note">
-        Get an amber/red warning here — and on Today's Slots card — when an appointment type drops
+        Get an amber/red warning on this tab when an appointment type drops
         to or below a threshold. Set threshold to 0 to alert only when a type is completely gone.
       </p>
       <div class="slots-alert-rule-list">${rows}</div>
