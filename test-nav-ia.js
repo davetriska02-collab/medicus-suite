@@ -43,6 +43,9 @@ function navButtons(html) {
 const ECG = '22 12 18 12 15 21 9 3 6 12 2 12';
 const INBOX = '22 12 16 12 14 15 10 15 8 12 2 12';
 const PANEL_ONLY = new Set(['rota-app', 'duplicate-checker']);
+// Custom flags and book-signing positions are pinned. Draft #459 renames them
+// (Flags, Book sign) and must not have those tabs moved to "fix" findability.
+const PINNED_ASIDE = new Set(['patient-alerts', 'rota-app', 'duplicate-checker']);
 // Digits 1–9 follow DOM order. The tail was regrouped; these nine must not move.
 const DIGIT_TABS = [
   'slots',
@@ -64,12 +67,31 @@ const panelJs = read('side-panel/panel.js');
 
 console.log('Default order');
 check(panelIds.slice(0, 9).join(',') === DIGIT_TABS.join(','), 'digits 1–9 still land on the same nine tabs');
+const panelAligned = panelIds.filter((id) => !PINNED_ASIDE.has(id));
+const popAligned = popIds.filter((id) => id !== 'patient-alerts');
 check(
-  panelIds.filter((id) => !PANEL_ONLY.has(id)).join(',') === popIds.join(','),
-  'pop-out default order matches the panel for every shared tab'
+  panelAligned.join(',') === popAligned.join(','),
+  'pop-out matches the panel once custom-flags and panel-only launchers are set aside'
 );
-check(panelIds.indexOf('record') === panelIds.indexOf('sweep') + 1, 'Record follows Sweep');
-check(panelIds.indexOf('patient-alerts') === panelIds.indexOf('record') + 1, 'Patient Alerts follows Record');
+check(panelIds.indexOf('record') === panelIds.indexOf('sweep') + 1, 'Record follows Sweep on the panel');
+check(
+  popIds.indexOf('record') + 1 === popIds.indexOf('patient-alerts'),
+  'pop-out custom-flags tab stays immediately after Record'
+);
+check(
+  panelIds.indexOf('rota-app') < panelIds.indexOf('patient-alerts') &&
+    panelIds.indexOf('patient-alerts') < panelIds.indexOf('phrases'),
+  'panel custom-flags tab stays after Rota manager and before Phrases'
+);
+for (const [name, ids] of [
+  ['panel', panelIds],
+  ['pop-out', popIds],
+]) {
+  check(
+    ids.indexOf('reception') < ids.indexOf('signing') && ids.indexOf('signing') < ids.indexOf('sweep'),
+    `${name}: book-signing tab stays between Reception and Sweep`
+  );
+}
 check(panelIds.indexOf('rota-app') === panelIds.indexOf('rota') + 1, 'Rota manager stays beside Rota');
 
 console.log('\nLabels');
