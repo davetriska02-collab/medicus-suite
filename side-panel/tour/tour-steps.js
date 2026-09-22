@@ -81,7 +81,7 @@ export const TOUR_STEPS = [
     target: ['#wrStrip', '#rmStrip', '#subRagStrip', '#paStrip'],
     centerFallback: true,
     title: 'Global alert strips',
-    body: 'When patients wait, queues build, demand thresholds trip — or the open patient carries one of your practice’s own flags (interpreter needed, safeguarding; set them in Pt Alerts) — a strip appears under the tab bar, on every tab.',
+    body: 'When patients wait, queues build, demand thresholds trip — or the open patient carries one of your practice’s own flags (interpreter needed, safeguarding; set them in Flags) — a strip appears under the tab bar, on every tab.',
   },
   {
     id: 'slots',

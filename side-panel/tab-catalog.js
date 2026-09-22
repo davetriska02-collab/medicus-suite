@@ -30,8 +30,8 @@ export const TAB_CATALOG = [
   { id: 'sweep', name: 'Sweep', blurb: 'Pre-clinic check of today’s booked patients for overdue monitoring.' },
   {
     id: 'signing',
-    name: 'Signing',
-    blurb: 'Open repeat requests with each patient’s recorded monitoring alongside — riskiest first.',
+    name: 'Book sign',
+    blurb: 'Right-hand view of the Medicus book-signing list, with recorded monitoring beside each request.',
   },
   { id: 'knowledge', name: 'Knowledge', blurb: 'Your practice’s reference base — criteria, contacts, pathways.' },
   { id: 'leaflets', name: 'Leaflets', blurb: 'Find and share the right NHS patient information leaflet, fast.' },
@@ -52,8 +52,8 @@ export const TAB_CATALOG = [
   },
   {
     id: 'patient-alerts',
-    name: 'Pt Alerts',
-    blurb: 'Your own per-patient flags — interpreter, safeguarding, behaviour — shown when that patient is open.',
+    name: 'Flags',
+    blurb: 'Custom flags you add for one patient. Shown on the strip and the Monitoring banner while that record is open.',
   },
   {
     id: 'phrases',

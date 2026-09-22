@@ -1155,7 +1155,7 @@ function patientAlertsChipsHtml(patient) {
         `<span class="sent-pa-chip sent-pa-chip--${escAttr(a.severity)}" title="${escAttr(a.note || a.label)}">${escHtml(a.label)}</span>`
     )
     .join('');
-  return `<div class="sent-pa-row" title="Practice-recorded patient alerts — manage in the Pt Alerts tab">${chips}</div>`;
+  return `<div class="sent-pa-row" title="Practice custom flags — open the Flags tab to add or change them">${chips}</div>`;
 }
 
 function render(payload) {

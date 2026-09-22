@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.32] — 2026-09-22
+
+### Findability — custom flags, task presence, book-signing right-hand view
+
+Clinicians could not see where practice custom flags, task presence, or the book-signing right-hand list live. Names and empty states now point at the controls that already exist. No new flag rules, and no auto-flagging.
+
+- **Flags** — the tab (panel and pop-out) is labelled Flags. The module is Custom flags. An empty card says to open a patient in Medicus and use Add flag. The strip says FLAG and its button is Open flags. The strip stays hidden when nothing is recorded.
+- **Book sign** — the tab is Book sign. The panel says it is the right-hand view of the Medicus book-signing list, and the scope line stays visible: the whole-practice pile, or the one person’s list the page is on. An empty individual list still says there is nothing on that list, and tells you to switch lists on the Medicus page.
+- **Task presence** — command palette **Settings: Task Presence** opens the existing Options section. The live “Change look” control names that same entry. Occupancy is still not painted on the book-signing column.
+
 ## [v3.264.15] — 2026-09-22
 
 ### Load cut — Today, appointment-book tally, Note TV board, slower Request Monitor

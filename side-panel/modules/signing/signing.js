@@ -565,9 +565,9 @@ function renderShell() {
     <div class="module-wrap sg-module">
       <div class="mod-header">
         <div>
-          <div class="mod-eyebrow">Signing Queue</div>
+          <div class="mod-eyebrow">Book-signing</div>
           <h1 class="mod-title" id="sgTitle">Repeat requests</h1>
-          <div class="mod-subtitle">Open prescription requests with each patient's recorded monitoring alongside</div>
+          <div class="mod-subtitle">Right-hand view of the Medicus book-signing list. Recorded monitoring sits beside each request. This panel never writes.</div>
         </div>
         <div class="header-right">
           <button id="sgRefreshBtn" class="ghost-btn"><svg class="ghost-btn-ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>
@@ -618,6 +618,7 @@ function renderShell() {
     await saveSoftFlags(on);
     rerunPass();
   });
+  renderScopeBanner();
 }
 
 function honestStateHtml() {
@@ -739,6 +740,24 @@ function renalHtml(row) {
   return `<span class="sg-renal${stale ? ' sg-renal--stale' : ''}" title="Latest recorded eGFR — display of the recorded value only; verify in the record">eGFR ${esc(r.value)} · ${when}</span>`;
 }
 
+// Warm "pile's clear" stays one line, and only when the pile is genuinely
+// finished. Narrowed empties keep the short line and point at the control
+// that narrowed them (type ticks, or the list on the Medicus book-signing page).
+function signingEmptyHtml({ scoped, narrowed }) {
+  const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
+  const kind = emptyStateKind(0, allTypes, narrowed || state.locationFilter.size > 0 || state.flaggedOnly || !!scoped);
+  if (kind === 'done') {
+    return '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>';
+  }
+  const line = scoped
+    ? 'No open repeat requests on this list.'
+    : 'No open repeat requests for the selected types.';
+  const where = scoped
+    ? 'Switch lists on the Medicus book-signing page. This panel is the right-hand view of that list.'
+    : 'Tick Routine or Non-routine above, or clear a location chip.';
+  return `<div class="sg-empty">${line}</div><p class="sg-empty-where">${where}</p>`;
+}
+
 function renderList() {
   const list = container?.querySelector('#sgList');
   if (!list) return;
@@ -753,15 +772,8 @@ function renderList() {
     // static text — but ONLY when the pile is genuinely finished (every task
     // type selected, no filter). A narrowed view keeps the neutral wording:
     // warmth on a false all-clear is worse than no warmth at all.
-    const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
     const scoped = state.scope && state.scope.mode === 'individual';
-    const kind = emptyStateKind(0, allTypes, state.locationFilter.size > 0 || state.flaggedOnly || scoped);
-    list.innerHTML =
-      kind === 'done'
-        ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
-        : scoped
-          ? '<div class="sg-empty">No open repeat requests on this list.</div>'
-          : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
+    list.innerHTML = signingEmptyHtml({ scoped, narrowed: false });
     renderMore(0);
     return;
   }
@@ -776,14 +788,7 @@ function renderList() {
   });
   renderFilterNote();
   if (visible.length === 0) {
-    const allTypes = TASK_TYPES.every((tt) => state.types[tt.key]);
-    const kind = emptyStateKind(0, allTypes, true);
-    list.innerHTML =
-      kind === 'done'
-        ? '<div class="sg-empty sg-empty--done"><span class="sg-empty-tick" aria-hidden="true">&#10003;</span> Pile&rsquo;s clear &mdash; nothing waiting on you.</div>'
-        : fetchedScoped
-          ? '<div class="sg-empty">No open repeat requests on this list.</div>'
-          : '<div class="sg-empty">No open repeat requests for the selected types.</div>';
+    list.innerHTML = signingEmptyHtml({ scoped: fetchedScoped, narrowed: true });
     renderMore(state.rows.filter((r) => r.state === ROW_STATE.PENDING).length);
     return;
   }
@@ -863,16 +868,16 @@ function renderScopeBanner() {
   const host = container?.querySelector('#sgScope');
   if (!host) return;
   const scope = normalizeSigningScope(state.scope);
+  host.className = 'sg-scope';
   if (scope.mode !== 'individual') {
-    host.className = 'sg-scope hidden';
-    host.textContent = '';
+    host.textContent =
+      'Whole-practice book-signing pile. On the Medicus book-signing page, open one person’s list and this panel follows it.';
     return;
   }
   const who =
     (state.rows.find((r) => r.assignedId && r.assignedId === scope.assigneeId && r.assignedTo) || {}).assignedTo ||
-    'this list';
-  host.className = 'sg-scope';
-  host.textContent = `This list: ${who} — not the whole practice.`;
+    'this person';
+  host.textContent = `Book-signing list: ${who}. This is the right-hand view of that list.`;
 }
 
 function renderLocPills() {

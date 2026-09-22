@@ -110,6 +110,11 @@ const OPTIONS_SECTIONS = [
   ['diagnostics', 'Diagnostics', 'event ledger suite health debug api log'],
   ['backup', 'Backup & Restore', 'export import suite backup'],
   ['stackchan', 'StackChan', 'desk robot face presence stackchan avatar'],
+  [
+    'presence',
+    'Task Presence',
+    'someone already on this request occupied colleague queue chip banner look shared folder',
+  ],
 ];
 
 // Build the command list from the live DOM + static registry.

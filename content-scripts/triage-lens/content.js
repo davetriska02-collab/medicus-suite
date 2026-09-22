@@ -4361,7 +4361,10 @@
     label.className = 'ch-q-pa-label';
     label.textContent = summary.topLabel + (summary.more > 0 ? ` +${summary.more}` : '');
     span.appendChild(label);
-    span.title = 'Practice alerts: ' + summary.all.join(' · ') + ' — recorded in the Pt Alerts tab, not the clinical record.';
+    span.title =
+      'Custom flags: ' +
+      summary.all.join(' · ') +
+      '. Open the Flags tab to change them. Code anything clinical in the Medicus record as usual.';
     // Always prepend (see injectResultChip — appended nodes are reconciled away).
     host.target.insertBefore(span, host.target.firstChild);
     refreshPulseOnRow(row);

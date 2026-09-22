@@ -132,6 +132,13 @@
   text-transform: uppercase;
   color: var(--text-4);
 }
+.sg-empty-where {
+  margin: -8px 12px 12px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
 
 .sg-row {
   padding: 8px 10px;
