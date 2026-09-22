@@ -172,6 +172,43 @@
         border-right-color: var(--accent);
       }
 
+      /* Always-visible jumps to settings that sit below the fold or under another name. */
+      .opt-find {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        align-items: center;
+        margin: -32px -40px 20px;
+        padding: 8px 40px;
+        background: var(--bg-elev);
+        border-bottom: 1px solid var(--border);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .opt-find-label {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-4);
+      }
+      .opt-find a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .opt-find a:hover {
+        text-decoration: underline;
+      }
+      #sect-request-monitor,
+      #sect-quiet-mode,
+      #sect-practice-profile,
+      #sect-baseline-chips-queue {
+        scroll-margin-top: 48px;
+      }
+
       /* Content area */
       .opt-content {
         flex: 1;
@@ -1288,15 +1325,32 @@
         <button class="nav-item" data-section="practice-features">Practice features</button>
         <button class="nav-item" data-section="safety">Clinical Safety</button>
         <button class="nav-item" data-section="diagnostics">Diagnostics</button>
-        <button class="nav-item" data-section="backup">Backup &amp; Restore</button>
+        <button class="nav-item" data-section="backup" title="Backup, restore, and the shared practice profile">
+          Backup &amp; Restore
+        </button>
       </nav>
 
       <div class="opt-content">
+        <nav class="opt-find" aria-label="Find a setting">
+          <span class="opt-find-label">Find</span>
+          <a href="#sect-request-monitor">Request Monitor</a>
+          <a href="#sect-quiet-mode">Quiet mode</a>
+          <a href="#sect-sentinel">Monitoring chips</a>
+          <a href="#sect-practice-profile">Practice profile</a>
+          <a href="#sect-practice-features">Practice features</a>
+          <a href="#sect-baseline-chips-queue">Baseline chips → Queue</a>
+        </nav>
+
         <!-- Suite section -->
         <section class="opt-section active" id="sect-suite">
           <h1>Medicus Suite <span class="module-badge" id="suiteVersionBadge">v—</span></h1>
           <p class="suite-tagline">The clinical intelligence layer for Medicus</p>
-          <p class="section-desc">Global settings shared across all modules. Changes take effect immediately.</p>
+          <p class="section-desc">
+            Global settings shared across all modules. Changes take effect immediately.
+            <a href="#sect-request-monitor">Request Monitor</a> is further down this page and stays off until you enable
+            it. The shared <a href="#sect-practice-profile">practice profile</a> is under Backup &amp; Restore.
+            <a href="#sect-quiet-mode">Quiet mode</a> is under Notifications.
+          </p>
 
           <!-- Local bits (practice OS-sync) — not GitHub. Hidden unless disk stamp is newer. -->
           <div
@@ -1506,7 +1560,9 @@
             <label class="suite-toggle-row">
               <span class="pf-copy">
                 <span class="pf-label">Signing Queue flags</span>
-                <span class="pf-sub">QOF review + Flagged</span>
+                <span class="pf-sub"
+                  >QOF review + Flagged. Off until you turn it on. Same switch as Practice features.</span
+                >
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
@@ -1539,19 +1595,23 @@
             <span id="checkUpdateResult" style="font-family: var(--mono); font-size: 10px; margin-left: 4px"></span>
           </div>
 
-          <!-- Request Monitor (Triage) — v1.3 ─────────────────────────────────── -->
-          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border)">
-            <h2 style="font-size: 13px; margin: 0 0 4px">Triage request monitor</h2>
+          <!-- Request Monitor — side-panel strip. Default off. Poll default 300s. -->
+          <div
+            id="sect-request-monitor"
+            style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border)"
+          >
+            <h2 style="font-size: 13px; margin: 0 0 4px">Request Monitor</h2>
             <p class="section-desc" style="margin-bottom: 14px">
-              Optional. Shows a strip in the side panel with live counts of new and replied medical/admin requests for a
-              specific team inbox. Leave off if your practice isn't using triage.
+              The side-panel strip for new and replied medical and admin requests in one team inbox. Off until you turn
+              it on. It does not start polling on its own.
             </p>
 
             <div class="field">
               <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
                 <input type="checkbox" id="rmEnabled" />
-                <span class="field-label" style="margin: 0">Enable triage request monitor</span>
+                <span class="field-label" style="margin: 0">Enable Request Monitor</span>
               </label>
+              <span class="field-help">Off by default.</span>
             </div>
 
             <div
@@ -1571,7 +1631,15 @@
 
               <div class="field">
                 <label class="field-label" for="rmPollSeconds">Poll interval (seconds)</label>
-                <input type="number" id="rmPollSeconds" min="120" max="600" placeholder="300" style="max-width: 120px" />
+                <input
+                  type="number"
+                  id="rmPollSeconds"
+                  min="120"
+                  max="600"
+                  placeholder="300"
+                  value="300"
+                  style="max-width: 120px"
+                />
                 <span class="field-help">Minimum 120 (2 minutes). Default 300 (5 minutes).</span>
               </div>
 
@@ -1581,15 +1649,15 @@
                   <span style="font-size: 12px">Desktop notifications when new items arrive</span>
                 </label>
                 <span class="field-help" style="margin-top: 4px; display: block"
-                  >Notifications fire even when Chrome is minimised. You'll need to grant browser notification
-                  permission the first time.</span
+                  >Off by default. This is the same switch as Notifications → Desktop notifications. Notifications fire
+                  even when the browser is minimised, after you grant permission the first time.</span
                 >
               </div>
 
               <div class="field">
                 <label class="checkbox-row" style="display: flex; align-items: center; gap: 8px; cursor: pointer">
                   <input type="checkbox" id="rmNotifySound" />
-                  <span style="font-size: 12px">Play sound with notifications</span>
+                  <span style="font-size: 12px">Play sound with notifications (off by default)</span>
                 </label>
               </div>
             </div>
@@ -1667,7 +1735,10 @@
         <!-- Notifications section -->
         <section class="opt-section" id="sect-notifications">
           <h1>Notifications</h1>
-          <p class="section-desc">Control which channels are active and mute desktop pop-ups during clinic sessions.</p>
+          <p class="section-desc">
+            Desktop pop-ups and the toolbar badge. Quiet mode (also called clinic mode) is at the bottom of this page
+            and is off until you choose a duration. On-screen strips and monitoring chips are not muted here.
+          </p>
 
           <!-- Channel table -->
           <div style="margin-bottom: 28px">
@@ -1712,7 +1783,8 @@
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
                       <input type="checkbox" id="notifDesktopEnabled" />
                       <span style="font-size: 11px; color: var(--text-3)"
-                        >Enable desktop pop-ups for triage requests</span
+                        >Desktop pop-ups for Request Monitor. Off by default. Same switch as Suite → Request
+                        Monitor.</span
                       >
                     </label>
                   </td>
@@ -1722,7 +1794,9 @@
                   <td style="padding: 10px 0">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
                       <input type="checkbox" id="notifSoundEnabled" />
-                      <span style="font-size: 11px; color: var(--text-3)">Play sound with desktop notifications</span>
+                      <span style="font-size: 11px; color: var(--text-3)"
+                        >Play sound with desktop notifications. Off by default.</span
+                      >
                     </label>
                   </td>
                 </tr>
@@ -1730,30 +1804,37 @@
                   <td style="padding: 10px 0; color: var(--text-2)">Toolbar badge</td>
                   <td style="padding: 10px 0">
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer">
-                      <input type="checkbox" id="notifBadgeEnabled" />
-                      <span style="font-size: 11px; color: var(--text-3)">Show count badge on toolbar icon</span>
+                      <input type="checkbox" id="notifBadgeEnabled" checked />
+                      <span style="font-size: 11px; color: var(--text-3)"
+                        >Show count badge on the toolbar icon. On unless you turn it off.</span
+                      >
                     </label>
                   </td>
                 </tr>
                 <tr style="border-bottom: 1px solid var(--border)">
                   <td style="padding: 10px 0; color: var(--text-2)">Strips</td>
                   <td style="padding: 10px 0; font-size: 11px; color: var(--text-4)">
-                    Waiting Room, Triage &amp; Demand strips — always shown. Configured in
-                    <a href="#sect-suite" style="color: var(--accent)">Suite settings</a>
+                    Waiting Room, Request Monitor and demand strips. The panel shows a strip only when it has something
+                    to say. Request Monitor itself stays off until you enable it under
+                    <a href="#sect-request-monitor" style="color: var(--accent)">Request Monitor</a>. Demand thresholds
+                    are in <a href="#sect-submissions" style="color: var(--accent)">Submissions</a>.
                   </td>
                 </tr>
                 <tr style="border-bottom: 1px solid var(--border)">
-                  <td style="padding: 10px 0; color: var(--text-2)">Sentinel chips</td>
+                  <td style="padding: 10px 0; color: var(--text-2)">Monitoring chips</td>
                   <td style="padding: 10px 0; font-size: 11px; color: var(--text-4)">
-                    Drug monitoring chips — always shown. Configured in
-                    <a href="#sect-sentinel" style="color: var(--accent)">Monitoring settings</a>
+                    Drug-monitoring chips stay on the record. This table cannot turn them off, and quiet mode does not
+                    hide them. The extra Sentinel alert library stays off until
+                    <a href="#sect-safety" style="color: var(--accent)">Clinical Safety → Accept for this practice</a>.
+                    Per-chip display is under
+                    <a href="#sect-sentinel" style="color: var(--accent)">Monitoring</a>.
                   </td>
                 </tr>
                 <tr>
                   <td style="padding: 10px 0; color: var(--text-2)">Triage Lens HUD</td>
                   <td style="padding: 10px 0; font-size: 11px; color: var(--text-4)">
-                    In-page HUD — always shown. Configured in
-                    <a href="#sect-triage" style="color: var(--accent)">Triage Lens settings</a>
+                    In-page HUD. Quiet mode does not hide it. Keyword rules are under
+                    <a href="#sect-triage" style="color: var(--accent)">Queue rules</a>.
                   </td>
                 </tr>
               </tbody>
@@ -1821,10 +1902,13 @@
             </div>
           </div>
 
-          <!-- Clinic mode block -->
-          <div style="margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border)">
-            <h2 style="font-size: 13px; margin: 0 0 4px">Clinic mode</h2>
-            <p class="section-desc" style="margin-bottom: 14px">Temporarily mute desktop pop-ups and sounds.</p>
+          <!-- Quiet mode (clinic mode). Default off. Safety sentence below is quoted by H-028. -->
+          <div id="sect-quiet-mode" style="margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border)">
+            <h2 style="font-size: 13px; margin: 0 0 4px">Quiet mode</h2>
+            <p class="section-desc" style="margin-bottom: 14px">
+              Also called clinic mode. Off until you choose a duration. Choose how long to mute desktop pop-ups and
+              sounds.
+            </p>
 
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px">
               <span style="font-size: 12px; color: var(--text-3)">Status:</span>
@@ -1834,10 +1918,10 @@
             </div>
 
             <div class="actions">
-              <button class="ghost" id="quietBtn30m">30 min</button>
-              <button class="ghost" id="quietBtn1h">1 hour</button>
-              <button class="ghost" id="quietBtnUntil18">Until 18:00</button>
-              <button class="ghost" id="quietBtnOff">Off</button>
+              <button class="ghost" id="quietBtn30m">Quiet for 30 min</button>
+              <button class="ghost" id="quietBtn1h">Quiet for 1 hour</button>
+              <button class="ghost" id="quietBtnUntil18">Quiet until 18:00</button>
+              <button class="ghost" id="quietBtnOff">Turn quiet off</button>
             </div>
 
             <p style="margin-top: 14px; font-size: 11px; color: var(--text-4); line-height: 1.6; max-width: 520px">
@@ -1938,7 +2022,10 @@
 
         <section class="opt-section" id="sect-sentinel">
           <h1>Monitoring <span class="module-badge">v0.4.0</span></h1>
-          <p class="section-desc">Sentinel settings — rule overrides, display config, import/export.</p>
+          <p class="section-desc">
+            Monitoring chips on the patient record. This screen is the Sentinel rule editor: rule overrides, display
+            config, import and export. Quiet mode does not hide these chips.
+          </p>
 
           <!-- Rules currency status card -->
           <div
@@ -2390,7 +2477,10 @@
         <!-- Triage Lens section -->
         <section class="opt-section" id="sect-triage">
           <h1>Triage Lens <span class="module-badge">v0.5.0</span></h1>
-          <p class="section-desc">Triage Lens keyword rules and display settings.</p>
+          <p class="section-desc" id="sect-baseline-chips-queue">
+            Triage Lens keyword rules and display settings. Queue chips that ship off stay off until you enable the row:
+            <a href="#sect-baseline-chips-queue">Options → Triage Lens → Baseline chips → Queue</a>.
+          </p>
           <div class="iframe-section">
             <iframe
               id="triageFrame"
@@ -3027,13 +3117,15 @@
           <h1>Practice features</h1>
           <div class="pf-deck">
             <div class="pf-brief">
-              Accept for practice stays separate. Merge is sticky-on — practice OFF needs Suite replace.
+              Accept for practice stays separate. Merge is sticky-on — practice OFF needs Suite replace. Signing Queue
+              flags start off. The other packs on this page start on, because they were already on before this switch
+              existed. A shared profile can turn a pack on; turning one off for every PC needs Suite replace.
             </div>
 
             <label class="pf-station" id="row-softFlags">
               <span class="pf-copy">
                 <span class="pf-label">Signing Queue flags</span>
-                <span class="pf-sub">QOF review + Flagged</span>
+                <span class="pf-sub">QOF review + Flagged. Off until you turn it on. Same switch as Suite.</span>
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
@@ -3051,7 +3143,7 @@
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
-                <input type="checkbox" id="pfAllocateCanvases" role="switch" />
+                <input type="checkbox" id="pfAllocateCanvases" role="switch" checked />
                 <span class="suite-toggle-track" aria-hidden="true"
                   ><span class="suite-toggle-thumb"></span
                 ></span>
@@ -3065,7 +3157,7 @@
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
-                <input type="checkbox" id="pfContactsCanvas" role="switch" />
+                <input type="checkbox" id="pfContactsCanvas" role="switch" checked />
                 <span class="suite-toggle-track" aria-hidden="true"
                   ><span class="suite-toggle-thumb"></span
                 ></span>
@@ -3079,7 +3171,7 @@
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
-                <input type="checkbox" id="pfRoutineRxButton" role="switch" />
+                <input type="checkbox" id="pfRoutineRxButton" role="switch" checked />
                 <span class="suite-toggle-track" aria-hidden="true"
                   ><span class="suite-toggle-thumb"></span
                 ></span>
@@ -3093,7 +3185,7 @@
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
-                <input type="checkbox" id="pfQuickActionsWidget" role="switch" />
+                <input type="checkbox" id="pfQuickActionsWidget" role="switch" checked />
                 <span class="suite-toggle-track" aria-hidden="true"
                   ><span class="suite-toggle-thumb"></span
                 ></span>
@@ -3107,7 +3199,7 @@
               </span>
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
-                <input type="checkbox" id="pfFocusAlerts" role="switch" />
+                <input type="checkbox" id="pfFocusAlerts" role="switch" checked />
                 <span class="suite-toggle-track" aria-hidden="true"
                   ><span class="suite-toggle-thumb"></span
                 ></span>
@@ -3362,12 +3454,16 @@
         <section class="opt-section" id="sect-backup">
           <h1>Backup &amp; Restore <span class="module-badge">v2.0</span></h1>
           <p class="section-desc">
-            Export all module settings to a single JSON file, or restore from a previous backup. Per-module quick
-            actions are available below for targeted exports.
+            The shared practice profile is the first card on this page. Below it: export all module settings to a single
+            JSON file, or restore from a previous backup. Per-module quick actions are available further down for
+            targeted exports.
           </p>
 
           <!-- ── Practice Profile ─────────────────────────────────────────────── -->
-          <div style="border: 1px solid var(--border-hi); border-radius: 10px; overflow: hidden; margin-bottom: 28px">
+          <div
+            id="sect-practice-profile"
+            style="border: 1px solid var(--border-hi); border-radius: 10px; overflow: hidden; margin-bottom: 28px"
+          >
             <!-- Header -->
             <div
               style="
