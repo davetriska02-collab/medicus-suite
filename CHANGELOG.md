@@ -2,6 +2,29 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.0] — 2026-09-22
+
+### Investigations page: wording, layout polish, and a pre-filled practice range (nothing acts on it yet)
+
+Continues Phase E (`docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`). Still setup-only: Lab Filing does not read any of
+this yet.
+
+- **"Autofiling" renamed to "assisted filing"** everywhere it's shown, including the setup screens' own text and the design docs — it
+  files nothing by itself; a human still presses File (or OK on the confirm dialog). The page's own explainer now says so directly:
+  "You still press File — assisted, not automated."
+- **Practice ranges can now be pre-filled from the lab's own reference range**, read from the same report the scan already opens to learn
+  codes and units (a lab's own reference bounds are a constant of the analyte, not a patient value, so this doesn't touch what "Match
+  requests to lab reports" promises never to keep). An empty range box shows the suggested number, highlighted, with "Suggested from the
+  lab's own range — not yet saved" and a **Use this** button; nothing is written until that's clicked or the box is edited. A range
+  that's already set shows the lab's own range alongside it for comparison.
+- **"What does this do?" and "Match requests to lab reports" are now collapsible** — the latter opens by default until the practice has
+  added its own tests, then stays collapsed to cut down scrolling to the results below.
+- **Fixed a page-wide CSS specificity bug**: `options.html`'s own global `input[type='text'|'number'|...]` reset
+  (specificity 0,1,1) was silently beating several narrower single-class rules (0,1,0) regardless of stylesheet order, stretching the
+  "Reports to read" box and the practice-range boxes to full width with the wrong padding. Fixed by giving the affected classes enough
+  specificity (a class repeated, 0,2,0) to win outright; a regression test guards it.
+- The lab select in "Match requests" now has its own visible "Lab" label (it only had a screen-reader label before).
+
 ## [v3.267.0] — 2026-09-22
 
 ### Investigations page: Lab Filing setup — safety guards, lab comments, one autofiling switch + approval per test (nothing acts on it yet)

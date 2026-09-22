@@ -83,6 +83,49 @@ console.log('\n── observation keeps structure only ──');
   );
 }
 
+console.log('\n── reference-range candidates (Lab Filing setup pre-fill — a suggestion, never a saved range) ──');
+{
+  const ALP = { conceptId: '1000621000000104', unit: 'u/L' };
+  const obsAt = (org, dept, refLow, refHigh) => ({
+    lab: { organisation: org, department: dept },
+    groups: [
+      {
+        heading: 'Bone profile',
+        specimenType: 'Blood',
+        results: [{ name: 'ALP', code: ALP.conceptId, codeText: null, unit: ALP.unit, numeric: true, refLow, refHigh }],
+      },
+    ],
+    ungrouped: [],
+    requests: [],
+  });
+  const cands = SC.referenceRangeCandidates(seed, [obsAt('RJ700', 'General Pathology', 30, 130)]);
+  check(
+    cands.length === 1 && cands[0].lab === LAB && cands[0].code === ALP.conceptId && cands[0].low === 30 && cands[0].high === 130,
+    'a result with a code, at a lab the catalogue knows, yields one candidate'
+  );
+  check(
+    SC.referenceRangeCandidates(seed, [obsAt('Unknown Org', 'Unknown Dept', 1, 2)]).length === 0,
+    'a lab the catalogue does not recognise yields no candidate (nothing to key it to)'
+  );
+  check(
+    SC.referenceRangeCandidates(seed, [obsAt('RJ700', 'General Pathology', null, null)]).length === 0,
+    'a result with no reference range yields no candidate'
+  );
+  const two = SC.referenceRangeCandidates(seed, [
+    obsAt('RJ700', 'General Pathology', 30, 130),
+    obsAt('RJ700', 'General Pathology', 32, 128),
+  ]);
+  check(
+    two.length === 1 && two[0].low === 32 && two[0].high === 128,
+    'the same lab x code seen twice keeps one candidate — the later report wins'
+  );
+  const o = obsOf(byPrefix('report-138'));
+  check(
+    o.groups[0].results.every((r) => 'refLow' in r && 'refHigh' in r),
+    'the observation itself carries refLow/refHigh through from the report (may be null)'
+  );
+}
+
 console.log('\n── gaps ──');
 {
   const stripped = withoutReportForms(seed, ['urine-acr', 'crp']);

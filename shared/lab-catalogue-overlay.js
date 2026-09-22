@@ -289,7 +289,7 @@
   // ── Lab Filing setup: a practice normal range for one RESULT, at one LAB, for one SNOMED CODE ──────────────────────────
   // The unit is carried by the code (HbA1c IFCC and NGSP are different codes), and is SNAPSHOTTED here: if the code's unit
   // later changes, the range no longer means what it did and is excluded until it is set again. `reviewed` is the FILING
-  // approval — separate from the approval of the result / test that decides matching. Whether autofiling is ON is not a
+  // approval — separate from the approval of the result / test that decides matching. Whether assisted filing is ON is not a
   // property of a result: Medicus files a whole report group at once, so the on/off switch lives on the group entry.
   const filingKey = (r) => [r.result, r.lab, r.code].join('|');
   function finiteOrNull(v, what) {
@@ -379,7 +379,7 @@
       heading: str(v.heading, LIMITS.text, w + '.heading', true),
       allowComments: [...new Set(allow)],
       suppressIfText: [...new Set(cleanTerms(v.suppressIfText, w + '.suppressIfText', 3, 50))],
-      // autofiling ON for this report group (Medicus files a group, never a single result)
+      // assisted filing ON for this report group (Medicus files a group, never a single result)
       enabled: v.enabled === true,
     };
     if (!out.allowComments.length && !out.suppressIfText.length && !out.enabled) fail(w + ' sets nothing');
@@ -606,7 +606,7 @@
     if (cleared) next.enabled = false;
     const key = filingKey(next);
     const i = o.filing.ranges.findIndex((r) => filingKey(r) === key);
-    // nothing set and autofiling off = clear it
+    // nothing set and assisted filing off = clear it
     if (next.low === null && next.high === null && !next.enabled) {
       if (i >= 0) o.filing.ranges.splice(i, 1);
       return o;
@@ -685,7 +685,7 @@
 
   // A lab report GROUP, per LAB x group heading: spec = { lab, heading, enabled, allowComments, suppressIfText }. The heading must
   // be one the lab really sends. Every whitelisted comment must pass allowCommentProblem. Medicus files a group at once, so the
-  // autofiling on/off switch is here, alongside the comment rules.
+  // assisted filing on/off switch is here, alongside the comment rules.
   function setFilingGroup(builtin, overlay, spec, today) {
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
@@ -779,8 +779,8 @@
   }
   const approveFilingRange = (overlay, key, by, when) => approveFiling(overlay, 'ranges', key, by, when);
 
-  // ── Autofiling for a TEST at a LAB: what it covers, whether it is on, and what still needs approving ──────────────────
-  // Medicus files a report group at once, so "autofiling" is one switch for the report groups (lab headings) that identify the
+  // ── Assisted filing for a TEST at a LAB: what it covers, whether it is on, and what still needs approving ──────────────────
+  // Medicus files a report group at once, so "assisted filing" is one switch for the report groups (lab headings) that identify the
   // test. It rests on: those group entries, the practice ranges and guards of the test's results at that lab, and the Medicus
   // wording if the practice has changed it. `merged` is the effective catalogue including unreviewed entries.
   function filingStateForTest(merged, overlay, invId, labId) {
@@ -814,7 +814,7 @@
     return out;
   }
 
-  // Switch autofiling on / off for a test at a lab: every report group that identifies it. Turning it on creates the group entry
+  // Switch assisted filing on / off for a test at a lab: every report group that identifies it. Turning it on creates the group entry
   // (unapproved) if there is none; a group left with nothing set is removed.
   function setFilingForTest(builtin, overlay, invId, labId, enabled, today) {
     const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
@@ -839,7 +839,7 @@
     return o;
   }
 
-  // Approve everything autofiling for a test at a lab rests on that is still awaiting approval — the report groups, the ranges and
+  // Approve everything assisted filing for a test at a lab rests on that is still awaiting approval — the report groups, the ranges and
   // guards of its results at that lab, and the Medicus wording if changed. Called from the test's own review screen only.
   function approveFilingForTest(builtin, overlay, invId, labId, by, when) {
     const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;

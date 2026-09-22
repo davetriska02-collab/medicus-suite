@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.0
+**Version:** v3.268.0
 **Generated:** 2026-09-22
 
 ## What it is
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.0 (22 Sep)** — Investigations page: "autofiling" renamed to "assisted filing" throughout (nothing acts automatically); a "What does this do?" explainer and "Match requests to lab reports" are now collapsible; empty practice-range boxes are pre-filled from the lab's own reference range seen on a recent report (highlighted, never saved without a click); fixed a page-wide CSS specificity bug that was silently stretching several narrow inputs to full width
 - **v3.267.0 (22 Sep)** — Investigations page: safety guards (with trend direction), lab-comment settings per report group, and one autofiling switch + approval per test at a lab; Medicus filing-screen wording is one practice-wide setting. Lab Filing does not read it yet
 - **v3.266.1 (22 Sep)** — Investigations results table tidied: no description or lab columns, click a code or an "also called" name to edit, plainer role words (core to the lab group / enough on its own)
 - **v3.266.0 (22 Sep)** — Investigations page: Lab Filing setup on the results table — practice normal range (per result, lab and SNOMED code), autofiling enable and its own approval, list filters and card badge. Lab Filing does not read it yet

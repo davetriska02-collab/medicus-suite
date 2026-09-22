@@ -1,9 +1,9 @@
 // Medicus Suite — Lab Result Catalogue: Lab Filing setup data (Phase E). Nothing reads these yet.
 //   ranges  — a practice normal range per RESULT x LAB x SNOMED CODE (the unit is carried by the code)
 //   guards  — trend limit (with direction), medicines, lab-flag override, per RESULT x LAB
-//   groups  — lab comments (whitelist + never-file phrases) AND the autofiling on/off switch, per LAB x report GROUP heading
+//   groups  — lab comments (whitelist + never-file phrases) AND the assisted filing on/off switch, per LAB x report GROUP heading
 //   screen  — the wording of Medicus's own filing screen (one setting for the practice)
-// Autofiling is switched on and approved for a TEST at a LAB: Medicus files a whole report group, never a single result.
+// Assisted filing is switched on and approved for a TEST at a LAB: Medicus files a whole report group, never a single result.
 // Run with: node test-lab-catalogue-filing.js
 
 'use strict';
@@ -336,7 +336,7 @@ console.log('\n--- safety guards: per result x lab, with the DIRECTION of a tren
   );
 }
 
-console.log('\n--- lab groups: comments and the autofiling switch, per lab x report group heading ---');
+console.log('\n--- lab groups: comments and the assisted filing switch, per lab x report group heading ---');
 {
   const spec = {
     lab: LAB,
@@ -348,7 +348,7 @@ console.log('\n--- lab groups: comments and the autofiling switch, per lab x rep
   const g = g1.filing.groups[0];
   check(
     g.allowComments[0] === NOTE && g.suppressIfText.length === 2 && g.enabled === false,
-    'whitelisted comments and block phrases are stored per lab and group; autofiling starts OFF'
+    'whitelisted comments and block phrases are stored per lab and group; assisted filing starts OFF'
   );
   check(g.provenance.reviewed === false && acting(g1).catalogue.filing === undefined, 'unapproved: does not act');
   const key = OV.filingGroupKey({ lab: LAB, heading: 'lfts' });
@@ -365,7 +365,7 @@ console.log('\n--- lab groups: comments and the autofiling switch, per lab x rep
   );
   check(
     OV.setFilingGroup(builtin, ap, { ...spec, enabled: true }).filing.groups[0].provenance.reviewed === false,
-    'switching autofiling on withdraws the approval too'
+    'switching assisted filing on withdraws the approval too'
   );
   check(
     OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'LFTs', enabled: true }).filing.groups[0]
@@ -465,7 +465,7 @@ console.log('\n--- Medicus filing-screen wording: one setting, defaults not stor
   );
 }
 
-console.log('\n--- autofiling for a TEST at a LAB: one switch, one approval ---');
+console.log('\n--- assisted filing for a TEST at a LAB: one switch, one approval ---');
 {
   const LFT = 'lft';
   const merged = (ov) => inc(ov).catalogue;

@@ -20,8 +20,10 @@
 //     consistent link; more than one is AMBIGUOUS and the person must choose (a name-similarity hint is only a hint);
 //   * nothing is auto-approved — the output is proposals; applying them writes unreviewed entries.
 //
-// PRIVACY: an observation keeps test names, headings, codes and units ONLY — never values, comments, dates, patient or
-// staff fields. Callers must drop the raw payload immediately (collectObservations does).
+// PRIVACY: an observation keeps test names, headings, codes, units and the LAB'S OWN reference range ONLY — never
+// this patient's result value, comments, dates, patient or staff fields. A reference range is the lab's own constant
+// for the analyte/assay (the same for every patient), kept only to suggest a starting practice range in Lab Filing
+// setup — never saved on its own. Callers must drop the raw payload immediately (collectObservations does).
 //
 // Dual-mode export: browser classic script -> window.LabCatalogueScan; Node/test -> require().
 
@@ -64,6 +66,8 @@
       unit: r.unit,
       numeric: r.resultType === 'unit-value-result',
       degraded: !!r.degraded,
+      refLow: r.refLow,
+      refHigh: r.refHigh,
     });
     return {
       lab: { organisation: rep.lab.organisation, department: rep.lab.department },
@@ -539,6 +543,28 @@
     };
   }
 
+  // ── Reference-range candidates (Lab Filing setup pre-fill) ────────────────────────────────────────────────────────
+  // A SUGGESTION only, never a saved practice range: the lab's own reference range, seen on a recent report, for a
+  // result the catalogue already has a CODE for, at a lab the catalogue already knows. One candidate per (lab, code) —
+  // the most recently seen report wins (observations are read newest-first by the queue). A lab the catalogue does not
+  // yet recognise, or a result with no code, yields no candidate: nothing to key it to.
+  function referenceRangeCandidates(catalogue, observations) {
+    const LC = need();
+    const index = LC.buildIndex(catalogue);
+    const out = new Map(); // 'labId|code' -> { lab, code, low, high, unit }
+    for (const obs of asArr(observations)) {
+      const lab = LC.identifyLab(index, obs.lab);
+      if (!lab) continue; // an unrecognised lab has no stable id to key a candidate to
+      for (const g of asArr(obs.groups)) {
+        for (const r of asArr(g.results)) {
+          if (!r.code || (r.refLow == null && r.refHigh == null)) continue;
+          out.set(lab.def.id + '|' + r.code, { lab: lab.def.id, code: r.code, low: r.refLow, high: r.refHigh, unit: r.unit });
+        }
+      }
+    }
+    return [...out.values()];
+  }
+
   // ── Proposal -> fills (for LabCatalogueOverlay.applyFills) ────────────────────────────────────────────────────────
   // choices: Map/obj proposal.key -> investigation id (for ambiguous ones). Returns { fills, skipped }.
   function fillsFromProposals(catalogue, proposals, choices) {
@@ -798,6 +824,7 @@
     observationFromOverview,
     findGaps,
     analyse,
+    referenceRangeCandidates,
     fillsFromProposals,
     fillsForRequests,
     orphanToProposal,

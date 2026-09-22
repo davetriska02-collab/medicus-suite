@@ -11,6 +11,27 @@
   margin-bottom: 10px;
 }
 
+/* "What does this do?" — a lightweight disclosure right under the page heading, not a coloured notice box */
+.inv-intro {
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.inv-intro > summary {
+  font-weight: 600;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: 13px;
+}
+.inv-intro p {
+  margin: 8px 0 0;
+}
+
+/* the "Match requests to lab reports" card collapses behind its own name once the practice has used it */
+.inv-match-details > summary {
+  cursor: pointer;
+}
+
 /* ── Your practice: two or three lines ── */
 .inv-practice {
   padding: 8px 12px;
@@ -590,10 +611,18 @@
   gap: 10px;
   margin-top: 8px;
 }
-.inv-limit {
+/* input[type='number'] in options.html's own inline <style> sets width:100% with specificity (0,1,1) — a bare class
+   (0,1,0) can never beat that regardless of stylesheet order, which is why this box was rendering full-width and
+   spilling into the next control. The class repeated once gives two classes (0,2,0), which wins outright. */
+.inv-limit.inv-limit {
   width: 70px;
   flex: 0 0 auto;
   display: inline-block;
+}
+.inv-scan-reports {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  margin-bottom: 0;
 }
 .inv-scan-result {
   margin-top: 10px;
@@ -1151,7 +1180,7 @@
   padding: 4px 8px 8px;
 }
 
-/* ── the autofiling section of the results table: its own colour, so it is clearly separate from matching ── */
+/* ── the assisted filing section of the results table: its own colour, so it is clearly separate from matching ── */
 .inv-rt-hf {
   color: var(--accent);
   border-bottom-color: var(--accent);
@@ -1164,14 +1193,34 @@
 }
 .inv-rt-frange {
   border-left: 1.5px solid var(--accent);
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 4px;
 }
-.inv-rt-num {
+/* input[type='text'] in options.html's own inline <style> sets width/padding/font-size at specificity (0,1,1) — a
+   bare class (0,1,0) never beats that (it was rendering full-width with 10px padding, not 64px with 3px). The class
+   repeated once gives two classes (0,2,0), which wins regardless of stylesheet order, without depending on an
+   ancestor — this class is reused in more than one place (see .inv-guards-edit below). */
+.inv-rt-num.inv-rt-num {
   width: 64px;
   min-width: 0;
   padding: 3px 5px;
   font-size: 12px;
+}
+.inv-rt-suggested {
+  border-color: var(--green-line, var(--green));
+  background: var(--green-dim);
+}
+.inv-rt-suggest-note {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--green);
+}
+.inv-rt-lab-range {
+  flex-basis: 100%;
+  font-size: 10.5px;
 }
 .inv-rt-fapproval {
   gap: 6px;
@@ -1218,7 +1267,7 @@
 .inv-fc-in {
   max-width: 250px;
 }
-/* the lab-comment strip: autofiling colour, full width under the results */
+/* the lab-comment strip: assisted filing colour, full width under the results */
 .inv-filing-strip {
   margin: 12px 0;
   padding: 8px 10px 10px;
@@ -1259,11 +1308,9 @@
   border-radius: var(--r-sm, 4px);
   background: var(--bg-deep);
 }
-.inv-guards-edit .inv-rt-num {
-  width: 64px;
-}
+/* superseded by .inv-rt-num.inv-rt-num above, which already wins on specificity without needing this ancestor */
 
-/* ── autofiling for a test: one bar, one switch, one approval ── */
+/* ── assisted filing for a test: one bar, one switch, one approval ── */
 .inv-af-bar {
   margin: 4px 0 8px;
   padding: 8px 10px;

@@ -29,6 +29,33 @@ check(
 );
 check(!/\beval\(|new Function\(/.test(src), 'no eval');
 check(/Not yet used by the suite/.test(src), 'the page says, on the page, that nothing reads the catalogue yet');
+check(
+  /What does this do\?/.test(src) && /function renderIntro\(\)/.test(src) && /h\('details', \{ class: 'inv-intro'/.test(src),
+  'the "What does this do?" explainer is a collapsible disclosure, not a boxed notice'
+);
+check(
+  /You still press File .{1,3} assisted, not automated\./.test(src),
+  'the explainer says out loud that this is assisted, not automatic filing'
+);
+check(
+  /S\.matchOpen === undefined\) S\.matchOpen = !\(S\.overlay\.investigations && S\.overlay\.investigations\.length\)/.test(
+    src
+  ) && /h\('details', \{ class: 'inv-match-details'/.test(src),
+  '"Match requests to lab reports" is collapsible, open by default only until the practice has added its own tests'
+);
+check(/inv-scan-reports/.test(src), 'the "Reports to read" control has its own no-shrink class (fixes the overlap with the lab select)');
+check(
+  /h\('label', \{ class: 'lf-check inv-scan-reports' \}, 'Lab ', labSel\)/.test(src),
+  'the lab select in "Match requests" has its own visible "Lab" label — it read as one run-on control without it'
+);
+{
+  const css = read('options/investigations-section.css');
+  check(
+    /\.inv-limit\.inv-limit\s*\{/.test(css) && /\.inv-rt-num\.inv-rt-num\s*\{/.test(css),
+    'the narrow-input classes repeat themselves for specificity (0,2,0) — options.html’s global input[type] reset ' +
+      'is (0,1,1) and silently wins over a bare class, which is what stretched "Reports to read" to full width'
+  );
+}
 check(!/Approve all/i.test(src), 'there is no bulk approve — each test is approved from its own review screen');
 check(
   /Clicking 'Approve' means I am approving this test's wordings, results, and codes\. This saves changes above and makes this test active for the features that use this catalogue\./.test(
@@ -40,36 +67,51 @@ check(!/I have checked/.test(src) && !/approveBtn\.disabled/.test(src), 'no fidd
 const approveButtons = src.match(/btn\(\s*'Approve( result)?',/g) || [];
 check(
   approveButtons.length === 3 && /if \(st\.review\) buttons\.appendChild\(btn\('Approve/.test(src),
-  'the only Approve buttons are on the review screens (test and result) and ONE filing approval, in the autofiling bar of the test'
+  'the only Approve buttons are on the review screens (test and result) and ONE filing approval, in the assisted filing bar of the test'
 );
 check(
   /OV\.approveFilingForTest\(S\.builtin, S\.overlay, st\.id, fLab, REVIEWER\)/.test(src) &&
     !/OV\.approveFiling\(/.test(src) &&
     !/OV\.approveFilingRange\(/.test(src),
-  'autofiling is approved once, for the test at a lab, through the pure helper — there is no per-result, per-range or per-group approve button'
+  'assisted filing is approved once, for the test at a lab, through the pure helper — there is no per-result, per-range or per-group approve button'
 );
 check(
-  !/inv-rt-fenable|inv-rt-fapproval|'Enable autofiling'|'Filing approval'/.test(src),
-  'there is no per-result "enable autofiling" or approval column (Medicus files a whole report group)'
+  !/inv-rt-fenable|inv-rt-fapproval|'Enable assisted filing'|'Filing approval'/.test(src),
+  'there is no per-result "enable assisted filing" or approval column (Medicus files a whole report group)'
 );
 check(
   /Direction of the change/.test(src) && /trendDirection: st\.dir/.test(src),
   'the trend guard says which way it moved (changed / increased / decreased)'
 );
 check(
-  /Autofiling on for this test group from ' \+ fLabName/.test(src) &&
+  /Assisted filing on for this test group from ' \+ fLabName/.test(src) &&
     /const fLabName = fLab \? labWords\(fLab\) : ''/.test(src),
-  'the autofiling switch names the lab in words ("… from SWL pathology"), never by its code'
+  'the assisted filing switch names the lab in words ("… from SWL pathology"), never by its code'
 );
 check(
   /S\.scrollToAutofiling = true/.test(src) && /inv-af-badge/.test(src),
-  'the list badge opens the test at its autofiling bar'
+  'the list badge opens the test at its assisted filing bar'
 );
 check(
   !/filingLabEntry|OV\.setFilingLabControls/.test(src) &&
     /OV\.setFilingScreen/.test(src) &&
     /Medicus filing-screen wording/.test(src),
   'the filing-screen wording is one practice-wide, pre-filled setting (not per lab)'
+);
+check(
+  /SC\.referenceRangeCandidates\(S\.merged, r\.observations\)/.test(src) &&
+    /S\.rangeCandidates = new Map\(/.test(src),
+  'reading the results queue also collects the lab’s own reference ranges, as suggestions (a Map, not persisted)'
+);
+check(
+  /inv-rt-suggested/.test(src) &&
+    /Suggested from the lab.s own range/.test(src) &&
+    /Use this/.test(src),
+  'an empty practice range is pre-filled from the lab’s own range, highlighted, and never saved without a click'
+);
+check(
+  /Lab's own range: /.test(src),
+  'a range already set still shows the lab’s own range beside it, for comparison'
 );
 check(/'Delete'/.test(src) && /removeInvestigation/.test(src), 'a practice test can be deleted (card and edit screen)');
 check(/Read again/.test(src), 'the reading can be run again');

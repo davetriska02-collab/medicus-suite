@@ -343,7 +343,13 @@
 
   // ── Adapter over the raw Medicus API shape ────────────────────────────────────
   // Accepts { data: { investigationReport } } (the task overview response), { investigationReport }, or the report
-  // itself. Keeps ONLY what resolution needs — never values, dates or patient fields.
+  // itself. Keeps ONLY what resolution needs — never this patient's result VALUE, dates or patient fields. The lab's
+  // own reference range (refLow/refHigh) IS kept: it is the lab's own constant for the analyte/assay, the same for
+  // every patient, not this patient's value — used only to suggest a starting practice range, never saved by itself.
+  function refLimit(v) {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
   function fromInvestigationReportPayload(payload) {
     const rep =
       (payload && payload.data && payload.data.investigationReport) ||
@@ -354,6 +360,8 @@
     const adaptResult = (r) => {
       const rc = isObj(r && r.resultCode) ? r.resultCode : {};
       const value = r ? r.resultValue : null;
+      const ranges = Array.isArray(r && r.referenceRanges) ? r.referenceRanges : [];
+      const rr = isObj(ranges[0]) ? ranges[0] : {};
       return {
         name: isStr(r && r.description) ? r.description : '',
         code: isStr(rc.conceptId) ? rc.conceptId : rc.conceptId != null ? String(rc.conceptId) : null,
@@ -363,6 +371,8 @@
         hasNumericValue: !!r && r.resultType === 'unit-value-result' && value != null && String(value).trim() !== '',
         text: isStr(r && r.resultText) ? r.resultText : null,
         degraded: !!(r && r.hasUnresolvedDegradedTypeCode),
+        refLow: refLimit(rr.lowerReferenceLimit),
+        refHigh: refLimit(rr.upperReferenceLimit),
       };
     };
     return {

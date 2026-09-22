@@ -24,7 +24,7 @@ const SC = typeof window !== 'undefined' ? window.LabCatalogueScan : null;
 const REVIEWER = 'this computer';
 
 // ── Lab Filing setup (Phase E) — practice ranges per result x lab x code; guards per result x lab; comments per lab x report
-//    group; autofiling is switched on and approved for a TEST at a LAB (Medicus files a whole report group, never one result) ──
+//    group; assisted filing is switched on and approved for a TEST at a LAB (Medicus files a whole report group, never one result) ──
 let filingLabId = null;
 function currentFilingLab() {
   const labs = S.merged.labs.filter((l) => labVisible(l.id));
@@ -57,8 +57,8 @@ const guardsSummary = (g) =>
         .filter(Boolean)
         .join(' · ')
     : '';
-// Autofiling for a test, across labs: { on, approved, labs:[{lab, state}] } — on = every report group that identifies it at some
-// lab is switched on; approved = nothing that autofiling rests on is still awaiting approval.
+// Assisted filing for a test, across labs: { on, approved, labs:[{lab, state}] } — on = every report group that identifies it at some
+// lab is switched on; approved = nothing that assisted filing rests on is still awaiting approval.
 function filingOverview(inv) {
   const labs = [];
   for (const lab of S.merged.labs) {
@@ -90,6 +90,7 @@ const S = {
   toast: '',
   codeInfo: null, // { qofClusters, codes } — descriptions and QOF status of shipped SNOMED codes
   editingContext: false,
+  rangeCandidates: new Map(), // 'labId|code' -> { low, high, unit } — a SUGGESTION from the last scan, never saved on its own
 };
 
 // ── tiny DOM helper ──────────────────────────────────────────────────────────────────────────────────
@@ -182,6 +183,41 @@ function describe(inv) {
   return { inv, inBuiltin, ov, disabled, status, needsReview };
 }
 
+function renderIntro() {
+  const det = h('details', { class: 'inv-intro', open: S.introOpen || undefined });
+  det.appendChild(h('summary', {}, 'What does this do?'));
+  det.appendChild(
+    h('p', {
+      text: 'This page holds a list of all lab results imported from your lab, with reference ranges, units and associated SNOMED codes.',
+    })
+  );
+  det.appendChild(
+    h('p', {
+      text:
+        "You can import these below, under ‘Match requests to lab reports’. That gives you a list of results, which you organise " +
+        'into groups based on how you order tests in Medicus and how the lab groups them when it reports back. These groups are stored ' +
+        'in a practice-wide profile.',
+    })
+  );
+  det.appendChild(
+    h('p', {
+      text:
+        'You can also set up assisted filing: working through groups of results as the lab submits them, optionally setting a practice ' +
+        'normal range where it differs from the lab’s own, then switching that on so the suite offers to file every matched result ' +
+        'with a single click. You still press File — assisted, not automated.',
+    })
+  );
+  det.appendChild(
+    h('p', {
+      text:
+        'Results themselves are stored once each, with a normal range per lab. In future you’ll be able to import a set of ready-made ' +
+        'investigations from another Medicus practice that shares your lab.',
+    })
+  );
+  det.addEventListener('toggle', () => (S.introOpen = det.open));
+  return det;
+}
+
 function renderBanner() {
   return h(
     'div',
@@ -238,8 +274,8 @@ function visibleInvestigations() {
     if (S.filter === 'builtin' && !d.inBuiltin) continue;
     if (S.filter === 'practice' && d.inBuiltin && !d.ov) continue;
     if (S.filter === 'review' && !d.needsReview) continue;
-    if (S.filter === 'autofiling' && !filingOverview(d.inv).on) continue;
-    if (S.filter === 'noautofiling' && filingOverview(d.inv).on) continue;
+    if (S.filter === 'assistedfiling' && !filingOverview(d.inv).on) continue;
+    if (S.filter === 'noassistedfiling' && filingOverview(d.inv).on) continue;
     if (S.kindFilter && d.inv.kind !== S.kindFilter) continue;
     const m = searchMatch(d, q);
     if (!m.hit) continue;
@@ -1036,7 +1072,7 @@ function renderEditor(st, done) {
   const newSpec = (m) => st.newResults.find((x) => 'new:' + x.label === m.result);
   // ONE full-width table of the results (a result is one thing, shared by every test that uses it). Each code is its own line
   // (code | unit); name, how it counts and "also called" span all of a result's code lines.
-  // The autofiling columns (practice range, safety guards, filing controls, enable) join at the right, in their own colour.
+  // The assisted filing columns (practice range, safety guards, filing controls, enable) join at the right, in their own colour.
   const rows = h('div', { class: 'inv-restable' });
   // Unit sits at the END of the matching columns, right beside the practice range it defines.
   const COLS = { name: 1, code: 2, role: 3, words: 4, unit: 5, range: 6, guards: 7 };
@@ -1064,7 +1100,7 @@ function renderEditor(st, done) {
       rows.appendChild(c);
     });
   }
-  // The autofiling section of one code line: practice normal range (min – max), enable, and its own approval. Edited here,
+  // The assisted filing section of one code line: practice normal range (min – max), enable, and its own approval. Edited here,
   // saved at once; ANY change withdraws that line's approval (pure op OV.setFilingRange).
   const cleanErr = (e) => ((e && e.message) || String(e)).replace(/^labcatalogue.practice: /, '');
   const applyFiling = async (spec) => {
@@ -1075,28 +1111,50 @@ function renderEditor(st, done) {
       redraw();
     }
   };
+  const rangeText = (cand) =>
+    (cand.low != null ? cand.low : '') + '–' + (cand.high != null ? cand.high : '') + (cand.unit ? ' ' + cand.unit : '');
   const filingCells = (row, r, c) => {
     const f = (cls, col, ...kids) => cell('inv-rt-f ' + cls, col, row, 1, ...kids);
     if (!fLab) {
       return [f('inv-rt-frange', COLS.range, h('span', { class: 'lf-muted', text: 'no lab defined' }))];
     }
     const e = r && c ? filingEntry(r.id, fLab, c.conceptId) : null;
+    const cand = r && c ? S.rangeCandidates.get(fLab + '|' + c.conceptId) : null;
+    const prefill = !e && cand && (cand.low != null || cand.high != null);
     const num = (v, label) =>
       h('input', {
-        class: 'lf-input inv-rt-num' + (e && !isApproved(e) ? ' inv-unapproved' : ''),
+        class:
+          'lf-input inv-rt-num' + (e && !isApproved(e) ? ' inv-unapproved' : '') + (prefill ? ' inv-rt-suggested' : ''),
         type: 'text',
         inputmode: 'decimal',
         maxlength: 12,
-        title: e && !isApproved(e) ? 'Not yet approved — approve from the autofiling bar above' : '',
+        title: e && !isApproved(e)
+          ? 'Not yet approved — approve from the assisted filing bar above'
+          : prefill
+            ? "Suggested from the lab's own reference range on a recent report — not yet saved"
+            : '',
         'aria-label': label + ' (' + c.conceptId + ', ' + fLabName + ')',
         value: v === null || v === undefined ? '' : String(v),
       });
-    const lo = num(e && e.low, 'Minimum');
-    const hi = num(e && e.high, 'Maximum');
+    const lo = num(e ? e.low : prefill ? cand.low : null, 'Minimum');
+    const hi = num(e ? e.high : prefill ? cand.high : null, 'Maximum');
     const submit = () => applyFiling({ result: r.id, lab: fLab, code: c.conceptId, low: lo.value, high: hi.value });
     lo.addEventListener('change', submit);
     hi.addEventListener('change', submit);
-    return [f('inv-rt-frange', COLS.range, lo, h('span', { text: '–' }), hi)];
+    const kids = [lo, h('span', { text: '–' }), hi];
+    if (prefill) {
+      kids.push(
+        h(
+          'div',
+          { class: 'inv-rt-suggest-note' },
+          h('span', { text: "Suggested from the lab’s own range — not yet saved." }),
+          h('button', { type: 'button', class: 'lf-btn lf-btn-sm', onclick: submit }, 'Use this')
+        )
+      );
+    } else if (cand && (cand.low != null || cand.high != null)) {
+      kids.push(h('span', { class: 'lf-muted inv-rt-lab-range', text: "Lab's own range: " + rangeText(cand) }));
+    }
+    return [f('inv-rt-frange', COLS.range, ...kids)];
   };
   const filingCellsNoCode = (row) => [
     cell('inv-rt-f inv-rt-frange', COLS.range, row, 1, h('span', { class: 'lf-muted', text: 'needs a code first' })),
@@ -1284,13 +1342,13 @@ function renderEditor(st, done) {
       rows.appendChild(line);
     }
   });
-  // which lab the ranges, guards and autofiling below are for (a result can have a different practice range at each lab)
+  // which lab the ranges, guards and assisted filing below are for (a result can have a different practice range at each lab)
   const filingLabLine = () => {
     const labsHere = S.merged.labs.filter((l) => labVisible(l.id));
     if (!labsHere.length) return null;
     const pick = h(
       'select',
-      { class: 'lf-input inv-sel-sm', 'aria-label': 'Lab the ranges, guards and autofiling are for' },
+      { class: 'lf-input inv-sel-sm', 'aria-label': 'Lab the ranges, guards and assisted filing are for' },
       labsHere.map((l) => h('option', { value: l.id, selected: l.id === fLab }, labLabel(l)))
     );
     pick.addEventListener('change', () => {
@@ -1303,14 +1361,14 @@ function renderEditor(st, done) {
       h(
         'div',
         { class: 'inv-edit-line inv-filing-lab' },
-        h('span', { class: 'inv-inline-label', text: 'Lab for the ranges, guards and autofiling below:' }),
+        h('span', { class: 'inv-inline-label', text: 'Lab for the ranges, guards and assisted filing below:' }),
         pick
       ),
       autofilingBar()
     );
   };
 
-  // ONE switch and ONE approval for the test at this lab. Medicus files a whole report group at once, so autofiling is not a
+  // ONE switch and ONE approval for the test at this lab. Medicus files a whole report group at once, so assisted filing is not a
   // property of a result: it is on for the report group(s) this test arrives in, and rests on those groups' comment settings, the
   // practice ranges and safety guards of the test's results, and the Medicus wording if it has been changed.
   const autofilingBar = () => {
@@ -1320,7 +1378,7 @@ function renderEditor(st, done) {
       bar.appendChild(
         h('span', {
           class: 'lf-muted',
-          text: 'Save the test first — autofiling is set up for the report group the lab sends it in.',
+          text: 'Save the test first — assisted filing is set up for the report group the lab sends it in.',
         })
       );
       return bar;
@@ -1332,7 +1390,7 @@ function renderEditor(st, done) {
           class: 'lf-muted',
           text:
             fLabName +
-            ' has no report group heading recorded for this test yet (see "How it comes back from the lab") — autofiling needs one.',
+            ' has no report group heading recorded for this test yet (see "How it comes back from the lab") — assisted filing needs one.',
         })
       );
       return bar;
@@ -1340,7 +1398,7 @@ function renderEditor(st, done) {
     const on = h('input', {
       type: 'checkbox',
       checked: state.enabled,
-      'aria-label': 'Enable autofiling for this test group from ' + fLabName,
+      'aria-label': 'Enable assisted filing for this test group from ' + fLabName,
     });
     on.addEventListener('change', async () => {
       try {
@@ -1359,7 +1417,7 @@ function renderEditor(st, done) {
       h(
         'div',
         { class: 'inv-edit-line' },
-        h('label', { class: 'lf-check inv-af-switch' }, on, ' Autofiling on for this test group from ' + fLabName),
+        h('label', { class: 'lf-check inv-af-switch' }, on, ' Assisted filing on for this test group from ' + fLabName),
         h('span', {
           class: 'lf-muted',
           text:
@@ -1397,7 +1455,7 @@ function renderEditor(st, done) {
             () =>
               save(
                 OV.approveFilingForTest(S.builtin, S.overlay, st.id, fLab, REVIEWER),
-                'Approved autofiling for ' + st.label + ' from ' + fLabName + '.'
+                'Approved assisted filing for ' + st.label + ' from ' + fLabName + '.'
               ),
             'lf-btn-primary lf-btn-sm'
           )
@@ -1407,7 +1465,7 @@ function renderEditor(st, done) {
         h('div', {
           class: 'inv-filing-note',
           text:
-            "Clicking 'Approve' means I am approving autofiling for this test group from " +
+            "Clicking 'Approve' means I am approving assisted filing for this test group from " +
             fLabName +
             ': its report group(s), the practice ranges and safety guards shown below, its lab-comment settings, and the Medicus wording. Changing any of them withdraws the approval. Filing does not read this yet.',
         })
@@ -1462,7 +1520,7 @@ function renderEditor(st, done) {
   };
 
   // Lab comments arrive per lab-defined REPORT GROUP, so both "never offer to file when the comment says…" and the whitelist of
-  // lab comments are per lab x group heading, never per result. (They are approved together with the rest of autofiling, above.)
+  // lab comments are per lab x group heading, never per result. (They are approved together with the rest of assisted filing, above.)
   const groupStrip = () => {
     if (!fLab || !st.members.length) return null;
     const lab = S.merged.labs.find((l) => l.id === fLab);
@@ -1600,7 +1658,7 @@ function renderEditor(st, done) {
       'div',
       { class: 'inv-filing-note' },
       'A practice range or safety guard applies to the result wherever it appears (ALP in LFTs and in Bone profile is one result) and to this lab only. ' +
-        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of autofiling, in the bar above. Filing does not read this yet.'
+        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of assisted filing, in the bar above. Filing does not read this yet.'
     );
   const listId = 'invResList' + Math.random().toString(36).slice(2, 7);
   const dl = h(
@@ -1884,7 +1942,7 @@ function renderGuardsEditor(r, labId, done) {
     foot.appendChild(
       h('span', {
         class: 'inv-foot-note',
-        text: 'Saved guards are approved together with autofiling for this test, in the bar at the top of the results.',
+        text: 'Saved guards are approved together with assisted filing for this test, in the bar at the top of the results.',
       })
     );
     const buttons = h('div', { class: 'inv-edit-buttons' });
@@ -2193,11 +2251,11 @@ function renderInvestigation(d) {
       (() => {
         const f = filingOverview(inv);
         if (!f.on) return null;
-        // opens the test's edit screen at its autofiling bar — approval is only ever given there, where what it covers is shown
+        // opens the test's edit screen at its assisted filing bar — approval is only ever given there, where what it covers is shown
         return h('button', {
           type: 'button',
           class: 'lf-badge inv-af-badge ' + (f.approved ? 'lf-badge-ok' : 'lf-badge-warn'),
-          title: 'Open the autofiling setup for this test',
+          title: 'Open the assisted filing setup for this test',
           onclick: () => {
             S.editing = inv.id;
             S.editState = editStateFor(inv, !f.approved);
@@ -2205,7 +2263,7 @@ function renderInvestigation(d) {
             S.scrollToAutofiling = true;
             render();
           },
-          text: f.approved ? 'autofiling on' : 'autofiling — awaiting approval',
+          text: f.approved ? 'assisted filing on' : 'assisted filing — awaiting approval',
         });
       })(),
       d.disabled ? badge('disabled', 'lf-badge-warn') : null
@@ -2313,8 +2371,8 @@ function renderBrowse() {
     ['builtin', 'Built-in'],
     ['practice', 'Practice'],
     ['review', `Awaiting review (${pending.length})`],
-    ['autofiling', 'Autofiling enabled'],
-    ['noautofiling', 'Autofiling not enabled'],
+    ['assistedfiling', 'Assisted filing enabled'],
+    ['noassistedfiling', 'Assisted filing not enabled'],
   ].map(([id, label]) =>
     btn(
       label,
@@ -2551,6 +2609,9 @@ async function runMatch() {
       shouldStop: () => sc.stop,
     });
     sc.read = { reports: r.observations.length, failed: r.failed, queueSize: r.queueSize, stopped: sc.stop };
+    S.rangeCandidates = new Map(
+      SC.referenceRangeCandidates(S.merged, r.observations).map((c) => [c.lab + '|' + c.code, c])
+    );
     const targets = SC.findGaps(S.merged, S.overlay.context).map((g) => g.id);
     sc.analysis = SC.analyse(S.merged, r.observations, { targets });
     sc.items = [...sc.analysis.proposals, ...sc.analysis.unmatched].map((u) => {
@@ -3075,8 +3136,14 @@ function renderMatch() {
   }
   const gaps = SC.findGaps(S.merged, S.overlay.context);
   const busy = sc.phase === 'importing' || sc.phase === 'reading';
-  const card = h('div', { class: 'lf-card inv-card inv-match' });
-  card.appendChild(h('div', { class: 'lf-card-name', text: 'Match requests to lab reports' }));
+  const outer = h('div', { class: 'lf-card inv-card inv-match' });
+  // Optional after the first run: open by default until the practice has added its own tests, then collapsed (less
+  // scrolling to reach the results below); a person's own click always wins over this default for the rest of the visit.
+  if (S.matchOpen === undefined) S.matchOpen = !(S.overlay.investigations && S.overlay.investigations.length);
+  const card = h('details', { class: 'inv-match-details', open: S.matchOpen || undefined });
+  card.addEventListener('toggle', () => (S.matchOpen = card.open));
+  outer.appendChild(card);
+  card.appendChild(h('summary', { class: 'lf-card-name' }, 'Match requests to lab reports'));
   card.appendChild(
     h('p', {
       class: 'lf-help',
@@ -3092,6 +3159,9 @@ function renderMatch() {
     S.merged.labs.map((l) => h('option', { value: l.id, selected: sc.lab === l.id }, 'test names from ' + labLabel(l)))
   );
   labSel.addEventListener('change', () => (sc.lab = labSel.value));
+  // Every control in this row gets a visible label before it — an unlabelled select sitting straight after the
+  // "Reports to read" box read as one run-on control, not two separate ones (2026-09-22, Nick).
+  const labSelLabelled = h('label', { class: 'lf-check inv-scan-reports' }, 'Lab ', labSel);
   const lim = h('input', {
     class: 'lf-input inv-limit',
     type: 'number',
@@ -3120,8 +3190,8 @@ function renderMatch() {
             'lf-btn-sm'
           )
         : null,
-      h('label', { class: 'lf-check' }, 'Reports to read ', lim),
-      labSel,
+      h('label', { class: 'lf-check inv-scan-reports' }, 'Reports to read ', lim),
+      labSelLabelled,
       h('span', {
         class: 'lf-muted',
         id: 'invScanProgress',
@@ -3189,7 +3259,7 @@ function renderMatch() {
       )
     );
   }
-  return card;
+  return outer;
 }
 
 function renderProblems() {
@@ -3252,6 +3322,7 @@ function render() {
   const wrap = h('div', { class: 'lf-module' });
   if (S.error) wrap.appendChild(h('div', { class: 'lf-notice' }, h('p', { text: S.error })));
   if (S.toast) wrap.appendChild(h('div', { class: 'lf-toast lf-toast-show', role: 'status', text: S.toast }));
+  wrap.appendChild(renderIntro());
   wrap.appendChild(renderBanner());
   wrap.appendChild(renderContext());
   if (SC) wrap.appendChild(renderMatch());
