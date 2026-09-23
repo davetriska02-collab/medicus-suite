@@ -593,6 +593,7 @@
   const SEV = window.SentinelResultSeverity;
   const LFC = window.LabFilingCatalogue;
   const LFG = window.LabFilingGate;
+  const OV = window.LabCatalogueOverlay; // for the catalogue "whitelist this comment" write (setFilingGroup)
 
   // Filing-screen URL gate. A result-review task overview. Kept deliberately
   // narrow; the in-DOM File-control gate (GATE 2 above) is the real guard.
@@ -601,6 +602,10 @@
   let profiles = [];
   let config = { commitMode: 'manual' };
   let resultRules = [];
+  // Phase E stage E2 — lives in triagelens.config.prefs, NOT labfiling.config: this is what gives it defaults.json
+  // governance and practice-wide publishing (shared/io/practice-profile.js merges it exactly like oirEngine), the
+  // same as every other engine-choice pref in the suite. 'legacy' | 'catalogue'.
+  let filingEnginePref = 'legacy';
   let suppress = []; // machine-local "never auto-file" patient list (uuids or {uuid})
   const sevCache = new Map(); // taskUuid → { report, severity, ts }
   const medsCache = new Map(); // patientUuid → { meds, ts }
@@ -624,6 +629,7 @@
         suppress = Array.isArray(r[STORE_SUPPRESS]) ? r[STORE_SUPPRESS] : [];
         const tc = r[TRIAGE_CONFIG];
         resultRules = tc && Array.isArray(tc.resultRules) ? tc.resultRules.filter((x) => x && x.enabled !== false) : [];
+        filingEnginePref = tc && tc.prefs && tc.prefs.filingEngine === 'catalogue' ? 'catalogue' : 'legacy';
         resolve();
       });
     });
@@ -744,21 +750,45 @@
     });
   }
 
-  function effectiveScore(rs, profile) {
+  // catalogue: only used when profile is null (no legacy match — catalogue-only mode); the caller passes whatever
+  // it already fetched (ensureFilingCatalogue()/catalogueForScreen), no new fetch here. Two things depend on it,
+  // both Nick, 2026-09-25, live-caught, both because the SUITE'S OWN baseline severity/comment gate below has no
+  // idea the catalogue engine exists at all:
+  //   1. Comment whitelist — with no legacy profile the baseline comment check has nothing to check a comment
+  //      against, so it treats every non-benign comment as unresolved FOREVER regardless of what's approved on the
+  //      Investigations page. Falls back to every report group's allowComments practice-wide (not narrowed to this
+  //      report's own lab — simpler, and safe: the catalogue engine's own PRECISE per-lab-per-heading check still
+  //      independently re-blocks a comment only allowed for a different heading, so this can only ever be as
+  //      permissive as that check already allows, never more).
+  //   2. A report group's overrideLabFlag (H-081 control d — one decision per test at a lab, on the group entry)
+  //      only ever affected the catalogue engine's OWN blocker list — it never reached this baseline severity gate,
+  //      so a result the practice had explicitly said should override the lab's flag still showed "not every result
+  //      is within normal limits" and could never actually auto-file. engine/lab-filing-catalogue.js's
+  //      applyCatalogueOverrides mirrors LF.applyParamOverrides exactly (same safety bounds) so this gate can
+  //      respect it the same way it already respects a legacy profile's paramsOverrideLabFlags, below.
+  // Neither of these is EVER built into a truthy pseudo-profile passed to computeProfileBlockers — that must keep
+  // seeing a genuinely null profile, or unrecognisedAnalyteBlockers flags every result (the original 2026-09-25 bug).
+  function effectiveScore(rs, profile, catalogue) {
     if (!rs) return { severity: null, report: null, fileBlockers: ['could not read the result'] };
     if (!LF || !SEV) return { severity: rs.severity, report: rs.report, fileBlockers: rs.blockers || [] };
-    if (!profile || profile.paramsOverrideLabFlags !== true) {
+    if (!profile) {
+      const useCatalogue = filingEngineWanted() && LFC && catalogue;
+      const allow = useCatalogue ? catalogueAllowComments(catalogue) : [];
+      const commentProfile = allow.length ? { allowComments: allow } : null;
+      const adj = useCatalogue ? LFC.applyCatalogueOverrides(rs.report, catalogue) : rs.report;
+      const severity = useCatalogue
+        ? SEV.evaluateReportSeverity(adj, { priorityDisplay: '', resultRules, problems: [] })
+        : rs.severity;
+      const fileBlockers = LF.fileabilityBlockers(adj, severity, resultRules, commentProfile, currentMatchedProfiles);
+      logCommentDebug(adj, commentProfile, fileBlockers);
+      return { severity, report: adj, fileBlockers };
+    }
+    if (profile.paramsOverrideLabFlags !== true) {
       // No lab-flag override — but still re-run fileabilityBlockers WITH the
       // matched profile, so its allowComments can excuse a comment that
       // rs.blockers (computed profile-agnostically in loadReportSeverity)
       // still lists. No fetch involved — cheap to recompute.
-      const fileBlockers = LF.fileabilityBlockers(
-        rs.report,
-        rs.severity,
-        resultRules,
-        profile,
-        currentMatchedProfiles
-      );
+      const fileBlockers = LF.fileabilityBlockers(rs.report, rs.severity, resultRules, profile, currentMatchedProfiles);
       logCommentDebug(rs.report, profile, fileBlockers);
       return { severity: rs.severity, report: rs.report, fileBlockers };
     }
@@ -783,7 +813,11 @@
       .concat(LF.trendBlockers(report, profile))
       .concat(LF.suppressedBlockers(report, suppress))
       .concat(LF.textSuppressBlockers(report, profile, document.body ? document.body.textContent : ''));
-    if (Array.isArray(profile.excludeIfMeds) && profile.excludeIfMeds.length) {
+    // profile may be null (no legacy profile matched, catalogue engine operating alone — see evaluateGate) — every
+    // other check above already handles that via its own `!profile` guard; this one didn't, and the resulting
+    // unguarded null.excludeIfMeds read threw as an UNCAUGHT PROMISE REJECTION that silently aborted evaluateGate()
+    // partway through — nothing after it (the shadow log, the catalogue combine, the button/blocked card) ever ran.
+    if (profile && Array.isArray(profile.excludeIfMeds) && profile.excludeIfMeds.length) {
       const meds = await loadMeds(report && report.patientUuid);
       if (meds === null) {
         blockers.push('could not check this patient’s medications — file manually');
@@ -802,6 +836,7 @@
   let _filingCataloguePromise = null;
   const resetFilingCatalogue = () => {
     _filingCataloguePromise = null;
+    _pendingFilingCataloguePromise = null;
   };
   try {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
@@ -821,6 +856,90 @@
       .catch(() => null);
     return _filingCataloguePromise;
   }
+  // A SEPARATE cached fetch, includeUnreviewed:true — every filing.groups/ranges/guards entry then carries its own
+  // `reviewed` flag instead of unreviewed ones being silently absent. Passed to engine/lab-filing-catalogue.js as
+  // opts.pendingCatalogue so it can tell "never configured" apart from "configured, awaiting approval" for a single
+  // result's range/guard (Nick, 2026-09-25). NEVER used for recognition — investigations/results/codes must only
+  // ever come from the approved-only `ensureFilingCatalogue()` above.
+  let _pendingFilingCataloguePromise = null;
+  function ensureFilingCataloguePending() {
+    if (_pendingFilingCataloguePromise) return _pendingFilingCataloguePromise;
+    if (typeof window.labcatalogueLoadEffective !== 'function')
+      return (_pendingFilingCataloguePromise = Promise.resolve(null));
+    _pendingFilingCataloguePromise = window
+      .labcatalogueLoadEffective({ includeUnreviewed: true })
+      .then((eff) => (eff && eff.catalogue) || null)
+      .catch(() => null);
+    return _pendingFilingCataloguePromise;
+  }
+
+  // ── Phase E, stage E2 — opt-in: config.filingEngine ('legacy' default | 'catalogue'), set on the Lab filing
+  // settings page (options/labfiling-section.js), mirroring the shape of Outstanding Requests' `oirEngine` pref.
+  // UNION-ONLY (H-080 control a, engine/lab-filing-gate.js's own contract): the catalogue engine's blockers are
+  // ADDED to the legacy ones, never used to remove one — it can only make the gate MORE cautious than today, never
+  // less. Shared by evaluateGate() (the poll-time check that decides what's offered) AND onAction() (the click-time
+  // re-verification that decides whether filing actually proceeds) so the two can never disagree about what's
+  // blocked — duplicating this logic at both call sites was the risk to avoid, not a convenience to skip.
+  const filingEngineWanted = () => filingEnginePref === 'catalogue';
+  // Mirrors shared/lab-catalogue-overlay.js's own FILING_DEFAULT_NORMAL_OPTION/FILING_DEFAULT_FILE_BUTTON constants
+  // — that module is not loaded in this content-script group, so the two stable default strings are repeated here
+  // rather than pulled in. Used only when the catalogue engine is operating WITHOUT a legacy profile (see
+  // evaluateGate): the practice-wide screen wording set on the Investigations page, or these standard defaults.
+  const CATALOGUE_DEFAULT_NORMAL_OPTION = 'Normal result, no action required';
+  const CATALOGUE_DEFAULT_FILE_BUTTON = 'File results';
+  function catalogueAllowComments(catalogue) {
+    if (!catalogue || !catalogue.filing || !Array.isArray(catalogue.filing.groups)) return [];
+    return catalogue.filing.groups.flatMap((g) => (Array.isArray(g.allowComments) ? g.allowComments : []));
+  }
+  function catalogueScreenText(catalogue) {
+    const s = catalogue && catalogue.filing && Array.isArray(catalogue.filing.screen) ? catalogue.filing.screen[0] : null;
+    return {
+      fileButtonText: (s && s.fileButtonText) || CATALOGUE_DEFAULT_FILE_BUTTON,
+      normalOptionText: (s && s.normalOptionText) || CATALOGUE_DEFAULT_NORMAL_OPTION,
+    };
+  }
+  async function combineWithCatalogueIfWanted(rs, legacyBlockers) {
+    if (!filingEngineWanted() || !LFC || !LFG || !rs || !rs.report) {
+      return { blockers: legacyBlockers, engine: 'legacy', catalogueUnresolvedComments: [] };
+    }
+    try {
+      const [catalogue, pendingCatalogue] = await Promise.all([
+        ensureFilingCatalogue(),
+        ensureFilingCataloguePending(),
+      ]);
+      // Meds are fetched only when the catalogue actually has a medicine-exclusion guard set anywhere — the same
+      // "don't fetch what nothing needs" doctrine as computeProfileBlockers' own legacy meds check below. A fetch
+      // failure fails CLOSED (adds a blocker) exactly like that legacy check, rather than silently skipping it.
+      const anyMedGuard =
+        catalogue &&
+        catalogue.filing &&
+        Array.isArray(catalogue.filing.guards) &&
+        catalogue.filing.guards.some((g) => Array.isArray(g.excludeIfMeds) && g.excludeIfMeds.length);
+      const extraBlockers = [];
+      let meds;
+      if (anyMedGuard) {
+        meds = await loadMeds(rs.report.patientUuid);
+        if (meds === null) extraBlockers.push('could not check this patient’s medications — file manually');
+      }
+      const catResult = LFC.evaluateFilingCatalogue(rs.report, catalogue, {
+        extraText: document.body ? document.body.textContent : '',
+        meds,
+        pendingCatalogue,
+      });
+      const combined = LFG.combineFilingBlockers([...legacyBlockers, ...extraBlockers], catResult);
+      return {
+        blockers: combined.blockers,
+        engine: combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',
+        // Structured data for the "whitelist this comment" UI (see renderCatalogueWhitelistBox) — only meaningful
+        // when the catalogue actually evaluated (catResult.ok); never carried into the shadow log.
+        catalogueUnresolvedComments:
+          catResult && catResult.ok && Array.isArray(catResult.unresolvedComments) ? catResult.unresolvedComments : [],
+      };
+    } catch (_) {
+      // combining must never break the real gate — fall back to legacy blockers alone.
+      return { blockers: legacyBlockers, engine: 'catalogue-fallback', catalogueUnresolvedComments: [] };
+    }
+  }
 
   // De-duped per taskUuid (in-memory, this page load only) against evaluateGate()'s own comment above it: that
   // function re-runs on every DOM mutation the page observes, often more than once a second — writing to
@@ -829,10 +948,11 @@
   const _shadowSignatures = new Map(); // taskUuid -> last-written JSON signature
   function runFilingShadow(rs, legacyBlockers) {
     if (!LFC || !LFG || !rs || !rs.report) return;
-    ensureFilingCatalogue()
-      .then((catalogue) => {
+    Promise.all([ensureFilingCatalogue(), ensureFilingCataloguePending()])
+      .then(([catalogue, pendingCatalogue]) => {
         const catResult = LFC.evaluateFilingCatalogue(rs.report, catalogue, {
           extraText: document.body ? document.body.textContent : '',
+          pendingCatalogue,
           // meds are deliberately NOT fetched here — this is observational only, and a medicine-exclusion fetch on
           // every gate evaluation would add a network call to a path that today changes nothing. The shadow log
           // will under-count medicine-exclusion divergence until this is revisited; every other check still runs.
@@ -865,7 +985,7 @@
     return el ? el.textContent : '';
   }
 
-  function recordAudit(profile, res, rs) {
+  function recordAudit(profile, res, rs, filingEngine) {
     try {
       if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
       const report = rs && rs.report;
@@ -882,6 +1002,9 @@
         filed: res.filed,
         completed: res.completed,
         messagePrepared: !!res.preparedMessage,
+        // Phase E stage E2 — which engine's verdict actually gated this filing: 'legacy', 'catalogue' (opted in and
+        // it contributed), or 'catalogue-fallback' (opted in but unusable this time, e.g. catalogue unreadable).
+        engine: filingEngine || 'legacy',
       };
       chrome.storage.local.get(AUDIT_KEY, (r) => {
         const arr = Array.isArray(r[AUDIT_KEY]) ? r[AUDIT_KEY] : [];
@@ -929,10 +1052,23 @@
   // each comment needs attributing to whichever of them actually owns it
   // (see profilesOwningResult / renderWhitelistBox).
   let currentMatchedProfiles = [];
+  // The REAL legacy profile match (null when none fits) — separate from currentProfile, which may hold a synthetic
+  // catalogue-only display profile (see evaluateGate). Blocker computation (effectiveScore/computeProfileBlockers)
+  // must always use THIS, never the synthetic one: those functions gracefully no-op on a null/absent profile, but
+  // a truthy profile object with no .analytes would make unrecognisedAnalyteBlockers flag every single result as
+  // unrecognised — the opposite of what a catalogue-only report should get.
+  let currentLegacyProfile = null;
   let whitelistBusy = false;
   // Last-rendered whitelist-box content signature — see renderWhitelistBox's
   // idempotent-rebuild comment. null whenever the box is hidden/empty.
   let whitelistSignature = null;
+  // A SEPARATE box for catalogue-engine comment whitelisting (Nick, 2026-09-25) — different target ("this lab's
+  // report group", via OV.setFilingGroup) and different persistence (labcatalogue.practice, not labfiling.profiles)
+  // from the legacy whitelist box above, so kept as its own element/signature/busy-flag rather than entangling two
+  // very different data shapes into one.
+  let catalogueWhitelistBox = null;
+  let catalogueWhitelistSignature = null;
+  let catalogueWhitelistBusy = false;
 
   function el(tag, className, text) {
     const n = document.createElement(tag);
@@ -952,6 +1088,7 @@
     titleEl = el('div', 'chlf-title');
     subEl = el('div', 'chlf-sub');
     whitelistBox = el('div', 'chlf-whitelist chlf-hidden');
+    catalogueWhitelistBox = el('div', 'chlf-whitelist chlf-hidden');
 
     const actions = el('div', 'chlf-actions');
     btn = el('button', 'chlf-primary');
@@ -973,6 +1110,7 @@
     host.appendChild(titleEl);
     host.appendChild(subEl);
     host.appendChild(whitelistBox);
+    host.appendChild(catalogueWhitelistBox);
     host.appendChild(actions);
     host.appendChild(foot);
 
@@ -1053,7 +1191,7 @@
   // cannot pass (out-of-range, free text, a guard tripped). The card NAMES the rule
   // and shows WHY inline — so the clinician sees the feature ran and deliberately
   // declined, rather than seeing nothing or a silent no-op.
-  function showBlockedHint(blockers, profile, commentedResults, matchedProfiles) {
+  function showBlockedHint(blockers, profile, commentedResults, matchedProfiles, catalogueUnresolvedComments) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
     host.className = 'chlf-card chlf-blocked';
@@ -1067,6 +1205,7 @@
     // Still allow opting this patient out, even on the not-offered state.
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
     renderWhitelistBox(commentedResults, matchedProfiles);
+    renderCatalogueWhitelistBox(catalogueUnresolvedComments);
     host.classList.remove('chlf-hidden');
   }
 
@@ -1163,6 +1302,161 @@
     checks.forEach((c) => (c.checkbox.onchange = syncButtonVisibility));
   }
 
+  // Same idea as renderWhitelistBox above, for the CATALOGUE engine's per-lab-x-heading comment whitelist
+  // (`filing.groups[].allowComments`, Options → Investigations) instead of a legacy profile's — different target,
+  // different save mechanism, so a separate box rather than entangling the two very different data shapes together.
+  function renderCatalogueWhitelistBox(comments) {
+    if (!catalogueWhitelistBox) return;
+    const list = Array.isArray(comments) ? comments : [];
+    // Dedupe by (lab, heading, residue) — several results in one group can carry the same comment.
+    const seen = new Set();
+    const rows = [];
+    for (const c of list) {
+      if (!c || !c.residue || !c.labId || !c.heading) continue;
+      const key = c.labId + '|' + norm(c.heading) + '|' + norm(c.residue);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push(c);
+    }
+    if (!rows.length) {
+      catalogueWhitelistBox.classList.add('chlf-hidden');
+      catalogueWhitelistBox.innerHTML = '';
+      catalogueWhitelistSignature = null;
+      return;
+    }
+    // Same idempotent-rebuild reason as renderWhitelistBox — never wipe a checked box or Save button mid-click.
+    const signature = JSON.stringify(rows.map((c) => [c.labId, c.heading, c.residue, c.name]));
+    if (signature === catalogueWhitelistSignature) return;
+    catalogueWhitelistSignature = signature;
+    catalogueWhitelistBox.innerHTML = '';
+    catalogueWhitelistBox.classList.remove('chlf-hidden');
+    catalogueWhitelistBox.appendChild(
+      el(
+        'div',
+        'chlf-wl-intro',
+        'Recognise a comment below? Whitelist it for this lab’s report group on the Investigations page.'
+      )
+    );
+    const checks = [];
+    rows.forEach((c) => {
+      const row = el('label', 'chlf-wl-row');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      row.appendChild(cb);
+      const text = el('span', 'chlf-wl-text');
+      text.appendChild(el('strong', null, c.name + ': '));
+      text.appendChild(document.createTextNode('“' + c.residue + '”'));
+      text.appendChild(el('span', 'chlf-wl-target', ' → ' + c.heading));
+      row.appendChild(text);
+      catalogueWhitelistBox.appendChild(row);
+      checks.push({ checkbox: cb, residue: c.residue, labId: c.labId, heading: c.heading });
+    });
+    const saveBtn = el('button', 'chlf-wl-save chlf-hidden', 'Save & send back for review');
+    saveBtn.type = 'button';
+    saveBtn.onclick = () => whitelistSelectedCatalogueComments(checks, saveBtn);
+    catalogueWhitelistBox.appendChild(saveBtn);
+    const note = el(
+      'div',
+      'chlf-wl-note',
+      'Saves to the report group it belongs to and sends it back to awaiting review — re-approve on the Investigations page before it can file anything again.'
+    );
+    catalogueWhitelistBox.appendChild(note);
+    const syncButtonVisibility = () => {
+      saveBtn.classList.toggle('chlf-hidden', !checks.some((c) => c.checkbox.checked));
+    };
+    checks.forEach((c) => (c.checkbox.onchange = syncButtonVisibility));
+  }
+
+  // Writes each checked residue into its (lab, heading) report group's allowComments via OV.setFilingGroup —
+  // enabled:false is set explicitly (same safety posture as whitelistSelectedComments below: ANY content change
+  // sends the group back to awaiting review AND switches it off, never leaves it silently live under new terms).
+  // Grouped by (lab, heading) so a group targeted by several checked comments gets ONE write, not several
+  // overwriting each other.
+  async function whitelistSelectedCatalogueComments(checks, saveBtn) {
+    if (catalogueWhitelistBusy) return;
+    const ticked = (checks || []).filter((c) => c.checkbox.checked && c.labId && c.heading);
+    if (!ticked.length) return;
+    if (!LF || !OV || typeof window.labcatalogueLoadEffective !== 'function' || typeof window.labcatalogueSaveOverlay !== 'function') {
+      toast('Could not save — extension utilities not loaded.', 'err');
+      return;
+    }
+    // A comment that may not be whitelisted (too short / generic, or over the length limit) is refused with the
+    // reason — never silently shortened or dropped, same rule as the legacy whitelist save.
+    const refused = ticked
+      .map((c) => ({ c, why: typeof LF.allowCommentProblem === 'function' ? LF.allowCommentProblem(c.residue) : '' }))
+      .filter((x) => x.why);
+    if (refused.length) {
+      toast('Not saved — ' + refused[0].c.residue.trim().slice(0, 40) + '… ' + refused[0].why + '.', 'err');
+      return;
+    }
+    const byGroup = new Map(); // "labId|heading" -> { labId, heading, residues: [] }
+    ticked.forEach((c) => {
+      const key = c.labId + '|' + c.heading;
+      if (!byGroup.has(key)) byGroup.set(key, { labId: c.labId, heading: c.heading, residues: [] });
+      byGroup.get(key).residues.push(c.residue);
+    });
+    catalogueWhitelistBusy = true;
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+    try {
+      const eff = await window.labcatalogueLoadEffective({ includeUnreviewed: true });
+      if (!eff || !eff.builtin || !eff.overlay) {
+        toast('Could not save — the catalogue could not be read.', 'err');
+        return;
+      }
+      let overlay = eff.overlay;
+      const updatedHeadings = [];
+      const today = new Date().toISOString().slice(0, 10);
+      for (const { labId, heading, residues } of byGroup.values()) {
+        const existing = overlay.filing.groups.find((g) => g.lab === labId && norm(g.heading) === norm(heading));
+        const existingAllow = existing && Array.isArray(existing.allowComments) ? existing.allowComments : [];
+        const existingNorm = new Set(existingAllow.map((s) => norm(s)));
+        const toAdd = residues.filter((t) => !existingNorm.has(norm(t)));
+        try {
+          overlay = OV.setFilingGroup(
+            eff.builtin,
+            overlay,
+            {
+              lab: labId,
+              heading,
+              enabled: false,
+              allowComments: existingAllow.concat(toAdd),
+              overrideLabFlag: !!(existing && existing.overrideLabFlag),
+            },
+            today
+          );
+          updatedHeadings.push(heading);
+        } catch (e) {
+          log('catalogue whitelist: could not save for', heading, e && e.message);
+        }
+      }
+      if (!updatedHeadings.length) {
+        toast('Could not save — the matching report group(s) could not be found.', 'err');
+        return;
+      }
+      await window.labcatalogueSaveOverlay(overlay);
+      const namesStr = updatedHeadings.map((n) => '“' + n + '”').join(', ');
+      toast(namesStr + ' updated and sent back for review on the Investigations page.', 'ok');
+      // Unlike the legacy save (STORE_PROFILES, which the OTHER storage listener already re-evaluates on), a write
+      // to labcatalogue.practice only invalidates the cached catalogue (see the resetFilingCatalogue listener) — it
+      // does not itself trigger a re-render. Ask for one explicitly rather than waiting on the next incidental DOM
+      // mutation from Medicus's own SPA.
+      scheduleEval();
+      return;
+    } catch (e) {
+      console.error('[LabFiling] catalogue whitelist save threw:', e);
+      toast('Could not save the whitelist entry: ' + (e && e.message ? e.message : 'unknown error'), 'err');
+    } finally {
+      catalogueWhitelistBusy = false;
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save & send back for review';
+      }
+    }
+  }
+
   // Writes each checked residue text into every one of its target profiles'
   // allowComments (never the synthetic merged object) and forces each of
   // those profiles back to enabled:false, reviewed:false — same "any content
@@ -1255,6 +1549,7 @@
   }
   function hideButton() {
     currentProfile = null;
+    currentLegacyProfile = null;
     currentMatchedProfiles = [];
     if (host) host.classList.add('chlf-hidden');
     if (subEl) subEl.title = '';
@@ -1262,6 +1557,11 @@
       whitelistBox.classList.add('chlf-hidden');
       whitelistBox.innerHTML = '';
       whitelistSignature = null;
+    }
+    if (catalogueWhitelistBox) {
+      catalogueWhitelistBox.classList.add('chlf-hidden');
+      catalogueWhitelistBox.innerHTML = '';
+      catalogueWhitelistSignature = null;
     }
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     if (suppressLink) suppressLink.classList.add('chlf-hidden');
@@ -1301,16 +1601,23 @@
       // — an irreversible file must act on live data, and must clear every
       // fail-closed blocker, not just numeric severity.
       const rs = await loadReportSeverity(true);
-      const profile = currentProfile;
-      const eff = effectiveScore(rs, profile);
+      const profile = currentProfile; // display/DOM-interaction profile — may be the catalogue-only synthetic one
+      const legacyProfile = currentLegacyProfile; // the REAL legacy match, null when none — see its own comment
+      // Same catalogue fallback effectiveScore() takes in evaluateGate() — see that function's own comment. Cached,
+      // so fetching it again here (rather than threading it through from evaluateGate's poll) costs nothing.
+      const catalogueForAction = !legacyProfile && filingEngineWanted() ? await ensureFilingCatalogue() : null;
+      const eff = effectiveScore(rs, legacyProfile, catalogueForAction);
       const blockers = rs
-        ? (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile))
+        ? (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, legacyProfile))
         : ['could not read the result'];
-      // Shadow only (Phase E stage E1) — this is the click-time, fresh-fetched re-verification, the moment closest
+      // Shadow log (Phase E stage E1) — this is the click-time, fresh-fetched re-verification, the moment closest
       // to a real filing decision, so it is worth its own shadow entry alongside evaluateGate()'s poll-time one.
       runFilingShadow(rs, blockers);
-      if (!rs || blockers.length) {
-        toast('Not filing — ' + (blockers[0] || 'review manually') + '. Review manually.', 'err');
+      // Phase E stage E2 — same union-only combine as evaluateGate(), re-run here on the FRESH fetch: this is the
+      // check that actually decides whether filing proceeds, so it must never disagree with what was offered.
+      const combined = rs ? await combineWithCatalogueIfWanted(rs, blockers) : { blockers, engine: 'legacy' };
+      if (!rs || combined.blockers.length) {
+        toast('Not filing — ' + (combined.blockers[0] || 'review manually') + '. Review manually.', 'err');
         hideButton();
         return;
       }
@@ -1380,7 +1687,7 @@
         if (fileBtn) highlight(fileBtn);
         toast('Marked ' + res.marked + ' subheading(s) normal. Review, then click File.', 'ok');
       } else if (res.filed) {
-        recordAudit(profile, res, rs);
+        recordAudit(profile, res, rs, combined.engine);
         // Audit R10: the macro observed its own clicks, not a Medicus
         // confirmation — the copy must not claim the filing completed.
         toast(
@@ -1418,19 +1725,29 @@
     // Practice kill switch — one config flag disables every offer instantly,
     // without touching individual profiles. The escape hatch a practice can pull.
     if (config && config.killSwitch === true) {
+      log('gate: hidden — kill switch is on');
       hideButton();
       return;
     }
     if (!FILING_URL_RE.test(location.pathname)) {
+      log('gate: hidden — not a filing-screen URL', location.pathname);
       hideButton();
       return;
     }
-    if (!profiles.some((p) => p && p.enabled === true)) {
+    const engineWanted = filingEngineWanted();
+    log('gate: filingEngine =', filingEnginePref, '| enabled legacy profiles =', profiles.filter((p) => p && p.enabled).length);
+    // The catalogue engine can operate entirely on its own, even with ZERO enabled legacy profiles (Nick,
+    // 2026-09-25: deleting every legacy profile to test the catalogue alone revealed this early exit was blocking
+    // it before the catalogue was ever consulted — there was no way to test "catalogue only" at all). With neither
+    // a legacy profile nor the catalogue engine opted in, there is genuinely nothing that can judge this screen.
+    if (!profiles.some((p) => p && p.enabled === true) && !engineWanted) {
+      log('gate: hidden — no enabled legacy profile, and filingEngine is not "catalogue"');
       hideButton();
       return;
     }
     const rs = await loadReportSeverity();
     if (!rs) {
+      log('gate: hidden — loadReportSeverity() returned nothing (wrong screen, fetch failed, or empty report)');
       hideButton();
       return;
     }
@@ -1439,45 +1756,85 @@
     // and ONE shared File button — so merge EVERY matching profile into one effective
     // profile (union of parameters/guards) and act on the whole task as a unit.
     const merge = LF && LF.mergeProfilesForReport(profiles, rs.report);
-    const profile = merge && merge.effective;
-    if (!profile) {
-      hideButton();
-      return;
-    }
+    const profile = merge && merge.effective; // null is fine now — the catalogue may still cover this screen
+    currentLegacyProfile = profile;
     // The REAL stored profiles (real id, own storage row), every one that
     // matched — renderWhitelistBox attributes each comment to whichever of
     // them actually owns it (see profilesOwningResult).
-    currentMatchedProfiles = Array.isArray(merge.matched) ? merge.matched : [];
-    // The File control must actually be on this screen, else the profile doesn't fit.
+    currentMatchedProfiles = Array.isArray(merge && merge.matched) ? merge.matched : [];
+    log('gate: legacy profile matched =', !!profile, profile && profile.name);
+    // No legacy profile fits — if the catalogue engine is opted in, fall back to ITS practice-wide screen wording
+    // (Options → Investigations) instead of a profile's. If the catalogue can't even be read right now, there is
+    // nothing to search the DOM for — hide rather than guess.
+    let catalogueForScreen = null;
+    if (!profile) {
+      if (!engineWanted) {
+        log('gate: hidden — no legacy profile matched this report, and filingEngine is not "catalogue"');
+        hideButton();
+        return;
+      }
+      catalogueForScreen = await ensureFilingCatalogue();
+      if (!catalogueForScreen) {
+        log('gate: hidden — no legacy profile, and ensureFilingCatalogue() returned nothing (unreadable/invalid catalogue, or window.labcatalogueLoadEffective is missing — check the manifest/load order)');
+        hideButton();
+        return;
+      }
+      log('gate: no legacy profile — proceeding on the catalogue alone');
+    }
+    const screenText = profile ? profile.filing : catalogueScreenText(catalogueForScreen);
+    log('gate: searching the DOM for a File button with text', JSON.stringify(screenText.fileButtonText));
+    // The File control must actually be on this screen, else nothing here fits.
     const fileBtn = findByText(
       document.body,
       ['button', '[role="button"]', 'input[type="submit"]'],
-      profile.filing.fileButtonText
+      screenText.fileButtonText
     );
     if (!fileBtn) {
+      log(
+        'gate: hidden — no element on this screen matched that exact File-button text. If the catalogue engine is standing in for a legacy profile, this text comes from Options → Investigations\' Medicus filing-screen wording (or the standard default "File results") — check it matches this screen exactly.'
+      );
       hideButton();
       return;
     }
-    // A profile fits and the screen is a filing screen — but if anything the gate
+    log('gate: File button found — evaluating blockers');
+    // Something fits and the screen is a filing screen — but if anything the gate
     // cannot judge is present (free text, unmatched, no rules, an abnormal value),
     // explain WHY auto-file is not offered rather than silently hiding (the nurse
     // and locum personas asked to see the not-offered state, not just the success
-    // one). Otherwise show the action button. The profile's OWN per-analyte
+    // one). Otherwise show the action button. A matched profile's OWN per-analyte
     // parameters (clinician-set ranges, incl. un-ranged analytes like HbA1c) are
-    // checked here on top of the generic blockers.
-    const eff = effectiveScore(rs, profile);
+    // checked here on top of the generic blockers; with no profile, only the
+    // generic (profile-agnostic) severity/free-text/comment blockers apply, same
+    // baseline every screen gets regardless of engine.
+    const eff = effectiveScore(rs, profile, catalogueForScreen);
     const blockers = (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile));
-    // Shadow only (Phase E stage E1) — observes, never gates. Fire-and-forget: must not slow down or affect what
-    // follows, and runFilingShadow() never throws out of its own promise chain.
+    log('gate: baseline/legacy blockers =', blockers);
+    // Shadow log (Phase E stage E1) — always runs, regardless of engine, as a standing comparison. Fire-and-forget:
+    // must not slow down or affect what follows, and runFilingShadow() never throws out of its own promise chain.
     runFilingShadow(rs, blockers);
-    if (blockers.length) {
+    // Phase E stage E2 — union-only combine with the catalogue engine when opted in (see combineWithCatalogueIfWanted).
+    const combined = await combineWithCatalogueIfWanted(rs, blockers);
+    log('gate: combined engine =', combined.engine, '| combined blockers =', combined.blockers);
+    if (combined.blockers.length) {
       const commentedResults = LF
         ? LF.unresolvedCommentedResults(eff.report, profile, currentMatchedProfiles)
         : [];
-      showBlockedHint(blockers, profile, commentedResults, currentMatchedProfiles);
+      showBlockedHint(combined.blockers, profile, commentedResults, currentMatchedProfiles, combined.catalogueUnresolvedComments);
       return;
     }
-    showButton(profile);
+    // A profile-shaped object for the DOM-interaction/display code below (showButton, fileAllNormal) is required
+    // even with no legacy profile — those read .name/.commitMode/.filing directly. Deliberately carries NOTHING
+    // legacy-specific (no .analytes/.parameters/.excludeIfMeds/.suppressIfText/.trend/messaging): those must stay
+    // absent so the blocker functions above keep treating this as "no legacy profile", not "an empty one".
+    // commitMode 'confirm' (not the 'manual' pre-fill-only default) — Nick, 2026-09-25: catalogue-only mode has no
+    // profile setting to read a preference from, and defaulting to 'manual' forced a double click every time (the
+    // suite's own button pre-fills, then the clinician must ALSO press Medicus's own File button). 'confirm' is an
+    // already-reviewed legacy mode, not a new one: one click on the suite's button, one window.confirm() the
+    // clinician reads and presses OK on, then the macro itself clicks File — a human still presses to file, just
+    // once, the same as this mode already works for any legacy profile set to it.
+    const displayProfile = profile || { name: 'Lab Result Catalogue', commitMode: 'confirm', filing: screenText };
+    log('gate: shown — nothing blocked', displayProfile.name);
+    showButton(displayProfile);
   }
 
   // Injected into the Medicus page (no access to the suite's CSS tokens), so values

@@ -364,9 +364,8 @@
       // a creatinine that falls is; the opposite movements are what must never be filed automatically.
       trendDirection: trend === null ? 'any' : dir,
       excludeIfMeds: cleanTerms(v.excludeIfMeds, w + '.excludeIfMeds', 2, 50),
-      overrideLabFlag: v.overrideLabFlag === true,
     };
-    if (out.trendMaxDeltaPct === null && !out.excludeIfMeds.length && !out.overrideLabFlag) fail(w + ' sets no guard');
+    if (out.trendMaxDeltaPct === null && !out.excludeIfMeds.length) fail(w + ' sets no guard');
     out.provenance = sanitiseProvenance(v.provenance);
     return out;
   }
@@ -406,8 +405,12 @@
       allowComments: [...new Set(allow)],
       // assisted filing ON for this report group (Medicus files a group, never a single result)
       enabled: v.enabled === true,
+      // the practice's own normal range overrides the LAB's out-of-range flag for every result this group covers — one
+      // decision per test at a lab (moved off the per-result guard, 2026-09-25: buried per-analyte was unfindable, and a
+      // multi-result test needed it ticked once per result). See engine/lab-filing-catalogue.js's applyCatalogueOverrides.
+      overrideLabFlag: v.overrideLabFlag === true,
     };
-    if (!out.allowComments.length && !out.enabled) fail(w + ' sets nothing');
+    if (!out.allowComments.length && !out.enabled && !out.overrideLabFlag) fail(w + ' sets nothing');
     out.provenance = sanitiseProvenance(v.provenance);
     return out;
   }
@@ -700,7 +703,7 @@
     );
   }
 
-  // Guards, per RESULT x LAB: spec = { result, lab, trendMaxDeltaPct, trendDirection, excludeIfMeds, overrideLabFlag }.
+  // Guards, per RESULT x LAB: spec = { result, lab, trendMaxDeltaPct, trendDirection, excludeIfMeds }.
   function setFilingGuards(builtin, overlay, spec, today) {
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
@@ -711,8 +714,7 @@
     const key = filingGuardKey(spec);
     const empty =
       finiteOrNull(spec.trendMaxDeltaPct, 'trendMaxDeltaPct') === null &&
-      !cleanTerms(spec.excludeIfMeds, 'excludeIfMeds', 2, 50).length &&
-      spec.overrideLabFlag !== true;
+      !cleanTerms(spec.excludeIfMeds, 'excludeIfMeds', 2, 50).length;
     if (empty) {
       o.filing.guards = o.filing.guards.filter((g) => filingGuardKey(g) !== key);
       return o;
@@ -736,7 +738,10 @@
     const known = asArr(lab.groupHeadings).some((g) => LC.norm(g.text) === LC.norm(spec.heading));
     if (!known) fail('"' + spec.heading + '" is not a report group heading recorded for ' + lab.name);
     const key = filingGroupKey(spec);
-    const empty = spec.enabled !== true && !asArr(spec.allowComments).some((x) => String(x || '').trim());
+    const empty =
+      spec.enabled !== true &&
+      spec.overrideLabFlag !== true &&
+      !asArr(spec.allowComments).some((x) => String(x || '').trim());
     if (empty) {
       o.filing.groups = o.filing.groups.filter((g) => filingGroupKey(g) !== key);
       return o;
@@ -838,7 +843,7 @@
     const LC = core();
     const inv = asArr(merged.investigations).find((i) => i.id === invId);
     const lab = asArr(merged.labs).find((l) => l.id === labId);
-    const out = { headings: [], groups: [], enabled: false, approved: false, pending: [] };
+    const out = { headings: [], groups: [], enabled: false, overrideLabFlag: false, approved: false, pending: [] };
     if (!inv || !lab) return out;
     out.headings = asArr(lab.groupHeadings)
       .filter((g) => asArr(g.identifies).includes(invId))
@@ -850,6 +855,10 @@
       out.groups.push({ heading: h, entry: e });
     }
     out.enabled = out.headings.length > 0 && out.groups.every((g) => g.entry && g.entry.enabled === true);
+    // whether the practice's own ranges override the lab's out-of-range flag for EVERY report group this test arrives in at
+    // this lab — one decision for the whole test, kept in sync across group entries by setFilingOverrideForTest below.
+    out.overrideLabFlag =
+      out.headings.length > 0 && out.groups.every((g) => g.entry && g.entry.overrideLabFlag === true);
     const need = [];
     for (const g of out.groups) if (g.entry) need.push(['groups', filingGroupKey(g.entry), g.entry, g.heading]);
     for (const r of overlay.filing.ranges)
@@ -883,6 +892,34 @@
           heading: g.heading,
           enabled: enabled === true,
           allowComments: cur.allowComments || [],
+          overrideLabFlag: cur.overrideLabFlag === true,
+        },
+        today
+      );
+    }
+    return o;
+  }
+
+  // Whether the practice's own ranges override the lab's out-of-range flag, for the WHOLE test at this lab — every report
+  // group it arrives in is kept in sync (H-081 control d, moved here from a per-result guard: Nick, 2026-09-25, "if I
+  // didn't find it having written this system, no chance of a mere user doing so" — a per-analyte toggle buried in each
+  // result's own Safety guards column was both unfindable and meant re-ticking it once per result of a multi-result test).
+  function setFilingOverrideForTest(builtin, overlay, invId, labId, overrideLabFlag, today) {
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const st = filingStateForTest(merged, overlay, invId, labId);
+    if (!st.headings.length) fail('this lab has no report group heading recorded for this test yet');
+    let o = safeClone(overlay);
+    for (const g of st.groups) {
+      const cur = g.entry || {};
+      o = setFilingGroup(
+        builtin,
+        o,
+        {
+          lab: labId,
+          heading: g.heading,
+          enabled: cur.enabled === true,
+          allowComments: cur.allowComments || [],
+          overrideLabFlag: overrideLabFlag === true,
         },
         today
       );
@@ -2422,6 +2459,7 @@
     setFilingSuppress,
     filingStateForTest,
     setFilingForTest,
+    setFilingOverrideForTest,
     approveFilingForTest,
     TREND_DIRECTIONS,
     approveFiling,

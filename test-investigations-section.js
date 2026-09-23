@@ -333,9 +333,8 @@ check(
   "each preset resets every toggle then sets just the one it names — \"show me X\" is a clean jump, not an accumulation of whatever was set before"
 );
 check(
-  /const score = \(d\) =>/.test(src) &&
-    /return out\.sort\(\(a, b\) => score\(b\) - score\(a\) \|\| a\.inv\.label\.localeCompare\(b\.inv\.label\)\)/.test(src),
-  'the list sorts needs-attention items first (by a weighted score across the four facets), alphabetically within the same score — not a flat alphabetical list'
+  /return out\.sort\(\(a, b\) => a\.inv\.label\.localeCompare\(b\.inv\.label\)\);/.test(src) && !/const score = \(d\) =>/.test(src),
+  'the list is plain alphabetical again — the needs-attention weighted sort tried 2026-09-24 was reverted 2026-09-25 ("in practice... they look random")'
 );
 check(/kindFilter/.test(src) && /Filter by sample/.test(src), 'the list can be filtered by sample type');
 check(

@@ -31,6 +31,10 @@ let _config = {};
 let _audit = [];
 let _resultRules = [];
 let _suppress = [];
+// Phase E stage E2 — lives in triagelens.config.prefs (NOT labfiling.config), for defaults.json governance and
+// practice-wide publishing (shared/io/practice-profile.js), same as Outstanding Requests' own engine pref. This is
+// the one setting on this page that persists into a DIFFERENT module's storage — see persistFilingEngine().
+let _filingEngine = 'legacy';
 
 let _editingId = null; // null | 'new' | profile id
 let _formSource = null; // 'llm' when the open form was filled from LLM JSON
@@ -126,6 +130,7 @@ async function init(el) {
 
   container.addEventListener('click', onClick);
   container.addEventListener('input', onInput);
+  container.addEventListener('change', onChange);
 
   _storageListener = (changes, area) => {
     if (area !== 'local') return;
@@ -170,6 +175,7 @@ async function loadState() {
   _suppress = Array.isArray(r['labfiling.suppress']) ? r['labfiling.suppress'] : [];
   const tc = r['triagelens.config'];
   _resultRules = tc && Array.isArray(tc.resultRules) ? tc.resultRules : [];
+  _filingEngine = tc && tc.prefs && tc.prefs.filingEngine === 'catalogue' ? 'catalogue' : 'legacy';
 }
 
 async function persistProfiles() {
@@ -179,6 +185,18 @@ async function persistProfiles() {
 async function persistConfig() {
   _ignoreNextChange = true;
   await chrome.storage.local.set({ 'labfiling.config': _config });
+}
+// Writes into triagelens.config, not labfiling.config — see _filingEngine's own comment for why. Reads the current
+// stored triagelens.config fresh rather than trusting our locally-cached copy, so an edit made on the Triage Lens
+// options page in the meantime is never clobbered — this page only ever touches the one pref it owns.
+async function persistFilingEngine(value) {
+  const engine = value === 'catalogue' ? 'catalogue' : 'legacy';
+  _ignoreNextChange = true;
+  const r = await chrome.storage.local.get('triagelens.config');
+  const tc = r['triagelens.config'] && typeof r['triagelens.config'] === 'object' ? r['triagelens.config'] : {};
+  const next = { ...tc, prefs: { ...(tc.prefs || {}), filingEngine: engine } };
+  await chrome.storage.local.set({ 'triagelens.config': next });
+  _filingEngine = engine;
 }
 async function persistSuppress() {
   _ignoreNextChange = true;
@@ -236,6 +254,31 @@ function renderToolbar() {
         <input type="checkbox" data-act="toggle-kill" ${killed ? 'checked' : ''}>
         <span><strong>Pause all auto-filing</strong> — practice kill switch. Hides the in-Medicus button everywhere instantly, without changing any profile.</span>
       </label>
+    </div>
+    ${renderFilingEngine()}`;
+}
+
+// Phase E stage E2 — opt-in engine choice, mirroring Outstanding Requests' own "Matching engine" pref
+// (content-scripts/triage-lens/options.html). UNION-ONLY when catalogue is chosen: the catalogue engine's
+// blockers are ADDED to the legacy ones, never used to remove one — it can only make filing MORE cautious than
+// today, never less (engine/lab-filing-gate.js's own contract). If the catalogue can't be read at the moment of a
+// filing check, that check silently falls back to legacy alone (recorded as 'catalogue-fallback' in the audit log,
+// never silently as if nothing had been chosen).
+function renderFilingEngine() {
+  const engine = _filingEngine === 'catalogue' ? 'catalogue' : 'legacy';
+  return `
+    <div class="lf-filing-engine">
+      <label class="lf-field">
+        <span>Filing engine</span>
+        <select data-act="set-filing-engine">
+          <option value="legacy" ${engine === 'legacy' ? 'selected' : ''}>Current (the profiles above)</option>
+          <option value="catalogue" ${engine === 'catalogue' ? 'selected' : ''}>Profiles above + Lab Result Catalogue (Options → Investigations)</option>
+        </select>
+      </label>
+      <small>The catalogue engine can only ADD reasons not to file — never remove one your profile above already
+        applies. It checks practice ranges, safety guards and comment whitelists set up per result on the
+        Investigations page, using only tests and labs approved there. If the catalogue can't be read when a report
+        is checked, that check falls back to the profile above alone.</small>
     </div>`;
 }
 
@@ -476,6 +519,15 @@ function onInput(ev) {
   // Live-update the patient-message enable hint, etc. (kept minimal — no churn.)
   if (ev.target && ev.target.id === 'lfMsgEnabled') {
     // no-op; saved on Save
+  }
+}
+
+async function onChange(ev) {
+  const el = ev.target && ev.target.closest && ev.target.closest('[data-act]');
+  if (!el) return;
+  if (el.dataset.act === 'set-filing-engine') {
+    await persistFilingEngine(el.value);
+    render();
   }
 }
 

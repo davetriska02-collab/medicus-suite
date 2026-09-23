@@ -55,7 +55,6 @@ const guardsSummary = (g) =>
           ? TREND_WORDS[g.trendDirection || 'any'] + ' by more than ' + g.trendMaxDeltaPct + '%'
           : '',
         g.excludeIfMeds.length ? 'not if on ' + g.excludeIfMeds.join(', ') : '',
-        g.overrideLabFlag ? 'range overrides lab flag' : '',
       ]
         .filter(Boolean)
         .join(' · ')
@@ -315,15 +314,9 @@ function visibleInvestigations() {
     if (!m.hit) continue;
     out.push({ ...d, via: m.via });
   }
-  // Needs-attention first (awaiting review, then no assisted filing, then no lab match, then no request match — each
-  // weighted so the most actionable gap surfaces highest), alphabetical within the same score. A search or an active
-  // toggle already narrows WHAT is shown; this decides the order of what's left (Nick, 2026-09-24: "re-sort the list").
-  const score = (d) =>
-    (d.needsReview ? 8 : 0) +
-    (!filingOverview(d.inv).on ? 4 : 0) +
-    (!hasLabMatch(d.inv) ? 2 : 0) +
-    (!hasRequestMatch(d.inv) ? 1 : 0);
-  return out.sort((a, b) => score(b) - score(a) || a.inv.label.localeCompare(b.inv.label));
+  // Plain alphabetical (Nick, 2026-09-25: the needs-attention weighted sort tried on 2026-09-24 "in practice...
+  // meaning they look random" — reverted). The four toggles + presets above are how you get to "what needs work".
+  return out.sort((a, b) => a.inv.label.localeCompare(b.inv.label));
 }
 
 // ── "Your practice": free text OR pulldown, the same control for every field ───────────────────────────────
@@ -1774,6 +1767,33 @@ function renderEditor(st, done) {
         status
       )
     );
+    // ONE decision for the whole test at this lab (H-081 control d) \u2014 moved here from a per-result guard, 2026-09-25:
+    // Nick, having written the system, still couldn't find it buried in each result's own Safety guards column.
+    const ovd = h('input', {
+      type: 'checkbox',
+      checked: state.overrideLabFlag,
+      'aria-label': 'Practice ranges override the lab flag for this test group from ' + fLabName,
+    });
+    ovd.addEventListener('change', async () => {
+      try {
+        await save(OV.setFilingOverrideForTest(S.builtin, S.overlay, st.id, fLab, ovd.checked), null);
+      } catch (err) {
+        alert(cleanErr(err));
+        redraw();
+      }
+    });
+    bar.appendChild(
+      h(
+        'div',
+        { class: 'inv-edit-line' },
+        h(
+          'label',
+          { class: 'lf-check' },
+          ovd,
+          ' The practice\u2019s own ranges override the lab\u2019s high / low flag for every result of this test (a value inside the range is treated as normal even if the lab flagged it)'
+        )
+      )
+    );
     if (state.enabled && state.pending.length) {
       const names = {
         groups: 'report group',
@@ -1959,6 +1979,7 @@ function renderEditor(st, done) {
               heading: gh.text,
               enabled: !!(e && e.enabled),
               allowComments: allow,
+              overrideLabFlag: !!(e && e.overrideLabFlag),
             }),
             null
           );
@@ -2245,7 +2266,6 @@ function renderGuardsEditor(r, labId, done) {
     trend: e && e.trendMaxDeltaPct != null ? String(e.trendMaxDeltaPct) : '',
     dir: (e && e.trendDirection) || 'any',
     meds: e ? [...e.excludeIfMeds] : [],
-    override: !!(e && e.overrideLabFlag),
     error: '',
   };
   let wrap;
@@ -2317,20 +2337,6 @@ function renderGuardsEditor(r, labId, done) {
         h('div', { class: 'inv-edit-line' }, med, btn('Add', addMed, 'lf-btn-sm'))
       )
     );
-    const ov = h('input', { type: 'checkbox', checked: st.override });
-    ov.addEventListener('change', () => (st.override = ov.checked));
-    w.appendChild(
-      editorRow(
-        'Lab flag',
-        null,
-        h(
-          'label',
-          { class: 'lf-check' },
-          ov,
-          ' The practice range overrides the lab\u2019s own high / low flag (a value inside the range is treated as normal even if the lab flagged it)'
-        )
-      )
-    );
     if (st.error) w.appendChild(h('div', { class: 'inv-error', text: st.error }));
     const foot = h('div', { class: 'inv-edit-foot' });
     foot.appendChild(
@@ -2353,7 +2359,6 @@ function renderGuardsEditor(r, labId, done) {
                 trendMaxDeltaPct: st.trend,
                 trendDirection: st.dir,
                 excludeIfMeds: st.meds,
-                overrideLabFlag: st.override,
               }),
               'Saved the safety guards for ' + r.label + ' at ' + labName + '.'
             );

@@ -248,15 +248,11 @@ console.log('\n--- safety guards: per result x lab, with the DIRECTION of a tren
     trendMaxDeltaPct: '20',
     trendDirection: 'down',
     excludeIfMeds: [' lithium ', 'methotrexate'],
-    overrideLabFlag: true,
   });
   const g = g1.filing.guards[0];
   check(
-    g.trendMaxDeltaPct === 20 &&
-      g.trendDirection === 'down' &&
-      g.excludeIfMeds.join() === 'lithium,methotrexate' &&
-      g.overrideLabFlag === true,
-    'a trend limit with its direction, medicine exclusions and the lab-flag override are stored, tidied'
+    g.trendMaxDeltaPct === 20 && g.trendDirection === 'down' && g.excludeIfMeds.join() === 'lithium,methotrexate',
+    'a trend limit with its direction and medicine exclusions are stored, tidied'
   );
   check(
     OV.setFilingGuards(builtin, OV.emptyOverlay(), { ...G, trendMaxDeltaPct: 20 }).filing.guards[0].trendDirection ===
@@ -287,7 +283,6 @@ console.log('\n--- safety guards: per result x lab, with the DIRECTION of a tren
       trendMaxDeltaPct: 20,
       trendDirection: 'up',
       excludeIfMeds: ['lithium', 'methotrexate'],
-      overrideLabFlag: true,
     }).filing.guards[0].provenance.reviewed === false,
     'changing only the direction withdraws the approval'
   );
@@ -297,13 +292,11 @@ console.log('\n--- safety guards: per result x lab, with the DIRECTION of a tren
       trendMaxDeltaPct: 20,
       trendDirection: 'down',
       excludeIfMeds: ['lithium', 'methotrexate'],
-      overrideLabFlag: true,
     }).filing.guards[0].provenance.reviewed === true,
     'saving with nothing changed keeps the approval'
   );
   check(
-    OV.setFilingGuards(builtin, ap, { ...G, trendMaxDeltaPct: '', excludeIfMeds: [], overrideLabFlag: false }).filing
-      .guards.length === 0,
+    OV.setFilingGuards(builtin, ap, { ...G, trendMaxDeltaPct: '', excludeIfMeds: [] }).filing.guards.length === 0,
     'no guard set clears the entry'
   );
   check(
@@ -601,6 +594,57 @@ console.log('\n--- assisted filing for a TEST at a LAB: one switch, one approval
   check(
     bone.pending.every((p) => p.kind !== 'ranges'),
     'ALP is shared with the Bone profile: its (already approved) range is not pending there'
+  );
+}
+
+console.log(
+  '\n--- lab-flag override, per test at a lab: ONE decision on the report group, not per result (moved off the guard, Nick, 2026-09-25) ---'
+);
+{
+  const LFT = 'lft';
+  const merged = (ov) => inc(ov).catalogue;
+  const state = (ov) => OV.filingStateForTest(merged(ov), ov, LFT, LAB);
+  const e0 = OV.emptyOverlay();
+  check(state(e0).overrideLabFlag === false, 'off by default, before anything is set up');
+  check(
+    throwsWith(
+      () => OV.setFilingOverrideForTest(builtin, e0, 'ferritin', 'not-a-lab', true),
+      /no report group heading|unknown/
+    ),
+    'a test with no group at that lab cannot have the override set'
+  );
+  // setting the override before assisted filing is even switched on: creates the group entries (unapproved),
+  // override on, enabled left off — the two switches are independent
+  const withOverride = OV.setFilingOverrideForTest(builtin, e0, LFT, LAB, true);
+  const s1 = state(withOverride);
+  check(
+    s1.overrideLabFlag === true && s1.enabled === false,
+    'the override can be turned on with assisted filing still off — the two switches are independent'
+  );
+  check(
+    acting(withOverride).catalogue.filing === undefined,
+    'unapproved: the override does not act until the group is approved'
+  );
+  // switching assisted filing ON afterwards must not silently wipe the override that was already set
+  const on = OV.setFilingForTest(builtin, withOverride, LFT, LAB, true);
+  check(
+    state(on).overrideLabFlag === true && state(on).enabled === true,
+    'switching assisted filing on preserves an override already set on the group (the regression this test guards)'
+  );
+  const ap = OV.approveFilingForTest(builtin, on, LFT, LAB, 'Dr Test', '2026-09-22');
+  check(
+    acting(ap).catalogue.filing.groups.every((g) => g.overrideLabFlag === true),
+    'once approved, every report group this test arrives in at this lab carries the override'
+  );
+  // turning the override off afterwards must not silently wipe assisted filing being on
+  const overrideOff = OV.setFilingOverrideForTest(builtin, ap, LFT, LAB, false);
+  check(
+    state(overrideOff).overrideLabFlag === false && state(overrideOff).enabled === true,
+    'turning the override off preserves assisted filing staying on'
+  );
+  check(
+    state(overrideOff).approved === false && state(overrideOff).pending.every((p) => p.kind === 'groups'),
+    'changing the override reopens approval for the group(s), same as any other change to them'
   );
 }
 

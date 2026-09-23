@@ -75,9 +75,10 @@ console.log('\n--- golden shape ---');
 {
   const res = FC.evaluateFilingCatalogue(report([result()]), acting(baseOverlay()));
   check(
-    Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds',
-    'success shape is exactly { ok, blockers, reasonKinds, meta }'
+    Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds,unresolvedComments',
+    'success shape is exactly { ok, blockers, reasonKinds, meta, unresolvedComments }'
   );
+  check(Array.isArray(res.unresolvedComments) && res.unresolvedComments.length === 0, 'no unresolved comments on the golden path');
   check(
     Object.keys(res.meta).sort().join(',') === 'groupsUsed,labId,recognisedCount,unrecognisedCount',
     'meta shape is exactly { labId, recognisedCount, unrecognisedCount, groupsUsed }'
@@ -249,10 +250,12 @@ console.log('\n--- no practice range at all (numeric requires SOME basis to judg
 
 console.log('\n--- lab-flag override, off by default (H-081 control d) ---');
 {
-  const overlayWithGuard = (overrideLabFlag) => {
+  // overrideLabFlag lives on the test's report-group entry, not per result (moved there 2026-09-25) — one decision
+  // per test at a lab.
+  const overlayWithOverride = (overrideLabFlag) => {
     let o = baseOverlay();
-    o = OV.setFilingGuards(builtin, o, { result: ALP.result, lab: LAB, overrideLabFlag }, TODAY);
-    o = OV.approveFiling(o, 'guards', OV.filingGuardKey({ result: ALP.result, lab: LAB }), 'Dr Test', TODAY);
+    o = OV.setFilingGroup(builtin, o, { lab: LAB, heading: 'LFTs', enabled: true, overrideLabFlag }, TODAY);
+    o = OV.approveFiling(o, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'LFTs' }), 'Dr Test', TODAY);
     return o;
   };
   const defaultOff = FC.evaluateFilingCatalogue(
@@ -263,10 +266,13 @@ console.log('\n--- lab-flag override, off by default (H-081 control d) ---');
     defaultOff.ok && defaultOff.blockers.some((b) => /flagged by the lab/.test(b)),
     'in range by our own calc, but the lab flagged it, and override is not set -> still blocks'
   );
-  const explicitOn = FC.evaluateFilingCatalogue(report([result({ isAbove: true })]), acting(overlayWithGuard(true)));
+  const explicitOn = FC.evaluateFilingCatalogue(
+    report([result({ isAbove: true })]),
+    acting(overlayWithOverride(true))
+  );
   check(
     explicitOn.ok && explicitOn.blockers.length === 0,
-    'the same case with overrideLabFlag explicitly approved -> the practice range wins, clean'
+    'the same case with overrideLabFlag explicitly approved on the report group -> the practice range wins, clean'
   );
 }
 
@@ -351,6 +357,15 @@ console.log('\n--- comments, reused from the legacy whole-comment matcher ---');
     notAllowed.ok && notAllowed.blockers.some((b) => /carries a comment that isn't on the allowed list/.test(b)),
     'a comment not on the list blocks, and the reason quotes the residue'
   );
+  check(
+    notAllowed.ok &&
+      notAllowed.unresolvedComments.length === 1 &&
+      notAllowed.unresolvedComments[0].residue === 'Please repeat in 3 months, new finding' &&
+      notAllowed.unresolvedComments[0].labId === LAB &&
+      notAllowed.unresolvedComments[0].heading === 'LFTs',
+    'the unresolved comment is ALSO returned structured — name/residue/lab/heading — for a "whitelist this" UI to act on directly, not just embedded in a human sentence'
+  );
+  check(allowed.unresolvedComments.length === 0, 'an already-allowed comment produces no unresolved-comment entry');
   // "never offer to file" phrases are now ONE practice-wide list (2026-09-23), not per lab x group.
   let withBlockPhrase = OV.setFilingSuppress(o, { items: ['telephone result'] }, TODAY);
   withBlockPhrase = OV.approveFiling(withBlockPhrase, 'suppress', OV.filingSuppressKey(), 'Dr Test', TODAY);
@@ -420,6 +435,117 @@ console.log('\n--- fail-closed / never throws ---');
   check(
     FC.evaluateFilingCatalogue(report([result()]), acting(baseOverlay())).ok === true,
     'the happy path still works after all the fail-closed cases above'
+  );
+}
+
+console.log(
+  '\n--- pending (edited-but-not-yet-approved) range/guard must BLOCK, not silently fall back to the lab\'s own range (Nick, 2026-09-25) ---'
+);
+{
+  const pending = (overlay) => OV.mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+
+  // The group is still approved; only the RANGE is edited afterwards, so it alone goes back to awaiting approval.
+  let o = baseOverlay();
+  o = OV.setFilingRange(builtin, o, { ...ALP, low: 25, high: 125 }, TODAY); // withdraws the range's own approval
+  const cat = acting(o);
+  const pend = pending(o);
+  check(
+    !(cat.filing && cat.filing.ranges && cat.filing.ranges.some((r) => r.result === 'alp')),
+    'setup check: the acting (approved-only) catalogue no longer carries this range at all'
+  );
+  check(
+    pend.filing.ranges.some((r) => r.result === 'alp' && r.reviewed === false),
+    'setup check: the pending catalogue carries it, tagged reviewed:false'
+  );
+
+  const withoutPending = FC.evaluateFilingCatalogue(report([result()]), cat);
+  check(
+    withoutPending.ok && withoutPending.blockers.length === 0,
+    "without pendingCatalogue supplied, the old (unsafe) behaviour reproduces: the result's value (77) sits inside " +
+      "the LAB's own range (20-140) and isAbove/isBelow are both false, so nothing blocks — this is exactly the gap"
+  );
+
+  const withPending = FC.evaluateFilingCatalogue(report([result()]), cat, { pendingCatalogue: pend });
+  check(
+    withPending.ok && withPending.blockers.some((b) => /awaiting approval/.test(b)),
+    'WITH pendingCatalogue, the same report is blocked — a practice range edited after its group was approved is never silently treated as "nothing set"'
+  );
+  check(
+    withPending.reasonKinds.includes('pending-range'),
+    'the value-free reason kind (for the shadow log) says exactly why: pending-range'
+  );
+
+  // A guard, not a range, edited after approval — same treatment.
+  let o2 = baseOverlay();
+  o2 = OV.setFilingGuards(builtin, o2, { ...ALP, trendMaxDeltaPct: 20 }, TODAY);
+  const cat2 = acting(o2);
+  const pend2 = pending(o2);
+  const guardBlocked = FC.evaluateFilingCatalogue(report([result()]), cat2, { pendingCatalogue: pend2 });
+  check(
+    guardBlocked.ok && guardBlocked.reasonKinds.includes('pending-guard'),
+    'the same protection applies to a pending (unapproved) safety guard'
+  );
+
+  // A result with NO range/guard configured at all still falls back to the lab's own range cleanly — the fix only
+  // changes "configured but pending", never "never configured".
+  const neverConfigured = FC.evaluateFilingCatalogue(report([result()]), acting(baseOverlay()), {
+    pendingCatalogue: pending(baseOverlay()),
+  });
+  check(
+    neverConfigured.ok && neverConfigured.blockers.length === 0,
+    'a result with an approved range (the golden path) is completely unaffected — pendingCatalogue only ever adds a check for something that is genuinely pending, never for something already approved'
+  );
+}
+
+console.log(
+  '\n--- applyCatalogueOverrides: the report-group override must reach the baseline severity gate too (Nick, 2026-09-25; moved off the per-result guard onto the group, same day) ---'
+);
+{
+  // ALP flagged below by the lab, but the value (77) sits inside the approved practice range (30-130).
+  const flaggedResult = result({ isBelow: true, value: 77, rawValue: '77' });
+  const rep = report([flaggedResult]);
+
+  const noOverride = FC.applyCatalogueOverrides(rep, acting(baseOverlay()));
+  check(
+    noOverride.results[0].isBelow === true && !noOverride.results[0]._labFlagOverridden,
+    'with the override NOT set on the report group, the lab flag is left exactly alone — a practice range on its own is never enough (H-081 control d: override is opt-in)'
+  );
+
+  let o = baseOverlay();
+  o = OV.setFilingGroup(builtin, o, { lab: LAB, heading: 'LFTs', enabled: true, overrideLabFlag: true }, TODAY);
+  o = OV.approveFiling(o, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'LFTs' }), 'Dr Test', TODAY);
+  const withOverride = FC.applyCatalogueOverrides(rep, acting(o));
+  check(
+    withOverride.results[0].isBelow === false && withOverride.results[0].isAbove === false,
+    'with the group override set AND the value inside the practice range, the lab flag IS cleared — this is what lets the baseline severity re-score to level:none and the result actually auto-file'
+  );
+  check(withOverride.results[0]._labFlagOverridden === true, 'the override is marked, same traceability as the legacy applyParamOverrides');
+  check(withOverride !== rep && withOverride.results[0] !== flaggedResult, 'the input report/result are never mutated — a new copy is returned');
+
+  const urgent = FC.applyCatalogueOverrides(report([result({ isBelow: true, value: 77, urgent: true })]), acting(o));
+  check(urgent.results[0].isBelow === true, 'an urgent flag is NEVER cleared, even with the group override and a matching range — same bound as legacy');
+
+  const outOfRange = FC.applyCatalogueOverrides(report([result({ isBelow: true, value: 10, rawValue: '10' })]), acting(o));
+  check(
+    outOfRange.results[0].isBelow === true,
+    'a value genuinely outside the practice range is never cleared just because the group override is on — it only applies when the value is within bounds'
+  );
+
+  const censored = FC.applyCatalogueOverrides(
+    report([result({ isBelow: true, value: 77, rawValue: '77', comparator: '<' })]),
+    acting(o)
+  );
+  check(censored.results[0].isBelow === true, 'a comparator-censored value never has its lab flag cleared — the true value is only bounded, not equal, to the parse');
+
+  const wrongUnit = FC.applyCatalogueOverrides(
+    report([result({ isBelow: true, value: 77, rawValue: '77', unit: 'mg/dL' })]),
+    acting(o)
+  );
+  check(wrongUnit.results[0].isBelow === true, "a unit that does not positively match the practice range's own unit never clears a flag");
+
+  check(
+    FC.applyCatalogueOverrides(report([result()]), acting(o)).results[0].isAbove === false,
+    'a result the lab never flagged at all is untouched (nothing to clear) — same shape either way'
   );
 }
 

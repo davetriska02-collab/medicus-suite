@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.270.0] — 2026-09-25
+
+### Lab Filing on the Lab Result Catalogue — Phase E stage E2 cutover: catalogue-driven filing can now actually gate real filing (opt-in, still off by default)
+
+- **A new `filingEngine` preference** (Options → Lab Filing, default `legacy`, practice-profile published) lets the
+  catalogue engine's blockers actually combine with the legacy gate at filing time — union-only: the catalogue can
+  only ever ADD a blocker, never remove one the legacy gate already raised. Runs from both the poll that decides
+  what's offered and the click-time re-verification that decides what actually files, so the two can never disagree.
+- **Catalogue-only filing** — assisted filing now works with zero legacy Lab Filing profiles at all, driven entirely
+  by the Investigations page's own practice ranges, safety guards, lab-comment whitelists and report-group approvals.
+  Fixed along the way: the button was hiding itself before the catalogue engine was ever consulted whenever no
+  legacy profile was enabled; a crash when a null profile hit an unguarded field access; a comment whitelisted on
+  the Investigations page not reaching the suite's own baseline comment check with no legacy profile to fall back on;
+  and a lab-flag override not reaching the baseline severity gate, so an approved override could never actually
+  unblock a result.
+- **A pending (edited-but-not-yet-approved) practice range or safety guard now correctly blocks filing**, rather than
+  being silently indistinguishable from "never configured" and falling back to the lab's own range/flag.
+- **The lab-flag override (H-081 control d) moved from a per-result safety guard to one switch per test at a lab**,
+  in the "Assisted filing on…" bar — a per-analyte tickbox buried in each result's own Safety guards editor was hard
+  to find and needed re-ticking once per result of a multi-result test.
+- **Catalogue-only filing now completes in one click.** It previously only pre-filled the normal options and left the
+  clinician to also press Medicus's own File button; it now asks for one confirmation (listing every value, same as
+  a legacy profile already can) and files itself, same as "File all normal…" already works elsewhere.
+
 ## [v3.269.0] — 2026-09-24
 
 ### Investigations page: duplicate-result and duplicate-lab detection/merging, filter overhaul; Phase E gate + shadow log (still setup-only)

@@ -1,5 +1,5 @@
 {
-  "version": 26,
+  "version": 27,
   "rules": [
     {
       "id": "mh-crisis",
@@ -3700,7 +3700,8 @@
     "oirLookbackMonths": 0,
     "oirShowValueOnBadge": false,
     "oirDateFormat": "absolute",
-    "oirAuditLog": true
+    "oirAuditLog": true,
+    "filingEngine": "legacy"
   },
   "oirTests": [],
   "systemChips": {

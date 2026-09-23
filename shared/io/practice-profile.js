@@ -395,6 +395,14 @@ const PracticeProfile = (() => {
               const applyEngine = publishedEngine === 'legacy' || publishedEngine === 'catalogue';
               const engineChanged =
                 applyEngine && !(local.prefs && local.prefs.oirEngine === publishedEngine);
+              // Same practice-published discipline for the Lab Filing engine choice (Phase E, stage E2): one choice
+              // for the whole practice, not per PC, whitelisted values only, absent/unrecognised leaves the local
+              // choice alone. UNION-ONLY when catalogue: it can only add filing blockers, never remove one.
+              const publishedFilingEngine =
+                config.prefs && typeof config.prefs === 'object' ? config.prefs.filingEngine : undefined;
+              const applyFilingEngine = publishedFilingEngine === 'legacy' || publishedFilingEngine === 'catalogue';
+              const filingEngineChanged =
+                applyFilingEngine && !(local.prefs && local.prefs.filingEngine === publishedFilingEngine);
               // ── Retirement: CONTENT-AWARE, never a blind key filter ───────
               // An edited test is never merged in-place over an existing key
               // (that would risk silently clobbering a clinician's own local
@@ -488,9 +496,13 @@ const PracticeProfile = (() => {
                 }
               }
 
-              if (retiredSomething || addedSomething || updatedSomething || engineChanged) {
+              if (retiredSomething || addedSomething || updatedSomething || engineChanged || filingEngineChanged) {
                 const next = Object.assign({}, local, { oirTests: nextTests });
-                if (engineChanged) next.prefs = Object.assign({}, local.prefs || {}, { oirEngine: publishedEngine });
+                if (engineChanged || filingEngineChanged) {
+                  next.prefs = Object.assign({}, local.prefs || {});
+                  if (engineChanged) next.prefs.oirEngine = publishedEngine;
+                  if (filingEngineChanged) next.prefs.filingEngine = publishedFilingEngine;
+                }
                 await chrome.storage.local.set({ 'triagelens.config': next });
                 applied.push('triage');
               }
