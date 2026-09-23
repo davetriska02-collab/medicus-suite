@@ -318,8 +318,9 @@ const overlayWith = (extra) => ({ ...OV.emptyOverlay(), ...extra });
           provenance: prov(true),
         },
       ],
-      groups: [{ lab: 'lab-a', heading: 'LFTs', allowComments: [NOTE], suppressIfText: [], provenance: prov(true) }],
+      groups: [{ lab: 'lab-a', heading: 'LFTs', allowComments: [NOTE], provenance: prov(true) }],
       screen: [{ normalOptionText: 'Normal', fileButtonText: '', provenance: prov(true) }],
+      suppress: [{ items: ['telephone result'], provenance: prov(true) }],
       ...(extra || {}),
     });
     STORE = {
@@ -337,6 +338,7 @@ const overlayWith = (extra) => ({ ...OV.emptyOverlay(), ...extra });
           ],
           groups: [],
           screen: [],
+          suppress: [],
         }),
       }),
     };
@@ -347,16 +349,18 @@ const overlayWith = (extra) => ({ ...OV.emptyOverlay(), ...extra });
       'a local guard is never changed by a publish (its approval stands)'
     );
     check(
-      st.groups.length === 1 && st.screen.length === 1,
-      'published lab-comment settings and filing-screen wording are added'
+      st.groups.length === 1 && st.screen.length === 1 && st.suppress.length === 1,
+      'published lab-comment settings, filing-screen wording and the suppress-phrase list are added'
     );
     check(
-      st.groups[0].provenance.reviewed === false && st.screen[0].provenance.reviewed === false,
+      st.groups[0].provenance.reviewed === false &&
+        st.screen[0].provenance.reviewed === false &&
+        st.suppress[0].provenance.reviewed === false,
       '…unapproved: they act only once approved on this machine'
     );
     const exp = await IO.labcatalogueExport();
     check(
-      ['ranges', 'guards', 'groups', 'screen'].every((k) =>
+      ['ranges', 'guards', 'groups', 'screen', 'suppress'].every((k) =>
         exp.practice.filing[k].every((x) => x.provenance.reviewed === false && !('reviewedBy' in x.provenance))
       ),
       'a backup carries no approval of any kind'

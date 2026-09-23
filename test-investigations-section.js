@@ -195,10 +195,14 @@ check(
   'unlinked headings and unrecognised requests become tests through the scan module'
 );
 check(
-  /Keep as a group-and-results test/.test(src) &&
+  /Create a new test: "/.test(src) &&
     /Add to a test/.test(src) &&
     /New test from an unrecognised request/.test(src),
-  'each unlinked heading offers: new test from a request / existing test / group-and-results only'
+  'each unlinked heading offers: new test from a request / existing test / a new test named after the group itself'
+);
+check(
+  /Create a new test: "\$\{u\.heading\}"/.test(src),
+  'creating a new test from the group pre-fills its name from the lab’s own heading, not a placeholder'
 );
 check(/needs a request/.test(src), 'a test with no request wording is flagged');
 {
@@ -211,12 +215,127 @@ check(/needs a request/.test(src), 'a test with no request wording is flagged');
   );
 }
 
+console.log('\n── merging one lab into another, and no longer creating duplicates in the first place (2026-09-24) ──');
+check(
+  /If this is really the same lab as another one — a duplicate created by mistake — you can merge it by /.test(
+    src
+  ) &&
+    /OV\.mergeLab\(S\.builtin, S\.overlay, lab\.id, into\.id\)/.test(src) &&
+    /!isBuiltinLab \? labMergeBlock\(lab, labs\) : null/.test(src),
+  'a duplicate lab can be merged away from the labs list (search box), via the tested overlay operation — never offered for a built-in'
+);
 console.log('\n── merge, sample filter, matching board ──');
 check(
   /If this investigation is part of another test, you can move it to that card as one of the results for that test by /.test(
     src
   ) && /OV\.mergeInvestigation/.test(src),
   'the edit screen offers to move a test into another test (search box), via the tested overlay operation'
+);
+check(
+  /If this is really the same result as another one, just under a different name or code, you can merge it by /.test(
+    src
+  ) &&
+    /OV\.mergeResult/.test(src) &&
+    /!isBuiltinResult\) w\.appendChild\(resultMergeBlock/.test(src),
+  'a practice result can likewise be merged into another result (search box), via the tested overlay operation — never offered for a built-in'
+);
+check(
+  /SC\.similarResults\(S\.merged, r\.label, r\.id\)/.test(src) &&
+    /This might already exist as: /.test(src),
+  'a result editor computes similarity hints against the live catalogue and surfaces likely duplicates automatically'
+);
+check(
+  /Might be the same as: /.test(src) &&
+    /const stageMerge = \(fromId, intoR\)/.test(src) &&
+    (src.match(/stageMerge\(/g) || []).length >= 2,
+  "a test's own results table shows the same duplicate hint inline (not only inside the separate result editor), via one shared staging helper used by both the hint link and drag/drop"
+);
+check(
+  /st\.pendingMerges\.push\(/.test(src) &&
+    /for \(const pm of st\.pendingMerges\) \{\s*\n\s*o = OV\.mergeResult\(S\.builtin, o, pm\.fromId, pm\.intoId\)\.overlay;/.test(
+      src
+    ) &&
+    !/mergeTwoResults/.test(src),
+  'dragging or picking a merge only STAGES it — the actual OV.mergeResult only runs from persist(), right before the test is saved, so the card never closes on drop and the merge is gated behind an explicit save (Nick, 2026-09-23)'
+);
+check(
+  /Pending: will merge into /.test(src) && /Pending: will receive /.test(src) && /'undo'/.test(src),
+  'a pending merge is shown inline on both the source and target rows, with its own undo, before anything is saved'
+);
+check(
+  /nameCell\.draggable = true/.test(src) &&
+    /nameCell\.addEventListener\('dragstart'/.test(src) &&
+    /nameCell\.addEventListener\('drop'/.test(src) &&
+    /inv-rt-dragover/.test(src),
+  'dragging one result row onto another in the results table merges them — an alternative to clicking the hint link'
+);
+check(
+  /might already exist — use instead: /.test(src) &&
+    /inv-scan-duplike/.test(src) &&
+    /dupIndex\.byCode\.get\(r\.code\)/.test(src) &&
+    /it\.resultChoices\.set\(nk, c\.id\)/.test(src),
+  "the match-requests-to-lab-reports scan screen flags a report result that looks like an existing catalogue result too, before it is even added — with an actual action (pick the existing one) right there, not only a passive warning"
+);
+check(
+  /SC\.fillsFromProposals\(cat, \[prop\], null, it\.resultChoices\)/.test(src),
+  "a picked \"use existing result\" choice from the match board is threaded through to fillsFromProposals's resultChoices param when the ticked matches are applied"
+);
+console.log('\n── "it\'s not X": dismissing a similarity suggestion (2026-09-24, Nick) ──');
+check(
+  /async function dismissSimilarPairAction\(idA, idB\)/.test(src) &&
+    /OV\.dismissSimilarPair\(S\.overlay, idA, idB\)/.test(src),
+  'a shared helper records a rejected pairing via the tested pure overlay operation'
+);
+check(
+  (src.match(/dismissSimilarPairAction\(/g) || []).length >= 3,
+  "\"it's not X\" is offered everywhere a duplicate hint with a real result id on both sides is shown — the results table, the standalone result editor's filter, and the match board"
+);
+check(
+  /\.filter\(\s*\(c\) => !OV\.isSimilarPairDismissed\(S\.overlay, r\.id, c\.id\)\s*\)/.test(src),
+  "the results table's own hint filters out anything already dismissed for that result"
+);
+check(
+  /const rawResultPairId = \(name\) => 'name:' \+ LC\.norm\(name\)/.test(src) &&
+    /!OV\.isSimilarPairDismissed\(S\.overlay, pairId, c\.id\)/.test(src),
+  'the match board dismisses by a stable name-based pseudo-id, since a raw report result has no id of its own yet'
+);
+{
+  const rmb = (src.split('function resultMergeBlock')[1] || '').split(/\nfunction /)[0];
+  check(
+    rmb.length > 100 &&
+      /!OV\.isSimilarPairDismissed\(S\.overlay, r\.id, c\.id\)/.test(rmb) &&
+      !/dismissSimilarPairAction/.test(rmb) &&
+      /This popup's own toggle is purely local/.test(rmb),
+    "the standalone \"Edit result\" popup only FILTERS dismissed pairs, it does not offer its own \"it's not X\" button — that popup isn't tracked at the S level, so a save triggered from inside it risks silently closing it"
+  );
+}
+console.log('\n── tri-state list toggles + presets + needs-attention sort (2026-09-24, Nick) ──');
+check(
+  /toggles: \{ review: null, filing: null, labMatched: null, reqMatched: null \}/.test(src),
+  'four independent tri-state facets exist (any/yes/no), not one either/or radio choice'
+);
+check(
+  /const hasLabMatch = \(inv\) =>/.test(src) && /const hasRequestMatch = \(inv\) =>/.test(src),
+  'matched-to-lab-report and matched-to-Medicus-request are each their own yes/no question, answerable without opening a test'
+);
+check(
+  /t\.review !== null && d\.needsReview !== t\.review/.test(src) &&
+    /t\.filing !== null && filingOverview\(d\.inv\)\.on !== t\.filing/.test(src) &&
+    /t\.labMatched !== null && hasLabMatch\(d\.inv\) !== t\.labMatched/.test(src) &&
+    /t\.reqMatched !== null && hasRequestMatch\(d\.inv\) !== t\.reqMatched/.test(src),
+  'all four toggles are applied when building the visible list, and combine freely (any dimension left at "Any" does not filter)'
+);
+check(
+  /presetBtn\('which need matching to a Medicus request', \{ reqMatched: false \}\)/.test(src) &&
+    /presetBtn\('which need matching to a lab report', \{ labMatched: false \}\)/.test(src) &&
+    /presetBtn\('where assisted filing is not yet enabled', \{ filing: false \}\)/.test(src) &&
+    /S\.toggles = \{ review: null, filing: null, labMatched: null, reqMatched: null, \.\.\.set \}/.test(src),
+  "each preset resets every toggle then sets just the one it names — \"show me X\" is a clean jump, not an accumulation of whatever was set before"
+);
+check(
+  /const score = \(d\) =>/.test(src) &&
+    /return out\.sort\(\(a, b\) => score\(b\) - score\(a\) \|\| a\.inv\.label\.localeCompare\(b\.inv\.label\)\)/.test(src),
+  'the list sorts needs-attention items first (by a weighted score across the four facets), alphabetically within the same score — not a flat alphabetical list'
 );
 check(/kindFilter/.test(src) && /Filter by sample/.test(src), 'the list can be filtered by sample type');
 check(
@@ -231,6 +350,15 @@ check(
   /it\.checked = true; \/\/ dragging is a deliberate act/.test(src),
   'a dragged match is a deliberate act and is ticked; nothing is matched without one'
 );
+{
+  const gi = (src.split('function groupItem')[1] || '').split(/\nfunction /)[0];
+  const pickAt = gi.indexOf('Investigation group:');
+  const resultsLabelAt = gi.indexOf('Individual results in this group');
+  check(
+    pickAt >= 0 && resultsLabelAt >= 0 && pickAt < resultsLabelAt,
+    'the group-level match is labelled "Investigation group" and sits ABOVE the individual-result suggestions, which are labelled separately — the two kinds of match on the card are not confused (Nick, 2026-09-24)'
+  );
+}
 check(
   /filterLeft/.test(src) &&
     /filterRight/.test(src) &&
@@ -312,6 +440,97 @@ check(
 check(
   /S\.open\.delete\(S\.editing\)/.test(src),
   'finishing an edit returns the card to its summary (nothing is left stuck open)'
+);
+
+console.log('\n── "How it comes back from the lab": real headings kept separate from matching-only wordings (2026-09-23) ──');
+check(
+  /const realHeads = st\.heads\.filter\(\(x\) => x\.lab\)/.test(src) &&
+    /const otherWords = st\.heads\.filter\(\(x\) => !x\.lab\)/.test(src),
+  'the edit screen splits real per-lab headings from lab-neutral matching wordings instead of listing them together'
+);
+check(
+  /Other wordings that might match a heading/.test(src),
+  'the matching-only wordings are shown separately, labelled as not real report headings'
+);
+check(
+  /labWords\(x\.lab\)/.test(src) && !/labShort\(a\.lab\)\)/.test(src.match(/realHeadRow[\s\S]{0,600}/)?.[0] || ''),
+  'a real heading is labelled with the lab in words (respects any rename), never its org code'
+);
+check(
+  /OV\.setHeadingNote\(S\.builtin, S\.overlay, x\.lab, x\.text, noteIn\.value\)/.test(src),
+  'each real heading has its own editable note (e.g. "used when the set includes potassium"), saved via the pure helper'
+);
+check(
+  /lab: lab\.name \}\)/.test(src) && !/performerOrg \|\| lab\.name/.test(src),
+  'the read-only summary also shows the lab in words, not its org code (headingChips)'
+);
+
+console.log('\n── "never offer to file" phrases: ONE practice-wide list, not per lab x group (2026-09-23) ──');
+check(
+  !/suppressIfText/.test(src),
+  'the per-group suppress editor is gone from this page entirely — the concept moved to the catalogue overlay’s filing.suppress'
+);
+check(
+  /const filingSuppressLine = \(\)/.test(src) && /OV\.setFilingSuppress\(S\.overlay, \{ items: next \}\)/.test(src),
+  'one global suppress-phrase editor exists, saved via the pure helper'
+);
+check(
+  /bar\.appendChild\(filingSuppressLine\(\)\)/.test(src),
+  'it sits in the same assisted-filing bar as the Medicus wording — both are practice-wide, both shown once per test'
+);
+check(
+  /filingSuppressEntry = \(\) =>/.test(src),
+  'a small reader helper exists alongside filingGroupEntry/filingGuardEntry, matching the page’s own convention'
+);
+
+console.log('\n── collapsibles keep their state across a save/re-render (2026-09-24, Nick) ──');
+{
+  const detailsWithoutOpenState = (src.match(/h\('details',\s*\{\s*class:\s*'[^']+'\s*\}/g) || []).filter(
+    (m) => !/inv-changes|inv-problems/.test(m) // these two are deliberately always/conditionally open, not user-toggle state
+  );
+  check(
+    detailsWithoutOpenState.length === 0,
+    'every collapsible outside the deliberately state-driven ones tracks its own open/closed state — none of them ' +
+      'snap shut just because something elsewhere on the page triggered a save and a re-render'
+  );
+  check(
+    /S\.labsOpen/.test(src) && /S\.otherWordsOpen/.test(src) && /S\.suppressLineOpen/.test(src) && /S\.wordingOpen/.test(src),
+    'the labs/headings box and the three assisted-filing sub-panels each have their own tracked open state'
+  );
+}
+
+console.log('\n── Medicus’s own exact request wording, offered for a request that already resolves (2026-09-24) ──');
+check(
+  /function newRequestWordingsEl\(\)/.test(src) &&
+    /OV\.addRequestAlias\(S\.builtin, S\.overlay, w\.investigationId, w\.text, 'any'\)/.test(src),
+  'the scan results offer Medicus’s own wording, one click to add, via the pure helper'
+);
+check(
+  /const wordings = newRequestWordingsEl\(\)/.test(src),
+  'it is shown in the "Match requests to lab reports" card, alongside what was just added'
+);
+
+console.log('\n── synonyms kept apart from "How it is requested in Medicus" (2026-09-24, Nick) ──');
+check(
+  /synonyms: \[\.\.\.\(inv\.synonyms \|\| \[\]\)\]/.test(src),
+  'the editor loads the investigation’s existing synonyms into its own state'
+);
+check(
+  /const synDet = h\('details', \{ class: 'inv-af-wording', open: S\.synonymsOpen \|\| undefined \}\)/.test(src),
+  '"Edit synonyms" is its own small, collapsed, state-tracked control — not mixed into the requested-as box'
+);
+check(
+  /synonyms: st\.synonyms,\s*\n\s*headingAliases: st\.heads/.test(src),
+  'saving the test writes synonyms back through the same pure saveInvestigation call as everything else'
+);
+check(
+  /const reqLabel = requests\.length \? '' : \(inv\.synonyms \|\| \[\]\)\.length \? 'known as ' : ''/.test(src),
+  'a test with no confirmed wording yet falls back to showing its synonyms on the card, labelled differently ' +
+    '("known as", not "requested as") so it never reads as a confirmed Medicus wording'
+);
+check(
+  /\.\.\.\(d\.inv\.synonyms \|\| \[\]\),/.test(src),
+  'the list search still finds a test by its old synonym terms'
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

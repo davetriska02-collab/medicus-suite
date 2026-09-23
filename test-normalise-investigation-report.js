@@ -435,6 +435,44 @@ console.log('\n--- specimen field: named group + ungrouped in same report ---');
   assert(byName['RDW'].specimen === null, 'RDW from ungrouped has specimen null');
 }
 
+// ── Additive (Phase E): report.lab and result.code — never read by the legacy engine ──────────
+console.log('\n--- report.lab (Phase E, lab-filing-catalogue.js) ---');
+{
+  const out = normaliseInvestigationReport(makePayload([], [wbcResult]));
+  assert(
+    out.lab && out.lab.organisation === null && out.lab.department === null,
+    'no performer on the payload -> lab is present but both fields null (never absent, never a throw)'
+  );
+  const withPerformer = {
+    data: {
+      patient: { id: 'p1' },
+      investigationReport: {
+        isMatchedToPatient: true,
+        performer: { organisationName: 'RJ700', departmentName: 'General Pathology' },
+        investigationGroups: [],
+        ungroupedResults: [wbcResult],
+      },
+    },
+  };
+  const out2 = normaliseInvestigationReport(withPerformer);
+  assert(
+    out2.lab.organisation === 'RJ700' && out2.lab.department === 'General Pathology',
+    'performer org/department read into report.lab'
+  );
+}
+
+console.log('\n--- result.code (Phase E, lab-filing-catalogue.js) ---');
+{
+  const out = normaliseInvestigationReport(makePayload([], [wbcResult]));
+  assert(out.results[0].code === null, 'a result with no resultCode gets code: null, not a throw');
+  const coded = { ...wbcResult, resultCode: { conceptId: '1000621000000104', description: 'Serum ALP' } };
+  const out2 = normaliseInvestigationReport(makePayload([], [coded]));
+  assert(out2.results[0].code === '1000621000000104', 'resultCode.conceptId is read as the SNOMED code');
+  const numericId = { ...wbcResult, resultCode: { conceptId: 12345 } };
+  const out3 = normaliseInvestigationReport(makePayload([], [numericId]));
+  assert(out3.results[0].code === '12345', 'a numeric conceptId is coerced to a string, matching the catalogue’s own string ids');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

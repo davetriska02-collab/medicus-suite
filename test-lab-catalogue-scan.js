@@ -126,6 +126,155 @@ console.log('\n── reference-range candidates (Lab Filing setup pre-fill — 
   );
 }
 
+console.log('\n── new request wordings: Medicus’s own exact text for a request that already resolves (2026-09-24) ──');
+{
+  const obsWith = { lab: { organisation: 'RJ700', department: 'General Pathology' }, groups: [], ungrouped: [], requests: [] };
+  const scanOf = (labels) =>
+    SC.analyse(seed, [{ ...obsWith, requests: labels }], { targets: [] });
+  const withK = scanOf(['Urea and Electrolytes WITH potassium']);
+  check(
+    withK.newRequestWordings.length === 1 &&
+      withK.newRequestWordings[0].investigationId === 'ue' &&
+      withK.newRequestWordings[0].text === 'Urea and Electrolytes WITH potassium',
+    'a request that resolves via a shorter alias ("electrolyte") is still offered by its own exact wording'
+  );
+  const withoutK = scanOf(['Urea and Electrolytes WITHOUT potassium']);
+  check(
+    withoutK.newRequestWordings[0].text === 'Urea and Electrolytes WITHOUT potassium',
+    'WITH and WITHOUT potassium are two distinct wordings, not collapsed into one'
+  );
+  check(!scanOf([]).newRequestWordings.length, 'no requests -> nothing offered');
+  const already = scanOf(['electrolyte']);
+  check(
+    already.newRequestWordings.length === 0,
+    'a wording that already matches a known alias exactly (case/spacing aside) is not offered again'
+  );
+  const already2 = scanOf(['U&E']);
+  check(
+    already2.newRequestWordings.length === 0,
+    "an investigation's own label counts as a known wording too — U&E itself is not offered as \"new\""
+  );
+  const unknown = scanOf(['Some Completely Unrecognised Test Name']);
+  check(
+    unknown.newRequestWordings.length === 0,
+    'a request the catalogue cannot resolve at all is not offered here — it is unknownRequests’ job'
+  );
+  const twice = scanOf(['Urea and Electrolytes WITH potassium', 'Urea and Electrolytes WITH potassium']);
+  check(twice.newRequestWordings.length === 1, 'the same new wording seen on two reports is offered once');
+  const suffixed = SC.analyse(
+    seed,
+    [{ ...obsWith, requests: ['Urea and Electrolytes WITH potassium (Dr Test • 22 Sep 2026, 10:00)'] }],
+    { targets: [] }
+  );
+  check(
+    suffixed.newRequestWordings[0].text === 'Urea and Electrolytes WITH potassium',
+    'the clinician/date suffix is stripped, same as everywhere else a request label is read'
+  );
+}
+
+console.log(
+  '\n── fillsFromProposals: redirecting a would-be-new result onto an existing one (resultChoices, 2026-09-23) ──'
+);
+{
+  const rr = (name, code) => ({
+    name,
+    code,
+    codeText: name,
+    unit: null,
+    resultType: 'unit-value-result',
+    hasNumericValue: true,
+    numeric: true,
+    freq: 1,
+  });
+  const prop = {
+    key: 'k',
+    lab: { id: 'rj700-general-pathology', isNew: false },
+    heading: 'U&Es',
+    headingIds: [],
+    target: 'ue',
+    results: [rr('Creat (recoded)', '999888777001')],
+  };
+  const withoutChoice = SC.fillsFromProposals(seed, [prop]).fills;
+  check(
+    withoutChoice.results.some((f) => f.key === 'new:c:999888777001' && f.label === 'Creat (recoded)'),
+    "without a choice, an unrecognised code/name still creates a brand new result (today's behaviour, unchanged)"
+  );
+  const withChoice = SC.fillsFromProposals(seed, [prop], null, { 'c:999888777001': 'creatinine' }).fills;
+  check(
+    !withChoice.results.some((f) => f.key && f.key.startsWith('new:')),
+    'given an explicit choice, no new result is created'
+  );
+  const rf = withChoice.results.find((f) => f.id === 'creatinine');
+  check(
+    !!rf && rf.codes.some((c) => c.conceptId === '999888777001') && rf.for.includes('ue'),
+    'the code and membership land on the CHOSEN existing result instead'
+  );
+  check(
+    rf.aliases.some((a) => a.text === 'Creat (recoded)'),
+    'the report wording is recorded as another name for that result, same as any other attach'
+  );
+  const bogus = SC.fillsFromProposals(seed, [prop], null, { 'c:999888777001': 'no-such-result' }).fills;
+  check(
+    bogus.results.some((f) => f.key === 'new:c:999888777001'),
+    'a choice naming a result that does not exist is ignored — falls back to creating new, never throws'
+  );
+  const viaMap = SC.fillsFromProposals(
+    seed,
+    [prop],
+    null,
+    new Map([['c:999888777001', 'creatinine']])
+  ).fills;
+  check(
+    viaMap.results.some((f) => f.id === 'creatinine'),
+    'resultChoices also accepts a Map, same as the existing investigation choices param'
+  );
+}
+
+console.log(
+  '\n── fillsFromProposals: a lab marked "new" at scan time is not recreated once it now exists (2026-09-24) ──'
+);
+{
+  // Nick, 2026-09-24: several duplicate lab entries appeared after applying a batch of matches all from the same
+  // not-yet-known lab — each proposal's p.lab.isNew was decided once, at scan time, and never re-checked.
+  const perf = { organisation: 'Kingston Hospital NHS Trust', department: 'General Pathology' };
+  const propFor = (heading) => ({
+    key: 'k:' + heading,
+    lab: { isNew: true, id: null, name: 'General Pathology', org: perf.organisation, dept: perf.department },
+    heading,
+    headingIds: [],
+    target: 'ue',
+    results: [],
+  });
+  const first = SC.fillsFromProposals(seed, [propFor('Renal function tests')]).fills;
+  check(first.labs.length === 1 && !!first.labs[0].newLab, 'the first proposal creates the new lab, as before');
+  const o = OV.applyFills(seed, OV.emptyOverlay(), first).overlay;
+  const cat2 = OV.mergeCatalogue(seed, o, { includeUnreviewed: true }).catalogue;
+  const idx2 = LC.buildIndex(cat2);
+  const realLab = LC.identifyLab(idx2, perf);
+  check(!!realLab, 'setup check: the lab now really exists in the catalogue');
+  const second = SC.fillsFromProposals(cat2, [propFor('U&Es')]).fills;
+  check(
+    second.labs.length === 1 && !second.labs[0].newLab && second.labs[0].ref === realLab.def.id,
+    'a second proposal from the SAME not-yet-known lab, still flagged isNew from analyse time, resolves to the lab that now exists instead of creating a duplicate'
+  );
+}
+
+console.log('\n── similarResults: a hint for a probable duplicate result, never a decision (2026-09-23) ──');
+{
+  const hits = SC.similarResults(seed, 'Serum creatinine level', null);
+  check(hits.some((h) => h.id === 'creatinine'), 'the existing result with overlapping wording is found');
+  const excluded = SC.similarResults(seed, 'Serum creatinine level', 'creatinine');
+  check(!excluded.some((h) => h.id === 'creatinine'), 'excludeId leaves that result out of its own hint list');
+  const sorted = SC.similarResults(seed, 'Sodium level', null);
+  check(sorted.length > 0 && sorted[0].id === 'sodium', 'the closest match ranks first');
+  check(
+    sorted.every((h, i) => i === 0 || h.score <= sorted[i - 1].score),
+    'candidates are sorted best first'
+  );
+  const none = SC.similarResults(seed, 'Xyzzyflorb nonsense wording', null);
+  check(none.length === 0, 'wording sharing nothing with any result finds nothing');
+}
+
 console.log('\n── gaps ──');
 {
   const stripped = withoutReportForms(seed, ['urine-acr', 'crp']);
@@ -221,6 +370,7 @@ console.log('\n── reviewing what a scan added (the editor save path must not
     label: inv.label,
     kind: inv.kind,
     requestAliases: inv.requestAliases,
+    synonyms: inv.synonyms,
     headingAliases: inv.headingAliases,
     exclude: inv.exclude,
     members: inv.members,

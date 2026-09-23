@@ -142,6 +142,32 @@
 }
 
 /* ── Browse ── */
+.inv-preset-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.inv-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.inv-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.inv-toggle-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .inv-browse-bar {
   display: flex;
   align-items: center;
@@ -549,6 +575,24 @@
   font-size: 11px;
   color: var(--text-4);
 }
+/* real per-lab report headings (2026-09-23): each its own row, lab name + heading + an editable "when used" note */
+.inv-real-heads {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.inv-real-head {
+  flex-wrap: nowrap;
+}
+.inv-real-head .inv-inline-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.inv-real-head strong {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .inv-review-note {
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
@@ -671,6 +715,26 @@
   white-space: nowrap;
 }
 .inv-scan-nocode {
+  color: var(--amber);
+}
+.inv-scan-duplike {
+  color: var(--accent);
+  font-weight: 600;
+}
+.inv-scan-res-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.inv-scan-res-note {
+  font-size: 10.5px;
+  color: var(--accent);
+}
+.inv-scan-res-note .lf-link {
+  font-size: inherit;
+}
+.inv-scan-res-warn {
   color: var(--amber);
 }
 
@@ -849,6 +913,12 @@
 .inv-merge .lf-link {
   font-size: inherit;
 }
+.inv-merge-hint {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  border-left: 3px solid var(--accent);
+}
 .inv-kind-filter {
   flex: 0 0 auto;
 }
@@ -933,6 +1003,25 @@
 }
 .inv-orphan-pick {
   margin: 4px 0 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.inv-orphan-pick-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.inv-scan-results-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 8px 0 2px 22px;
 }
 .inv-board-filter {
   margin: 4px 0;
@@ -1143,6 +1232,35 @@
   align-items: center;
   gap: 6px;
   margin-top: 3px;
+}
+.inv-rt-duphint {
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+.inv-rt-duphint .lf-link {
+  font-size: inherit;
+  font-weight: 600;
+}
+.inv-rt-duphint.inv-rt-pending {
+  color: var(--amber);
+  background: var(--amber-dim, rgba(217, 119, 6, 0.08));
+  font-weight: 600;
+}
+.inv-rt-not-this {
+  color: var(--text-4);
+  font-weight: 400;
+  font-size: 0.95em;
+}
+.inv-rt-name[draggable='true'] {
+  cursor: grab;
+}
+.inv-rt-name.inv-rt-dragover {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
 }
 .inv-rt-code .inv-qof-tag {
   margin-left: 2px;

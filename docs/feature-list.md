@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.0
-**Generated:** 2026-09-22
+**Version:** v3.269.0
+**Generated:** 2026-09-24
 
 ## What it is
 
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.269.0 (24 Sep)** — Investigations page: a hint when a scan or a test's own results table is about to treat two results as separate when they're likely the same analyte, with one-click merge (staged and reviewable — nothing merges until the test is saved) and "it's not X" to permanently dismiss a wrong suggestion; a duplicate-lab-entry bug fixed at its source plus a merge tool for existing duplicates; the results list filters reworked into independent Yes/No/Any toggles (awaiting review, assisted filing, matched to a lab report, matched to a Medicus request) with quick-jump presets, and re-sorted to surface items needing attention first; a gate + shadow log for filing on the Lab Result Catalogue (not yet switched on)
 - **v3.268.0 (22 Sep)** — Investigations page: "autofiling" renamed to "assisted filing" throughout (nothing acts automatically); a "What does this do?" explainer and "Match requests to lab reports" are now collapsible; empty practice-range boxes are pre-filled from the lab's own reference range seen on a recent report (highlighted, never saved without a click); fixed a page-wide CSS specificity bug that was silently stretching several narrow inputs to full width
 - **v3.267.0 (22 Sep)** — Investigations page: safety guards (with trend direction), lab-comment settings per report group, and one autofiling switch + approval per test at a lab; Medicus filing-screen wording is one practice-wide setting. Lab Filing does not read it yet
 - **v3.266.1 (22 Sep)** — Investigations results table tidied: no description or lab columns, click a code or an "also called" name to edit, plainer role words (core to the lab group / enough on its own)

@@ -291,7 +291,7 @@ console.log('\n── mergeIntoOverlay forces the imported side inert (no smuggl
 console.log('\n── extension that only adds a lab wording still carries an approvable entry ──');
 {
   const bi = builtin.investigations.find((i) => i.id === 'crp');
-  const r = run([T('crp', 'CRP', [bi.requestAliases[0].text], [], ['C reactive prot (lab wording only)'], true)]);
+  const r = run([T('crp', 'CRP', [bi.synonyms[0]], [], ['C reactive prot (lab wording only)'], true)]);
   const e = inv(r, 'crp');
   check(
     !!e && e.requestAliases.length === 0 && e.members.length === 0,

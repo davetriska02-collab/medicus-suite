@@ -1486,6 +1486,9 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     profileParamBlockers,
     unrecognisedAnalyteBlockers,
     applyParamOverrides,
+    // Exported for engine/lab-filing-catalogue.js (Phase E) — the same "both declared and equal, or neither
+    // declared" unit-safety rule applies to a catalogue-held practice range, and must not drift from this one.
+    unitsSafeToApply,
     // Exported for the lab-file-button.js debug log (ch-debug flag) — lets the
     // clinician see exactly what text an allowComments phrase is being
     // compared against, rather than guess at it.

@@ -1424,16 +1424,8 @@
       "label": "Lipid profile",
       "kind": "blood",
       "legacyKey": "lipids",
-      "requestAliases": [
-        {
-          "text": "lipid",
-          "system": "any"
-        },
-        {
-          "text": "cholesterol",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["lipid", "cholesterol"],
       "headingAliases": ["lipid", "lipid profile"],
       "members": [
         {
@@ -1467,24 +1459,8 @@
       "label": "U&E",
       "kind": "blood",
       "legacyKey": "ue",
-      "requestAliases": [
-        {
-          "text": "electrolyte",
-          "system": "any"
-        },
-        {
-          "text": "u&e",
-          "system": "any"
-        },
-        {
-          "text": "urea electrolyte",
-          "system": "any"
-        },
-        {
-          "text": "creatinine + electrolyte",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["electrolyte", "u&e", "urea electrolyte", "creatinine + electrolyte"],
       "headingAliases": ["u&e", "urea and electrolytes", "electrolyte", "renal profile"],
       "exclude": ["urine", "urinary"],
       "members": [
@@ -1516,16 +1492,8 @@
       "label": "Full blood count",
       "kind": "blood",
       "legacyKey": "fbc",
-      "requestAliases": [
-        {
-          "text": "full blood count",
-          "system": "any"
-        },
-        {
-          "text": "fbc",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["full blood count", "fbc"],
       "headingAliases": ["fbc", "full blood count"],
       "exclude": ["a1c", "glycated", "glycosylated"],
       "members": [
@@ -1596,24 +1564,8 @@
       "label": "HbA1c",
       "kind": "blood",
       "legacyKey": "hba1c",
-      "requestAliases": [
-        {
-          "text": "hba1c",
-          "system": "any"
-        },
-        {
-          "text": "haemoglobin a1c",
-          "system": "any"
-        },
-        {
-          "text": "glycated haemoglobin",
-          "system": "any"
-        },
-        {
-          "text": "glycosylated haemoglobin",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"],
       "headingAliases": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"],
       "members": [
         {
@@ -1628,16 +1580,8 @@
       "label": "Liver function tests",
       "kind": "blood",
       "legacyKey": "lft",
-      "requestAliases": [
-        {
-          "text": "liver function",
-          "system": "any"
-        },
-        {
-          "text": "lft",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["liver function", "lft"],
       "headingAliases": ["lft", "liver function", "liver function test"],
       "members": [
         {
@@ -1672,16 +1616,8 @@
       "label": "PSA",
       "kind": "blood",
       "legacyKey": "psa",
-      "requestAliases": [
-        {
-          "text": "prostate specific antigen",
-          "system": "any"
-        },
-        {
-          "text": "psa",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["prostate specific antigen", "psa"],
       "headingAliases": ["psa", "prostate specific antigen"],
       "members": [
         {
@@ -1695,16 +1631,8 @@
       "label": "Thyroid function",
       "kind": "blood",
       "legacyKey": "tft",
-      "requestAliases": [
-        {
-          "text": "thyroid",
-          "system": "any"
-        },
-        {
-          "text": "tft",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["thyroid", "tft"],
       "headingAliases": ["tft", "thyroid", "thyroid function"],
       "members": [
         {
@@ -1727,16 +1655,8 @@
       "id": "free-t4",
       "label": "Free T4",
       "kind": "blood",
-      "requestAliases": [
-        {
-          "text": "free t4",
-          "system": "any"
-        },
-        {
-          "text": "ft4",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["free t4", "ft4"],
       "headingAliases": ["free t4", "ft4"],
       "members": [
         {
@@ -1751,16 +1671,8 @@
       "label": "Faecal immunochemical test",
       "kind": "faeces",
       "legacyKey": "fit",
-      "requestAliases": [
-        {
-          "text": "faecal immunochemical",
-          "system": "any"
-        },
-        {
-          "text": "fit",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["faecal immunochemical", "fit"],
       "headingAliases": ["fit", "faecal immunochemical", "faecal haemoglobin"],
       "members": [
         {
@@ -1774,12 +1686,8 @@
       "label": "Ferritin",
       "kind": "blood",
       "legacyKey": "ferritin",
-      "requestAliases": [
-        {
-          "text": "ferritin",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["ferritin"],
       "headingAliases": ["ferritin"],
       "members": [
         {
@@ -1793,12 +1701,8 @@
       "label": "Bone profile",
       "kind": "blood",
       "legacyKey": "bone",
-      "requestAliases": [
-        {
-          "text": "bone profile",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["bone profile"],
       "headingAliases": ["bone profile"],
       "members": [
         {
@@ -1829,12 +1733,8 @@
       "label": "Rheumatoid factor",
       "kind": "blood",
       "legacyKey": "rheumatoid_factor",
-      "requestAliases": [
-        {
-          "text": "rheumatoid factor",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["rheumatoid factor"],
       "headingAliases": ["rheumatoid factor"],
       "members": [
         {
@@ -1848,12 +1748,8 @@
       "label": "HIV",
       "kind": "blood",
       "legacyKey": "hiv",
-      "requestAliases": [
-        {
-          "text": "hiv",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["hiv"],
       "headingAliases": ["hiv 1 & 2 antigen antibody", "hiv 1&2 antigen antibody"],
       "members": [
         {
@@ -1867,20 +1763,8 @@
       "label": "Vitamin D",
       "kind": "blood",
       "legacyKey": "vitamin_d",
-      "requestAliases": [
-        {
-          "text": "vitamin d",
-          "system": "any"
-        },
-        {
-          "text": "25 hydroxyvitamin d",
-          "system": "any"
-        },
-        {
-          "text": "25 oh vitamin d",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["vitamin d", "25 hydroxyvitamin d", "25 oh vitamin d"],
       "headingAliases": ["vitamin d", "25 hydroxyvitamin d"],
       "members": [
         {
@@ -1894,16 +1778,8 @@
       "label": "Urate",
       "kind": "blood",
       "legacyKey": "urate",
-      "requestAliases": [
-        {
-          "text": "urate",
-          "system": "any"
-        },
-        {
-          "text": "uric acid",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["urate", "uric acid"],
       "headingAliases": ["urate", "uric acid"],
       "members": [
         {
@@ -1917,16 +1793,8 @@
       "label": "C-reactive protein",
       "kind": "blood",
       "legacyKey": "crp",
-      "requestAliases": [
-        {
-          "text": "c reactive protein",
-          "system": "any"
-        },
-        {
-          "text": "crp",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["c reactive protein", "crp"],
       "headingAliases": ["crp", "c reactive protein"],
       "members": [
         {
@@ -1940,16 +1808,8 @@
       "label": "Hepatitis C",
       "kind": "blood",
       "legacyKey": "hepatitis_c",
-      "requestAliases": [
-        {
-          "text": "hepatitis c",
-          "system": "any"
-        },
-        {
-          "text": "hep c",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["hepatitis c", "hep c"],
       "headingAliases": ["hepatitis c", "hep c"],
       "members": [
         {
@@ -1963,20 +1823,8 @@
       "label": "Hepatitis B surface antigen",
       "kind": "blood",
       "legacyKey": "hepatitis_b",
-      "requestAliases": [
-        {
-          "text": "hepatitis b surface antigen",
-          "system": "any"
-        },
-        {
-          "text": "hep b surface antigen",
-          "system": "any"
-        },
-        {
-          "text": "hbsag",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["hepatitis b surface antigen", "hep b surface antigen", "hbsag"],
       "headingAliases": ["hepatitis b surface antigen", "hep b surface antigen", "hbsag"],
       "members": [
         {
@@ -1990,12 +1838,8 @@
       "label": "Syphilis",
       "kind": "blood",
       "legacyKey": "syphilis",
-      "requestAliases": [
-        {
-          "text": "syphilis",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["syphilis"],
       "headingAliases": ["syphilis", "treponema"],
       "members": [
         {
@@ -2009,16 +1853,8 @@
       "label": "Faecal calprotectin",
       "kind": "faeces",
       "legacyKey": "calprotectin",
-      "requestAliases": [
-        {
-          "text": "faecal calprotectin",
-          "system": "any"
-        },
-        {
-          "text": "calprotectin",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["faecal calprotectin", "calprotectin"],
       "headingAliases": ["faecal calprotectin", "calprotectin"],
       "members": [
         {
@@ -2032,16 +1868,8 @@
       "label": "Follicle stimulating hormone",
       "kind": "blood",
       "legacyKey": "fsh",
-      "requestAliases": [
-        {
-          "text": "follicle stimulating hormone",
-          "system": "any"
-        },
-        {
-          "text": "fsh",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["follicle stimulating hormone", "fsh"],
       "headingAliases": ["fsh", "follicle stimulating hormone"],
       "members": [
         {
@@ -2055,20 +1883,8 @@
       "label": "Luteinising hormone",
       "kind": "blood",
       "legacyKey": "lh",
-      "requestAliases": [
-        {
-          "text": "luteinising hormone",
-          "system": "any"
-        },
-        {
-          "text": "luteinizing hormone",
-          "system": "any"
-        },
-        {
-          "text": "lh",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["luteinising hormone", "luteinizing hormone", "lh"],
       "headingAliases": ["lh", "luteinising hormone", "luteinizing hormone"],
       "members": [
         {
@@ -2082,16 +1898,8 @@
       "label": "Oestradiol",
       "kind": "blood",
       "legacyKey": "oestradiol",
-      "requestAliases": [
-        {
-          "text": "oestradiol",
-          "system": "any"
-        },
-        {
-          "text": "estradiol",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["oestradiol", "estradiol"],
       "headingAliases": ["oestradiol", "estradiol"],
       "members": [
         {
@@ -2105,12 +1913,8 @@
       "label": "Prolactin",
       "kind": "blood",
       "legacyKey": "prolactin",
-      "requestAliases": [
-        {
-          "text": "prolactin",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["prolactin"],
       "headingAliases": ["prolactin"],
       "members": [
         {
@@ -2124,12 +1928,8 @@
       "label": "Testosterone",
       "kind": "blood",
       "legacyKey": "testosterone",
-      "requestAliases": [
-        {
-          "text": "testosterone",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["testosterone"],
       "headingAliases": ["testosterone"],
       "members": [
         {
@@ -2143,20 +1943,8 @@
       "label": "Knee X-ray",
       "kind": "imaging",
       "legacyKey": "radiology_knee",
-      "requestAliases": [
-        {
-          "text": "xr knee",
-          "system": "any"
-        },
-        {
-          "text": "knee",
-          "system": "any"
-        },
-        {
-          "text": "radiograph knee",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["xr knee", "knee", "radiograph knee"],
       "headingAliases": ["knee"],
       "members": []
     },
@@ -2164,12 +1952,8 @@
       "id": "magnesium",
       "label": "Magnesium",
       "kind": "blood",
-      "requestAliases": [
-        {
-          "text": "magnesium",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["magnesium"],
       "headingAliases": ["magnesium"],
       "members": [
         {
@@ -2182,16 +1966,8 @@
       "id": "urine-acr",
       "label": "Urine albumin:creatinine ratio",
       "kind": "urine",
-      "requestAliases": [
-        {
-          "text": "urine albumin creatinine ratio",
-          "system": "any"
-        },
-        {
-          "text": "urine acr",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["urine albumin creatinine ratio", "urine acr"],
       "headingAliases": ["urine acr", "urine albumin creatinine ratio"],
       "members": [
         {
@@ -2212,20 +1988,8 @@
       "id": "ca-125",
       "label": "CA 125",
       "kind": "blood",
-      "requestAliases": [
-        {
-          "text": "ca 125",
-          "system": "any"
-        },
-        {
-          "text": "ca 12 5",
-          "system": "any"
-        },
-        {
-          "text": "ca125",
-          "system": "any"
-        }
-      ],
+      "requestAliases": [],
+      "synonyms": ["ca 125", "ca 12 5", "ca125"],
       "headingAliases": ["ca 125"],
       "members": [
         {

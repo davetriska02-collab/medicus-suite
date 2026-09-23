@@ -338,17 +338,12 @@ console.log('\n--- safety guards: per result x lab, with the DIRECTION of a tren
 
 console.log('\n--- lab groups: comments and the assisted filing switch, per lab x report group heading ---');
 {
-  const spec = {
-    lab: LAB,
-    heading: 'LFTs',
-    allowComments: [NOTE],
-    suppressIfText: ['telephone result', 'call patient'],
-  };
+  const spec = { lab: LAB, heading: 'LFTs', allowComments: [NOTE] };
   const g1 = OV.setFilingGroup(builtin, OV.emptyOverlay(), spec);
   const g = g1.filing.groups[0];
   check(
-    g.allowComments[0] === NOTE && g.suppressIfText.length === 2 && g.enabled === false,
-    'whitelisted comments and block phrases are stored per lab and group; assisted filing starts OFF'
+    g.allowComments[0] === NOTE && g.enabled === false && !('suppressIfText' in g),
+    'whitelisted comments are stored per lab and group; assisted filing starts OFF; no suppressIfText here (2026-09-23: that moved to ONE practice-wide list, below)'
   );
   check(g.provenance.reviewed === false && acting(g1).catalogue.filing === undefined, 'unapproved: does not act');
   const key = OV.filingGroupKey({ lab: LAB, heading: 'lfts' });
@@ -359,8 +354,8 @@ console.log('\n--- lab groups: comments and the assisted filing switch, per lab 
   const ap = OV.approveFiling(g1, 'groups', key, 'Dr Test');
   check(acting(ap).catalogue.filing.groups[0].allowComments.length === 1, 'approved: acts');
   check(
-    OV.setFilingGroup(builtin, ap, { ...spec, suppressIfText: ['telephone result'] }).filing.groups[0].provenance
-      .reviewed === false,
+    OV.setFilingGroup(builtin, ap, { ...spec, allowComments: [NOTE, 'a second whitelisted lab comment here'] }).filing
+      .groups[0].provenance.reviewed === false,
     'any change withdraws the approval'
   );
   check(
@@ -394,15 +389,8 @@ console.log('\n--- lab groups: comments and the assisted filing switch, per lab 
     'the heading must be one the lab really sends'
   );
   check(
-    throwsWith(
-      () => OV.setFilingGroup(builtin, OV.emptyOverlay(), { ...spec, suppressIfText: ['ok'], allowComments: [] }),
-      /too short/
-    ),
-    'a block phrase of one or two letters is refused'
-  );
-  check(
-    OV.setFilingGroup(builtin, ap, { lab: LAB, heading: 'LFTs', allowComments: [], suppressIfText: [], enabled: false })
-      .filing.groups.length === 0,
+    OV.setFilingGroup(builtin, ap, { lab: LAB, heading: 'LFTs', allowComments: [], enabled: false }).filing.groups
+      .length === 0,
     'nothing set (and off) clears the group'
   );
   const myLab = OV.sanitiseOverlay({
@@ -418,13 +406,49 @@ console.log('\n--- lab groups: comments and the assisted filing switch, per lab 
   });
   const both = OV.setFilingGroup(
     builtin,
-    OV.setFilingGroup(builtin, myLab, { lab: 'mylab', heading: 'My panel', suppressIfText: ['call patient'] }),
+    OV.setFilingGroup(builtin, myLab, {
+      lab: 'mylab',
+      heading: 'My panel',
+      allowComments: ['a whitelisted note about this lab panel'],
+    }),
     spec
   );
   const gone = OV.removeEntry(both, 'labs', 'mylab');
   check(
     both.filing.groups.length === 2 && gone.filing.groups.length === 1 && gone.filing.groups[0].lab === LAB,
     "deleting a lab deletes that lab's group settings only"
+  );
+}
+
+console.log('\n--- "never offer to file" phrases: ONE practice-wide list, not per lab x group (Nick, 2026-09-23) ---');
+{
+  const s1 = OV.setFilingSuppress(OV.emptyOverlay(), { items: ['telephone result', 'call patient'] });
+  const s = s1.filing.suppress[0];
+  check(
+    s.items.length === 2 && s.provenance.reviewed === false,
+    'the suppress-phrase list is stored once, practice-wide, and starts unapproved'
+  );
+  check(OV.filingSuppressKey() === 'suppress', 'the key is fixed — there is only ever one row');
+  check(acting(s1).catalogue.filing === undefined, 'unapproved: does not act');
+  const key = OV.filingSuppressKey();
+  const ap = OV.approveFiling(s1, 'suppress', key, 'Dr Test');
+  check(acting(ap).catalogue.filing.suppress[0].items.length === 2, 'approved: acts');
+  check(
+    OV.setFilingSuppress(ap, { items: ['telephone result'] }).filing.suppress[0].provenance.reviewed === false,
+    'any change withdraws the approval'
+  );
+  check(
+    OV.setFilingSuppress(ap, { items: ['telephone result'] }).filing.suppress[0].items.length === 1,
+    'the list can be trimmed down'
+  );
+  check(OV.setFilingSuppress(ap, { items: [] }).filing.suppress.length === 0, 'an empty list clears the entry');
+  check(
+    throwsWith(() => OV.setFilingSuppress(OV.emptyOverlay(), { items: ['ok'] }), /too short/),
+    'a phrase of one or two letters is refused (same floor as before)'
+  );
+  check(
+    OV.setFilingSuppress(OV.emptyOverlay(), { items: [] }).filing.suppress.length === 0,
+    'setting an empty list on a fresh overlay is a no-op, not an error'
   );
 }
 
@@ -548,7 +572,6 @@ console.log('\n--- assisted filing for a TEST at a LAB: one switch, one approval
     heading: 'LFTs',
     enabled: true,
     allowComments: [NOTE],
-    suppressIfText: [],
   });
   check(
     state(edGroup).approved === false && state(edGroup).pending.some((p) => p.kind === 'groups'),
@@ -565,6 +588,13 @@ console.log('\n--- assisted filing for a TEST at a LAB: one switch, one approval
     state(withScreen).pending.some((p) => p.kind === 'screen') &&
       OV.approveFilingForTest(builtin, withScreen, LFT, LAB, 'x').filing.screen[0].provenance.reviewed === true,
     'a changed Medicus wording is part of the approval'
+  );
+  // the practice-wide "never offer to file" list joins the set once changed too (same shape as screen)
+  const withSuppress = OV.setFilingSuppress(ap, { items: ['telephone result'] });
+  check(
+    state(withSuppress).pending.some((p) => p.kind === 'suppress') &&
+      OV.approveFilingForTest(builtin, withSuppress, LFT, LAB, 'x').filing.suppress[0].provenance.reviewed === true,
+    'a changed suppress-phrase list is part of every test’s approval, the same way the Medicus wording is'
   );
   // shared results: approving via another test also approves the shared range (it is one range)
   const bone = OV.filingStateForTest(merged(ap), ap, 'bone-profile', LAB);

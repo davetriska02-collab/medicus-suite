@@ -44,6 +44,7 @@
     filingGuards: 3000,
     filingGroups: 1500,
     filingScreen: 1,
+    filingSuppress: 1,
   };
   const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
   const PREFIX = 'labcatalogue.practice';
@@ -87,14 +88,23 @@
   function emptyOverlay() {
     return {
       schema: OVERLAY_SCHEMA,
-      context: { icb: '', icbCode: '', borough: '', labs: [], orderingSystems: [], dismissed: [], labNames: {} },
+      context: {
+        icb: '',
+        icbCode: '',
+        borough: '',
+        labs: [],
+        orderingSystems: [],
+        dismissed: [],
+        labNames: {},
+        dismissedSimilarPairs: [],
+      },
       results: [],
       investigations: [],
       labs: [],
       retired: [],
       disabled: { results: [], investigations: [] },
       // Lab Filing setup (Phase E): practice normal ranges per RESULT x LAB x SNOMED CODE, each with its own filing approval.
-      filing: { ranges: [], guards: [], groups: [], screen: [] },
+      filing: { ranges: [], guards: [], groups: [], screen: [], suppress: [] },
     };
   }
 
@@ -195,6 +205,9 @@
         };
       }),
       headingAliases: strArr(v.headingAliases, LIMITS.aliases, LIMITS.text, `${w}.headingAliases`),
+      // Legacy free-text terms (pre-catalogue matcher) — still matched, kept apart so requestAliases can hold only
+      // wording confirmed by a scan of real Medicus requests (Nick, 2026-09-24).
+      synonyms: strArr(v.synonyms, LIMITS.aliases, LIMITS.text, `${w}.synonyms`),
       exclude: strArr(v.exclude, LIMITS.aliases, LIMITS.text, `${w}.exclude`),
       members: arr(v.members, LIMITS.members, `${w}.members`).map((m, j) => {
         if (!isObj(m)) fail(`${w}.members[${j}] must be an object`);
@@ -231,11 +244,16 @@
       identifiers: { performerOrg: str(ident.performerOrg, 80, `${w}.identifiers.performerOrg`, true) },
       groupHeadings: arr(l.groupHeadings, LIMITS.headings, `${w}.groupHeadings`).map((h, j) => {
         if (!isObj(h)) fail(`${w}.groupHeadings[${j}] must be an object`);
-        return {
+        const out2 = {
           text: str(h.text, LIMITS.text, `${w}.groupHeadings[${j}].text`, true),
           identifies: strArr(h.identifies, LIMITS.refs, 64, `${w}.groupHeadings[${j}].identifies`),
           mayContain: strArr(h.mayContain, LIMITS.refs, 70, `${w}.groupHeadings[${j}].mayContain`),
         };
+        // Cosmetic only — when this heading is used, e.g. "used when the set includes potassium". Never read for
+        // matching/recognition or for filing; editing it does not withdraw any approval (see setHeadingNote).
+        const note = str(h.note, LIMITS.text, `${w}.groupHeadings[${j}].note`);
+        if (note) out2.note = note;
+        return out2;
       }),
     };
     const dept = str(ident.department, 80, `${w}.identifiers.department`);
@@ -280,6 +298,10 @@
       dismissed: strArr(o.dismissed, 300, 128, 'context.dismissed'),
       // human-readable names the practice gives labs (display only; never changes how a lab is recognised)
       labNames: sanitiseLabNames(o.labNames),
+      // two result ids a person has explicitly said are NOT the same analyte ("it's not X") — the similarity HINT
+      // (SC.similarResults) must not suggest this pairing again, on the match board or in a test's own results table.
+      // Sorted "idA|idB" (order-independent), same string-list shape/limits as `dismissed` above.
+      dismissedSimilarPairs: strArr(o.dismissedSimilarPairs, 500, 160, 'context.dismissedSimilarPairs'),
     };
   }
 
@@ -349,8 +371,12 @@
     return out;
   }
 
-  // Lab comments arrive per lab-defined REPORT GROUP (a heading), as one package for the group's results — so both the comment
-  // whitelist and "never offer to file when the comment says…" are per lab x group heading, never per result.
+  // Lab comments arrive per lab-defined REPORT GROUP (a heading), as one package for the group's results — so the
+  // comment WHITELIST (allowComments) is per lab x group heading, never per result: the exact wording is the lab's
+  // own and genuinely differs heading to heading. "Never offer to file when the comment says…" (suppressIfText) is
+  // NOT here — Nick, 2026-09-23: those phrases (e.g. "telephone result") are expected to be the same whichever
+  // heading variant or lab sent the report, so they are ONE practice-wide list (filing.suppress, below), not
+  // duplicated per heading.
   const filingGroupKey = (g) => [g.lab, core().norm(g.heading)].join('|');
   function filingUtils() {
     let U = null;
@@ -378,11 +404,23 @@
       lab: str(v.lab, 64, w + '.lab', true),
       heading: str(v.heading, LIMITS.text, w + '.heading', true),
       allowComments: [...new Set(allow)],
-      suppressIfText: [...new Set(cleanTerms(v.suppressIfText, w + '.suppressIfText', 3, 50))],
       // assisted filing ON for this report group (Medicus files a group, never a single result)
       enabled: v.enabled === true,
     };
-    if (!out.allowComments.length && !out.suppressIfText.length && !out.enabled) fail(w + ' sets nothing');
+    if (!out.allowComments.length && !out.enabled) fail(w + ' sets nothing');
+    out.provenance = sanitiseProvenance(v.provenance);
+    return out;
+  }
+
+  // "Never offer to file when the comment says…" — ONE practice-wide list (Nick, 2026-09-23: expected to be the
+  // same whichever heading variant or lab sent the report, unlike the comment whitelist above). Same shape/rules as
+  // a group's old suppressIfText (min length 3, up to 50 phrases) — see the filingGroupKey comment for why it moved.
+  const filingSuppressKey = () => 'suppress';
+  function sanitiseFilingSuppress(v, i) {
+    const w = 'filing.suppress[' + i + ']';
+    if (!isObj(v)) fail(w + ' must be an object');
+    const out = { items: [...new Set(cleanTerms(v.items, w + '.items', 3, 50))] };
+    if (!out.items.length) fail(w + ' sets nothing');
     out.provenance = sanitiseProvenance(v.provenance);
     return out;
   }
@@ -422,6 +460,7 @@
     guards: { key: filingGuardKey, sanitise: sanitiseFilingGuard, limit: 'filingGuards' },
     groups: { key: filingGroupKey, sanitise: sanitiseFilingGroup, limit: 'filingGroups' },
     screen: { key: filingScreenKey, sanitise: sanitiseFilingScreen, limit: 'filingScreen' },
+    suppress: { key: filingSuppressKey, sanitise: sanitiseFilingSuppress, limit: 'filingSuppress' },
   };
   function sanitiseFiling(raw) {
     const src = isObj(raw) ? raw : {};
@@ -683,9 +722,9 @@
     );
   }
 
-  // A lab report GROUP, per LAB x group heading: spec = { lab, heading, enabled, allowComments, suppressIfText }. The heading must
+  // A lab report GROUP, per LAB x group heading: spec = { lab, heading, enabled, allowComments }. The heading must
   // be one the lab really sends. Every whitelisted comment must pass allowCommentProblem. Medicus files a group at once, so the
-  // assisted filing on/off switch is here, alongside the comment rules.
+  // assisted filing on/off switch is here, alongside the comment whitelist.
   function setFilingGroup(builtin, overlay, spec, today) {
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
@@ -697,10 +736,7 @@
     const known = asArr(lab.groupHeadings).some((g) => LC.norm(g.text) === LC.norm(spec.heading));
     if (!known) fail('"' + spec.heading + '" is not a report group heading recorded for ' + lab.name);
     const key = filingGroupKey(spec);
-    const empty =
-      spec.enabled !== true &&
-      !asArr(spec.allowComments).some((x) => String(x || '').trim()) &&
-      !cleanTerms(spec.suppressIfText, 'suppressIfText', 3, 50).length;
+    const empty = spec.enabled !== true && !asArr(spec.allowComments).some((x) => String(x || '').trim());
     if (empty) {
       o.filing.groups = o.filing.groups.filter((g) => filingGroupKey(g) !== key);
       return o;
@@ -728,6 +764,21 @@
     }
     return upsertFiling(o, 'screen', {}, () =>
       sanitiseFilingScreen({ ...next, provenance: { source: 'practice', reviewed: false, createdAt: day } }, 0)
+    );
+  }
+
+  // "Never offer to file when the comment says…" (one practice-wide list): spec = { items: string[] }. Empty clears it.
+  function setFilingSuppress(overlay, spec, today) {
+    const day = today || new Date().toISOString().slice(0, 10);
+    const o = safeClone(overlay);
+    if (!isObj(spec)) fail('the suppress-phrase list must be an object');
+    const items = cleanTerms(spec.items, 'items', 3, 50);
+    if (!items.length) {
+      o.filing.suppress = [];
+      return o;
+    }
+    return upsertFiling(o, 'suppress', {}, () =>
+      sanitiseFilingSuppress({ items, provenance: { source: 'practice', reviewed: false, createdAt: day } }, 0)
     );
   }
 
@@ -806,6 +857,7 @@
     for (const g of overlay.filing.guards)
       if (g.lab === labId && ids.has(g.result)) need.push(['guards', filingGuardKey(g), g, g.result]);
     for (const sc of overlay.filing.screen) need.push(['screen', filingScreenKey(sc), sc, 'screen']);
+    for (const sp of overlay.filing.suppress) need.push(['suppress', filingSuppressKey(sp), sp, 'suppress']);
     out.pending = need
       .filter(([, , e]) => !(e.provenance && e.provenance.reviewed === true))
       .map(([kind, key, , label]) => ({ kind, key, label }));
@@ -831,7 +883,6 @@
           heading: g.heading,
           enabled: enabled === true,
           allowComments: cur.allowComments || [],
-          suppressIfText: cur.suppressIfText || [],
         },
         today
       );
@@ -1000,6 +1051,7 @@
       label: v.label,
       kind: v.kind,
       req: sortedJson(asArr(v.requestAliases).map((a) => LC.norm(a.text) + '|' + a.system)),
+      syn: sortedJson(asArr(v.synonyms).map(LC.norm)),
       heads: sortedJson(asArr(v.headingAliases).map(LC.norm)),
       exclude: sortedJson(asArr(v.exclude).map(LC.norm)),
       members: sortedJson(asArr(v.members).map((m) => m.result + '|' + m.role + '|' + (m.anchor === true ? 'A' : ''))),
@@ -1106,6 +1158,7 @@
         [],
         (a) => LC.norm(a.text) + '|' + a.system
       ),
+      synonyms: dropNorm(asArr(spec.synonyms).map(text), [], (x) => LC.norm(x)),
       headingAliases: dropNorm(asArr(spec.headingAliases).map(text), [], (x) => LC.norm(x)),
       exclude: dropNorm(asArr(spec.exclude).map(text), [], (x) => LC.norm(x)),
       members: asArr(spec.members).map((m) => {
@@ -1199,6 +1252,47 @@
     return { overlay: clean, id, reverted: !!unchanged };
   }
 
+  // Add ONE more request wording to an investigation that already exists — Medicus's OWN exact phrasing (e.g. "Urea
+  // and Electrolytes WITH potassium"), kept on record in addition to whatever shorter alias already matches it
+  // (Nick, 2026-09-24: a request the scan already recognises via a short alias was previously never offered by its
+  // full wording — this is the one-click way to add it without opening the whole editor). Reuses saveInvestigation
+  // so nothing else about the investigation is touched; a duplicate (by text, case/spacing aside) is a no-op.
+  function addRequestAlias(builtin, overlay, invId, text, system, today) {
+    const LC = core();
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const inv = asArr(merged.investigations).find((i) => i.id === invId);
+    if (!inv) fail('unknown investigation "' + invId + '"');
+    const clean = String(text == null ? '' : text).trim();
+    if (!clean) fail('a request wording is required');
+    const nt = LC.norm(clean);
+    if (
+      asArr(inv.requestAliases).some((a) => LC.norm(a.text) === nt) ||
+      asArr(inv.synonyms).some((s) => LC.norm(s) === nt)
+    ) {
+      return safeClone(overlay); // already known, as an exact wording or as a synonym
+    }
+    const labHeadings = [];
+    for (const lab of asArr(merged.labs))
+      for (const g of asArr(lab.groupHeadings))
+        if (asArr(g.identifies).includes(invId)) labHeadings.push({ lab: lab.id, text: g.text });
+    const spec = {
+      id: invId,
+      label: inv.label,
+      kind: inv.kind,
+      note: inv.note,
+      requestAliases: [
+        ...asArr(inv.requestAliases).map((a) => ({ text: a.text, system: a.system })),
+        { text: clean, system: system || 'any' },
+      ],
+      synonyms: [...asArr(inv.synonyms)],
+      headingAliases: [...asArr(inv.headingAliases)],
+      exclude: [...asArr(inv.exclude)],
+      members: asArr(inv.members).map((m) => ({ result: m.result, role: m.role, anchor: m.anchor === true })),
+      labHeadings,
+    };
+    return saveInvestigation(builtin, overlay, spec, today).overlay;
+  }
+
   // Put a built-in investigation back to its shipped definition (and its shipped report headings).
   function revertInvestigation(builtin, overlay, id, today) {
     const b = asArr(builtin && builtin.investigations).find((i) => i.id === id);
@@ -1215,6 +1309,7 @@
         label: b.label,
         kind: b.kind,
         requestAliases: b.requestAliases,
+        synonyms: b.synonyms,
         headingAliases: b.headingAliases,
         exclude: b.exclude,
         members: b.members,
@@ -1250,6 +1345,7 @@
       asArr(n.requestAliases),
       (a) => a.text + (a.system !== 'any' ? ` (${a.system})` : '')
     );
+    diff('synonym', asArr(b.synonyms), asArr(n.synonyms), (x) => x);
     diff('report heading', asArr(b.headingAliases), asArr(n.headingAliases), (x) => x);
     diff('"never matches" word', asArr(b.exclude), asArr(n.exclude), (x) => x);
     const resLabel = (id) => (asArr(m.results).find((r) => r.id === id) || { label: id }).label;
@@ -1601,6 +1697,14 @@
       haveHead.add(LC.norm(h));
       moved.headings++;
     }
+    e.synonyms = asArr(e.synonyms);
+    const haveSyn = new Set([...asArr(T.synonyms).map(LC.norm), ...haveReq]); // a synonym already present as a request wording is not duplicated either
+    for (const s of asArr(F.synonyms)) {
+      const k = LC.norm(s);
+      if (!k || haveSyn.has(k)) continue;
+      e.synonyms.push(s);
+      haveSyn.add(k);
+    }
     for (const lab of o.labs) {
       let changed = false;
       for (const g of asArr(lab.groupHeadings)) {
@@ -1618,6 +1722,177 @@
     }
     o.investigations = o.investigations.filter((i) => i.id !== fromId);
     o.disabled.investigations = o.disabled.investigations.filter((x) => x !== fromId);
+    e.provenance = { ...e.provenance, reviewed: false };
+    delete e.provenance.reviewedBy;
+    delete e.provenance.reviewedAt;
+    const clean = sanitiseOverlay(o);
+    assertUsable(builtin, clean, [intoId]);
+    return { overlay: clean, moved };
+  }
+
+  // "This is the same analyte, just a different code/wording": move a result's codes and other names onto another
+  // result, repoint every test that used it, and remove the duplicate. Mirrors mergeInvestigation above — same
+  // "never merge away a built-in" rule, same "target goes back to awaiting review" outcome. Nick's 2026-09-23 case:
+  // a scan creates a new practice result for a report row whose code/wording differs from an existing result that
+  // means the same thing (e.g. a re-worded creatinine), and the two need collapsing into one before either is used.
+  function mergeResult(builtin, overlay, fromId, intoId, today) {
+    const LC = core();
+    const day = today || new Date().toISOString().slice(0, 10);
+    if (fromId === intoId) fail('a result cannot be merged into itself');
+    if (asArr(builtin && builtin.results).some((r) => r.id === fromId))
+      fail('a built-in result cannot be merged away — disable it instead');
+    const o = safeClone(overlay);
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const F = merged.results.find((r) => r.id === fromId);
+    const T = merged.results.find((r) => r.id === intoId);
+    if (!F) fail(`result "${fromId}" not found`);
+    if (!T) fail(`result "${intoId}" not found`);
+    let e = o.results.find((r) => r.id === intoId);
+    if (!e) {
+      const b = asArr(builtin && builtin.results).find((r) => r.id === intoId);
+      if (!b) fail(`result "${intoId}" not found`);
+      e = {
+        id: b.id,
+        label: b.label,
+        valueKind: b.valueKind,
+        codes: [],
+        aliases: [],
+        override: true,
+        provenance: authoredProvenance(null, day),
+      };
+      o.results.push(e);
+    }
+    const moved = { codes: 0, aliases: 0, tests: 0 };
+    e.codes = asArr(e.codes);
+    const haveCode = new Set(e.codes.map((c) => c.conceptId));
+    for (const c of asArr(F.codes)) {
+      if (haveCode.has(c.conceptId)) continue;
+      e.codes.push({ ...c, role: 'alternate' });
+      haveCode.add(c.conceptId);
+      moved.codes++;
+    }
+    e.aliases = asArr(e.aliases);
+    const haveAlias = new Set([LC.norm(T.label) + '|', ...e.aliases.map((a) => LC.norm(a.text) + '|' + (a.lab || ''))]);
+    for (const a of [{ text: F.label }, ...asArr(F.aliases)]) {
+      const k = LC.norm(a.text) + '|' + (a.lab || '');
+      if (!LC.norm(a.text) || haveAlias.has(k)) continue;
+      e.aliases.push({ text: a.text, ...(a.lab ? { lab: a.lab } : {}) });
+      haveAlias.add(k);
+      moved.aliases++;
+    }
+    // every test that had "from" as a member now has "into" instead — never both, and never a second core if "into"
+    // already has one (the same role-conflict rule mergeInvestigation uses for the reverse case).
+    for (const inv of o.investigations) {
+      const from = asArr(inv.members).find((m) => m.result === fromId);
+      if (!from) continue;
+      const already = inv.members.find((m) => m.result === intoId);
+      if (already) {
+        if (from.role === 'core' && already.role !== 'core') already.role = 'core';
+        if (from.anchor === true && already.role === 'core') already.anchor = true;
+        inv.members = inv.members.filter((m) => m.result !== fromId);
+      } else {
+        from.result = intoId;
+      }
+      inv.provenance = { ...inv.provenance, reviewed: false };
+      moved.tests++;
+    }
+    // a fresh, unreviewed result almost never has filing setup yet, but if it does, remap rather than drop it — the
+    // target's own entry wins on a clash (rejectDuplicateKeys would otherwise throw on the merged overlay below).
+    for (const kind of ['ranges', 'guards']) {
+      const keyOf = kind === 'ranges' ? filingKey : filingGuardKey;
+      const remapped = asArr(o.filing[kind]).map((r) => (r.result === fromId ? { ...r, result: intoId } : r));
+      const seen = new Set();
+      o.filing[kind] = remapped.filter((r) => {
+        if (r.result !== intoId) return true;
+        const k = keyOf(r);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+    o.results = o.results.filter((r) => r.id !== fromId);
+    o.disabled.results = o.disabled.results.filter((x) => x !== fromId);
+    e.provenance = { ...e.provenance, reviewed: false };
+    delete e.provenance.reviewedBy;
+    delete e.provenance.reviewedAt;
+    const clean = sanitiseOverlay(o);
+    assertUsable(builtin, clean, [intoId]);
+    return { overlay: clean, moved };
+  }
+
+  // "This is the same lab as that one, under a different reported name": move its report headings onto the target
+  // lab, repoint every result's lab-tagged alias and every lab-keyed filing entry (ranges/guards/comment groups), then
+  // delete the duplicate. Mirrors mergeInvestigation/mergeResult above. Nick, 2026-09-24: several proposals learned
+  // from the SAME not-yet-known lab in one scan, applied together, each created their OWN "new" lab entry — this is
+  // the cleanup tool for duplicates that already exist; fillsFromProposals itself was fixed so it stops happening.
+  function mergeLab(builtin, overlay, fromId, intoId, today) {
+    const LC = core();
+    const day = today || new Date().toISOString().slice(0, 10);
+    if (fromId === intoId) fail('a lab cannot be merged into itself');
+    if (asArr(builtin && builtin.labs).some((l) => l.id === fromId))
+      fail('a built-in lab cannot be merged away — disable it instead');
+    const o = safeClone(overlay);
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const F = merged.labs.find((l) => l.id === fromId);
+    const T = merged.labs.find((l) => l.id === intoId);
+    if (!F) fail(`lab "${fromId}" not found`);
+    if (!T) fail(`lab "${intoId}" not found`);
+    let e = o.labs.find((l) => l.id === intoId);
+    if (!e) {
+      const b = asArr(builtin && builtin.labs).find((l) => l.id === intoId);
+      if (!b) fail(`lab "${intoId}" not found`);
+      e = {
+        id: b.id,
+        name: b.name,
+        identifiers: { ...b.identifiers },
+        groupHeadings: [],
+        provenance: authoredProvenance(null, day),
+      };
+      o.labs.push(e);
+    }
+    const moved = { headings: 0, aliases: 0, filing: 0 };
+    e.groupHeadings = asArr(e.groupHeadings);
+    const haveHead = new Set(e.groupHeadings.map((g) => LC.norm(g.text)));
+    for (const g of asArr(F.groupHeadings)) {
+      const k = LC.norm(g.text);
+      if (haveHead.has(k)) continue; // the target already has this heading — the duplicate's copy adds nothing
+      const copy = { text: g.text, identifies: [...asArr(g.identifies)], mayContain: [...asArr(g.mayContain)] };
+      if (g.note) copy.note = g.note;
+      e.groupHeadings.push(copy);
+      haveHead.add(k);
+      moved.headings++;
+    }
+    // every result's alias tagged for the from-lab moves to the into-lab (deduped against what's already there)
+    for (const r of o.results) {
+      if (!asArr(r.aliases).some((a) => a.lab === fromId)) continue;
+      const seen = new Set();
+      r.aliases = asArr(r.aliases)
+        .map((a) => (a.lab === fromId ? { ...a, lab: intoId } : a))
+        .filter((a) => {
+          const k = LC.norm(a.text) + '|' + (a.lab || '');
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+      r.provenance = { ...r.provenance, reviewed: false };
+      moved.aliases++;
+    }
+    // filing entries keyed by lab (ranges, guards, comment groups) remap the same way results' ranges/guards do —
+    // target's own entry wins on a clash.
+    for (const kind of ['ranges', 'guards', 'groups']) {
+      const keyOf = FILING_KINDS[kind].key;
+      moved.filing += asArr(o.filing[kind]).filter((f) => f.lab === fromId).length;
+      const remapped = asArr(o.filing[kind]).map((f) => (f.lab === fromId ? { ...f, lab: intoId } : f));
+      const seen = new Set();
+      o.filing[kind] = remapped.filter((f) => {
+        if (f.lab !== intoId) return true;
+        const k = keyOf(f);
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+    }
+    o.labs = o.labs.filter((l) => l.id !== fromId);
     e.provenance = { ...e.provenance, reviewed: false };
     delete e.provenance.reviewedBy;
     delete e.provenance.reviewedAt;
@@ -1721,10 +1996,72 @@
     return sanitiseOverlay(o);
   }
 
+  // A plain-English note on ONE of a lab's report-group headings — "used when the set includes potassium" — so two
+  // heading variants of the same test (e.g. "Renal function tests" vs "U&Es" at one lab) can say what tells them
+  // apart. Cosmetic only, like renameLab: it never changes matching/recognition or filing, so it does NOT withdraw
+  // any approval. An override lab entry is created if this lab is still shipped/built-in.
+  function setHeadingNote(builtin, overlay, labId, headingText, note) {
+    const o = safeClone(overlay);
+    const LC = core();
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const lab = asArr(merged.labs).find((l) => l.id === labId);
+    if (!lab) fail('unknown lab "' + labId + '"');
+    const nh = LC.norm(headingText);
+    if (!asArr(lab.groupHeadings).some((g) => LC.norm(g.text) === nh)) {
+      fail('"' + headingText + '" is not a report group heading recorded for ' + lab.name);
+    }
+    const cleanNote = String(note == null ? '' : note).trim();
+    const heads = asArr(lab.groupHeadings).map((g) => {
+      const next = { text: g.text, identifies: [...asArr(g.identifies)], mayContain: [...asArr(g.mayContain)] };
+      const n = LC.norm(g.text) === nh ? cleanNote : g.note;
+      if (n) next.note = n;
+      return next;
+    });
+    const bl = asArr(builtin && builtin.labs).find((l) => l.id === labId);
+    const li = o.labs.findIndex((l) => l.id === labId);
+    const labEntry = {
+      id: lab.id,
+      name: lab.name,
+      identifiers: { ...lab.identifiers },
+      groupHeadings: heads,
+      provenance: li >= 0 ? o.labs[li].provenance : { source: 'practice', createdAt: new Date().toISOString().slice(0, 10) },
+    };
+    if (lab.orderingSystem) labEntry.orderingSystem = lab.orderingSystem;
+    if (lab.structured !== undefined) labEntry.structured = lab.structured;
+    if (lab.note) labEntry.note = lab.note;
+    if (bl) labEntry.override = true;
+    if (li >= 0) o.labs[li] = labEntry;
+    else o.labs.push(labEntry);
+    return sanitiseOverlay(o);
+  }
+
   // "Bring my deleted imported tests back": forget the deletions (the next import re-adds them).
   function restoreDismissed(overlay) {
     const o = safeClone(overlay);
     o.context = { ...(o.context || {}), dismissed: [] };
+    return o;
+  }
+
+  // "It's not X": a person's explicit, remembered "these two results are NOT the same analyte" — the similarity HINT
+  // (SC.similarResults, called from the match board and a test's own results table) must stop suggesting this pairing.
+  // Sorted so order never matters ("a|b" and "b|a" are the same dismissal). Nick, 2026-09-24: "an option 'it's not X'
+  // which then stops offering the match".
+  const similarPairKey = (idA, idB) => [idA, idB].sort().join('|');
+  function isSimilarPairDismissed(overlay, idA, idB) {
+    const list = asArr(overlay && overlay.context && overlay.context.dismissedSimilarPairs);
+    return list.includes(similarPairKey(idA, idB));
+  }
+  function dismissSimilarPair(overlay, idA, idB) {
+    const o = safeClone(overlay);
+    const key = similarPairKey(idA, idB);
+    const list = asArr(o.context && o.context.dismissedSimilarPairs).filter((x) => x !== key);
+    list.push(key);
+    o.context = { ...(o.context || {}), dismissedSimilarPairs: list.slice(-500) };
+    return sanitiseOverlay(o);
+  }
+  function restoreDismissedSimilarPairs(overlay) {
+    const o = safeClone(overlay);
+    o.context = { ...(o.context || {}), dismissedSimilarPairs: [] };
     return o;
   }
 
@@ -1835,6 +2172,7 @@
         [...asArr(existing.requestAliases), ...o.requestAliases],
         (a) => norm(a.text) + '|' + a.system
       );
+      existing.synonyms = dedupe([...asArr(existing.synonyms), ...asArr(o.synonyms)], (x) => norm(x));
       existing.headingAliases = dedupe([...asArr(existing.headingAliases), ...o.headingAliases], (x) => norm(x));
       if (o.exclude.length) existing.exclude = dedupe([...asArr(existing.exclude), ...o.exclude], (x) => norm(x));
       const haveMembers = new Map(asArr(existing.members).map((m) => [m.result, m]));
@@ -1957,6 +2295,7 @@
           : 'the lab no longer has that report group heading';
       });
       usable('screen', overlay.filing.screen, () => '');
+      usable('suppress', overlay.filing.suppress, () => '');
       // absent (not empty) when nothing acts, so a catalogue with no filing setup is byte-for-byte the built-in one
       if (Object.keys(filing).length) cat.filing = filing;
       return cat;
@@ -2061,11 +2400,18 @@
     saveInvestigation,
     revertInvestigation,
     mergeInvestigation,
+    mergeResult,
+    mergeLab,
     describeChanges,
     ownLabHeadings,
     removeInvestigation,
     restoreDismissed,
+    isSimilarPairDismissed,
+    dismissSimilarPair,
+    restoreDismissedSimilarPairs,
     renameLab,
+    setHeadingNote,
+    addRequestAlias,
     filingKey,
     setFilingRange,
     removeFilingRange,
@@ -2073,6 +2419,7 @@
     setFilingGuards,
     setFilingGroup,
     setFilingScreen,
+    setFilingSuppress,
     filingStateForTest,
     setFilingForTest,
     approveFilingForTest,
@@ -2084,6 +2431,7 @@
     filingGuardKey,
     filingGroupKey,
     filingScreenKey,
+    filingSuppressKey,
     removeEntry,
     setInvestigationDisabled,
     mergeCatalogue,

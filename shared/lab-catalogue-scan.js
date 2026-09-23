@@ -129,6 +129,24 @@
     return n / Math.min(A.size, B.size);
   }
 
+  // Existing results that MIGHT be the same analyte as `name` under different wording — a HINT for the person
+  // reviewing a freshly-scanned result, never a decision (same doctrine as the investigation-similarity hint above).
+  // A result whose name/aliases are already token-equal to `name` is caught earlier, at scan time, and reuses the
+  // result outright (fillsFromProposals' own-name check) — it never reaches "new", so it never reaches here either.
+  // What DOES reach here: a different code and a part-overlapping name (a re-worded or newly-split-out analyte),
+  // which is exactly the "duplicate result created for a new code" gap Nick's real-life case was testing.
+  const SIMILAR_RESULT_THRESHOLD = 0.5;
+  function similarResults(catalogue, name, excludeId) {
+    const out = [];
+    for (const r of asArr(catalogue.results)) {
+      if (r.id === excludeId) continue;
+      let best = 0;
+      for (const t of [r.label, ...asArr(r.aliases).map((a) => a.text)]) best = Math.max(best, similarity(name, t));
+      if (best >= SIMILAR_RESULT_THRESHOLD) out.push({ id: r.id, label: r.label, score: best });
+    }
+    return out.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+  }
+
   // ── What sample / kind of test a group can belong to ───────────────────────────────────────────────────────────
   // A group from a radiology department can never be a blood test, and vice versa. Anything we cannot tell stays open.
   const IMAGING_RE =
@@ -248,8 +266,30 @@
       unexplained: 0,
       unknownRequests: new Map(),
       unmatchedHeadings: new Map(),
+      // Medicus's own EXACT request wording (e.g. "Urea and Electrolytes WITH potassium"), for a request that
+      // already resolves — unambiguously, to one investigation — but is not yet recorded, word for word, as one of
+      // that investigation's own requestAliases. A shorter alias ("electrolytes") is enough to MATCH it, so this
+      // wording was previously seen only long enough to resolve, then discarded — never offered for review (Nick,
+      // 2026-09-24). Keyed 'invId|norm(text)' -> { investigationId, text }; not gated by `targets`, since an
+      // investigation can be fully set up already and still be missing a wording variant like this.
+      newRequestWordings: new Map(),
     };
     const groupsSeen = new Map(); // key -> aggregate
+    // Every wording already known for each investigation (its own label counts too — buildIndex adds it as an
+    // implicit alias) — computed once, not per observation.
+    const knownWordings = new Map(); // investigationId -> Set<norm text>
+    const wordingsFor = (invId) => {
+      if (knownWordings.has(invId)) return knownWordings.get(invId);
+      const inv = invById.get(invId);
+      const set = new Set();
+      if (inv) {
+        set.add(LC.norm(inv.label));
+        for (const a of asArr(inv.requestAliases)) if (a && a.text) set.add(LC.norm(a.text));
+        for (const s of asArr(inv.synonyms)) set.add(LC.norm(s));
+      }
+      knownWordings.set(invId, set);
+      return set;
+    };
 
     for (const obs of asArr(observations)) {
       stats.reports++;
@@ -303,7 +343,14 @@
           continue;
         }
         const top = hits.filter((h) => h.specificity === hits[0].specificity);
-        if (top.length === 1 && targets.has(top[0].investigationId)) onCard.add(top[0].investigationId);
+        if (top.length !== 1) continue;
+        const invId = top[0].investigationId;
+        if (targets.has(invId)) onCard.add(invId);
+        const text = LC.parseRequestName(label);
+        const nt = LC.norm(text);
+        if (nt && !wordingsFor(invId).has(nt)) {
+          stats.newRequestWordings.set(invId + '|' + nt, { investigationId: invId, text });
+        }
       }
 
       obs.groups.forEach((g, gi) => {
@@ -469,7 +516,7 @@
       const ranked = candidates
         .map((id) => {
           const inv = invById.get(id);
-          const reqs = [inv.label, ...asArr(inv.requestAliases).map((a) => a.text)];
+          const reqs = [inv.label, ...asArr(inv.requestAliases).map((a) => a.text), ...asArr(inv.synonyms)];
           let best = 0;
           for (const p of probe) for (const q of reqs) best = Math.max(best, similarity(p, q));
           return { id, score: best };
@@ -533,6 +580,12 @@
       ),
       unmatched,
       unknownRequests: [...stats.unknownRequests.values()].sort((a, b) => b.count - a.count),
+      newRequestWordings: [...stats.newRequestWordings.values()].sort(
+        (a, b) =>
+          (invById.get(a.investigationId) || { label: '' }).label.localeCompare(
+            (invById.get(b.investigationId) || { label: '' }).label
+          ) || a.text.localeCompare(b.text)
+      ),
       stats: {
         alreadyComplete,
         reports: stats.reports,
@@ -567,12 +620,19 @@
 
   // ── Proposal -> fills (for LabCatalogueOverlay.applyFills) ────────────────────────────────────────────────────────
   // choices: Map/obj proposal.key -> investigation id (for ambiguous ones). Returns { fills, skipped }.
-  function fillsFromProposals(catalogue, proposals, choices) {
+  // resultChoices: an optional Map/object, keyed the same way as a NEW result's own key ('c:<code>' or 'n:<norm name>'),
+  // letting the person redirect a result that would otherwise be created as brand new onto an existing one instead —
+  // the person's answer to the similarity hint shown on the match board (Nick, 2026-09-23: creating the duplicate
+  // anyway with "no obvious option to merge" is the gap; this is that option, offered BEFORE the duplicate exists
+  // rather than only as a later merge). Never guessed — only ever a person's explicit choice reaches here.
+  function fillsFromProposals(catalogue, proposals, choices, resultChoices) {
     const LC = need();
     const index = LC.buildIndex(catalogue);
     const invById = new Map(asArr(catalogue.investigations).map((i) => [i.id, i]));
     const resById = new Map(asArr(catalogue.results).map((r) => [r.id, r]));
     const pick = (k) => (choices instanceof Map ? choices.get(k) : choices && choices[k]);
+    const pickResult = (k) =>
+      resultChoices instanceof Map ? resultChoices.get(k) : resultChoices && resultChoices[k];
     // a group linked to several tests at once (targets) is the same fill once per test
     proposals = asArr(proposals).flatMap((p) =>
       p && Array.isArray(p.targets) && p.targets.length
@@ -610,9 +670,13 @@
         skipped.push({ key: p.key, reason: 'no test chosen' });
         continue;
       }
-      // the lab: an existing one, or a new one described by the report's performer
-      let labRef = p.lab.id;
-      if (p.lab.isNew) {
+      // the lab: an existing one, or a new one described by the report's performer. p.lab.isNew was decided when the
+      // scan first ran and never updated since — several proposals from the SAME not-yet-known lab, applied together
+      // (Nick, 2026-09-24: several duplicate lab entries appeared after approving results), would otherwise each
+      // create their OWN "new" lab. Re-check against the catalogue THIS call actually sees before trusting it.
+      const nowKnown = p.lab.isNew ? LC.identifyLab(index, { organisation: p.lab.org, department: p.lab.dept }) : null;
+      let labRef = nowKnown ? nowKnown.def.id : p.lab.id;
+      if (p.lab.isNew && !nowKnown) {
         labRef = 'new:' + LC.norm(p.lab.org) + '|' + LC.norm(p.lab.dept);
         if (!fills.labs.some((l) => l.ref === labRef))
           fills.labs.push({
@@ -647,6 +711,11 @@
             });
           if (!own) resultId = null;
         }
+        const nk = r.code ? 'c:' + r.code : 'n:' + LC.norm(r.name);
+        if (!resultId) {
+          const chosen = pickResult(nk);
+          if (chosen && resById.has(chosen)) resultId = chosen;
+        }
         if (resultId) {
           const def = resById.get(resultId);
           if (!resultFill(resultId).for.includes(inv.id)) resultFill(resultId).for.push(inv.id);
@@ -660,7 +729,6 @@
             def && [def.label, ...asArr(def.aliases).map((a) => a.text)].some((t) => LC.norm(t) === LC.norm(r.name));
           if (!known) resultFill(resultId).aliases.push({ text: r.name, lab: labRef });
         } else {
-          const nk = r.code ? 'c:' + r.code : 'n:' + LC.norm(r.name);
           if (!newByKey.has(nk)) {
             newByKey.set(nk, 'new:' + nk);
             fills.results.push({
@@ -831,6 +899,7 @@
     mergeFills,
     collectObservations,
     similarity,
+    similarResults,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.LabCatalogueScan = api;

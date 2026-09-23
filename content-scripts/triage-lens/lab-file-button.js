@@ -582,11 +582,17 @@
   const STORE_SUPPRESS = 'labfiling.suppress';
   const AUDIT_KEY = 'labfiling.auditLog';
   const TRIAGE_CONFIG = 'triagelens.config';
+  // Phase E, stage E1 — see engine/lab-filing-gate.js. A separate, MANDATORY, read-only ring buffer: every filing
+  // evaluation also runs the catalogue engine and records where it would have diverged from the legacy verdict.
+  // Never read by anything that decides what gets offered — legacy blockers alone still do that at this stage.
+  const CATALOGUE_SHADOW_KEY = 'labfiling.catalogueShadowLog';
 
   const LF = window.LabFilingUtils;
   const API = window.SentinelApiClient;
   const NORM = window.SentinelNormalisers;
   const SEV = window.SentinelResultSeverity;
+  const LFC = window.LabFilingCatalogue;
+  const LFG = window.LabFilingGate;
 
   // Filing-screen URL gate. A result-review task overview. Kept deliberately
   // narrow; the in-DOM File-control gate (GATE 2 above) is the real guard.
@@ -786,6 +792,69 @@
       }
     }
     return Array.from(new Set(blockers));
+  }
+
+  // ── Phase E, stage E1 — the catalogue engine runs in SHADOW only (engine/lab-filing-catalogue.js /
+  // engine/lab-filing-gate.js). It never changes what evaluateGate() offers at this stage; it only records where
+  // it would have diverged from the legacy verdict above, for review before anything is ever switched on.
+  // Same caching/invalidation shape as content.js's ensureOirCatalogue() (Phase D) — a separate copy because each
+  // content script file has its own top-level closure; both read the same window.labcatalogueLoadEffective(). ──
+  let _filingCataloguePromise = null;
+  const resetFilingCatalogue = () => {
+    _filingCataloguePromise = null;
+  };
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes['labcatalogue.practice']) resetFilingCatalogue(); // approvals/edits change the acting catalogue
+      });
+    }
+  } catch (_) {
+    /* no storage events — reloaded fresh on the next page load */
+  }
+  function ensureFilingCatalogue() {
+    if (_filingCataloguePromise) return _filingCataloguePromise;
+    if (typeof window.labcatalogueLoadEffective !== 'function') return (_filingCataloguePromise = Promise.resolve(null));
+    _filingCataloguePromise = window
+      .labcatalogueLoadEffective()
+      .then((eff) => (eff && eff.catalogue) || null)
+      .catch(() => null);
+    return _filingCataloguePromise;
+  }
+
+  // De-duped per taskUuid (in-memory, this page load only) against evaluateGate()'s own comment above it: that
+  // function re-runs on every DOM mutation the page observes, often more than once a second — writing to
+  // chrome.storage on every one of those would flood the ring buffer for no benefit, since the underlying report
+  // and blockers do not change nearly that often. Only a genuinely different outcome for this task gets written.
+  const _shadowSignatures = new Map(); // taskUuid -> last-written JSON signature
+  function runFilingShadow(rs, legacyBlockers) {
+    if (!LFC || !LFG || !rs || !rs.report) return;
+    ensureFilingCatalogue()
+      .then((catalogue) => {
+        const catResult = LFC.evaluateFilingCatalogue(rs.report, catalogue, {
+          extraText: document.body ? document.body.textContent : '',
+          // meds are deliberately NOT fetched here — this is observational only, and a medicine-exclusion fetch on
+          // every gate evaluation would add a network call to a path that today changes nothing. The shadow log
+          // will under-count medicine-exclusion divergence until this is revisited; every other check still runs.
+        });
+        const entry = LFG.buildShadowLogEntry({
+          taskUuid: rs.taskUuid,
+          legacyBlockers,
+          catalogueResult: catResult,
+        });
+        const sig = JSON.stringify(entry);
+        if (_shadowSignatures.get(rs.taskUuid) === sig) return; // unchanged since the last write for this task
+        _shadowSignatures.set(rs.taskUuid, sig);
+        if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return;
+        chrome.storage.local.get(CATALOGUE_SHADOW_KEY, (r) => {
+          const arr = Array.isArray(r[CATALOGUE_SHADOW_KEY]) ? r[CATALOGUE_SHADOW_KEY] : [];
+          arr.unshift(entry);
+          chrome.storage.local.set({ [CATALOGUE_SHADOW_KEY]: arr.slice(0, 200) });
+        });
+      })
+      .catch(() => {
+        /* shadow logging must never affect, or even surface an error into, the real gate */
+      });
   }
 
   function readPatientBanner() {
@@ -1237,6 +1306,9 @@
       const blockers = rs
         ? (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile))
         : ['could not read the result'];
+      // Shadow only (Phase E stage E1) — this is the click-time, fresh-fetched re-verification, the moment closest
+      // to a real filing decision, so it is worth its own shadow entry alongside evaluateGate()'s poll-time one.
+      runFilingShadow(rs, blockers);
       if (!rs || blockers.length) {
         toast('Not filing — ' + (blockers[0] || 'review manually') + '. Review manually.', 'err');
         hideButton();
@@ -1395,6 +1467,9 @@
     // checked here on top of the generic blockers.
     const eff = effectiveScore(rs, profile);
     const blockers = (eff.fileBlockers || []).concat(await computeProfileBlockers(rs, profile));
+    // Shadow only (Phase E stage E1) — observes, never gates. Fire-and-forget: must not slow down or affect what
+    // follows, and runFilingShadow() never throws out of its own promise chain.
+    runFilingShadow(rs, blockers);
     if (blockers.length) {
       const commentedResults = LF
         ? LF.unresolvedCommentedResults(eff.report, profile, currentMatchedProfiles)

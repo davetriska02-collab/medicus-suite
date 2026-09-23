@@ -125,7 +125,7 @@
         .join(' ');
     const byExactReq = new Map(); // stripped wording -> built-in id (null when two built-ins share it)
     for (const i of asArr(base.investigations)) {
-      for (const t of [i.label, ...asArr(i.requestAliases).map((a) => a && a.text)]) {
+      for (const t of [i.label, ...asArr(i.requestAliases).map((a) => a && a.text), ...asArr(i.synonyms)]) {
         const k = stripSpecimen(t);
         if (!k) continue;
         byExactReq.set(k, byExactReq.has(k) && byExactReq.get(k) !== i.id ? null : i.id);
@@ -339,7 +339,10 @@
         provenance: provenance(),
       };
       if (b && b.legacyKey) inv.legacyKey = b.legacyKey;
-      const haveReq = new Set(asArr(b && b.requestAliases).map((a) => norm(a.text)));
+      const haveReq = new Set([
+        ...asArr(b && b.requestAliases).map((a) => norm(a.text)),
+        ...asArr(b && b.synonyms).map(norm),
+      ]);
       const haveHead = new Set(asArr(b && b.headingAliases).map(norm));
       for (const r of req) if (!haveReq.has(norm(r))) inv.requestAliases.push({ text: r, system: 'any' });
       for (const r of rep) if (!haveHead.has(norm(r))) inv.headingAliases.push(r);

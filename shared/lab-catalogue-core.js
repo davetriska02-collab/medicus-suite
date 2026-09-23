@@ -178,6 +178,12 @@
       ) {
         err(`${where}: headingAliases must be an array of strings`);
       }
+      // Legacy free-text terms from the old (pre-catalogue) matcher — still used to MATCH a request (folded into the
+      // same request table as requestAliases), but kept apart so "How it is requested in Medicus" can hold only
+      // wording actually confirmed by a scan of real Medicus requests, never a guess (Nick, 2026-09-24).
+      if (v.synonyms !== undefined && !(Array.isArray(v.synonyms) && v.synonyms.every(isNonEmptyStr))) {
+        err(`${where}: synonyms must be an array of strings`);
+      }
       if (v.exclude !== undefined && !(Array.isArray(v.exclude) && v.exclude.every(isNonEmptyStr))) {
         err(`${where}: exclude must be an array of strings`);
       }
@@ -203,7 +209,9 @@
       if (v.note !== undefined && !isStr(v.note)) err(`${where}: note must be a string`);
     });
     investigations.forEach((v) => {
-      if (isObj(v) && asArr(v.requestAliases).length === 0) warn(`investigation "${v.id}" has no requestAliases`);
+      if (isObj(v) && asArr(v.requestAliases).length === 0 && asArr(v.synonyms).length === 0) {
+        warn(`investigation "${v.id}" has no requestAliases or synonyms`);
+      }
     });
 
     // labs
@@ -297,6 +305,9 @@
       };
       addReq(inv.label, 'any');
       for (const a of asArr(inv.requestAliases)) if (isObj(a)) addReq(a.text, a.system);
+      // Synonyms match too (system 'any') — they are kept apart from requestAliases for editing/display only, not to
+      // weaken recognition; a legacy synonym must go on matching a real request exactly as it always has.
+      for (const s of asArr(inv.synonyms)) addReq(s, 'any');
       const addHead = (text) => {
         const n = norm(text);
         if (n) headingTable.push({ investigationId: inv.id, norm: n, len: tokenCount(n), exclude });

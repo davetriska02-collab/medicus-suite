@@ -2,6 +2,48 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.269.0] — 2026-09-24
+
+### Investigations page: duplicate-result and duplicate-lab detection/merging, filter overhaul; Phase E gate + shadow log (still setup-only)
+
+- **A hint when two results are probably the same analyte**, wherever a scan or a test's own results table is about to
+  treat them as separate — under a different SNOMED code or wording. Shown on the match-requests-to-lab-reports scan
+  board (before a duplicate is even created, with a one-click "use this instead") and inline in a test's own results
+  table. Merging moves codes and other names onto the survivor, repoints every test that used the duplicate, and
+  deletes it (`OV.mergeResult`). In the results table this is **staged, not immediate**: drag one result onto another
+  (or click the hint) just records a pending merge shown on both rows with its own Undo — nothing actually merges
+  until the test itself is saved, so the card never closes unexpectedly and the merge is gated behind a real save
+  decision.
+- **"It's not X"** — dismiss a wrong similarity suggestion permanently (remembered per practice, order-independent);
+  it stops being offered on the results table, the scan board, and the standalone result editor.
+- **Duplicate lab entries, fixed at the source**: several proposals learned from the same not-yet-known lab, applied
+  together, previously created their own separate "new lab" entry each — the scan's "is this lab new?" flag was
+  decided once and never re-checked against what had already been created earlier in the same batch. Also added a
+  "Merge into that lab" tool (report headings, result aliases and lab-keyed filing setup move across) to clean up any
+  duplicates already sitting in a practice's data.
+- **Investigations list filters reworked into independent toggles**: Awaiting review / Assisted filing / Matched to a
+  lab report / Matched to a Medicus request, each Any/Yes/No and combinable freely (replacing one either/or choice).
+  Three "Show me investigation groups…" presets jump straight to a single-facet view. The list now sorts items
+  needing attention first (by a weighted score across the four facets) instead of flat alphabetical.
+- The scan board now clearly separates a whole-group match ("Investigation group:", moved above) from individual
+  per-result suggestions ("Individual results in this group — match by clicking a suggestion").
+- Scan gained a "how it comes back from the lab" refresh: the exact wording Medicus uses to request a group (e.g.
+  "Urea and Electrolytes WITH potassium") is captured and offered even when the request already resolves via a
+  shorter alias; the green summary box now shows only real per-lab report headings (with an editable per-heading
+  note), separated from legacy free-text matching terms; several `<details>` sections no longer snap shut on an
+  unrelated save mid-edit or mid-scroll.
+- **"How it is requested in Medicus" now holds only scan-confirmed exact wording.** Legacy free-text guesses moved to
+  a separate, small "Edit synonyms" control per test; the built-in seed catalogue was migrated accordingly. A test
+  with no confirmed wording yet falls back to showing its synonyms, labelled "known as" so it's never mistaken for a
+  confirmed match.
+- The existing "create a new test from a lab group" option (in the matching-board dropdown) is now clearly labelled
+  and pre-fills the new test's name from the lab's own report heading.
+- **Phase E gate + shadow log** (`engine/lab-filing-catalogue.js`, `engine/lab-filing-gate.js`): a pure adapter that
+  reads assisted-filing setup from the Lab Result Catalogue and combines its verdict with the legacy filing gate,
+  plus a mandatory shadow log (names/codes/reasons only, never values) recording what each engine would have done.
+  **Not switched on** — Lab Filing still acts on the legacy gate alone; this only logs what the catalogue-driven gate
+  would have decided, for comparison before any cutover.
+
 ## [v3.268.0] — 2026-09-22
 
 ### Investigations page: wording, layout polish, and a pre-filled practice range (nothing acts on it yet)
