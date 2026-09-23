@@ -1,10 +1,10 @@
 // Medicus Suite — tab grouping scheme A
 // Run with: node test-tab-sections.js
 //
-// Locks the menu/palette section membership, the ungrouped Slots + Monitoring
-// pins, and the shipped strip: same order as v3.264.15, minus Rota manager
-// and Duplicates. Those two stay reachable (palette, Open full rota, manager
-// preset) and must not sit on the strip.
+// Locks the menu/palette section membership and the shipped strip: same order
+// as v3.264.15, minus Rota manager, Duplicates, and Phrases. The first two
+// stay reachable (palette, Open full rota, manager preset). Phrases is not
+// in this build. None of them sit on the strip.
 
 'use strict';
 
@@ -67,7 +67,6 @@ const PANEL_STRIP = [
   'record',
   'rota',
   'patient-alerts',
-  'phrases',
 ];
 
 const PANEL_LABELS = [
@@ -86,7 +85,6 @@ const PANEL_LABELS = [
   'Record',
   'Rota',
   'Pt Alerts',
-  'Phrases',
 ];
 
 const POPOUT_STRIP = [
@@ -105,7 +103,6 @@ const POPOUT_STRIP = [
   'knowledge',
   'rota',
   'leaflets',
-  'phrases',
 ];
 
 const POPOUT_LABELS = [
@@ -124,19 +121,19 @@ const POPOUT_LABELS = [
   'Knowledge',
   'Rota',
   'Leaflets',
-  'Phrases',
 ];
 
 const MENU_ORDER = [
+  'section:triage',
   'item:slots',
-  'item:sentinel',
-  'section:with-patient',
-  'item:record',
-  'item:trends',
+  'section:qof-tools',
   'item:sweep',
   'item:signing',
+  'section:with-patient',
+  'item:sentinel',
+  'item:record',
+  'item:trends',
   'item:patient-alerts',
-  'item:phrases',
   'section:desk',
   'item:reception',
   'item:submissions',
@@ -169,13 +166,15 @@ const MENU_ORDER = [
   } = sections;
 
   console.log('Section membership');
-  check(PINNED_IDS.join(',') === 'slots,sentinel', 'Slots and Monitoring are the only pinned tabs');
+  check(PINNED_IDS.length === 0, 'nothing is pinned above the sections');
   check(
-    TAB_SECTIONS.map((s) => s.label).join('|') === 'With the patient|Desk|Practice|Reference',
+    TAB_SECTIONS.map((s) => s.label).join('|') === 'Triage|QOF tools|With the patient|Desk|Practice|Reference',
     'section names match the palette and the All-tabs menu'
   );
   const expectedIds = {
-    'With the patient': ['record', 'trends', 'sweep', 'signing', 'patient-alerts', 'phrases'],
+    Triage: ['slots'],
+    'QOF tools': ['sweep', 'signing'],
+    'With the patient': ['sentinel', 'record', 'trends', 'patient-alerts'],
     Desk: ['reception', 'submissions'],
     Practice: ['capacity', 'activity', 'referrals', 'rota', 'rota-app', 'duplicate-checker'],
     Reference: ['knowledge', 'leaflets'],
@@ -193,12 +192,11 @@ const MENU_ORDER = [
     classified.slice().sort().join(',') === catalogIds.slice().sort().join(','),
     'section map covers the catalog, nothing more'
   );
-  check(paletteGroupFor('slots') === '' && paletteGroupFor('sentinel') === '', 'pinned tabs have no parent badge');
-  check(
-    paletteGroupFor('signing') === 'With the patient',
-    'Signing stays in With the patient (main label, not Book sign)'
-  );
+  check(paletteGroupFor('slots') === 'Triage', 'Slots sits under Triage');
+  check(paletteGroupFor('sentinel') === 'With the patient', 'Monitoring sits under With the patient');
+  check(paletteGroupFor('sweep') === 'QOF tools' && paletteGroupFor('signing') === 'QOF tools', 'QOF tools is Sweep and Signing');
   check(paletteGroupFor('patient-alerts') === 'With the patient', 'Pt Alerts stays in With the patient');
+  check(!classified.includes('phrases'), 'Phrases is not in the jump menu');
   check(
     paletteGroupFor('reception') === 'Desk' && paletteGroupFor('submissions') === 'Desk',
     'Desk is Reception and Submissions'
@@ -216,21 +214,23 @@ const MENU_ORDER = [
     'no Today, tally, Note TV, or Consult parent'
   );
   check(OFF_STRIP_IDS.join(',') === 'rota-app,duplicate-checker', 'off-strip set is Rota manager and Duplicates');
-  check(orderedMenuIds().join(',') === classified.join(','), 'palette order is pinned, then sections');
+  check(orderedMenuIds().join(',') === classified.join(','), 'palette order follows the sections');
 
   console.log('\nMenu HTML');
   const shuffled = TAB_CATALOG.map((t) => ({ id: t.id, label: t.name, active: t.id === 'slots' })).sort((a, b) =>
     b.id < a.id ? -1 : 1
   );
   const html = renderTabMenuHTML(shuffled, (s) => s);
-  check(menuTokens(html).join(',') === MENU_ORDER.join(','), 'menu lists pins, then sections, ignoring input order');
+  check(menuTokens(html).join(',') === MENU_ORDER.join(','), 'menu lists sections in scheme order, ignoring input order');
   check(
     html.includes('alltabs-item active') && html.includes('data-module="slots"'),
-    'active pin keeps the active class'
+    'active Slots row keeps the active class'
   );
+  check(!html.includes('phrases'), 'Phrases is not rendered in the menu');
+  const triageAt = html.indexOf('data-section="triage"');
   const slotsAt = html.indexOf('data-module="slots"');
-  const firstSection = html.indexOf('data-section=');
-  check(slotsAt > -1 && firstSection > slotsAt, 'Slots is rendered before any section heading');
+  const qofAt = html.indexOf('data-section="qof-tools"');
+  check(triageAt > -1 && slotsAt > triageAt && (qofAt < 0 || slotsAt < qofAt), 'Slots is the Triage row');
   check(
     !html.includes('alltabs-group" role="group"><div class="alltabs-group'),
     'Knowledge and Leaflets are not a nested child menu'
@@ -273,19 +273,23 @@ const MENU_ORDER = [
   const popNav = between(popHtml, 'id="popoutTabs"', 'class="popout-actions"');
   check(
     moduleIds(panelNav).join(',') === PANEL_STRIP.join(','),
-    'panel strip order is unchanged apart from the two demotions'
+    'panel strip order is unchanged apart from the demotions'
   );
   check(
     spanLabels(panelNav).join('|') === PANEL_LABELS.join('|'),
     'panel strip labels unchanged (Slots, Monitoring, Signing, Pt Alerts)'
   );
   check(
-    !panelNav.includes('rota-app') && !panelNav.includes('duplicate-checker'),
-    'Rota manager and Duplicates are not on the panel strip'
+    !panelNav.includes('rota-app') && !panelNav.includes('duplicate-checker') && !panelNav.includes('phrases'),
+    'Rota manager, Duplicates, and Phrases are not on the panel strip'
   );
   check(!panelNav.includes('nav-parent') && !/>\s*Consult\s*</.test(panelNav), 'the strip has no parent button');
-  check(moduleIds(popNav).join(',') === POPOUT_STRIP.join(','), 'pop-out strip order is untouched');
-  check(spanLabels(popNav).join('|') === POPOUT_LABELS.join('|'), 'pop-out strip labels are untouched');
+  check(
+    !panelHtml.includes('phrases-core.js') && !popHtml.includes('phrases-core.js'),
+    'panel and pop-out do not load the Phrases scripts'
+  );
+  check(moduleIds(popNav).join(',') === POPOUT_STRIP.join(','), 'pop-out strip drops Phrases and keeps its short labels');
+  check(spanLabels(popNav).join('|') === POPOUT_LABELS.join('|'), 'pop-out strip labels keep Monitor and Subs');
   const tplAt = panelHtml.indexOf('<template id="offStripLaunchers">');
   const tpl = panelHtml.slice(tplAt, panelHtml.indexOf('</template>', tplAt));
   check(tplAt > panelHtml.indexOf('class="nav-actions"'), 'launcher template sits outside the strip');
@@ -316,6 +320,10 @@ const MENU_ORDER = [
   );
   check(!palette.includes("group: 'Tab'"), 'palette no longer dumps every tab into one Tab group');
   const panelJs = read('side-panel/panel.js');
+  check(
+    !panelJs.includes('\n  phrases:') && !read('pop-out/pop-out.js').includes('\n  phrases:'),
+    'neither shell registers the Phrases module'
+  );
   check(panelJs.includes('renderTabMenuHTML('), 'All-tabs menu renders the section groups');
   check(
     panelJs.includes('digitJumpCaption(') && panelJs.includes('jump along the strip'),

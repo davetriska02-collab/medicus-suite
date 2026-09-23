@@ -2,6 +2,23 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.34] — 2026-09-23
+
+### Jump menu — Triage, QOF tools, Phrases off this build
+
+The strip stays flat and in the same order. Phrases is not on the strip, in the jump menu, in the command palette, or in the tab catalog. A saved Phrases tab falls back to Slots.
+
+The All-tabs menu and the command palette now group as:
+
+- **Triage** — Slots
+- **QOF tools** — Sweep, Signing
+- **With the patient** — Monitoring, Record, Trends, Pt Alerts
+- **Desk** — Reception, Submissions
+- **Practice** — Forecast, Activity, Referrals, Rota, Rota manager, Duplicates
+- **Reference** — Knowledge, Leaflets
+
+Digits 1–9 still follow the strip, so they still start Slots, Monitoring, Trends.
+
 ## [v3.264.33] — 2026-09-22
 
 ### Tab grouping, scheme A — sections in the menu and palette

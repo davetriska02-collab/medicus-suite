@@ -2967,6 +2967,9 @@ html[data-colorblind='true'] .ampm-pm .ampm-num {
   color: var(--text-3);
   padding: 10px 6px 4px;
 }
+.alltabs-group:first-child > .alltabs-section {
+  padding-top: 2px;
+}
 .alltabs-item {
   display: flex;
   align-items: center;

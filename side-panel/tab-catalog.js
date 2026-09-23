@@ -58,11 +58,6 @@ export const TAB_CATALOG = [
     blurb: 'Your own per-patient flags — interpreter, safeguarding, behaviour — shown when that patient is open.',
   },
   {
-    id: 'phrases',
-    name: 'Phrases',
-    blurb: 'Reusable message blocks you compose, copy and paste into Medicus yourself.',
-  },
-  {
     // Off the strip, same as Rota manager. The Everything preset still shows it.
     id: 'duplicate-checker',
     name: 'Duplicates',
@@ -86,7 +81,6 @@ export const ROLE_PRESETS = [
       'signing',
       'knowledge',
       'leaflets',
-      'phrases',
     ],
   },
   {

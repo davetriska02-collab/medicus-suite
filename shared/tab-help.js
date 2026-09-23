@@ -91,12 +91,6 @@ export const TAB_HELP = {
     firstStep:
       'Open a patient in Medicus, then add an alert — pick a preset or write your own. Keep wording professional and factual: flags are visible to every practice user and disclosable to the patient.',
   },
-  phrases: {
-    title: 'Phrases',
-    what: 'A library of reusable message blocks — openers, results wording, safety-netting, sign-offs — you compose into one message and copy. It copies text only: you paste it into the right Medicus box and send it yourself; nothing is sent or written for you.',
-    firstStep:
-      'Tap blocks to build a message (or type /trigger in search), press Copy, then paste into Medicus. Type over every *** with the patient’s details — they are never filled in for you.',
-  },
   rota: {
     title: 'Rota',
     what: 'Today’s duty cover, who is on leave, sessions still needing cover and this week’s high-priority staffing warnings.',

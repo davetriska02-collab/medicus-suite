@@ -67,10 +67,6 @@ const MODULES = {
     js: () => import('../side-panel/modules/patient-alerts/patient-alerts.js'),
     css: '../side-panel/modules/patient-alerts/patient-alerts.css',
   },
-  phrases: {
-    js: () => import('../side-panel/modules/phrases/phrases.js'),
-    css: '../side-panel/modules/phrases/phrases.css',
-  },
   rota: {
     js: () => import('../side-panel/modules/rota/rota.js'),
     css: '../side-panel/modules/rota/rota.css',

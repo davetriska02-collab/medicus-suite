@@ -140,12 +140,12 @@ const MODULES = {
     js: () => import('./modules/patient-alerts/patient-alerts.js'),
     css: './modules/patient-alerts/patient-alerts.css',
   },
-  phrases: { js: () => import('./modules/phrases/phrases.js'), css: './modules/phrases/phrases.css' },
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
 };
 // NOTE: 'rota-app' and 'duplicate-checker' are deliberately absent. They open
 // a full page (All tabs → Practice, and the command palette), not a panel
-// module. The boot guard (`m in MODULES`) refuses to restore the panel into them.
+// module. 'phrases' is out of this build. The boot guard (`m in MODULES`)
+// refuses to restore the panel into any of them.
 
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both

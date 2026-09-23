@@ -3,22 +3,32 @@
 //
 // Menu and command-palette grouping only. This is NOT the strip order.
 // The strip stays the flat DOM order shipped in panel.html / pop-out.html.
-// Slots and Monitoring are pinned above the sections — never under a parent.
-// Rota manager and Duplicates are off the strip; they still belong to Practice.
+// Phrases is not in this build. Rota manager and Duplicates are off the
+// strip; they still belong to Practice.
 
 'use strict';
 
-// Visible strip positions 1 and 2. No section heading.
-export const PINNED_IDS = ['slots', 'sentinel'];
+// Nothing sits above the sections. Kept so callers can still ask.
+export const PINNED_IDS = [];
 
 // Full-tab launchers. Kept out of the strip, the digit jump, and the arrow cycle.
 export const OFF_STRIP_IDS = ['rota-app', 'duplicate-checker'];
 
 export const TAB_SECTIONS = [
   {
+    id: 'triage',
+    label: 'Triage',
+    ids: ['slots'],
+  },
+  {
+    id: 'qof-tools',
+    label: 'QOF tools',
+    ids: ['sweep', 'signing'],
+  },
+  {
     id: 'with-patient',
     label: 'With the patient',
-    ids: ['record', 'trends', 'sweep', 'signing', 'patient-alerts', 'phrases'],
+    ids: ['sentinel', 'record', 'trends', 'patient-alerts'],
   },
   {
     id: 'desk',
@@ -42,14 +52,13 @@ for (const section of TAB_SECTIONS) {
   for (const id of section.ids) SECTION_BY_ID.set(id, section);
 }
 
-// Palette badge. Pinned tabs return '' so they render with no parent label.
-// An id this map does not know keeps the old 'Tab' badge rather than vanishing.
+// Palette badge. An id this map does not know keeps the old 'Tab' badge.
 export function paletteGroupFor(moduleId) {
   if (PINNED_IDS.includes(moduleId)) return '';
   return SECTION_BY_ID.get(moduleId)?.label || 'Tab';
 }
 
-// Pinned ids, then each section's ids, in scheme order.
+// Each section's ids, in scheme order. Pinned ids, if any, come first.
 export function orderedMenuIds() {
   return [...PINNED_IDS, ...TAB_SECTIONS.flatMap((section) => section.ids)];
 }
