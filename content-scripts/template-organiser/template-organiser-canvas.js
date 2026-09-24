@@ -156,18 +156,49 @@
     });
   }
 
-  function resourceUrls() {
+  var _apiRing = [];
+
+  function noteClinicalUrl(url) {
+    _apiRing = C.rememberClinicalUrl(_apiRing, url);
+  }
+
+  function watchClinicalUrls() {
     try {
-      return performance.getEntriesByType('resource').map(function (entry) {
-        return entry && entry.name;
+      var existing = performance.getEntriesByType('resource') || [];
+      existing.forEach(function (entry) {
+        if (entry && entry.name) noteClinicalUrl(entry.name);
       });
+      if (typeof PerformanceObserver !== 'function') return;
+      var observer = new PerformanceObserver(function (list) {
+        var entries = list.getEntries();
+        for (var i = 0; i < entries.length; i += 1) {
+          if (entries[i] && entries[i].name) noteClinicalUrl(entries[i].name);
+        }
+      });
+      observer.observe({ type: 'resource', buffered: true });
     } catch (err) {
-      return [];
+      /* resource timing is optional; overview hydrate still runs */
     }
   }
 
+  function resourceUrls() {
+    var live = [];
+    try {
+      live = performance.getEntriesByType('resource').map(function (entry) {
+        return entry && entry.name;
+      });
+    } catch (err) {
+      live = [];
+    }
+    return C.mergeResourceUrls(_apiRing, live);
+  }
+
   function readLiveContext() {
-    return C.readSessionContext({ href: location.href, resourceUrls: resourceUrls() });
+    return C.readSessionContext({
+      href: location.href,
+      resourceUrls: resourceUrls(),
+      headingId: _headingId,
+    });
   }
 
   function practiceCodeHint() {
@@ -215,7 +246,12 @@
       .then(function () {
         if (!window.TemplateOrganiserClient) throw new Error('Template list client is not loaded.');
         if (!api) throw new Error('No practice API host on this page. Nothing was read.');
-        return api.hydrate(C.readSessionContext({ href: href, resourceUrls: urls }), href, urls);
+        return api.hydrate(
+          C.readSessionContext({ href: href, resourceUrls: urls, headingId: _headingId }),
+          href,
+          urls,
+          _headingId
+        );
       })
       .then(function (ctx) {
         if (gen !== _harvestGen) return null;
@@ -385,17 +421,9 @@
 
   function shellHtml() {
     var gaps = (_catalogue && _catalogue.gaps) || {};
-    var seenGap = {};
-    var gapLine = [gaps.templates, gaps.documents]
-      .filter(function (line) {
-        if (!line || seenGap[line]) return false;
-        seenGap[line] = true;
-        return true;
-      })
-      .join(' ');
+    var surfaceGap = _surface === 'documents' ? gaps.documents || '' : gaps.templates || '';
     var banner =
-      'Groups are kept on this install. Open uses Medicus’s own template form. Medicus places the finished item at the cursor.' +
-      (gapLine ? ' ' + gapLine : '');
+      'Groups are kept on this install. Open uses Medicus’s own template form. Medicus places the finished item at the cursor.';
     var templatesN = _catalogue && _catalogue.templates ? _catalogue.templates.length : 0;
     var documentsN = _catalogue && _catalogue.documents ? _catalogue.documents.length : 0;
     var board = '';
@@ -449,6 +477,7 @@
       '</header>' +
       board +
       '<footer class="ms-toc-footer">' +
+      (surfaceGap ? '<p class="ms-toc-gap" role="status">' + esc(surfaceGap) + '</p>' : '') +
       '<p class="ms-toc-foot-note">' +
       esc(foot) +
       '</p>' +
@@ -833,6 +862,7 @@
 
   var _fieldEl = null;
   var _fieldKind = '';
+  var _headingId = '';
 
   function consultPage() {
     try {
@@ -894,12 +924,18 @@
         headingText: '',
         editable: true,
       });
-      if (kind) return { kind: kind, el: el };
+      if (kind) {
+        return {
+          kind: kind,
+          el: el,
+          headingId: C.headingContextId(node.id || '') ? node.id : labelled,
+        };
+      }
       var prev = node.previousElementSibling;
       var steps = 0;
       while (prev && steps < 6) {
         var sib = headingKindFrom(prev);
-        if (sib) return { kind: sib, el: el };
+        if (sib) return { kind: sib, el: el, headingId: prev.id || '' };
         prev = prev.previousElementSibling;
         steps += 1;
       }
@@ -914,10 +950,12 @@
     if (hit) {
       _fieldEl = hit.el;
       _fieldKind = hit.kind;
+      _headingId = hit.headingId || '';
       return;
     }
     _fieldEl = null;
     _fieldKind = '';
+    _headingId = '';
   }
 
   function launcherWanted() {
@@ -1105,6 +1143,8 @@
   function stopHeavyChrome() {
     muteOrganiserChrome();
   }
+
+  watchClinicalUrls();
 
   var Runtime = window.InjectorRuntime;
   if (Runtime && typeof Runtime.register === 'function') {

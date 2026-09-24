@@ -91,14 +91,20 @@
       return C.parseList(json, 'documents');
     }
 
-    async function hydrate(ctx, href, resourceUrls) {
-      var next = C.mergeSession(ctx, C.readSessionContext({ href: href, resourceUrls: resourceUrls, overview: null }));
+    async function hydrate(ctx, href, resourceUrls, headingId) {
+      var seed = { href: href, resourceUrls: resourceUrls, overview: null, headingId: headingId || '' };
+      var next = C.mergeSession(ctx, C.readSessionContext(seed));
       if (next.encounterId && (!next.patientId || !next.consultationTopicId)) {
         try {
           var overview = await getJson(C.PATHS.encounterOverview(next.encounterId));
-          next = C.readSessionContext({ href: href, resourceUrls: resourceUrls, overview: overview });
+          next = C.readSessionContext({
+            href: href,
+            resourceUrls: resourceUrls,
+            overview: overview,
+            headingId: headingId || '',
+          });
         } catch (err) {
-          /* named fields may already be on the resource URLs */
+          /* named fields may already be on the resource URLs or the heading */
         }
       }
       return next;

@@ -176,6 +176,78 @@ function names(surface) {
     'practice code fills in when the path has no site id'
   );
 
+  const OTHER = '88888888-8888-4888-8888-888888888888';
+  const OTHER_HEADING = '99999999-9999-4999-8999-999999999999';
+  const fromTopics = C.readSessionContext({
+    href: pageHref,
+    overview: { consultationTopics: [{ id: TOPIC, patientId: PATIENT }] },
+  });
+  check(
+    fromTopics.consultationTopicId === TOPIC && fromTopics.patientId === PATIENT,
+    'overview consultationTopics id hydrates topic and patient'
+  );
+  const owned = C.readSessionContext({
+    href: pageHref,
+    resourceUrls: [
+      'https://560b6c.api.england.medicus.health/clinical/data/data-entry-template/list?consultationTopicId=' + OTHER,
+    ],
+    headingId: 'heading-history-' + CONTEXT,
+    overview: {
+      patient: { id: PATIENT },
+      consultationTopics: [
+        { id: OTHER, headings: [{ id: OTHER_HEADING, title: 'History' }] },
+        { id: TOPIC, patientId: PATIENT, headings: [{ id: CONTEXT, title: 'History' }] },
+      ],
+    },
+  });
+  check(owned.consultationTopicId === TOPIC, 'focused heading picks the topic that owns it');
+  check(owned.patientId === PATIENT, 'overview patient stays when the heading picks a topic');
+  check(
+    owned.contextId === CONTEXT && owned.contextType === 'consultation-topic-heading',
+    'heading-history uuid is the document context'
+  );
+  const fromSummary = C.readSessionContext({
+    href: pageHref,
+    resourceUrls: [
+      'https://560b6c.api.england.medicus.health/clinical/data/clinical-summary/summary/' +
+        PATIENT +
+        '?encounterId=' +
+        ENTRY,
+      'https://560b6c.api.england.medicus.health/clinical/data/encounter/consultation-topic/draft-consultation-topic/' +
+        TOPIC,
+      'https://560b6c.api.england.medicus.health/clinical/encounter/consultation-topic/topic-heading-entries/' +
+        CONTEXT,
+    ],
+  });
+  check(fromSummary.patientId === PATIENT, 'clinical-summary URL yields patient');
+  check(fromSummary.consultationTopicId === TOPIC, 'draft-consultation-topic URL yields topic');
+  check(
+    fromSummary.contextId === CONTEXT && fromSummary.contextType === 'consultation-topic-heading',
+    'topic-heading-entries URL yields context'
+  );
+  const nestedTopic = C.readSessionContext({
+    href: pageHref,
+    overview: { data: { consultationTopics: [{ consultationTopicId: TOPIC, patient: { id: PATIENT } }] } },
+  });
+  check(
+    nestedTopic.consultationTopicId === TOPIC && nestedTopic.patientId === PATIENT,
+    'nested consultationTopics and patient hydrate'
+  );
+  const notRows = C.parseList({ consultationTopics: [{ id: TOPIC, title: 'Surgery consultation' }] }, 'templates');
+  check(notRows.ok === false && notRows.items.length === 0, 'consultation topics are not template rows');
+  const listEnvelope = C.parseList({ list: [{ id: TPL, name: 'Asthma review' }] }, 'templates');
+  check(listEnvelope.ok && listEnvelope.items[0].id === TPL, 'list envelope is a catalogue');
+  let ring = C.rememberClinicalUrl([], 'https://england.medicus.health/version');
+  check(ring.length === 0, 'page-origin URL is not kept in the api ring');
+  ring = C.rememberClinicalUrl(
+    ring,
+    'https://560b6c.api.england.medicus.health/clinical/data/encounter/consultation-topic/draft-consultation-topic/' +
+      TOPIC
+  );
+  check(ring.length === 1, 'practice api clinical URL is kept');
+  const fromRing = C.readSessionContext({ href: pageHref, resourceUrls: C.mergeResourceUrls(ring, []) });
+  check(fromRing.consultationTopicId === TOPIC, 'a remembered api URL still yields the topic');
+
   console.log('\n--- clinical field and native open, no suite create body ---');
   check(C.clinicalFieldKind({ id: 'heading-history-' + TOPIC }) === 'history', 'heading-history id is history');
   check(
@@ -316,6 +388,57 @@ function names(surface) {
     'HTML body names the status and that it was not JSON'
   );
 
+  const harvestCalls = [];
+  const harvestClient = Client.createClient({
+    apiBase: fromPath,
+    fetchImpl(url, init) {
+      harvestCalls.push({ url: String(url), method: init.method });
+      const target = String(url);
+      if (target.indexOf('/clinical/data/encounter/overview/') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              patient: { id: PATIENT },
+              consultationTopics: [{ id: TOPIC, headings: [{ id: CONTEXT }] }],
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ items: [{ id: TPL, name: 'Asthma review' }] }),
+      });
+    },
+  });
+  const harvestHref = pageHref;
+  const harvestHeading = 'heading-examination-' + CONTEXT;
+  const harvested = await harvestClient.hydrate(
+    C.readSessionContext({ href: harvestHref, resourceUrls: [], headingId: harvestHeading }),
+    harvestHref,
+    [],
+    harvestHeading
+  );
+  check(harvested.consultationTopicId === TOPIC, 'hydrate reads consultationTopics from overview');
+  check(harvested.contextId === CONTEXT, 'hydrate keeps the focused heading as context');
+  const harvestedList = await harvestClient.listTemplates(harvested);
+  check(harvestedList.ok && harvestedList.items[0].id === TPL, 'hydrated topic lists templates');
+  check(
+    harvestCalls.some(
+      (call) =>
+        call.method === 'GET' &&
+        call.url ===
+          'https://560b6c.api.england.medicus.health/clinical/data/data-entry-template/list?consultationTopicId=' +
+            TOPIC
+    ),
+    'listTemplates uses that topic on the practice API host'
+  );
+  check(
+    harvestCalls.every((call) => call.url.indexOf('https://england.medicus.health/') !== 0),
+    'hydrate does not call the page origin'
+  );
+
   console.log('\n--- confirm payload is the local group overlay ---');
   const payload = C.confirmPayload(seed, {
     templates: [{ id: TPL, title: 'Asthma review', preview: 'Short', category: 'QoF', insert: 'data-entry' }],
@@ -411,6 +534,13 @@ function names(surface) {
   );
   check(/Document and Template Organiser/.test(readme), 'README uses the product name');
   check(/History/.test(readme) && /Examination/.test(readme), 'README names the clinical fields');
+  check(
+    /consultationTopics/.test(readme) && /clinical-summary/.test(readme) && /heading-/.test(readme),
+    'README names overview topics, clinical-summary, and the heading id'
+  );
+  check(/headingId/.test(canvas) && /rememberClinicalUrl/.test(canvas), 'canvas passes the heading and the api ring');
+  check(/PerformanceObserver/.test(canvas), 'canvas watches practice API resource URLs');
+  check(/ms-toc-gap/.test(canvas), 'a missing id is shown at the bottom of the canvas');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

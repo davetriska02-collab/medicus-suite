@@ -35,7 +35,7 @@ Medicus’s own open (not called by this canvas as a create POST) is still:
 
 Medicus itself POSTs `/clinical/data-entry-template/create`, `/clinical/data/document/template/create`, or `/clinical/document/template/reflow/create` when the clinician finishes the form. The suite does not POST those.
 
-Ids are taken from the encounter overview path and from request URLs the page has already made. They are not hardcoded.
+The template list needs a consultation topic id. Document search needs a patient id, a heading context id, and context type `consultation-topic-heading`. Those are read from the focused field’s `heading-(history|examination|impression|plan)-{uuid}` (that uuid is the heading, not the topic), from request URLs the page has already made, and from a short ring of recent practice-API URLs so a rotated performance buffer does not drop them. The URLs that carry ids are `draft-consultation-topic/{topicId}`, `clinical-summary/summary/{patientId}`, and `topic-heading-entries/{contextId}`. When the page URL has an encounter id and the topic or patient is still missing, the canvas GETs `encounter/overview/{encounterId}` and reads `consultationTopics[]` (`id` or `consultationTopicId`, plus `patientId`). If several topics are present, the one whose `headings[].id` is the focused heading is used. Ids are not hardcoded.
 
 ## How groups persist
 
@@ -51,7 +51,7 @@ The capture file `medicus-native-template-capture` v1 (2026-09-24) has 84 networ
 
 Consequences:
 
-- List JSON is parsed defensively (array, or `items` / `data` / `templates` / `results` / `content` / `records`). Any other shape shows a gap and no invented rows.
+- List JSON is parsed defensively (array, or `items` / `data` / `templates` / `results` / `content` / `records` / `list` / `page`). `consultationTopics` is an encounter shape, not a template list. Any other shape shows a gap at the bottom of the canvas and no invented rows. A missing topic, patient, or heading context shows that gap as well. The empty columns are not a successful empty catalogue.
 - Open matches a Medicus control by title. Two cards with the same title can hit the first control.
 - If Medicus does not open its menu from the field, nothing is written.
 - Communication templates were in the capture and are not wired.

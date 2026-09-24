@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.2] — 2026-09-24
+
+### Document and Template Organiser catalogue
+
+Opening the organiser from History, Examination, Impression, or Plan left the template list empty when the list URL had already left the performance resource buffer. The consultation topic is now taken from encounter overview `consultationTopics[]` (the topic that owns the focused heading when several exist). A clinical-summary URL supplies the patient id. `heading-history-{uuid}` (and the same shape for examination, impression, and plan) supplies the document context. A short ring keeps recent practice-API URLs after that buffer rotates. Catalogue GETs stay on `{siteId}.api.{hostname}`. A missing id is shown at the bottom of the canvas.
+
 ## [v3.265.1] — 2026-09-24
 
 ### Document and Template Organiser

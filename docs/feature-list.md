@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.1
+**Version:** v3.265.2
 **Generated:** 2026-09-24
 
 ## What it is
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.265.2 (24 Sep)** — Document and Template Organiser catalogue: opening it from History, Examination, Impression, or Plan reads the template list even when that list URL is no longer in the performance buffer. The topic comes from encounter overview `consultationTopics[]` (the topic that owns the focused heading). Patient and heading context come from the clinical-summary URL and the heading id. Catalogue reads stay on the practice API host.
 - **v3.265.1 (24 Sep)** — Document and Template Organiser (still off until a practice turns it on). The button shows when the cursor is in History, Examination, Impression, or Plan. Open uses Medicus’s own template form; the suite does not POST the record. Catalogue reads use the practice API host (`{site}.api.{page hostname}`), not the page that serves the SPA shell.
 - **v3.265.0 (24 Sep)** — Template and document organiser (off until a practice turns it on): groups Medicus template and document lists on a canvas. Groups stay on this install. Superseded the same day by v3.265.1 (name, clinical-field launcher, Medicus’s own open, no suite insert POST).
 - **v3.264.35 (24 Sep)** — Lab Filing can opt into filing on the Lab Result Catalogue (setting, default off, union-only with the legacy gate, practice-published): works even with zero legacy profiles, driven by the catalogue's own practice ranges/guards/comment whitelists. Fail closed: a pending catalogue that does not load blocks filing (no lab-range fallback); catalogue `ok: false` with no legacy profile blocks filing (no generic baseline, including the practice-wide comment whitelist); the one-click confirm shows the practice range that cleared the file and the lab-flag override warning when that path applied. The lab-flag override is one switch per test at a lab. Catalogue-only filing completes in one click. H-080 and H-081 accepted; H-073 re-signed. Shipped `filingEngine` and `oirEngine` stay `legacy`.

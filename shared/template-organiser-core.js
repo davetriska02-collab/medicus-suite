@@ -52,6 +52,9 @@
     'rows',
     'templateList',
     'documentTemplates',
+    'dataEntryTemplates',
+    'list',
+    'page',
     'values',
   ];
 
@@ -203,7 +206,8 @@
       }
       return null;
     }
-    return from(json) || from(json.data);
+    const nested = plain(json.data) ? json.data.data : null;
+    return from(json) || from(json.data) || from(nested);
   }
 
   // The list GET responses were not in the capture. Accept an array or a
@@ -281,10 +285,27 @@
     return typeof value === 'string' && UUID_RE.test(value) ? value : '';
   }
 
+  const HEADING_ID_RE =
+    /^heading-(history|examination|impression|plan)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  const HEADING_CONTEXT_TYPE = 'consultation-topic-heading';
+
+  // The slash menu is labelled heading-history-{uuid} (and the same shape for
+  // examination, impression, and plan). That uuid is the heading context, not
+  // the consultation topic id.
+  function headingContextId(value) {
+    const parts = String(value || '')
+      .trim()
+      .split(/\s+/);
+    for (let i = 0; i < parts.length; i += 1) {
+      const match = HEADING_ID_RE.exec(parts[i]);
+      if (match && UUID_RE.test(match[2])) return match[2];
+    }
+    return '';
+  }
+
   function absorbNamed(node, ctx, depth) {
-    if (!plain(node) || depth > 3) return;
-    if (!ctx.patientId) ctx.patientId = takeUuid(node.patientId);
-    if (!ctx.patientId && plain(node.patient)) ctx.patientId = takeUuid(node.patient.id);
+    if (!plain(node) || depth > 4) return;
+    if (!ctx.patientId) ctx.patientId = takePatient(node);
     if (!ctx.consultationTopicId) ctx.consultationTopicId = takeUuid(node.consultationTopicId);
     if (!ctx.contextId) ctx.contextId = takeUuid(node.contextId);
     if (!ctx.contextType && typeof node.contextType === 'string' && CONTEXT_TYPE_RE.test(node.contextType)) {
@@ -295,8 +316,68 @@
     });
   }
 
-  // Ids come from the page URL and from request URLs the page has already
-  // made (performance resource entries). Nothing here is a hardcoded patient.
+  function takePatient(node) {
+    if (!plain(node)) return '';
+    if (takeUuid(node.patientId)) return takeUuid(node.patientId);
+    if (!plain(node.patient)) return '';
+    return takeUuid(node.patient.id) || takeUuid(node.patient.patientId);
+  }
+
+  function sameHeading(value, headingId) {
+    if (!headingId || typeof value !== 'string') return false;
+    if (takeUuid(value) === headingId) return true;
+    return headingContextId(value) === headingId;
+  }
+
+  function ownsHeading(topic, headingId) {
+    if (!headingId || !plain(topic) || !Array.isArray(topic.headings)) return false;
+    return topic.headings.some((heading) => {
+      if (!plain(heading)) return false;
+      return sameHeading(heading.id, headingId) || sameHeading(heading.headingId, headingId);
+    });
+  }
+
+  function collectTopics(node, out, depth) {
+    if (!plain(node) || depth > 5 || out.length >= 32) return;
+    if (Array.isArray(node.consultationTopics)) {
+      node.consultationTopics.forEach((topic) => {
+        if (plain(topic) && out.length < 32) out.push(topic);
+      });
+    }
+    ['data', 'encounter', 'consultation'].forEach((key) => {
+      if (plain(node[key])) collectTopics(node[key], out, depth + 1);
+    });
+  }
+
+  // Live encounter overview keeps the topic on consultationTopics[].id (or
+  // consultationTopicId) and the patient on the topic or a nested patient.
+  // A scalar consultationTopicId is not what that endpoint returns. When
+  // several topics are present, the one whose headings include the focused
+  // heading id is the list to read.
+  function applyOverviewTopics(ctx, overview, headingId) {
+    const topics = [];
+    collectTopics(overview, topics, 0);
+    if (!topics.length) return;
+    const owner = headingId ? topics.find((topic) => ownsHeading(topic, headingId)) : null;
+    const chosen = owner || (!ctx.consultationTopicId ? topics[0] : null);
+    if (chosen) {
+      const topicId = takeUuid(chosen.id) || takeUuid(chosen.consultationTopicId);
+      if (topicId && (owner || !ctx.consultationTopicId)) ctx.consultationTopicId = topicId;
+    }
+    if (!ctx.patientId) {
+      const fromChosen = chosen ? takePatient(chosen) : '';
+      ctx.patientId = fromChosen || takePatient(topics[0]) || takePatient(overview);
+    }
+  }
+
+  function fillUuid(current, match) {
+    if (!match || !UUID_RE.test(match[1])) return current;
+    return match[1];
+  }
+
+  // Ids come from the page URL, from request URLs the page has already made,
+  // from the focused heading id, and from encounter overview JSON. Nothing
+  // here is a hardcoded patient or topic.
   function readSessionContext(input) {
     const src = plain(input) ? input : {};
     const ctx = emptyContext();
@@ -306,22 +387,39 @@
     const urls = Array.isArray(src.resourceUrls) ? src.resourceUrls : [];
     urls.forEach((url) => {
       const s = String(url);
-      const topic = s.match(/[?&]consultationTopicId=([0-9a-f-]{36})/i);
-      if (topic && UUID_RE.test(topic[1])) ctx.consultationTopicId = topic[1];
+      const topicQuery = s.match(/[?&]consultationTopicId=([0-9a-f-]{36})/i);
+      if (topicQuery && UUID_RE.test(topicQuery[1])) ctx.consultationTopicId = topicQuery[1];
       const draft = s.match(/\/draft-consultation-topic\/([0-9a-f-]{36})/i);
-      if (!ctx.consultationTopicId && draft && UUID_RE.test(draft[1])) ctx.consultationTopicId = draft[1];
+      if (!ctx.consultationTopicId) ctx.consultationTopicId = fillUuid('', draft);
+      const summary = s.match(/\/clinical-summary\/summary\/([0-9a-f-]{36})/i);
+      if (summary && UUID_RE.test(summary[1])) ctx.patientId = summary[1];
+      const encounterQuery = s.match(/[?&]encounterId=([0-9a-f-]{36})/i);
+      if (!ctx.encounterId) ctx.encounterId = fillUuid('', encounterQuery);
       const patient =
         s.match(/\/document\/template\/search\/([0-9a-f-]{36})/i) ||
         s.match(/\/new-document-modal\/([0-9a-f-]{36})/i) ||
         s.match(/\/medicus-template-form\/([0-9a-f-]{36})/i) ||
         s.match(/\/create-care-record-communication\/([0-9a-f-]{36})/i);
       if (patient && UUID_RE.test(patient[1])) ctx.patientId = patient[1];
+      const headingEntries = s.match(/\/topic-heading-entries\/([0-9a-f-]{36})/i);
+      if (headingEntries && UUID_RE.test(headingEntries[1])) {
+        ctx.contextId = headingEntries[1];
+        if (!ctx.contextType) ctx.contextType = HEADING_CONTEXT_TYPE;
+      }
       const contextId = s.match(/[?&]contextId=([0-9a-f-]{36})/i);
       if (contextId && UUID_RE.test(contextId[1])) ctx.contextId = contextId[1];
       const contextType = s.match(/[?&]contextType=([a-z0-9-]{1,64})/i);
       if (contextType && CONTEXT_TYPE_RE.test(contextType[1])) ctx.contextType = contextType[1];
     });
-    absorbNamed(src.overview, ctx, 0);
+    const focusedHeading = headingContextId(src.headingId);
+    if (focusedHeading) {
+      ctx.contextId = focusedHeading;
+      ctx.contextType = HEADING_CONTEXT_TYPE;
+    }
+    if (plain(src.overview)) {
+      absorbNamed(src.overview, ctx, 0);
+      applyOverviewTopics(ctx, src.overview, focusedHeading);
+    }
     return ctx;
   }
 
@@ -386,6 +484,48 @@
     }
     if (!siteId || !hostname || hostname.indexOf('medicus') === -1) return '';
     return 'https://' + siteId + '.api.' + hostname;
+  }
+
+  const API_RING_MAX = 40;
+
+  function isClinicalApiUrl(url) {
+    let parsed;
+    try {
+      parsed = new URL(String(url));
+    } catch (err) {
+      return false;
+    }
+    const host = parsed.hostname || '';
+    if (!/\.api\./i.test(host) || host.indexOf('medicus') === -1) return false;
+    return /\/clinical\/|\/patient\/data\//.test(parsed.pathname || '');
+  }
+
+  // The performance resource buffer is about 250 entries and rotates. Keep a
+  // short ring of practice-API clinical URLs so a later open can still see
+  // draft-consultation-topic, clinical-summary, and topic-heading-entries.
+  function rememberClinicalUrl(ring, url) {
+    const next = Array.isArray(ring) ? ring.filter((item) => typeof item === 'string') : [];
+    const value = String(url || '');
+    if (!isClinicalApiUrl(value)) return next.slice(-API_RING_MAX);
+    const without = next.filter((item) => item !== value);
+    without.push(value);
+    return without.slice(-API_RING_MAX);
+  }
+
+  function mergeResourceUrls(ring, live) {
+    const out = [];
+    const seen = new Set();
+    function add(list) {
+      (Array.isArray(list) ? list : []).forEach((url) => {
+        const value = String(url || '');
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        out.push(value);
+      });
+    }
+    add(ring);
+    add(live);
+    return out.slice(-80);
   }
 
   function pathsFor() {
@@ -693,6 +833,9 @@
     cloneConfig,
     parseList,
     readSessionContext,
+    headingContextId,
+    rememberClinicalUrl,
+    mergeResourceUrls,
     mergeSession,
     sessionDrift,
     resolveApiBase,
