@@ -2,7 +2,24 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.35] — 2026-09-24
+
+### Lab Result Catalogue opt-in, rebased onto v3.264.34, with fail-closed filing fixes
+
+Ships the Outstanding Requests catalogue matcher and the Lab Filing catalogue gate (written on the branch as v3.265.0–v3.270.0; those headings below were not published as separate releases). Rebased onto v3.264.34, which keeps the frailty word-boundary fix. **Shipped defaults stay `oirEngine: legacy` and `filingEngine: legacy`.** This is not a practice-wide catalogue-filing enablement.
+
+Fail-closed fixes from the review of #468:
+
+- **Catalogue-only confirm names the practice range that cleared the file**, and shows the lab-flag override warning ("lab flagged high/low — accepted by your set range") when that path applied. The dialog still shows the lab's own flags on the original report.
+- **A pending catalogue that fails to load blocks filing.** An unapproved practice range or guard does not fall back to the lab range. The blocker is added even when a legacy profile is present.
+- **Catalogue `ok: false` with no legacy profile blocks filing.** It does not proceed on the generic baseline, including the practice-wide comment whitelist. A legacy profile plus `ok: false` stays legacy-alone (the pending-load blocker is still added when that load failed).
+
+CSO sign-off, 2026-09-24, Europe/London (Dr D. Triska, GMC 6159481): **H-080** and **H-081** Accepted (ALARP); **H-073** re-signed so the residual line agrees with controls (h), (i) and new (j). Hazard log document v3.69, clinical safety notice document v3.84. Product-version pin and `last_cso_review_version` stay 3.264.1. Draft H-078 is not part of this signature.
+
 ## [v3.270.0] — 2026-09-25
+
+_Branch draft, shipped in v3.264.35. Not published as 3.270.0._
+
 
 ### Lab Filing on the Lab Result Catalogue — Phase E stage E2 cutover: catalogue-driven filing can now actually gate real filing (opt-in, still off by default)
 
