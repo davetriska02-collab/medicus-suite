@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.5] — 2026-09-24
+
+### Document catalogue on History, Examination, Impression, and Plan
+
+Templates could fill from encounter overview `consultationTopics[]` while Documents stayed empty. Document search needs a patient id, a heading context id, and context type `consultation-topic-heading`. Those now come from the focused `heading-(history|examination|impression|plan)-{uuid}` (including when that id sits on an ancestor of the field), from `consultationTopics[].headings[]` when the focused field names exactly one of those four headings, and from the clinical-summary and draft-consultation-topic URLs. Overview is read when that document context is still missing, not only when the template topic is missing. Catalogue GETs stay on `{siteId}.api.{hostname}`. A missing context is a footer gap and is not an empty catalogue. The pack stays opt-in.
+
 ## [v3.265.4] — 2026-09-24
 
 ### Document and Template Organiser — Open from a group

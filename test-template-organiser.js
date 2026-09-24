@@ -501,6 +501,185 @@ function names(surface) {
     harvestCalls.every((call) => call.url.indexOf('https://england.medicus.health/') !== 0),
     'hydrate does not call the page origin'
   );
+  const harvestedDocs = await harvestClient.listDocuments(harvested);
+  check(harvestedDocs.ok && harvestedDocs.items.length === 1, 'hydrated heading lists documents');
+  check(
+    harvestCalls.some(
+      (call) =>
+        call.method === 'GET' &&
+        call.url ===
+          'https://560b6c.api.england.medicus.health' +
+            C.PATHS.documentSearch(PATIENT, CONTEXT, 'consultation-topic-heading')
+    ),
+    'listDocuments uses patient, heading context, and the practice API host'
+  );
+
+  console.log('\n--- document list ids for the four clinical headings ---');
+  const HISTORY_ID = 'aaaa1111-1111-4111-8111-111111111111';
+  const EXAM_ID = 'bbbb2222-2222-4222-8222-222222222222';
+  const IMPR_ID = 'cccc3333-3333-4333-8333-333333333333';
+  const PLAN_ID = 'dddd4444-4444-4444-8444-444444444444';
+  const headingIds = { history: HISTORY_ID, examination: EXAM_ID, impression: IMPR_ID, plan: PLAN_ID };
+  const docCalls = [];
+  const docClient = Client.createClient({
+    apiBase: fromPath,
+    fetchImpl(url, init) {
+      docCalls.push({ url: String(url), method: init.method });
+      const target = String(url);
+      if (target.indexOf('/clinical/data/encounter/overview/') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              consultationTopics: [
+                {
+                  id: TOPIC,
+                  patientId: PATIENT,
+                  headings: ['history', 'examination', 'impression', 'plan'].map((kind) => ({
+                    id: 'heading-' + kind + '-' + headingIds[kind],
+                    title: kind.charAt(0).toUpperCase() + kind.slice(1),
+                  })),
+                },
+              ],
+            }),
+        });
+      }
+      if (target.indexOf('/document/template/search/') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ items: [{ id: DOC, name: 'Food bank letter' }] }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ items: [{ id: TPL, name: 'Asthma review' }] }),
+      });
+    },
+  });
+  for (const kind of ['history', 'examination', 'impression', 'plan']) {
+    const headingId = 'heading-' + kind + '-' + headingIds[kind];
+    const session = await docClient.hydrate(
+      C.readSessionContext({ href: pageHref, resourceUrls: [], headingId: headingId, headingKind: kind }),
+      pageHref,
+      [],
+      headingId,
+      kind
+    );
+    check(session.patientId === PATIENT, kind + ' document list has the overview patient');
+    check(session.consultationTopicId === TOPIC, kind + ' document list keeps the consultation topic');
+    check(
+      session.contextId === headingIds[kind] && session.contextType === 'consultation-topic-heading',
+      kind + ' heading uuid is the document context'
+    );
+    const docs = await docClient.listDocuments(session);
+    check(docs.ok && docs.items[0] && docs.items[0].id === DOC, kind + ' document list returns rows');
+    const want =
+      'https://560b6c.api.england.medicus.health' +
+      C.PATHS.documentSearch(PATIENT, headingIds[kind], 'consultation-topic-heading');
+    check(
+      docCalls.some((call) => call.method === 'GET' && call.url === want),
+      kind + ' listDocuments GET carries that patient and context'
+    );
+  }
+  check(
+    docCalls.every((call) => call.url.indexOf('https://560b6c.api.england.medicus.health') === 0),
+    'document catalogue GETs stay on the practice API host'
+  );
+
+  const fromKindOnly = C.readSessionContext({
+    href: pageHref,
+    headingKind: 'examination',
+    overview: {
+      consultationTopics: [
+        {
+          id: TOPIC,
+          patientId: PATIENT,
+          headings: [{ id: EXAM_ID, title: 'Examination' }],
+        },
+      ],
+    },
+  });
+  check(
+    fromKindOnly.contextId === EXAM_ID && fromKindOnly.contextType === 'consultation-topic-heading',
+    'a single Examination heading row supplies context when the field has no uuid'
+  );
+  const ambiguous = C.readSessionContext({
+    href: pageHref,
+    headingKind: 'plan',
+    overview: {
+      consultationTopics: [
+        {
+          id: TOPIC,
+          patientId: PATIENT,
+          headings: [
+            { id: PLAN_ID, title: 'Plan' },
+            { id: CONTEXT, title: 'Plan' },
+          ],
+        },
+      ],
+    },
+  });
+  check(ambiguous.patientId === PATIENT && ambiguous.contextId === '', 'two Plan headings do not pick a context');
+  const missingDocs = await docClient.listDocuments(ambiguous);
+  check(
+    missingDocs.ok === false && missingDocs.items.length === 0 && /Nothing was read/.test(missingDocs.gap),
+    'missing document context is a gap, not an empty catalogue'
+  );
+  const searchCount = docCalls.filter((call) => call.url.indexOf('/document/template/search/') !== -1).length;
+  check(searchCount === 4, 'document search is not called when the context is missing');
+
+  const summaryUrls = [
+    'https://560b6c.api.england.medicus.health/clinical/data/clinical-summary/summary/' +
+      PATIENT +
+      '?encounterId=' +
+      ENTRY,
+    'https://560b6c.api.england.medicus.health/clinical/data/encounter/consultation-topic/draft-consultation-topic/' +
+      TOPIC,
+  ];
+  const kindHydrated = await docClient.hydrate(
+    C.readSessionContext({ href: pageHref, resourceUrls: summaryUrls, headingKind: 'impression' }),
+    pageHref,
+    summaryUrls,
+    '',
+    'impression'
+  );
+  check(
+    kindHydrated.patientId === PATIENT &&
+      kindHydrated.consultationTopicId === TOPIC &&
+      kindHydrated.contextId === IMPR_ID &&
+      kindHydrated.contextType === 'consultation-topic-heading',
+    'clinical-summary, draft topic, and overview impression heading hydrate together'
+  );
+  check(
+    docCalls.some((call) => call.url.indexOf('/clinical/data/encounter/overview/' + ENTRY) !== -1),
+    'overview is fetched when the topic and patient are known but the heading context is not'
+  );
+
+  const quietCalls = [];
+  const quietClient = Client.createClient({
+    apiBase: fromPath,
+    fetchImpl(url, init) {
+      quietCalls.push({ url: String(url), method: init.method });
+      return Promise.resolve({ ok: true, status: 200, text: async () => '{}' });
+    },
+  });
+  await quietClient.hydrate(
+    {
+      encounterId: ENTRY,
+      consultationTopicId: TOPIC,
+      patientId: PATIENT,
+      contextId: CONTEXT,
+      contextType: 'consultation-topic-heading',
+    },
+    pageHref,
+    [],
+    'heading-history-' + CONTEXT,
+    'history'
+  );
+  check(quietCalls.length === 0, 'a complete document context does not refetch overview');
 
   console.log('\n--- confirm payload is the local group overlay ---');
   const payload = C.confirmPayload(seed, {
@@ -691,6 +870,18 @@ function names(surface) {
   check(
     /suite\.ui\.templateOrganiser/.test(canvas) && /resolveApiBase/.test(canvas),
     'search change leaves the pack and API host'
+  );
+  check(
+    /<footer class="ms-toc-footer">[\s\S]*ms-toc-gap/.test(canvas),
+    'a missing document context leaves the gap in the footer'
+  );
+  check(/headingKind:\s*_fieldKind/.test(canvas), 'canvas passes the focused heading kind into hydrate');
+  check(/function headingIdNear\(/.test(canvas), 'canvas keeps a heading uuid that sits above the field');
+  const packs = fs.readFileSync(path.join(__dirname, 'shared/practice-packs.js'), 'utf8');
+  const grandfather = packs.slice(packs.indexOf('const GRANDFATHER_KEYS'), packs.indexOf('const ALL_PACK_KEYS'));
+  check(
+    /templateOrganiser: 'suite\.ui\.templateOrganiser'/.test(packs) && !/templateOrganiser/.test(grandfather),
+    'template organiser pack stays opt-in'
   );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

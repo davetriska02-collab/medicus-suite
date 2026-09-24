@@ -200,6 +200,7 @@
       href: location.href,
       resourceUrls: resourceUrls(),
       headingId: _headingId,
+      headingKind: _fieldKind,
     });
   }
 
@@ -249,10 +250,16 @@
         if (!window.TemplateOrganiserClient) throw new Error('Template list client is not loaded.');
         if (!api) throw new Error('No practice API host on this page. Nothing was read.');
         return api.hydrate(
-          C.readSessionContext({ href: href, resourceUrls: urls, headingId: _headingId }),
+          C.readSessionContext({
+            href: href,
+            resourceUrls: urls,
+            headingId: _headingId,
+            headingKind: _fieldKind,
+          }),
           href,
           urls,
-          _headingId
+          _headingId,
+          _fieldKind
         );
       })
       .then(function (ctx) {
@@ -1011,6 +1018,27 @@
     return false;
   }
 
+  // The uuid often sits on an ancestor (heading-history-{uuid}) while the
+  // visible word History is a sibling with no id. Stopping at that sibling
+  // leaves document search without a context id.
+  function headingIdNear(el) {
+    var node = el;
+    for (var i = 0; i < 8 && node && node.nodeType === 1; i += 1) {
+      if (C.headingContextId(node.id || '')) return node.id;
+      var labelled = node.getAttribute ? node.getAttribute('aria-labelledby') || '' : '';
+      if (C.headingContextId(labelled)) return labelled;
+      var prev = node.previousElementSibling;
+      var steps = 0;
+      while (prev && steps < 6) {
+        if (C.headingContextId(prev.id || '')) return prev.id;
+        prev = prev.previousElementSibling;
+        steps += 1;
+      }
+      node = node.parentElement;
+    }
+    return '';
+  }
+
   // Walk from the focused node to a History / Examination / Impression / Plan
   // signal. Heading ids (heading-history-{uuid}) are the slash-menu label.
   // A sibling or ancestor heading with that exact word counts when the
@@ -1044,17 +1072,22 @@
         return {
           kind: kind,
           el: el,
-          headingId: C.headingContextId(node.id || '') ? node.id : labelled,
+          headingId: headingIdNear(el) || (C.headingContextId(node.id || '') ? node.id : labelled),
         };
       }
       var prev = node.previousElementSibling;
       var steps = 0;
+      var textKind = '';
       while (prev && steps < 6) {
         var sib = headingKindFrom(prev);
-        if (sib) return { kind: sib, el: el, headingId: prev.id || '' };
+        if (sib) {
+          textKind = sib;
+          break;
+        }
         prev = prev.previousElementSibling;
         steps += 1;
       }
+      if (textKind) return { kind: textKind, el: el, headingId: headingIdNear(el) };
       node = node.parentElement;
     }
     return null;
