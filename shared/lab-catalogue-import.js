@@ -125,7 +125,7 @@
         .join(' ');
     const byExactReq = new Map(); // stripped wording -> built-in id (null when two built-ins share it)
     for (const i of asArr(base.investigations)) {
-      for (const t of [i.label, ...asArr(i.requestAliases).map((a) => a && a.text)]) {
+      for (const t of [i.label, ...asArr(i.requestAliases).map((a) => a && a.text), ...asArr(i.synonyms)]) {
         const k = stripSpecimen(t);
         if (!k) continue;
         byExactReq.set(k, byExactReq.has(k) && byExactReq.get(k) !== i.id ? null : i.id);
@@ -339,7 +339,10 @@
         provenance: provenance(),
       };
       if (b && b.legacyKey) inv.legacyKey = b.legacyKey;
-      const haveReq = new Set(asArr(b && b.requestAliases).map((a) => norm(a.text)));
+      const haveReq = new Set([
+        ...asArr(b && b.requestAliases).map((a) => norm(a.text)),
+        ...asArr(b && b.synonyms).map(norm),
+      ]);
       const haveHead = new Set(asArr(b && b.headingAliases).map(norm));
       for (const r of req) if (!haveReq.has(norm(r))) inv.requestAliases.push({ text: r, system: 'any' });
       for (const r of rep) if (!haveHead.has(norm(r))) inv.headingAliases.push(r);
@@ -460,6 +463,17 @@
     const next = JSON.parse(JSON.stringify(local));
     let added = 0;
     let skipped = 0;
+    // tests the person deleted are not brought back by reading their Outstanding Requests tests again
+    const dismissed = new Set(next.context && Array.isArray(next.context.dismissed) ? next.context.dismissed : []);
+    let dismissedSkipped = 0;
+    const isNew = (kind, e) => !next[kind].some((x) => x.id === e.id);
+    const dropInv = new Set(
+      (imported.investigations || []).filter((e) => dismissed.has(e.id) && isNew('investigations', e)).map((e) => e.id)
+    );
+    // results only the dropped tests use are dropped with them (nothing else would reference them)
+    const usedByKept = new Set();
+    for (const e of [...next.investigations, ...(imported.investigations || []).filter((x) => !dropInv.has(x.id))])
+      for (const m of e.members || []) usedByKept.add(m.result);
     for (const kind of ['results', 'investigations', 'labs']) {
       const have = new Set(next[kind].map((e) => e.id));
       for (const e of inert[kind] || []) {
@@ -467,6 +481,11 @@
           skipped++;
           continue;
         }
+        if (kind === 'investigations' && dropInv.has(e.id)) {
+          dismissedSkipped++;
+          continue;
+        }
+        if (kind === 'results' && dropInv.size && !usedByKept.has(e.id)) continue;
         next[kind].push(e);
         have.add(e.id);
         added++;
@@ -475,7 +494,7 @@
     for (const id of inert.disabled ? inert.disabled.investigations : []) {
       if (!next.disabled.investigations.includes(id)) next.disabled.investigations.push(id);
     }
-    return { overlay: OV.sanitiseOverlay(next), added, skipped };
+    return { overlay: OV.sanitiseOverlay(next), added, skipped, dismissedSkipped };
   }
 
   const api = { importOirTests, mergeIntoOverlay, repairFragments, guessKind };

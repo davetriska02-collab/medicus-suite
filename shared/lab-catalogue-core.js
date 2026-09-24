@@ -178,6 +178,12 @@
       ) {
         err(`${where}: headingAliases must be an array of strings`);
       }
+      // Legacy free-text terms from the old (pre-catalogue) matcher — still used to MATCH a request (folded into the
+      // same request table as requestAliases), but kept apart so "How it is requested in Medicus" can hold only
+      // wording actually confirmed by a scan of real Medicus requests, never a guess (Nick, 2026-09-24).
+      if (v.synonyms !== undefined && !(Array.isArray(v.synonyms) && v.synonyms.every(isNonEmptyStr))) {
+        err(`${where}: synonyms must be an array of strings`);
+      }
       if (v.exclude !== undefined && !(Array.isArray(v.exclude) && v.exclude.every(isNonEmptyStr))) {
         err(`${where}: exclude must be an array of strings`);
       }
@@ -203,7 +209,9 @@
       if (v.note !== undefined && !isStr(v.note)) err(`${where}: note must be a string`);
     });
     investigations.forEach((v) => {
-      if (isObj(v) && asArr(v.requestAliases).length === 0) warn(`investigation "${v.id}" has no requestAliases`);
+      if (isObj(v) && asArr(v.requestAliases).length === 0 && asArr(v.synonyms).length === 0) {
+        warn(`investigation "${v.id}" has no requestAliases or synonyms`);
+      }
     });
 
     // labs
@@ -297,6 +305,9 @@
       };
       addReq(inv.label, 'any');
       for (const a of asArr(inv.requestAliases)) if (isObj(a)) addReq(a.text, a.system);
+      // Synonyms match too (system 'any') — they are kept apart from requestAliases for editing/display only, not to
+      // weaken recognition; a legacy synonym must go on matching a real request exactly as it always has.
+      for (const s of asArr(inv.synonyms)) addReq(s, 'any');
       const addHead = (text) => {
         const n = norm(text);
         if (n) headingTable.push({ investigationId: inv.id, norm: n, len: tokenCount(n), exclude });
@@ -343,7 +354,13 @@
 
   // ── Adapter over the raw Medicus API shape ────────────────────────────────────
   // Accepts { data: { investigationReport } } (the task overview response), { investigationReport }, or the report
-  // itself. Keeps ONLY what resolution needs — never values, dates or patient fields.
+  // itself. Keeps ONLY what resolution needs — never this patient's result VALUE, dates or patient fields. The lab's
+  // own reference range (refLow/refHigh) IS kept: it is the lab's own constant for the analyte/assay, the same for
+  // every patient, not this patient's value — used only to suggest a starting practice range, never saved by itself.
+  function refLimit(v) {
+    const n = typeof v === 'number' ? v : parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
   function fromInvestigationReportPayload(payload) {
     const rep =
       (payload && payload.data && payload.data.investigationReport) ||
@@ -354,6 +371,8 @@
     const adaptResult = (r) => {
       const rc = isObj(r && r.resultCode) ? r.resultCode : {};
       const value = r ? r.resultValue : null;
+      const ranges = Array.isArray(r && r.referenceRanges) ? r.referenceRanges : [];
+      const rr = isObj(ranges[0]) ? ranges[0] : {};
       return {
         name: isStr(r && r.description) ? r.description : '',
         code: isStr(rc.conceptId) ? rc.conceptId : rc.conceptId != null ? String(rc.conceptId) : null,
@@ -363,6 +382,8 @@
         hasNumericValue: !!r && r.resultType === 'unit-value-result' && value != null && String(value).trim() !== '',
         text: isStr(r && r.resultText) ? r.resultText : null,
         degraded: !!(r && r.hasUnresolvedDegradedTypeCode),
+        refLow: refLimit(rr.lowerReferenceLimit),
+        refHigh: refLimit(rr.upperReferenceLimit),
       };
     };
     return {
@@ -586,11 +607,18 @@
 
     // Coverage — mirrors the existing matcher's confident/tentative tiers (see header).
     const coverage = new Map();
-    const upgrade = (id, conf, via, rids, labMessageOnly) => {
+    const upgrade = (id, conf, via, rids, labMessageOnly, groupNo) => {
       const cur = coverage.get(id);
       if (!cur || (conf === 'confident' && cur.confidence !== 'confident')) {
-        coverage.set(id, { confidence: conf, via, results: [...new Set(rids)], labMessageOnly });
+        coverage.set(id, {
+          confidence: conf,
+          via,
+          results: [...new Set(rids)],
+          labMessageOnly,
+          groupNos: groupNo == null ? [] : [groupNo],
+        });
       } else if (conf === cur.confidence) {
+        if (groupNo != null && !cur.groupNos.includes(groupNo)) cur.groupNos.push(groupNo);
         cur.results = [...new Set([...cur.results, ...rids])];
         cur.labMessageOnly = cur.labMessageOnly && labMessageOnly;
       }
@@ -599,7 +627,7 @@
       for (const id of p.hm.identifies) {
         const rids = p.resolved.filter((r) => r.resultId).map((r) => r.resultId);
         const onlyMsgs = p.resolved.length > 0 && p.resolved.every((r) => r.labMessage);
-        upgrade(id, 'confident', 'heading', rids, onlyMsgs);
+        upgrade(id, 'confident', 'heading', rids, onlyMsgs, prepared.indexOf(p));
       }
     }
     const allResolved = [...prepared.flatMap((p) => p.resolved), ...ungroupedPrepared.resolved];
@@ -612,7 +640,12 @@
       const presentCore = new Set(supporting.map((r) => r.resultId));
       if (!presentCore.size) continue;
       const need = thresholdFor(inv, presentCore);
-      const conf = presentCore.size >= need ? 'confident' : 'tentative';
+      // A result that is a core member of several tests (a generic "Culture") cannot tell them apart: evidence made only of such
+      // results can never be more than tentative.
+      const distinctive = [...presentCore].some(
+        (rid) => (index.membership.get(rid) || []).filter((m) => m.role === 'core').length === 1
+      );
+      const conf = presentCore.size >= need && distinctive ? 'confident' : 'tentative';
       upgrade(
         id,
         conf,
@@ -620,6 +653,24 @@
         [...presentCore],
         supporting.every((r) => r.labMessage)
       );
+    }
+
+    // Tests with no results of their own (imaging / procedures) that a report answers through the SAME generic group or the same
+    // result (e.g. "Ultrasonography" for groin, abdomen and neck alike): the report says an ultrasound was done, not which. Record who
+    // shares the evidence so a consumer can refuse to be confident when more than one of them is being asked for.
+    const NO_RESULT_KINDS = ['imaging', 'procedure'];
+    for (const [id, c] of coverage) {
+      const me = index.investigations.get(id);
+      c.sharedWith = [];
+      if (!me || !NO_RESULT_KINDS.includes(me.def.kind)) continue;
+      for (const [oid, oc] of coverage) {
+        if (oid === id) continue;
+        const o = index.investigations.get(oid);
+        if (!o || !NO_RESULT_KINDS.includes(o.def.kind)) continue;
+        const sameGroup = (c.groupNos || []).some((g) => (oc.groupNos || []).includes(g));
+        const sameResult = c.results.some((r) => oc.results.includes(r));
+        if (sameGroup || sameResult) c.sharedWith.push(oid);
+      }
     }
 
     for (const p of prepared) {

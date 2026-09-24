@@ -11,6 +11,27 @@
   margin-bottom: 10px;
 }
 
+/* "What does this do?" — a lightweight disclosure right under the page heading, not a coloured notice box */
+.inv-intro {
+  margin-bottom: 14px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.inv-intro > summary {
+  font-weight: 600;
+  color: var(--text-1);
+  cursor: pointer;
+  font-size: 13px;
+}
+.inv-intro p {
+  margin: 8px 0 0;
+}
+
+/* the "Match requests to lab reports" card collapses behind its own name once the practice has used it */
+.inv-match-details > summary {
+  cursor: pointer;
+}
+
 /* ── Your practice: two or three lines ── */
 .inv-practice {
   padding: 8px 12px;
@@ -121,6 +142,32 @@
 }
 
 /* ── Browse ── */
+.inv-preset-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.inv-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.inv-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.inv-toggle-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .inv-browse-bar {
   display: flex;
   align-items: center;
@@ -528,6 +575,24 @@
   font-size: 11px;
   color: var(--text-4);
 }
+/* real per-lab report headings (2026-09-23): each its own row, lab name + heading + an editable "when used" note */
+.inv-real-heads {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.inv-real-head {
+  flex-wrap: nowrap;
+}
+.inv-real-head .inv-inline-label {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.inv-real-head strong {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .inv-review-note {
   background: var(--amber-dim);
   border: 1px solid var(--amber-line);
@@ -590,10 +655,18 @@
   gap: 10px;
   margin-top: 8px;
 }
-.inv-limit {
+/* input[type='number'] in options.html's own inline <style> sets width:100% with specificity (0,1,1) — a bare class
+   (0,1,0) can never beat that regardless of stylesheet order, which is why this box was rendering full-width and
+   spilling into the next control. The class repeated once gives two classes (0,2,0), which wins outright. */
+.inv-limit.inv-limit {
   width: 70px;
   flex: 0 0 auto;
   display: inline-block;
+}
+.inv-scan-reports {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  margin-bottom: 0;
 }
 .inv-scan-result {
   margin-top: 10px;
@@ -642,6 +715,26 @@
   white-space: nowrap;
 }
 .inv-scan-nocode {
+  color: var(--amber);
+}
+.inv-scan-duplike {
+  color: var(--accent);
+  font-weight: 600;
+}
+.inv-scan-res-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+.inv-scan-res-note {
+  font-size: 10.5px;
+  color: var(--accent);
+}
+.inv-scan-res-note .lf-link {
+  font-size: inherit;
+}
+.inv-scan-res-warn {
   color: var(--amber);
 }
 
@@ -714,7 +807,7 @@
   color: var(--green);
 }
 .inv-panel-never {
-  grid-column: 1;
+  grid-column: 1 / -1;
   grid-row: 2;
   border-color: var(--red);
   background: var(--red-dim, transparent);
@@ -723,12 +816,25 @@
   color: var(--red);
 }
 .inv-panel-res {
-  grid-column: 2;
-  grid-row: 2;
+  grid-column: 1 / -1;
+  grid-row: 3;
+}
+/* the "never" strip runs the full width, its chips and its input on one line */
+.inv-panel-never .inv-edit-col {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.inv-panel-never .inv-edit-col .inv-help {
+  flex: 1 1 100%;
+}
+.inv-panel-never .inv-edit-line {
+  flex: 1 1 260px;
+  max-width: 420px;
 }
 /* the arrows: request -> lab (across), lab -> results (down) */
-.inv-panel-req::after,
-.inv-panel-lab::after {
+.inv-panel-req::after {
   position: absolute;
   color: var(--text-3);
   font-size: 18px;
@@ -740,10 +846,15 @@
   right: -22px;
   top: 12px;
 }
-.inv-panel-lab::after {
+.inv-panel-res::before {
   content: '↓';
+  position: absolute;
+  color: var(--text-3);
+  font-size: 18px;
+  line-height: 1;
   left: 50%;
-  bottom: -20px;
+  top: -21px;
+  pointer-events: none;
 }
 .inv-panel .inv-sec {
   flex-direction: column;
@@ -770,7 +881,7 @@
     grid-row: auto;
   }
   .inv-panel-req::after,
-  .inv-panel-lab::after {
+  .inv-panel-res::before {
     display: none;
   }
 }
@@ -801,6 +912,12 @@
 }
 .inv-merge .lf-link {
   font-size: inherit;
+}
+.inv-merge-hint {
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  border-left: 3px solid var(--accent);
 }
 .inv-kind-filter {
   flex: 0 0 auto;
@@ -886,6 +1003,25 @@
 }
 .inv-orphan-pick {
   margin: 4px 0 0 22px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.inv-orphan-pick-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.inv-scan-results-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 8px 0 2px 22px;
 }
 .inv-board-filter {
   margin: 4px 0;
@@ -1025,4 +1161,311 @@
 }
 .inv-edit-member {
   flex-wrap: wrap;
+}
+
+.inv-multi { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; padding: 8px; background: rgba(0, 0, 0, 0.03); border-radius: 6px; }
+.inv-multi-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.inv-em-resslot {
+  flex: 1 1 100%;
+  margin: 2px 0 4px 8px;
+}
+.inv-em-resedit:not(:empty) {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* ── the results as ONE full-width table ── */
+.inv-restable {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 1.1fr) minmax(130px, 0.9fr) minmax(150px, 1.1fr) minmax(200px, 2fr) minmax(70px, 0.5fr)
+    minmax(170px, 1.3fr) minmax(200px, 1.5fr);
+  column-gap: 0;
+  row-gap: 0;
+  align-items: stretch;
+  min-width: 0;
+  overflow-x: auto;
+}
+.inv-rt-h {
+  padding: 4px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  border-bottom: 1.5px solid var(--text-4);
+}
+.inv-rt-c {
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text-1);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  align-items: center;
+  gap: 3px 4px;
+}
+.inv-rt-code .inv-code-id {
+  font-family: var(--mono, monospace);
+  font-size: 11.5px;
+}
+.inv-rt-desc {
+  color: var(--text-2);
+}
+.inv-rt-c.inv-code-qof {
+  background: var(--green-dim);
+}
+.inv-rt-name,
+.inv-rt-role {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+}
+.inv-rt-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.inv-rt-duphint {
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+.inv-rt-duphint .lf-link {
+  font-size: inherit;
+  font-weight: 600;
+}
+.inv-rt-duphint.inv-rt-pending {
+  color: var(--amber);
+  background: var(--amber-dim, rgba(217, 119, 6, 0.08));
+  font-weight: 600;
+}
+.inv-rt-not-this {
+  color: var(--text-4);
+  font-weight: 400;
+  font-size: 0.95em;
+}
+.inv-rt-name[draggable='true'] {
+  cursor: grab;
+}
+.inv-rt-name.inv-rt-dragover {
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+}
+.inv-rt-code .inv-qof-tag {
+  margin-left: 2px;
+}
+.inv-note {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.inv-chip-ro {
+  cursor: inherit;
+}
+/* a code or an "also called" cell is the way in to editing that result */
+.inv-rt-click {
+  cursor: pointer;
+}
+.inv-rt-click:hover {
+  background: var(--bg-hover);
+}
+.inv-rt-click.inv-code-qof:hover {
+  background: var(--green-dim);
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.inv-rt-remove:hover {
+  background: var(--red-dim);
+  border-color: var(--red-line);
+}
+.inv-rt-remove {
+  min-height: 28px;
+}
+.inv-rt-edit {
+  min-width: 0;
+}
+.inv-rt-edit:has(.inv-em-resedit:not(:empty)) {
+  padding: 4px 8px 8px;
+}
+
+/* ── the assisted filing section of the results table: its own colour, so it is clearly separate from matching ── */
+.inv-rt-hf {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.inv-rt-hf:nth-child(6) {
+  border-left: 1.5px solid var(--accent);
+}
+.inv-rt-f {
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+}
+.inv-rt-frange {
+  border-left: 1.5px solid var(--accent);
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* input[type='text'] in options.html's own inline <style> sets width/padding/font-size at specificity (0,1,1) — a
+   bare class (0,1,0) never beats that (it was rendering full-width with 10px padding, not 64px with 3px). The class
+   repeated once gives two classes (0,2,0), which wins regardless of stylesheet order, without depending on an
+   ancestor — this class is reused in more than one place (see .inv-guards-edit below). */
+.inv-rt-num.inv-rt-num {
+  width: 64px;
+  min-width: 0;
+  padding: 3px 5px;
+  font-size: 12px;
+}
+.inv-rt-suggested {
+  border-color: var(--green-line, var(--green));
+  background: var(--green-dim);
+}
+.inv-rt-suggest-note {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--green);
+}
+.inv-rt-lab-range {
+  flex-basis: 100%;
+  font-size: 10.5px;
+}
+.inv-rt-fapproval {
+  gap: 6px;
+}
+.inv-filing-lab {
+  margin: 4px 0;
+  align-items: center;
+}
+.inv-filing-note {
+  margin: 6px 0 2px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+/* "also called" names stack, one to a line, instead of stretching across the column */
+.inv-rt-words {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+}
+
+.inv-rt-fguards {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  flex-wrap: nowrap;
+  gap: 3px;
+  font-size: 11.5px;
+}
+.inv-filing-labbar {
+  margin: 4px 0 6px;
+}
+.inv-filing-controls {
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 2px 0;
+  align-items: center;
+}
+.inv-fc-in {
+  max-width: 250px;
+}
+/* the lab-comment strip: assisted filing colour, full width under the results */
+.inv-filing-strip {
+  margin: 12px 0;
+  padding: 8px 10px 10px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  font-size: 12px;
+}
+.inv-filing-strip-title {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.inv-filing-group {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--accent);
+}
+.inv-filing-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.inv-filing-allowed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.inv-filing-allow-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 4px);
+  background: var(--bg-deep);
+}
+/* superseded by .inv-rt-num.inv-rt-num above, which already wins on specificity without needing this ancestor */
+
+/* ── assisted filing for a test: one bar, one switch, one approval ── */
+.inv-af-bar {
+  margin: 4px 0 8px;
+  padding: 8px 10px;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--r-md);
+  background: var(--accent-dim, rgba(37, 99, 235, 0.06));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.inv-af-switch {
+  font-weight: 600;
+}
+.inv-af-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.inv-af-wording summary {
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.inv-af-badge {
+  cursor: pointer;
+  font: inherit;
+}
+.inv-af-badge:hover {
+  filter: brightness(0.96);
+  text-decoration: underline;
+}
+.inv-unapproved {
+  border-color: var(--amber);
+}
+.inv-unapproved-note {
+  font-size: 10.5px;
+  color: var(--amber);
 }

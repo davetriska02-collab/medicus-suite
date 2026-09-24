@@ -609,6 +609,7 @@ console.log('\n--- fromInvestigationReportPayload ---');
                 resultUnit: 'u/L',
                 resultCode: { conceptId: '1000621000000104', description: 'Serum alkaline phosphatase' },
                 performerComments: 'private',
+                referenceRanges: [{ lowerReferenceLimit: '30', upperReferenceLimit: '130' }],
               },
               {
                 description: 'TSH',
@@ -645,6 +646,14 @@ console.log('\n--- fromInvestigationReportPayload ---');
     'a text result is not a numeric value'
   );
   check(a.ungrouped[0].hasNumericValue === false, 'an empty resultValue is not a value');
+  check(
+    a.groups[0].results[0].refLow === 30 && a.groups[0].results[0].refHigh === 130,
+    "the lab's own reference range is read as numbers (a constant of the analyte, not this patient's value)"
+  );
+  check(
+    a.groups[0].results[1].refLow === null && a.groups[0].results[1].refHigh === null,
+    'a result with no reference range gets null, not a throw'
+  );
   const flat = JSON.stringify(a);
   check(
     !/MUST NOT COPY|9990000001|private|"77"|2026-09-10|resultValue|performerComments/.test(flat),

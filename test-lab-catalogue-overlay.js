@@ -729,6 +729,7 @@ console.log('\n── hand authoring (C3) ──');
     label: bone.label,
     kind: bone.kind,
     requestAliases: bone.requestAliases,
+    synonyms: bone.synonyms,
     headingAliases: bone.headingAliases,
     exclude: bone.exclude,
     members: bone.members,
@@ -747,6 +748,7 @@ console.log('\n── hand authoring (C3) ──');
       label: 'Bone chemistry',
       kind: 'other',
       requestAliases: [{ text: 'Bone screen', system: 'any' }],
+      synonyms: [],
       exclude: [],
       members: bone.members.filter((m) => m.role !== 'shared'),
     })
@@ -775,7 +777,7 @@ console.log('\n── hand authoring (C3) ──');
   check(
     ch.some((x) => /Name changed/.test(x)) &&
       ch.some((x) => /Sample changed from blood to other/.test(x)) &&
-      ch.some((x) => /^Removed request wording/.test(x)) &&
+      ch.some((x) => /^Removed synonym/.test(x)) &&
       ch.some((x) => /^Added request wording: Bone screen/.test(x)) &&
       ch.some((x) => /^Removed result/.test(x)),
     'describeChanges lists what differs from the shipped test'
@@ -975,6 +977,161 @@ console.log('\n── merging one test into another ──');
   );
   check(JSON.stringify(builtin) === JSON.stringify(JSON.parse(JSON.stringify(builtin))), 'built-in untouched');
 }
+console.log('\n── merging one result into another (2026-09-23) ──');
+{
+  const LAB = 'rj700-general-pathology';
+  let o = OV.emptyOverlay();
+  const savedFrom = OV.saveResult(builtin, o, {
+    label: 'Creat (recoded)',
+    valueKind: 'numeric',
+    codes: [{ conceptId: '999888777001', role: 'primary', unit: 'µmol/L' }],
+    aliases: [{ text: 'Creat level', lab: LAB }],
+  });
+  o = savedFrom.overlay;
+  const from = savedFrom.id;
+  o = OV.saveInvestigation(builtin, o, {
+    label: 'Renal check',
+    kind: 'blood',
+    requestAliases: [{ text: 'Renal check', system: 'any' }],
+    members: [{ result: from, role: 'core' }],
+    labHeadings: [],
+  }).overlay;
+  o = OV.saveInvestigation(builtin, o, {
+    label: 'Renal panel two',
+    kind: 'blood',
+    requestAliases: [{ text: 'Renal panel two', system: 'any' }],
+    members: [
+      { result: 'creatinine', role: 'core' },
+      { result: from, role: 'optional' },
+    ],
+    labHeadings: [],
+  }).overlay;
+  o = OV.setFilingRange(builtin, o, { result: from, lab: LAB, code: '999888777001', low: 50, high: 120 });
+  o = OV.setFilingGuards(builtin, o, { result: from, lab: LAB, trendMaxDeltaPct: 25 });
+  const into = 'creatinine';
+  const r = OV.mergeResult(builtin, o, from, into, '2026-09-23');
+  const t = r.overlay.results.find((x) => x.id === into);
+  check(!r.overlay.results.some((x) => x.id === from), 'the merged-away result is deleted');
+  check(t && t.override === true, 'merging into a built-in result creates an additive override, not an override-free copy');
+  check(
+    t.codes.some((c) => c.conceptId === '999888777001' && c.role === 'alternate'),
+    "the from-result's code moves across as an alternate"
+  );
+  check(
+    t.aliases.some((a) => a.text === 'Creat level' && a.lab === LAB),
+    "the from-result's lab wording moves across"
+  );
+  const rc = r.overlay.investigations.find((i) => i.id === 'practice-renal-check');
+  check(
+    rc.members.length === 1 && rc.members[0].result === into,
+    'a test that only had the from-result now has the target instead'
+  );
+  const rp = r.overlay.investigations.find((i) => i.id === 'practice-renal-panel-two');
+  check(
+    rp.members.length === 1 && rp.members[0].result === into,
+    'a test that already had the target as a member just drops the duplicate membership'
+  );
+  check(rc.provenance.reviewed === false, 'a touched test goes back to awaiting review');
+  check(r.moved.tests === 2, 'the summary counts every test touched');
+  const range = r.overlay.filing.ranges.find((x) => x.result === into && x.lab === LAB);
+  check(range && range.low === 50 && range.high === 120, 'a filing range on the from-result is remapped to the target');
+  const guard = r.overlay.filing.guards.find((x) => x.result === into && x.lab === LAB);
+  check(guard && guard.trendMaxDeltaPct === 25, 'a filing guard on the from-result is remapped to the target');
+  check(
+    throwsWith(() => OV.mergeResult(builtin, o, from, from), /itself/),
+    'not into itself'
+  );
+  check(
+    throwsWith(() => OV.mergeResult(builtin, o, 'creatinine', 'sodium'), /built-in/),
+    'a built-in result cannot be merged away'
+  );
+  check(
+    throwsWith(() => OV.mergeResult(builtin, o, from, 'nope'), /not found/),
+    'unknown target'
+  );
+}
+console.log('\n── dismissing a similarity pairing ("it\'s not X") (2026-09-24) ──');
+{
+  let o = OV.emptyOverlay();
+  check(!OV.isSimilarPairDismissed(o, 'a', 'b'), 'nothing is dismissed to start with');
+  o = OV.dismissSimilarPair(o, 'a', 'b');
+  check(OV.isSimilarPairDismissed(o, 'a', 'b'), 'the pair is now dismissed');
+  check(OV.isSimilarPairDismissed(o, 'b', 'a'), 'order never matters — a dismissal is symmetric');
+  check(!OV.isSimilarPairDismissed(o, 'a', 'c'), 'a different pair sharing one id is not affected');
+  const again = OV.dismissSimilarPair(o, 'b', 'a');
+  check(again.context.dismissedSimilarPairs.length === 1, 'dismissing the same pair again (either order) is not a duplicate');
+  const restored = OV.restoreDismissedSimilarPairs(o);
+  check(!OV.isSimilarPairDismissed(restored, 'a', 'b'), 'restoring clears every dismissed pairing');
+  const bad = JSON.parse(JSON.stringify(o));
+  bad.context.dismissedSimilarPairs = [123];
+  check(
+    throwsWith(() => OV.sanitiseOverlay(bad), /dismissedSimilarPairs/),
+    'a non-string entry is rejected by the sanitiser (fails closed, like every other typed list)'
+  );
+}
+console.log('\n── merging one lab into another (2026-09-24) ──');
+{
+  const day = '2026-09-24';
+  let o = OV.emptyOverlay();
+  o.labs.push({
+    id: 'practice-kingston-general-pathology',
+    name: 'General Pathology',
+    identifiers: { performerOrg: 'kingston', department: 'General Pathology' },
+    groupHeadings: [{ text: 'FBC', identifies: ['ue'], mayContain: [] }],
+    provenance: { source: 'practice', reviewed: false, createdAt: day },
+  });
+  o.labs.push({
+    id: 'practice-kingston-general-pathology-2',
+    name: 'General Pathology',
+    identifiers: { performerOrg: 'kingston', department: 'General Pathology' },
+    groupHeadings: [
+      { text: 'FBC', identifies: ['ue'], mayContain: [] }, // the same heading as the target — a redundant copy
+      { text: 'Troponin', identifies: ['ue'], mayContain: [] },
+    ],
+    provenance: { source: 'practice', reviewed: false, createdAt: day },
+  });
+  const from = 'practice-kingston-general-pathology-2';
+  const into = 'practice-kingston-general-pathology';
+  o = OV.saveResult(builtin, o, {
+    label: 'Troponin',
+    valueKind: 'numeric',
+    codes: [{ conceptId: '999123456001', role: 'primary' }],
+    aliases: [{ text: 'CARDIAC TROPONIN I', lab: from }],
+  }).overlay;
+  o = OV.setFilingGuards(builtin, o, { result: 'practice-troponin', lab: from, trendMaxDeltaPct: 20 });
+  const r = OV.mergeLab(builtin, o, from, into, day);
+  check(!r.overlay.labs.some((l) => l.id === from), 'the merged-away lab is deleted');
+  const t = r.overlay.labs.find((l) => l.id === into);
+  check(
+    t.groupHeadings.filter((g) => g.text === 'FBC').length === 1,
+    'a heading already on the target is not duplicated'
+  );
+  check(
+    t.groupHeadings.some((g) => g.text === 'Troponin'),
+    "the merged-away lab's own heading moves across"
+  );
+  const troponin = r.overlay.results.find((x) => x.id === 'practice-troponin');
+  check(
+    troponin.aliases.some((a) => a.text === 'CARDIAC TROPONIN I' && a.lab === into),
+    'a result alias tagged for the merged-away lab is repointed to the target'
+  );
+  const guard = r.overlay.filing.guards.find((g) => g.lab === into);
+  check(guard && guard.trendMaxDeltaPct === 20, 'a filing guard keyed to the merged-away lab is repointed too');
+  check(r.moved.headings === 1 && r.moved.aliases === 1 && r.moved.filing === 1, 'the summary counts what moved');
+  check(t.provenance.reviewed === false, 'the target goes back to awaiting review');
+  check(
+    throwsWith(() => OV.mergeLab(builtin, o, from, from), /itself/),
+    'not into itself'
+  );
+  check(
+    throwsWith(() => OV.mergeLab(builtin, o, 'rj700-general-pathology', into), /built-in/),
+    'a built-in lab cannot be merged away'
+  );
+  check(
+    throwsWith(() => OV.mergeLab(builtin, o, from, 'nope'), /not found/),
+    'unknown target'
+  );
+}
 console.log('\n── dangling links (deleted tests must not poison a lab) ──');
 {
   const LAB = 'rj700-general-pathology';
@@ -1145,6 +1302,142 @@ console.log('\n── stripApprovals: approvals (and reviewer names) never trave
     'stripApprovals clears reviewed/reviewedBy/reviewedAt but leaves the source untouched'
   );
   check(o.results[0].provenance.reviewed === true, 'the input overlay is not mutated');
+}
+
+console.log('\n── lab display names ──');
+{
+  const LAB = 'rj700-general-pathology';
+  const renamed = OV.renameLab(OV.emptyOverlay(), LAB, '  Kingston Hospital pathology  ');
+  const m = OV.mergeCatalogue(builtin, renamed, {});
+  const lab = m.catalogue.labs.find((l) => l.id === LAB);
+  check(lab && lab.name === 'Kingston Hospital pathology', 'a built-in lab can be given a readable name (trimmed)');
+  check(
+    lab.identifiers.performerOrg === 'RJ700' && lab.identifiers.department === 'General Pathology',
+    'renaming never changes how the lab is recognised (organisation / department)'
+  );
+  check(
+    m.catalogue.labs.find((l) => l.id === LAB).groupHeadings.length ===
+      builtin.labs.find((l) => l.id === LAB).groupHeadings.length && m.problems.length === 0,
+    'and does not touch its headings or add problems'
+  );
+  const back = OV.renameLab(renamed, LAB, '   ');
+  check(
+    Object.keys(back.context.labNames).length === 0 &&
+      OV.mergeCatalogue(builtin, back, {}).catalogue.labs.find((l) => l.id === LAB).name ===
+        builtin.labs.find((l) => l.id === LAB).name,
+    'a blank name puts the original back'
+  );
+  const kept = OV.setContext(renamed, { icb: 'X', labs: [], orderingSystems: [] });
+  check(
+    kept.context.labNames[LAB] === 'Kingston Hospital pathology',
+    'saving the practice details keeps the lab names'
+  );
+  const polluted = OV.sanitiseOverlay({
+    ...OV.emptyOverlay(),
+    context: { ...OV.emptyOverlay().context, labNames: JSON.parse('{"__proto__":"x","ok":"Fine"}') },
+  });
+  check(
+    polluted.context.labNames.ok === 'Fine' && Object.keys(polluted.context.labNames).length === 1,
+    'prototype-pollution keys are dropped from lab names'
+  );
+  let threw = false;
+  try {
+    OV.renameLab(OV.emptyOverlay(), LAB, 'x'.repeat(5000));
+  } catch (e) {
+    threw = true;
+  }
+  check(threw, 'an over-long name is rejected, not truncated');
+  const withDismissed = OV.setContext(
+    { ...OV.emptyOverlay(), context: { ...OV.emptyOverlay().context, dismissed: ['a'] } },
+    { labs: [] }
+  );
+  check(withDismissed.context.dismissed.length === 1, 'saving the practice details keeps the list of deleted imports');
+}
+
+console.log('\n── a note on one of a lab’s report headings (2026-09-24) ──');
+{
+  const LAB = 'rj700-general-pathology';
+  const lab = builtin.labs.find((l) => l.id === LAB);
+  const heading = lab.groupHeadings.find((g) => (g.identifies || []).includes('ue')).text; // e.g. "Renal function tests"
+  const noted = OV.setHeadingNote(builtin, OV.emptyOverlay(), LAB, heading, '  used when the set includes potassium  ');
+  const merged = OV.mergeCatalogue(builtin, noted, { includeUnreviewed: true }).catalogue;
+  const g = merged.labs.find((l) => l.id === LAB).groupHeadings.find((x) => x.text === heading);
+  check(g.note === 'used when the set includes potassium', 'the note is stored, trimmed, against that one heading');
+  check(
+    merged.labs.find((l) => l.id === LAB).groupHeadings.filter((x) => x.text !== heading).every((x) => !x.note),
+    'no other heading on the lab is touched'
+  );
+  const labOv = noted.labs.find((l) => l.id === LAB);
+  check(
+    labOv && labOv.provenance && labOv.provenance.reviewed !== true,
+    'a note on a built-in lab creates an inert override (cosmetic only — never pre-approved)'
+  );
+  check(
+    OV.setHeadingNote(builtin, noted, LAB, heading, '').filing === undefined ||
+      OV.mergeCatalogue(builtin, OV.setHeadingNote(builtin, noted, LAB, heading, ''), { includeUnreviewed: true })
+        .catalogue.labs.find((l) => l.id === LAB)
+        .groupHeadings.find((x) => x.text === heading).note === undefined,
+    'a blank note clears it'
+  );
+  check(
+    throwsWith(
+      () => OV.setHeadingNote(builtin, OV.emptyOverlay(), LAB, 'Not a real heading', 'x'),
+      /not a report group heading/
+    ),
+    'the heading must be one the lab really has'
+  );
+  check(
+    throwsWith(() => OV.setHeadingNote(builtin, OV.emptyOverlay(), 'no-such-lab', heading, 'x'), /unknown lab/),
+    'an unknown lab is refused'
+  );
+}
+
+console.log('\n── adding one more request wording Medicus uses, on top of a shorter alias (2026-09-24) ──');
+{
+  const added = OV.addRequestAlias(builtin, OV.emptyOverlay(), 'ue', 'Urea and Electrolytes WITH potassium', 'any');
+  const merged = OV.mergeCatalogue(builtin, added, { includeUnreviewed: true }).catalogue;
+  const ue = merged.investigations.find((i) => i.id === 'ue');
+  check(
+    ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITH potassium') &&
+      ue.synonyms.some((s) => s === 'electrolyte'), // the existing (legacy) synonym survives untouched
+    'the new exact wording is added alongside the existing synonyms, not instead of them'
+  );
+  check(
+    added.investigations[0].provenance.reviewed === false,
+    'the change arrives unapproved, like any other edit to a built-in test'
+  );
+  const again = OV.addRequestAlias(builtin, added, 'ue', 'urea and electrolytes with potassium', 'any');
+  check(
+    OV.mergeCatalogue(builtin, again, { includeUnreviewed: true }).catalogue.investigations.find((i) => i.id === 'ue')
+      .requestAliases.filter((a) => /with potassium/i.test(a.text)).length === 1,
+    'adding the same wording again (case/spacing aside) is a no-op, not a duplicate'
+  );
+  check(
+    JSON.stringify(again) === JSON.stringify(added),
+    'and genuinely changes nothing when it is already there — no spurious re-approval needed'
+  );
+  check(
+    throwsWith(() => OV.addRequestAlias(builtin, OV.emptyOverlay(), 'not-a-real-test', 'x', 'any'), /unknown investigation/),
+    'an unknown investigation is refused'
+  );
+  check(
+    throwsWith(() => OV.addRequestAlias(builtin, OV.emptyOverlay(), 'ue', '   ', 'any'), /is required/),
+    'a blank wording is refused'
+  );
+  const practiceOnly = OV.saveInvestigation(builtin, OV.emptyOverlay(), {
+    id: 'my-own-test',
+    label: 'My own test',
+    kind: 'other',
+    requestAliases: [{ text: 'my own test', system: 'any' }],
+    members: [],
+  }).overlay;
+  const addedToPractice = OV.addRequestAlias(builtin, practiceOnly, 'my-own-test', 'My Own Test, extended name', 'any');
+  check(
+    OV.mergeCatalogue(builtin, addedToPractice, { includeUnreviewed: true })
+      .catalogue.investigations.find((i) => i.id === 'my-own-test')
+      .requestAliases.some((a) => a.text === 'My Own Test, extended name'),
+    'works the same way for a practice-authored test, not just a built-in one'
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

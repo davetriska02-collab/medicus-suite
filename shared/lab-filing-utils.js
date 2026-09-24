@@ -55,11 +55,44 @@
     control: 120, // visible-text / aria-label of a control
     selector: 200, // CSS selector hint
     comment: 500,
+    // A whitelisted lab comment is the WHOLE lab-generated text (real ones are 300-600 characters), so it needs far more room
+    // than a control label — and an over-long one is REJECTED, never truncated (a truncated phrase can no longer explain the
+    // whole comment, which is exactly what the matching now requires).
+    allowComment: 2000,
     template: 500,
     notes: 1000,
     params: 200, // max per-analyte parameter rows
     unit: 24,
   };
+
+  // ── Whitelisted lab comments: what may be whitelisted at all ─────────────────────────────────────────────────────
+  // A lab comment is boilerplate the LAB attaches to a report group (several sentences). Whitelisting a word or a short
+  // generic phrase ("normal") must be impossible: it would excuse anything that mentions it.
+  const LF_ALLOW_MIN_WORDS = 6;
+  const LF_ALLOW_MIN_CHARS = 30;
+  const LF_ALLOW_GENERIC_TOKENS = new Set(
+    (
+      'normal no action further required needed result results satisfactory stable acceptable nad within limits limit range ok ' +
+      'fine all is are was were the a an of and to for this that it be'
+    ).split(' ')
+  );
+  // '' when the phrase may be whitelisted, else the reason it may not.
+  function allowCommentProblem(phrase) {
+    const raw = isStr(phrase) ? phrase.trim() : '';
+    if (!raw) return 'is empty';
+    if (raw.length > LF_LIMITS.allowComment)
+      return `is ${raw.length} characters — the limit is ${LF_LIMITS.allowComment} (it is never truncated, because a truncated phrase cannot explain the whole comment)`;
+    const norm = raw
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const words = norm ? norm.split(' ') : [];
+    if (words.length < LF_ALLOW_MIN_WORDS || norm.length < LF_ALLOW_MIN_CHARS)
+      return `is too short to whitelist — a lab comment is several words long (at least ${LF_ALLOW_MIN_WORDS} words and ${LF_ALLOW_MIN_CHARS} characters)`;
+    if (words.every((w) => LF_ALLOW_GENERIC_TOKENS.has(w))) return 'is made only of generic words';
+    return '';
+  }
 
   const isUnset = (v) => v === undefined || v === null || v === '';
   function numOrNull(v) {
@@ -77,7 +110,10 @@
     return Array.isArray(v) && v.every((x) => typeof x === 'string');
   }
 
-  function validateProfile(p) {
+  // opts.lenientAllowComments: import / sync / restore paths pass this so ONE unacceptable whitelisted phrase never rejects a
+  // whole profile — sanitiseProfile drops it and the matcher ignores it anyway. The author paths (Options save, paste-in)
+  // do NOT pass it, so a clinician gets the reason instead of a silently ignored entry.
+  function validateProfile(p, opts) {
     const errs = [];
     if (!p || typeof p !== 'object' || Array.isArray(p)) return ['Profile must be an object.'];
 
@@ -190,13 +226,22 @@
       errs.push('excludeIfMeds must be an array of strings.');
     if (p.suppressIfText !== undefined && !strArrOk(p.suppressIfText))
       errs.push('suppressIfText must be an array of strings.');
-    // Per-profile allow-list for a recurring performer comment (e.g. a fixed
-    // NICE-guidance note Medicus prints on every eGFR). Deliberately scoped to
+    // Per-profile allow-list for a recurring performer comment (e.g. the fixed
+    // NICE-guidance note the LAB attaches to every eGFR — lab text, not Medicus text). Deliberately scoped to
     // ONE profile, not a global edit to LF_BENIGN_COMMENT_PHRASES — a phrase
     // benign for this profile's report type is not a general claim about every
     // other profile's results.
     if (p.allowComments !== undefined && !strArrOk(p.allowComments))
       errs.push('allowComments must be an array of strings.');
+    else if (Array.isArray(p.allowComments) && !(opts && opts.lenientAllowComments)) {
+      p.allowComments.forEach((phrase, i) => {
+        const why = allowCommentProblem(phrase);
+        if (why)
+          errs.push(
+            `allowComments[${i}] (“${String(phrase).trim().slice(0, 40)}${String(phrase).trim().length > 40 ? '…' : ''}”) ${why}.`
+          );
+      });
+    }
 
     if (p.commitMode !== undefined && !LF_COMMIT_MODES.includes(p.commitMode)) {
       errs.push(`commitMode must be one of: ${LF_COMMIT_MODES.join(', ')}.`);
@@ -304,7 +349,12 @@
       // prints on every result of this type (see fileabilityBlockers below).
       // Full sentences copied from a real comment, so clamp to LF_LIMITS.comment
       // (a match/analyte term's 80-char matchItem limit is too short for one).
-      allowComments: sanitiseStrArr(p.allowComments, LF_LIMITS.comment, LF_LIMITS.match),
+      // Rejected, never truncated or shortened: an entry that may not be whitelisted is dropped here, and the matcher ignores
+      // any that slip through (a profile from an older build, a restore, a sync).
+      allowComments: (Array.isArray(p.allowComments) ? p.allowComments : [])
+        .filter((s) => isStr(s) && allowCommentProblem(s) === '')
+        .map((s) => s.trim())
+        .slice(0, LF_LIMITS.match),
       commitMode: LF_COMMIT_MODES.includes(p.commitMode) ? p.commitMode : 'manual',
       source: LF_SOURCES.includes(p.source) ? p.source : 'manual',
       reviewed: p.reviewed === true,
@@ -1052,12 +1102,15 @@
     return s;
   }
 
-  // A comment residue is allowed for THIS profile if it exactly matches, or
-  // contains, one of the profile's own allowComments phrases — same
-  // normalisation as the phrase being checked, same "contains" looseness as
-  // suppressIfText's own phrase matching. Never touches the global
-  // LF_BENIGN_COMMENT_PHRASES set: an allow-listed phrase excuses only the
-  // profile that lists it.
+  // A comment residue is allowed for THIS profile only if the WHOLE residue is explained by the profile's own allowComments
+  // phrases — one phrase, or several that together make up the residue. Nothing else may remain.
+  //
+  // This replaced a "residue contains the phrase, or the phrase contains the residue" test (H-073's open review item). That
+  // test let a whitelisted "normal" excuse "abnormal — please phone", and let a whitelisted paragraph excuse the same
+  // paragraph with a warning added after it. Now: a phrase that is only PART of the residue leaves the rest unexplained, so
+  // the result still blocks; a phrase that merely CONTAINS the residue explains nothing. Phrases too short or too generic to
+  // whitelist (see allowCommentProblem) are ignored here as well, so a profile that carries one — restored, synced, or from
+  // an older build — gains nothing from it. Never touches the global LF_BENIGN_COMMENT_PHRASES set.
   function _normComment(s) {
     return String(s || '')
       .toLowerCase()
@@ -1067,17 +1120,23 @@
   }
   function _commentAllowedByProfile(norm, profile) {
     if (!norm || !profile || !Array.isArray(profile.allowComments)) return false;
-    return profile.allowComments.some((phrase) => {
-      const p = _normComment(phrase);
-      // Bidirectional on purpose: an entry saved BEFORE the 2026-09-17 fix to
-      // _collapseRepeatedWhole above carries Medicus's doubled-comment text
-      // verbatim, which is now longer than a freshly computed (de-duplicated)
-      // residue — norm.includes(p) alone would stop matching it. Checking
-      // the reverse too keeps every already-saved entry working without
-      // requiring anyone to re-save it, at no extra risk: either direction
-      // still requires one full text to appear verbatim inside the other.
-      return p && (norm.includes(p) || p.includes(norm));
-    });
+    // A phrase saved BEFORE the 2026-09-17 fix to _collapseRepeatedWhole carries Medicus's doubled-comment text verbatim;
+    // collapse an exact doubling so it still explains the (de-duplicated) residue without anyone re-saving it.
+    const phrases = [
+      ...new Set(
+        profile.allowComments
+          .filter((p) => isStr(p) && allowCommentProblem(p) === '')
+          .map((p) => _collapseRepeatedWhole(_normComment(p)))
+          .filter(Boolean)
+      ),
+    ].sort((a, b) => b.length - a.length);
+    if (!phrases.length) return false;
+    let rest = ' ' + norm + ' ';
+    for (const p of phrases) {
+      const needle = ' ' + p + ' ';
+      while (rest.includes(needle)) rest = rest.replace(needle, ' ');
+    }
+    return rest.trim() === '';
   }
 
   // Every numeric result whose comment residue is non-benign AND not already
@@ -1112,7 +1171,11 @@
       const residue = numericCommentResidue(r);
       if (!residue) continue;
       const norm = _normComment(residue);
-      if (norm && !LF_BENIGN_COMMENT_PHRASES.has(norm) && !_commentAllowedForResult(norm, profile, r, matchedProfiles)) {
+      if (
+        norm &&
+        !LF_BENIGN_COMMENT_PHRASES.has(norm) &&
+        !_commentAllowedForResult(norm, profile, r, matchedProfiles)
+      ) {
         // `result` (the raw row) rides along so a caller with several
         // candidate profiles (a combined multi-panel report) can work out
         // which one actually covers THIS analyte — see profilesOwningResult.
@@ -1423,12 +1486,18 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     profileParamBlockers,
     unrecognisedAnalyteBlockers,
     applyParamOverrides,
+    // Exported for engine/lab-filing-catalogue.js (Phase E) — the same "both declared and equal, or neither
+    // declared" unit-safety rule applies to a catalogue-held practice range, and must not drift from this one.
+    unitsSafeToApply,
     // Exported for the lab-file-button.js debug log (ch-debug flag) — lets the
     // clinician see exactly what text an allowComments phrase is being
     // compared against, rather than guess at it.
     numericCommentResidue,
     unresolvedCommentedResults,
     profilesOwningResult,
+    allowCommentProblem,
+    LF_ALLOW_MIN_WORDS,
+    LF_ALLOW_MIN_CHARS,
     // 2026-08-22 audit R1b — exported so the unidirectional-match invariant is
     // pinned directly, not only through the blocker functions.
     LF_SCHEMA,

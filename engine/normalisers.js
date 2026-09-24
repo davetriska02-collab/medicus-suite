@@ -600,6 +600,9 @@
     const safe = {
       patientUuid: null,
       unmatched: false,
+      // Additive (Phase E, lab-filing-catalogue.js): which lab sent this report. Never read by the legacy gate,
+      // which matches by analyte name regardless of lab — only the catalogue-driven engine needs it.
+      lab: { organisation: null, department: null },
       results: [],
     };
     try {
@@ -609,6 +612,11 @@
       const report = data.investigationReport;
       if (!report) return safe;
       safe.unmatched = report.isMatchedToPatient === false;
+      const perf = report.performer && typeof report.performer === 'object' ? report.performer : {};
+      safe.lab = {
+        organisation: typeof perf.organisationName === 'string' ? perf.organisationName : null,
+        department: typeof perf.departmentName === 'string' ? perf.departmentName : null,
+      };
 
       // Collect all result objects from groups + ungrouped.
       // Each result from a named group gets a `specimen` field set to the group's
@@ -760,12 +768,16 @@
         }
         const text = textParts.join(' ');
 
+        const rc = r.resultCode && typeof r.resultCode === 'object' ? r.resultCode : {};
         safe.results.push({
           name,
           value: numValue,
           rawValue,
           comparator: r.resultComparator || null,
           unit: r.resultUnit || null,
+          // Additive (Phase E): the SNOMED code, for the catalogue engine's by-code recognition. Never read by the
+          // legacy engine, which matches results by analyte NAME.
+          code: typeof rc.conceptId === 'string' ? rc.conceptId : rc.conceptId != null ? String(rc.conceptId) : null,
           low,
           high,
           isAbove: !!r.isAboveReferenceRange,

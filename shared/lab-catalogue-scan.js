@@ -20,8 +20,10 @@
 //     consistent link; more than one is AMBIGUOUS and the person must choose (a name-similarity hint is only a hint);
 //   * nothing is auto-approved — the output is proposals; applying them writes unreviewed entries.
 //
-// PRIVACY: an observation keeps test names, headings, codes and units ONLY — never values, comments, dates, patient or
-// staff fields. Callers must drop the raw payload immediately (collectObservations does).
+// PRIVACY: an observation keeps test names, headings, codes, units and the LAB'S OWN reference range ONLY — never
+// this patient's result value, comments, dates, patient or staff fields. A reference range is the lab's own constant
+// for the analyte/assay (the same for every patient), kept only to suggest a starting practice range in Lab Filing
+// setup — never saved on its own. Callers must drop the raw payload immediately (collectObservations does).
 //
 // Dual-mode export: browser classic script -> window.LabCatalogueScan; Node/test -> require().
 
@@ -64,6 +66,8 @@
       unit: r.unit,
       numeric: r.resultType === 'unit-value-result',
       degraded: !!r.degraded,
+      refLow: r.refLow,
+      refHigh: r.refHigh,
     });
     return {
       lab: { organisation: rep.lab.organisation, department: rep.lab.department },
@@ -125,6 +129,24 @@
     return n / Math.min(A.size, B.size);
   }
 
+  // Existing results that MIGHT be the same analyte as `name` under different wording — a HINT for the person
+  // reviewing a freshly-scanned result, never a decision (same doctrine as the investigation-similarity hint above).
+  // A result whose name/aliases are already token-equal to `name` is caught earlier, at scan time, and reuses the
+  // result outright (fillsFromProposals' own-name check) — it never reaches "new", so it never reaches here either.
+  // What DOES reach here: a different code and a part-overlapping name (a re-worded or newly-split-out analyte),
+  // which is exactly the "duplicate result created for a new code" gap Nick's real-life case was testing.
+  const SIMILAR_RESULT_THRESHOLD = 0.5;
+  function similarResults(catalogue, name, excludeId) {
+    const out = [];
+    for (const r of asArr(catalogue.results)) {
+      if (r.id === excludeId) continue;
+      let best = 0;
+      for (const t of [r.label, ...asArr(r.aliases).map((a) => a.text)]) best = Math.max(best, similarity(name, t));
+      if (best >= SIMILAR_RESULT_THRESHOLD) out.push({ id: r.id, label: r.label, score: best });
+    }
+    return out.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+  }
+
   // ── What sample / kind of test a group can belong to ───────────────────────────────────────────────────────────
   // A group from a radiology department can never be a blood test, and vice versa. Anything we cannot tell stays open.
   const IMAGING_RE =
@@ -137,18 +159,25 @@
     if (/(faec|stool|calprotectin|elastase)/.test(t)) return 'faeces';
     return null; // could be anything
   }
+  // Numeric results and nothing else to go on: any laboratory sample type (never imaging).
+  const NUMERIC_ONLY = ['blood', 'urine', 'faeces', 'microbiology', 'other'];
   function compatibleKinds(group, lab) {
     const LC = need();
     const spec = LC.norm(group.specimenType || '');
     if (spec) {
-      if (/(blood|serum|plasma)/.test(spec)) return ['blood', 'other'];
-      if (/urine/.test(spec)) return ['urine', 'other'];
-      if (/(faec|stool)/.test(spec)) return ['faeces', 'other'];
-      if (/(swab|sputum|pus|fluid|tissue|culture)/.test(spec)) return ['microbiology', 'other'];
+      // A urine / faeces / blood specimen is also what a microbiology test (MC&S, culture, molecular screening) is run on,
+      // so a microbiology test must stay a valid owner of such a group — otherwise "Urine culture" under a Urine MC&S
+      // test is reported as unlinked even though it is already recorded.
+      if (/(blood|serum|plasma)/.test(spec)) return ['blood', 'microbiology', 'other'];
+      if (/urine/.test(spec)) return ['urine', 'microbiology', 'other'];
+      if (/(faec|stool)/.test(spec)) return ['faeces', 'microbiology', 'other'];
+      // ...and a microbiology specimen (swab, culture) may belong to a test recorded as urine / faeces / blood MC&S.
+      if (/(swab|sputum|pus|fluid|tissue|culture|microbio)/.test(spec))
+        return ['microbiology', 'urine', 'faeces', 'blood', 'other'];
     }
     const text = [group.heading, lab && lab.organisation, lab && lab.department].filter(Boolean).join(' ');
     if (IMAGING_RE.test(LC.norm(text))) return ['imaging', 'procedure', 'other'];
-    if (asArr(group.results).some((r) => r.numeric)) return ['blood', 'urine', 'faeces', 'microbiology', 'other'];
+    if (asArr(group.results).some((r) => r.numeric)) return NUMERIC_ONLY;
     return null;
   }
   const kindOk = (kind, compat) => !compat || kind === 'other' || compat.includes(kind);
@@ -160,8 +189,8 @@
     );
     if (!compat) return 'other';
     if (compat[0] === 'imaging') return 'imaging';
-    if (compat.length <= 2) return compat[0] === 'other' ? 'other' : compat[0];
-    return 'blood'; // numeric results and nothing else to go on
+    if (compat === NUMERIC_ONLY) return 'blood'; // numeric results and nothing else to go on
+    return compat[0] === 'other' ? 'other' : compat[0]; // a specimen was named
   }
   // The kind of a NEW test that has only a request (no results to recognise it by yet): imaging needs none; everything
   // else must have results, so it starts as "other" and takes its sample from the first report learned for it.
@@ -182,6 +211,44 @@
     return [...out];
   }
 
+  // Why a group is not recognised, in words a person can act on: where (if anywhere) its heading is already recorded, and
+  // whether the test it is recorded for is missing, or is the wrong sample type for this group's specimen.
+  function whyUnexplained(index, invById, lab, obs, group, compat) {
+    const LC = need();
+    const h = LC.norm(group.heading);
+    const notes = [];
+    if (!lab)
+      notes.push(
+        'this lab (' +
+          ((obs.lab && (obs.lab.department || obs.lab.organisation)) || 'unknown') +
+          ') is not in the catalogue yet'
+      );
+    for (const l of index.labs) {
+      for (const e of l.headings) {
+        if (!LC.hasTerm(h, e.norm)) continue;
+        const where = l.def.name || l.def.id;
+        for (const id of e.identifies) {
+          const iv = invById.get(id);
+          if (!iv) notes.push('recorded under ' + where + ' for a test that no longer exists (' + id + ')');
+          else if (!kindOk(iv.kind, compat))
+            notes.push(
+              'recorded under ' +
+                where +
+                ' for ' +
+                iv.label +
+                ', whose sample type (' +
+                iv.kind +
+                ") does not fit this group's specimen"
+            );
+          else if (l !== lab) notes.push('recorded for ' + iv.label + ' under a different lab entry (' + where + ')');
+        }
+      }
+    }
+    if (!notes.length)
+      notes.push('its heading is not recorded against any test for this lab yet, and its results do not identify one');
+    return [...new Set(notes)];
+  }
+
   // ── Analysis ───────────────────────────────────────────────────────────────────────────────────────────────────
   // catalogue: the EFFECTIVE catalogue including unreviewed entries (what the person sees on the page)
   // observations: from observationFromOverview
@@ -199,8 +266,30 @@
       unexplained: 0,
       unknownRequests: new Map(),
       unmatchedHeadings: new Map(),
+      // Medicus's own EXACT request wording (e.g. "Urea and Electrolytes WITH potassium"), for a request that
+      // already resolves — unambiguously, to one investigation — but is not yet recorded, word for word, as one of
+      // that investigation's own requestAliases. A shorter alias ("electrolytes") is enough to MATCH it, so this
+      // wording was previously seen only long enough to resolve, then discarded — never offered for review (Nick,
+      // 2026-09-24). Keyed 'invId|norm(text)' -> { investigationId, text }; not gated by `targets`, since an
+      // investigation can be fully set up already and still be missing a wording variant like this.
+      newRequestWordings: new Map(),
     };
     const groupsSeen = new Map(); // key -> aggregate
+    // Every wording already known for each investigation (its own label counts too — buildIndex adds it as an
+    // implicit alias) — computed once, not per observation.
+    const knownWordings = new Map(); // investigationId -> Set<norm text>
+    const wordingsFor = (invId) => {
+      if (knownWordings.has(invId)) return knownWordings.get(invId);
+      const inv = invById.get(invId);
+      const set = new Set();
+      if (inv) {
+        set.add(LC.norm(inv.label));
+        for (const a of asArr(inv.requestAliases)) if (a && a.text) set.add(LC.norm(a.text));
+        for (const s of asArr(inv.synonyms)) set.add(LC.norm(s));
+      }
+      knownWordings.set(invId, set);
+      return set;
+    };
 
     for (const obs of asArr(observations)) {
       stats.reports++;
@@ -254,7 +343,14 @@
           continue;
         }
         const top = hits.filter((h) => h.specificity === hits[0].specificity);
-        if (top.length === 1 && targets.has(top[0].investigationId)) onCard.add(top[0].investigationId);
+        if (top.length !== 1) continue;
+        const invId = top[0].investigationId;
+        if (targets.has(invId)) onCard.add(invId);
+        const text = LC.parseRequestName(label);
+        const nt = LC.norm(text);
+        if (nt && !wordingsFor(invId).has(nt)) {
+          stats.newRequestWordings.set(invId + '|' + nt, { investigationId: invId, text });
+        }
       }
 
       obs.groups.forEach((g, gi) => {
@@ -275,6 +371,7 @@
           return iv && kindOk(iv.kind, compat);
         });
         const explained = owners.length > 0;
+        const why = explained ? [] : whyUnexplained(index, invById, lab, obs, g, compat);
         if (explained) stats.explained++;
         else stats.unexplained++;
         // explained groups matter only when they belong to a selected test (missing codes / results on a known heading)
@@ -283,6 +380,10 @@
         if (explained) {
           const sel = owners.filter((id) => targets.has(id));
           if (!sel.length) return;
+          // a generic imaging heading the lab records against several result-less tests on purpose (identifies) is finished:
+          // there is nothing to choose between, and no results of their own to complete
+          const noResults = (id) => ['imaging', 'procedure'].includes((invById.get(id) || {}).kind);
+          if (sel.length > 1 && identifies.length && sel.every(noResults)) return;
           if (sel.length === 1) owner = sel[0];
           else ownerCands = sel; // its results belong to several selected tests: the person decides
         }
@@ -296,6 +397,8 @@
             heading: g.heading,
             specimen: g.specimenType,
             headingIds: labHeadingIds(lab, g.heading),
+            why,
+            explained,
             owner,
             labObs: obs.lab,
             cards: [],
@@ -362,6 +465,7 @@
         lab: agg.lab,
         heading: agg.heading,
         headingIds: agg.headingIds,
+        why: agg.why,
         headingKnown: false,
         specimen: agg.specimen || null,
         reports: agg.reports,
@@ -381,6 +485,9 @@
         }
         let inter = new Set(informative[0]);
         for (const c of informative.slice(1)) inter = new Set([...inter].filter((x) => c.includes(x)));
+        // An imaging group ("Ultrasonography") is generic: each report of it usually answers a DIFFERENT request (groin,
+        // abdomen, neck...). Intersecting the cards would keep only what they all share, so offer every test seen on any card.
+        if (kindForGroup(agg) === 'imaging' && informative.length > 1) inter = new Set(informative.flat());
         const all = [...inter];
         candidates = all.filter((id) => !id.startsWith('unknown:'));
         const unk = all.filter((id) => id.startsWith('unknown:')).map((id) => agg.unknownLabels.get(id));
@@ -409,7 +516,7 @@
       const ranked = candidates
         .map((id) => {
           const inv = invById.get(id);
-          const reqs = [inv.label, ...asArr(inv.requestAliases).map((a) => a.text)];
+          const reqs = [inv.label, ...asArr(inv.requestAliases).map((a) => a.text), ...asArr(inv.synonyms)];
           let best = 0;
           for (const p of probe) for (const q of reqs) best = Math.max(best, similarity(p, q));
           return { id, score: best };
@@ -422,6 +529,7 @@
         lab: agg.lab,
         heading: agg.heading,
         headingIds: agg.headingIds,
+        why: agg.why,
         headingKnown: candidates.length === 1 && agg.headingIds.includes(candidates[0]),
         specimen: agg.specimen || null,
         reports: agg.reports,
@@ -429,6 +537,8 @@
         kind: kindForGroup(agg),
         candidates: ranked.map((r) => r.id),
         target: candidates.length === 1 && !unknownCommon.length ? candidates[0] : null,
+        // one generic group that several tests share: the person may link it to all of them (see coverage.sharedWith)
+        multi: kindForGroup(agg) === 'imaging' && candidates.length > 1,
         unknownOnCard: unknownCommon,
         hint,
         results,
@@ -437,6 +547,24 @@
       if (prop.target && prop.headingKnown) {
         const f = fillsFromProposals(catalogue, [prop]).fills;
         if (!f.results.length && !f.members.length) {
+          alreadyComplete++;
+          continue;
+        }
+      }
+      // A group the catalogue already recognises for SEVERAL selected tests (so the person is asked to choose) is finished
+      // too when, whichever of them it is, there is nothing left to add: no heading, no result, no code.
+      if (agg.explained && candidates.length > 1) {
+        prop.recognisedFor = candidates.map((c) => {
+          const f = fillsFromProposals(catalogue, [{ ...prop, target: c }]).fills;
+          return {
+            id: c,
+            headings: f.labs.reduce((n, l) => n + l.headings.length, 0),
+            results: f.results.length,
+            members: f.members.length,
+          };
+        });
+        const done = prop.recognisedFor.every((r) => !r.headings && !r.results && !r.members);
+        if (done) {
           alreadyComplete++;
           continue;
         }
@@ -452,6 +580,12 @@
       ),
       unmatched,
       unknownRequests: [...stats.unknownRequests.values()].sort((a, b) => b.count - a.count),
+      newRequestWordings: [...stats.newRequestWordings.values()].sort(
+        (a, b) =>
+          (invById.get(a.investigationId) || { label: '' }).label.localeCompare(
+            (invById.get(b.investigationId) || { label: '' }).label
+          ) || a.text.localeCompare(b.text)
+      ),
       stats: {
         alreadyComplete,
         reports: stats.reports,
@@ -462,14 +596,49 @@
     };
   }
 
+  // ── Reference-range candidates (Lab Filing setup pre-fill) ────────────────────────────────────────────────────────
+  // A SUGGESTION only, never a saved practice range: the lab's own reference range, seen on a recent report, for a
+  // result the catalogue already has a CODE for, at a lab the catalogue already knows. One candidate per (lab, code) —
+  // the most recently seen report wins (observations are read newest-first by the queue). A lab the catalogue does not
+  // yet recognise, or a result with no code, yields no candidate: nothing to key it to.
+  function referenceRangeCandidates(catalogue, observations) {
+    const LC = need();
+    const index = LC.buildIndex(catalogue);
+    const out = new Map(); // 'labId|code' -> { lab, code, low, high, unit }
+    for (const obs of asArr(observations)) {
+      const lab = LC.identifyLab(index, obs.lab);
+      if (!lab) continue; // an unrecognised lab has no stable id to key a candidate to
+      for (const g of asArr(obs.groups)) {
+        for (const r of asArr(g.results)) {
+          if (!r.code || (r.refLow == null && r.refHigh == null)) continue;
+          out.set(lab.def.id + '|' + r.code, { lab: lab.def.id, code: r.code, low: r.refLow, high: r.refHigh, unit: r.unit });
+        }
+      }
+    }
+    return [...out.values()];
+  }
+
   // ── Proposal -> fills (for LabCatalogueOverlay.applyFills) ────────────────────────────────────────────────────────
   // choices: Map/obj proposal.key -> investigation id (for ambiguous ones). Returns { fills, skipped }.
-  function fillsFromProposals(catalogue, proposals, choices) {
+  // resultChoices: an optional Map/object, keyed the same way as a NEW result's own key ('c:<code>' or 'n:<norm name>'),
+  // letting the person redirect a result that would otherwise be created as brand new onto an existing one instead —
+  // the person's answer to the similarity hint shown on the match board (Nick, 2026-09-23: creating the duplicate
+  // anyway with "no obvious option to merge" is the gap; this is that option, offered BEFORE the duplicate exists
+  // rather than only as a later merge). Never guessed — only ever a person's explicit choice reaches here.
+  function fillsFromProposals(catalogue, proposals, choices, resultChoices) {
     const LC = need();
     const index = LC.buildIndex(catalogue);
     const invById = new Map(asArr(catalogue.investigations).map((i) => [i.id, i]));
     const resById = new Map(asArr(catalogue.results).map((r) => [r.id, r]));
     const pick = (k) => (choices instanceof Map ? choices.get(k) : choices && choices[k]);
+    const pickResult = (k) =>
+      resultChoices instanceof Map ? resultChoices.get(k) : resultChoices && resultChoices[k];
+    // a group linked to several tests at once (targets) is the same fill once per test
+    proposals = asArr(proposals).flatMap((p) =>
+      p && Array.isArray(p.targets) && p.targets.length
+        ? p.targets.map((t) => ({ ...p, target: t, targets: null }))
+        : [p]
+    );
     const fills = { labs: [], results: [], members: [], newInvestigations: [], kinds: [] };
     const skipped = [];
     const newByKey = new Map();
@@ -501,9 +670,13 @@
         skipped.push({ key: p.key, reason: 'no test chosen' });
         continue;
       }
-      // the lab: an existing one, or a new one described by the report's performer
-      let labRef = p.lab.id;
-      if (p.lab.isNew) {
+      // the lab: an existing one, or a new one described by the report's performer. p.lab.isNew was decided when the
+      // scan first ran and never updated since — several proposals from the SAME not-yet-known lab, applied together
+      // (Nick, 2026-09-24: several duplicate lab entries appeared after approving results), would otherwise each
+      // create their OWN "new" lab. Re-check against the catalogue THIS call actually sees before trusting it.
+      const nowKnown = p.lab.isNew ? LC.identifyLab(index, { organisation: p.lab.org, department: p.lab.dept }) : null;
+      let labRef = nowKnown ? nowKnown.def.id : p.lab.id;
+      if (p.lab.isNew && !nowKnown) {
         labRef = 'new:' + LC.norm(p.lab.org) + '|' + LC.norm(p.lab.dept);
         if (!fills.labs.some((l) => l.ref === labRef))
           fills.labs.push({
@@ -524,6 +697,25 @@
       for (const r of p.results) {
         const byCode = r.code ? index.byCode.get(r.code) : null;
         let resultId = byCode ? byCode.resultId : r.resultId || null;
+        // A result the resolver only matched by a word INSIDE its name ("Urine culture" contains the alias "culture") is a
+        // different result, not this one: attaching its code and wording would merge unrelated tests' results (a urine
+        // culture turning up inside a throat swab). Reuse a result found by name only when the name says the same thing ("Ferritin level" is ferritin; "Urine culture" is not "Culture").
+        if (!byCode && resultId) {
+          const d = resById.get(resultId);
+          const mine = tokens(r.name);
+          const own =
+            d &&
+            [d.label, ...asArr(d.aliases).map((a) => a.text)].some((t) => {
+              const theirs = tokens(t);
+              return theirs.size === mine.size && [...mine].every((x) => theirs.has(x));
+            });
+          if (!own) resultId = null;
+        }
+        const nk = r.code ? 'c:' + r.code : 'n:' + LC.norm(r.name);
+        if (!resultId) {
+          const chosen = pickResult(nk);
+          if (chosen && resById.has(chosen)) resultId = chosen;
+        }
         if (resultId) {
           const def = resById.get(resultId);
           if (!resultFill(resultId).for.includes(inv.id)) resultFill(resultId).for.push(inv.id);
@@ -537,7 +729,6 @@
             def && [def.label, ...asArr(def.aliases).map((a) => a.text)].some((t) => LC.norm(t) === LC.norm(r.name));
           if (!known) resultFill(resultId).aliases.push({ text: r.name, lab: labRef });
         } else {
-          const nk = r.code ? 'c:' + r.code : 'n:' + LC.norm(r.name);
           if (!newByKey.has(nk)) {
             newByKey.set(nk, 'new:' + nk);
             fills.results.push({
@@ -602,6 +793,7 @@
     const LC = need();
     if (!orphan || !action) return null;
     if (action.type === 'test' && action.id) return { ...orphan, target: action.id };
+    if (action.type === 'tests' && asArr(action.ids).length) return { ...orphan, targets: asArr(action.ids) };
     if (action.type === 'request' && LC.norm(action.label)) {
       const label = String(action.label).trim();
       return {
@@ -700,12 +892,14 @@
     observationFromOverview,
     findGaps,
     analyse,
+    referenceRangeCandidates,
     fillsFromProposals,
     fillsForRequests,
     orphanToProposal,
     mergeFills,
     collectObservations,
     similarity,
+    similarResults,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.LabCatalogueScan = api;

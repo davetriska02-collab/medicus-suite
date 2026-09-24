@@ -387,6 +387,22 @@ const PracticeProfile = (() => {
               applied.push('triage');
             } else {
               const localTests = Array.isArray(local.oirTests) ? local.oirTests : [];
+              // Engine choice for the Outstanding Requests matcher is practice-published (Phase D, decision 5): the
+              // profile carries it and it is applied whenever the profile is applied — a practice chooses the engine
+              // once, not per PC. Whitelisted values only; anything else (or an absent key from an older publisher)
+              // leaves the local choice alone. Every failure mode of the catalogue engine falls back to the legacy one.
+              const publishedEngine = config.prefs && typeof config.prefs === 'object' ? config.prefs.oirEngine : undefined;
+              const applyEngine = publishedEngine === 'legacy' || publishedEngine === 'catalogue';
+              const engineChanged =
+                applyEngine && !(local.prefs && local.prefs.oirEngine === publishedEngine);
+              // Same practice-published discipline for the Lab Filing engine choice (Phase E, stage E2): one choice
+              // for the whole practice, not per PC, whitelisted values only, absent/unrecognised leaves the local
+              // choice alone. UNION-ONLY when catalogue: it can only add filing blockers, never remove one.
+              const publishedFilingEngine =
+                config.prefs && typeof config.prefs === 'object' ? config.prefs.filingEngine : undefined;
+              const applyFilingEngine = publishedFilingEngine === 'legacy' || publishedFilingEngine === 'catalogue';
+              const filingEngineChanged =
+                applyFilingEngine && !(local.prefs && local.prefs.filingEngine === publishedFilingEngine);
               // ── Retirement: CONTENT-AWARE, never a blind key filter ───────
               // An edited test is never merged in-place over an existing key
               // (that would risk silently clobbering a clinician's own local
@@ -480,10 +496,14 @@ const PracticeProfile = (() => {
                 }
               }
 
-              if (retiredSomething || addedSomething || updatedSomething) {
-                await chrome.storage.local.set({
-                  'triagelens.config': Object.assign({}, local, { oirTests: nextTests }),
-                });
+              if (retiredSomething || addedSomething || updatedSomething || engineChanged || filingEngineChanged) {
+                const next = Object.assign({}, local, { oirTests: nextTests });
+                if (engineChanged || filingEngineChanged) {
+                  next.prefs = Object.assign({}, local.prefs || {});
+                  if (engineChanged) next.prefs.oirEngine = publishedEngine;
+                  if (filingEngineChanged) next.prefs.filingEngine = publishedFilingEngine;
+                }
+                await chrome.storage.local.set({ 'triagelens.config': next });
                 applied.push('triage');
               }
             }
@@ -1018,7 +1038,7 @@ const PracticeProfile = (() => {
               // A malformed incoming entry is skipped, not fatal to the whole
               // merge — same "don't abort a valid batch over one bad row"
               // discipline as sentinelImport's skipInvalidCustomRules.
-              if (LFU.validateProfile(raw).length > 0) continue;
+              if (LFU.validateProfile(raw, { lenientAllowComments: true }).length > 0) continue;
               const clean = LFU.lockForReview(raw, 'import');
               if (!clean.id || takenIds.has(clean.id)) clean.id = LFU.generateProfileId(clean.name, takenIds);
               takenIds.add(clean.id);

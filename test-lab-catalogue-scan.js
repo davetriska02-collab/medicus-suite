@@ -83,6 +83,198 @@ console.log('\n── observation keeps structure only ──');
   );
 }
 
+console.log('\n── reference-range candidates (Lab Filing setup pre-fill — a suggestion, never a saved range) ──');
+{
+  const ALP = { conceptId: '1000621000000104', unit: 'u/L' };
+  const obsAt = (org, dept, refLow, refHigh) => ({
+    lab: { organisation: org, department: dept },
+    groups: [
+      {
+        heading: 'Bone profile',
+        specimenType: 'Blood',
+        results: [{ name: 'ALP', code: ALP.conceptId, codeText: null, unit: ALP.unit, numeric: true, refLow, refHigh }],
+      },
+    ],
+    ungrouped: [],
+    requests: [],
+  });
+  const cands = SC.referenceRangeCandidates(seed, [obsAt('RJ700', 'General Pathology', 30, 130)]);
+  check(
+    cands.length === 1 && cands[0].lab === LAB && cands[0].code === ALP.conceptId && cands[0].low === 30 && cands[0].high === 130,
+    'a result with a code, at a lab the catalogue knows, yields one candidate'
+  );
+  check(
+    SC.referenceRangeCandidates(seed, [obsAt('Unknown Org', 'Unknown Dept', 1, 2)]).length === 0,
+    'a lab the catalogue does not recognise yields no candidate (nothing to key it to)'
+  );
+  check(
+    SC.referenceRangeCandidates(seed, [obsAt('RJ700', 'General Pathology', null, null)]).length === 0,
+    'a result with no reference range yields no candidate'
+  );
+  const two = SC.referenceRangeCandidates(seed, [
+    obsAt('RJ700', 'General Pathology', 30, 130),
+    obsAt('RJ700', 'General Pathology', 32, 128),
+  ]);
+  check(
+    two.length === 1 && two[0].low === 32 && two[0].high === 128,
+    'the same lab x code seen twice keeps one candidate — the later report wins'
+  );
+  const o = obsOf(byPrefix('report-138'));
+  check(
+    o.groups[0].results.every((r) => 'refLow' in r && 'refHigh' in r),
+    'the observation itself carries refLow/refHigh through from the report (may be null)'
+  );
+}
+
+console.log('\n── new request wordings: Medicus’s own exact text for a request that already resolves (2026-09-24) ──');
+{
+  const obsWith = { lab: { organisation: 'RJ700', department: 'General Pathology' }, groups: [], ungrouped: [], requests: [] };
+  const scanOf = (labels) =>
+    SC.analyse(seed, [{ ...obsWith, requests: labels }], { targets: [] });
+  const withK = scanOf(['Urea and Electrolytes WITH potassium']);
+  check(
+    withK.newRequestWordings.length === 1 &&
+      withK.newRequestWordings[0].investigationId === 'ue' &&
+      withK.newRequestWordings[0].text === 'Urea and Electrolytes WITH potassium',
+    'a request that resolves via a shorter alias ("electrolyte") is still offered by its own exact wording'
+  );
+  const withoutK = scanOf(['Urea and Electrolytes WITHOUT potassium']);
+  check(
+    withoutK.newRequestWordings[0].text === 'Urea and Electrolytes WITHOUT potassium',
+    'WITH and WITHOUT potassium are two distinct wordings, not collapsed into one'
+  );
+  check(!scanOf([]).newRequestWordings.length, 'no requests -> nothing offered');
+  const already = scanOf(['electrolyte']);
+  check(
+    already.newRequestWordings.length === 0,
+    'a wording that already matches a known alias exactly (case/spacing aside) is not offered again'
+  );
+  const already2 = scanOf(['U&E']);
+  check(
+    already2.newRequestWordings.length === 0,
+    "an investigation's own label counts as a known wording too — U&E itself is not offered as \"new\""
+  );
+  const unknown = scanOf(['Some Completely Unrecognised Test Name']);
+  check(
+    unknown.newRequestWordings.length === 0,
+    'a request the catalogue cannot resolve at all is not offered here — it is unknownRequests’ job'
+  );
+  const twice = scanOf(['Urea and Electrolytes WITH potassium', 'Urea and Electrolytes WITH potassium']);
+  check(twice.newRequestWordings.length === 1, 'the same new wording seen on two reports is offered once');
+  const suffixed = SC.analyse(
+    seed,
+    [{ ...obsWith, requests: ['Urea and Electrolytes WITH potassium (Dr Test • 22 Sep 2026, 10:00)'] }],
+    { targets: [] }
+  );
+  check(
+    suffixed.newRequestWordings[0].text === 'Urea and Electrolytes WITH potassium',
+    'the clinician/date suffix is stripped, same as everywhere else a request label is read'
+  );
+}
+
+console.log(
+  '\n── fillsFromProposals: redirecting a would-be-new result onto an existing one (resultChoices, 2026-09-23) ──'
+);
+{
+  const rr = (name, code) => ({
+    name,
+    code,
+    codeText: name,
+    unit: null,
+    resultType: 'unit-value-result',
+    hasNumericValue: true,
+    numeric: true,
+    freq: 1,
+  });
+  const prop = {
+    key: 'k',
+    lab: { id: 'rj700-general-pathology', isNew: false },
+    heading: 'U&Es',
+    headingIds: [],
+    target: 'ue',
+    results: [rr('Creat (recoded)', '999888777001')],
+  };
+  const withoutChoice = SC.fillsFromProposals(seed, [prop]).fills;
+  check(
+    withoutChoice.results.some((f) => f.key === 'new:c:999888777001' && f.label === 'Creat (recoded)'),
+    "without a choice, an unrecognised code/name still creates a brand new result (today's behaviour, unchanged)"
+  );
+  const withChoice = SC.fillsFromProposals(seed, [prop], null, { 'c:999888777001': 'creatinine' }).fills;
+  check(
+    !withChoice.results.some((f) => f.key && f.key.startsWith('new:')),
+    'given an explicit choice, no new result is created'
+  );
+  const rf = withChoice.results.find((f) => f.id === 'creatinine');
+  check(
+    !!rf && rf.codes.some((c) => c.conceptId === '999888777001') && rf.for.includes('ue'),
+    'the code and membership land on the CHOSEN existing result instead'
+  );
+  check(
+    rf.aliases.some((a) => a.text === 'Creat (recoded)'),
+    'the report wording is recorded as another name for that result, same as any other attach'
+  );
+  const bogus = SC.fillsFromProposals(seed, [prop], null, { 'c:999888777001': 'no-such-result' }).fills;
+  check(
+    bogus.results.some((f) => f.key === 'new:c:999888777001'),
+    'a choice naming a result that does not exist is ignored — falls back to creating new, never throws'
+  );
+  const viaMap = SC.fillsFromProposals(
+    seed,
+    [prop],
+    null,
+    new Map([['c:999888777001', 'creatinine']])
+  ).fills;
+  check(
+    viaMap.results.some((f) => f.id === 'creatinine'),
+    'resultChoices also accepts a Map, same as the existing investigation choices param'
+  );
+}
+
+console.log(
+  '\n── fillsFromProposals: a lab marked "new" at scan time is not recreated once it now exists (2026-09-24) ──'
+);
+{
+  // Nick, 2026-09-24: several duplicate lab entries appeared after applying a batch of matches all from the same
+  // not-yet-known lab — each proposal's p.lab.isNew was decided once, at scan time, and never re-checked.
+  const perf = { organisation: 'Kingston Hospital NHS Trust', department: 'General Pathology' };
+  const propFor = (heading) => ({
+    key: 'k:' + heading,
+    lab: { isNew: true, id: null, name: 'General Pathology', org: perf.organisation, dept: perf.department },
+    heading,
+    headingIds: [],
+    target: 'ue',
+    results: [],
+  });
+  const first = SC.fillsFromProposals(seed, [propFor('Renal function tests')]).fills;
+  check(first.labs.length === 1 && !!first.labs[0].newLab, 'the first proposal creates the new lab, as before');
+  const o = OV.applyFills(seed, OV.emptyOverlay(), first).overlay;
+  const cat2 = OV.mergeCatalogue(seed, o, { includeUnreviewed: true }).catalogue;
+  const idx2 = LC.buildIndex(cat2);
+  const realLab = LC.identifyLab(idx2, perf);
+  check(!!realLab, 'setup check: the lab now really exists in the catalogue');
+  const second = SC.fillsFromProposals(cat2, [propFor('U&Es')]).fills;
+  check(
+    second.labs.length === 1 && !second.labs[0].newLab && second.labs[0].ref === realLab.def.id,
+    'a second proposal from the SAME not-yet-known lab, still flagged isNew from analyse time, resolves to the lab that now exists instead of creating a duplicate'
+  );
+}
+
+console.log('\n── similarResults: a hint for a probable duplicate result, never a decision (2026-09-23) ──');
+{
+  const hits = SC.similarResults(seed, 'Serum creatinine level', null);
+  check(hits.some((h) => h.id === 'creatinine'), 'the existing result with overlapping wording is found');
+  const excluded = SC.similarResults(seed, 'Serum creatinine level', 'creatinine');
+  check(!excluded.some((h) => h.id === 'creatinine'), 'excludeId leaves that result out of its own hint list');
+  const sorted = SC.similarResults(seed, 'Sodium level', null);
+  check(sorted.length > 0 && sorted[0].id === 'sodium', 'the closest match ranks first');
+  check(
+    sorted.every((h, i) => i === 0 || h.score <= sorted[i - 1].score),
+    'candidates are sorted best first'
+  );
+  const none = SC.similarResults(seed, 'Xyzzyflorb nonsense wording', null);
+  check(none.length === 0, 'wording sharing nothing with any result finds nothing');
+}
+
 console.log('\n── gaps ──');
 {
   const stripped = withoutReportForms(seed, ['urine-acr', 'crp']);
@@ -178,6 +370,7 @@ console.log('\n── reviewing what a scan added (the editor save path must not
     label: inv.label,
     kind: inv.kind,
     requestAliases: inv.requestAliases,
+    synonyms: inv.synonyms,
     headingAliases: inv.headingAliases,
     exclude: inv.exclude,
     members: inv.members,
@@ -1066,6 +1259,382 @@ console.log('\n── reading the queue (injected client) ──');
     bad = /401/.test(e.message);
   }
   check(bad, 'a queue that cannot be read is an error, not an empty result');
+
+  // A microbiology test (Urine MC&S, Stool MC&S) is run on a urine / faeces specimen. A group it already owns must not
+  // come back as "unlinked" just because the group's specimen is Urine or Faeces (reported 2026-09-22).
+  console.log('\n── a microbiology test owns urine / faeces groups it has recorded ──');
+  {
+    const base = clone(seed);
+    const res = (name, code, numeric) => ({
+      name,
+      code,
+      codeText: name,
+      unit: null,
+      resultType: numeric ? 'unit-value-result' : 'text-result',
+      hasNumericValue: !!numeric,
+      numeric: !!numeric,
+    });
+    for (const [request, heading, specimen, results, kind] of [
+      [
+        'Urine MC&S',
+        'Urine culture',
+        'Urine',
+        [res('Urine culture', '1023711000000100', false), res('WBC', '1022541000000102', true)],
+        'urine',
+      ],
+      [
+        'Stool MC&S',
+        'FAECES - MOLECULAR SCREENING',
+        'Faeces',
+        [res('Comment', '726737008', false), res('Enteric pathogen DNA', '391236001', false)],
+        'faeces',
+      ],
+    ]) {
+      const report = {
+        lab: { organisation: 'RJ700', department: 'General Pathology' },
+        groups: [{ heading, specimenType: specimen, results }],
+        ungrouped: [],
+        requests: [request],
+      };
+      const unlinked = SC.analyse(base, [report], { targets: [] });
+      check(
+        unlinked.unmatched.length === 1 && unlinked.unmatched[0].kind === kind,
+        `${heading}: an unlinked ${specimen} group still proposes a "${kind}" test (not blood)`
+      );
+      let ov = OV.emptyOverlay();
+      ov = OV.applyFills(base, ov, SC.fillsForRequests([request])).overlay;
+      const id = ov.investigations[0].id;
+      const eff1 = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+      const first = SC.analyse(eff1, [report], { targets: [id] });
+      ov = OV.applyFills(base, ov, SC.fillsFromProposals(eff1, first.proposals).fills).overlay;
+      ov.investigations.find((i) => i.id === id).kind = 'microbiology'; // as an imported MC&S test is
+      const eff2 = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+      const again = SC.analyse(eff2, [report], { targets: [id] });
+      check(
+        again.proposals.length === 0 && again.unmatched.length === 0 && again.stats.explained === 1,
+        `${heading}: once recorded against ${request} (microbiology) the group is explained, not offered again`
+      );
+    }
+    // The same test can hold either sample type (an MC&S test is 'urine' if its first report was a Urine group), and the lab
+    // may label the specimen 'Culture' / 'Microbiology' on another report — neither combination may hide a recorded link.
+    for (const [testKind, specimen] of [
+      ['urine', 'Culture'],
+      ['urine', 'Microbiology'],
+      ['faeces', 'Swab'],
+      ['microbiology', 'Urine'],
+      ['microbiology', 'Faeces'],
+    ]) {
+      const report = {
+        lab: { organisation: 'RJ700', department: 'General Pathology' },
+        groups: [
+          {
+            heading: 'URINE MICROSCOPY AND CULTURE',
+            specimenType: specimen,
+            results: [res('Urine culture', '1023711000000100', false)],
+          },
+        ],
+        ungrouped: [],
+        requests: ['Urine MC&S'],
+      };
+      let ov = OV.applyFills(base, OV.emptyOverlay(), SC.fillsForRequests(['Urine MC&S'])).overlay;
+      const id = ov.investigations[0].id;
+      const eff1 = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+      ov = OV.applyFills(
+        base,
+        ov,
+        SC.fillsFromProposals(eff1, SC.analyse(eff1, [report], { targets: [id] }).proposals).fills
+      ).overlay;
+      ov.investigations.find((i) => i.id === id).kind = testKind;
+      const eff2 = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+      const again = SC.analyse(eff2, [report], { targets: [id] });
+      check(
+        again.proposals.length === 0 && again.unmatched.length === 0 && again.stats.explained === 1,
+        `a ${testKind}-kind test still owns its recorded group on a ${specimen} specimen`
+      );
+    }
+    // ...but the sample-type filter still keeps imaging and lab tests apart
+    {
+      const rad = {
+        lab: { organisation: 'RJ700', department: 'General Pathology' },
+        groups: [
+          { heading: 'Ultrasonography', specimenType: 'Xray', results: [res('Ultrasonography', '16310003', false)] },
+        ],
+        ungrouped: [],
+        requests: [],
+      };
+      const t = SC.analyse(base, [rad], { targets: ['testosterone'] });
+      check(
+        t.unmatched.length === 1 && t.unmatched[0].kind === 'imaging',
+        'an imaging group is still never a laboratory sample type'
+      );
+    }
+  }
+
+  console.log('\n── a generic imaging group seen in several reports links to every test it answers ──');
+  {
+    const base = clone(seed);
+    // One generic imaging group ("Ultrasonography"), seen in three reports that each answer a DIFFERENT ultrasound request.
+    const usRes = (name, code) => ({
+      name,
+      code,
+      codeText: name,
+      unit: null,
+      resultType: 'text-result',
+      hasNumericValue: false,
+      numeric: false,
+    });
+    const usReport = (requests) => ({
+      lab: { organisation: 'RJ700', department: 'Xray' },
+      groups: [{ heading: 'Ultrasonography', specimenType: null, results: [usRes('Ultrasonography', '16310003')] }],
+      ungrouped: [],
+      requests,
+    });
+    let ov = OV.applyFills(
+      base,
+      OV.emptyOverlay(),
+      SC.fillsForRequests(['US Abdomen', 'US Neck', 'US Groin/Inguinal Region'])
+    ).overlay;
+    const ids = ov.investigations.map((i) => i.id);
+    let eff = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const reports = [usReport(['US Abdomen']), usReport(['US Neck']), usReport(['US Groin/Inguinal Region'])];
+    const an = SC.analyse(eff, reports, { targets: ids });
+    const p = an.proposals[0];
+    check(
+      an.proposals.length === 1 && p.multi === true && p.candidates.length === 3 && p.target === null,
+      'each report names a different test, so all three are offered (not just what the cards share)'
+    );
+    const fills = SC.fillsFromProposals(eff, [SC.orphanToProposal(p, { type: 'tests', ids: p.candidates })]).fills;
+    ov = OV.applyFills(base, ov, fills).overlay;
+    eff = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const lab = eff.labs.find((l) => l.identifiers.department === 'Xray');
+    check(
+      lab && lab.groupHeadings.some((g) => g.text === 'Ultrasonography' && ids.every((i) => g.identifies.includes(i))),
+      'the one heading now identifies all three tests'
+    );
+    const again = SC.analyse(eff, reports, { targets: ids });
+    check(again.proposals.length === 0 && again.unmatched.length === 0, 'and a rescan no longer offers it');
+    const solo = SC.analyse(base, [usReport(['US Abdomen'])], { targets: [] });
+    check(solo.unmatched.length === 1 && solo.unmatched[0].multi !== true, 'one candidate is never multi');
+  }
+
+  console.log('\n── a group recognised for several selected tests is finished when nothing is left to add ──');
+  {
+    const base = clone(seed);
+    const r = (name, code) => ({
+      name,
+      code,
+      codeText: name,
+      unit: null,
+      resultType: 'text-result',
+      hasNumericValue: false,
+      numeric: false,
+    });
+    const rep = (results) => ({
+      lab: { organisation: 'RJ700', department: 'Medical Microbiology' },
+      groups: [{ heading: 'URINE MICROSCOPY AND CULTURE', specimenType: 'Urine', results }],
+      ungrouped: [],
+      requests: ['Urine MC&S', 'Urine culture'],
+    });
+    const first = rep([r('Culture', '61594008'), r('Pus cells', '1041881000000101')]);
+    let ov = OV.applyFills(base, OV.emptyOverlay(), SC.fillsForRequests(['Urine MC&S', 'Urine culture'])).overlay;
+    const ids = ov.investigations.map((i) => i.id);
+    let eff = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const p = SC.analyse(eff, [first], { targets: ids });
+    const pr = p.proposals[0] || p.unmatched[0];
+    const prop = pr.target ? pr : SC.orphanToProposal(pr, { type: 'tests', ids });
+    ov = OV.applyFills(base, ov, SC.fillsFromProposals(eff, [{ ...prop, target: null, targets: ids }]).fills).overlay;
+    eff = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const again = SC.analyse(eff, [first], { targets: ids });
+    check(
+      again.proposals.length === 0 && again.unmatched.length === 0,
+      'recognised for two selected tests with nothing missing: not offered again'
+    );
+    const richer = SC.analyse(
+      eff,
+      [rep([r('Culture', '61594008'), r('Pus cells', '1041881000000101'), r('Comment', '726737008')])],
+      {
+        targets: ids,
+      }
+    );
+    check(
+      richer.proposals.length === 1 &&
+        richer.proposals[0].recognisedFor &&
+        richer.proposals[0].recognisedFor.length === 2 &&
+        richer.proposals[0].recognisedFor.every((x) => x.results + x.members > 0),
+      'a new result on that group IS offered, and says what is missing for each test'
+    );
+  }
+
+  console.log('\n── results of different tests are never merged by a word inside their name ──');
+  {
+    const base = clone(seed);
+    const r = (name, code) => ({
+      name,
+      code,
+      codeText: name,
+      unit: null,
+      resultType: 'text-result',
+      hasNumericValue: false,
+      numeric: false,
+    });
+    const gp = { organisation: 'RJ700', department: 'General Pathology' };
+    const rep = (heading, specimen, results) => ({
+      lab: gp,
+      groups: [{ heading, specimenType: specimen, results }],
+      ungrouped: [],
+      requests: [],
+    });
+    let ov = OV.applyFills(base, OV.emptyOverlay(), SC.fillsForRequests(['Urine MC&S', 'Genital Swab MC&S'])).overlay;
+    const [urine, swab] = ov.investigations.map((i) => i.id);
+    const eff = () => OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const link = (report, id) => {
+      const e = eff();
+      const an = SC.analyse(e, [report], { targets: [urine, swab] });
+      const p = an.proposals[0] || an.unmatched[0];
+      ov = OV.applyFills(
+        base,
+        ov,
+        SC.fillsFromProposals(e, [SC.orphanToProposal(p, { type: 'test', id })]).fills
+      ).overlay;
+    };
+    link(rep('GENITAL SWAB CULTURE', 'Swab', [r('Culture', '61594008')]), swab);
+    link(rep('Urine culture', 'Urine', [r('Urine culture', '1023711000000100')]), urine);
+    const e = eff();
+    const generic = e.results.find((x) => x.codes.some((c) => c.conceptId === '61594008'));
+    check(
+      generic &&
+        generic.codes.length === 1 &&
+        !generic.aliases.some((a) => /urine/i.test(a.text)) &&
+        e.investigations.find((i) => i.id === swab).members.every((m) => m.result === generic.id),
+      'a urine culture code and wording are NOT added to the generic "Culture" result (or to a swab test)'
+    );
+    check(
+      e.investigations.find((i) => i.id === urine).members.every((m) => m.result !== generic.id),
+      'the urine test gets its own result'
+    );
+    // and a genuine variant wording of the SAME analyte is still reused
+    check(
+      SC.fillsFromProposals(eff(), [
+        {
+          key: 'k',
+          lab: { id: 'rj700-general-pathology', isNew: false },
+          heading: 'Ferritin',
+          headingIds: [],
+          target: 'ferritin',
+          results: [{ ...r('Ferritin level', '900000000000777'), resultId: 'ferritin', freq: 1 }],
+        },
+      ]).fills.results.some((f) => f.id === 'ferritin'),
+      '"Ferritin level" is still the ferritin result'
+    );
+    // a generic result shared by several tests is never enough, on its own, to be confident about any of them
+    const both = OV.applyFills(base, ov, {
+      results: [],
+      members: [
+        { investigation: urine, result: generic.id, role: 'core' },
+        { investigation: swab, result: generic.id, role: 'core' },
+      ],
+      labs: [],
+      newInvestigations: [],
+      kinds: [],
+    }).overlay;
+    const idx = LC.buildIndex(OV.mergeCatalogue(base, both, { includeUnreviewed: true }).catalogue);
+    const cov = LC.resolveReport(
+      idx,
+      LC.fromInvestigationReportPayload({
+        investigationReport: {
+          performer: { organisationName: 'RJ700', departmentName: 'General Pathology' },
+          investigationGroups: [
+            {
+              description: 'Some unmapped panel',
+              specimen: { type: 'Swab' },
+              results: [{ description: 'Culture', resultType: 'text-result', resultCode: { conceptId: '61594008' } }],
+            },
+          ],
+        },
+      })
+    ).coverage;
+    check(
+      Object.keys(cov).length >= 1 && Object.values(cov).every((c) => c.confidence === 'tentative'),
+      'evidence made only of a result shared by several tests is tentative, never confident'
+    );
+  }
+
+  console.log('\n── starting from imported tests that share one "Culture" result ──');
+  {
+    const IMP = require('./shared/lab-catalogue-import.js');
+    const base = clone(seed);
+    const T = (key, label, req, rep) => ({
+      key,
+      label,
+      req,
+      rep,
+      analytes: ['culture'],
+      singleAnalyte: true,
+      disabled: false,
+    });
+    let ov = IMP.mergeIntoOverlay(
+      OV.emptyOverlay(),
+      IMP.importOirTests(
+        [
+          T('genital', 'Genital swab', ['Genital Swab MC&S'], ['genital swab']),
+          T('throat', 'Throat swab', ['Throat Swab MC&S'], ['throat swab']),
+          T('urine', 'Urine MC&S', ['Urine MC&S'], ['urine culture']),
+        ],
+        base,
+        { labId: 'rj700-general-pathology' }
+      ).overlay
+    ).overlay;
+    const ids = ov.investigations.map((i) => i.id);
+    const r = (name, code) => ({
+      name,
+      code,
+      codeText: name,
+      unit: null,
+      resultType: 'text-result',
+      hasNumericValue: false,
+      numeric: false,
+    });
+    const reports = [
+      {
+        lab: { organisation: 'RJ700', department: 'Medical Microbiology' },
+        groups: [
+          {
+            heading: 'GENITAL SWAB CULTURE',
+            specimenType: 'Swab',
+            results: [r('Candida Culture', '995241000000109'), r('Culture', '61594008')],
+          },
+        ],
+        ungrouped: [],
+        requests: ['Genital Swab MC&S'],
+      },
+      {
+        lab: { organisation: 'RJ700', department: 'General Pathology' },
+        groups: [
+          { heading: 'Urine culture', specimenType: 'Urine', results: [r('Urine culture', '1023711000000100')] },
+        ],
+        ungrouped: [],
+        requests: ['Urine MC&S'],
+      },
+    ];
+    const e0 = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const props = SC.analyse(e0, reports, { targets: ids }).proposals.filter((p) => p.target);
+    ov = OV.applyFills(base, ov, SC.fillsFromProposals(e0, props).fills).overlay;
+    const e1 = OV.mergeCatalogue(base, ov, { includeUnreviewed: true }).catalogue;
+    const culture = e1.results.find((x) => x.id === 'practice-culture');
+    check(
+      props.length === 2 &&
+        culture &&
+        culture.codes.length === 1 &&
+        culture.codes[0].conceptId === '61594008' &&
+        culture.aliases.every((a) => !/urine|candida/i.test(a.text)),
+      'the shared "Culture" result only ever gets the generic Culture code and wording'
+    );
+    check(
+      e1.results.some((x) => x.codes.some((c) => c.conceptId === '1023711000000100') && x.id !== 'practice-culture') &&
+        e1.results.some((x) => x.codes.some((c) => c.conceptId === '995241000000109') && x.id !== 'practice-culture'),
+      'urine culture and Candida culture each become their own result'
+    );
+  }
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

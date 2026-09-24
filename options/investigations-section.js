@@ -22,6 +22,63 @@ const IMP = typeof window !== 'undefined' ? window.LabCatalogueImport : null;
 const SC = typeof window !== 'undefined' ? window.LabCatalogueScan : null;
 
 const REVIEWER = 'this computer';
+
+// ── Lab Filing setup (Phase E) — practice ranges per result x lab x code; guards per result x lab; comments per lab x report
+//    group; assisted filing is switched on and approved for a TEST at a LAB (Medicus files a whole report group, never one result) ──
+let filingLabId = null;
+function currentFilingLab() {
+  const labs = S.merged.labs.filter((l) => labVisible(l.id));
+  if (labs.some((l) => l.id === filingLabId)) return filingLabId;
+  const ctx = (S.overlay.context && S.overlay.context.labs) || [];
+  const pick = labs.find((l) => ctx.includes(l.id)) || labs[0];
+  return pick ? pick.id : null;
+}
+const filingEntry = (resultId, labId, code) =>
+  ((S.overlay.filing && S.overlay.filing.ranges) || []).find(
+    (r) => r.result === resultId && r.lab === labId && r.code === code
+  ) || null;
+const filingGuardEntry = (resultId, labId) =>
+  ((S.overlay.filing && S.overlay.filing.guards) || []).find((g) => g.result === resultId && g.lab === labId) || null;
+const filingGroupEntry = (labId, heading) =>
+  ((S.overlay.filing && S.overlay.filing.groups) || []).find(
+    (g) => OV.filingGroupKey(g) === OV.filingGroupKey({ lab: labId, heading })
+  ) || null;
+// Practice-wide "never offer to file when…" list — see shared/lab-catalogue-overlay.js's filingGroupKey comment for
+// why this is one list, not one per lab x heading.
+const filingSuppressEntry = () => ((S.overlay.filing && S.overlay.filing.suppress) || [])[0] || null;
+const isApproved = (e) => !!(e && e.provenance && e.provenance.reviewed === true);
+const TREND_WORDS = { any: 'changed', up: 'increased', down: 'decreased' };
+const guardsSummary = (g) =>
+  g
+    ? [
+        g.trendMaxDeltaPct != null
+          ? TREND_WORDS[g.trendDirection || 'any'] + ' by more than ' + g.trendMaxDeltaPct + '%'
+          : '',
+        g.excludeIfMeds.length ? 'not if on ' + g.excludeIfMeds.join(', ') : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+// Assisted filing for a test, across labs: { on, approved, labs:[{lab, state}] } — on = every report group that identifies it at some
+// lab is switched on; approved = nothing that assisted filing rests on is still awaiting approval.
+function filingOverview(inv) {
+  const labs = [];
+  for (const lab of S.merged.labs) {
+    const st = OV.filingStateForTest(S.merged, S.overlay, inv.id, lab.id);
+    if (st.headings.length && st.groups.some((g) => g.entry && g.entry.enabled)) labs.push({ lab: lab.id, state: st });
+  }
+  return {
+    on: labs.some((l) => l.state.enabled),
+    approved: labs.length > 0 && labs.every((l) => l.state.approved),
+    labs,
+  };
+}
+// "Matched to a lab report": some lab really sends a report heading recognised as this test (not just a lab-neutral
+// matching wording) — the "realHeads" concept from the results table's own green box.
+const hasLabMatch = (inv) => S.merged.labs.some((lab) => (lab.groupHeadings || []).some((g) => (g.identifies || []).includes(inv.id)));
+// "Matched to a Medicus request": at least one scan-CONFIRMED exact wording is on file — synonyms (unconfirmed
+// legacy text guesses) do not count, same distinction the card itself makes ("known as" vs "requested as").
+const hasRequestMatch = (inv) => (inv.requestAliases || []).length > 0;
 const LOCAL_KEYS = ['triagelens.config', 'config'];
 
 let root = null;
@@ -41,6 +98,11 @@ const S = {
   toast: '',
   codeInfo: null, // { qofClusters, codes } — descriptions and QOF status of shipped SNOMED codes
   editingContext: false,
+  rangeCandidates: new Map(), // 'labId|code' -> { low, high, unit } — a SUGGESTION from the last scan, never saved on its own
+  // Four independent tri-state facets (null = any, true = yes, false = no), combined with S.filter/S.kindFilter/S.query
+  // rather than replacing them (Nick, 2026-09-24: "let's give filters to be toggles"). Each is a genuine yes/no
+  // question about ONE investigation, answerable without opening it.
+  toggles: { review: null, filing: null, labMatched: null, reqMatched: null },
 };
 
 // ── tiny DOM helper ──────────────────────────────────────────────────────────────────────────────────
@@ -103,6 +165,20 @@ async function save(nextOverlay, message) {
   }
 }
 
+// "It's not X": a person's explicit, remembered rejection of one similarity suggestion — used by the results table,
+// the standalone result editor, and the match-requests-to-lab-reports scan board (Nick, 2026-09-24: "an option 'it's
+// not X' which then stops offering the match"). A raw, not-yet-saved report result has no id of its own, so the
+// scan board passes a stable 'name:<norm>' pseudo-id on that side instead — OV.dismissSimilarPair only ever sorts
+// and joins two strings, so this is a legitimate use, not a special case it needs to know about.
+async function dismissSimilarPairAction(idA, idB) {
+  try {
+    await save(OV.dismissSimilarPair(S.overlay, idA, idB), null);
+  } catch (e) {
+    alert(((e && e.message) || String(e)).replace(/^labcatalogue\.practice: /, ''));
+  }
+}
+const rawResultPairId = (name) => 'name:' + LC.norm(name);
+
 async function readOirTests() {
   const r = await chrome.storage.local.get(LOCAL_KEYS);
   const cfg = r['triagelens.config'] || r.config || {};
@@ -133,6 +209,41 @@ function describe(inv) {
   return { inv, inBuiltin, ov, disabled, status, needsReview };
 }
 
+function renderIntro() {
+  const det = h('details', { class: 'inv-intro', open: S.introOpen || undefined });
+  det.appendChild(h('summary', {}, 'What does this do?'));
+  det.appendChild(
+    h('p', {
+      text: 'This page holds a list of all lab results imported from your lab, with reference ranges, units and associated SNOMED codes.',
+    })
+  );
+  det.appendChild(
+    h('p', {
+      text:
+        "You can import these below, under ‘Match requests to lab reports’. That gives you a list of results, which you organise " +
+        'into groups based on how you order tests in Medicus and how the lab groups them when it reports back. These groups are stored ' +
+        'in a practice-wide profile.',
+    })
+  );
+  det.appendChild(
+    h('p', {
+      text:
+        'You can also set up assisted filing: working through groups of results as the lab submits them, optionally setting a practice ' +
+        'normal range where it differs from the lab’s own, then switching that on so the suite offers to file every matched result ' +
+        'with a single click. You still press File — assisted, not automated.',
+    })
+  );
+  det.appendChild(
+    h('p', {
+      text:
+        'Results themselves are stored once each, with a normal range per lab. In future you’ll be able to import a set of ready-made ' +
+        'investigations from another Medicus practice that shares your lab.',
+    })
+  );
+  det.addEventListener('toggle', () => (S.introOpen = det.open));
+  return det;
+}
+
 function renderBanner() {
   return h(
     'div',
@@ -161,7 +272,12 @@ function resultsOf(inv) {
 function searchMatch(d, q) {
   if (!q) return { hit: true, via: null };
   const own = LC.norm(
-    [d.inv.label, ...d.inv.requestAliases.map((a) => a.text), ...(d.inv.headingAliases || [])].join(' ')
+    [
+      d.inv.label,
+      ...d.inv.requestAliases.map((a) => a.text),
+      ...(d.inv.synonyms || []),
+      ...(d.inv.headingAliases || []),
+    ].join(' ')
   );
   if (own.includes(q)) return { hit: true, via: null };
   for (const lab of S.merged.labs)
@@ -184,16 +300,22 @@ function searchMatch(d, q) {
 
 function visibleInvestigations() {
   const q = LC.norm(S.query);
+  const t = S.toggles;
   const out = [];
   for (const d of S.merged.investigations.map(describe)) {
     if (S.filter === 'builtin' && !d.inBuiltin) continue;
     if (S.filter === 'practice' && d.inBuiltin && !d.ov) continue;
-    if (S.filter === 'review' && !d.needsReview) continue;
+    if (t.review !== null && d.needsReview !== t.review) continue;
+    if (t.filing !== null && filingOverview(d.inv).on !== t.filing) continue;
+    if (t.labMatched !== null && hasLabMatch(d.inv) !== t.labMatched) continue;
+    if (t.reqMatched !== null && hasRequestMatch(d.inv) !== t.reqMatched) continue;
     if (S.kindFilter && d.inv.kind !== S.kindFilter) continue;
     const m = searchMatch(d, q);
     if (!m.hit) continue;
     out.push({ ...d, via: m.via });
   }
+  // Plain alphabetical (Nick, 2026-09-25: the needs-attention weighted sort tried on 2026-09-24 "in practice...
+  // meaning they look random" — reverted). The four toggles + presets above are how you get to "what needs work".
   return out.sort((a, b) => a.inv.label.localeCompare(b.inv.label));
 }
 
@@ -490,8 +612,7 @@ function headingChips(inv) {
   for (const lab of S.merged.labs)
     if (labVisible(lab.id))
       for (const g of lab.groupHeadings || [])
-        if ((g.identifies || []).includes(inv.id))
-          out.push({ text: g.text, lab: lab.identifiers.performerOrg || lab.name });
+        if ((g.identifies || []).includes(inv.id)) out.push({ text: g.text, lab: lab.name });
   return out;
 }
 
@@ -607,6 +728,11 @@ function resultRow(inv, { m, r }) {
   return row;
 }
 
+// The lab in WORDS (its name as you know it, including any name you gave it) — never its code. For sentences and messages.
+function labWords(labId) {
+  const l = S.merged.labs.find((x) => x.id === labId);
+  return l ? l.name : labId;
+}
 function labShort(labId) {
   const l = S.merged.labs.find((x) => x.id === labId);
   return l ? l.identifiers.performerOrg || l.name : labId;
@@ -636,11 +762,15 @@ const VALUE_OPTIONS = [
   ['numeric', 'Number'],
   ['text', 'Text'],
 ];
+// What each result does for the test. core = the results the matcher looks for; shared = also belongs to another test (used to
+// tell them apart, never needed); optional = may be there, never needed.
 const ROLE_OPTIONS = [
-  ['core', 'core'],
-  ['shared', 'shared'],
-  ['optional', 'optional'],
+  ['core', 'Core to the lab group'],
+  ['shared', 'Shared with another test'],
+  ['optional', 'May be present'],
 ];
+const ENOUGH_ALONE =
+  'Tick if this result on its own is enough to recognise the test. If nothing is ticked, the test needs at least two of its "Core to the lab group" results to be present (or its only one, if it has just one).';
 
 // Headings for labs the practice does not use are kept (and saved back untouched) but not shown.
 function labVisible(labId) {
@@ -661,6 +791,7 @@ function editStateFor(inv, review) {
       label: '',
       kind: 'blood',
       reqs: [],
+      synonyms: [],
       heads: [],
       hidden: [],
       excl: [],
@@ -670,6 +801,7 @@ function editStateFor(inv, review) {
       error: '',
       review: false,
       changes: [],
+      pendingMerges: [],
     };
   }
   const st = {
@@ -678,6 +810,7 @@ function editStateFor(inv, review) {
     label: inv.label,
     kind: inv.kind,
     reqs: inv.requestAliases.map((a) => ({ text: a.text, system: a.system })),
+    synonyms: [...(inv.synonyms || [])],
     heads: (inv.headingAliases || []).map((t) => ({ text: t, lab: '' })),
     hidden: [],
     excl: (inv.exclude || []).map((t) => ({ text: t })),
@@ -687,11 +820,15 @@ function editStateFor(inv, review) {
     error: '',
     review: !!review,
     changes: [],
+    // Pending result merges, drag-dropped in the results table but not yet applied: {fromId, fromLabel, intoId, intoLabel}.
+    // Reviewable and undoable while the card stays open; only actually merged (OV.mergeResult) when the test is saved
+    // (Nick, 2026-09-23: "leave it open so the user can review the merge... gates the merge behind a user decision to save").
+    pendingMerges: [],
   };
   for (const lab of S.merged.labs)
     for (const g of lab.groupHeadings || [])
       if ((g.identifies || []).includes(inv.id))
-        (labVisible(lab.id) ? st.heads : st.hidden).push({ text: g.text, lab: lab.id });
+        (labVisible(lab.id) ? st.heads : st.hidden).push({ text: g.text, lab: lab.id, note: g.note || '' });
   st.changes = st.isBuiltin ? OV.describeChanges(S.builtin, S.overlay, inv.id) : [];
   return st;
 }
@@ -825,6 +962,105 @@ Its ${plural(n, 'result')}, request wordings and report headings move onto "${in
   return box;
 }
 
+// "This is really the same analyte as another result": move its codes and other names onto that result, repoint every
+// test that used it, then delete the duplicate. Mirrors mergeBlock above, plus an automatic hint (SC.similarResults) for
+// the case that prompted it — a rescan creates a new practice result for a report row whose code/wording differs from
+// an existing result that already means the same thing (Nick, 2026-09-23).
+function resultMergeBlock(r, done) {
+  const box = h('div', { class: 'inv-merge' });
+  const others = S.merged.results.filter((x) => x.id !== r.id).sort((a, b) => a.label.localeCompare(b.label));
+  const doMerge = async (into) => {
+    if (
+      !confirm(
+        `Merge "${r.label}" into "${into.label}"?
+
+Its codes and other names move onto "${into.label}", every test using "${r.label}" uses "${into.label}" instead, then "${r.label}" is deleted. "${into.label}" goes back to awaiting review.`
+      )
+    )
+      return;
+    try {
+      const out = OV.mergeResult(S.builtin, S.overlay, r.id, into.id);
+      await save(out.overlay, `Merged "${r.label}" into "${into.label}" — awaiting review.`);
+      done(true);
+    } catch (e) {
+      alert(((e && e.message) || String(e)).replace(/^labcatalogue\.practice: /, ''));
+    }
+  };
+  // Dismissed pairings ("it's not X" — see the results table and match board, where the surrounding editor survives
+  // a save-triggered re-render) are respected here too. This popup's own toggle is purely local (resultEditorParts),
+  // not tracked at the S level like an investigation's editor, so it does not offer "it's not X" itself — that action
+  // would risk silently closing the popup on the save it triggers.
+  const hints = SC
+    ? SC.similarResults(S.merged, r.label, r.id).filter((c) => !OV.isSimilarPairDismissed(S.overlay, r.id, c.id))
+    : [];
+  if (hints.length)
+    box.appendChild(
+      h(
+        'div',
+        { class: 'inv-merge-hint' },
+        h('span', { class: 'inv-merge-text' }, 'This might already exist as: '),
+        ...hints
+          .slice(0, 3)
+          .flatMap((c, i) => [
+            i ? h('span', { class: 'inv-merge-text', text: ', ' }) : null,
+            btn(c.label, () => doMerge(others.find((x) => x.id === c.id)), 'lf-link'),
+          ])
+          .filter(Boolean),
+        h('span', { class: 'inv-merge-text', text: ' — click a name to merge this result into it.' })
+      )
+    );
+  const row = h('div', { class: 'inv-edit-line', style: 'display:none' });
+  const listId = 'invResMergeList' + Math.random().toString(36).slice(2, 7);
+  const search = h('input', {
+    class: 'lf-input inv-in',
+    type: 'text',
+    list: listId,
+    placeholder: 'Search for the result it belongs to, e.g. Creatinine',
+    'aria-label': 'Result to merge this into',
+  });
+  const dl = h(
+    'datalist',
+    { id: listId },
+    others.map((i) => h('option', { value: i.label }))
+  );
+  const err = h('span', { class: 'inv-error', role: 'alert' });
+  const go = btn(
+    'Merge into that result',
+    () => {
+      err.textContent = '';
+      const q = LC.norm(search.value);
+      const found = others.filter((i) => LC.norm(i.label) === q);
+      if (!q || found.length !== 1) {
+        err.textContent =
+          found.length > 1 ? 'More than one result has that name — rename one first.' : 'Pick a result from the list.';
+        return;
+      }
+      doMerge(found[0]);
+    },
+    'lf-btn-sm'
+  );
+  row.append(search, dl, go, err);
+  const link = h('button', {
+    type: 'button',
+    class: 'lf-link',
+    text: 'clicking here',
+    onclick: () => {
+      row.style.display = row.style.display === 'none' ? '' : 'none';
+    },
+  });
+  box.append(
+    h(
+      'span',
+      { class: 'inv-merge-text' },
+      'If this is really the same result as another one, just under a different name or code, you can merge it by ',
+      link,
+      '.'
+    ),
+    row
+  );
+  return box;
+}
+
 function renderEditor(st, done) {
   const redraw = () => {
     const fresh = renderEditor(st, done);
@@ -880,6 +1116,13 @@ function renderEditor(st, done) {
   const kind = sel(KIND_OPTIONS, st.kind);
   kind.setAttribute('aria-label', 'Sample');
   kind.addEventListener('change', () => (st.kind = kind.value));
+  if (S.scrollToAutofiling) {
+    S.scrollToAutofiling = false;
+    setTimeout(() => {
+      const el = document.querySelector('.inv-af-bar');
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    }, 60);
+  }
   wrap.appendChild(
     editorRow(
       'Name and sample',
@@ -888,11 +1131,47 @@ function renderEditor(st, done) {
     )
   );
 
+  // Legacy free-text synonyms (2026-09-24, Nick): the pre-catalogue matcher's old text-match terms — still matched
+  // (folded into the same request table as "How it is requested in Medicus"), kept apart so that box can hold only
+  // wording actually confirmed by scanning real Medicus requests, never a guess. Small and collapsed — it is a
+  // fallback, not the thing to trust.
+  {
+    const synText = input({ placeholder: 'e.g. hba1c', 'aria-label': 'Synonym' });
+    const addSyn = () => {
+      const t = synText.value.trim();
+      if (!t) return;
+      st.synonyms.push(t);
+      synText.value = '';
+      redraw();
+    };
+    synText.addEventListener('keydown', enter(addSyn));
+    const synDet = h('details', { class: 'inv-af-wording', open: S.synonymsOpen || undefined });
+    synDet.addEventListener('toggle', () => (S.synonymsOpen = synDet.open));
+    synDet.appendChild(
+      h('summary', {}, 'Edit synonyms' + (st.synonyms.length ? ` (${st.synonyms.length})` : ''))
+    );
+    synDet.appendChild(
+      h('div', {
+        class: 'lf-muted',
+        text: 'Older free-text terms this test is still recognised by, in addition to "How it is requested in Medicus" below — not a real Medicus wording, just a fallback that still works.',
+      })
+    );
+    synDet.appendChild(
+      chipsEl(
+        st.synonyms,
+        (i) => (st.synonyms.splice(i, 1), redraw()),
+        (x) => x
+      )
+    );
+    synDet.appendChild(h('div', { class: 'inv-edit-line' }, synText, btn('Add', addSyn, 'lf-btn-sm')));
+    wrap.appendChild(synDet);
+  }
+
   // the four areas: how it is REQUESTED in Medicus -> how it COMES BACK from the lab -> the RESULTS looked for; and the
   // "never matches" guard.
   const pReq = panel('req', 'How it is requested in Medicus');
   const pLab = panel('lab', 'How it comes back from the lab');
-  const pNever = panel('never', 'Never matches…');
+  const pNever = panel('never', 'Never counts as this test…');
   const pRes = panel('res', 'SNOMED codes');
   wrap.appendChild(flowGrid(pReq, pLab, pNever, pRes));
 
@@ -919,7 +1198,10 @@ function renderEditor(st, done) {
     )
   );
 
-  // report headings (any lab, or one lab's own)
+  // report headings — REAL headings this lab actually sends (lab.groupHeadings, shown with the lab's own name and
+  // an editable "when is this used" note) are kept visually separate from OTHER WORDINGS (inv.headingAliases): those
+  // are lab-neutral terms used only to help recognise a heading during import/scan, never a literal report heading
+  // — mixing the two in one list reads as if every entry were something a lab actually prints (Nick, 2026-09-23).
   const headText = input({ placeholder: 'Heading the lab uses on the report', 'aria-label': 'Report heading' });
   const headLab = h('select', { class: 'lf-input inv-sel-sm' }, h('option', { value: '' }, 'any lab'), labOptions);
   const addHead = () => {
@@ -929,20 +1211,75 @@ function renderEditor(st, done) {
     redraw();
   };
   headText.addEventListener('keydown', enter(addHead));
+  const realHeads = st.heads.filter((x) => x.lab);
+  const otherWords = st.heads.filter((x) => !x.lab);
+  const realHeadRow = (x) => {
+    const noteIn = h('input', {
+      class: 'lf-input inv-in',
+      type: 'text',
+      maxlength: 200,
+      placeholder: 'when is this used? e.g. includes potassium',
+      'aria-label': 'When ' + x.text + ' is used',
+      value: x.note || '',
+    });
+    const saveNote = async () => {
+      try {
+        await save(OV.setHeadingNote(S.builtin, S.overlay, x.lab, x.text, noteIn.value), null);
+      } catch (err) {
+        alert(cleanErr(err));
+        redraw();
+      }
+    };
+    noteIn.addEventListener('change', saveNote);
+    return h(
+      'div',
+      { class: 'inv-edit-line inv-real-head' },
+      h('span', { class: 'inv-inline-label', text: labWords(x.lab) }),
+      h('strong', { text: x.text }),
+      noteIn,
+      h('button', {
+        type: 'button',
+        class: 'inv-chip-x',
+        title: 'Remove this heading',
+        'aria-label': 'Remove ' + labWords(x.lab) + ' ' + x.text,
+        onclick: () => (st.heads.splice(st.heads.indexOf(x), 1), redraw()),
+        text: '×',
+      })
+    );
+  };
   pLab.appendChild(
     editorRow(
       'Lab report heading',
       st.hidden.length
         ? `${plural(st.hidden.length, 'heading')} for labs you do not use ${st.hidden.length === 1 ? 'is' : 'are'} kept but not shown.`
         : null,
-      chipsEl(
-        st.heads,
-        (i) => (st.heads.splice(i, 1), redraw()),
-        (x) => (x.lab ? `${labShort(x.lab)} ` : '') + x.text
-      ),
+      realHeads.length
+        ? h('div', { class: 'inv-real-heads' }, realHeads.map(realHeadRow))
+        : h('span', { class: 'lf-muted', text: 'No lab has sent this test under a heading yet.' }),
       h('div', { class: 'inv-edit-line' }, headText, headLab, btn('Add', addHead, 'lf-btn-sm'))
     )
   );
+  {
+    const owDet = h('details', { class: 'inv-af-wording', open: S.otherWordsOpen || undefined });
+    owDet.addEventListener('toggle', () => (S.otherWordsOpen = owDet.open));
+    owDet.appendChild(
+      h('summary', {}, 'Other wordings that might match a heading' + (otherWords.length ? ` (${otherWords.length})` : ''))
+    );
+    owDet.appendChild(
+      h('div', {
+        class: 'lf-muted',
+        text: 'Not headings a lab actually sends — extra terms that help recognise a new heading during import or a scan. A real heading above is what filing and matching act on.',
+      })
+    );
+    owDet.appendChild(
+      chipsEl(
+        otherWords,
+        (i) => (st.heads.splice(st.heads.indexOf(otherWords[i]), 1), redraw()),
+        (x) => x.text
+      )
+    );
+    pLab.appendChild(owDet);
+  }
 
   // never matches
   const exclText = input({ placeholder: 'e.g. urine', 'aria-label': 'Never matches' });
@@ -966,16 +1303,146 @@ function renderEditor(st, done) {
     )
   );
 
-  // results — one line each: name, role, any-one, codes, lab wording
   const newSpec = (m) => st.newResults.find((x) => 'new:' + x.label === m.result);
-  const rows = h('div', { class: 'inv-reslist' });
+  // ONE full-width table of the results (a result is one thing, shared by every test that uses it). Each code is its own line
+  // (code | unit); name, how it counts and "also called" span all of a result's code lines.
+  // The assisted filing columns (practice range, safety guards, filing controls, enable) join at the right, in their own colour.
+  const rows = h('div', { class: 'inv-restable' });
+  // Unit sits at the END of the matching columns, right beside the practice range it defines.
+  const COLS = { name: 1, code: 2, role: 3, words: 4, unit: 5, range: 6, guards: 7 };
+  const fLab = currentFilingLab();
+  const fLabName = fLab ? labWords(fLab) : '';
+  const cell = (cls, col, row, span, ...kids) => {
+    const c = h('div', { class: 'inv-rt-c ' + cls }, ...kids);
+    c.style.gridColumn = String(col);
+    c.style.gridRow = span > 1 ? row + ' / span ' + span : String(row);
+    return c;
+  };
+  if (st.members.length) {
+    [
+      ['Name', 'name'],
+      ['Code', 'code'],
+      ['How it counts', 'role'],
+      ['Also called', 'words'],
+      ['Unit', 'unit'],
+      ['Practice normal range (min – max)', 'range'],
+      ['Safety guards', 'guards'],
+    ].forEach(([t, k]) => {
+      const c = h('div', { class: 'inv-rt-h' + (COLS[k] >= COLS.range ? ' inv-rt-hf' : ''), text: t });
+      c.style.gridColumn = String(COLS[k]);
+      c.style.gridRow = '1';
+      rows.appendChild(c);
+    });
+  }
+  // The assisted filing section of one code line: practice normal range (min – max), enable, and its own approval. Edited here,
+  // saved at once; ANY change withdraws that line's approval (pure op OV.setFilingRange).
+  const cleanErr = (e) => ((e && e.message) || String(e)).replace(/^labcatalogue.practice: /, '');
+  const applyFiling = async (spec) => {
+    try {
+      await save(OV.setFilingRange(S.builtin, S.overlay, spec), null);
+    } catch (e) {
+      alert(cleanErr(e));
+      redraw();
+    }
+  };
+  const rangeText = (cand) =>
+    (cand.low != null ? cand.low : '') + '–' + (cand.high != null ? cand.high : '') + (cand.unit ? ' ' + cand.unit : '');
+  const filingCells = (row, r, c) => {
+    const f = (cls, col, ...kids) => cell('inv-rt-f ' + cls, col, row, 1, ...kids);
+    if (!fLab) {
+      return [f('inv-rt-frange', COLS.range, h('span', { class: 'lf-muted', text: 'no lab defined' }))];
+    }
+    const e = r && c ? filingEntry(r.id, fLab, c.conceptId) : null;
+    const cand = r && c ? S.rangeCandidates.get(fLab + '|' + c.conceptId) : null;
+    const prefill = !e && cand && (cand.low != null || cand.high != null);
+    const num = (v, label) =>
+      h('input', {
+        class:
+          'lf-input inv-rt-num' + (e && !isApproved(e) ? ' inv-unapproved' : '') + (prefill ? ' inv-rt-suggested' : ''),
+        type: 'text',
+        inputmode: 'decimal',
+        maxlength: 12,
+        title: e && !isApproved(e)
+          ? 'Not yet approved — approve from the assisted filing bar above'
+          : prefill
+            ? "Suggested from the lab's own reference range on a recent report — not yet saved"
+            : '',
+        'aria-label': label + ' (' + c.conceptId + ', ' + fLabName + ')',
+        value: v === null || v === undefined ? '' : String(v),
+      });
+    const lo = num(e ? e.low : prefill ? cand.low : null, 'Minimum');
+    const hi = num(e ? e.high : prefill ? cand.high : null, 'Maximum');
+    const submit = () => applyFiling({ result: r.id, lab: fLab, code: c.conceptId, low: lo.value, high: hi.value });
+    lo.addEventListener('change', submit);
+    hi.addEventListener('change', submit);
+    const kids = [lo, h('span', { text: '–' }), hi];
+    if (prefill) {
+      kids.push(
+        h(
+          'div',
+          { class: 'inv-rt-suggest-note' },
+          h('span', { text: "Suggested from the lab’s own range — not yet saved." }),
+          h('button', { type: 'button', class: 'lf-btn lf-btn-sm', onclick: submit }, 'Use this')
+        )
+      );
+    } else if (cand && (cand.low != null || cand.high != null)) {
+      kids.push(h('span', { class: 'lf-muted inv-rt-lab-range', text: "Lab's own range: " + rangeText(cand) }));
+    }
+    return [f('inv-rt-frange', COLS.range, ...kids)];
+  };
+  const filingCellsNoCode = (row) => [
+    cell('inv-rt-f inv-rt-frange', COLS.range, row, 1, h('span', { class: 'lf-muted', text: 'needs a code first' })),
+  ];
+  // Clicking a code or an "also called" cell opens (or closes) that result's own editor, full width under its rows.
+  const clickToEdit = (el, parts, tip) => {
+    if (!parts) return el;
+    el.classList.add('inv-rt-click');
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.title = (tip ? tip + '\n\n' : '') + 'Click to add or edit this result\u2019s codes and other names';
+    el.addEventListener('click', parts.toggle);
+    el.addEventListener('keydown', (e) => {
+      if (e.target === el && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        parts.toggle();
+      }
+    });
+    return el;
+  };
+  const guardsHolders = new Map();
+  let cursor = 2;
+  // Stage a merge of one result into another — shared by the automatic duplicate hint (click a name) and dragging one
+  // result row onto another (Nick, 2026-09-23: "can we offer drag/drop merging within the results table row rather
+  // than hunts?"). NOT applied immediately: it is only recorded in st.pendingMerges so the card stays open and the
+  // person can review (and undo) it before anything is saved — "leave it open... gates the merge behind a user
+  // decision to save". The real OV.mergeResult only runs from persist(), right before the test itself is saved.
+  const resolvePendingId = (id) => {
+    let cur = id;
+    for (const pm of st.pendingMerges) if (cur === pm.fromId) cur = pm.intoId;
+    return cur;
+  };
+  const stageMerge = (fromId, intoR) => {
+    const resolvedFrom = resolvePendingId(fromId);
+    const resolvedInto = resolvePendingId(intoR.id);
+    if (resolvedFrom === resolvedInto) return; // already merging into the same place — nothing new to record
+    const fromR = resultById(fromId);
+    st.pendingMerges.push({
+      fromId: resolvedFrom,
+      fromLabel: (resultById(resolvedFrom) || fromR || { label: fromId }).label,
+      intoId: resolvedInto,
+      intoLabel: intoR.label,
+    });
+    redraw();
+  };
   st.members.forEach((m, i) => {
     const isNew = m.result.startsWith('new:');
     const r = isNew ? null : resultById(m.result);
     const ns = isNew ? newSpec(m) : null;
     const nameText = isNew ? m.result.slice(4) + ' (new)' : r ? r.label : m.result;
-    const codes = isNew ? (ns && ns.code ? ns.code : 'no code') : codesText(r);
-    const wording = isNew ? '' : wordingText(r);
+    const codeList = r ? r.codes : [];
+    const n = Math.max(1, codeList.length);
+    const start = cursor;
+    cursor += n + 1; // + a full-width line for the inline result editor
     const role = sel(ROLE_OPTIONS, m.role);
     role.addEventListener('change', () => {
       m.role = role.value;
@@ -984,45 +1451,603 @@ function renderEditor(st, done) {
     });
     const anchor = h('input', { type: 'checkbox', checked: !!m.anchor, disabled: m.role !== 'core' });
     anchor.addEventListener('change', () => (m.anchor = anchor.checked));
-    rows.appendChild(
+    const usedBy = r ? S.merged.investigations.filter((x) => x.members.some((y) => y.result === r.id)).length : 0;
+    const parts = r ? resultEditorParts(r) : null;
+    const undoBtn = (idx) =>
+      btn(
+        'undo',
+        () => {
+          st.pendingMerges.splice(idx, 1);
+          redraw();
+        },
+        'lf-link'
+      );
+    const pendingFrom = r ? st.pendingMerges.findIndex((pm) => pm.fromId === r.id) : -1;
+    const pendingInto = r ? st.pendingMerges.filter((pm) => pm.intoId === r.id) : [];
+    let mergeNoteEl = null;
+    if (pendingFrom >= 0) {
+      const pm = st.pendingMerges[pendingFrom];
+      mergeNoteEl = h(
+        'div',
+        { class: 'inv-rt-duphint inv-rt-pending' },
+        `Pending: will merge into "${pm.intoLabel}" when saved`,
+        ' ',
+        undoBtn(pendingFrom)
+      );
+    } else if (pendingInto.length) {
+      mergeNoteEl = h(
+        'div',
+        { class: 'inv-rt-duphint inv-rt-pending' },
+        `Pending: will receive ${pendingInto.map((pm) => `"${pm.fromLabel}"`).join(', ')} when saved`,
+        ' ',
+        undoBtn(st.pendingMerges.indexOf(pendingInto[0]))
+      );
+    } else if (r && !S.builtin.results.some((x) => x.id === r.id)) {
+      // A duplicate hint right in the table, not only inside the separate "Edit result" popup — two rows that mean the
+      // same analyte sit side by side HERE, which is where a person actually spots them (Nick, 2026-09-23: "the
+      // lab-matched result is similar enough to the predefined one that it should offer a match"). "it's not X"
+      // (Nick, 2026-09-24) remembers a rejected pairing so it stops being suggested — checked here too, not only
+      // filtered out at source, so a dismissal made anywhere is respected everywhere.
+      const dupHits = SC.similarResults(S.merged, r.label, r.id).filter(
+        (c) => !OV.isSimilarPairDismissed(S.overlay, r.id, c.id)
+      );
+      if (dupHits.length)
+        mergeNoteEl = h(
+          'div',
+          { class: 'inv-rt-duphint' },
+          h('span', { text: 'Might be the same as: ' }),
+          ...dupHits
+            .slice(0, 2)
+            .flatMap((c, idx) => [
+              idx ? h('span', { text: '; ' }) : null,
+              btn(c.label, () => stageMerge(r.id, c), 'lf-link'),
+              ' ',
+              btn(`it's not ${c.label}`, () => dismissSimilarPairAction(r.id, c.id), 'lf-link inv-rt-not-this'),
+            ])
+            .filter(Boolean)
+        );
+    }
+    const nameCell = cell(
+      'inv-rt-name',
+      COLS.name,
+      start,
+      n,
+      h('strong', { text: nameText }),
+      usedBy > 1 ? h('div', { class: 'lf-muted', text: 'shared by ' + usedBy + ' tests' }) : null,
+      mergeNoteEl,
       h(
         'div',
-        {
-          class: 'inv-edit-member',
-          title: [
-            nameText,
-            r
-              ? 'Codes: ' + (r.codes.map((c) => c.conceptId + (c.unit ? ` (${c.unit})` : '')).join(', ') || 'none')
-              : '',
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        },
-        h('span', { class: 'inv-em-name', text: nameText }),
-        role,
-        h(
-          'label',
-          { class: 'lf-check inv-em-any', title: 'Any one of the "any one" results is enough to recognise the test' },
-          anchor,
-          ' any one'
-        ),
-        wording ? h('span', { class: 'inv-em-lab', text: wording }) : null,
+        { class: 'inv-rt-actions' },
         h('button', {
           type: 'button',
-          class: 'inv-chip-x',
-          title: 'Remove',
-          onclick: () => (st.members.splice(i, 1), redraw()),
-          text: '×',
-        }),
-        r && r.codes.length
-          ? h('div', { class: 'inv-codelist inv-em-codelist' }, r.codes.map(codeLine))
-          : h('div', {
-              class: 'inv-em-codelist inv-tag ' + (codes === 'no code' ? 'inv-tag-warn' : ''),
-              text: codes === 'no code' ? 'no code yet — matched by name only' : codes,
-            })
+          class: 'lf-btn lf-btn-sm lf-btn-danger inv-rt-remove',
+          title: 'Remove from this test — the result stays in the catalogue and in other tests',
+          'aria-label': 'Remove ' + nameText + ' from this test',
+          onclick: () => {
+            st.members.splice(i, 1);
+            if (r) st.pendingMerges = st.pendingMerges.filter((pm) => pm.fromId !== r.id && pm.intoId !== r.id);
+            redraw();
+          },
+          text: 'Remove',
+        })
       )
     );
+    // Drag this result onto another result's name cell to merge the two — an alternative to hunting for the automatic
+    // hint's link (Nick, 2026-09-23: "offer drag/drop merging... rather than hunts"). This only STAGES the merge
+    // (stageMerge), it does not apply or save anything, so it never closes the card — see stageMerge's own note.
+    if (r) {
+      nameCell.draggable = true;
+      nameCell.title = 'Drag onto another result to merge them (reviewable before saving)';
+      nameCell.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('text/plain', r.id);
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      nameCell.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        nameCell.classList.add('inv-rt-dragover');
+      });
+      nameCell.addEventListener('dragleave', () => nameCell.classList.remove('inv-rt-dragover'));
+      nameCell.addEventListener('drop', (e) => {
+        e.preventDefault();
+        nameCell.classList.remove('inv-rt-dragover');
+        const fromId = e.dataTransfer.getData('text/plain');
+        if (fromId) stageMerge(fromId, r);
+      });
+    }
+    rows.appendChild(nameCell);
+    if (r && fLab) {
+      const ge = filingGuardEntry(r.id, fLab);
+      const sum = guardsSummary(ge);
+      const gcell = cell(
+        'inv-rt-f inv-rt-fguards inv-rt-click',
+        COLS.guards,
+        start,
+        n,
+        h('span', { class: sum ? '' : 'lf-muted', text: sum || 'none set' }),
+        ge && !isApproved(ge) ? h('span', { class: 'inv-unapproved-note', text: 'not yet approved' }) : null
+      );
+      gcell.setAttribute('role', 'button');
+      gcell.tabIndex = 0;
+      gcell.title = 'Click to set the safety guards for ' + r.label + ' at ' + fLabName;
+      const toggleGuards = () => {
+        const gh = guardsHolders.get(r.id);
+        if (!gh) return;
+        if (gh.firstChild) gh.textContent = '';
+        else gh.appendChild(renderGuardsEditor(r, fLab, () => (gh.textContent = '')));
+      };
+      gcell.addEventListener('click', toggleGuards);
+      gcell.addEventListener('keydown', (e) => {
+        if (e.target === gcell && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          toggleGuards();
+        }
+      });
+      rows.appendChild(gcell);
+    } else if (r) {
+      rows.appendChild(
+        cell('inv-rt-f inv-rt-fguards', COLS.guards, start, n, h('span', { class: 'lf-muted', text: '—' }))
+      );
+    }
+    if (codeList.length) {
+      codeList.forEach((c, k) => {
+        const info = codeInfoFor(c);
+        const q = info.qof ? ' inv-code-qof' : '';
+        rows.appendChild(
+          clickToEdit(
+            cell(
+              'inv-rt-code' + q,
+              COLS.code,
+              start + k,
+              1,
+              h('span', { class: 'inv-code-id', text: c.conceptId }),
+              info.qof ? h('span', { class: 'inv-qof-tag', text: 'QOF' }) : null
+            ),
+            parts,
+            [c.conceptId, info.desc, info.qof ? 'Counts towards QOF (' + info.qofClusters.join(', ') + ')' : '']
+              .filter(Boolean)
+              .join('\n')
+          )
+        );
+        rows.appendChild(
+          cell(
+            'inv-rt-unit' + q,
+            COLS.unit,
+            start + k,
+            1,
+            c.unit ? c.unit : h('span', { class: 'lf-muted', text: '—' })
+          )
+        );
+        filingCells(start + k, r, c).forEach((x) => rows.appendChild(x));
+      });
+    } else {
+      const none = isNew && ns && ns.code ? ns.code : '';
+      rows.appendChild(
+        clickToEdit(
+          cell(
+            'inv-rt-code',
+            COLS.code,
+            start,
+            1,
+            none
+              ? h('span', { class: 'inv-code-id', text: none })
+              : h('span', { class: 'inv-tag inv-tag-warn', text: 'no code yet — matched by name only' })
+          ),
+          parts,
+          ''
+        )
+      );
+      rows.appendChild(cell('inv-rt-unit', COLS.unit, start, 1, h('span', { class: 'lf-muted', text: '—' })));
+      filingCellsNoCode(start).forEach((x) => rows.appendChild(x));
+    }
+    rows.appendChild(
+      cell(
+        'inv-rt-role',
+        COLS.role,
+        start,
+        n,
+        role,
+        h('label', { class: 'lf-check inv-em-any', title: ENOUGH_ALONE }, anchor, ' enough on its own')
+      )
+    );
+    // The result's name is itself one of its names, so an unlabelled name that just repeats it adds nothing here (lab-tagged
+    // ones always show). The full list is in the editor that opens when you click a code or an "also called" name.
+    const words = r ? r.aliases.filter((a) => a.lab || LC.norm(a.text) !== LC.norm(r.label)) : [];
+    rows.appendChild(
+      clickToEdit(
+        cell(
+          'inv-rt-words',
+          COLS.words,
+          start,
+          n,
+          ...(words.length
+            ? words.map((a) =>
+                h('span', { class: 'inv-chip inv-chip-ro', text: (a.lab ? labShort(a.lab) + ': ' : '') + a.text })
+              )
+            : [h('span', { class: 'lf-muted', text: '—' })])
+        ),
+        parts,
+        ''
+      )
+    );
+    if (parts) {
+      // the result's own codes and wordings are edited right here, full width (a result can be shared by several tests)
+      const gholder = h('div', { class: 'inv-em-resedit' });
+      guardsHolders.set(r.id, gholder);
+      const line = h('div', { class: 'inv-rt-edit' }, parts.holder, gholder);
+      line.style.gridColumn = '1 / -1';
+      line.style.gridRow = String(start + n);
+      rows.appendChild(line);
+    }
   });
+  // which lab the ranges, guards and assisted filing below are for (a result can have a different practice range at each lab)
+  const filingLabLine = () => {
+    const labsHere = S.merged.labs.filter((l) => labVisible(l.id));
+    if (!labsHere.length) return null;
+    const pick = h(
+      'select',
+      { class: 'lf-input inv-sel-sm', 'aria-label': 'Lab the ranges, guards and assisted filing are for' },
+      labsHere.map((l) => h('option', { value: l.id, selected: l.id === fLab }, labLabel(l)))
+    );
+    pick.addEventListener('change', () => {
+      filingLabId = pick.value;
+      redraw();
+    });
+    return h(
+      'div',
+      { class: 'inv-filing-labbar' },
+      h(
+        'div',
+        { class: 'inv-edit-line inv-filing-lab' },
+        h('span', { class: 'inv-inline-label', text: 'Lab for the ranges, guards and assisted filing below:' }),
+        pick
+      ),
+      autofilingBar()
+    );
+  };
+
+  // ONE switch and ONE approval for the test at this lab. Medicus files a whole report group at once, so assisted filing is not a
+  // property of a result: it is on for the report group(s) this test arrives in, and rests on those groups' comment settings, the
+  // practice ranges and safety guards of the test's results, and the Medicus wording if it has been changed.
+  const autofilingBar = () => {
+    if (!fLab) return null;
+    const bar = h('div', { class: 'inv-af-bar' });
+    if (!st.id) {
+      bar.appendChild(
+        h('span', {
+          class: 'lf-muted',
+          text: 'Save the test first — assisted filing is set up for the report group the lab sends it in.',
+        })
+      );
+      return bar;
+    }
+    const state = OV.filingStateForTest(S.merged, S.overlay, st.id, fLab);
+    if (!state.headings.length) {
+      bar.appendChild(
+        h('span', {
+          class: 'lf-muted',
+          text:
+            fLabName +
+            ' has no report group heading recorded for this test yet (see "How it comes back from the lab") — assisted filing needs one.',
+        })
+      );
+      return bar;
+    }
+    const on = h('input', {
+      type: 'checkbox',
+      checked: state.enabled,
+      'aria-label': 'Enable assisted filing for this test group from ' + fLabName,
+    });
+    on.addEventListener('change', async () => {
+      try {
+        await save(OV.setFilingForTest(S.builtin, S.overlay, st.id, fLab, on.checked), null);
+      } catch (err) {
+        alert(cleanErr(err));
+        redraw();
+      }
+    });
+    const status = !state.enabled
+      ? null
+      : state.approved
+        ? badge('approved', 'lf-badge-ok')
+        : badge('awaiting approval', 'lf-badge-warn');
+    bar.appendChild(
+      h(
+        'div',
+        { class: 'inv-edit-line' },
+        h('label', { class: 'lf-check inv-af-switch' }, on, ' Assisted filing on for this test group from ' + fLabName),
+        h('span', {
+          class: 'lf-muted',
+          text:
+            'report group' +
+            (state.headings.length === 1 ? '' : 's') +
+            ': ' +
+            state.headings.map((x) => '\u201c' + x + '\u201d').join(', '),
+        }),
+        status
+      )
+    );
+    // ONE decision for the whole test at this lab (H-081 control d) \u2014 moved here from a per-result guard, 2026-09-25:
+    // Nick, having written the system, still couldn't find it buried in each result's own Safety guards column.
+    const ovd = h('input', {
+      type: 'checkbox',
+      checked: state.overrideLabFlag,
+      'aria-label': 'Practice ranges override the lab flag for this test group from ' + fLabName,
+    });
+    ovd.addEventListener('change', async () => {
+      try {
+        await save(OV.setFilingOverrideForTest(S.builtin, S.overlay, st.id, fLab, ovd.checked), null);
+      } catch (err) {
+        alert(cleanErr(err));
+        redraw();
+      }
+    });
+    bar.appendChild(
+      h(
+        'div',
+        { class: 'inv-edit-line' },
+        h(
+          'label',
+          { class: 'lf-check' },
+          ovd,
+          ' The practice\u2019s own ranges override the lab\u2019s high / low flag for every result of this test (a value inside the range is treated as normal even if the lab flagged it)'
+        )
+      )
+    );
+    if (state.enabled && state.pending.length) {
+      const names = {
+        groups: 'report group',
+        ranges: 'practice range',
+        guards: 'safety guard',
+        screen: 'Medicus wording',
+      };
+      const counts = {};
+      state.pending.forEach((x) => (counts[x.kind] = (counts[x.kind] || 0) + 1));
+      bar.appendChild(
+        h(
+          'div',
+          { class: 'inv-af-pending' },
+          h('span', {
+            text:
+              'Awaiting approval: ' +
+              Object.keys(counts)
+                .map((k) => counts[k] + ' ' + names[k] + (counts[k] === 1 ? '' : 's'))
+                .join(', ') +
+              '. ',
+          }),
+          btn(
+            'Approve',
+            () =>
+              save(
+                OV.approveFilingForTest(S.builtin, S.overlay, st.id, fLab, REVIEWER),
+                'Approved assisted filing for ' + st.label + ' from ' + fLabName + '.'
+              ),
+            'lf-btn-primary lf-btn-sm'
+          )
+        )
+      );
+      bar.appendChild(
+        h('div', {
+          class: 'inv-filing-note',
+          text:
+            "Clicking 'Approve' means I am approving assisted filing for this test group from " +
+            fLabName +
+            ': its report group(s), the practice ranges and safety guards shown below, its lab-comment settings, and the Medicus wording. Changing any of them withdraws the approval. Filing does not read this yet.',
+        })
+      );
+    }
+    bar.appendChild(medicusWordingLine());
+    bar.appendChild(filingSuppressLine());
+    return bar;
+  };
+
+  // "Never offer to file when the comment says…" — ONE practice-wide list (not per lab x group: Nick, 2026-09-23 —
+  // these phrases are expected to be the same whichever heading variant or lab sent the report). Shown once, here,
+  // for the same reason the Medicus wording above is: it is part of every test's assisted-filing approval.
+  const filingSuppressLine = () => {
+    const cur = filingSuppressEntry();
+    const items = cur ? [...cur.items] : [];
+    const apply = async (next) => {
+      try {
+        await save(OV.setFilingSuppress(S.overlay, { items: next }), null);
+      } catch (err) {
+        alert(cleanErr(err));
+        redraw();
+      }
+    };
+    const blockIn = h('input', {
+      class: 'lf-input inv-in',
+      type: 'text',
+      maxlength: 80,
+      placeholder: 'e.g. telephone result',
+      'aria-label': 'Never offer to file when the comment says',
+    });
+    const addBlock = () => {
+      const t = blockIn.value.trim();
+      if (t) apply([...items, t]);
+    };
+    blockIn.addEventListener('keydown', enter(addBlock));
+    const det = h('details', { class: 'inv-af-wording', open: S.suppressLineOpen || undefined });
+    det.addEventListener('toggle', () => (S.suppressLineOpen = det.open));
+    det.appendChild(
+      h('summary', {}, 'Never offer to file when the comment says…' + (items.length ? ` (${items.length})` : ''))
+    );
+    det.appendChild(
+      h('div', {
+        class: 'lf-muted',
+        text: 'Any of these words in a lab comment blocks one-click filing — for every lab and every heading, since these are expected to mean the same thing wherever they come from.',
+      })
+    );
+    det.appendChild(chipsEl(items, (i) => apply(items.filter((_, j) => j !== i)), (x) => x));
+    det.appendChild(h('div', { class: 'inv-edit-line' }, blockIn, btn('Add', addBlock, 'lf-btn-sm')));
+    return det;
+  };
+
+  // Medicus's own filing-screen wording (the same for every lab, and not something a lab controls). The macro finds these two
+  // controls on the live screen by their visible text; changing them here does NOT change what is written to the record — it only
+  // has to match what Medicus shows. Pre-filled with the standard wording; a changed wording needs approving.
+  const medicusWordingLine = () => {
+    const cur = (S.overlay.filing.screen || [])[0] || null;
+    const mk = (val, dflt, label) =>
+      h('input', {
+        class: 'lf-input inv-in inv-fc-in',
+        type: 'text',
+        maxlength: 120,
+        'aria-label': label,
+        value: val || dflt,
+      });
+    const opt = mk(cur && cur.normalOptionText, OV.FILING_DEFAULT_NORMAL_OPTION, 'Medicus normal option wording');
+    const fileBtn = mk(cur && cur.fileButtonText, OV.FILING_DEFAULT_FILE_BUTTON, 'Medicus File button wording');
+    const submit = async () => {
+      try {
+        await save(OV.setFilingScreen(S.overlay, { normalOptionText: opt.value, fileButtonText: fileBtn.value }), null);
+      } catch (err) {
+        alert(cleanErr(err));
+        redraw();
+      }
+    };
+    opt.addEventListener('change', submit);
+    fileBtn.addEventListener('change', submit);
+    const det = h('details', { class: 'inv-af-wording', open: S.wordingOpen || undefined });
+    det.addEventListener('toggle', () => (S.wordingOpen = det.open));
+    det.appendChild(h('summary', {}, 'Medicus filing-screen wording' + (cur ? ' (changed)' : ' (standard)')));
+    det.appendChild(
+      h('div', {
+        class: 'lf-muted',
+        text: 'The suite finds these controls on the Medicus screen by their visible text. Only change them if Medicus changes its wording; this does not alter what is written to the record.',
+      })
+    );
+    det.appendChild(
+      h(
+        'div',
+        { class: 'inv-edit-line' },
+        h('span', { class: 'inv-inline-label', text: 'Normal option:' }),
+        opt,
+        h('span', { class: 'inv-inline-label', text: 'File button:' }),
+        fileBtn
+      )
+    );
+    return det;
+  };
+
+  // Lab comments arrive per lab-defined REPORT GROUP as one package for the group's results, so the WHITELIST of lab
+  // comments is per lab x group heading, never per result — the exact wording is the lab's own and genuinely
+  // differs heading to heading. (Approved together with the rest of assisted filing, above.) "Never offer to file
+  // when the comment says…" is NOT here — since 2026-09-23 it is one practice-wide list, in the bar above.
+  const groupStrip = () => {
+    if (!fLab || !st.members.length) return null;
+    const lab = S.merged.labs.find((l) => l.id === fLab);
+    const heads = st.id && lab ? (lab.groupHeadings || []).filter((g) => (g.identifies || []).includes(st.id)) : [];
+    const box = h('div', { class: 'inv-filing-strip' });
+    box.appendChild(
+      h('h4', { class: 'inv-filing-strip-title', text: 'Lab comments — comments you allow through' })
+    );
+    if (!st.id) {
+      box.appendChild(
+        h('div', {
+          class: 'lf-muted',
+          text: 'Save the test first — lab comments belong to the report groups the lab sends it in.',
+        })
+      );
+      return box;
+    }
+    if (!heads.length) {
+      box.appendChild(
+        h('div', {
+          class: 'lf-muted',
+          text:
+            fLabName +
+            ' has no report group heading recorded for this test yet (see "How it comes back from the lab").',
+        })
+      );
+      return box;
+    }
+    box.appendChild(
+      h('div', {
+        class: 'lf-muted',
+        text: 'A comment arrives as one package for the whole group, so these apply to the group as a whole. A report whose comment is not covered by a comment you have allowed is never offered for one-click filing.',
+      })
+    );
+    for (const gh of heads) {
+      const e = filingGroupEntry(fLab, gh.text);
+      const cur = { allow: e ? [...e.allowComments] : [] };
+      const apply = async (allow) => {
+        try {
+          await save(
+            OV.setFilingGroup(S.builtin, S.overlay, {
+              lab: fLab,
+              heading: gh.text,
+              enabled: !!(e && e.enabled),
+              allowComments: allow,
+              overrideLabFlag: !!(e && e.overrideLabFlag),
+            }),
+            null
+          );
+        } catch (err) {
+          alert(cleanErr(err));
+          redraw();
+        }
+      };
+      const allowIn = h('textarea', {
+        class: 'lf-input inv-in inv-note',
+        rows: '2',
+        maxlength: 2000,
+        placeholder: 'Paste the whole comment exactly as the lab sends it',
+        'aria-label': 'Lab comment to allow',
+      });
+      const addAllow = () => {
+        const t = allowIn.value.trim();
+        if (t) apply([...cur.allow, t]);
+      };
+      box.appendChild(
+        h(
+          'div',
+          { class: 'inv-filing-group' },
+          h(
+            'div',
+            { class: 'inv-filing-group-head' },
+            h('strong', { text: '\u201c' + gh.text + '\u201d' }),
+            e && !isApproved(e) ? h('span', { class: 'inv-unapproved-note', text: 'not yet approved' }) : null
+          ),
+          editorRow(
+            'Lab comments allowed through',
+            'The WHOLE comment must be listed. A comment with anything added to it is not allowed through.',
+            cur.allow.length
+              ? h(
+                  'div',
+                  { class: 'inv-filing-allowed' },
+                  cur.allow.map((t, i) =>
+                    h(
+                      'div',
+                      { class: 'inv-filing-allow-item' },
+                      h('span', { title: t, text: t.length > 140 ? t.slice(0, 140) + '…' : t }),
+                      h('button', {
+                        type: 'button',
+                        class: 'inv-chip-x',
+                        title: 'Stop allowing this comment',
+                        'aria-label': 'Stop allowing this comment',
+                        onclick: () => apply(cur.allow.filter((_, j) => j !== i)),
+                        text: '×',
+                      })
+                    )
+                  )
+                )
+              : h('span', { class: 'lf-muted', text: 'None — every comment blocks one-click filing.' }),
+            allowIn,
+            h('div', { class: 'inv-edit-line' }, btn('Allow this comment', addAllow, 'lf-btn-sm'))
+          )
+        )
+      );
+    }
+    return box;
+  };
+  const filingNote = () =>
+    h(
+      'div',
+      { class: 'inv-filing-note' },
+      'A practice range or safety guard applies to the result wherever it appears (ALP in LFTs and in Bone profile is one result) and to this lab only. ' +
+        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of assisted filing, in the bar above. Filing does not read this yet.'
+    );
   const listId = 'invResList' + Math.random().toString(36).slice(2, 7);
   const dl = h(
     'datalist',
@@ -1072,8 +2097,11 @@ function renderEditor(st, done) {
   pRes.appendChild(
     editorRow(
       '',
-      'Core results identify the test. Click a result under Details to edit its codes and wordings. ' + QOF_LEGEND,
+      'Click a code or an “also called” name to add or edit it. The results marked “Core to the lab group” are what the matcher looks for. ' +
+        QOF_LEGEND,
+      st.members.length ? filingLabLine() : null,
       st.members.length ? rows : h('span', { class: 'lf-muted', text: 'None yet.' }),
+      st.members.length ? filingNote() : null,
       h('div', { class: 'inv-panel-sub', text: 'Add more tests to this panel' }),
       h(
         'div',
@@ -1081,23 +2109,35 @@ function renderEditor(st, done) {
         memText,
         dl,
         memRole,
-        h('label', { class: 'lf-check' }, memAnchor, ' any one'),
+        h('label', { class: 'lf-check', title: ENOUGH_ALONE }, memAnchor, ' enough on its own'),
         btn('Add', addMember, 'lf-btn-sm')
       ),
       newBox
     )
   );
 
+  const strip = groupStrip();
+  if (strip) wrap.appendChild(strip);
+
   // note
   const note = h('textarea', {
-    class: 'lf-input inv-in',
-    rows: '2',
+    class: 'lf-input inv-in inv-note',
+    rows: '1',
     maxlength: '1000',
     placeholder: 'Optional note for whoever reviews this',
     'aria-label': 'Note',
   });
   note.value = st.note;
-  note.addEventListener('input', () => (st.note = note.value));
+  // only as tall as its text (it grows as you type; drag the corner to make it larger)
+  const fitNote = () => {
+    note.style.height = 'auto';
+    note.style.height = note.scrollHeight + 2 + 'px';
+  };
+  note.addEventListener('input', () => {
+    st.note = note.value;
+    fitNote();
+  });
+  requestAnimationFrame(fitNote);
   wrap.appendChild(editorRow('Note', null, note));
 
   // save / approve
@@ -1105,6 +2145,13 @@ function renderEditor(st, done) {
     try {
       if (!st.label.trim()) throw new Error('Give the test a name.');
       let o = S.overlay;
+      // Pending result merges are applied for real only now, right before the test itself is saved — everything up to
+      // this point was just review (Nick, 2026-09-23). Insertion order matters: each pending entry was already
+      // resolved against earlier ones at the moment it was staged (see stageMerge), so applying them in that same
+      // order is always valid — a later entry's fromId/intoId still exists by the time its turn comes.
+      for (const pm of st.pendingMerges) {
+        o = OV.mergeResult(S.builtin, o, pm.fromId, pm.intoId).overlay;
+      }
       const idFor = new Map();
       for (const nr of st.newResults) {
         if (!st.members.some((m) => m.result === 'new:' + nr.label)) continue;
@@ -1117,14 +2164,34 @@ function renderEditor(st, done) {
         o = r.overlay;
         idFor.set('new:' + nr.label, r.id);
       }
+      // A merge can leave two members pointing at the same (surviving) result — collapse them, keeping the more
+      // prominent role, same rule OV.mergeResult itself uses.
+      const rawMembers = st.members.map((m) => ({
+        result: idFor.get(m.result) || resolvePendingId(m.result),
+        role: m.role,
+        anchor: m.anchor,
+      }));
+      const members = [];
+      const memberIdx = new Map();
+      for (const m of rawMembers) {
+        const ex = memberIdx.has(m.result) ? members[memberIdx.get(m.result)] : null;
+        if (ex) {
+          if (m.role === 'core' && ex.role !== 'core') ex.role = 'core';
+          if (m.anchor && ex.role === 'core') ex.anchor = true;
+          continue;
+        }
+        memberIdx.set(m.result, members.length);
+        members.push(m);
+      }
       const spec = {
         id: st.id || undefined,
         label: st.label,
         kind: st.kind,
         requestAliases: st.reqs.map((x) => ({ text: x.text, system: x.system })),
+        synonyms: st.synonyms,
         headingAliases: st.heads.filter((x) => !x.lab).map((x) => x.text),
         exclude: st.excl.map((x) => x.text),
-        members: st.members.map((m) => ({ result: idFor.get(m.result) || m.result, role: m.role, anchor: m.anchor })),
+        members,
         note: st.note,
         labHeadings: [...st.heads, ...st.hidden].filter((x) => x.lab).map((x) => ({ lab: x.lab, text: x.text })),
       };
@@ -1190,8 +2257,149 @@ function renderEditor(st, done) {
 
 // One result's editor (codes and wordings; name and value type). Everything is editable. Used by every test that
 // includes the result — the line below says how many.
+// The safety guards of one result at one lab: a trend limit, medicines that stop it, and whether the practice range overrides the
+// lab's own high / low flag. Saved together; any change withdraws the approval.
+function renderGuardsEditor(r, labId, done) {
+  const labName = labWords(labId);
+  const e = filingGuardEntry(r.id, labId);
+  const st = {
+    trend: e && e.trendMaxDeltaPct != null ? String(e.trendMaxDeltaPct) : '',
+    dir: (e && e.trendDirection) || 'any',
+    meds: e ? [...e.excludeIfMeds] : [],
+    error: '',
+  };
+  let wrap;
+  const build = () => {
+    const w = h('div', { class: 'inv-res-edit inv-guards-edit' });
+    const trend = h('input', {
+      class: 'lf-input inv-in inv-rt-num',
+      type: 'text',
+      inputmode: 'decimal',
+      maxlength: 8,
+      value: st.trend,
+      'aria-label': 'Trend limit percent',
+    });
+    trend.addEventListener('input', () => (st.trend = trend.value));
+    // which way it moved: an eGFR that rises is good news, a creatinine that falls is — the opposite is what must not be filed
+    const dirSel = h(
+      'select',
+      { class: 'lf-input inv-sel-sm', 'aria-label': 'Direction of the change' },
+      [
+        ['any', 'changed'],
+        ['up', 'increased'],
+        ['down', 'decreased'],
+      ].map(([v, l]) => h('option', { value: v, selected: v === st.dir }, l))
+    );
+    dirSel.addEventListener('change', () => (st.dir = dirSel.value));
+    w.appendChild(
+      editorRow(
+        'Trend',
+        null,
+        h(
+          'div',
+          { class: 'inv-edit-line' },
+          h('span', { text: 'Never offer to file if it has' }),
+          dirSel,
+          h('span', { text: 'by more than' }),
+          trend,
+          h('span', { text: '% since the patient\u2019s last result' })
+        )
+      )
+    );
+    const med = h('input', {
+      class: 'lf-input inv-in',
+      type: 'text',
+      maxlength: 80,
+      placeholder: 'e.g. lithium',
+      'aria-label': 'Medicine',
+    });
+    const addMed = () => {
+      const t = med.value.trim();
+      if (!t) return;
+      if (t.length < 2) {
+        st.error = 'A medicine name needs at least two letters.';
+        return redraw();
+      }
+      if (!st.meds.some((x) => x.toLowerCase() === t.toLowerCase())) st.meds.push(t);
+      st.error = '';
+      redraw();
+    };
+    med.addEventListener('keydown', (ev) => ev.key === 'Enter' && (ev.preventDefault(), addMed()));
+    w.appendChild(
+      editorRow(
+        'Medicines',
+        'Never offer to file this result if the patient is on any of these.',
+        chipsEl(
+          st.meds,
+          (i) => (st.meds.splice(i, 1), redraw()),
+          (x) => x
+        ),
+        h('div', { class: 'inv-edit-line' }, med, btn('Add', addMed, 'lf-btn-sm'))
+      )
+    );
+    if (st.error) w.appendChild(h('div', { class: 'inv-error', text: st.error }));
+    const foot = h('div', { class: 'inv-edit-foot' });
+    foot.appendChild(
+      h('span', {
+        class: 'inv-foot-note',
+        text: 'Saved guards are approved together with assisted filing for this test, in the bar at the top of the results.',
+      })
+    );
+    const buttons = h('div', { class: 'inv-edit-buttons' });
+    buttons.appendChild(btn('Cancel', () => done(false), 'lf-btn-sm'));
+    buttons.appendChild(
+      btn(
+        'Save guards',
+        async () => {
+          try {
+            await save(
+              OV.setFilingGuards(S.builtin, S.overlay, {
+                result: r.id,
+                lab: labId,
+                trendMaxDeltaPct: st.trend,
+                trendDirection: st.dir,
+                excludeIfMeds: st.meds,
+              }),
+              'Saved the safety guards for ' + r.label + ' at ' + labName + '.'
+            );
+            done(true);
+          } catch (err) {
+            st.error = ((err && err.message) || String(err)).replace(/^labcatalogue.practice: /, '');
+            redraw();
+          }
+        },
+        'lf-btn-primary lf-btn-sm'
+      )
+    );
+    foot.appendChild(buttons);
+    w.appendChild(foot);
+    return w;
+  };
+  const redraw = () => {
+    const fresh = build();
+    wrap.replaceWith(fresh);
+    wrap = fresh;
+  };
+  wrap = build();
+  return wrap;
+}
+
+// Opens / closes a result's own editor in place, inside the test's edit screen (clicked from its code or "also called" cell).
+function resultEditorParts(r) {
+  const holder = h('div', { class: 'inv-em-resedit' });
+  const toggle = () => {
+    if (holder.firstChild) {
+      holder.textContent = '';
+      return;
+    }
+    holder.appendChild(renderResultEditor(r, () => (holder.textContent = '')));
+  };
+  return { toggle, holder };
+}
+
 function renderResultEditor(r, done) {
   const ov = S.overlay.results.find((x) => x.id === r.id) || null;
+  const isBuiltinResult = S.builtin.results.some((x) => x.id === r.id);
   const usedBy = S.merged.investigations.filter((i) => i.members.some((m) => m.result === r.id));
   const st = {
     label: r.label,
@@ -1235,7 +2443,10 @@ function renderResultEditor(r, done) {
         h('div', { class: 'inv-edit-line' }, code, unit, btn('Add code', addCode, 'lf-btn-sm'))
       )
     );
-    const word = input({ placeholder: 'A wording the lab (or anyone) uses for this result', 'aria-label': 'Wording' });
+    const word = input({
+      placeholder: 'Another name the lab or your GP system uses for this result',
+      'aria-label': 'Other name',
+    });
     const wlab = h(
       'select',
       { class: 'lf-input inv-sel-sm' },
@@ -1251,14 +2462,14 @@ function renderResultEditor(r, done) {
     word.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), addWord()));
     w.appendChild(
       editorRow(
-        'Wordings',
+        'Also called',
         null,
         chipsEl(
           st.aliases,
           (i) => (st.aliases.splice(i, 1), redraw()),
           (a) => (a.lab ? `${labShort(a.lab)}: ` : '') + a.text
         ),
-        h('div', { class: 'inv-edit-line' }, word, wlab, btn('Add wording', addWord, 'lf-btn-sm'))
+        h('div', { class: 'inv-edit-line' }, word, wlab, btn('Add name', addWord, 'lf-btn-sm'))
       )
     );
     const persist = async (approve) => {
@@ -1284,12 +2495,13 @@ function renderResultEditor(r, done) {
         redraw();
       }
     };
+    if (!isBuiltinResult) w.appendChild(resultMergeBlock(r, done));
     const foot = h('div', { class: 'inv-edit-foot' });
     foot.appendChild(
       h('span', {
         class: 'inv-foot-note',
         text: st.review
-          ? "Clicking 'Approve result' means I am approving this result's codes and wordings. This saves changes above and makes this result active for the features that use this catalogue."
+          ? "Clicking 'Approve result' means I am approving this result's codes and other names. This saves changes above and makes this result active for the features that use this catalogue."
           : `Used by ${plural(usedBy.length, 'test')}${
               usedBy.length
                 ? ': ' +
@@ -1321,6 +2533,7 @@ function renderResultEditor(r, done) {
 }
 
 function finishEdit() {
+  if (S.editing) S.open.delete(S.editing); // the card goes back to its one-line summary
   S.editing = null;
   S.editState = null;
   render();
@@ -1331,7 +2544,11 @@ function renderInvestigation(d) {
   const editing = S.editing === inv.id && S.editState;
   const open = S.open.has(inv.id) || !!editing;
   const requests = inv.requestAliases.map((a) => a.text);
-  const reqText = requests.join(' · ');
+  // No confirmed Medicus wording yet (common for a built-in since 2026-09-24 — see "Edit synonyms" in the editor) —
+  // fall back to showing the legacy synonyms, so the card doesn't just go blank, but labelled differently so it
+  // doesn't read as a confirmed wording.
+  const reqLabel = requests.length ? '' : (inv.synonyms || []).length ? 'known as ' : '';
+  const reqText = (requests.length ? requests : inv.synonyms || []).join(' · ');
 
   const actions = h('span', { class: 'inv-actions' });
   // Approval is only possible from the review screen, so the person has the whole test in front of them.
@@ -1419,17 +2636,6 @@ function renderInvestigation(d) {
         : 'Edit this test'
     )
   );
-  actions.appendChild(
-    btn(
-      open ? 'Hide' : 'Details',
-      () => {
-        if (open) S.open.delete(inv.id);
-        else S.open.add(inv.id);
-        render();
-      },
-      'lf-btn-sm'
-    )
-  );
 
   const top = h(
     'div',
@@ -1437,8 +2643,8 @@ function renderInvestigation(d) {
     h('span', { class: 'inv-name', text: inv.label }),
     h(
       'span',
-      { class: 'inv-req', title: reqText ? 'Requested as: ' + reqText : '' },
-      reqText ? h('span', { class: 'inv-req-k', text: 'requested as ' }) : null,
+      { class: 'inv-req', title: reqText ? (reqLabel || 'requested as ') + reqText : '' },
+      reqText ? h('span', { class: 'inv-req-k', text: reqLabel || 'requested as ' }) : null,
       reqText || '—'
     ),
     h(
@@ -1447,6 +2653,24 @@ function renderInvestigation(d) {
       badge(kindLabel(inv.kind)),
       inv.requestAliases.length ? null : badge('needs a request', 'lf-badge-warn'),
       badge(d.status.text, d.status.cls),
+      (() => {
+        const f = filingOverview(inv);
+        if (!f.on) return null;
+        // opens the test's edit screen at its assisted filing bar — approval is only ever given there, where what it covers is shown
+        return h('button', {
+          type: 'button',
+          class: 'lf-badge inv-af-badge ' + (f.approved ? 'lf-badge-ok' : 'lf-badge-warn'),
+          title: 'Open the assisted filing setup for this test',
+          onclick: () => {
+            S.editing = inv.id;
+            S.editState = editStateFor(inv, !f.approved);
+            S.open.add(inv.id);
+            S.scrollToAutofiling = true;
+            render();
+          },
+          text: f.approved ? 'assisted filing on' : 'assisted filing — awaiting approval',
+        });
+      })(),
       d.disabled ? badge('disabled', 'lf-badge-warn') : null
     ),
     actions
@@ -1551,7 +2775,6 @@ function renderBrowse() {
     ['all', 'All'],
     ['builtin', 'Built-in'],
     ['practice', 'Practice'],
-    ['review', `Awaiting review (${pending.length})`],
   ].map(([id, label]) =>
     btn(
       label,
@@ -1562,9 +2785,59 @@ function renderBrowse() {
       S.filter === id ? 'lf-btn-primary lf-btn-sm' : 'lf-btn-sm'
     )
   );
+  // Four independent yes/no questions, each Any/Yes/No (Nick, 2026-09-24: "some filters to be toggles" — assisted
+  // filing on/off, awaiting review, matched to a lab report, matched to a Medicus request — combined freely with each
+  // other and with search, instead of one either/or radio choice.
+  const facets = [
+    ['review', 'Awaiting review', (d) => d.needsReview],
+    ['filing', 'Assisted filing', (d) => filingOverview(d.inv).on],
+    ['labMatched', 'Matched to lab report', (d) => hasLabMatch(d.inv)],
+    ['reqMatched', 'Matched to Medicus request', (d) => hasRequestMatch(d.inv)],
+  ];
+  const toggleGroup = ([key, label, test]) => {
+    const count = (want) => all.filter((d) => test(d) === want).length;
+    const seg = (val, text) =>
+      btn(
+        text,
+        () => {
+          S.toggles[key] = val;
+          render();
+        },
+        S.toggles[key] === val ? 'lf-btn-primary lf-btn-sm' : 'lf-btn-sm'
+      );
+    return h(
+      'div',
+      { class: 'inv-toggle-group' },
+      h('span', { class: 'inv-toggle-label', text: label + ':' }),
+      seg(null, 'Any'),
+      seg(true, `Yes (${count(true)})`),
+      seg(false, `No (${count(false)})`)
+    );
+  };
+  const presetBtn = (text, set) =>
+    btn(
+      text,
+      () => {
+        S.toggles = { review: null, filing: null, labMatched: null, reqMatched: null, ...set };
+        S.query = '';
+        render();
+      },
+      'lf-btn-sm'
+    );
+  const presets = h(
+    'div',
+    { class: 'inv-preset-row' },
+    h('span', { class: 'inv-toggle-label', text: 'Show me investigation groups…' }),
+    presetBtn('which need matching to a Medicus request', { reqMatched: false }),
+    presetBtn('which need matching to a lab report', { labMatched: false }),
+    presetBtn('where assisted filing is not yet enabled', { filing: false })
+  );
+  const toggles = h('div', { class: 'inv-toggle-row' }, facets.map(toggleGroup));
   const card = h(
     'div',
     { class: 'inv-browse' },
+    presets,
+    toggles,
     h(
       'div',
       { class: 'inv-browse-bar' },
@@ -1587,7 +2860,7 @@ function renderBrowse() {
             () => {
               const d = pending.slice().sort((x, y) => x.inv.label.localeCompare(y.inv.label))[0];
               S.query = '';
-              S.filter = 'review';
+              S.toggles.review = true;
               S.editing = d.inv.id;
               S.editState = editStateFor(d.inv, true);
               S.open.add(d.inv.id);
@@ -1633,14 +2906,88 @@ function renderList() {
 
 // Report headings now live inside each investigation's details. What remains here: labs (to approve a lab you added)
 // and any heading that covers a MIXED group (no single investigation to hang it on).
+// "This is really the same lab as another one": move its report headings, result aliases and lab-keyed filing setup
+// onto that lab, then delete the duplicate. Mirrors mergeBlock (investigations). Nick, 2026-09-24: several proposals
+// learned from the SAME not-yet-known lab in one scan, applied together, each created their OWN "new" lab entry —
+// this is the cleanup tool for duplicates that already exist (fillsFromProposals itself no longer does this going
+// forward, but existing duplicates need merging away by hand).
+function labMergeBlock(lab, allLabs) {
+  const box = h('div', { class: 'inv-merge' });
+  const others = allLabs.filter((l) => l.id !== lab.id).sort((a, b) => a.name.localeCompare(b.name));
+  const row = h('div', { class: 'inv-edit-line', style: 'display:none' });
+  const listId = 'invLabMergeList' + Math.random().toString(36).slice(2, 7);
+  const search = h('input', {
+    class: 'lf-input inv-in',
+    type: 'text',
+    list: listId,
+    placeholder: 'Search for the lab it belongs to',
+    'aria-label': 'Lab to merge this into',
+  });
+  const dl = h(
+    'datalist',
+    { id: listId },
+    others.map((l) => h('option', { value: l.name }))
+  );
+  const err = h('span', { class: 'inv-error', role: 'alert' });
+  const go = btn(
+    'Merge into that lab',
+    async () => {
+      err.textContent = '';
+      const q = LC.norm(search.value);
+      const hits = others.filter((l) => LC.norm(l.name) === q);
+      if (!q || hits.length !== 1) {
+        err.textContent =
+          hits.length > 1 ? 'More than one lab has that name — rename one first.' : 'Pick a lab from the list.';
+        return;
+      }
+      const into = hits[0];
+      if (
+        !confirm(
+          `Merge "${lab.name}" into "${into.name}"?
+
+Its report headings, result names and filing setup move onto "${into.name}", then "${lab.name}" is deleted. "${into.name}" goes back to awaiting review.`
+        )
+      )
+        return;
+      try {
+        const out = OV.mergeLab(S.builtin, S.overlay, lab.id, into.id);
+        await save(out.overlay, `Merged "${lab.name}" into "${into.name}" — awaiting review.`);
+      } catch (e) {
+        err.textContent = ((e && e.message) || String(e)).replace(/^labcatalogue\.practice: /, '');
+      }
+    },
+    'lf-btn-sm'
+  );
+  row.append(search, dl, go, err);
+  const link = h('button', {
+    type: 'button',
+    class: 'lf-link',
+    text: 'clicking here',
+    onclick: () => {
+      row.style.display = row.style.display === 'none' ? '' : 'none';
+    },
+  });
+  box.append(
+    h(
+      'span',
+      { class: 'inv-merge-text' },
+      'If this is really the same lab as another one — a duplicate created by mistake — you can merge it by ',
+      link,
+      '.'
+    ),
+    row
+  );
+  return box;
+}
+
 function renderLabs() {
   const labs = S.merged.labs;
   const invById = new Map(S.merged.investigations.map((i) => [i.id, i]));
-  const det = h(
-    'details',
-    { class: 'inv-details inv-labs' },
-    h('summary', {}, `Labs (${labs.length}) and mixed report headings`)
-  );
+  // Kept open across re-renders (2026-09-24, Nick): every save (rename, approve a lab) reloads and rebuilds the
+  // whole page, which used to recreate this <details> closed every time — snapping shut mid-edit or mid-scroll.
+  const det = h('details', { class: 'inv-details inv-labs', open: S.labsOpen || undefined });
+  det.appendChild(h('summary', {}, `Labs (${labs.length}) and mixed report headings`));
+  det.addEventListener('toggle', () => (S.labsOpen = det.open));
   if (!labs.length) {
     det.appendChild(h('div', { class: 'lf-muted', text: 'No labs defined.' }));
     return det;
@@ -1652,12 +2999,26 @@ function renderLabs() {
     const ov = S.overlay.labs.find((l) => l.id === lab.id);
     const needs = ov && ov.provenance.reviewed !== true;
     const heads = lab.groupHeadings || [];
+    const isBuiltinLab = S.builtin.labs.some((l) => l.id === lab.id);
+    const rename = () => {
+      const now = (S.overlay.context.labNames || {})[lab.id] || lab.name;
+      const next = prompt(
+        'A name that means something to your team for this lab (“' +
+          lab.identifiers.performerOrg +
+          '” is its code). Leave blank to go back to the original name.',
+        now
+      );
+      if (next === null) return;
+      save(OV.renameLab(S.overlay, lab.id, next), next.trim() ? 'Lab renamed.' : 'Lab name reset.');
+    };
     const block = h(
       'div',
       { class: 'inv-lab-block' },
       h('strong', {
         text: `${lab.name} — ${lab.identifiers.performerOrg}${lab.identifiers.department ? ' / ' + lab.identifiers.department : ''}`,
       }),
+      ' ',
+      btn('Rename', rename, 'lf-btn-sm'),
       ' ',
       needs ? badge('awaiting review', 'lf-badge-warn') : null,
       needs ? ' ' : null,
@@ -1681,7 +3042,8 @@ function renderLabs() {
               return h('li', {}, h('strong', { text: g.text }), ' → ' + (parts.join('; ') || '—'));
             })
           )
-        : h('div', { class: 'lf-muted', text: 'No report headings.' })
+        : h('div', { class: 'lf-muted', text: 'No report headings.' }),
+      !isBuiltinLab ? labMergeBlock(lab, labs) : null
     );
     det.appendChild(block);
   }
@@ -1739,7 +3101,13 @@ async function runMatch() {
     if (tests.length) {
       const imp = IMP.importOirTests(tests, S.builtin, { labId: sc.lab || undefined });
       const merged = IMP.mergeIntoOverlay(S.overlay, imp.overlay);
-      sc.importNotes = { read: tests.length, added: merged.added, skipped: merged.skipped, review: imp.review };
+      sc.importNotes = {
+        read: tests.length,
+        added: merged.added,
+        skipped: merged.skipped,
+        dismissed: merged.dismissedSkipped || 0,
+        review: imp.review,
+      };
       if (merged.added) {
         await labcatalogueSaveOverlay(merged.overlay);
         await load();
@@ -1769,9 +3137,14 @@ async function runMatch() {
       shouldStop: () => sc.stop,
     });
     sc.read = { reports: r.observations.length, failed: r.failed, queueSize: r.queueSize, stopped: sc.stop };
+    S.rangeCandidates = new Map(
+      SC.referenceRangeCandidates(S.merged, r.observations).map((c) => [c.lab + '|' + c.code, c])
+    );
     const targets = SC.findGaps(S.merged, S.overlay.context).map((g) => g.id);
     sc.analysis = SC.analyse(S.merged, r.observations, { targets });
     sc.items = [...sc.analysis.proposals, ...sc.analysis.unmatched].map((u) => {
+      // one generic group several tests share (an ultrasound): the person picks which tests it answers; never ticked for them
+      if (u.multi) return { u, choice: 'tests', checked: false, tests: new Set(u.candidates) };
       if (u.target) return { u, choice: 'test:' + u.target, checked: true }; // linked with evidence: ticked, still reviewable
       if (u.hint) return { u, choice: 'test:' + u.hint, checked: false }; // a hint is only pre-selected
       return { u, choice: u.maybe && u.maybe.length === 1 ? 'req:' + u.maybe[0] : '', checked: false };
@@ -1793,6 +3166,7 @@ function parseChoice(v) {
   if (v === 'group') return { type: 'group' };
   if (v.startsWith('req:')) return { type: 'request', label: v.slice(4) };
   if (v.startsWith('test:')) return { type: 'test', id: v.slice(5) };
+  if (v === 'tests') return { type: 'tests' };
   return null;
 }
 
@@ -1863,7 +3237,10 @@ function fillLeft(list) {
     return el;
   };
 
-  if (a) list.appendChild(item('group', 'Keep as a group-and-results test (no request yet)', 'drop a lab group here'));
+  if (a)
+    list.appendChild(
+      item('group', 'Create a new test from a lab group', 'drop a lab group here — its own name and results fill in from the report')
+    );
   const tests = gaps.filter((g) => {
     const inv = S.merged.investigations.find((i) => i.id === g.id);
     return fits(g.label, ...(inv ? inv.requestAliases.map((r) => r.text) : []));
@@ -1930,7 +3307,8 @@ function fillRight(list) {
     list.appendChild(
       h('div', { class: 'lf-muted', text: 'Every lab group was recognised and is complete — nothing to match.' })
     );
-  for (const it of shown.slice(0, 150)) list.appendChild(groupItem(it, a.unknownRequests));
+  const dupIndex = LC.buildIndex(S.merged);
+  for (const it of shown.slice(0, 150)) list.appendChild(groupItem(it, a.unknownRequests, dupIndex));
   if (sc.items.length && !shown.length)
     list.appendChild(h('div', { class: 'lf-muted', text: 'Nothing matches the filter.' }));
 }
@@ -1996,7 +3374,7 @@ async function applyTicked() {
       x.headings ? plural(x.headings, 'heading') : '',
       x.codes ? plural(x.codes, 'code') : '',
       x.members ? plural(x.members, 'result') : '',
-      x.aliases ? plural(x.aliases, 'wording') : '',
+      x.aliases ? plural(x.aliases, 'other name') : '',
       x.labs ? plural(x.labs, 'new lab') : '',
     ]
       .filter(Boolean)
@@ -2015,13 +3393,17 @@ async function applyTicked() {
   const createdFromItems = new Set();
   for (const it of sc.items.filter((x) => x.checked && x.choice)) {
     let action = parseChoice(it.choice);
+    if (action && action.type === 'tests')
+      action = it.tests && it.tests.size ? { type: 'tests', ids: [...it.tests] } : null;
     if (action && action.type === 'request') createdFromItems.add(LC.norm(action.label));
     const where = action
-      ? action.type === 'test'
-        ? label(action.id)
-        : action.type === 'request'
-          ? action.label
-          : 'a group-and-results test'
+      ? action.type === 'tests'
+        ? action.ids.map(label).join(' + ')
+        : action.type === 'test'
+          ? label(action.id)
+          : action.type === 'request'
+            ? action.label
+            : 'a group-and-results test'
       : '';
     apply(`“${it.u.heading}” → ${where}`, (cat) => {
       // a request that already resolves to a test (in the catalogue or just created) is attached to it, never duplicated
@@ -2030,7 +3412,7 @@ async function applyTicked() {
         if (hits.length) action = { type: 'test', id: hits[0].investigationId };
       }
       const prop = SC.orphanToProposal(it.u, action);
-      return prop ? SC.fillsFromProposals(cat, [prop]).fills : null;
+      return prop ? SC.fillsFromProposals(cat, [prop], null, it.resultChoices).fills : null;
     });
   }
   const reqs = a.unknownRequests.filter((r) => sc.reqChecked.has(LC.norm(r.label))).map((r) => r.label);
@@ -2071,6 +3453,55 @@ function applyResultEl() {
   );
 }
 
+// Medicus's own exact request wording ("Urea and Electrolytes WITH potassium") for a request that already resolves
+// via a shorter alias — never surfaced before (Nick, 2026-09-24), since matching only needed to know THAT it
+// resolved, not the literal text. One-click add, per item; added items drop off the list immediately (no re-scan
+// needed to see it go).
+function newRequestWordingsEl() {
+  const sc = S.scan;
+  const list = sc.analysis && sc.analysis.newRequestWordings;
+  if (!list || !list.length) return null;
+  const invLabel = (id) => (S.merged.investigations.find((i) => i.id === id) || {}).label || id;
+  const box = h('div', { class: 'inv-apply' });
+  box.appendChild(
+    h('div', {
+      class: 'inv-apply-title',
+      text: `Medicus's own request wording, not yet on record (${list.length})`,
+    })
+  );
+  box.appendChild(
+    h('div', {
+      class: 'lf-muted',
+      text: 'These already resolve to the test named — a shorter alias is enough to match them. Add the exact wording too, so it is on record word for word.',
+    })
+  );
+  for (const w of list) {
+    const row = h(
+      'div',
+      { class: 'inv-edit-line' },
+      h('span', { text: `“${w.text}”` }),
+      h('span', { class: 'inv-inline-label', text: '→ ' + invLabel(w.investigationId) }),
+      btn(
+        'Add',
+        async () => {
+          try {
+            await save(OV.addRequestAlias(S.builtin, S.overlay, w.investigationId, w.text, 'any'), 'Added.');
+            const i = sc.analysis.newRequestWordings.indexOf(w);
+            if (i >= 0) sc.analysis.newRequestWordings.splice(i, 1);
+            render();
+          } catch (err) {
+            alert(((err && err.message) || String(err)).replace(/^labcatalogue\.practice: /, ''));
+            render();
+          }
+        },
+        'lf-btn-sm'
+      )
+    );
+    box.appendChild(row);
+  }
+  return box;
+}
+
 function basisText(u) {
   return (
     {
@@ -2084,7 +3515,7 @@ function basisText(u) {
 
 // One lab group, draggable. Groups the scan could link with evidence arrive matched and ticked; a hint or a suggestion
 // is only pre-SELECTED, never ticked.
-function groupItem(it, unknownRequests) {
+function groupItem(it, unknownRequests, dupIndex) {
   const u = it.u;
   const tick = h('input', { type: 'checkbox', checked: it.checked && !!it.choice, 'aria-label': 'Add ' + u.heading });
   tick.disabled = !it.choice;
@@ -2113,6 +3544,28 @@ function groupItem(it, unknownRequests) {
       .map((i) => ({ k: 'test:' + i.id, id: i.id })),
     (t) => h('option', { value: 'test:' + t.id, selected: it.choice === 'test:' + t.id }, nameOf(t.id))
   );
+  const multiBox = u.multi
+    ? h(
+        'div',
+        { class: 'inv-multi' },
+        h('div', {
+          class: 'inv-scan-meta',
+          text: 'This group is the same for all of these tests, so it cannot say which was done. Tick every test it answers — a report is then only ever flagged "possibly resulted — confirm" against them, never auto-ticked, when more than one is requested.',
+        }),
+        (u.candidates || []).map((id) => {
+          const cb = h('input', { type: 'checkbox', checked: !!(it.tests && it.tests.has(id)) });
+          cb.addEventListener('change', () => {
+            if (!it.tests) it.tests = new Set();
+            if (cb.checked) it.tests.add(id);
+            else it.tests.delete(id);
+            if (!it.tests.size) it.checked = false;
+            tick.disabled = !it.tests.size;
+          });
+          return h('label', { class: 'inv-multi-item' }, cb, ' ', nameOf(id));
+        })
+      )
+    : null;
+  if (u.multi) tick.disabled = !(it.tests && it.tests.size);
   const sel = h(
     'select',
     { class: 'lf-input inv-sel-sm inv-scan-choice', 'aria-label': 'What is ' + u.heading },
@@ -2123,9 +3576,13 @@ function groupItem(it, unknownRequests) {
       : null,
     testOpts.length ? h('optgroup', { label: 'Add to a test' }, testOpts) : null,
     h(
-      'option',
-      { value: 'group', selected: it.choice === 'group' },
-      'Keep as a group-and-results test (no request yet)'
+      'optgroup',
+      { label: 'Create a new test' },
+      h(
+        'option',
+        { value: 'group', selected: it.choice === 'group' },
+        `Create a new test: "${u.heading}"`
+      )
     )
   );
   sel.addEventListener('change', () => {
@@ -2133,12 +3590,69 @@ function groupItem(it, unknownRequests) {
     if (!it.choice) it.checked = false;
     drawBoard();
   });
-  const results = u.results.slice(0, 6).map((r) =>
-    h('span', {
-      class: 'inv-scan-res' + (r.code ? '' : ' inv-scan-nocode'),
+  // A result this report row is about to add as brand new — because its code (if any) isn't already in the catalogue
+  // — might really be an existing result under different wording/code (Nick, 2026-09-23: this needs to surface on the
+  // match screen itself, "as that's where most users will use it", AND needs an actual action there, not just a
+  // passive warning — "no obvious option to merge" is what let the duplicate get created anyway). Picking a name here
+  // sets it.resultChoices[nk], which applyTicked() threads through as fillsFromProposals's resultChoices param:
+  // the fill attaches to the CHOSEN existing result instead of creating a new one. Still never auto-picked.
+  if (!it.resultChoices) it.resultChoices = new Map();
+  const results = u.results.slice(0, 6).map((r) => {
+    const nk = r.code ? 'c:' + r.code : 'n:' + LC.norm(r.name);
+    const pairId = rawResultPairId(r.name);
+    const codeKnown = r.code && dupIndex && dupIndex.byCode.get(r.code);
+    const dupHits = !codeKnown && SC
+      ? SC.similarResults(S.merged, r.name, null).filter((c) => !OV.isSimilarPairDismissed(S.overlay, pairId, c.id))
+      : [];
+    const chosenId = it.resultChoices.get(nk);
+    const chosen = chosenId ? S.merged.results.find((x) => x.id === chosenId) : null;
+    const chip = h('span', {
+      class: 'inv-scan-res' + (r.code ? '' : ' inv-scan-nocode') + (dupHits.length || chosen ? ' inv-scan-duplike' : ''),
       text: [r.name, r.code || 'no code', r.unit].filter(Boolean).join(' · '),
-    })
-  );
+    });
+    if (!dupHits.length && !chosen) return chip;
+    const note = chosen
+      ? h(
+          'span',
+          { class: 'inv-scan-res-note' },
+          `→ will use existing "${chosen.label}"`,
+          ' ',
+          btn(
+            'undo',
+            () => {
+              it.resultChoices.delete(nk);
+              drawBoard();
+            },
+            'lf-link'
+          )
+        )
+      : h(
+          'span',
+          { class: 'inv-scan-res-note inv-scan-res-warn' },
+          '⚠ might already exist — use instead: ',
+          ...dupHits
+            .slice(0, 3)
+            .flatMap((c, idx) => [
+              idx ? h('span', { text: '; ' }) : null,
+              btn(
+                c.label,
+                () => {
+                  it.resultChoices.set(nk, c.id);
+                  drawBoard();
+                },
+                'lf-link'
+              ),
+              ' ',
+              btn(
+                `it's not ${c.label}`,
+                () => dismissSimilarPairAction(pairId, c.id).then(drawBoard),
+                'lf-link inv-rt-not-this'
+              ),
+            ])
+            .filter(Boolean)
+        );
+    return h('span', { class: 'inv-scan-res-line' }, chip, note);
+  });
   if (u.results.length > 6) results.push(h('span', { class: 'lf-muted', text: `+${u.results.length - 6} more` }));
   const why = [
     `seen in ${plural(u.reports, 'report')}`,
@@ -2165,14 +3679,49 @@ function groupItem(it, unknownRequests) {
       h('span', { class: 'lf-muted', text: `${u.lab.name}${u.lab.isNew ? ' (new lab)' : ''}` })
     ),
     h('div', { class: 'inv-scan-meta', text: why.join(' · ') }),
+    u.recognisedFor && u.recognisedFor.length
+      ? h('div', {
+          class: 'inv-scan-meta inv-scan-warn',
+          text:
+            'Already recognised for several tests, so choose which one gets what is missing: ' +
+            u.recognisedFor
+              .map((r) => {
+                const bits = [
+                  r.headings ? plural(r.headings, 'heading') : '',
+                  r.results ? plural(r.results, 'result') : '',
+                  r.members ? plural(r.members, 'linked result') : '',
+                ].filter(Boolean);
+                return `${(S.merged.investigations.find((i) => i.id === r.id) || { label: r.id }).label} (missing: ${bits.join(', ') || 'nothing'})`;
+              })
+              .join('; '),
+        })
+      : null,
+    u.why && u.why.length
+      ? h('div', { class: 'inv-scan-meta inv-scan-warn', text: 'Why it is not recognised: ' + u.why.join('; ') + '.' })
+      : null,
     u.unknownOnCard && u.unknownOnCard.length
       ? h('div', {
           class: 'inv-scan-meta inv-scan-warn',
           text: `The card also has a request the catalogue does not recognise (${u.unknownOnCard.join(', ')}) — this group may belong to that instead.`,
         })
       : null,
-    h('div', { class: 'inv-scan-results' }, results),
-    h('div', { class: 'inv-orphan-pick' }, sel)
+    // The group-level match (this whole lab group -> one test/request) sits ABOVE the individual-result suggestions,
+    // and both are labelled, so the two different kinds of match on this card are never confused (Nick, 2026-09-24:
+    // "we're offering two different types of match here, to a group and to individual results").
+    h(
+      'div',
+      { class: 'inv-orphan-pick' },
+      h('span', { class: 'inv-orphan-pick-label', text: 'Investigation group:' }),
+      sel
+    ),
+    it.choice === 'tests' && multiBox ? multiBox : null,
+    results.length
+      ? h('div', {
+          class: 'inv-scan-results-label',
+          text: 'Individual results in this group — match by clicking a suggestion:',
+        })
+      : null,
+    h('div', { class: 'inv-scan-results' }, results)
   );
   row.addEventListener('dragstart', (e) => {
     e.dataTransfer.setData('text/plain', u.key);
@@ -2197,7 +3746,19 @@ function importNotesEl(n) {
     unchanged: 'Nothing to add',
     disabled: 'Disabled built-ins',
   };
-  return h(
+  const restore = n.dismissed
+    ? h(
+        'div',
+        { class: 'inv-scan-meta' },
+        `${plural(n.dismissed, 'test')} you deleted earlier ${n.dismissed === 1 ? 'was' : 'were'} not added back. `,
+        btn(
+          'Bring them back',
+          () => save(OV.restoreDismissed(S.overlay), 'Deleted tests will be added back the next time you read.'),
+          'lf-btn-sm'
+        )
+      )
+    : null;
+  const details = h(
     'details',
     { class: 'inv-details' },
     h(
@@ -2220,6 +3781,7 @@ function importNotesEl(n) {
       )
     )
   );
+  return h('div', {}, details, restore);
 }
 
 function renderMatch() {
@@ -2230,8 +3792,14 @@ function renderMatch() {
   }
   const gaps = SC.findGaps(S.merged, S.overlay.context);
   const busy = sc.phase === 'importing' || sc.phase === 'reading';
-  const card = h('div', { class: 'lf-card inv-card inv-match' });
-  card.appendChild(h('div', { class: 'lf-card-name', text: 'Match requests to lab reports' }));
+  const outer = h('div', { class: 'lf-card inv-card inv-match' });
+  // Optional after the first run: open by default until the practice has added its own tests, then collapsed (less
+  // scrolling to reach the results below); a person's own click always wins over this default for the rest of the visit.
+  if (S.matchOpen === undefined) S.matchOpen = !(S.overlay.investigations && S.overlay.investigations.length);
+  const card = h('details', { class: 'inv-match-details', open: S.matchOpen || undefined });
+  card.addEventListener('toggle', () => (S.matchOpen = card.open));
+  outer.appendChild(card);
+  card.appendChild(h('summary', { class: 'lf-card-name' }, 'Match requests to lab reports'));
   card.appendChild(
     h('p', {
       class: 'lf-help',
@@ -2247,6 +3815,9 @@ function renderMatch() {
     S.merged.labs.map((l) => h('option', { value: l.id, selected: sc.lab === l.id }, 'test names from ' + labLabel(l)))
   );
   labSel.addEventListener('change', () => (sc.lab = labSel.value));
+  // Every control in this row gets a visible label before it — an unlabelled select sitting straight after the
+  // "Reports to read" box read as one run-on control, not two separate ones (2026-09-22, Nick).
+  const labSelLabelled = h('label', { class: 'lf-check inv-scan-reports' }, 'Lab ', labSel);
   const lim = h('input', {
     class: 'lf-input inv-limit',
     type: 'number',
@@ -2275,8 +3846,8 @@ function renderMatch() {
             'lf-btn-sm'
           )
         : null,
-      h('label', { class: 'lf-check' }, 'Reports to read ', lim),
-      labSel,
+      h('label', { class: 'lf-check inv-scan-reports' }, 'Reports to read ', lim),
+      labSelLabelled,
       h('span', {
         class: 'lf-muted',
         id: 'invScanProgress',
@@ -2324,6 +3895,8 @@ function renderMatch() {
   card.appendChild(renderBoard());
   const applied = applyResultEl();
   if (applied) card.appendChild(applied);
+  const wordings = newRequestWordingsEl();
+  if (wordings) card.appendChild(wordings);
 
   if (sc.analysis) {
     card.appendChild(
@@ -2344,7 +3917,7 @@ function renderMatch() {
       )
     );
   }
-  return card;
+  return outer;
 }
 
 function renderProblems() {
@@ -2407,6 +3980,7 @@ function render() {
   const wrap = h('div', { class: 'lf-module' });
   if (S.error) wrap.appendChild(h('div', { class: 'lf-notice' }, h('p', { text: S.error })));
   if (S.toast) wrap.appendChild(h('div', { class: 'lf-toast lf-toast-show', role: 'status', text: S.toast }));
+  wrap.appendChild(renderIntro());
   wrap.appendChild(renderBanner());
   wrap.appendChild(renderContext());
   if (SC) wrap.appendChild(renderMatch());

@@ -415,6 +415,22 @@ textarea.lf-input {
   color: var(--text-1);
 }
 
+/* ── Filing engine ── */
+.lf-filing-engine {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 9px 12px;
+  margin-bottom: 12px;
+  background: var(--bg-elev);
+}
+.lf-filing-engine .lf-field {
+  margin-bottom: 4px;
+}
+.lf-filing-engine small {
+  color: var(--text-4);
+  font-size: 11px;
+}
+
 /* ── Card provenance ── */
 .lf-card-prov {
   font-size: 10.5px;

@@ -2,6 +2,263 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.264.35] — 2026-09-24
+
+### Lab Result Catalogue opt-in, rebased onto v3.264.34, with fail-closed filing fixes
+
+Ships the Outstanding Requests catalogue matcher and the Lab Filing catalogue gate (written on the branch as v3.265.0–v3.270.0; those headings below were not published as separate releases). Rebased onto v3.264.34, which keeps the frailty word-boundary fix. **Shipped defaults stay `oirEngine: legacy` and `filingEngine: legacy`.** This is not a practice-wide catalogue-filing enablement.
+
+Fail-closed fixes from the review of #468:
+
+- **Catalogue-only confirm names the practice range that cleared the file**, and shows the lab-flag override warning ("lab flagged high/low — accepted by your set range") when that path applied. The dialog still shows the lab's own flags on the original report.
+- **A pending catalogue that fails to load blocks filing.** An unapproved practice range or guard does not fall back to the lab range. The blocker is added even when a legacy profile is present.
+- **Catalogue `ok: false` with no legacy profile blocks filing.** It does not proceed on the generic baseline, including the practice-wide comment whitelist. A legacy profile plus `ok: false` stays legacy-alone (the pending-load blocker is still added when that load failed).
+
+CSO sign-off, 2026-09-24, Europe/London (Dr D. Triska, GMC 6159481): **H-080** and **H-081** Accepted (ALARP); **H-073** re-signed so the residual line agrees with controls (h), (i) and new (j). Hazard log document v3.69, clinical safety notice document v3.84. Product-version pin and `last_cso_review_version` stay 3.264.1. Draft H-078 is not part of this signature.
+
+## [v3.270.0] — 2026-09-25
+
+_Branch draft, shipped in v3.264.35. Not published as 3.270.0._
+
+
+### Lab Filing on the Lab Result Catalogue — Phase E stage E2 cutover: catalogue-driven filing can now actually gate real filing (opt-in, still off by default)
+
+- **A new `filingEngine` preference** (Options → Lab Filing, default `legacy`, practice-profile published) lets the
+  catalogue engine's blockers actually combine with the legacy gate at filing time — union-only: the catalogue can
+  only ever ADD a blocker, never remove one the legacy gate already raised. Runs from both the poll that decides
+  what's offered and the click-time re-verification that decides what actually files, so the two can never disagree.
+- **Catalogue-only filing** — assisted filing now works with zero legacy Lab Filing profiles at all, driven entirely
+  by the Investigations page's own practice ranges, safety guards, lab-comment whitelists and report-group approvals.
+  Fixed along the way: the button was hiding itself before the catalogue engine was ever consulted whenever no
+  legacy profile was enabled; a crash when a null profile hit an unguarded field access; a comment whitelisted on
+  the Investigations page not reaching the suite's own baseline comment check with no legacy profile to fall back on;
+  and a lab-flag override not reaching the baseline severity gate, so an approved override could never actually
+  unblock a result.
+- **A pending (edited-but-not-yet-approved) practice range or safety guard now correctly blocks filing**, rather than
+  being silently indistinguishable from "never configured" and falling back to the lab's own range/flag.
+- **The lab-flag override (H-081 control d) moved from a per-result safety guard to one switch per test at a lab**,
+  in the "Assisted filing on…" bar — a per-analyte tickbox buried in each result's own Safety guards editor was hard
+  to find and needed re-ticking once per result of a multi-result test.
+- **Catalogue-only filing now completes in one click.** It previously only pre-filled the normal options and left the
+  clinician to also press Medicus's own File button; it now asks for one confirmation (listing every value, same as
+  a legacy profile already can) and files itself, same as "File all normal…" already works elsewhere.
+
+## [v3.269.0] — 2026-09-24
+
+### Investigations page: duplicate-result and duplicate-lab detection/merging, filter overhaul; Phase E gate + shadow log (still setup-only)
+
+- **A hint when two results are probably the same analyte**, wherever a scan or a test's own results table is about to
+  treat them as separate — under a different SNOMED code or wording. Shown on the match-requests-to-lab-reports scan
+  board (before a duplicate is even created, with a one-click "use this instead") and inline in a test's own results
+  table. Merging moves codes and other names onto the survivor, repoints every test that used the duplicate, and
+  deletes it (`OV.mergeResult`). In the results table this is **staged, not immediate**: drag one result onto another
+  (or click the hint) just records a pending merge shown on both rows with its own Undo — nothing actually merges
+  until the test itself is saved, so the card never closes unexpectedly and the merge is gated behind a real save
+  decision.
+- **"It's not X"** — dismiss a wrong similarity suggestion permanently (remembered per practice, order-independent);
+  it stops being offered on the results table, the scan board, and the standalone result editor.
+- **Duplicate lab entries, fixed at the source**: several proposals learned from the same not-yet-known lab, applied
+  together, previously created their own separate "new lab" entry each — the scan's "is this lab new?" flag was
+  decided once and never re-checked against what had already been created earlier in the same batch. Also added a
+  "Merge into that lab" tool (report headings, result aliases and lab-keyed filing setup move across) to clean up any
+  duplicates already sitting in a practice's data.
+- **Investigations list filters reworked into independent toggles**: Awaiting review / Assisted filing / Matched to a
+  lab report / Matched to a Medicus request, each Any/Yes/No and combinable freely (replacing one either/or choice).
+  Three "Show me investigation groups…" presets jump straight to a single-facet view. The list now sorts items
+  needing attention first (by a weighted score across the four facets) instead of flat alphabetical.
+- The scan board now clearly separates a whole-group match ("Investigation group:", moved above) from individual
+  per-result suggestions ("Individual results in this group — match by clicking a suggestion").
+- Scan gained a "how it comes back from the lab" refresh: the exact wording Medicus uses to request a group (e.g.
+  "Urea and Electrolytes WITH potassium") is captured and offered even when the request already resolves via a
+  shorter alias; the green summary box now shows only real per-lab report headings (with an editable per-heading
+  note), separated from legacy free-text matching terms; several `<details>` sections no longer snap shut on an
+  unrelated save mid-edit or mid-scroll.
+- **"How it is requested in Medicus" now holds only scan-confirmed exact wording.** Legacy free-text guesses moved to
+  a separate, small "Edit synonyms" control per test; the built-in seed catalogue was migrated accordingly. A test
+  with no confirmed wording yet falls back to showing its synonyms, labelled "known as" so it's never mistaken for a
+  confirmed match.
+- The existing "create a new test from a lab group" option (in the matching-board dropdown) is now clearly labelled
+  and pre-fills the new test's name from the lab's own report heading.
+- **Phase E gate + shadow log** (`engine/lab-filing-catalogue.js`, `engine/lab-filing-gate.js`): a pure adapter that
+  reads assisted-filing setup from the Lab Result Catalogue and combines its verdict with the legacy filing gate,
+  plus a mandatory shadow log (names/codes/reasons only, never values) recording what each engine would have done.
+  **Not switched on** — Lab Filing still acts on the legacy gate alone; this only logs what the catalogue-driven gate
+  would have decided, for comparison before any cutover.
+
+## [v3.268.0] — 2026-09-22
+
+### Investigations page: wording, layout polish, and a pre-filled practice range (nothing acts on it yet)
+
+Continues Phase E (`docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`). Still setup-only: Lab Filing does not read any of
+this yet.
+
+- **"Autofiling" renamed to "assisted filing"** everywhere it's shown, including the setup screens' own text and the design docs — it
+  files nothing by itself; a human still presses File (or OK on the confirm dialog). The page's own explainer now says so directly:
+  "You still press File — assisted, not automated."
+- **Practice ranges can now be pre-filled from the lab's own reference range**, read from the same report the scan already opens to learn
+  codes and units (a lab's own reference bounds are a constant of the analyte, not a patient value, so this doesn't touch what "Match
+  requests to lab reports" promises never to keep). An empty range box shows the suggested number, highlighted, with "Suggested from the
+  lab's own range — not yet saved" and a **Use this** button; nothing is written until that's clicked or the box is edited. A range
+  that's already set shows the lab's own range alongside it for comparison.
+- **"What does this do?" and "Match requests to lab reports" are now collapsible** — the latter opens by default until the practice has
+  added its own tests, then stays collapsed to cut down scrolling to the results below.
+- **Fixed a page-wide CSS specificity bug**: `options.html`'s own global `input[type='text'|'number'|...]` reset
+  (specificity 0,1,1) was silently beating several narrower single-class rules (0,1,0) regardless of stylesheet order, stretching the
+  "Reports to read" box and the practice-range boxes to full width with the wrong padding. Fixed by giving the affected classes enough
+  specificity (a class repeated, 0,2,0) to win outright; a regression test guards it.
+- The lab select in "Match requests" now has its own visible "Lab" label (it only had a screen-reader label before).
+
+## [v3.267.0] — 2026-09-22
+
+### Investigations page: Lab Filing setup — safety guards, lab comments, one autofiling switch + approval per test (nothing acts on it yet)
+
+Finishes the setup screens of Phase E (`docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`). **Lab Filing does not read any
+of this yet**; the page says so. No live behaviour changes.
+
+- **Autofiling is switched on and approved for a TEST at a LAB — never per result** (Medicus files a whole report group at once). One bar at
+  the top of the results ("Autofiling on for this test group from <lab name>") holds the switch and ONE Approve, which covers the report
+  group(s) that identify the test, the practice ranges and safety guards of its results at that lab, the group's lab-comment settings and
+  the Medicus wording if changed. Changing any of them reopens only that item. The list badge ("autofiling — awaiting approval") opens the
+  test at that bar; approval is only ever given there. Replaces the per-code "enable" and "approval" columns of v3.266.0.
+- **Safety guards** (per result × lab, a column beside the range; click to edit): never offer to file if it has **changed / increased /
+  decreased** by more than X% since the last result (direction matters — a rising eGFR or falling creatinine is good news); medicines that
+  stop it; whether the practice range overrides the lab's own high / low flag.
+- **Lab comments** (per lab × report-group heading, a strip under the results): "never offer to file when the comment says…" phrases, and
+  the whole lab comments you allow through (same size / no-truncation rule as the Lab Filing whitelist fix, v3.265.1).
+- **Medicus filing-screen wording is one practice-wide setting, not a lab's:** pre-filled with the standard wording ("Normal result, no
+  action required", "File results"), stored and approved only if changed. It never changes what is written to the record — the macro finds
+  these controls by their visible text.
+- **Data** (`shared/lab-catalogue-overlay.js`, overlay `filing.{ranges,guards,groups,screen}`): each entry withdraws its approval on any
+  change; everything arrives unapproved on restore / sync / merge (intent such as the switch may travel), backups carry no approval or
+  reviewer name; deleting a result or lab deletes its entries; a range whose code's unit changed, or a group whose heading is gone, stops
+  acting and the page says why. The short-lived per-lab wording and per-code enable of v3.266.0 are ignored on read, never fatal.
+- Tests: `test-lab-catalogue-filing.js` (90), `test-labcatalogue-io.js` (62), `test-investigations-section.js` (59), plus a manifest guard that
+  the lab-filing helpers load wherever the catalogue does.
+
+## [v3.266.1] — 2026-09-22
+
+### Investigations page: a tidier results table, in plainer words
+
+Layout and wording only — no data or behaviour changes.
+
+- **Less duplication.** The SNOMED-description and Lab columns are gone (the description was only ever a label for imports; it
+  survives as a hover on the code, with its QOF note; the lab is chosen once above the table — "Lab for the ranges and autofiling
+  below"). An unlabelled "also called" name that only repeats the result's own name is no longer listed again. Unit sits just
+  before the practice range it defines, and is not repeated after it.
+- **Click to edit.** A code or an "also called" cell opens that result's own editor under its rows (click again to close); the
+  Codes & wordings buttons are gone and the panel says how to edit. Remove is a real "Remove" button under the name, with a tooltip
+  that says the result stays in the catalogue and in other tests.
+- **Plainer words.** "Core / optional" → **How it counts**: *Core to the lab group* / *Shared with another test* / *May be present*;
+  "any one" → **enough on its own** (with a tooltip explaining the rule); "Wordings" → **Also called** (result editor: "Add name").
+  "Also called" names stack one to a line.
+- Tests: `test-investigations-section.js` (54).
+
+## [v3.266.0] — 2026-09-22
+
+### Investigations page: Lab Filing setup — practice normal ranges and autofiling enable, per result × lab × SNOMED code (nothing acts on it yet)
+
+Second step of folding Lab Filing into the catalogue (`docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`). **Lab Filing
+does not read any of this yet**; the page says so. No live behaviour changes.
+
+- **Data** (`shared/lab-catalogue-overlay.js`, overlay `filing.ranges`): one practice range per (result × lab × SNOMED code); the unit
+  is carried by the code and snapshotted — if the code's unit later changes, the code leaves the result or the lab is deleted, the
+  range stops acting and the page says why. The range is optional (autofiling can be enabled on the lab's own reference range). Each
+  entry has its own **filing approval**, separate from the approval of the result / test / lab (approving one never approves the
+  other); any change to the range or the enable flag withdraws it. An entry acts only when approved AND enabled
+  (`catalogue.filing.ranges`, absent when nothing acts, so an unconfigured catalogue is byte-for-byte the built-in one). Arrives
+  unapproved on restore / sync / merge (its enabled intent may travel), and backups carry no approval or reviewer name.
+  Deleting a result or lab deletes its ranges.
+- **Screen** (`options/investigations-section.js`): the results table gains a blue autofiling section — practice range min – max,
+  enable, filing approval with its own Approve button — per code line, for the lab chosen above the table. New list filters
+  "Autofiling enabled" / "Autofiling not enabled" and a card badge ("autofiling on" / "awaiting approval").
+- Tests: `test-lab-catalogue-filing.js` (50); additions to `test-labcatalogue-io.js` (merge / replace / export of ranges) and
+  `test-investigations-section.js`.
+
+## [v3.265.2] — 2026-09-22
+
+### Investigations page: test card layout (first step of folding Lab Filing into the catalogue)
+
+Layout only — no filing data yet (design: `docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`).
+
+- **The test card runs in rows.** Two columns on top (how it is requested in Medicus → how it comes back from the lab), then
+  the red strip — renamed **"Never counts as this test…"**, so a later "never offer to file when…" strip is clearly a different
+  thing — and the results, both full width.
+- **One results table** instead of a list of rows: Name | Code | SNOMED description | Unit | Core / optional | Wordings | Lab.
+  Each code is its own line (HbA1c shows its four codes stacked); name, role, wordings and lab span a result's code lines. The QOF
+  tag sits beside the code and the pale-green highlight is kept. A result used by several tests says "shared by N tests".
+- **Codes & wordings** (and remove) now sit under the result's name, and open the result editor full width under its row.
+- **The Note box** is only as tall as its text.
+- Tests: `test-investigations-section.js` guards the layout (full-width strip and table, table columns, per-code lines).
+
+## [v3.265.1] — 2026-09-22
+
+### Lab Filing: a whitelisted lab comment must now explain the WHOLE comment (H-073 review item)
+
+Closes the open review item recorded against H-073: `allowComments` used to excuse a comment if the comment contained the
+whitelisted phrase **or the phrase contained the comment**, with no minimum size. A whitelisted "normal" excused
+"not normal, please phone", and a whitelisted paragraph with a warning added before or after it was still excused. This
+only ever makes the filing gate stricter, so there is no switch: it applies as soon as the extension reloads.
+
+- **Whole-comment matching** (`shared/lab-filing-utils.js`, `_commentAllowedByProfile`): the whole comment residue must be
+  explained by the profile's whitelisted phrases — one phrase, or several that together make up the comment. A phrase that
+  is only part of the comment, or merely contains it, explains nothing. Case and spacing are ignored; an exact doubling
+  (saved before the doubled-comment fix) still explains the single-copy comment.
+- **Size floor:** an entry needs at least 6 words and 30 characters and cannot be made only of generic words ("normal",
+  "no action"…). `LF_ALLOW_MIN_WORDS` / `LF_ALLOW_MIN_CHARS` / `LF_ALLOW_GENERIC_TOKENS`. The matcher also ignores any such
+  entry that reaches it (older profile, restore, sync).
+- **No truncation:** the limit for a whitelisted comment is now 2 000 characters (was 500, silently truncating); an over-long
+  or too-short entry is **refused** with the reason — at Options → Lab Filing save, and in the filing screen's "whitelist
+  this comment" action — and dropped (never shortened) on import / sync / restore, which do not reject a whole profile over
+  one bad phrase (`validateProfile(p, { lenientAllowComments: true })`).
+- **Expect:** an existing whitelist entry that was only a fragment of the real comment, or a phrase joining two comments
+  into one entry, stops excusing a comment that carries only part of it — the result blocks again until the whole comment is
+  whitelisted (each comment as its own entry). The tick-box on the blocked card saves the full text.
+- **Docs:** `docs/HAZARD-LOG.md` H-073 description corrected (the comments are lab-generated, not Medicus-generated) and
+  mitigations (h)/(i) added — pending CSO review, document version unchanged; `docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md`
+  records the agreed design for folding Lab Filing into the catalogue; `docs/feature-list.md` brought to the manifest version
+  (it had fallen a minor behind v3.265.0).
+- Tests: `test-lab-filing-utils.js` (216) — whole-comment rule with the real eGFR and AKI-risk notes, appended/prepended
+  warning, single generic word, reverse containment, tiling by several entries, size floor, validation, sanitise.
+
+## [v3.265.0] — 2026-09-22
+
+### Outstanding Requests can now use the Lab Result Catalogue (opt-in, default off) + catalogue fixes
+
+The Outstanding Investigation Requests card can recognise requests and lab reports through the practice's approved Lab
+Result Catalogue (SNOMED code, then the lab's own report heading, then wording) instead of the free-text test rules.
+**It is off by default** (`oirEngine: 'legacy'`), so nothing changes until a practice turns it on. Plan and hazard text:
+`docs/plans/PHASE-D-OUTSTANDING-MATCHER-ON-CATALOGUE-2026-09-22.md` (proposed H-078 / H-079, not yet in the hazard log).
+
+- **New engine, same clearing rules.** `engine/outstanding-match-catalogue.js` (pure). A request only clears when the
+  report covers it AND it predates the sample; only confident matches auto-tick; auto-tick is still its own default-off
+  opt-in (`oirAutoTick`) decided by `shared/oir-write-core.js`; the strict confidence floor, review toast, audit trail and
+  "resulted elsewhere" behave as before. Verdicts have the legacy shape plus `investigationId`, `via`,
+  `labMessageKind`, `sharedHeading`, `engine`. Any catalogue problem (unreadable, invalid, empty, engine error) falls
+  back to the legacy engine for that card; a request the catalogue cannot identify, or two tests tying on a wording, is
+  left outstanding. Only APPROVED entries are read.
+- **Sample-problem lab messages** ("sample dropped / wrong bottle") complete the old request like any other lab message
+  (a repeat needs a new request anyway) and are flagged "may need repeating" on the verdict and the auto-tick toast.
+- **Generic evidence is never confident.** A lab heading or result shared by several result-less tests (one generic
+  "Ultrasonography" for groin / abdomen / neck) flags each requested test "possibly resulted — confirm" instead of
+  ticking it, when more than one of them is on the card; a result that is core to several tests can never make a
+  match more than tentative on its own.
+- **Engine choice** is a Triage option ("Matching engine") and is **published through the practice profile**
+  (`shared/io/practice-profile.js` applies only `oirEngine`, whitelisted, to an existing config — no other pref travels).
+  `defaults.json` version 26. Audit entries record which engine produced them. Manifest: the catalogue modules load with
+  the OIR engine; `rules/lab-catalogue.json` is web-accessible.
+- **Investigations page.** Edit and Details are one screen: every result has a **Codes & wordings** button that edits its
+  codes and wordings in place. Labs can be **renamed** (display only; recognition still uses organisation / department).
+  Deleting an imported test is remembered, so "Read again" no longer re-creates it (**Bring them back** restores them).
+- **Matching tool fixes.** A urine/faeces/blood specimen now fits a microbiology test (recorded groups no longer come
+  back as "unlinked"); a group recognised for several tests is finished when nothing is left to add, and says what is
+  missing when something is; a generic imaging group (Ultrasonography) can be linked to every test it answers; unrecognised
+  groups say why. **A result is only reused by name when the name means the same** — a urine culture is no longer merged
+  into the generic "Culture" result (which put "Urine culture" into throat / genital swabs). If your catalogue already has
+  a merged result, remove the extra codes and wordings from it (Edit → Codes & wordings).
+- Tests: `test-outstanding-match-catalogue.js` (parity/differential against the legacy engine with a reviewed allow-list,
+  fail-safes, clearing gate, strict floor, sample-problem, shared-heading, wiring) plus new cases in the scan, import,
+  overlay, Investigations-page and practice-profile suites.
+
 ## [v3.264.34] — 2026-09-23
 
 ### Jump menu — Triage, QOF tools, Phrases off this build

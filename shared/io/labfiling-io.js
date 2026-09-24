@@ -14,6 +14,11 @@
 // log). config.noticeAcknowledgedAt is also NOT imported: acknowledging the
 // "verify before clinical use" notice is a per-install attestation.
 //
+// labfiling.catalogueShadowLog (Phase E, engine/lab-filing-gate.js) is the same
+// doctrine again: a machine-local, read-only ring buffer comparing the legacy and
+// catalogue engines' verdicts on THIS device, never a practice decision — never
+// exported or imported.
+//
 // labfiling.suppress (the per-patient "never auto-file" list) is NOT exported or
 // imported at all: it holds patient UUIDs (identifiers), so it must never leave the
 // device in a config backup — same doctrine as the audit log.
@@ -26,7 +31,7 @@ const _LabFilingUtils =
   (typeof self !== 'undefined' && self.LabFilingUtils) ||
   (typeof module !== 'undefined' && typeof require === 'function' ? require('../lab-filing-utils.js') : null);
 
-const LABFILING_KEYS = ['labfiling.profiles', 'labfiling.config', 'labfiling.auditLog'];
+const LABFILING_KEYS = ['labfiling.profiles', 'labfiling.config', 'labfiling.auditLog', 'labfiling.catalogueShadowLog'];
 
 // Namespaced (_LF_) because this file is loaded as a CLASSIC script alongside the
 // other IO files in options.html — a bare `_DANGEROUS_KEYS` collides with the same
@@ -56,7 +61,7 @@ async function labfilingExport() {
   return {
     profiles: r['labfiling.profiles'] ?? [],
     config: r['labfiling.config'] ?? {},
-    // auditLog deliberately omitted — machine-local governance record.
+    // auditLog / catalogueShadowLog deliberately omitted — machine-local governance records.
   };
 }
 
@@ -90,7 +95,7 @@ async function labfilingImport(data) {
       ) {
         delete pre.commitMode;
       }
-      const errs = LF.validateProfile(pre);
+      const errs = LF.validateProfile(pre, { lenientAllowComments: true });
       if (errs.length > 0) throw new Error(`labfiling.profiles["${(pre && pre.name) || '?'}"]: ${errs[0]}`);
       // Force inert: imported profiles arrive disabled, unreviewed, message off.
       const clean = LF.lockForReview(pre, 'import');

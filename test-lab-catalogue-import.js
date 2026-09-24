@@ -291,7 +291,7 @@ console.log('\n── mergeIntoOverlay forces the imported side inert (no smuggl
 console.log('\n── extension that only adds a lab wording still carries an approvable entry ──');
 {
   const bi = builtin.investigations.find((i) => i.id === 'crp');
-  const r = run([T('crp', 'CRP', [bi.requestAliases[0].text], [], ['C reactive prot (lab wording only)'], true)]);
+  const r = run([T('crp', 'CRP', [bi.synonyms[0]], [], ['C reactive prot (lab wording only)'], true)]);
   const e = inv(r, 'crp');
   check(
     !!e && e.requestAliases.length === 0 && e.members.length === 0,
@@ -332,6 +332,60 @@ if (process.env.MEDICUS_TRIAGE_EXPORT) {
     r.overlay.investigations.every((i) => i.provenance.reviewed === false),
     'all unreviewed'
   );
+}
+
+console.log('\n── deleted imported tests are not brought back by reading again ──');
+{
+  const tests = [
+    T('nose-swab', 'Nose swab', ['nose swab mc&s'], ['nose swab'], ['culture'], true),
+    T('sputum', 'Sputum', ['sputum mc&s'], ['sputum'], ['culture'], true),
+    T('mouth', 'Swab - mouth', ['mouth swab'], ['mouth swab'], ['culture'], true),
+  ];
+  const first = run(tests);
+  let ov = IMP.mergeIntoOverlay(OV.emptyOverlay(), first.overlay).overlay;
+  const ids = ov.investigations.map((i) => i.id);
+  check(ids.length === 3, 'the three tests are imported the first time');
+  const shared = ov.results.filter((r) => /culture/i.test(r.label));
+  check(shared.length === 1, 'they share one "Culture" result (as your own catalogue does)');
+  // delete two of them
+  ov = OV.removeInvestigation(builtin, ov, ids[0]).overlay;
+  ov = OV.removeInvestigation(builtin, ov, ids[1]).overlay;
+  check(
+    ov.context.dismissed.length === 2 && ov.context.dismissed.includes(ids[0]),
+    'deleting an imported test remembers it'
+  );
+  const again = IMP.mergeIntoOverlay(ov, run(tests).overlay);
+  check(
+    again.overlay.investigations.length === 1 && again.dismissedSkipped === 2,
+    'reading the tests again does not recreate the two deleted ones'
+  );
+  check(
+    again.overlay.results.filter((r) => /culture/i.test(r.label)).length === 1,
+    'and does not duplicate the shared result'
+  );
+  // delete the last one too: its now-unused imported result is not brought back either
+  let ov2 = OV.removeInvestigation(builtin, again.overlay, ids[2]).overlay;
+  ov2 = IMP.mergeIntoOverlay(ov2, run(tests).overlay).overlay;
+  check(ov2.investigations.length === 0 && ov2.results.length === 0, 'with every test deleted, nothing is re-added');
+  // and the person can bring them back
+  const back = IMP.mergeIntoOverlay(OV.restoreDismissed(ov2), run(tests).overlay);
+  check(back.overlay.investigations.length === 3, 'restoring the deleted tests brings them back on the next read');
+  // a test the person wrote themselves is not remembered
+  const own = OV.saveInvestigation(
+    builtin,
+    OV.emptyOverlay(),
+    {
+      label: 'X scan',
+      kind: 'imaging',
+      requestAliases: [{ text: 'x scan', system: 'any' }],
+      headingAliases: [],
+      exclude: [],
+      members: [],
+    },
+    '2026-09-22'
+  ).overlay;
+  const removed = OV.removeInvestigation(builtin, own, own.investigations[0].id).overlay;
+  check(removed.context.dismissed.length === 0, 'only imported tests are remembered as deleted');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
