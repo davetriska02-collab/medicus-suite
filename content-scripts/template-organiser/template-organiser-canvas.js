@@ -41,6 +41,8 @@
   var _editingGroupId = '';
   var _editingName = '';
   var _newGroupName = '';
+  var _query = '';
+  var _focusSearch = false;
   var _focusClose = false;
   var _session = null;
   var _client = null;
@@ -361,10 +363,9 @@
     }
     var cards = group.items.map(cardHtml).join('');
     if (!cards) {
-      cards =
-        '<p class="ms-toc-empty">' +
-        (group.locked ? 'Drop a card here to take it out of a group.' : 'Drop cards here.') +
-        '</p>';
+      var hint = group.locked ? 'Drop a card here to take it out of a group.' : 'Drop cards here.';
+      if (String(_query || '').trim()) hint = 'No matches in this group.';
+      cards = '<p class="ms-toc-empty">' + hint + '</p>';
     }
     return (
       '<section class="ms-toc-col' +
@@ -419,6 +420,30 @@
     );
   }
 
+  function searchHtml(view) {
+    var label = _surface === 'documents' ? 'Search documents' : 'Search templates';
+    var note = '';
+    if (String(_query || '').trim() && view) {
+      var shown = 0;
+      view.groups.forEach(function (group) {
+        shown += group.items.length;
+      });
+      note = '<p class="ms-toc-search-note">' + shown + ' shown</p>';
+    }
+    return (
+      '<div class="ms-toc-search">' +
+      '<label class="ms-toc-search-label" for="ms-toc-search">' +
+      esc(label) +
+      '</label>' +
+      '<input id="ms-toc-search" class="ms-toc-search-input" type="search" autocomplete="off" value="' +
+      esc(_query) +
+      '" />' +
+      '<button type="button" class="ms-toc-text" id="ms-toc-search-clear">Clear</button>' +
+      note +
+      '</div>'
+    );
+  }
+
   function shellHtml() {
     var gaps = (_catalogue && _catalogue.gaps) || {};
     var surfaceGap = _surface === 'documents' ? gaps.documents || '' : gaps.templates || '';
@@ -427,10 +452,12 @@
     var templatesN = _catalogue && _catalogue.templates ? _catalogue.templates.length : 0;
     var documentsN = _catalogue && _catalogue.documents ? _catalogue.documents.length : 0;
     var board = '';
+    var view = null;
     if (_loading) {
       board = '<p class="ms-toc-status">Reading Medicus template lists…</p>';
     } else if (_draft) {
-      var view = C.buildBoard(itemsForSurface(), currentSurfaceState());
+      // Search hides cards in the view. Group membership in the draft stays put.
+      view = C.filterBoard(C.buildBoard(itemsForSurface(), currentSurfaceState()), _query);
       board =
         '<div class="ms-toc-board">' +
         view.groups.map(columnHtml).join('') +
@@ -475,6 +502,7 @@
       '</div>' +
       '<button type="button" class="ms-toc-close" id="ms-toc-close">Close</button>' +
       '</header>' +
+      searchHtml(view) +
       board +
       '<footer class="ms-toc-footer">' +
       (surfaceGap ? '<p class="ms-toc-gap" role="status">' + esc(surfaceGap) + '</p>' : '') +
@@ -495,7 +523,27 @@
     if (!root) return;
     var shell = root.querySelector('.ms-toc-shell');
     if (!shell) return;
+    var active = document.activeElement;
+    var keepSearch = _focusSearch || (active && active.id === 'ms-toc-search');
+    var caretStart = keepSearch && active && active.id === 'ms-toc-search' ? active.selectionStart : null;
+    var caretEnd = keepSearch && active && active.id === 'ms-toc-search' ? active.selectionEnd : null;
     shell.innerHTML = shellHtml();
+    _focusSearch = false;
+    if (keepSearch && !_editingGroupId) {
+      _focusClose = false;
+      var search = shell.querySelector('#ms-toc-search');
+      if (search) {
+        search.focus();
+        var start = caretStart == null ? search.value.length : caretStart;
+        var end = caretEnd == null ? start : caretEnd;
+        try {
+          search.setSelectionRange(start, end);
+        } catch (err) {
+          /* input type may reject selection */
+        }
+      }
+      return;
+    }
     if (_editingGroupId) {
       var input = shell.querySelector('[data-rename="' + _editingGroupId + '"]');
       if (input) {
@@ -523,6 +571,8 @@
     _dragId = '';
     _editingGroupId = '';
     _editingName = '';
+    _query = '';
+    _focusSearch = false;
     _loading = false;
     _writing = false;
     _error = null;
@@ -658,6 +708,12 @@
       openNative(opened);
       return;
     }
+    if (t.closest('#ms-toc-search-clear')) {
+      _query = '';
+      _focusSearch = true;
+      render();
+      return;
+    }
     if (t.closest('#ms-toc-add-group')) {
       addGroup();
       return;
@@ -684,6 +740,11 @@
   function onInput(e) {
     var t = e.target;
     if (!t || !t.closest || !t.closest('#' + OVERLAY_ID)) return;
+    if (t.id === 'ms-toc-search') {
+      _query = t.value;
+      render();
+      return;
+    }
     if (t.id === 'ms-toc-new-name') _newGroupName = t.value;
     if (t.getAttribute && t.getAttribute('data-rename')) _editingName = t.value;
   }
@@ -830,6 +891,8 @@
     _editingGroupId = '';
     _editingName = '';
     _newGroupName = '';
+    _query = '';
+    _focusSearch = false;
     _catalogue = null;
     _loading = true;
     var el = document.getElementById(OVERLAY_ID);
