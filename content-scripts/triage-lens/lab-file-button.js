@@ -853,7 +853,17 @@
   try {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes['labcatalogue.practice']) resetFilingCatalogue(); // approvals/edits change the acting catalogue
+        if (area !== 'local' || !changes['labcatalogue.practice']) return;
+        resetFilingCatalogue(); // approvals/edits change the acting catalogue
+        // Unlike the STORE_PROFILES/STORE_CONFIG listener below, this one never used to call scheduleEval() —
+        // invalidating the cache alone does nothing until SOMETHING re-runs the gate. Approving on the
+        // Investigations page (a separate tab) fires this exact storage change, but the blocked card sat there
+        // still showing the pre-approval state until an unrelated Medicus SPA re-render happened to trigger a
+        // fresh poll — which could be a long wait, or (if the tab-focus visibilitychange handler's own
+        // scheduleEval() raced this event and ran first, reading the catalogue before the cache was reset) never
+        // at all (Nick, 2026-09-26: "re-approved, and the same thing appears — it's still blocked"). Explicit,
+        // same as every other cache-affecting storage key already gets.
+        scheduleEval();
       });
     }
   } catch (_) {
@@ -929,7 +939,12 @@
   async function combineWithCatalogueIfWanted(rs, legacyBlockers, opts) {
     const catalogueOnly = !!(opts && opts.catalogueOnly);
     if (!filingEngineWanted() || !rs || !rs.report) {
-      return { blockers: legacyBlockers, engine: 'legacy', catalogueUnresolvedComments: [] };
+      return {
+        blockers: legacyBlockers,
+        engine: 'legacy',
+        catalogueUnresolvedComments: [],
+        catalogueUnapprovedGroups: [],
+      };
     }
     // The engine is the one the practice asked for, but the adapter is not on the page. Catalogue-only has nothing
     // else to stand on. A legacy profile still files on its own gate.
@@ -944,7 +959,12 @@
                 ]
               : legacyBlockers,
           };
-      return { blockers: gated.blockers, engine: 'catalogue-fallback', catalogueUnresolvedComments: [] };
+      return {
+        blockers: gated.blockers,
+        engine: 'catalogue-fallback',
+        catalogueUnresolvedComments: [],
+        catalogueUnapprovedGroups: [],
+      };
     }
     try {
       const [catalogue, pendingCatalogue] = await Promise.all([
@@ -980,10 +1000,17 @@
       return {
         blockers: combined.blockers,
         engine: combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',
-        // Structured data for the "whitelist this comment" UI (see renderCatalogueWhitelistBox) — only meaningful
-        // when the catalogue actually evaluated (catResult.ok); never carried into the shadow log.
-        catalogueUnresolvedComments:
-          catResult && catResult.ok && Array.isArray(catResult.unresolvedComments) ? catResult.unresolvedComments : [],
+        // Structured data for the "whitelist this comment" UI (see renderCatalogueWhitelistBox). Deliberately NOT
+        // catResult.unresolvedComments (evaluateFilingCatalogue's own per-heading loop never even reaches the
+        // comment check for a group that isn't approved+enabled yet — Nick, 2026-09-26: a result whose test had no
+        // approved filing setup at all got the baseline "carries a comment" blocker with no checkbox anywhere to
+        // act on it). commentsForWhitelist only needs the heading to be one the lab is KNOWN to send — never read
+        // by anything that decides whether to FILE, only by what offers to whitelist a comment.
+        catalogueUnresolvedComments: LFC.commentsForWhitelist(rs.report, catalogue),
+        // Structured data for the "open this test's setup" button (see renderReasonActions) — one entry per
+        // group-not-approved heading whose results resolve, by code only, to exactly one investigation.
+        catalogueUnapprovedGroups:
+          catResult && catResult.ok && Array.isArray(catResult.unapprovedGroups) ? catResult.unapprovedGroups : [],
       };
     } catch (_) {
       // A throw is "could not check". Catalogue-only must not file on the generic baseline. A legacy profile stays
@@ -991,7 +1018,12 @@
       // not erase a legacy blocker. (A pending-catalogue load that fails returns null rather than throwing; that
       // path sets pendingCatalogueMissing above and blocks even when a legacy profile is present.)
       const combined = LFG.combineFilingBlockers(legacyBlockers, { ok: false }, { catalogueOnly });
-      return { blockers: combined.blockers, engine: 'catalogue-fallback', catalogueUnresolvedComments: [] };
+      return {
+        blockers: combined.blockers,
+        engine: 'catalogue-fallback',
+        catalogueUnresolvedComments: [],
+        catalogueUnapprovedGroups: [],
+      };
     }
   }
 
@@ -1093,6 +1125,15 @@
   let host = null;
   let titleEl = null;
   let subEl = null;
+  // The full blocked-reasons list, collapsed by default (subEl already shows the first two + "(+N more)") — a
+  // <details> so it needs no toggle state of its own and opens/closes with a native click (Nick, 2026-09-25: the
+  // truncated line only offered the rest via a hover tooltip, easy to miss and unusable on a touch device).
+  let reasonsEl = null;
+  let reasonsList = null;
+  // Last-rendered reasons signature — same idempotent-rebuild doctrine as whitelistSignature: evaluateGate() fires on
+  // every observed page change (often more than once a second), and each pass calls showBlockedHint(); rebuilding
+  // unconditionally would reset reasonsEl.open back to false before the clinician could ever finish reading it.
+  let reasonsSignature = null;
   let whitelistBox = null;
   let btn = null;
   let msgBtn = null;
@@ -1123,6 +1164,11 @@
   let catalogueWhitelistBox = null;
   let catalogueWhitelistSignature = null;
   let catalogueWhitelistBusy = false;
+  // Buttons offering to open a group-not-approved heading's own test on the Investigations page (Nick, 2026-09-26) —
+  // only ever built for a heading whose results resolve BY CODE to exactly one test (see engine/lab-filing-
+  // catalogue.js's unapprovedGroups): "obviously need to check here we have a result to open".
+  let unapprovedGroupsBox = null;
+  let unapprovedGroupsSignature = null;
 
   function el(tag, className, text) {
     const n = document.createElement(tag);
@@ -1141,8 +1187,15 @@
 
     titleEl = el('div', 'chlf-title');
     subEl = el('div', 'chlf-sub');
+    reasonsEl = document.createElement('details');
+    reasonsEl.className = 'chlf-reasons chlf-hidden';
+    const reasonsSummary = el('summary', 'chlf-reasons-summary');
+    reasonsList = el('ul', 'chlf-reasons-list');
+    reasonsEl.appendChild(reasonsSummary);
+    reasonsEl.appendChild(reasonsList);
     whitelistBox = el('div', 'chlf-whitelist chlf-hidden');
     catalogueWhitelistBox = el('div', 'chlf-whitelist chlf-hidden');
+    unapprovedGroupsBox = el('div', 'chlf-whitelist chlf-hidden');
 
     const actions = el('div', 'chlf-actions');
     btn = el('button', 'chlf-primary');
@@ -1163,8 +1216,10 @@
     host.appendChild(head);
     host.appendChild(titleEl);
     host.appendChild(subEl);
+    host.appendChild(reasonsEl);
     host.appendChild(whitelistBox);
     host.appendChild(catalogueWhitelistBox);
+    host.appendChild(unapprovedGroupsBox);
     host.appendChild(actions);
     host.appendChild(foot);
 
@@ -1208,10 +1263,28 @@
 
   function showButton(profile) {
     currentProfile = profile;
+    if (reasonsEl) {
+      reasonsEl.classList.add('chlf-hidden');
+      reasonsEl.open = false;
+      if (reasonsList) reasonsList.innerHTML = '';
+      reasonsSignature = null;
+    }
     if (whitelistBox) {
       whitelistBox.classList.add('chlf-hidden');
       whitelistBox.innerHTML = '';
       whitelistSignature = null;
+    }
+    // catalogueWhitelistBox/unapprovedGroupsBox were never cleared here before — a stale one could linger visible
+    // even once the button flips to "ready to file". Same reset every other box on this card already gets.
+    if (catalogueWhitelistBox) {
+      catalogueWhitelistBox.classList.add('chlf-hidden');
+      catalogueWhitelistBox.innerHTML = '';
+      catalogueWhitelistSignature = null;
+    }
+    if (unapprovedGroupsBox) {
+      unapprovedGroupsBox.classList.add('chlf-hidden');
+      unapprovedGroupsBox.innerHTML = '';
+      unapprovedGroupsSignature = null;
     }
     const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
     host.className = 'chlf-card chlf-ready';
@@ -1245,7 +1318,30 @@
   // cannot pass (out-of-range, free text, a guard tripped). The card NAMES the rule
   // and shows WHY inline — so the clinician sees the feature ran and deliberately
   // declined, rather than seeing nothing or a silent no-op.
-  function showBlockedHint(blockers, profile, commentedResults, matchedProfiles, catalogueUnresolvedComments) {
+  // Opens the Investigations page (Options → Investigations) straight onto one test's own Review screen, scrolled
+  // to its "Assisted filing on…" bar. Via the service worker's ms-open-options relay (Nick, 2026-09-26, live-caught
+  // on Edge: options/options.html is not in web_accessible_resources, so a content script's OWN window.open() to a
+  // chrome-extension:// URL is blocked outright — ERR_BLOCKED_BY_CLIENT — regardless of browser; reception-quick-
+  // actions.js's ⚙ button already solves this exact problem the same way, via chrome.tabs.create from the
+  // privileged background context, which is never subject to that restriction). The service worker validates
+  // `review` against the same slug shape every investigation id already has before it ever reaches a URL.
+  function openInvestigationSetup(invId) {
+    try {
+      chrome.runtime.sendMessage({ action: 'ms-open-options', section: 'investigations', review: invId });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function showBlockedHint(
+    blockers,
+    profile,
+    commentedResults,
+    matchedProfiles,
+    catalogueUnresolvedComments,
+    catalogueUnapprovedGroups,
+    catalogue
+  ) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
     host.className = 'chlf-card chlf-blocked';
@@ -1254,12 +1350,30 @@
     const extra = reasons.length > 2 ? ' (+' + (reasons.length - 2) + ' more)' : '';
     subEl.textContent = reasons.length ? 'Review manually: ' + shown + extra : 'Review manually.';
     subEl.title = reasons.join('\n');
+    if (reasonsEl) {
+      const sig = JSON.stringify(reasons);
+      if (sig !== reasonsSignature) {
+        reasonsSignature = sig;
+        if (reasons.length > 2) {
+          reasonsEl.classList.remove('chlf-hidden');
+          reasonsEl.open = false;
+          reasonsEl.querySelector('summary').textContent = 'Show all ' + reasons.length + ' reasons';
+          reasonsList.innerHTML = '';
+          reasons.forEach((r) => reasonsList.appendChild(el('li', null, r)));
+        } else {
+          reasonsEl.classList.add('chlf-hidden');
+          reasonsEl.open = false;
+          reasonsList.innerHTML = '';
+        }
+      }
+    }
     if (btn) btn.classList.add('chlf-hidden');
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     // Still allow opting this patient out, even on the not-offered state.
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
     renderWhitelistBox(commentedResults, matchedProfiles);
     renderCatalogueWhitelistBox(catalogueUnresolvedComments);
+    renderUnapprovedGroupsBox(catalogueUnapprovedGroups, catalogue);
     host.classList.remove('chlf-hidden');
   }
 
@@ -1516,6 +1630,53 @@
     }
   }
 
+  // One row per group-not-approved heading that confidently resolved to exactly one test (see
+  // engine/lab-filing-catalogue.js's unapprovedGroups — code-only, never a guess), deduplicated by investigation:
+  // several headings (or the same heading seen on several polls) can point at the same test.
+  function renderUnapprovedGroupsBox(groups, catalogue) {
+    if (!unapprovedGroupsBox) return;
+    const list = Array.isArray(groups) ? groups : [];
+    const invs = catalogue && Array.isArray(catalogue.investigations) ? catalogue.investigations : [];
+    const seen = new Set();
+    const rows = [];
+    for (const g of list) {
+      if (!g || !g.investigationId || seen.has(g.investigationId)) continue;
+      const inv = invs.find((i) => i.id === g.investigationId);
+      if (!inv) continue; // never offer a test the catalogue can no longer find
+      seen.add(g.investigationId);
+      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label });
+    }
+    if (!rows.length) {
+      unapprovedGroupsBox.classList.add('chlf-hidden');
+      unapprovedGroupsBox.innerHTML = '';
+      unapprovedGroupsSignature = null;
+      return;
+    }
+    const signature = JSON.stringify(rows.map((r) => r.investigationId));
+    if (signature === unapprovedGroupsSignature) return;
+    unapprovedGroupsSignature = signature;
+    unapprovedGroupsBox.innerHTML = '';
+    unapprovedGroupsBox.classList.remove('chlf-hidden');
+    unapprovedGroupsBox.appendChild(
+      el(
+        'div',
+        'chlf-wl-intro',
+        rows.length === 1
+          ? 'This test has no assisted-filing setup at this lab yet.'
+          : 'These tests have no assisted-filing setup at this lab yet.'
+      )
+    );
+    rows.forEach((r) => {
+      const row = el('div', 'chlf-wl-row chlf-open-row');
+      row.appendChild(el('span', 'chlf-wl-text', r.label + ' (“' + r.heading + '”)'));
+      const openBtn = el('button', 'chlf-wl-open', 'Set up on Investigations page');
+      openBtn.type = 'button';
+      openBtn.onclick = () => openInvestigationSetup(r.investigationId);
+      row.appendChild(openBtn);
+      unapprovedGroupsBox.appendChild(row);
+    });
+  }
+
   // Writes each checked residue text into every one of its target profiles'
   // allowComments (never the synthetic merged object) and forces each of
   // those profiles back to enabled:false, reviewed:false — same "any content
@@ -1631,6 +1792,12 @@
     currentMatchedProfiles = [];
     if (host) host.classList.add('chlf-hidden');
     if (subEl) subEl.title = '';
+    if (reasonsEl) {
+      reasonsEl.classList.add('chlf-hidden');
+      reasonsEl.open = false;
+      if (reasonsList) reasonsList.innerHTML = '';
+      reasonsSignature = null;
+    }
     if (whitelistBox) {
       whitelistBox.classList.add('chlf-hidden');
       whitelistBox.innerHTML = '';
@@ -1640,6 +1807,11 @@
       catalogueWhitelistBox.classList.add('chlf-hidden');
       catalogueWhitelistBox.innerHTML = '';
       catalogueWhitelistSignature = null;
+    }
+    if (unapprovedGroupsBox) {
+      unapprovedGroupsBox.classList.add('chlf-hidden');
+      unapprovedGroupsBox.innerHTML = '';
+      unapprovedGroupsSignature = null;
     }
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     if (suppressLink) suppressLink.classList.add('chlf-hidden');
@@ -1920,7 +2092,9 @@
         profile,
         commentedResults,
         currentMatchedProfiles,
-        combined.catalogueUnresolvedComments
+        combined.catalogueUnresolvedComments,
+        combined.catalogueUnapprovedGroups,
+        catalogueForScreen
       );
       return;
     }
@@ -1968,6 +2142,17 @@
     '.chlf-eyebrow{font:700 10px/1 ' + FONT + ';letter-spacing:.07em;text-transform:uppercase;color:#475569}',
     '.chlf-title{font:600 13px/1.35 ' + FONT + ';color:#0f172a;margin:0 0 3px;word-break:break-word}',
     '.chlf-sub{font:400 11.5px/1.45 ' + FONT + ';color:#475569;margin:0}',
+    '.chlf-reasons{margin-top:6px}.chlf-reasons.chlf-hidden{display:none}',
+    '.chlf-reasons-summary{font:600 11px/1.3 ' +
+      FONT +
+      ';color:#0d6e5e;cursor:pointer;list-style:none;user-select:none}',
+    '.chlf-reasons-summary::-webkit-details-marker{display:none}',
+    '.chlf-reasons-summary::before{content:"▸ ";display:inline-block}',
+    '.chlf-reasons[open] .chlf-reasons-summary::before{content:"▾ "}',
+    '.chlf-reasons-summary:hover{text-decoration:underline}',
+    '.chlf-reasons-summary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
+    '.chlf-reasons-list{margin:6px 0 0;padding-left:16px}',
+    '.chlf-reasons-list li{font:400 11.5px/1.5 ' + FONT + ';color:#475569;margin-bottom:4px}',
     '.chlf-actions{display:flex;flex-direction:column;gap:7px;margin-top:11px}',
     '.chlf-primary{appearance:none;border:0;border-radius:8px;background:#0d6e5e;color:#fff;',
     'font:600 13px/1.2 ' + FONT + ';padding:10px 12px;cursor:pointer;text-align:center}',
@@ -1992,6 +2177,11 @@
     '.chlf-wl-save:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
     '.chlf-wl-save.chlf-hidden{display:none}',
     '.chlf-wl-note{font:400 10.5px/1.4 ' + FONT + ';color:#94a3b8;margin-top:6px}',
+    '.chlf-open-row{cursor:default;justify-content:space-between;align-items:center;flex-wrap:wrap}',
+    '.chlf-wl-open{appearance:none;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#0d6e5e;',
+    'font:600 11px/1.2 ' + FONT + ';padding:6px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}',
+    '.chlf-wl-open:hover{border-color:#0d6e5e;background:#f0fdfa}',
+    '.chlf-wl-open:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
     '.chlf-foot{display:flex;justify-content:flex-end;margin-top:9px}',
     '.chlf-link{background:none;border:0;color:#64748b;font:500 11px/1.2 ' + FONT + ';cursor:pointer;',
     'padding:2px;text-decoration:underline;text-underline-offset:2px}',

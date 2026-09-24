@@ -12,7 +12,9 @@
           "conceptId": "935051000000108",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["CALC_COD"]
+          "refsets": [
+            "CALC_COD"
+          ]
         }
       ],
       "aliases": [
@@ -40,7 +42,9 @@
           "conceptId": "1000821000000103",
           "role": "primary",
           "unit": "g/L",
-          "refsets": ["LFT_COD"]
+          "refsets": [
+            "LFT_COD"
+          ]
         }
       ],
       "aliases": [
@@ -55,7 +59,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "alp",
@@ -66,7 +73,9 @@
           "conceptId": "1000621000000104",
           "role": "primary",
           "unit": "u/L",
-          "refsets": ["LFT_COD"]
+          "refsets": [
+            "LFT_COD"
+          ]
         }
       ],
       "aliases": [
@@ -94,7 +103,9 @@
           "conceptId": "1018251000000107",
           "role": "primary",
           "unit": "u/L",
-          "refsets": ["LFT_COD"]
+          "refsets": [
+            "LFT_COD"
+          ]
         }
       ],
       "aliases": [
@@ -164,7 +175,9 @@
           "conceptId": "999691000000104",
           "role": "primary",
           "unit": "µmol/L",
-          "refsets": ["LFT_COD"]
+          "refsets": [
+            "LFT_COD"
+          ]
         }
       ],
       "aliases": [
@@ -217,7 +230,9 @@
           "conceptId": "1000691000000101",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["CALC_COD"]
+          "refsets": [
+            "CALC_COD"
+          ]
         }
       ],
       "aliases": [
@@ -232,7 +247,13 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["adjusted", "corrected", "urine", "urinary", "ionised"]
+      "excludeAliases": [
+        "adjusted",
+        "corrected",
+        "urine",
+        "urinary",
+        "ionised"
+      ]
     },
     {
       "id": "cholesterol-hdl-ratio",
@@ -242,7 +263,10 @@
         {
           "conceptId": "1015681000000109",
           "role": "primary",
-          "refsets": ["NDACHOLEST_COD", "TCHOLHDL_COD"]
+          "refsets": [
+            "NDACHOLEST_COD",
+            "TCHOLHDL_COD"
+          ]
         }
       ],
       "aliases": [
@@ -267,7 +291,9 @@
           "conceptId": "1000731000000107",
           "role": "primary",
           "unit": "µmol/L",
-          "refsets": ["CRE_COD"]
+          "refsets": [
+            "CRE_COD"
+          ]
         }
       ],
       "aliases": [
@@ -282,7 +308,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "crp",
@@ -318,7 +347,9 @@
           "conceptId": "1020291000000106",
           "role": "primary",
           "unit": "ml/min/1.73 m²",
-          "refsets": ["EGFR_COD"]
+          "refsets": [
+            "EGFR_COD"
+          ]
         }
       ],
       "aliases": [
@@ -396,7 +427,9 @@
           "conceptId": "1049361000000101",
           "role": "primary",
           "unit": "ug/g faeces",
-          "refsets": ["FAECIMM_COD"]
+          "refsets": [
+            "FAECIMM_COD"
+          ]
         }
       ],
       "aliases": [
@@ -449,7 +482,9 @@
           "conceptId": "1016971000000106",
           "role": "primary",
           "unit": "pmol/L",
-          "refsets": ["TFT_COD"]
+          "refsets": [
+            "TFT_COD"
+          ]
         }
       ],
       "aliases": [
@@ -536,7 +571,10 @@
           "conceptId": "1022431000000105",
           "role": "primary",
           "unit": "g/L",
-          "refsets": ["FBC_COD", "HB_COD"]
+          "refsets": [
+            "FBC_COD",
+            "HB_COD"
+          ]
         }
       ],
       "aliases": [
@@ -548,7 +586,13 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["a1c", "glycated", "glycosylated", "faecal", "corpuscular"]
+      "excludeAliases": [
+        "a1c",
+        "glycated",
+        "glycosylated",
+        "faecal",
+        "corpuscular"
+      ]
     },
     {
       "id": "hba1c",
@@ -559,25 +603,33 @@
           "conceptId": "999791000000106",
           "role": "primary",
           "unit": "mmol/mol",
-          "refsets": ["IFCCHBAM_COD"]
+          "refsets": [
+            "IFCCHBAM_COD"
+          ]
         },
         {
           "conceptId": "1049301000000100",
           "role": "alternate",
           "unit": "mmol/mol",
-          "refsets": ["IFCCHBAM_COD"]
+          "refsets": [
+            "IFCCHBAM_COD"
+          ]
         },
         {
           "conceptId": "1049321000000109",
           "role": "alternate",
           "unit": "mmol/mol",
-          "refsets": ["IFCCHBAM_COD"]
+          "refsets": [
+            "IFCCHBAM_COD"
+          ]
         },
         {
           "conceptId": "1019431000000105",
           "role": "alternate",
           "unit": "%",
-          "refsets": ["DCCTHBA1C_COD"]
+          "refsets": [
+            "DCCTHBA1C_COD"
+          ]
         }
       ],
       "aliases": [
@@ -608,7 +660,10 @@
           "conceptId": "1005681000000107",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["HDLCCHOL_COD", "NDACHOLEST_COD"]
+          "refsets": [
+            "HDLCCHOL_COD",
+            "NDACHOLEST_COD"
+          ]
         }
       ],
       "aliases": [
@@ -623,7 +678,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["non", "ratio"]
+      "excludeAliases": [
+        "non",
+        "ratio"
+      ]
     },
     {
       "id": "hepatitis-b-surface-antigen",
@@ -679,7 +737,10 @@
           "conceptId": "1014501000000104",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["LDLCCHOL_COD", "NDACHOLEST_COD"]
+          "refsets": [
+            "LDLCCHOL_COD",
+            "NDACHOLEST_COD"
+          ]
         }
       ],
       "aliases": [
@@ -761,7 +822,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "mch",
@@ -787,7 +851,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["concentration", "mchc"]
+      "excludeAliases": [
+        "concentration",
+        "mchc"
+      ]
     },
     {
       "id": "mchc",
@@ -823,7 +890,9 @@
           "conceptId": "1022491000000106",
           "role": "primary",
           "unit": "fL",
-          "refsets": ["FBC_COD"]
+          "refsets": [
+            "FBC_COD"
+          ]
         }
       ],
       "aliases": [
@@ -923,7 +992,10 @@
           "conceptId": "1006191000000106",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["NDACHOLEST_COD", "NONHDLCCHOL_COD"]
+          "refsets": [
+            "NDACHOLEST_COD",
+            "NONHDLCCHOL_COD"
+          ]
         }
       ],
       "aliases": [
@@ -962,7 +1034,9 @@
           "conceptId": "1000701000000101",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["PHOSPHATE_COD"]
+          "refsets": [
+            "PHOSPHATE_COD"
+          ]
         }
       ],
       "aliases": [
@@ -980,7 +1054,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "platelets",
@@ -1009,7 +1086,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["mean", "volume"]
+      "excludeAliases": [
+        "mean",
+        "volume"
+      ]
     },
     {
       "id": "potassium",
@@ -1020,7 +1100,9 @@
           "conceptId": "1000651000000109",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["UE_COD"]
+          "refsets": [
+            "UE_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1032,7 +1114,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "prolactin",
@@ -1068,7 +1153,9 @@
           "conceptId": "1022451000000103",
           "role": "primary",
           "unit": "× 10¹²/L",
-          "refsets": ["FBC_COD"]
+          "refsets": [
+            "FBC_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1135,7 +1222,9 @@
           "conceptId": "1000661000000107",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["UE_COD"]
+          "refsets": [
+            "UE_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1147,7 +1236,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "syphilis-serology",
@@ -1183,7 +1275,11 @@
           "conceptId": "1005671000000105",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["CHOL2_COD", "CHOL_COD", "NDACHOLEST_COD"]
+          "refsets": [
+            "CHOL2_COD",
+            "CHOL_COD",
+            "NDACHOLEST_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1198,7 +1294,12 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["hdl", "ldl", "non", "ratio"]
+      "excludeAliases": [
+        "hdl",
+        "ldl",
+        "non",
+        "ratio"
+      ]
     },
     {
       "id": "triglycerides",
@@ -1209,7 +1310,9 @@
           "conceptId": "1005691000000109",
           "role": "primary",
           "unit": "mmol/L",
-          "refsets": ["TRIGLYC_COD"]
+          "refsets": [
+            "TRIGLYC_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1234,7 +1337,9 @@
           "conceptId": "1022791000000101",
           "role": "primary",
           "unit": "mIU/L",
-          "refsets": ["TFT_COD"]
+          "refsets": [
+            "TFT_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1249,7 +1354,11 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["receptor", "antibody", "antibodies"]
+      "excludeAliases": [
+        "receptor",
+        "antibody",
+        "antibodies"
+      ]
     },
     {
       "id": "urate",
@@ -1286,7 +1395,10 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary"]
+      "excludeAliases": [
+        "urine",
+        "urinary"
+      ]
     },
     {
       "id": "urine-acr",
@@ -1297,7 +1409,10 @@
           "conceptId": "1023491000000104",
           "role": "primary",
           "unit": "mg/mmol",
-          "refsets": ["APCR_COD", "NDAALB_COD"]
+          "refsets": [
+            "APCR_COD",
+            "NDAALB_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1344,7 +1459,10 @@
           "conceptId": "1010251000000109",
           "role": "primary",
           "unit": "mg/L",
-          "refsets": ["APCR_COD", "NDAALB_COD"]
+          "refsets": [
+            "APCR_COD",
+            "NDAALB_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1397,7 +1515,9 @@
           "conceptId": "1022541000000102",
           "role": "primary",
           "unit": "× 10⁹/L",
-          "refsets": ["FBC_COD"]
+          "refsets": [
+            "FBC_COD"
+          ]
         }
       ],
       "aliases": [
@@ -1415,7 +1535,364 @@
           "lab": "rj700-general-pathology"
         }
       ],
-      "excludeAliases": ["urine", "urinary", "csf", "pus"]
+      "excludeAliases": [
+        "urine",
+        "urinary",
+        "csf",
+        "pus"
+      ]
+    },
+    {
+      "id": "coeliac",
+      "label": "Coeliac disease antibodies",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "coeliac disease antibodies"
+        }
+      ]
+    },
+    {
+      "id": "iron-binding-studies",
+      "label": "Iron binding studies",
+      "valueKind": "mixed",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "iron binding studies"
+        }
+      ]
+    },
+    {
+      "id": "alpha-1-antitrypsin",
+      "label": "Alpha-1 antitrypsin",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "alpha-1 antitrypsin"
+        }
+      ]
+    },
+    {
+      "id": "caeruloplasmin",
+      "label": "Caeruloplasmin",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "caeruloplasmin"
+        }
+      ]
+    },
+    {
+      "id": "antinuclear-antibody",
+      "label": "Antinuclear antibody (Hep-2)",
+      "valueKind": "mixed",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "antinuclear antibody (hep-2)"
+        }
+      ]
+    },
+    {
+      "id": "immunoglobulins",
+      "label": "Immunoglobulins",
+      "valueKind": "mixed",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "immunoglobulins"
+        }
+      ]
+    },
+    {
+      "id": "liver-anaemia-autoantibody-screen",
+      "label": "Liver/anaemia autoantibody screen",
+      "valueKind": "coded",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "liver/anaemia autoantibody screen"
+        }
+      ]
+    },
+    {
+      "id": "esr",
+      "label": "Erythrocyte sedimentation rate (ESR)",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "erythrocyte sedimentation rate (esr)"
+        }
+      ]
+    },
+    {
+      "id": "coagulation-screen",
+      "label": "Coagulation screen",
+      "valueKind": "mixed",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "coagulation screen"
+        }
+      ]
+    },
+    {
+      "id": "helicobacter-pylori",
+      "label": "Helicobacter pylori antigen",
+      "valueKind": "coded",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "helicobacter pylori antigen"
+        }
+      ]
+    },
+    {
+      "id": "cortisol",
+      "label": "Cortisol",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "cortisol"
+        }
+      ]
+    },
+    {
+      "id": "ccp-antibody",
+      "label": "CCP antibody",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "ccp antibody"
+        }
+      ]
+    },
+    {
+      "id": "creatine-kinase",
+      "label": "Creatine kinase",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "creatine kinase"
+        }
+      ]
+    },
+    {
+      "id": "zinc",
+      "label": "Zinc",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "zinc"
+        }
+      ]
+    },
+    {
+      "id": "copper",
+      "label": "Copper",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "copper"
+        }
+      ]
+    },
+    {
+      "id": "rast-mixed-grass",
+      "label": "RAST mixed grass pollen",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "rast mixed grass pollen"
+        }
+      ]
+    },
+    {
+      "id": "rast-mixed-trees",
+      "label": "RAST mixed trees",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "rast mixed trees"
+        }
+      ]
+    },
+    {
+      "id": "rast-cat",
+      "label": "RAST cat dander",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "rast cat dander"
+        }
+      ]
+    },
+    {
+      "id": "rast-house-dust-mite",
+      "label": "RAST house dust mite",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "rast house dust mite"
+        }
+      ]
+    },
+    {
+      "id": "rast-mixed-weeds",
+      "label": "RAST mixed weeds",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "rast mixed weeds"
+        }
+      ]
+    },
+    {
+      "id": "blood-film-microscopy",
+      "label": "Blood film microscopy",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "blood film microscopy"
+        }
+      ]
+    },
+    {
+      "id": "urine-mcs",
+      "label": "Urine MC&S (MSU)",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "urine mc&s (msu)"
+        }
+      ]
+    },
+    {
+      "id": "wound-swab-mcs",
+      "label": "Wound swab MC&S",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "wound swab mc&s"
+        }
+      ]
+    },
+    {
+      "id": "skin-swab-mcs",
+      "label": "Skin swab MC&S",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "skin swab mc&s"
+        }
+      ]
+    },
+    {
+      "id": "ear-swab-mcs",
+      "label": "Ear swab MC&S",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "ear swab mc&s"
+        }
+      ]
+    },
+    {
+      "id": "mycology-nail-clippings",
+      "label": "Mycology MC&S (nail clippings)",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "mycology mc&s (nail clippings)"
+        }
+      ]
+    },
+    {
+      "id": "fibrosis-4-score",
+      "label": "Fibrosis-4 (FIB-4) score",
+      "valueKind": "numeric",
+      "codes": [
+        {
+          "conceptId": "719873005",
+          "role": "primary",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "fibrosis-4 (fib-4) score"
+        }
+      ]
+    },
+    {
+      "id": "cervical-screening",
+      "label": "Cervical screening",
+      "valueKind": "text",
+      "codes": [
+        {
+          "conceptId": "1008271000000101",
+          "role": "primary",
+          "refsets": []
+        },
+        {
+          "conceptId": "427272008",
+          "role": "alternate",
+          "refsets": []
+        },
+        {
+          "conceptId": "1020451000000104",
+          "role": "alternate",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "cervical screening"
+        }
+      ]
+    },
+    {
+      "id": "vitamin-b12",
+      "label": "Vitamin B12",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "vitamin b12"
+        }
+      ]
+    },
+    {
+      "id": "folate",
+      "label": "Folate",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "folate"
+        }
+      ]
     }
   ],
   "investigations": [
@@ -1425,8 +1902,15 @@
       "kind": "blood",
       "legacyKey": "lipids",
       "requestAliases": [],
-      "synonyms": ["lipid", "cholesterol"],
-      "headingAliases": ["lipid", "lipid profile"],
+      "synonyms": [
+        "lipid",
+        "cholesterol",
+        "Lipids Blood"
+      ],
+      "headingAliases": [
+        "lipid",
+        "lipid profile"
+      ],
       "members": [
         {
           "result": "total-cholesterol",
@@ -1460,9 +1944,24 @@
       "kind": "blood",
       "legacyKey": "ue",
       "requestAliases": [],
-      "synonyms": ["electrolyte", "u&e", "urea electrolyte", "creatinine + electrolyte"],
-      "headingAliases": ["u&e", "urea and electrolytes", "electrolyte", "renal profile"],
-      "exclude": ["urine", "urinary"],
+      "synonyms": [
+        "electrolyte",
+        "u&e",
+        "urea electrolyte",
+        "creatinine + electrolyte",
+        "Urea and Electrolytes WITH Potassium",
+        "Urea and Electrolytes WITHOUT Potassium"
+      ],
+      "headingAliases": [
+        "u&e",
+        "urea and electrolytes",
+        "electrolyte",
+        "renal profile"
+      ],
+      "exclude": [
+        "urine",
+        "urinary"
+      ],
       "members": [
         {
           "result": "sodium",
@@ -1493,9 +1992,19 @@
       "kind": "blood",
       "legacyKey": "fbc",
       "requestAliases": [],
-      "synonyms": ["full blood count", "fbc"],
-      "headingAliases": ["fbc", "full blood count"],
-      "exclude": ["a1c", "glycated", "glycosylated"],
+      "synonyms": [
+        "full blood count",
+        "fbc"
+      ],
+      "headingAliases": [
+        "fbc",
+        "full blood count"
+      ],
+      "exclude": [
+        "a1c",
+        "glycated",
+        "glycosylated"
+      ],
       "members": [
         {
           "result": "haemoglobin",
@@ -1565,8 +2074,19 @@
       "kind": "blood",
       "legacyKey": "hba1c",
       "requestAliases": [],
-      "synonyms": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"],
-      "headingAliases": ["hba1c", "haemoglobin a1c", "glycated haemoglobin", "glycosylated haemoglobin"],
+      "synonyms": [
+        "hba1c",
+        "haemoglobin a1c",
+        "glycated haemoglobin",
+        "glycosylated haemoglobin",
+        "HbA1C (Glycated Haemoglobin)"
+      ],
+      "headingAliases": [
+        "hba1c",
+        "haemoglobin a1c",
+        "glycated haemoglobin",
+        "glycosylated haemoglobin"
+      ],
       "members": [
         {
           "result": "hba1c",
@@ -1581,8 +2101,15 @@
       "kind": "blood",
       "legacyKey": "lft",
       "requestAliases": [],
-      "synonyms": ["liver function", "lft"],
-      "headingAliases": ["lft", "liver function", "liver function test"],
+      "synonyms": [
+        "liver function",
+        "lft"
+      ],
+      "headingAliases": [
+        "lft",
+        "liver function",
+        "liver function test"
+      ],
       "members": [
         {
           "result": "alt",
@@ -1617,8 +2144,14 @@
       "kind": "blood",
       "legacyKey": "psa",
       "requestAliases": [],
-      "synonyms": ["prostate specific antigen", "psa"],
-      "headingAliases": ["psa", "prostate specific antigen"],
+      "synonyms": [
+        "prostate specific antigen",
+        "psa"
+      ],
+      "headingAliases": [
+        "psa",
+        "prostate specific antigen"
+      ],
       "members": [
         {
           "result": "psa",
@@ -1632,8 +2165,16 @@
       "kind": "blood",
       "legacyKey": "tft",
       "requestAliases": [],
-      "synonyms": ["thyroid", "tft"],
-      "headingAliases": ["tft", "thyroid", "thyroid function"],
+      "synonyms": [
+        "thyroid",
+        "tft",
+        "Thyroid Stimulating Hormone"
+      ],
+      "headingAliases": [
+        "tft",
+        "thyroid",
+        "thyroid function"
+      ],
       "members": [
         {
           "result": "tsh",
@@ -1656,8 +2197,14 @@
       "label": "Free T4",
       "kind": "blood",
       "requestAliases": [],
-      "synonyms": ["free t4", "ft4"],
-      "headingAliases": ["free t4", "ft4"],
+      "synonyms": [
+        "free t4",
+        "ft4"
+      ],
+      "headingAliases": [
+        "free t4",
+        "ft4"
+      ],
       "members": [
         {
           "result": "free-t4",
@@ -1672,8 +2219,15 @@
       "kind": "faeces",
       "legacyKey": "fit",
       "requestAliases": [],
-      "synonyms": ["faecal immunochemical", "fit"],
-      "headingAliases": ["fit", "faecal immunochemical", "faecal haemoglobin"],
+      "synonyms": [
+        "faecal immunochemical",
+        "fit"
+      ],
+      "headingAliases": [
+        "fit",
+        "faecal immunochemical",
+        "faecal haemoglobin"
+      ],
       "members": [
         {
           "result": "faecal-immunochemical-test",
@@ -1687,8 +2241,13 @@
       "kind": "blood",
       "legacyKey": "ferritin",
       "requestAliases": [],
-      "synonyms": ["ferritin"],
-      "headingAliases": ["ferritin"],
+      "synonyms": [
+        "ferritin",
+        "Ferritin Blood"
+      ],
+      "headingAliases": [
+        "ferritin"
+      ],
       "members": [
         {
           "result": "ferritin",
@@ -1702,8 +2261,13 @@
       "kind": "blood",
       "legacyKey": "bone",
       "requestAliases": [],
-      "synonyms": ["bone profile"],
-      "headingAliases": ["bone profile"],
+      "synonyms": [
+        "bone profile",
+        "Bone Profile (Calcium Studies)"
+      ],
+      "headingAliases": [
+        "bone profile"
+      ],
       "members": [
         {
           "result": "phosphate",
@@ -1734,8 +2298,12 @@
       "kind": "blood",
       "legacyKey": "rheumatoid_factor",
       "requestAliases": [],
-      "synonyms": ["rheumatoid factor"],
-      "headingAliases": ["rheumatoid factor"],
+      "synonyms": [
+        "rheumatoid factor"
+      ],
+      "headingAliases": [
+        "rheumatoid factor"
+      ],
       "members": [
         {
           "result": "rheumatoid-factor",
@@ -1749,8 +2317,13 @@
       "kind": "blood",
       "legacyKey": "hiv",
       "requestAliases": [],
-      "synonyms": ["hiv"],
-      "headingAliases": ["hiv 1 & 2 antigen antibody", "hiv 1&2 antigen antibody"],
+      "synonyms": [
+        "hiv"
+      ],
+      "headingAliases": [
+        "hiv 1 & 2 antigen antibody",
+        "hiv 1&2 antigen antibody"
+      ],
       "members": [
         {
           "result": "hiv-antigen-antibody",
@@ -1764,8 +2337,16 @@
       "kind": "blood",
       "legacyKey": "vitamin_d",
       "requestAliases": [],
-      "synonyms": ["vitamin d", "25 hydroxyvitamin d", "25 oh vitamin d"],
-      "headingAliases": ["vitamin d", "25 hydroxyvitamin d"],
+      "synonyms": [
+        "vitamin d",
+        "25 hydroxyvitamin d",
+        "25 oh vitamin d",
+        "Vitamin D (25-hydroxy)"
+      ],
+      "headingAliases": [
+        "vitamin d",
+        "25 hydroxyvitamin d"
+      ],
       "members": [
         {
           "result": "vitamin-d",
@@ -1779,8 +2360,15 @@
       "kind": "blood",
       "legacyKey": "urate",
       "requestAliases": [],
-      "synonyms": ["urate", "uric acid"],
-      "headingAliases": ["urate", "uric acid"],
+      "synonyms": [
+        "urate",
+        "uric acid",
+        "Urate Blood"
+      ],
+      "headingAliases": [
+        "urate",
+        "uric acid"
+      ],
       "members": [
         {
           "result": "urate",
@@ -1794,8 +2382,15 @@
       "kind": "blood",
       "legacyKey": "crp",
       "requestAliases": [],
-      "synonyms": ["c reactive protein", "crp"],
-      "headingAliases": ["crp", "c reactive protein"],
+      "synonyms": [
+        "c reactive protein",
+        "crp",
+        "C-Reactive Protein Blood"
+      ],
+      "headingAliases": [
+        "crp",
+        "c reactive protein"
+      ],
       "members": [
         {
           "result": "crp",
@@ -1809,8 +2404,15 @@
       "kind": "blood",
       "legacyKey": "hepatitis_c",
       "requestAliases": [],
-      "synonyms": ["hepatitis c", "hep c"],
-      "headingAliases": ["hepatitis c", "hep c"],
+      "synonyms": [
+        "hepatitis c",
+        "hep c",
+        "Hepatitis C IgG"
+      ],
+      "headingAliases": [
+        "hepatitis c",
+        "hep c"
+      ],
       "members": [
         {
           "result": "hepatitis-c",
@@ -1824,8 +2426,16 @@
       "kind": "blood",
       "legacyKey": "hepatitis_b",
       "requestAliases": [],
-      "synonyms": ["hepatitis b surface antigen", "hep b surface antigen", "hbsag"],
-      "headingAliases": ["hepatitis b surface antigen", "hep b surface antigen", "hbsag"],
+      "synonyms": [
+        "hepatitis b surface antigen",
+        "hep b surface antigen",
+        "hbsag"
+      ],
+      "headingAliases": [
+        "hepatitis b surface antigen",
+        "hep b surface antigen",
+        "hbsag"
+      ],
       "members": [
         {
           "result": "hepatitis-b-surface-antigen",
@@ -1839,8 +2449,13 @@
       "kind": "blood",
       "legacyKey": "syphilis",
       "requestAliases": [],
-      "synonyms": ["syphilis"],
-      "headingAliases": ["syphilis", "treponema"],
+      "synonyms": [
+        "syphilis"
+      ],
+      "headingAliases": [
+        "syphilis",
+        "treponema"
+      ],
       "members": [
         {
           "result": "syphilis-serology",
@@ -1854,8 +2469,14 @@
       "kind": "faeces",
       "legacyKey": "calprotectin",
       "requestAliases": [],
-      "synonyms": ["faecal calprotectin", "calprotectin"],
-      "headingAliases": ["faecal calprotectin", "calprotectin"],
+      "synonyms": [
+        "faecal calprotectin",
+        "calprotectin"
+      ],
+      "headingAliases": [
+        "faecal calprotectin",
+        "calprotectin"
+      ],
       "members": [
         {
           "result": "faecal-calprotectin",
@@ -1869,8 +2490,14 @@
       "kind": "blood",
       "legacyKey": "fsh",
       "requestAliases": [],
-      "synonyms": ["follicle stimulating hormone", "fsh"],
-      "headingAliases": ["fsh", "follicle stimulating hormone"],
+      "synonyms": [
+        "follicle stimulating hormone",
+        "fsh"
+      ],
+      "headingAliases": [
+        "fsh",
+        "follicle stimulating hormone"
+      ],
       "members": [
         {
           "result": "fsh",
@@ -1884,8 +2511,16 @@
       "kind": "blood",
       "legacyKey": "lh",
       "requestAliases": [],
-      "synonyms": ["luteinising hormone", "luteinizing hormone", "lh"],
-      "headingAliases": ["lh", "luteinising hormone", "luteinizing hormone"],
+      "synonyms": [
+        "luteinising hormone",
+        "luteinizing hormone",
+        "lh"
+      ],
+      "headingAliases": [
+        "lh",
+        "luteinising hormone",
+        "luteinizing hormone"
+      ],
       "members": [
         {
           "result": "lh",
@@ -1899,8 +2534,15 @@
       "kind": "blood",
       "legacyKey": "oestradiol",
       "requestAliases": [],
-      "synonyms": ["oestradiol", "estradiol"],
-      "headingAliases": ["oestradiol", "estradiol"],
+      "synonyms": [
+        "oestradiol",
+        "estradiol",
+        "Oestradiol Blood"
+      ],
+      "headingAliases": [
+        "oestradiol",
+        "estradiol"
+      ],
       "members": [
         {
           "result": "oestradiol",
@@ -1914,8 +2556,12 @@
       "kind": "blood",
       "legacyKey": "prolactin",
       "requestAliases": [],
-      "synonyms": ["prolactin"],
-      "headingAliases": ["prolactin"],
+      "synonyms": [
+        "prolactin"
+      ],
+      "headingAliases": [
+        "prolactin"
+      ],
       "members": [
         {
           "result": "prolactin",
@@ -1929,8 +2575,12 @@
       "kind": "blood",
       "legacyKey": "testosterone",
       "requestAliases": [],
-      "synonyms": ["testosterone"],
-      "headingAliases": ["testosterone"],
+      "synonyms": [
+        "testosterone"
+      ],
+      "headingAliases": [
+        "testosterone"
+      ],
       "members": [
         {
           "result": "testosterone",
@@ -1944,8 +2594,14 @@
       "kind": "imaging",
       "legacyKey": "radiology_knee",
       "requestAliases": [],
-      "synonyms": ["xr knee", "knee", "radiograph knee"],
-      "headingAliases": ["knee"],
+      "synonyms": [
+        "xr knee",
+        "knee",
+        "radiograph knee"
+      ],
+      "headingAliases": [
+        "knee"
+      ],
       "members": []
     },
     {
@@ -1953,8 +2609,12 @@
       "label": "Magnesium",
       "kind": "blood",
       "requestAliases": [],
-      "synonyms": ["magnesium"],
-      "headingAliases": ["magnesium"],
+      "synonyms": [
+        "magnesium"
+      ],
+      "headingAliases": [
+        "magnesium"
+      ],
       "members": [
         {
           "result": "magnesium",
@@ -1967,8 +2627,14 @@
       "label": "Urine albumin:creatinine ratio",
       "kind": "urine",
       "requestAliases": [],
-      "synonyms": ["urine albumin creatinine ratio", "urine acr"],
-      "headingAliases": ["urine acr", "urine albumin creatinine ratio"],
+      "synonyms": [
+        "urine albumin creatinine ratio",
+        "urine acr"
+      ],
+      "headingAliases": [
+        "urine acr",
+        "urine albumin creatinine ratio"
+      ],
       "members": [
         {
           "result": "urine-acr",
@@ -1989,11 +2655,585 @@
       "label": "CA 125",
       "kind": "blood",
       "requestAliases": [],
-      "synonyms": ["ca 125", "ca 12 5", "ca125"],
-      "headingAliases": ["ca 125"],
+      "synonyms": [
+        "ca 125",
+        "ca 12 5",
+        "ca125"
+      ],
+      "headingAliases": [
+        "ca 125"
+      ],
       "members": [
         {
           "result": "ca-125",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "ggt",
+      "label": "Gamma-glutamyl transferase (GGT)",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Gamma-glutamyl Transferase (GGT)"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "ggt",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "ast",
+      "label": "Aspartate aminotransferase (AST)",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Aspartate Aminotransferase Serum"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "ast",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "coeliac",
+      "label": "Coeliac disease antibodies",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Coeliac Disease Antibodies"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "coeliac",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "iron-binding-studies",
+      "label": "Iron binding studies",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Iron Binding Studies"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "iron-binding-studies",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "alpha-1-antitrypsin",
+      "label": "Alpha-1 antitrypsin",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Alpha-1 Antitrypsin Serum"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "alpha-1-antitrypsin",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "caeruloplasmin",
+      "label": "Caeruloplasmin",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Caeruloplasmin Serum"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "caeruloplasmin",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "antinuclear-antibody",
+      "label": "Antinuclear antibody (Hep-2)",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Anti Nuclear antibody (Hep-2)"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "antinuclear-antibody",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "immunoglobulins",
+      "label": "Immunoglobulins",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Immunoglobulins (includes Electrophoresis)"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "immunoglobulins",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "liver-anaemia-autoantibody-screen",
+      "label": "Liver/anaemia autoantibody screen",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Liver/Anaemia Autoantibody screen"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "liver-anaemia-autoantibody-screen",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "esr",
+      "label": "Erythrocyte sedimentation rate (ESR)",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Erythrocyte Sedimentation Rate"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "esr",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "coagulation-screen",
+      "label": "Coagulation screen",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Coagulation Screen"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "coagulation-screen",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "helicobacter-pylori",
+      "label": "Helicobacter pylori antigen",
+      "kind": "faeces",
+      "requestAliases": [],
+      "synonyms": [
+        "Helicobacter pylori Antigen"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "helicobacter-pylori",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "cortisol",
+      "label": "Cortisol",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Cortisol Blood"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "cortisol",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "ccp-antibody",
+      "label": "CCP antibody",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "CCP Antibody"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "ccp-antibody",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "creatine-kinase",
+      "label": "Creatine kinase",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Creatine Kinase"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "creatine-kinase",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "zinc",
+      "label": "Zinc",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Zinc Blood"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "zinc",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "copper",
+      "label": "Copper",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Copper Blood"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "copper",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "rast-mixed-grass",
+      "label": "RAST mixed grass pollen",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "RAST Mixed Grass"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "rast-mixed-grass",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "rast-mixed-trees",
+      "label": "RAST mixed trees",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "RAST Mixed Trees"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "rast-mixed-trees",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "rast-cat",
+      "label": "RAST cat dander",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "RAST Cat"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "rast-cat",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "rast-house-dust-mite",
+      "label": "RAST house dust mite",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "RAST House Dust Mite"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "rast-house-dust-mite",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "rast-mixed-weeds",
+      "label": "RAST mixed weeds",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "RAST Mixed Weeds"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "rast-mixed-weeds",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "blood-film-microscopy",
+      "label": "Blood film microscopy",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Blood Film Microscopy"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "blood-film-microscopy",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "urine-mcs",
+      "label": "Urine MC&S (MSU)",
+      "kind": "microbiology",
+      "requestAliases": [],
+      "synonyms": [
+        "Urine MC&S (MSU)"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "urine-mcs",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "wound-swab-mcs",
+      "label": "Wound swab MC&S",
+      "kind": "microbiology",
+      "requestAliases": [],
+      "synonyms": [
+        "Wound Swab MC&S"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "wound-swab-mcs",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "skin-swab-mcs",
+      "label": "Skin swab MC&S",
+      "kind": "microbiology",
+      "requestAliases": [],
+      "synonyms": [
+        "Skin Swab MC&S"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "skin-swab-mcs",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "ear-swab-mcs",
+      "label": "Ear swab MC&S",
+      "kind": "microbiology",
+      "requestAliases": [],
+      "synonyms": [
+        "Ear Swab MC&S"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "ear-swab-mcs",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "mycology-nail-clippings",
+      "label": "Mycology MC&S (nail clippings)",
+      "kind": "microbiology",
+      "requestAliases": [],
+      "synonyms": [
+        "Mycology MC&S (Nail Clippings)"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "mycology-nail-clippings",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "fibrosis-4-score",
+      "label": "Fibrosis-4 (FIB-4) score",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Fibrosis-4-Score"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "fibrosis-4-score",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "cervical-screening",
+      "label": "Cervical screening",
+      "kind": "procedure",
+      "requestAliases": [],
+      "synonyms": [
+        "Cervical Screening"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "cervical-screening",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "sacrum-xray",
+      "label": "Sacrum AP & lateral X-ray",
+      "kind": "imaging",
+      "requestAliases": [],
+      "synonyms": [
+        "Sacrum Ap & Lat X-ray"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": []
+    },
+    {
+      "id": "us-soft-tissue",
+      "label": "Ultrasound soft tissue",
+      "kind": "imaging",
+      "requestAliases": [],
+      "synonyms": [
+        "US Soft Tissue"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": []
+    },
+    {
+      "id": "vitamin-b12",
+      "label": "Vitamin B12",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Vitamin B12"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "vitamin-b12",
+          "role": "core"
+        }
+      ]
+    },
+    {
+      "id": "folate",
+      "label": "Folate",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "Folate Blood"
+      ],
+      "headingAliases": [],
+      "exclude": [],
+      "members": [
+        {
+          "result": "folate",
           "role": "core"
         }
       ]
@@ -2013,56 +3253,102 @@
       "groupHeadings": [
         {
           "text": "Bone profile",
-          "identifies": ["bone-profile"]
+          "identifies": [
+            "bone-profile"
+          ]
         },
         {
           "text": "LFTs",
-          "identifies": ["lft"]
+          "identifies": [
+            "lft"
+          ]
         },
         {
           "text": "TSH",
-          "identifies": ["tft"]
+          "identifies": [
+            "tft"
+          ]
         },
         {
           "text": "FREE T4",
-          "identifies": ["free-t4"],
-          "mayContain": ["inv:tft"]
+          "identifies": [
+            "free-t4"
+          ],
+          "mayContain": [
+            "inv:tft"
+          ]
         },
         {
           "text": "Renal function tests",
-          "identifies": ["ue"]
+          "identifies": [
+            "ue"
+          ]
         },
         {
           "text": "U&Es",
-          "identifies": ["ue"]
+          "identifies": [
+            "ue"
+          ]
         },
         {
           "text": "Lipids",
-          "identifies": ["lipids"]
+          "identifies": [
+            "lipids"
+          ]
         },
         {
           "text": "FBC",
-          "identifies": ["fbc"]
+          "identifies": [
+            "fbc"
+          ]
         },
         {
           "text": "HbA1c",
-          "identifies": ["hba1c"]
+          "identifies": [
+            "hba1c"
+          ]
         },
         {
           "text": "Urine ACR",
-          "identifies": ["urine-acr"]
+          "identifies": [
+            "urine-acr"
+          ]
         },
         {
           "text": "Se CA 125 level",
-          "identifies": ["ca-125"]
+          "identifies": [
+            "ca-125"
+          ]
         },
         {
           "text": "CALPROTECTIN (FAECAL)",
-          "identifies": ["calprotectin"]
+          "identifies": [
+            "calprotectin"
+          ]
         },
         {
           "text": "Quantitv faecal immunochem tst",
-          "identifies": ["fit"]
+          "identifies": [
+            "fit"
+          ]
+        },
+        {
+          "text": "CRP",
+          "identifies": [
+            "crp"
+          ]
+        },
+        {
+          "text": "Serum magnesium level",
+          "identifies": [
+            "magnesium"
+          ]
+        },
+        {
+          "text": "Serum 25-HO vit D3 level",
+          "identifies": [
+            "vitamin-d"
+          ]
         }
       ]
     }

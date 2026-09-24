@@ -61,6 +61,23 @@ check(
   'the COVID-planning cluster GDPPR2YR_COD is not carried (it is not a clinical purpose set)'
 );
 
+// A standalone, single-result test's own lab-tagged wording ("Serum 25-HO vit D3 level" etc.) used to be seeded onto
+// the RESULT's alias without a matching groupHeadings entry on the lab — meaning assisted filing (which needs a
+// confirmed lab.groupHeadings[].identifies entry, not just a recognisable result) could never be set up for it, even
+// though the wording was already on file (Nick, 2026-09-25, live-caught via Vitamin D at rj700-general-pathology).
+// CRP and Magnesium had the identical gap.
+const rj700 = seed.labs.find((l) => l.id === 'rj700-general-pathology');
+for (const [invId, heading] of [
+  ['crp', 'CRP'],
+  ['magnesium', 'Serum magnesium level'],
+  ['vitamin-d', 'Serum 25-HO vit D3 level'],
+]) {
+  check(
+    rj700.groupHeadings.some((g) => g.text === heading && g.identifies.includes(invId)),
+    `rj700-general-pathology records "${heading}" as ${invId}'s own report-group heading`
+  );
+}
+
 // HbA1c: a code FAMILY, QOF status derivable from refsets
 const hba1c = seed.results.find((r) => r.id === 'hba1c');
 const byCode = (c) => hba1c.codes.find((x) => x.conceptId === c);
@@ -284,8 +301,8 @@ console.log('\n--- 138: urine ACR must not select serum profiles ---');
     '138: the outstanding Bone / LFT / U&E requests correctly stay outstanding'
   );
   check(
-    q['Immunoglobulins (includes Electrophoresis)'] === null,
-    '138: immunoglobulins is not in the seed -> unrecognised'
+    q['Immunoglobulins (includes Electrophoresis)'] === 'immunoglobulins',
+    '138: immunoglobulins is now a shipped test (added 2026-09-26, from the practice\'s own unreconciled-requests listing) and resolves by its exact request wording'
   );
 }
 
@@ -303,8 +320,8 @@ console.log('\n--- 139/140/142: FIT, FBC, HbA1c ---');
     '139: unrelated requests on the card stay uncovered'
   );
   check(
-    q139['Erythrocyte Sedimentation Rate'] === null && q139['Coeliac Disease Antibodies'] === null,
-    '139: ESR / coeliac are not in the seed -> unrecognised'
+    q139['Erythrocyte Sedimentation Rate'] === 'esr' && q139['Coeliac Disease Antibodies'] === 'coeliac',
+    '139: ESR / coeliac are now shipped tests (added 2026-09-26) and resolve by their exact request wording, but neither is actually present as a RESULT on this report — cov(fit, ...) below confirms they still do not falsely show as covered'
   );
   const fbc = run('140');
   check(
@@ -327,8 +344,13 @@ console.log('\n--- 139/140/142: FIT, FBC, HbA1c ---');
     q['HbA1C (Glycated Haemoglobin)'] === 'hba1c' &&
       q['Urine Albumin:Creatinine Ratio'] === 'urine-acr' &&
       q['Lipids Blood'] === 'lipids' &&
-      q['Vitamin B12'] === null,
-    '142: the request labels on the card resolve (incl. the duplicated stale lines); B12 is no longer a shipped test (each practice defines B12 / folate as it orders them)'
+      q['Vitamin B12'] === 'vitamin-b12',
+    // B12/folate were deliberately excluded from an earlier version of this seed, on the theory that "each
+    // practice defines B12/folate as it orders them" — that theory was wrong: the excluded entry had wrongly
+    // modelled them as ONE combined "B12/folate" order (freetexted, never verified against real requests), when
+    // practices order them as two SEPARATE tests. Nick's own unreconciled-requests listing (2026-09-26) confirmed
+    // this — "Vitamin B12" and "Folate Blood" are each their own request — so they are shipped separately now.
+    '142: the request labels on the card resolve (incl. the duplicated stale lines), including Vitamin B12 as its own separate test'
   );
   check(
     cov(hb, q['HbA1C (Glycated Haemoglobin)']) && !cov(hb, 'lft') && !cov(hb, 'urine-acr') && !cov(hb, 'lipids'),

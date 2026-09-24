@@ -76,8 +76,8 @@ console.log('\n--- golden shape ---');
 {
   const res = FC.evaluateFilingCatalogue(report([result()]), acting(baseOverlay()));
   check(
-    Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds,unresolvedComments',
-    'success shape is exactly { ok, blockers, reasonKinds, meta, unresolvedComments }'
+    Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds,unapprovedGroups,unresolvedComments',
+    'success shape is exactly { ok, blockers, reasonKinds, meta, unresolvedComments, unapprovedGroups }'
   );
   check(
     Array.isArray(res.unresolvedComments) && res.unresolvedComments.length === 0,
@@ -120,6 +120,48 @@ console.log('\n--- report-group heading gate (H-074 generalised) ---');
   check(
     noHeading.ok && noHeading.blockers.some((b) => /no report-group heading/.test(b)),
     'a result with no heading at all cannot be matched to any group'
+  );
+}
+
+console.log(
+  '\n--- unapprovedGroups: which test to offer opening, for a heading with no approved filing setup (2026-09-26, Nick) ---'
+);
+{
+  const TSH = { name: 'TSH', value: 2.5, rawValue: '2.5', comparator: null, unit: 'mIU/L', code: '1022791000000101' };
+  const tshResult = (over) => ({ ...result(over), ...TSH, specimen: 'TSH', low: null, high: null, ...over });
+  const noSetup = FC.evaluateFilingCatalogue(report([tshResult()]), acting(OV.emptyOverlay()));
+  check(
+    noSetup.ok &&
+      noSetup.unapprovedGroups.length === 1 &&
+      noSetup.unapprovedGroups[0].heading === 'TSH' &&
+      noSetup.unapprovedGroups[0].labId === LAB &&
+      noSetup.unapprovedGroups[0].investigationId === 'tft',
+    'a heading whose only result resolves BY CODE to exactly one investigation offers that test to open, even though nothing is approved for it yet'
+  );
+  const noResult = FC.evaluateFilingCatalogue(report([result({ specimen: 'TSH', code: null })]), acting(OV.emptyOverlay()));
+  check(
+    noResult.ok && noResult.unapprovedGroups.length === 0,
+    'a result that does not resolve by code at all offers nothing to open — never a guess'
+  );
+  const twoTests = FC.evaluateFilingCatalogue(
+    report([tshResult(), result({ specimen: 'TSH' })]), // TSH + ALP under the same (wrong) heading
+    acting(OV.emptyOverlay())
+  );
+  check(
+    twoTests.ok && twoTests.unapprovedGroups.length === 0,
+    'a group whose results resolve to MORE THAN ONE investigation offers nothing to open — ambiguous, not a decision for the suite to make'
+  );
+  const noHeadingAtAll = FC.evaluateFilingCatalogue(report([tshResult({ specimen: null })]), acting(OV.emptyOverlay()));
+  check(
+    noHeadingAtAll.ok && noHeadingAtAll.unapprovedGroups.length === 0,
+    'a result with no heading at all has nothing to open either'
+  );
+  let tshApproved = OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'TSH', enabled: true }, TODAY);
+  tshApproved = OV.approveFiling(tshApproved, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'TSH' }), 'Dr Test', TODAY);
+  const configured = FC.evaluateFilingCatalogue(report([tshResult()]), acting(tshApproved));
+  check(
+    configured.ok && configured.unapprovedGroups.length === 0,
+    'a heading that already has an approved group is not offered — nothing left to set up'
   );
 }
 
@@ -385,6 +427,68 @@ console.log('\n--- comments, reused from the legacy whole-comment matcher ---');
   check(
     suppressedOnAnotherHeading.ok && suppressedOnAnotherHeading.blockers.some((b) => /telephone result/.test(b)),
     'the practice-wide phrase blocks regardless of which heading is on the report, even one with no filing setup'
+  );
+}
+
+console.log(
+  '\n--- commentsForWhitelist: offers a checkbox even when the group has no approved filing setup at all (2026-09-26, Nick) ---'
+);
+{
+  const RESIDUE = 'Please repeat in 3 months, new finding';
+  const commented = report([result({ text: RESIDUE })]); // LFTs is a KNOWN heading at this lab, but nothing is set up for it
+  const none = FC.commentsForWhitelist(commented, acting(OV.emptyOverlay()));
+  check(
+    none.length === 1 &&
+      none[0].name === 'ALP' &&
+      none[0].residue === RESIDUE &&
+      none[0].labId === LAB &&
+      none[0].heading === 'LFTs',
+    'a commented result under a KNOWN heading is offered for whitelisting even though the group is not approved (or does not exist) yet — evaluateFilingCatalogue\'s own per-heading loop never even reaches the comment check for an unapproved group'
+  );
+  const approvedButUnresolved = FC.commentsForWhitelist(commented, acting(baseOverlay()));
+  check(
+    approvedButUnresolved.length === 1 && approvedButUnresolved[0].residue === RESIDUE,
+    'the same holds once the group IS approved but the comment still is not whitelisted (the case evaluateFilingCatalogue itself already covered)'
+  );
+  const unknownHeading = FC.commentsForWhitelist(
+    report([result({ text: RESIDUE, specimen: 'Nonsense heading nobody sends' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    unknownHeading.length === 0,
+    'a heading the lab has never been recorded as sending at all offers nothing — there is no group entry to attach the whitelist to yet (that case gets the "open this test" button instead, not a checkbox)'
+  );
+  const benign = FC.commentsForWhitelist(
+    report([result({ text: 'Normal, no action required' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(benign.length === 0, 'a benign comment is not offered — nothing to whitelist');
+  const noComment = FC.commentsForWhitelist(report([result()]), acting(OV.emptyOverlay()));
+  check(noComment.length === 0, 'a result with no comment at all is not offered');
+  check(FC.commentsForWhitelist(null, acting(OV.emptyOverlay())).length === 0, 'no report at all -> empty, never a throw');
+  check(FC.commentsForWhitelist(commented, null).length === 0, 'no catalogue at all -> empty, never a throw');
+
+  // THE BUG (Nick, 2026-09-26, live-caught the same day as the feature shipped): this used to check "unresolved"
+  // with profile:null unconditionally, which ALWAYS returns not-allowed regardless of what is actually saved —
+  // so an ALREADY-whitelisted-and-approved comment still offered its checkbox every single time, forever. "I've
+  // just clicked again to whitelist that eGFR comment again, reapproved, and the same thing appears."
+  let whitelisted = OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'LFTs', allowComments: [RESIDUE] }, TODAY);
+  whitelisted = OV.approveFiling(whitelisted, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'LFTs' }), 'Dr Test', TODAY);
+  const resolved = FC.commentsForWhitelist(commented, acting(whitelisted));
+  check(
+    resolved.length === 0,
+    'once a comment is genuinely whitelisted (and approved), it is no longer offered — the checkbox must actually reflect group.allowComments, not just "is there any comment at all"'
+  );
+  // A SECOND commented result under the same heading, still genuinely unresolved, is unaffected by the first one
+  // being whitelisted — resolution is per residue, not "the whole heading is done once anything is whitelisted".
+  const OTHER_RESIDUE = 'A second, different, genuinely unresolved comment about this LFT result entirely';
+  const stillOne = FC.commentsForWhitelist(
+    report([result({ text: RESIDUE }), result({ text: OTHER_RESIDUE })]),
+    acting(whitelisted)
+  );
+  check(
+    stillOne.length === 1 && stillOne[0].residue !== RESIDUE,
+    'a genuinely different, still-unresolved comment under the same heading is still offered — whitelisting one comment does not silently clear every other'
   );
 }
 

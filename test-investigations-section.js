@@ -58,16 +58,28 @@ check(
 }
 check(!/Approve all/i.test(src), 'there is no bulk approve — each test is approved from its own review screen');
 check(
-  /Clicking 'Approve' means I am approving this test's wordings, results, and codes\. This saves changes above and makes this test active for the features that use this catalogue\./.test(
+  /Save and approve additionally approves whatever is currently awaiting review for this test — its wordings\/results\/codes and\/or its assisted-filing setup/.test(
     src
   ),
-  'the review screen states exactly what Approve means, next to the button'
+  'the review screen states exactly what Save and approve means, next to the button'
 );
 check(!/I have checked/.test(src) && !/approveBtn\.disabled/.test(src), 'no fiddly tick-box on the review screen');
-const approveButtons = src.match(/btn\(\s*'Approve( result)?',/g) || [];
+const approveButtons = src.match(/btn\(\s*'(Save and approve( result)?|Approve)',/g) || [];
+check(approveButtons.length === 3, 'exactly three approve actions exist: the test\'s own, the result\'s own, and the assisted-filing bar\'s');
 check(
-  approveButtons.length === 3 && /if \(st\.review\) buttons\.appendChild\(btn\('Approve/.test(src),
-  'the only Approve buttons are on the review screens (test and result) and ONE filing approval, in the assisted filing bar of the test'
+  /buttons\.appendChild\(btn\('Save and approve', \(\) => persist\(true\), 'lf-btn-primary'\)\);/.test(src) &&
+    !/if \(st\.review\) buttons\.appendChild\(btn\('Save and approve',/.test(src),
+  'the TEST\'s own "Save and approve" is always offered, never conditional on st.review — a test can have nothing of its own pending yet still have a pending assisted-filing approval, and this is the one screen that settles either (Nick, 2026-09-26: "the option is \'save\', not \'save and approve\', so again I have to open it a second time")'
+);
+check(
+  /const mergedNow = OV\.mergeCatalogue\(S\.builtin, next, \{ includeUnreviewed: true \}\)\.catalogue;\s*\n\s*for \(const lab of S\.merged\.labs\) {\s*\n\s*const pending = OV\.filingStateForTest\(mergedNow, next, saved\.id, lab\.id\)\.pending;\s*\n\s*if \(!pending\.length\) continue;\s*\n\s*next = OV\.approveFilingForTest\(S\.builtin, next, saved\.id, lab\.id, REVIEWER\);/.test(
+    src
+  ),
+  'clicking Save and approve also approves assisted filing for every lab that genuinely has something pending for this test — never a lab with nothing pending, never blindly for every lab regardless'
+);
+check(
+  !/btn\(\s*'Edit',/.test(src) && !/if \(d\.needsReview && d\.ov\)/.test(src),
+  'there is no separate Edit button and no separate needsReview-gated Review button — ONE entry point always opens the same screen, so approving never needs closing and reopening on the identical screen with a different button (Nick, 2026-09-25)'
 );
 check(
   /OV\.approveFilingForTest\(S\.builtin, S\.overlay, st\.id, fLab, REVIEWER\)/.test(src) &&
@@ -530,6 +542,38 @@ check(
 check(
   /\.\.\.\(d\.inv\.synonyms \|\| \[\]\),/.test(src),
   'the list search still finds a test by its old synonym terms'
+);
+
+console.log(
+  '\n── deep-link from the Lab Filing card\'s "Set up on Investigations page" button (2026-09-26, Nick) ──'
+);
+check(
+  /function applyReviewDeepLink\(\)/.test(src) &&
+    /new URLSearchParams\(location\.search\)\.get\('review'\)/.test(src),
+  'options.html?review=<id> is read via the standard URLSearchParams API, not a hand-rolled parser'
+);
+check(
+  /S\.loaded = true;\s*\n\s*applyReviewDeepLink\(\);\s*\n\s*render\(\);/.test(src),
+  'the deep link is applied once the catalogue has actually loaded (S.merged is populated), before the first render'
+);
+check(
+  /S\.editing = inv\.id;\s*\n\s*S\.editState = editStateFor\(inv\);\s*\n\s*S\.open\.add\(inv\.id\);\s*\n\s*S\.scrollToAutofiling = true;\s*\n\}/.test(
+    src
+  ),
+  'it opens the SAME single Review screen every other entry point uses (editStateFor, no separate deep-link-only editor) and scrolls to the assisted-filing bar — the deep link only exists to reach a decision that already lives there'
+);
+check(
+  /const inv = S\.merged\.investigations\.find\(\(i\) => i\.id === invId\);\s*\n\s*if \(!inv\) return;/.test(src),
+  'an id that no longer resolves (test deleted/renamed since the button was drawn) is silently ignored, never a crash or an error banner'
+);
+check(
+  /chrome\.runtime\.sendMessage\(\{ action: 'ms-open-options', section: 'investigations', review: invId \}\);/.test(
+    read('content-scripts/triage-lens/lab-file-button.js')
+  ) &&
+    /chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\('options\/options\.html'\) \+ query \+ suffix \}\);/.test(
+      read('service-worker.js')
+    ),
+  'the button that opens this link (lab-file-button.js) reuses the SAME query param name via the service worker\'s ms-open-options relay (a content script\'s own window.open() to a chrome-extension:// URL is blocked outright on Edge — ERR_BLOCKED_BY_CLIENT — since options/options.html is not in web_accessible_resources) and the existing #sect-investigations hash-router — no new deep-link mechanism duplicated on the other side'
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

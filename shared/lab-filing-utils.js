@@ -1057,6 +1057,15 @@
   function escapeRe(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
+  // Medicus auto-generates this exact label into `interpretation` whenever isAboveReferenceRange /
+  // isBelowReferenceRange is set (engine/normalisers.js folds `interpretation` into `text` for OTHER
+  // consumers — microbiology text-classification rules, where `interpretation` can carry genuine free-text
+  // findings like "Significant growth identified" that must stay). It restates the numeric flag this gate
+  // already reads directly (r.isAbove/r.isBelow) — never something a clinician wrote — so it is not comment
+  // content: it must not itself trigger "carries a comment the suite cannot score" or a "whitelist this
+  // comment" offer (Nick, 2026-09-25, live-caught: the blocked card offered to whitelist "Above reference
+  // range" as if it were a lab comment, for a result that had no comment at all).
+  const LF_REFERENCE_RANGE_LABELS = new Set(['above reference range', 'below reference range']);
   function numericCommentResidue(r) {
     if (!isStr(r.text)) return '';
     let residue = r.text;
@@ -1065,6 +1074,9 @@
     if (Number.isFinite(r.value)) strip.push(String(r.value));
     if (isStr(r.unit) && r.unit.trim()) strip.push(r.unit.trim());
     if (isStr(r.name) && r.name.trim()) strip.push(r.name.trim());
+    if (isStr(r.interpretation) && LF_REFERENCE_RANGE_LABELS.has(r.interpretation.trim().toLowerCase())) {
+      strip.push(r.interpretation.trim());
+    }
     // Strip only the FIRST occurrence of each token (no 'g' flag) — these
     // exist to remove the row's own restated value/name as a label (e.g. a
     // leading "Creatinine - " before the real comment), not every occurrence

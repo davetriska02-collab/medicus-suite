@@ -151,7 +151,30 @@ async function load() {
     S.error = (e && e.message) || String(e);
   }
   S.loaded = true;
+  applyReviewDeepLink();
   render();
+}
+
+// Deep-link from the Lab Filing card on the live Medicus page (content-scripts/triage-lens/lab-file-button.js's
+// "Set up on Investigations page" button, Nick, 2026-09-26): options.html?review=<investigation id>#sect-
+// investigations opens straight onto that test's own Review screen, scrolled to its assisted-filing bar — same
+// screen "Review next" already opens. Silently does nothing for an id that no longer exists (deleted/renamed since
+// the button was rendered) rather than erroring on a stale link.
+function applyReviewDeepLink() {
+  if (typeof location === 'undefined' || !S.merged) return;
+  let invId;
+  try {
+    invId = new URLSearchParams(location.search).get('review');
+  } catch (e) {
+    return;
+  }
+  if (!invId) return;
+  const inv = S.merged.investigations.find((i) => i.id === invId);
+  if (!inv) return;
+  S.editing = inv.id;
+  S.editState = editStateFor(inv);
+  S.open.add(inv.id);
+  S.scrollToAutofiling = true;
 }
 
 async function save(nextOverlay, message) {
@@ -783,7 +806,13 @@ const resultById = (id) => S.merged.results.find((r) => r.id === id) || null;
 // Everything is editable, built-in or not: the form starts from the effective definition and a save stores the COMPLETE
 // result as a practice version (an "override" for a built-in). It stays inactive until approved, and the shipped version
 // keeps applying until then.
-function editStateFor(inv, review) {
+// review is always computed from the test's OWN current state (never a caller's guess) — one entry point ("Review"),
+// not "Edit" now and "Review" again later just to reach the same Approve button (Nick, 2026-09-25: editing then
+// having to close and reopen on the identical screen with a different button to approve was "unwieldy"). Drives the
+// "Review before approving" banner and the changes list starting open — NOT whether "Save and approve" is offered
+// (that button is always offered now: a test can have nothing of its OWN pending yet still have a pending assisted-
+// filing approval, and this is the one screen that settles either — see persist()'s own comment, Nick, 2026-09-26).
+function editStateFor(inv) {
   if (!inv) {
     return {
       id: null,
@@ -818,7 +847,7 @@ function editStateFor(inv, review) {
     note: inv.note || '',
     newResults: [],
     error: '',
-    review: !!review,
+    review: describe(inv).needsReview,
     changes: [],
     // Pending result merges, drag-dropped in the results table but not yet applied: {fromId, fromLabel, intoId, intoLabel}.
     // Reviewable and undoable while the card stays open; only actually merged (OV.mergeResult) when the test is saved
@@ -2199,10 +2228,28 @@ function renderEditor(st, done) {
       let next = saved.overlay;
       let msg = `Saved "${st.label}" — awaiting review.`;
       if (approve) {
+        // A test's own review (wordings/results/codes) and its assisted-filing approval are deliberately SEPARATE
+        // tracks — approving one never approves the other. But both are visible, and either or both may need
+        // approving, on this SAME screen — so one "Save and approve" click settles whatever is actually pending
+        // here, rather than sending the person back to reopen the identical screen a second time for the other
+        // track (Nick, 2026-09-26: "the option is 'save', not 'save and approve', so again I have to open it a
+        // second time"). Each approve call below still only fires when ITS OWN track genuinely has something
+        // pending — this changes how many clicks it takes, not what "approved" means for either track.
+        const approvedParts = [];
         if (next.investigations.some((i) => i.id === saved.id)) {
           next = OV.approveInvestigation(S.builtin, next, saved.id, REVIEWER).overlay;
-          msg = `Approved "${st.label}".`;
-        } else msg = `"${st.label}" is the shipped test — nothing to approve.`;
+          approvedParts.push('wordings, results and codes');
+        }
+        const mergedNow = OV.mergeCatalogue(S.builtin, next, { includeUnreviewed: true }).catalogue;
+        for (const lab of S.merged.labs) {
+          const pending = OV.filingStateForTest(mergedNow, next, saved.id, lab.id).pending;
+          if (!pending.length) continue;
+          next = OV.approveFilingForTest(S.builtin, next, saved.id, lab.id, REVIEWER);
+          approvedParts.push('assisted filing at ' + labWords(lab.id));
+        }
+        msg = approvedParts.length
+          ? `Approved "${st.label}" — ${approvedParts.join(', ')}.`
+          : `"${st.label}" — nothing needed approving.`;
       }
       await save(next, msg);
       done(true);
@@ -2213,13 +2260,15 @@ function renderEditor(st, done) {
   };
   if (st.id && !st.isBuiltin) wrap.appendChild(mergeBlock(st, done));
   const foot = h('div', { class: 'inv-edit-foot' });
-  // On the review screen the statement sits with the buttons: pressing Approve IS the confirmation.
+  // 'Save and approve' saves whatever is on screen, then approves anything about this test that is currently
+  // awaiting review — its own wordings/results/codes, its assisted-filing setup, or both — in one action. Always
+  // offered, not just when this specific screen's OWN fields show pending changes: filing can go back to "awaiting
+  // approval" from edits made elsewhere (e.g. the lab-comments box above), and this is the one screen that settles
+  // it (Nick, 2026-09-26 — see the persist() comment for why "approving one never approves the other" still holds).
   foot.appendChild(
     h('span', {
       class: 'inv-foot-note',
-      text: st.review
-        ? "Clicking 'Approve' means I am approving this test's wordings, results, and codes. This saves changes above and makes this test active for the features that use this catalogue."
-        : 'Saving sends this test back to “awaiting review”; nothing here acts until you approve it. A change to a built-in test replaces the shipped version only once approved.',
+      text: 'Save keeps this as a draft; nothing here acts until it is approved. Save and approve additionally approves whatever is currently awaiting review for this test — its wordings/results/codes and/or its assisted-filing setup — and makes it active for the features that use this catalogue (matching inbound results to outstanding requests, and assisted filing if enabled above). A change to a built-in test replaces the shipped version only once approved.',
     })
   );
   const buttons = h('span', { class: 'inv-foot-btns' });
@@ -2247,8 +2296,8 @@ function renderEditor(st, done) {
     );
   }
   buttons.appendChild(btn('Cancel', () => done(false)));
-  buttons.appendChild(btn('Save', () => persist(false), st.review ? '' : 'lf-btn-primary'));
-  if (st.review) buttons.appendChild(btn('Approve', () => persist(true), 'lf-btn-primary'));
+  buttons.appendChild(btn('Save', () => persist(false)));
+  buttons.appendChild(btn('Save and approve', () => persist(true), 'lf-btn-primary'));
   foot.appendChild(buttons);
   if (st.error) foot.appendChild(h('span', { class: 'inv-error', role: 'alert', text: st.error }));
   wrap.appendChild(foot);
@@ -2501,7 +2550,7 @@ function renderResultEditor(r, done) {
       h('span', {
         class: 'inv-foot-note',
         text: st.review
-          ? "Clicking 'Approve result' means I am approving this result's codes and other names. This saves changes above and makes this result active for the features that use this catalogue."
+          ? "Clicking 'Save and approve result' means I am approving this result's codes and other names. It saves the changes above and makes this result active for the features that use this catalogue."
           : `Used by ${plural(usedBy.length, 'test')}${
               usedBy.length
                 ? ': ' +
@@ -2517,7 +2566,7 @@ function renderResultEditor(r, done) {
     const buttons = h('span', { class: 'inv-foot-btns' });
     buttons.appendChild(btn('Cancel', () => done(false), 'lf-btn-sm'));
     buttons.appendChild(btn('Save result', () => persist(false), st.review ? 'lf-btn-sm' : 'lf-btn-primary lf-btn-sm'));
-    if (st.review) buttons.appendChild(btn('Approve result', () => persist(true), 'lf-btn-primary lf-btn-sm'));
+    if (st.review) buttons.appendChild(btn('Save and approve result', () => persist(true), 'lf-btn-primary lf-btn-sm'));
     foot.appendChild(buttons);
     if (st.error) foot.appendChild(h('span', { class: 'inv-error', role: 'alert', text: st.error }));
     w.appendChild(foot);
@@ -2551,22 +2600,6 @@ function renderInvestigation(d) {
   const reqText = (requests.length ? requests : inv.synonyms || []).join(' · ');
 
   const actions = h('span', { class: 'inv-actions' });
-  // Approval is only possible from the review screen, so the person has the whole test in front of them.
-  if (d.needsReview && d.ov) {
-    actions.appendChild(
-      btn(
-        'Review',
-        () => {
-          S.editing = inv.id;
-          S.editState = editStateFor(inv, true);
-          S.open.add(inv.id);
-          render();
-        },
-        'lf-btn-primary lf-btn-sm',
-        'Open the whole test to check it, then approve.'
-      )
-    );
-  }
   if (d.ov && d.inBuiltin) {
     actions.appendChild(
       btn(
@@ -2622,18 +2655,23 @@ function renderInvestigation(d) {
       )
     );
   }
+  // ONE entry point — opening it always shows both "Save" and, when there is something awaiting review, "Save and
+  // approve" together, so approving never needs a second visit to the identical screen (Nick, 2026-09-25).
   actions.appendChild(
     btn(
-      'Edit',
+      'Review',
       () => {
         S.editing = inv.id;
         S.editState = editStateFor(inv);
+        S.open.add(inv.id);
         render();
       },
-      'lf-btn-sm',
-      d.inBuiltin
-        ? 'Change this built-in test for your practice (the shipped version can be restored)'
-        : 'Edit this test'
+      d.needsReview ? 'lf-btn-primary lf-btn-sm' : 'lf-btn-sm',
+      d.needsReview
+        ? 'Open the whole test to check it, then save and approve.'
+        : d.inBuiltin
+          ? 'Change this built-in test for your practice (the shipped version can be restored)'
+          : 'Edit this test'
     )
   );
 
@@ -2663,7 +2701,7 @@ function renderInvestigation(d) {
           title: 'Open the assisted filing setup for this test',
           onclick: () => {
             S.editing = inv.id;
-            S.editState = editStateFor(inv, !f.approved);
+            S.editState = editStateFor(inv);
             S.open.add(inv.id);
             S.scrollToAutofiling = true;
             render();
@@ -2862,7 +2900,7 @@ function renderBrowse() {
               S.query = '';
               S.toggles.review = true;
               S.editing = d.inv.id;
-              S.editState = editStateFor(d.inv, true);
+              S.editState = editStateFor(d.inv);
               S.open.add(d.inv.id);
               render();
             },
