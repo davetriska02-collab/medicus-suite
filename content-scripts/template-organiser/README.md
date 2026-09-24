@@ -15,17 +15,17 @@ The control Medicus already renders is used when it is on the page:
 - Data-entry: the **Use template** button on the card with that title.
 - Documents: the **Create {title}** control, or **Use template** on that card.
 
-If that control is not mounted, the canvas focuses the clinical field and asks Medicus for the same menu item slash uses (`#id-template` or `#id-document`), then clicks the matching control. A slash character is not left in the note. The suite does not submit Medicus’s form.
+If that control is not mounted, the canvas focuses the clinical field and types `/` so Medicus opens the same menu slash uses (`#id-template` or `#id-document`), then clicks the matching control. A synthetic keydown does not type that character, so the menu never opened when the control was not already on the page. A card in a group and a card in Not in a group use this same path. The slash character is not left in the note. The suite does not submit Medicus’s form and does not POST a create body.
 
 ## Endpoints the catalogue still reads
 
 Host is the practice API base, `https://{siteId}.api.{page hostname}` (for example `https://560b6c.api.england.medicus.health`). The page host returns the SPA HTML shell for these paths. A resource URL that already contains `.api.` wins over the first path segment. Paths stay root-absolute.
 
-| Catalogue step | Method and path |
-|---|---|
-| Data-entry list | `GET /clinical/data/data-entry-template/list?consultationTopicId=` |
-| Document list | `GET /clinical/data/document/template/search/{patientId}?contextId=&contextType=` |
-| Consult ids | `GET /clinical/data/encounter/overview/{encounterId}` |
+| Catalogue step  | Method and path                                                                   |
+| --------------- | --------------------------------------------------------------------------------- |
+| Data-entry list | `GET /clinical/data/data-entry-template/list?consultationTopicId=`                |
+| Document list   | `GET /clinical/data/document/template/search/{patientId}?contextId=&contextType=` |
+| Consult ids     | `GET /clinical/data/encounter/overview/{encounterId}`                             |
 
 Medicus’s own open (not called by this canvas as a create POST) is still:
 

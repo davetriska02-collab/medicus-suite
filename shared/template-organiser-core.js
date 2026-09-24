@@ -627,6 +627,14 @@
     return '';
   }
 
+  // One plan for every card. Which column holds the card is not an input.
+  // posts stays false: the suite does not build or send a create body.
+  function nativeOpenPlan(item) {
+    const src = plain(item) ? item : {};
+    const insert = INSERTS.indexOf(src.insert) !== -1 ? src.insert : '';
+    return { posts: false, menuId: nativeMenuId(src), insert };
+  }
+
   // True when a live Medicus control is the open path for this card.
   // Data-entry: "Use template" on the card with that title.
   // Documents: a control titled "Create {title}", or the same Use template pair.
@@ -841,6 +849,7 @@
     resolveApiBase,
     clinicalFieldKind,
     nativeMenuId,
+    nativeOpenPlan,
     nativeControlMatches,
     buildBoard,
     moveItem,

@@ -305,7 +305,7 @@
       esc(item.preview) +
       '</p>' +
       (item.category ? '<span class="ms-toc-tag">' + esc(item.category) + '</span>' : '') +
-      '<button type="button" class="ms-toc-text ms-toc-use" data-open="' +
+      '<button type="button" draggable="false" class="ms-toc-text ms-toc-use" data-open="' +
       esc(item.id) +
       '" aria-label="Open ' +
       esc(item.title) +
@@ -650,6 +650,8 @@
     }
     var openBtn = t.closest('[data-open]');
     if (openBtn) {
+      _openArm += 1;
+      releaseHeldCards();
       var openId = openBtn.getAttribute('data-open');
       var opened = itemsForSurface().filter(function (item) {
         return item.id === openId;
@@ -737,6 +739,54 @@
     true
   );
 
+  function holdCardForOpen(card) {
+    if (!card) return;
+    card.setAttribute('data-drag-hold', '1');
+    card.setAttribute('draggable', 'false');
+  }
+
+  function releaseHeldCards() {
+    var root = document.getElementById(OVERLAY_ID);
+    if (!root) return;
+    root.querySelectorAll('[data-drag-hold]').forEach(function (card) {
+      card.removeAttribute('data-drag-hold');
+      card.setAttribute('draggable', 'true');
+    });
+  }
+
+  // Open sits inside a draggable card. Clearing draggable on mousedown, in
+  // capture, stops the drag before dragstart. preventDefault on dragstart
+  // also swallows the click, which is how Open on a filed card did nothing.
+  var _openArm = 0;
+
+  function onOpenMouseDown(e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var openBtn = t.closest('[data-open]');
+    if (!openBtn || !openBtn.closest('#' + OVERLAY_ID)) return;
+    holdCardForOpen(openBtn.closest('[data-item-id]'));
+  }
+
+  // Click is the normal Open path. If dragstart already ran and its
+  // preventDefault swallowed that click, mouseup still opens the same card.
+  function onOpenMouseUp(e) {
+    var t = e.target;
+    var openBtn = t && t.closest ? t.closest('[data-open]') : null;
+    var inOverlay = openBtn && openBtn.closest('#' + OVERLAY_ID);
+    releaseHeldCards();
+    if (!inOverlay || !_open) return;
+    var openId = openBtn.getAttribute('data-open');
+    var token = ++_openArm;
+    setTimeout(function () {
+      if (token !== _openArm || !_open) return;
+      var opened = itemsForSurface().filter(function (item) {
+        return item.id === openId;
+      })[0];
+      if (!opened) return;
+      openNative(opened);
+    }, 0);
+  }
+
   function onDragStart(e) {
     if (_writing || _loading) {
       e.preventDefault();
@@ -745,6 +795,7 @@
     var card = e.target && e.target.closest ? e.target.closest('[data-item-id]') : null;
     if (!card || !card.closest('#' + OVERLAY_ID)) return;
     if (e.target.closest && e.target.closest('[data-open]')) {
+      holdCardForOpen(card);
       e.preventDefault();
       return;
     }
@@ -811,6 +862,8 @@
   }
 
   function wireOverlay(el) {
+    el.addEventListener('mousedown', onOpenMouseDown, true);
+    el.addEventListener('mouseup', onOpenMouseUp, true);
     el.addEventListener('click', onClick);
     el.addEventListener('input', onInput);
     el.addEventListener('keydown', onKeyDown);
@@ -1019,10 +1072,91 @@
   function undoAccidentalSlash(el, before) {
     if (!el) return;
     var tag = String(el.tagName || '').toLowerCase();
-    var now = fieldText(el);
-    if (now !== before + '/' && now !== '/' + before) return;
-    if (tag === 'textarea' || tag === 'input') el.value = before;
-    else el.textContent = before;
+    function restoreEnds() {
+      var now = fieldText(el);
+      if (now === before) return;
+      if (now !== before + '/' && now !== '/' + before) return;
+      if (tag === 'textarea' || tag === 'input') el.value = before;
+      else el.textContent = before;
+    }
+    if (tag === 'textarea' || tag === 'input') {
+      var value = String(el.value || '');
+      var at = typeof el.selectionStart === 'number' ? el.selectionStart : value.length;
+      if (at > 0 && value.charAt(at - 1) === '/' && value.slice(0, at - 1) + value.slice(at) === before) {
+        el.value = before;
+        try {
+          el.selectionStart = at - 1;
+          el.selectionEnd = at - 1;
+        } catch (err) {
+          /* selection may be unsupported */
+        }
+        return;
+      }
+      restoreEnds();
+      return;
+    }
+    try {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && sel.rangeCount && sel.anchorNode && el.contains(sel.anchorNode)) {
+        var node = sel.anchorNode;
+        var offset = sel.anchorOffset;
+        if (node.nodeType === 3 && offset > 0 && node.data.charAt(offset - 1) === '/') {
+          node.deleteData(offset - 1, 1);
+          if (fieldText(el) === before) return;
+        }
+      }
+    } catch (err2) {
+      /* selection may be unavailable */
+    }
+    restoreEnds();
+  }
+
+  // Medicus opens its template menu when '/' is typed into the clinical field.
+  // A KeyboardEvent alone is not that keystroke, so the menu stayed shut when
+  // the matching control was not already on the page. A card in a group and a
+  // card in Not in a group both come through here. The slash is removed once
+  // the menu is up. This does not POST.
+  function revealSlashMenu(field) {
+    if (!field) return false;
+    try {
+      field.focus();
+    } catch (err) {
+      /* focus can throw; still try to type */
+    }
+    var before = fieldText(field);
+    try {
+      document.execCommand('insertText', false, '/');
+    } catch (err2) {
+      /* insertText is missing in some hosts */
+    }
+    if (fieldText(field) !== before) return true;
+    var tag = String(field.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'input') {
+      var value = String(field.value || '');
+      var start = typeof field.selectionStart === 'number' ? field.selectionStart : value.length;
+      var end = typeof field.selectionEnd === 'number' ? field.selectionEnd : start;
+      field.value = value.slice(0, start) + '/' + value.slice(end);
+      try {
+        field.selectionStart = start + 1;
+        field.selectionEnd = start + 1;
+      } catch (err3) {
+        /* selection may be unsupported */
+      }
+      try {
+        field.dispatchEvent(
+          new InputEvent('input', { bubbles: true, cancelable: true, data: '/', inputType: 'insertText' })
+        );
+      } catch (err4) {
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (fieldText(field) !== before) return true;
+    }
+    try {
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', bubbles: true, cancelable: true }));
+      return true;
+    } catch (err5) {
+      return false;
+    }
   }
 
   function finishOpen(item) {
@@ -1049,7 +1183,8 @@
   }
 
   function waitForMenu(item, field, before, n) {
-    var menuId = C.nativeMenuId(item);
+    var plan = C.nativeOpenPlan(item);
+    var menuId = plan && !plan.posts ? plan.menuId : '';
     var menu = menuId ? document.getElementById(menuId) : null;
     if (menu) {
       undoAccidentalSlash(field, before);
@@ -1068,6 +1203,13 @@
 
   function openNative(item) {
     if (_writing || !item) return;
+    var plan = C.nativeOpenPlan(item);
+    if (!plan || plan.posts || !plan.menuId) {
+      _error = 'Medicus’s template form was not opened. Nothing was written.';
+      announce(_error);
+      render();
+      return;
+    }
     var live = readLiveContext();
     if (C.sessionDrift(_session, live)) {
       _error = 'The consultation on screen changed. Medicus’s template form was not opened.';
@@ -1091,8 +1233,7 @@
       finishOpen(item);
       return;
     }
-    var menuId = C.nativeMenuId(item);
-    var menu = menuId ? document.getElementById(menuId) : null;
+    var menu = plan.menuId ? document.getElementById(plan.menuId) : null;
     if (menu && clickNative(menu)) {
       waitForControl(item, 0);
       return;
@@ -1101,9 +1242,7 @@
       noteOutside('The cursor is not in History, Examination, Impression, or Plan. Nothing was opened.');
       return;
     }
-    try {
-      field.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', bubbles: true, cancelable: true }));
-    } catch (err) {
+    if (!revealSlashMenu(field)) {
       noteOutside('Medicus’s template menu did not open. Nothing was written.');
       return;
     }
