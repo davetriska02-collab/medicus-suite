@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.264.35
+**Version:** v3.265.0
 **Generated:** 2026-09-24
 
 ## What it is
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.265.0 (24 Sep)** — Template and document organiser (off until a practice turns it on): groups Medicus template and document lists on a canvas. Groups stay on this install. Use inserts with the same slash-menu request, and does not insert when the live form response is missing the fields that request needs.
 - **v3.264.35 (24 Sep)** — Lab Filing can opt into filing on the Lab Result Catalogue (setting, default off, union-only with the legacy gate, practice-published): works even with zero legacy profiles, driven by the catalogue's own practice ranges/guards/comment whitelists. Fail closed: a pending catalogue that does not load blocks filing (no lab-range fallback); catalogue `ok: false` with no legacy profile blocks filing (no generic baseline, including the practice-wide comment whitelist); the one-click confirm shows the practice range that cleared the file and the lab-flag override warning when that path applied. The lab-flag override is one switch per test at a lab. Catalogue-only filing completes in one click. H-080 and H-081 accepted; H-073 re-signed. Shipped `filingEngine` and `oirEngine` stay `legacy`.
 - **v3.264.35 (24 Sep)** — Investigations page: a hint when a scan or a test's own results table is about to treat two results as separate when they're likely the same analyte, with one-click merge (staged and reviewable — nothing merges until the test is saved) and "it's not X" to permanently dismiss a wrong suggestion; a duplicate-lab-entry bug fixed at its source plus a merge tool for existing duplicates; the results list filters reworked into independent Yes/No/Any toggles (awaiting review, assisted filing, matched to a lab report, matched to a Medicus request) with quick-jump presets, and re-sorted to surface items needing attention first; a gate + shadow log for filing on the Lab Result Catalogue
 - **v3.264.35 (22 Sep)** — Investigations page: "autofiling" renamed to "assisted filing" throughout (nothing acts automatically); a "What does this do?" explainer and "Match requests to lab reports" are now collapsible; empty practice-range boxes are pre-filled from the lab's own reference range seen on a recent report (highlighted, never saved without a click); fixed a page-wide CSS specificity bug that was silently stretching several narrow inputs to full width

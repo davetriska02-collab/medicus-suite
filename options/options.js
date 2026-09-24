@@ -118,6 +118,7 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.routineRxButton', ids: ['pfRoutineRxButton'], grandfather: true },
   { key: 'suite.ui.quickActionsWidget', ids: ['pfQuickActionsWidget'], grandfather: true },
   { key: 'suite.ui.focusAlerts', ids: ['pfFocusAlerts'], grandfather: true },
+  { key: 'suite.ui.templateOrganiser', ids: ['pfTemplateOrganiser'], grandfather: false },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);
@@ -1114,6 +1115,7 @@ async function doFullExport() {
     rota,
     allocationGroups,
     stackchan,
+    templateOrganiser,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -1136,6 +1138,7 @@ async function doFullExport() {
     rotaExport(),
     allocationGroupsExport(),
     stackchanExport(),
+    templateOrganiserExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -1162,6 +1165,7 @@ async function doFullExport() {
       rota,
       allocationGroups,
       stackchan,
+      templateOrganiser,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -1191,6 +1195,7 @@ async function doModuleExport(scope) {
     rota: () => rotaExport(),
     allocationGroups: () => allocationGroupsExport(),
     stackchan: () => stackchanExport(),
+    templateOrganiser: () => templateOrganiserExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -1242,6 +1247,7 @@ async function applyEnvelope(envelope) {
     mods.rota && (() => rotaImport(mods.rota)),
     mods.allocationGroups && (() => allocationGroupsImport(mods.allocationGroups)),
     mods.stackchan && (() => stackchanImport(mods.stackchan)),
+    mods.templateOrganiser && (() => templateOrganiserImport(mods.templateOrganiser)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);

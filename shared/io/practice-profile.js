@@ -1141,6 +1141,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton',
           'ui.quickActionsWidget',
           'ui.focusAlerts',
+          'ui.templateOrganiser',
         ];
         const BOOLEAN_PACK_KEYS = [
           'signing.softFlags',
@@ -1149,6 +1150,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton',
           'ui.quickActionsWidget',
           'ui.focusAlerts',
+          'ui.templateOrganiser',
         ];
         const GRANDFATHER_PACK_KEYS = [
           'ui.allocateCanvases',
@@ -1164,6 +1166,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton': 'routineRxButton',
           'ui.quickActionsWidget': 'quickActionsWidget',
           'ui.focusAlerts': 'focusAlerts',
+          'ui.templateOrganiser': 'templateOrganiser',
         };
 
         for (const key of ALLOWED_SUITE_KEYS) {

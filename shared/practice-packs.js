@@ -22,6 +22,8 @@
     routineRxButton: 'suite.ui.routineRxButton',
     quickActionsWidget: 'suite.ui.quickActionsWidget',
     focusAlerts: 'suite.ui.focusAlerts',
+    // Opt-in, like softFlags: missing storage means OFF. Not grandfathered.
+    templateOrganiser: 'suite.ui.templateOrganiser',
   };
 
   const GRANDFATHER_KEYS = [
@@ -32,7 +34,7 @@
     KEYS.focusAlerts,
   ];
 
-  const ALL_PACK_KEYS = [KEYS.softFlags].concat(GRANDFATHER_KEYS);
+  const ALL_PACK_KEYS = [KEYS.softFlags, KEYS.templateOrganiser].concat(GRANDFATHER_KEYS);
 
   const ENVELOPE_ALIASES = {
     'signing.softFlags': 'signingSoftFlags',
@@ -41,6 +43,7 @@
     'ui.routineRxButton': 'routineRxButton',
     'ui.quickActionsWidget': 'quickActionsWidget',
     'ui.focusAlerts': 'focusAlerts',
+    'ui.templateOrganiser': 'templateOrganiser',
   };
 
   const _raw = Object.create(null);

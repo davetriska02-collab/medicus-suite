@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.0] — 2026-09-24
+
+### Template and document organiser (off by default)
+
+Practice staff can group Medicus data-entry templates and document templates on a full-bleed canvas, and insert a card with the same slash-menu request the consultation already uses.
+
+- Pack `suite.ui.templateOrganiser` is **opt-in** (missing means off). The **Organise templates…** button shows on a consultation or plan page, and while the Data Entry Templates, Document Templates, or New Document drawer is open.
+- Groups (Nursing, Co-op, Admin, plus any the practice adds) persist in `chrome.storage.local` under `templateOrganiser.config`, keyed by Medicus template id. Saving groups does not call Medicus. Medicus has no group field on these lists.
+- **Use** then **Insert into consultation** runs the captured create POST only after the matching form GET supplies the fields that POST requires. A missing version id, form, visibility flags, or consult `sortOrder` / `sortOrderHash` does not POST. See `content-scripts/template-organiser/README.md` for endpoints and capture gaps. W25, H-082 (pending CSO review).
+
 ## [v3.264.35] — 2026-09-24
 
 ### Lab Result Catalogue opt-in, rebased onto v3.264.34, with fail-closed filing fixes

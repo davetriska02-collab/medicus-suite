@@ -186,9 +186,10 @@ const FILE_TO_WIDS = {
   'content-scripts/triage-lens/content.js': ['W22'],
   'shared/lab-allocate-core.js': ['W23'],
   'content-scripts/risk-flag-cleanup.js': ['W24'],
+  'shared/template-organiser-client.js': ['W25'],
 };
 
-const LAST_WID = 24;
+const LAST_WID = 25;
 
 // W7/W8/W22 are DOM macros (may have no method:POST). W12 panel files and the
 // W1 slots shim may only re-export booking-core. W21 companions instantiate
@@ -313,7 +314,7 @@ for (const rel of Object.keys(CLICK_MACRO_MAP).sort()) {
   check(fs.existsSync(abs), `CLICK_MACRO_MAP entry ${rel} still exists`);
 }
 
-// ── 5. CSN §6.1 table rows W1–W23 ────────────────────────────────────────────
+// ── 5. CSN §6.1 table rows W1–W25 ────────────────────────────────────────────
 
 console.log('\n--- CSN §6.1 W-id table rows ---');
 const csnPath = path.join(ROOT, 'docs', 'CLINICAL-SAFETY-NOTICE.md');
@@ -350,7 +351,7 @@ for (const rel of EXISTENCE_EVEN_WITHOUT_POST) {
 }
 
 // Self-check: every W-id except W3 has ≥1 mapped file in this inventory.
-console.log('\n--- inventory map covers W1–W23 ---');
+console.log('\n--- inventory map covers W1–W25 ---');
 const widsWithFiles = new Set();
 for (const wids of Object.values(FILE_TO_WIDS)) {
   wids.forEach((w) => widsWithFiles.add(w));

@@ -126,6 +126,7 @@ const KEY_PREFIXES = [
   'rota',
   'board',
   'allocationGroups',
+  'templateOrganiser',
 ];
 
 function hasKeyPrefix(k) {
@@ -466,7 +467,6 @@ const ALLOWLIST = new Set([
   // onto another machine would import a stale "this worker failed to load"
   // verdict that has nothing to do with that machine:
   'suite.swLoadErrors',
-
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
