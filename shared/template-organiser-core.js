@@ -675,6 +675,39 @@
     return { groups };
   }
 
+  function queryText(query) {
+    return String(query ?? '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  // View filter only. Group columns stay, including a pot whose cards all miss.
+  // Title, preview, and category are the haystack. Stored order is not touched.
+  function filterBoard(board, query) {
+    const q = queryText(query);
+    const groups = board && Array.isArray(board.groups) ? board.groups : [];
+    return {
+      groups: groups.map((group) => {
+        const items = Array.isArray(group && group.items) ? group.items : [];
+        const visible = q
+          ? items.filter((item) => {
+              const clean = sanitiseItem(item);
+              if (!clean) return false;
+              const hay = (clean.title + '\n' + clean.preview + '\n' + clean.category).toLowerCase();
+              return hay.indexOf(q) !== -1;
+            })
+          : items.slice();
+        return {
+          id: group && group.id,
+          name: group && group.name,
+          locked: !!(group && group.locked),
+          items: visible,
+        };
+      }),
+    };
+  }
+
   function moveItem(surface, itemId, toGroupId, beforeId) {
     const base = sanitiseSurface(surface);
     const id = clamp(itemId, LIMITS.id);
@@ -843,6 +876,7 @@
     nativeMenuId,
     nativeControlMatches,
     buildBoard,
+    filterBoard,
     moveItem,
     createGroup,
     renameGroup,

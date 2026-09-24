@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.3] — 2026-09-24
+
+### Document and Template Organiser search
+
+Templates and Documents each have a search field. Typing filters that list by title, preview, or category, ignoring case, and leaves every group on the board. Cards that do not match are hidden. Clearing the field shows the full organised board again. The pack stays off until a practice turns it on. Catalogue reads stay on the practice API host.
+
 ## [v3.265.2] — 2026-09-24
 
 ### Document and Template Organiser catalogue

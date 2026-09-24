@@ -485,6 +485,60 @@ function names(surface) {
     'backup preview counts both surfaces'
   );
 
+  console.log('\n--- search hides cards and keeps pots ---');
+  const searchItems = [
+    { id: 'asthma-review', title: 'Asthma review', preview: 'Annual QoF', category: 'Nursing' },
+    { id: 'coop-letter', title: 'Co-op handover', preview: 'Evening cover', category: 'Admin' },
+    { id: 'bp-check', title: 'Blood pressure', preview: 'Clinic card', category: 'Nursing' },
+  ];
+  let searchSurface = C.moveItem(seed.surfaces.templates, 'asthma-review', 'nursing', null).surface;
+  searchSurface = C.moveItem(searchSurface, 'coop-letter', 'coop', null).surface;
+  searchSurface = C.moveItem(searchSurface, 'bp-check', 'nursing', null).surface;
+  const fullBoard = C.buildBoard(searchItems, searchSurface);
+  const byTitle = C.filterBoard(fullBoard, 'ASTHMA');
+  function potIds(board) {
+    return board.groups.map((g) => g.id).join('|');
+  }
+  function placedIds(board) {
+    return board.groups.map((g) => g.id + ':' + g.items.map((item) => item.id).join(',')).join('|');
+  }
+  check(potIds(byTitle) === potIds(fullBoard), 'filter keeps every pot, including empty ones');
+  check(
+    byTitle.groups.every((g, i) => g.name === fullBoard.groups[i].name && g.locked === fullBoard.groups[i].locked),
+    'pot names and the ungrouped lane stay'
+  );
+  const nursingShown = byTitle.groups.find((g) => g.id === 'nursing').items.map((item) => item.id);
+  check(nursingShown.join('|') === 'asthma-review', 'case-insensitive title match stays in its pot');
+  check(
+    !byTitle.groups.some((g) => g.items.some((item) => item.id === 'bp-check' || item.id === 'coop-letter')),
+    'non-matching cards are hidden'
+  );
+  check(
+    fullBoard.groups.find((g) => g.id === 'nursing').items.some((item) => item.id === 'bp-check'),
+    'hiding a card does not remove it from the organised board'
+  );
+  check(placedIds(C.filterBoard(fullBoard, 'qof')) === placedIds(byTitle), 'preview match');
+  const byCategory = C.filterBoard(fullBoard, 'admin');
+  check(
+    byCategory.groups.find((g) => g.id === 'coop').items.some((item) => item.id === 'coop-letter') &&
+      !byCategory.groups.some((g) => g.items.some((item) => item.id === 'asthma-review')),
+    'category match hides the other cards'
+  );
+  check(placedIds(C.filterBoard(fullBoard, '')) === placedIds(fullBoard), 'clear restores every card in its pot');
+  check(placedIds(C.filterBoard(fullBoard, '   ')) === placedIds(fullBoard), 'a blank query restores every card');
+  const docSurface = C.moveItem(seed.surfaces.documents, 'bp-check', 'admin', null).surface;
+  const docBoard = C.buildBoard(searchItems, docSurface);
+  const docFiltered = C.filterBoard(docBoard, 'blood');
+  check(potIds(docFiltered) === potIds(docBoard), 'document pots stay while a card is hidden');
+  check(
+    docFiltered.groups
+      .find((g) => g.id === 'admin')
+      .items.map((item) => item.id)
+      .join('|') === 'bp-check',
+    'document list filters by title'
+  );
+  check(placedIds(C.filterBoard(docBoard, '')) === placedIds(docBoard), 'clear restores the document board');
+
   console.log('\n--- canvas wires the client and stays gated ---');
   const canvas = fs.readFileSync(
     path.join(__dirname, 'content-scripts/template-organiser/template-organiser-canvas.js'),
@@ -541,6 +595,17 @@ function names(surface) {
   check(/headingId/.test(canvas) && /rememberClinicalUrl/.test(canvas), 'canvas passes the heading and the api ring');
   check(/PerformanceObserver/.test(canvas), 'canvas watches practice API resource URLs');
   check(/ms-toc-gap/.test(canvas), 'a missing id is shown at the bottom of the canvas');
+  check(/filterBoard/.test(coreSrc) && /filterBoard/.test(canvas), 'canvas filters through the core');
+  check(/Search templates/.test(canvas) && /Search documents/.test(canvas), 'both lists have a search label');
+  check(
+    /for="ms-toc-search"/.test(canvas) && /type="search"/.test(canvas),
+    'search field is labelled and keyboard usable'
+  );
+  check(/ms-toc-search-clear/.test(canvas) && /_query = ''/.test(canvas), 'clear empties the query');
+  check(
+    /suite\.ui\.templateOrganiser/.test(canvas) && /resolveApiBase/.test(canvas),
+    'search change leaves the pack and API host'
+  );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);
