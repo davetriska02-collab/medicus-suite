@@ -310,7 +310,7 @@ const NEW_PACKS = [
   check(store['suite.ui.templateOrganiser'] === true, 'suiteImport writes suite.ui.templateOrganiser');
   const tocPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { templateOrganiser: true } }));
   check(
-    tocPreview.some((l) => /Template organiser canvas ON/.test(l)),
+    tocPreview.some((l) => /Document and Template Organiser canvas ON/.test(l)),
     'previewEnvelope mentions template organiser when ON'
   );
 

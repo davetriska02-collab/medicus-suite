@@ -154,6 +154,10 @@ const CLICK_MACRO_MAP = {
     reason:
       "extension options page script (not injected into Medicus pages): download-anchor click and file-input opener for the suite's own import/export UI",
   },
+  'content-scripts/template-organiser/template-organiser-canvas.js': {
+    wids: ['W25'],
+    note: 'opens Medicus’s own template or document control (Use template / Create title, or the slash menu item when that control is not mounted). The suite does not POST the create body',
+  },
 };
 
 // ── Expected file → W-id map (a file may map to several W-ids) ───────────────
@@ -186,7 +190,6 @@ const FILE_TO_WIDS = {
   'content-scripts/triage-lens/content.js': ['W22'],
   'shared/lab-allocate-core.js': ['W23'],
   'content-scripts/risk-flag-cleanup.js': ['W24'],
-  'shared/template-organiser-client.js': ['W25'],
 };
 
 const LAST_WID = 25;

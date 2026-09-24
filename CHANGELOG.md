@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.1] — 2026-09-24
+
+### Document and Template Organiser
+
+The launcher is named **Document and Template Organiser**. It shows while the cursor is in History, Examination, Impression, or Plan on a consultation or plan page, and hides when that focus leaves. An open template drawer is not required. Pack key `suite.ui.templateOrganiser` and storage key `templateOrganiser.config` are unchanged.
+
+Open on a card uses Medicus’s own template form (the slash **Use template** / **Create** control, or that menu item when the control is not already on the page). Medicus places the finished item at the cursor. The suite no longer POSTs a create body and no longer asks “Insert into consultation”.
+
+Catalogue reads still use `https://{siteId}.api.{page hostname}`, preferring a resource URL that already contains `.api.`. The page host returns the SPA HTML shell for those paths, which was the “Unexpected response” on the list.
+
 ## [v3.265.0] — 2026-09-24
 
 ### Template and document organiser (off by default)

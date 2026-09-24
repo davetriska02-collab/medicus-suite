@@ -2,11 +2,12 @@
 // Medicus Suite — template & document organiser canvas
 //
 // Full-bleed overlay, same mount shape as the allocate canvases. Group
-// edits confirm into chrome.storage.local only. Use on a card inserts
-// through TemplateOrganiserClient, which repeats the slash-menu GET and
-// POST. The pack suite.ui.templateOrganiser stays off until a practice
-// switches it on. The launcher mounts on the encounter / plan page, or
-// while a Template or Document drawer is open.
+// edits confirm into chrome.storage.local only. Open on a card uses
+// Medicus’s own template form (the same control the slash menu uses).
+// This canvas does not POST a create body. The pack
+// suite.ui.templateOrganiser stays off until a practice switches it on.
+// The launcher shows while the cursor is in History, Examination,
+// Impression, or Plan on a consultation or plan page.
 'use strict';
 
 (function () {
@@ -19,6 +20,7 @@
 
   var OVERLAY_ID = 'ms-toc-overlay';
   var LAUNCH_ID = 'ms-toc-launch';
+  var FEATURE_NAME = 'Document and Template Organiser';
   var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.templateOrganiser) || 'suite.ui.templateOrganiser';
   var CONFIG_KEY = 'templateOrganiser.config';
   // Opt-in pack: a missing PracticePacks helper stays off (unlike grandfathered canvases).
@@ -42,6 +44,7 @@
   var _focusClose = false;
   var _session = null;
   var _client = null;
+  var _clientBase = '';
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -167,11 +170,36 @@
     return C.readSessionContext({ href: location.href, resourceUrls: resourceUrls() });
   }
 
+  function practiceCodeHint() {
+    try {
+      var helper = window.PracticeCode;
+      if (!helper || typeof helper.getPracticeCodeSync !== 'function') return '';
+      var code = helper.getPracticeCodeSync();
+      if (helper.isValidPracticeCode && !helper.isValidPracticeCode(code)) return '';
+      return code || '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function apiBase() {
+    return C.resolveApiBase({
+      href: location.href,
+      pathname: location.pathname,
+      hostname: location.hostname,
+      resourceUrls: resourceUrls(),
+      practiceCode: practiceCodeHint(),
+    });
+  }
+
   function client() {
-    if (_client) return _client;
     var factory = window.TemplateOrganiserClient;
     if (!factory || typeof factory.createClient !== 'function') return null;
-    _client = factory.createClient({ origin: location.origin });
+    var base = apiBase();
+    if (!base) return null;
+    if (_client && _clientBase === base) return _client;
+    _clientBase = base;
+    _client = factory.createClient({ apiBase: base });
     return _client;
   }
 
@@ -185,7 +213,8 @@
     var urls = resourceUrls();
     Promise.resolve()
       .then(function () {
-        if (!api) throw new Error('Template list client is not loaded.');
+        if (!window.TemplateOrganiserClient) throw new Error('Template list client is not loaded.');
+        if (!api) throw new Error('No practice API host on this page. Nothing was read.');
         return api.hydrate(C.readSessionContext({ href: href, resourceUrls: urls }), href, urls);
       })
       .then(function (ctx) {
@@ -240,9 +269,11 @@
       esc(item.preview) +
       '</p>' +
       (item.category ? '<span class="ms-toc-tag">' + esc(item.category) + '</span>' : '') +
-      '<button type="button" class="ms-toc-text ms-toc-use" data-use="' +
+      '<button type="button" class="ms-toc-text ms-toc-use" data-open="' +
       esc(item.id) +
-      '">Use</button>' +
+      '" aria-label="Open ' +
+      esc(item.title) +
+      ' with Medicus">Open</button>' +
       '</article>'
     );
   }
@@ -321,24 +352,6 @@
       );
     }
     if (!_pending) return '';
-    if (_pending.kind === 'insert') {
-      var title = _pending.item && _pending.item.title ? _pending.item.title : 'this template';
-      var frozenInsert = _writing ? ' disabled' : '';
-      return (
-        '<div class="ms-toc-confirm" role="region" aria-label="Insert into the consultation">' +
-        '<p>Insert “' +
-        esc(title) +
-        '” into this consultation with Medicus’s own template action? This writes the record. Cancel leaves it unchanged.</p>' +
-        '<div class="ms-toc-confirm-actions">' +
-        '<button type="button" class="ms-toc-ghost" id="ms-toc-cancel-pending"' +
-        frozenInsert +
-        '>Keep organising</button>' +
-        '<button type="button" class="ms-toc-primary" id="ms-toc-confirm-pending"' +
-        frozenInsert +
-        '>Insert into consultation</button>' +
-        '</div></div>'
-      );
-    }
     if (_pending.kind === 'abandon') {
       return (
         '<div class="ms-toc-confirm" role="region" aria-label="Discard unsaved organisation">' +
@@ -381,7 +394,7 @@
       })
       .join(' ');
     var banner =
-      'Groups are kept on this install. Use on a card inserts with the same Medicus action as the slash menu.' +
+      'Groups are kept on this install. Open uses Medicus’s own template form. Medicus places the finished item at the cursor.' +
       (gapLine ? ' ' + gapLine : '');
     var templatesN = _catalogue && _catalogue.templates ? _catalogue.templates.length : 0;
     var documentsN = _catalogue && _catalogue.documents ? _catalogue.documents.length : 0;
@@ -409,7 +422,9 @@
       '<div class="ms-toc-panel" role="document">' +
       '<header class="ms-toc-header">' +
       '<div class="ms-toc-heading">' +
-      '<h1 class="ms-toc-title">Template and document organiser</h1>' +
+      '<h1 class="ms-toc-title">' +
+      esc(FEATURE_NAME) +
+      '</h1>' +
       '<p class="ms-toc-banner">' +
       esc(banner) +
       '</p>' +
@@ -484,8 +499,13 @@
     _error = null;
     var el = document.getElementById(OVERLAY_ID);
     if (el) el.remove();
-    var launch = document.getElementById(LAUNCH_ID);
-    if (launch) launch.focus();
+    if (_fieldEl && _fieldEl.isConnected) {
+      try {
+        _fieldEl.focus();
+      } catch (err) {
+        /* the field may reject focus */
+      }
+    }
   }
 
   function requestClose() {
@@ -512,59 +532,7 @@
       closeOverlay();
       return;
     }
-    if (_pending.kind === 'insert') {
-      runInsert(_pending.item);
-      return;
-    }
     if (_pending.kind === 'confirm') persistDraft();
-  }
-
-  function runInsert(item) {
-    if (_writing || !item) return;
-    var api = client();
-    if (!api) {
-      _error = 'Template list client is not loaded.';
-      _pending = null;
-      announce(_error);
-      render();
-      return;
-    }
-    var live = readLiveContext();
-    if (C.sessionDrift(_session, live)) {
-      _error = 'The consultation on screen changed. The insert did not run.';
-      _pending = null;
-      announce(_error);
-      render();
-      return;
-    }
-    var ctx = C.mergeSession(_session, live);
-    _writing = true;
-    _error = null;
-    render();
-    api
-      .insertItem(item, ctx)
-      .then(function (result) {
-        _writing = false;
-        _pending = null;
-        if (result && result.ok) {
-          announce('Medicus accepted the insert for ' + item.title + '.');
-          render();
-          return;
-        }
-        if (result && result.gap) _error = result.gap;
-        else if (result && result.status) {
-          _error = 'Medicus did not accept the insert (HTTP ' + result.status + ').';
-        } else _error = 'The insert did not run.';
-        announce(_error);
-        render();
-      })
-      .catch(function (err) {
-        _writing = false;
-        _pending = null;
-        _error = err && err.message ? err.message : 'The insert did not run.';
-        announce(_error);
-        render();
-      });
   }
 
   function commitRename(groupId) {
@@ -651,18 +619,14 @@
       announce('Group removed on this canvas. Its cards moved to Not in a group.');
       return;
     }
-    var useBtn = t.closest('[data-use]');
-    if (useBtn) {
-      var useId = useBtn.getAttribute('data-use');
-      var used = itemsForSurface().filter(function (item) {
-        return item.id === useId;
+    var openBtn = t.closest('[data-open]');
+    if (openBtn) {
+      var openId = openBtn.getAttribute('data-open');
+      var opened = itemsForSurface().filter(function (item) {
+        return item.id === openId;
       })[0];
-      if (!used) return;
-      _pending = { kind: 'insert', item: used };
-      _error = null;
-      _editingGroupId = '';
-      announce('Review the insert. Nothing is written until you confirm.');
-      render();
+      if (!opened) return;
+      openNative(opened);
       return;
     }
     if (t.closest('#ms-toc-add-group')) {
@@ -751,7 +715,7 @@
     }
     var card = e.target && e.target.closest ? e.target.closest('[data-item-id]') : null;
     if (!card || !card.closest('#' + OVERLAY_ID)) return;
-    if (e.target.closest && e.target.closest('[data-use]')) {
+    if (e.target.closest && e.target.closest('[data-open]')) {
       e.preventDefault();
       return;
     }
@@ -845,7 +809,7 @@
       el.id = OVERLAY_ID;
       el.setAttribute('role', 'dialog');
       el.setAttribute('aria-modal', 'true');
-      el.setAttribute('aria-label', 'Template and document organiser');
+      el.setAttribute('aria-label', FEATURE_NAME);
       el.innerHTML = '<div class="ms-toc-live" aria-live="polite"></div><div class="ms-toc-shell"></div>';
       wireOverlay(el);
       document.documentElement.appendChild(el);
@@ -867,7 +831,10 @@
     }
   }
 
-  function nativeSurface() {
+  var _fieldEl = null;
+  var _fieldKind = '';
+
+  function consultPage() {
     try {
       var path = String(location.pathname || '');
       if (path.indexOf('/clinical/encounter/') !== -1) return true;
@@ -875,20 +842,244 @@
     } catch (err) {
       /* location can throw in a torn-down frame */
     }
-    var nodes = document.querySelectorAll('.drawer-modal, .m-action-menu');
-    for (var i = 0; i < nodes.length; i += 1) {
-      var text = nodes[i].textContent || '';
-      if (text.indexOf('Data Entry Templates') !== -1) return true;
-      if (text.indexOf('Document Templates') !== -1) return true;
-      if (text.indexOf('New Document') !== -1) return true;
-    }
     return false;
+  }
+
+  function nodeEditable(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'textarea') return true;
+    if (tag === 'input') {
+      var type = String(el.getAttribute('type') || 'text').toLowerCase();
+      return type === '' || type === 'text' || type === 'search';
+    }
+    if (el.isContentEditable) return true;
+    return el.getAttribute && el.getAttribute('role') === 'textbox';
+  }
+
+  function inOrganiser(node) {
+    if (!node || !node.closest) return false;
+    if (node.id === LAUNCH_ID) return true;
+    if (node.closest('#' + LAUNCH_ID)) return true;
+    if (node.closest('#' + OVERLAY_ID)) return true;
+    return false;
+  }
+
+  // Walk from the focused node to a History / Examination / Impression / Plan
+  // signal. Heading ids (heading-history-{uuid}) are the slash-menu label.
+  // A sibling or ancestor heading with that exact word counts when the
+  // focused node is an editor.
+  function headingKindFrom(el) {
+    if (!el || el.nodeType !== 1) return '';
+    var tag = String(el.tagName || '').toLowerCase();
+    var role = el.getAttribute && el.getAttribute('role');
+    var isHeading = tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || role === 'heading';
+    if (!isHeading) return '';
+    return C.clinicalFieldKind({
+      id: el.id || '',
+      labelledBy: '',
+      headingText: (el.textContent || '').replace(/\s+/g, ' ').trim(),
+      editable: true,
+    });
+  }
+
+  function fieldSignal(el) {
+    if (!el || el.nodeType !== 1 || !nodeEditable(el)) return null;
+    var node = el;
+    for (var i = 0; i < 8 && node && node.nodeType === 1; i += 1) {
+      var labelled = node.getAttribute ? node.getAttribute('aria-labelledby') || '' : '';
+      var kind = C.clinicalFieldKind({
+        id: node.id || '',
+        labelledBy: labelled,
+        headingText: '',
+        editable: true,
+      });
+      if (kind) return { kind: kind, el: el };
+      var prev = node.previousElementSibling;
+      var steps = 0;
+      while (prev && steps < 6) {
+        var sib = headingKindFrom(prev);
+        if (sib) return { kind: sib, el: el };
+        prev = prev.previousElementSibling;
+        steps += 1;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function syncFieldFrom(node) {
+    if (inOrganiser(node)) return;
+    var hit = fieldSignal(node);
+    if (hit) {
+      _fieldEl = hit.el;
+      _fieldKind = hit.kind;
+      return;
+    }
+    _fieldEl = null;
+    _fieldKind = '';
+  }
+
+  function launcherWanted() {
+    if (!_packOn || !consultPage()) return false;
+    if (_open) return true;
+    if (_fieldKind) return true;
+    var active = document.activeElement;
+    if (active && active.id === LAUNCH_ID) return true;
+    return false;
+  }
+
+  function noteOutside(text) {
+    var host = document.getElementById('ms-toc-note');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'ms-toc-note';
+      host.setAttribute('aria-live', 'polite');
+      host.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;';
+      document.documentElement.appendChild(host);
+    }
+    host.textContent = text || '';
+  }
+
+  function clickNative(el) {
+    if (!el || typeof el.click !== 'function') return false;
+    el.click();
+    return true;
+  }
+
+  function controlSpec(el) {
+    var card = el.closest ? el.closest('.m-card, .template-list-item, .m-list-item, li') : null;
+    var cardTitle = '';
+    if (card && card.querySelector) {
+      var label = card.querySelector('.description-list-item--label, .m-list-item--content');
+      cardTitle = label ? label.textContent || '' : '';
+    }
+    return {
+      text: el.textContent || '',
+      title: el.getAttribute ? el.getAttribute('title') || '' : '',
+      cardTitle: cardTitle,
+    };
+  }
+
+  function findNativeControl(item) {
+    var nodes = document.querySelectorAll('button, a, [role="button"]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      if (C.nativeControlMatches(item, controlSpec(el))) return el;
+    }
+    return null;
+  }
+
+  function fieldText(el) {
+    if (!el) return '';
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'input') return String(el.value || '');
+    return String(el.textContent || '');
+  }
+
+  function undoAccidentalSlash(el, before) {
+    if (!el) return;
+    var tag = String(el.tagName || '').toLowerCase();
+    var now = fieldText(el);
+    if (now !== before + '/' && now !== '/' + before) return;
+    if (tag === 'textarea' || tag === 'input') el.value = before;
+    else el.textContent = before;
+  }
+
+  function finishOpen(item) {
+    noteOutside(
+      'Medicus’s own template control was used for ' +
+        item.title +
+        '. Finish that form in Medicus. This canvas does not write the record.'
+    );
+  }
+
+  function waitForControl(item, n) {
+    var el = findNativeControl(item);
+    if (el && clickNative(el)) {
+      finishOpen(item);
+      return;
+    }
+    if (n > 40) {
+      noteOutside('Medicus’s template control for ' + item.title + ' was not on the page. Nothing was written.');
+      return;
+    }
+    setTimeout(function () {
+      waitForControl(item, n + 1);
+    }, 50);
+  }
+
+  function waitForMenu(item, field, before, n) {
+    var menuId = C.nativeMenuId(item);
+    var menu = menuId ? document.getElementById(menuId) : null;
+    if (menu) {
+      undoAccidentalSlash(field, before);
+      if (clickNative(menu)) waitForControl(item, 0);
+      return;
+    }
+    if (n > 20) {
+      undoAccidentalSlash(field, before);
+      noteOutside('Medicus’s template menu did not open. Nothing was written.');
+      return;
+    }
+    setTimeout(function () {
+      waitForMenu(item, field, before, n + 1);
+    }, 50);
+  }
+
+  function openNative(item) {
+    if (_writing || !item) return;
+    var live = readLiveContext();
+    if (C.sessionDrift(_session, live)) {
+      _error = 'The consultation on screen changed. Medicus’s template form was not opened.';
+      _pending = null;
+      announce(_error);
+      render();
+      return;
+    }
+    var field = _fieldEl && _fieldEl.isConnected ? _fieldEl : null;
+    var before = fieldText(field);
+    closeOverlay();
+    if (field) {
+      try {
+        field.focus();
+      } catch (err) {
+        /* keep going; Medicus still inserts into the field that has focus */
+      }
+    }
+    var direct = findNativeControl(item);
+    if (direct && clickNative(direct)) {
+      finishOpen(item);
+      return;
+    }
+    var menuId = C.nativeMenuId(item);
+    var menu = menuId ? document.getElementById(menuId) : null;
+    if (menu && clickNative(menu)) {
+      waitForControl(item, 0);
+      return;
+    }
+    if (!field) {
+      noteOutside('The cursor is not in History, Examination, Impression, or Plan. Nothing was opened.');
+      return;
+    }
+    try {
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', bubbles: true, cancelable: true }));
+    } catch (err) {
+      noteOutside('Medicus’s template menu did not open. Nothing was written.');
+      return;
+    }
+    waitForMenu(item, field, before, 0);
   }
 
   function ensureLauncher() {
     healIfWiped();
-    if (!_packOn || !nativeSurface()) {
-      muteOrganiserChrome();
+    if (!launcherWanted()) {
+      if (!_open) muteOrganiserChrome();
+      else {
+        var stray = document.getElementById(LAUNCH_ID);
+        if (stray) stray.remove();
+      }
       return;
     }
     var launch = document.getElementById(LAUNCH_ID);
@@ -896,8 +1087,8 @@
       launch = document.createElement('button');
       launch.type = 'button';
       launch.id = LAUNCH_ID;
-      launch.textContent = 'Organise templates…';
-      launch.setAttribute('aria-label', 'Organise templates and documents');
+      launch.textContent = FEATURE_NAME;
+      launch.setAttribute('aria-label', FEATURE_NAME);
       launch.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -919,7 +1110,7 @@
   if (Runtime && typeof Runtime.register === 'function') {
     Runtime.register('template-organiser', {
       match: function () {
-        return !!_packOn && nativeSurface();
+        return launcherWanted();
       },
       start: startHeavyChrome,
       place: ensureLauncher,
@@ -949,4 +1140,17 @@
       },
     });
   }
+
+  document.addEventListener(
+    'focusin',
+    function (e) {
+      syncFieldFrom(e.target);
+      if (window.InjectorRuntime && typeof window.InjectorRuntime.sync === 'function') {
+        window.InjectorRuntime.sync();
+      } else {
+        ensureLauncher();
+      }
+    },
+    true
+  );
 })();

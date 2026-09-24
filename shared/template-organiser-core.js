@@ -7,11 +7,10 @@
 // (capture 2026-09-24: every DOM tag was untagged). Membership is a local
 // overlay keyed by the Medicus template id.
 //
-// List and insert payloads are built here so a test can lock them to the
-// slash-menu capture without a network call. The client performs the GET
-// and POST. This file does not invent a form, a version id, or a
-// sortOrderHash — if the live JSON does not already carry them, the
-// builder returns a gap and the client must not POST.
+// List parsing and the practice API host live here so a test can lock them
+// without a network call. The client performs catalogue GETs only. Opening
+// a template is Medicus’s own form (the slash Use-template path). This file
+// does not build a create body.
 
 'use strict';
 
@@ -24,7 +23,6 @@
   const INSERTS = ['data-entry', 'document', 'reflow'];
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const ID_RE = /^[A-Za-z0-9-]{1,64}$/;
-  const HASH_RE = /^[a-f0-9]{32}$/i;
   const CONTEXT_TYPE_RE = /^[a-z0-9-]{1,64}$/;
 
   const LIMITS = {
@@ -343,6 +341,53 @@
     return keys.some((key) => a[key] && b[key] && a[key] !== b[key]);
   }
 
+  // Practice API host is {siteId}.api.{page hostname}. The page host serves
+  // the SPA shell for these paths (200 HTML), which is not the list JSON.
+  const SITE_ID_RE = /^[a-f0-9]{4,8}$/i;
+
+  function apiOriginFromResource(url) {
+    let parsed;
+    try {
+      parsed = new URL(String(url));
+    } catch (err) {
+      return '';
+    }
+    const host = parsed.hostname || '';
+    const match = /^([a-f0-9]{4,8})\.api\.(.+)$/i.exec(host);
+    if (!match || match[2].indexOf('medicus') === -1) return '';
+    return parsed.protocol + '//' + host;
+  }
+
+  function resolveApiBase(input) {
+    const src = plain(input) ? input : {};
+    const urls = Array.isArray(src.resourceUrls) ? src.resourceUrls : [];
+    for (let i = 0; i < urls.length; i += 1) {
+      const fromResource = apiOriginFromResource(urls[i]);
+      if (fromResource) return fromResource;
+    }
+    let hostname = typeof src.hostname === 'string' ? src.hostname : '';
+    let pathname = typeof src.pathname === 'string' ? src.pathname : '';
+    if ((!hostname || !pathname) && src.href) {
+      try {
+        const parsed = new URL(String(src.href));
+        if (!hostname) hostname = parsed.hostname;
+        if (!pathname) pathname = parsed.pathname;
+      } catch (err) {
+        /* href was not a URL */
+      }
+    }
+    const seg = String(pathname || '')
+      .split('/')
+      .filter(Boolean)[0];
+    let siteId = '';
+    if (seg && SITE_ID_RE.test(seg)) siteId = seg.toLowerCase();
+    else if (typeof src.practiceCode === 'string' && SITE_ID_RE.test(src.practiceCode)) {
+      siteId = src.practiceCode.toLowerCase();
+    }
+    if (!siteId || !hostname || hostname.indexOf('medicus') === -1) return '';
+    return 'https://' + siteId + '.api.' + hostname;
+  }
+
   function pathsFor() {
     return {
       dataEntryList(topicId) {
@@ -406,250 +451,62 @@
 
   const PATHS = pathsFor();
 
-  function findShell(node, depth, ready) {
-    if (!plain(node) || depth > 4) return null;
-    if (ready(node)) return node;
-    const keys = ['data', 'result', 'template', 'payload', 'create', 'model', 'form'];
-    for (let i = 0; i < keys.length; i += 1) {
-      const found = findShell(node[keys[i]], depth + 1, ready);
-      if (found) return found;
-    }
-    return null;
+  function normaliseLabel(value) {
+    return String(value || '')
+      .replace(/[!\u2013\u2014]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   }
 
-  function dataEntryCreateBody(formJson, ctx, templateId) {
-    const topicId = takeUuid(ctx && ctx.consultationTopicId);
-    const cardId = typeof templateId === 'string' && UUID_RE.test(templateId) ? templateId : '';
-    if (!topicId || !cardId) {
-      return {
-        ok: false,
-        gap: 'This consultation has no topic id for the data-entry insert. Open the slash Template list once, then try again. Nothing was written.',
-      };
-    }
-    const shell = findShell(formJson, 0, function (node) {
-      return plain(node.form) && takeUuid(node.dataEntryTemplateVersionId);
-    });
-    if (!shell) {
-      return {
-        ok: false,
-        gap: 'The data-entry form response had no form object and version id. The capture did not include that body, so the insert did not run.',
-      };
-    }
-    const versionId = takeUuid(shell.dataEntryTemplateVersionId);
-    const fromForm = takeUuid(shell.dataEntryTemplateId);
-    if (fromForm && fromForm !== cardId) {
-      return {
-        ok: false,
-        gap: 'The form response named a different template id. The insert did not run.',
-      };
-    }
-    const formTopic = takeUuid(shell.consultationTopicId);
-    if (formTopic && formTopic !== topicId) {
-      return {
-        ok: false,
-        gap: 'The form response named a different consultation. The insert did not run.',
-      };
-    }
-    let usage = null;
-    if (Object.prototype.hasOwnProperty.call(shell, 'consultationUsageId')) {
-      usage = shell.consultationUsageId == null ? null : shell.consultationUsageId;
-      if (usage != null && typeof usage !== 'string') {
-        return {
-          ok: false,
-          gap: 'consultationUsageId was not a string. The insert did not run.',
-        };
-      }
-    }
-    return {
-      ok: true,
-      body: {
-        form: shell.form,
-        consultationTopicId: topicId,
-        dataEntryTemplateId: fromForm || cardId,
-        dataEntryTemplateVersionId: versionId,
-        consultationUsageId: usage,
-      },
-    };
-  }
-
-  function documentContextGap(ctx) {
-    const patientId = takeUuid(ctx && ctx.patientId);
-    const contextId = takeUuid(ctx && ctx.contextId);
-    const contextType = ctx && CONTEXT_TYPE_RE.test(ctx.contextType || '') ? ctx.contextType : '';
-    if (!patientId || !contextId || !contextType) {
-      return 'This page has no patient, context id, and context type for a document insert. Open the slash Document list once, then try again. Nothing was written.';
+  // History, examination, impression, plan. A heading id from the slash menu
+  // (heading-history-{uuid}) wins. A visible heading of those four words
+  // counts only when the focused control is editable, so a mention of "plan"
+  // in other text does not.
+  function clinicalFieldKind(input) {
+    const src = plain(input) ? input : {};
+    const id = String(src.id || '');
+    const labelledBy = String(src.labelledBy || '');
+    const idMatch = /^heading-(history|examination|impression|plan)(?:-|$)/i.exec(id);
+    if (idMatch) return idMatch[1].toLowerCase();
+    const labelMatch = /^heading-(history|examination|impression|plan)(?:-|$)/i.exec(labelledBy);
+    if (labelMatch) return labelMatch[1].toLowerCase();
+    if (src.editable) {
+      const text = normaliseLabel(src.headingText);
+      if (text === 'history' || text === 'examination' || text === 'impression' || text === 'plan') return text;
     }
     return '';
   }
 
-  function findConsultSort(node, depth) {
-    if (!plain(node) || depth > 5) return null;
-    if (Array.isArray(node.sortOrder) && typeof node.sortOrderHash === 'string' && HASH_RE.test(node.sortOrderHash)) {
-      return { sortOrder: node.sortOrder, sortOrderHash: node.sortOrderHash };
-    }
-    const keys = [
-      'data',
-      'consultation',
-      'consultationTopic',
-      'topic',
-      'draft',
-      'encounter',
-      'result',
-      'payload',
-      'heading',
-    ];
-    for (let i = 0; i < keys.length; i += 1) {
-      const found = findConsultSort(node[keys[i]], depth + 1);
-      if (found) return found;
-    }
-    return null;
+  // The slash menu item that opens Medicus's own list. The canvas clicks it
+  // only when the matching Use / Create control is not already on the page.
+  function nativeMenuId(item) {
+    const src = plain(item) ? item : {};
+    if (src.insert === 'data-entry') return 'id-template';
+    if (src.insert === 'document' || src.insert === 'reflow') return 'id-document';
+    return '';
   }
 
-  function withNewEntry(sort, uuid) {
-    let order;
-    try {
-      order = JSON.parse(JSON.stringify(sort.sortOrder));
-    } catch (err) {
-      return null;
+  // True when a live Medicus control is the open path for this card.
+  // Data-entry: "Use template" on the card with that title.
+  // Documents: a control titled "Create {title}", or the same Use template pair.
+  function nativeControlMatches(item, control) {
+    const src = plain(item) ? item : {};
+    const ctl = plain(control) ? control : {};
+    const want = normaliseLabel(src.title);
+    if (!want) return false;
+    const text = normaliseLabel(ctl.text);
+    const titleAttr = normaliseLabel(ctl.title);
+    const card = normaliseLabel(ctl.cardTitle);
+    if (src.insert === 'data-entry') {
+      return text === 'use template' && card === want;
     }
-    if (!Array.isArray(order) || order.length > 500) return null;
-    const already = order.some((row) => row && row.id === uuid);
-    if (!already) order.push({ id: uuid, entryType: 'document' });
-    return order;
-  }
-
-  function documentCreateBody(input) {
-    const src = plain(input) ? input : {};
-    const gap = documentContextGap(src.ctx);
-    if (gap) return { ok: false, gap };
-    const templateId = typeof src.templateId === 'string' && UUID_RE.test(src.templateId) ? src.templateId : '';
-    const uuid = typeof src.uuid === 'string' && UUID_RE.test(src.uuid) ? src.uuid : '';
-    if (!templateId || !uuid) {
-      return { ok: false, gap: 'The document insert is missing a template id or a new entry id. Nothing was written.' };
+    if (src.insert === 'document' || src.insert === 'reflow') {
+      if (titleAttr === normaliseLabel('Create ' + String(src.title || ''))) return true;
+      if (text === 'use template' && card === want) return true;
+      return false;
     }
-    const shell = findShell(src.formJson, 0, function (node) {
-      return plain(node.formValues);
-    });
-    if (!shell) {
-      return {
-        ok: false,
-        gap: 'The document form response had no formValues object. The capture did not include that body, so the insert did not run.',
-      };
-    }
-    if (
-      typeof shell.hiddenFromPatientFacingServices !== 'boolean' ||
-      typeof shell.confidentialFromThirdParties !== 'boolean'
-    ) {
-      return {
-        ok: false,
-        gap: 'The document form response did not include the visibility flags the slash insert sends. Those flags were not guessed. Nothing was written.',
-      };
-    }
-    const sort = findConsultSort(src.sortJson, 0) || (plain(src.sort) && findConsultSort(src.sort, 0));
-    if (!sort) {
-      return {
-        ok: false,
-        gap: 'The consultation did not return sortOrder and sortOrderHash together. The capture had no response body for that pair, and this canvas does not compute a hash. Nothing was written.',
-      };
-    }
-    const sortOrder = withNewEntry(sort, uuid);
-    if (!sortOrder) {
-      return { ok: false, gap: 'The consultation sort order could not be copied. Nothing was written.' };
-    }
-    const ctx = src.ctx;
-    const previewBody = {
-      formValues: shell.formValues,
-      patientId: ctx.patientId,
-      contextId: ctx.contextId,
-      contextType: ctx.contextType,
-    };
-    const body = {
-      templateId,
-      patientId: ctx.patientId,
-      formValues: shell.formValues,
-      hiddenFromPatientFacingServices: shell.hiddenFromPatientFacingServices,
-      confidentialFromThirdParties: shell.confidentialFromThirdParties,
-      contextId: ctx.contextId,
-      contextType: ctx.contextType,
-      linkedProblemIds: Array.isArray(shell.linkedProblemIds) ? shell.linkedProblemIds : [],
-      problemCode: Object.prototype.hasOwnProperty.call(shell, 'problemCode') ? shell.problemCode : null,
-      clinicalCaseId: Object.prototype.hasOwnProperty.call(shell, 'clinicalCaseId') ? shell.clinicalCaseId : null,
-      uuid,
-      sortOrder,
-      sortOrderHash: sort.sortOrderHash,
-    };
-    return { ok: true, body, previewBody };
-  }
-
-  const REFLOW_STRINGS = ['referralDetails', 'referringClinician', 'referralDate', 'title', 'recipientDetails'];
-
-  function reflowCreateBody(input) {
-    const src = plain(input) ? input : {};
-    const gap = documentContextGap(src.ctx);
-    if (gap) return { ok: false, gap };
-    const slug = typeof src.slug === 'string' && ID_RE.test(src.slug) && !UUID_RE.test(src.slug) ? src.slug : '';
-    const uuid = typeof src.uuid === 'string' && UUID_RE.test(src.uuid) ? src.uuid : '';
-    if (!slug || !uuid) {
-      return { ok: false, gap: 'The reflow insert is missing a template slug or a new entry id. Nothing was written.' };
-    }
-    const shell = findShell(src.formJson, 0, function (node) {
-      if (typeof node.template === 'string' && node.template !== slug) return false;
-      return REFLOW_STRINGS.every((key) => typeof node[key] === 'string');
-    });
-    if (!shell) {
-      return {
-        ok: false,
-        gap: 'The built-in document form did not include the referral fields the slash insert sends. Nothing was written.',
-      };
-    }
-    if (
-      typeof shell.hiddenFromPatientFacingServices !== 'boolean' ||
-      typeof shell.confidentialFromThirdParties !== 'boolean'
-    ) {
-      return {
-        ok: false,
-        gap: 'The built-in document form did not include the visibility flags. Those flags were not guessed. Nothing was written.',
-      };
-    }
-    const sort = findConsultSort(src.sortJson, 0) || (plain(src.sort) && findConsultSort(src.sort, 0));
-    if (!sort) {
-      return {
-        ok: false,
-        gap: 'The consultation did not return sortOrder and sortOrderHash together. Nothing was written.',
-      };
-    }
-    const sortOrder = withNewEntry(sort, uuid);
-    if (!sortOrder) return { ok: false, gap: 'The consultation sort order could not be copied. Nothing was written.' };
-    const ctx = src.ctx;
-    const previewBody = {
-      referralDetails: shell.referralDetails,
-      referringClinician: shell.referringClinician,
-      patientId: ctx.patientId,
-      contextId: ctx.contextId,
-      contextType: ctx.contextType,
-      referralDate: shell.referralDate,
-      title: shell.title,
-      recipientDetails: shell.recipientDetails,
-    };
-    const body = {
-      template: slug,
-      patientId: ctx.patientId,
-      contextId: ctx.contextId,
-      contextType: ctx.contextType,
-      referralDetails: shell.referralDetails,
-      referringClinician: shell.referringClinician,
-      referralDate: shell.referralDate,
-      title: shell.title,
-      recipientDetails: shell.recipientDetails,
-      hiddenFromPatientFacingServices: shell.hiddenFromPatientFacingServices,
-      confidentialFromThirdParties: shell.confidentialFromThirdParties,
-      linkedProblemIds: Array.isArray(shell.linkedProblemIds) ? shell.linkedProblemIds : [],
-      problemCode: Object.prototype.hasOwnProperty.call(shell, 'problemCode') ? shell.problemCode : null,
-      uuid,
-      sortOrder,
-      sortOrderHash: sort.sortOrderHash,
-    };
-    return { ok: true, body, previewBody };
+    return false;
   }
 
   function buildBoard(items, surfaceState) {
@@ -838,10 +695,10 @@
     readSessionContext,
     mergeSession,
     sessionDrift,
-    dataEntryCreateBody,
-    documentCreateBody,
-    reflowCreateBody,
-    findConsultSort,
+    resolveApiBase,
+    clinicalFieldKind,
+    nativeMenuId,
+    nativeControlMatches,
     buildBoard,
     moveItem,
     createGroup,

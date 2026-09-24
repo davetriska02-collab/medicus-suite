@@ -47,10 +47,8 @@ const TOPIC = '11111111-1111-4111-8111-111111111111';
 const PATIENT = '22222222-2222-4222-8222-222222222222';
 const CONTEXT = '33333333-3333-4333-8333-333333333333';
 const TPL = '44444444-4444-4444-8444-444444444444';
-const VERSION = '55555555-5555-4555-8555-555555555555';
 const ENTRY = '66666666-6666-4666-8666-666666666666';
 const DOC = '77777777-7777-4777-8777-777777777777';
-const HASH = 'd751713988987e9331980363e24189ce';
 
 function names(surface) {
   return C.seedConfig().surfaces[surface].groups.map((g) => g.name);
@@ -143,118 +141,88 @@ function names(surface) {
   check(C.sessionDrift(ctx, Object.assign({}, ctx, { patientId: DOC })) === true, 'a changed patient id is drift');
   check(C.mergeSession(ctx, { patientId: '' }).patientId === PATIENT, 'an empty live id does not wipe a pinned one');
 
-  console.log('\n--- insert bodies match the slash capture, or they do not POST ---');
-  const entryBody = C.dataEntryCreateBody(
-    {
-      form: { fieldA: null, fieldB: false },
-      dataEntryTemplateId: TPL,
-      dataEntryTemplateVersionId: VERSION,
-      consultationUsageId: null,
-    },
-    ctx,
-    TPL
-  );
-  check(entryBody.ok, 'data-entry body builds when the form GET has a version id');
+  const pageHref = 'https://england.medicus.health/560b6c/clinical/encounter/overview/' + ENTRY;
+  const fromPath = C.resolveApiBase({
+    href: pageHref,
+    pathname: '/560b6c/clinical/encounter/overview/' + ENTRY,
+    hostname: 'england.medicus.health',
+    resourceUrls: [],
+  });
+  check(fromPath === 'https://560b6c.api.england.medicus.health', 'api base is {site}.api.{page hostname}');
+  const fromResource = C.resolveApiBase({
+    href: 'https://england.medicus.health/not-a-site/clinical/encounter/overview/' + ENTRY,
+    pathname: '/not-a-site/clinical/encounter/overview/' + ENTRY,
+    hostname: 'england.medicus.health',
+    resourceUrls: [
+      'https://560b6c.api.england.medicus.health/clinical/data/data-entry-template/list?consultationTopicId=' + TOPIC,
+    ],
+  });
   check(
-    JSON.stringify(Object.keys(entryBody.body)) ===
-      JSON.stringify([
-        'form',
-        'consultationTopicId',
-        'dataEntryTemplateId',
-        'dataEntryTemplateVersionId',
-        'consultationUsageId',
-      ]),
-    'data-entry keys match the captured POST'
+    fromResource === 'https://560b6c.api.england.medicus.health',
+    'a resource URL that already contains .api. wins over the path segment'
   );
+  const staging = C.resolveApiBase({
+    pathname: '/560b6c/clinical/encounter/overview/' + ENTRY,
+    hostname: 'staging.medicus.health',
+  });
+  check(staging === 'https://560b6c.api.staging.medicus.health', 'hostname variant stays on the page host');
+  const fromCode = C.resolveApiBase({
+    pathname: '/clinical/encounter/overview/' + ENTRY,
+    hostname: 'england.medicus.health',
+    practiceCode: '560b6c',
+  });
   check(
-    entryBody.body.consultationTopicId === TOPIC && entryBody.body.dataEntryTemplateId === TPL,
-    'ids are the live ones'
+    fromCode === 'https://560b6c.api.england.medicus.health',
+    'practice code fills in when the path has no site id'
   );
-  check(entryBody.body.form.fieldA === null, 'form object is passed through');
-  const missingVersion = C.dataEntryCreateBody({ form: { fieldA: null } }, ctx, TPL);
-  check(missingVersion.ok === false && !missingVersion.body, 'missing version id does not invent a body');
 
-  const sort = { sortOrder: [{ id: ENTRY, entryType: 'document' }], sortOrderHash: HASH };
-  const docBody = C.documentCreateBody({
-    formJson: {
-      formValues: { document_title: 'yo' },
-      hiddenFromPatientFacingServices: true,
-      confidentialFromThirdParties: false,
-      linkedProblemIds: [],
-      problemCode: null,
-      clinicalCaseId: null,
-    },
-    ctx,
-    templateId: DOC,
-    sort,
-    uuid: ENTRY,
-  });
-  check(docBody.ok, 'document body builds when formValues and sort are present');
+  console.log('\n--- clinical field and native open, no suite create body ---');
+  check(C.clinicalFieldKind({ id: 'heading-history-' + TOPIC }) === 'history', 'heading-history id is history');
   check(
-    JSON.stringify(Object.keys(docBody.body)) ===
-      JSON.stringify([
-        'templateId',
-        'patientId',
-        'formValues',
-        'hiddenFromPatientFacingServices',
-        'confidentialFromThirdParties',
-        'contextId',
-        'contextType',
-        'linkedProblemIds',
-        'problemCode',
-        'clinicalCaseId',
-        'uuid',
-        'sortOrder',
-        'sortOrderHash',
-      ]),
-    'document create keys match the captured POST'
+    C.clinicalFieldKind({ labelledBy: 'heading-examination-' + TOPIC }) === 'examination',
+    'aria-labelledby heading-examination is examination'
   );
-  check(docBody.body.sortOrderHash === HASH, 'hash is copied, not computed');
-  check(docBody.body.sortOrder[docBody.body.sortOrder.length - 1].id === ENTRY, 'new entry is appended');
   check(
-    JSON.stringify(Object.keys(docBody.previewBody)) ===
-      JSON.stringify(['formValues', 'patientId', 'contextId', 'contextType']),
-    'document preview keys match the captured POST'
+    C.clinicalFieldKind({ headingText: 'Impression', editable: true }) === 'impression',
+    'editable impression heading'
   );
-  const noFlags = C.documentCreateBody({
-    formJson: { formValues: { document_title: 'yo' } },
-    ctx,
-    templateId: DOC,
-    sort,
-    uuid: ENTRY,
-  });
-  check(noFlags.ok === false, 'visibility flags are not defaulted');
-  const noSort = C.documentCreateBody({
-    formJson: {
-      formValues: { document_title: 'yo' },
-      hiddenFromPatientFacingServices: false,
-      confidentialFromThirdParties: false,
-    },
-    ctx,
-    templateId: DOC,
-    sortJson: { unrelated: true },
-    uuid: ENTRY,
-  });
-  check(noSort.ok === false, 'missing sort pair does not invent a hash');
-
-  const reflow = C.reflowCreateBody({
-    formJson: {
-      template: 'referral-letter',
-      referralDetails: '',
-      referringClinician: 'Dr Example',
-      referralDate: '2026-09-24',
+  check(C.clinicalFieldKind({ headingText: 'Plan', editable: true }) === 'plan', 'editable plan heading');
+  check(C.clinicalFieldKind({ headingText: 'Plan', editable: false }) === '', 'plan text outside an editor is ignored');
+  check(
+    C.clinicalFieldKind({ headingText: 'Clinical history', editable: true }) === '',
+    'a longer heading is not history'
+  );
+  check(C.clinicalFieldKind({ id: 'heading-other-' + TOPIC }) === '', 'other heading ids are not clinical fields');
+  const asthma = { id: TPL, title: '! Asthma Diagnosis [Contracts]', insert: 'data-entry' };
+  check(
+    C.nativeControlMatches(asthma, {
+      text: 'Use template',
       title: '',
-      recipientDetails: '',
-      hiddenFromPatientFacingServices: false,
-      confidentialFromThirdParties: false,
-    },
-    ctx,
-    slug: 'referral-letter',
-    sort,
-    uuid: ENTRY,
-  });
-  check(reflow.ok && reflow.body.template === 'referral-letter', 'reflow body uses the slug');
-  check(reflow.previewBody.referringClinician === 'Dr Example', 'reflow preview keeps the form clinician');
+      cardTitle: '! Asthma Diagnosis [Contracts]',
+    }),
+    'data-entry matches Use template on that card'
+  );
+  check(
+    C.nativeControlMatches(asthma, { text: 'Use template', cardTitle: 'Stroke' }) === false,
+    'Use template on a different card does not match'
+  );
+  check(C.nativeMenuId(asthma) === 'id-template', 'data-entry opens from the template menu item');
+  const letter = { id: DOC, title: 'Food bank letter', insert: 'document' };
+  check(
+    C.nativeControlMatches(letter, { text: '', title: 'Create Food bank letter', cardTitle: 'Food bank letter' }),
+    'document matches the Create control'
+  );
+  check(C.nativeMenuId(letter) === 'id-document', 'documents open from the document menu item');
+  check(
+    C.nativeMenuId({ insert: 'reflow', title: 'Referral letter' }) === 'id-document',
+    'built-in letters use the document menu'
+  );
+  const coreHasCreateBody = /function dataEntryCreateBody|function documentCreateBody|function reflowCreateBody/.test(
+    coreSrc
+  );
+  check(coreHasCreateBody === false, 'core does not build a suite create body');
+
+  console.log('\n--- catalogue paths, not a suite insert ---');
   check(
     C.PATHS.dataEntryList(TOPIC) === '/clinical/data/data-entry-template/list?consultationTopicId=' + TOPIC,
     'data-entry list path'
@@ -287,89 +255,66 @@ function names(surface) {
     'reflow preview path'
   );
 
-  console.log('\n--- client posts only a built body ---');
+  console.log('\n--- client lists on the practice API host and does not POST ---');
   const calls = [];
-  function fetchImpl(url, init) {
-    calls.push({ url: String(url), method: init.method, body: init.body || '' });
-    const path = String(url).replace('https://example.medicus.health', '');
-    let json = { items: [] };
-    if (path.indexOf('/data-entry-template/create/' + TOPIC) !== -1) {
-      json = {
-        form: { fieldA: null },
-        dataEntryTemplateId: TPL,
-        dataEntryTemplateVersionId: VERSION,
-        consultationUsageId: null,
-      };
-    } else if (path.indexOf('/data-entry-template/list') !== -1) {
-      json = { items: [{ id: TPL, name: 'Asthma review', description: 'Short' }] };
-    } else if (path.indexOf('/document/template/search/') !== -1) {
-      json = { items: [{ id: DOC, name: 'Food bank letter', description: 'Letter' }] };
-    } else if (path.indexOf('/document/template/form/') !== -1) {
-      json = {
-        formValues: { document_title: 'yo' },
-        hiddenFromPatientFacingServices: true,
-        confidentialFromThirdParties: false,
-      };
-    } else if (path.indexOf('/draft-consultation-topic/') !== -1) {
-      json = { sortOrder: [{ id: ENTRY, entryType: 'document' }], sortOrderHash: HASH };
-    }
-    return Promise.resolve({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(json),
-    });
-  }
   const client = Client.createClient({
-    fetchImpl,
+    fetchImpl(url, init) {
+      calls.push({ url: String(url), method: init.method, body: init.body || '' });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ items: [{ id: TPL, name: 'Asthma review', description: 'Short' }] }),
+      });
+    },
     origin: 'https://example.medicus.health',
-    uuid: () => ENTRY,
   });
   const listed = await client.listTemplates(ctx);
   check(listed.ok && listed.items[0].id === TPL, 'client lists data-entry templates');
   check(
     calls.some((c) => c.method === 'GET' && c.url.indexOf(C.PATHS.dataEntryList(TOPIC)) !== -1),
-    'list GET is the slash URL'
+    'list GET is the catalogue URL'
   );
-  calls.length = 0;
-  const inserted = await client.insertItem({ id: TPL, title: 'Asthma review', insert: 'data-entry' }, ctx);
-  check(inserted.ok && inserted.posted, 'data-entry insert posts');
-  const post = calls.filter((c) => c.method === 'POST');
-  check(post.length === 1 && post[0].url.endsWith(C.PATHS.dataEntryCreate), 'only the slash create URL is posted');
-  const sent = JSON.parse(post[0].body);
-  check(sent.dataEntryTemplateVersionId === VERSION && sent.form.fieldA === null, 'posted form is the GET form');
-  calls.length = 0;
-  const docInsert = await client.insertItem({ id: DOC, title: 'Letter', insert: 'document' }, ctx);
-  check(docInsert.ok, 'document insert posts preview then create');
-  const docPosts = calls.filter((c) => c.method === 'POST').map((c) => c.url);
-  check(docPosts[0].indexOf('/clinical/template/preview-document/' + DOC) !== -1, 'preview URL first');
-  check(docPosts[1].endsWith('/clinical/data/document/template/create'), 'create URL second');
-  calls.length = 0;
-  const blocked = await client.insertItem(
-    { id: TPL, title: 'Asthma review', insert: 'data-entry' },
-    { consultationTopicId: TOPIC }
-  );
-  // form GET still happens; body builder needs topic which is present. Force a form without version by swapping fetch.
-  check(blocked.posted === true || blocked.posted === false, 'blocked path returns a result');
-  const gapCalls = [];
-  const gapClient = Client.createClient({
+  check(typeof client.insertItem !== 'function', 'client has no insert');
+  check(!calls.some((c) => c.method === 'POST'), 'listing does not POST');
+
+  const hostCalls = [];
+  const hostClient = Client.createClient({
     fetchImpl(url, init) {
-      gapCalls.push(init.method);
-      const path = String(url);
-      if (path.indexOf('/data-entry-template/create/' + TOPIC) !== -1) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          text: async () => JSON.stringify({ form: { fieldA: null } }),
-        });
-      }
-      return Promise.resolve({ ok: true, status: 200, text: async () => '{}' });
+      hostCalls.push({ url: String(url), method: init.method });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ items: [{ id: TPL, name: 'Asthma review' }] }),
+      });
     },
-    origin: 'https://example.medicus.health',
-    uuid: () => ENTRY,
+    apiBase: fromPath,
   });
-  const gap = await gapClient.insertItem({ id: TPL, title: 'Asthma review', insert: 'data-entry' }, ctx);
-  check(gap.ok === false && gap.posted === false, 'a form without a version id does not POST');
-  check(!gapCalls.includes('POST'), 'no POST was issued for the gap');
+  await hostClient.listTemplates({ consultationTopicId: TOPIC });
+  check(
+    hostCalls[0].url.indexOf('https://560b6c.api.england.medicus.health/clinical/data/data-entry-template/list') === 0,
+    'list GET uses the practice API host'
+  );
+  check(hostCalls[0].url.indexOf('https://england.medicus.health/') !== 0, 'list GET does not use the page origin');
+  let htmlMessage = '';
+  const htmlClient = Client.createClient({
+    fetchImpl() {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => '<!doctype html><html></html>',
+      });
+    },
+    apiBase: fromPath,
+  });
+  try {
+    await htmlClient.listTemplates({ consultationTopicId: TOPIC });
+  } catch (err) {
+    htmlMessage = err.message;
+  }
+  check(
+    /HTTP 200/.test(htmlMessage) && /not JSON/.test(htmlMessage),
+    'HTML body names the status and that it was not JSON'
+  );
 
   console.log('\n--- confirm payload is the local group overlay ---');
   const payload = C.confirmPayload(seed, {
@@ -426,7 +371,8 @@ function names(surface) {
   const readme = fs.readFileSync(path.join(__dirname, 'content-scripts/template-organiser/README.md'), 'utf8');
   const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
   check(!/method:\s*['"]POST['"]/.test(canvas), 'canvas file does not itself POST');
-  check(/method:\s*'POST'/.test(clientSrc), 'client posts with a literal POST');
+  check(!/method:\s*['"]POST['"]/.test(clientSrc), 'client does not POST a create body');
+  check(/method:\s*'GET'/.test(clientSrc), 'client still GETs the catalogue');
   check(/TemplateOrganiserClient/.test(canvas), 'canvas calls the client');
   check(
     /function persistDraft\(/.test(canvas) && /chrome\.storage\.local\.set/.test(canvas),
@@ -435,15 +381,22 @@ function names(surface) {
   check(/templateOrganiser\.config/.test(canvas), 'canvas names the practice config key');
   check(/suite\.ui\.templateOrganiser/.test(canvas), 'canvas names the pack key');
   check(
-    /nativeSurface/.test(canvas) && /\/clinical\/encounter\//.test(canvas),
-    'launcher is limited to the consult surface'
+    /consultPage/.test(canvas) && /\/clinical\/encounter\//.test(canvas) && /clinicalFieldKind/.test(canvas),
+    'launcher requires a consultation page and a clinical field'
   );
   check(
-    /Data Entry Templates/.test(canvas) && /Document Templates/.test(canvas),
-    'launcher also notices the slash drawers'
+    !/Data Entry Templates/.test(canvas) && !/Document Templates/.test(canvas),
+    'launcher does not mount because a template drawer is open'
   );
+  check(/Document and Template Organiser/.test(canvas), 'canvas uses the product name');
+  check(/nativeMenuId/.test(canvas) && /id-template/.test(coreSrc), 'open goes through Medicus’s template menu id');
+  check(!/Use template/.test(canvas), 'canvas does not label its own button Use template');
+  check(/nativeControlMatches/.test(canvas), 'open matches Medicus’s own control');
+  check(!/Insert into consultation/.test(canvas), 'suite insert confirm is gone');
   check(!/Submitted|Booked|\bSent\b|\bDone\b/.test(canvas), 'canvas does not claim a completed send');
-  check(/Medicus accepted the insert/.test(canvas), 'success copy waits for the POST response');
+  check(!/Medicus accepted the insert/.test(canvas), 'canvas does not claim a suite insert');
+  check(/resolveApiBase/.test(canvas) && /apiBase:\s*base/.test(canvas), 'canvas passes the practice API host');
+  check(!/origin:\s*location\.origin/.test(canvas), 'canvas does not call the page origin');
   const coreAt = manifest.indexOf('shared/template-organiser-core.js');
   const clientAt = manifest.indexOf('shared/template-organiser-client.js');
   const canvasAt = manifest.indexOf('content-scripts/template-organiser/template-organiser-canvas.js');
@@ -453,9 +406,11 @@ function names(surface) {
   );
   check(/GAPS/.test(readme) && /templateOrganiser\.config/.test(readme), 'README names persistence and gaps');
   check(
-    /data-entry-template\/list/.test(readme) && /document\/template\/create/.test(readme),
-    'README names the wired endpoints'
+    /data-entry-template\/list/.test(readme) && /does not POST/.test(readme) && /\.api\./.test(readme),
+    'README names the catalogue GET, the API host, and that the suite does not POST'
   );
+  check(/Document and Template Organiser/.test(readme), 'README uses the product name');
+  check(/History/.test(readme) && /Examination/.test(readme), 'README names the clinical fields');
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);
   if (failed > 0) process.exit(1);

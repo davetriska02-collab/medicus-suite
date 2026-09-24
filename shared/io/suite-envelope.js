@@ -558,10 +558,10 @@ function previewEnvelope(envelope) {
       ? surfaces.documents.groups.length
       : 0;
     lines.push(
-      `Template organiser: ${templateGroups} template group(s), ${documentGroups} document group(s) (local overlay, Medicus lists unchanged)`
+      `Document and Template Organiser: ${templateGroups} template group(s), ${documentGroups} document group(s) (local overlay, Medicus lists unchanged)`
     );
   } else {
-    const m = missing('Template organiser');
+    const m = missing('Document and Template Organiser');
     if (m) lines.push(m);
   }
 
@@ -598,7 +598,7 @@ function previewEnvelope(envelope) {
       lines.push('Focus alerts (queue) ON');
     }
     if (mods.suite.templateOrganiser === true || mods.suite['ui.templateOrganiser'] === true) {
-      lines.push('Template organiser canvas ON');
+      lines.push('Document and Template Organiser canvas ON');
     }
   }
 
