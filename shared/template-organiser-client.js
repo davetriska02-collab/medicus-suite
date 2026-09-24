@@ -91,10 +91,20 @@
       return C.parseList(json, 'documents');
     }
 
-    async function hydrate(ctx, href, resourceUrls, headingId) {
-      var seed = { href: href, resourceUrls: resourceUrls, overview: null, headingId: headingId || '' };
+    async function hydrate(ctx, href, resourceUrls, headingId, headingKind) {
+      var seed = {
+        href: href,
+        resourceUrls: resourceUrls,
+        overview: null,
+        headingId: headingId || '',
+        headingKind: headingKind || '',
+      };
       var next = C.mergeSession(ctx, C.readSessionContext(seed));
-      if (next.encounterId && (!next.patientId || !next.consultationTopicId)) {
+      // Document search needs patient + heading context, not only the topic
+      // that listTemplates uses. Fetch overview when any of those are missing.
+      var needsOverview =
+        next.encounterId && (!next.patientId || !next.consultationTopicId || !next.contextId || !next.contextType);
+      if (needsOverview) {
         try {
           var overview = await getJson(C.PATHS.encounterOverview(next.encounterId));
           next = C.readSessionContext({
@@ -102,6 +112,7 @@
             resourceUrls: resourceUrls,
             overview: overview,
             headingId: headingId || '',
+            headingKind: headingKind || '',
           });
         } catch (err) {
           /* named fields may already be on the resource URLs or the heading */

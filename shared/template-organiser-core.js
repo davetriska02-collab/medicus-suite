@@ -288,6 +288,7 @@
   const HEADING_ID_RE =
     /^heading-(history|examination|impression|plan)-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
   const HEADING_CONTEXT_TYPE = 'consultation-topic-heading';
+  const HEADING_KINDS = { history: true, examination: true, impression: true, plan: true };
 
   // The slash menu is labelled heading-history-{uuid} (and the same shape for
   // examination, impression, and plan). That uuid is the heading context, not
@@ -301,6 +302,45 @@
       if (match && UUID_RE.test(match[2])) return match[2];
     }
     return '';
+  }
+
+  function headingKindToken(value) {
+    const parts = String(value || '')
+      .trim()
+      .split(/\s+/);
+    for (let i = 0; i < parts.length; i += 1) {
+      const match = /^heading-(history|examination|impression|plan)(?:-|$)/i.exec(parts[i]);
+      if (match) return match[1].toLowerCase();
+    }
+    return '';
+  }
+
+  function plainHeadingKind(value) {
+    const text = String(value || '')
+      .replace(/[!\u2013\u2014]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    return HEADING_KINDS[text] ? text : '';
+  }
+
+  // A heading row may carry a bare uuid or the slash-menu id. The title is
+  // the kind only when it is exactly one of the four clinical words.
+  function headingRecord(heading) {
+    if (!plain(heading)) return null;
+    const idText = typeof heading.id === 'string' ? heading.id : '';
+    const altText = typeof heading.headingId === 'string' ? heading.headingId : '';
+    const uuid = takeUuid(idText) || takeUuid(altText) || headingContextId(idText) || headingContextId(altText);
+    if (!uuid) return null;
+    const kind =
+      headingKindToken(idText) ||
+      headingKindToken(altText) ||
+      plainHeadingKind(heading.title) ||
+      plainHeadingKind(heading.name) ||
+      plainHeadingKind(heading.label) ||
+      plainHeadingKind(heading.type) ||
+      plainHeadingKind(heading.headingType);
+    return { uuid, kind };
   }
 
   function absorbNamed(node, ctx, depth) {
@@ -349,16 +389,41 @@
     });
   }
 
+  // Headings that can fill document search. A focused uuid wins. A focused
+  // kind (history, examination, impression, plan) counts only when exactly
+  // one heading of that kind has an id — two would be a guess.
+  function headingHits(topics, focusedUuid, focusedKind) {
+    const hits = [];
+    topics.forEach((topic) => {
+      if (!plain(topic) || !Array.isArray(topic.headings)) return;
+      topic.headings.forEach((heading) => {
+        const rec = headingRecord(heading);
+        if (!rec) return;
+        if (focusedUuid && rec.uuid === focusedUuid) hits.push({ topic, rec });
+        else if (!focusedUuid && focusedKind && rec.kind === focusedKind) hits.push({ topic, rec });
+      });
+    });
+    return hits;
+  }
+
   // Live encounter overview keeps the topic on consultationTopics[].id (or
   // consultationTopicId) and the patient on the topic or a nested patient.
   // A scalar consultationTopicId is not what that endpoint returns. When
   // several topics are present, the one whose headings include the focused
-  // heading id is the list to read.
-  function applyOverviewTopics(ctx, overview, headingId) {
+  // heading is the list to read. That heading's uuid is the document
+  // contextId, with contextType consultation-topic-heading.
+  function applyOverviewTopics(ctx, overview, focusedUuid, focusedKind) {
     const topics = [];
     collectTopics(overview, topics, 0);
     if (!topics.length) return;
-    const owner = headingId ? topics.find((topic) => ownsHeading(topic, headingId)) : null;
+    const hits = headingHits(topics, focusedUuid, focusedKind);
+    const uuidHit = focusedUuid ? hits.find((hit) => hit.rec.uuid === focusedUuid) : null;
+    const uniqueHit = !focusedUuid && hits.length === 1 ? hits[0] : null;
+    const owner =
+      (uuidHit && uuidHit.topic) ||
+      (focusedUuid ? topics.find((topic) => ownsHeading(topic, focusedUuid)) : null) ||
+      (uniqueHit && uniqueHit.topic) ||
+      null;
     const chosen = owner || (!ctx.consultationTopicId ? topics[0] : null);
     if (chosen) {
       const topicId = takeUuid(chosen.id) || takeUuid(chosen.consultationTopicId);
@@ -367,6 +432,16 @@
     if (!ctx.patientId) {
       const fromChosen = chosen ? takePatient(chosen) : '';
       ctx.patientId = fromChosen || takePatient(topics[0]) || takePatient(overview);
+    }
+    if (!ctx.contextId && focusedUuid) {
+      ctx.contextId = focusedUuid;
+      ctx.contextType = HEADING_CONTEXT_TYPE;
+    } else if (!ctx.contextId && uniqueHit) {
+      ctx.contextId = uniqueHit.rec.uuid;
+      if (!ctx.contextType) ctx.contextType = HEADING_CONTEXT_TYPE;
+    }
+    if (ctx.contextId && !ctx.contextType && (focusedUuid || uniqueHit)) {
+      ctx.contextType = HEADING_CONTEXT_TYPE;
     }
   }
 
@@ -412,13 +487,14 @@
       if (contextType && CONTEXT_TYPE_RE.test(contextType[1])) ctx.contextType = contextType[1];
     });
     const focusedHeading = headingContextId(src.headingId);
+    const focusedKind = headingKindToken(src.headingId) || plainHeadingKind(src.headingKind);
     if (focusedHeading) {
       ctx.contextId = focusedHeading;
       ctx.contextType = HEADING_CONTEXT_TYPE;
     }
     if (plain(src.overview)) {
       absorbNamed(src.overview, ctx, 0);
-      applyOverviewTopics(ctx, src.overview, focusedHeading);
+      applyOverviewTopics(ctx, src.overview, focusedHeading, focusedKind);
     }
     return ctx;
   }
