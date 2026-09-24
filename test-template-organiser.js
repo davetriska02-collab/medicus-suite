@@ -294,6 +294,69 @@ function names(surface) {
   );
   check(coreHasCreateBody === false, 'core does not build a suite create body');
 
+  console.log('\n--- open from a group uses the same native plan as ungrouped ---');
+  const tplItem = {
+    id: TPL,
+    title: '! Asthma Diagnosis [Contracts]',
+    preview: 'Short',
+    category: 'QoF',
+    insert: 'data-entry',
+  };
+  const docItem = { id: DOC, title: 'Food bank letter', preview: 'Letter', category: '', insert: 'document' };
+  const reflowItem = { id: 'referral-letter', title: 'Referral letter', preview: '', category: '', insert: 'reflow' };
+  const tplSurface = C.moveItem(seed.surfaces.templates, TPL, 'nursing', null).surface;
+  const docSurface = C.moveItem(seed.surfaces.documents, DOC, 'admin', null).surface;
+  const reflowSurface = C.moveItem(seed.surfaces.documents, 'referral-letter', 'coop', null).surface;
+  const potTpl = C.buildBoard([tplItem], tplSurface).groups.find((g) => g.id === 'nursing').items[0];
+  const looseTpl = C.buildBoard([tplItem], seed.surfaces.templates).groups[0].items[0];
+  const potDoc = C.buildBoard([docItem], docSurface).groups.find((g) => g.id === 'admin').items[0];
+  const looseDoc = C.buildBoard([docItem], seed.surfaces.documents).groups[0].items[0];
+  const potReflow = C.buildBoard([reflowItem], reflowSurface).groups.find((g) => g.id === 'coop').items[0];
+  const looseReflow = C.buildBoard([reflowItem], seed.surfaces.documents).groups[0].items[0];
+  const useSpec = { text: 'Use template', title: '', cardTitle: '! Asthma Diagnosis [Contracts]' };
+  const createSpec = { text: '', title: 'Create Food bank letter', cardTitle: 'Food bank letter' };
+  check(
+    potTpl && looseTpl && potTpl.id === TPL && looseTpl.id === TPL,
+    'template card is the same item in a pot and ungrouped'
+  );
+  check(
+    JSON.stringify(C.nativeOpenPlan(potTpl)) === JSON.stringify(C.nativeOpenPlan(looseTpl)),
+    'potted template open plan matches ungrouped'
+  );
+  check(
+    C.nativeOpenPlan(potTpl).posts === false && C.nativeOpenPlan(potTpl).menuId === 'id-template',
+    'potted template does not POST and uses the template menu'
+  );
+  check(
+    C.nativeControlMatches(potTpl, useSpec) === true && C.nativeControlMatches(looseTpl, useSpec) === true,
+    'potted template matches the same Use template control'
+  );
+  check(potDoc && looseDoc && potDoc.id === DOC, 'document card is the same item in a pot and ungrouped');
+  check(
+    JSON.stringify(C.nativeOpenPlan(potDoc)) === JSON.stringify(C.nativeOpenPlan(looseDoc)),
+    'potted document open plan matches ungrouped'
+  );
+  check(
+    C.nativeOpenPlan(potDoc).posts === false && C.nativeOpenPlan(potDoc).menuId === 'id-document',
+    'potted document does not POST and uses the document menu'
+  );
+  check(
+    C.nativeControlMatches(potDoc, createSpec) === true && C.nativeControlMatches(looseDoc, createSpec) === true,
+    'potted document matches the same Create control'
+  );
+  check(
+    JSON.stringify(C.nativeOpenPlan(potReflow)) === JSON.stringify(C.nativeOpenPlan(looseReflow)) &&
+      C.nativeOpenPlan(potReflow).posts === false &&
+      C.nativeOpenPlan(potReflow).menuId === 'id-document',
+    'potted built-in letter uses the same document menu and does not POST'
+  );
+  check(
+    !/function dataEntryCreateBody|function documentCreateBody|fetch\(/.test(
+      coreSrc.slice(coreSrc.indexOf('function nativeOpenPlan'), coreSrc.indexOf('function buildBoard'))
+    ),
+    'native open plan does not fetch or build a create body'
+  );
+
   console.log('\n--- catalogue paths, not a suite insert ---');
   check(
     C.PATHS.dataEntryList(TOPIC) === '/clinical/data/data-entry-template/list?consultationTopicId=' + TOPIC,
@@ -566,7 +629,30 @@ function names(surface) {
     'launcher does not mount because a template drawer is open'
   );
   check(/Document and Template Organiser/.test(canvas), 'canvas uses the product name');
-  check(/nativeMenuId/.test(canvas) && /id-template/.test(coreSrc), 'open goes through Medicus’s template menu id');
+  check(
+    /nativeOpenPlan/.test(canvas) && /nativeMenuId/.test(coreSrc) && /id-template/.test(coreSrc),
+    'open goes through the shared Medicus menu plan'
+  );
+  const openNativeSrc = canvas.slice(
+    canvas.indexOf('function openNative('),
+    canvas.indexOf('function ensureLauncher(')
+  );
+  const onClickSrc = canvas.slice(canvas.indexOf('function onClick('), canvas.indexOf('function onInput('));
+  check(
+    /nativeOpenPlan/.test(openNativeSrc) && /plan\.posts/.test(openNativeSrc),
+    'openNative uses the shared plan and refuses a POST'
+  );
+  check(!/ungrouped|data-group-id|\.locked/.test(openNativeSrc), 'openNative does not branch on the column');
+  check(!/method:\s*['"]POST['"]/.test(openNativeSrc), 'openNative does not POST');
+  check(/execCommand\(\s*'insertText',\s*false,\s*'\/'\s*\)/.test(canvas), 'slash is typed into the clinical field');
+  check(
+    /data-drag-hold/.test(canvas) && /onOpenMouseDown/.test(canvas) && /onOpenMouseUp/.test(canvas),
+    'pressing Open does not drag the card, and a swallowed click still opens'
+  );
+  check(
+    /data-open/.test(onClickSrc) && /itemsForSurface\(/.test(onClickSrc) && !/ungrouped/.test(onClickSrc),
+    'Open resolves the catalogue item and does not special-case Not in a group'
+  );
   check(!/Use template/.test(canvas), 'canvas does not label its own button Use template');
   check(/nativeControlMatches/.test(canvas), 'open matches Medicus’s own control');
   check(!/Insert into consultation/.test(canvas), 'suite insert confirm is gone');

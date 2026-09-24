@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.4] — 2026-09-24
+
+### Document and Template Organiser — Open from a group
+
+Open on a card filed into a group did not launch Medicus. The click sat inside a draggable card, and when Medicus’s Use template or Create control was not already on the page the fallback only dispatched a synthetic slash keydown. That is not the keystroke the clinical field uses to open its menu, so nothing was inserted. Open now uses one plan for a grouped card and a card in Not in a group: click the mounted control, or type `/`, click `#id-template` or `#id-document`, then the same control. The slash is removed. The suite still does not POST a create body. The pack stays opt-in. Catalogue GETs stay on `{siteId}.api.{hostname}`.
+
 ## [v3.265.3] — 2026-09-24
 
 ### Document and Template Organiser search

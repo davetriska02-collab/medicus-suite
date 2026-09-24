@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.3
+**Version:** v3.265.4
 **Generated:** 2026-09-24
 
 ## What it is
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.265.4 (24 Sep)** — Document and Template Organiser: Open on a card in a group uses the same Medicus Use template / Create path as a card that is not in a group. The suite does not POST a create body. Still off until a practice turns it on.
 - **v3.265.3 (24 Sep)** — Document and Template Organiser: a search field on Templates and on Documents filters cards by title, preview, or category as you type. Groups stay on the board; clearing the field shows every card again. Still off until a practice turns it on.
 - **v3.265.2 (24 Sep)** — Document and Template Organiser catalogue: opening it from History, Examination, Impression, or Plan reads the template list even when that list URL is no longer in the performance buffer. The topic comes from encounter overview `consultationTopics[]` (the topic that owns the focused heading). Patient and heading context come from the clinical-summary URL and the heading id. Catalogue reads stay on the practice API host.
 - **v3.265.1 (24 Sep)** — Document and Template Organiser (still off until a practice turns it on). The button shows when the cursor is in History, Examination, Impression, or Plan. Open uses Medicus’s own template form; the suite does not POST the record. Catalogue reads use the practice API host (`{site}.api.{page hostname}`), not the page that serves the SPA shell.
