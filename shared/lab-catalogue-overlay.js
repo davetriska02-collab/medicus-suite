@@ -615,62 +615,9 @@
   // ── Settings-page operations (pure: each returns a NEW overlay) ─────────────────────────────────────────────────
 
   // ── Lab Filing setup operations (pure) ─────────────────────────────────────────────────────────────────────────────
-  // Set (create or change) a practice normal range: spec = { result, lab, code, low, high, enabled }. The result, lab and code
-  // must exist in the effective catalogue and the code must be one of the RESULT's own codes (that is where the unit comes
-  // from). ANY change withdraws the filing approval; a new range starts unapproved.
-  function setFilingRange(builtin, overlay, spec, today) {
-    const day = today || new Date().toISOString().slice(0, 10);
-    const o = safeClone(overlay);
-    if (!isObj(spec)) fail('a filing range must be an object');
-    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
-    const res = asArr(cat.results).find((r) => r.id === spec.result);
-    if (!res) fail('unknown result "' + spec.result + '"');
-    if (!asArr(cat.labs).some((l) => l.id === spec.lab)) fail('unknown lab "' + spec.lab + '"');
-    const code = asArr(res.codes).find((c) => c.conceptId === spec.code);
-    if (!code) fail('code ' + spec.code + ' is not one of ' + res.label + "'s codes");
-    const cleared =
-      (spec.low === undefined || spec.low === null || spec.low === '') &&
-      (spec.high === undefined || spec.high === null || spec.high === '') &&
-      spec.enabled !== true;
-    const next = sanitiseFilingRange(
-      {
-        result: spec.result,
-        lab: spec.lab,
-        code: spec.code,
-        unit: code.unit || '',
-        low: spec.low,
-        high: spec.high,
-        enabled: cleared ? true : spec.enabled === true, // (a placeholder so a cleared entry passes validation, then is dropped below)
-        provenance: { source: 'practice', reviewed: false, createdAt: day },
-      },
-      0
-    );
-    if (cleared) next.enabled = false;
-    const key = filingKey(next);
-    const i = o.filing.ranges.findIndex((r) => filingKey(r) === key);
-    // nothing set and assisted filing off = clear it
-    if (next.low === null && next.high === null && !next.enabled) {
-      if (i >= 0) o.filing.ranges.splice(i, 1);
-      return o;
-    }
-    if (i >= 0) {
-      const old = o.filing.ranges[i];
-      const same =
-        old.low === next.low && old.high === next.high && old.enabled === next.enabled && old.unit === next.unit;
-      if (same) return o; // nothing changed: the approval stands
-      next.provenance = { ...old.provenance, reviewed: false };
-      delete next.provenance.reviewedBy;
-      delete next.provenance.reviewedAt;
-      o.filing.ranges[i] = next;
-    } else {
-      if (o.filing.ranges.length >= LIMITS.filingRanges) fail('too many filing ranges');
-      o.filing.ranges.push(next);
-    }
-    return sanitiseOverlay(o);
-  }
-
-  // A practice normal range for one code of one result at one lab: spec = { result, lab, code, low, high }. Blank = cleared.
-  // (Redefined here so the range no longer carries an on/off flag.)
+  // A practice normal range for one code of one result at one lab: spec = { result, lab, code, low, high }.
+  // Blank clears it. The range does not carry its own on/off flag — assisted filing is the report-group switch.
+  // ANY change withdraws the filing approval; a new range starts unapproved.
   function setFilingRange(builtin, overlay, spec, today) {
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
@@ -2061,7 +2008,8 @@
       name: lab.name,
       identifiers: { ...lab.identifiers },
       groupHeadings: heads,
-      provenance: li >= 0 ? o.labs[li].provenance : { source: 'practice', createdAt: new Date().toISOString().slice(0, 10) },
+      provenance:
+        li >= 0 ? o.labs[li].provenance : { source: 'practice', createdAt: new Date().toISOString().slice(0, 10) },
     };
     if (lab.orderingSystem) labEntry.orderingSystem = lab.orderingSystem;
     if (lab.structured !== undefined) labEntry.structured = lab.structured;

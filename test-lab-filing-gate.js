@@ -48,15 +48,49 @@ console.log('--- combineFilingBlockers: union-only ---');
   const c6 = LFG.combineFilingBlockers([], failResult('catalogue threw'));
   check(
     c6.blockers.length === 0 && c6.usedCatalogue === false,
-    'catalogue ok:false -> legacy alone, NEVER read as "nothing to add" by silently blocking everything'
+    'catalogue ok:false with no catalogueOnly flag -> legacy alone, NEVER a blanket deny of a legacy clearance'
   );
   const c7 = LFG.combineFilingBlockers(['legacy blocker'], failResult('catalogue threw'));
   check(
     c7.blockers.length === 1 && c7.blockers[0] === 'legacy blocker' && c7.usedCatalogue === false,
-    'catalogue ok:false with a legacy blocker present -> the legacy blocker survives untouched'
+    'catalogue ok:false with a legacy blocker present -> the legacy blocker survives, and no blanket deny is invented'
   );
   const c8 = LFG.combineFilingBlockers(['x'], null);
   check(c8.blockers.length === 1 && c8.usedCatalogue === false, 'no catalogue result at all behaves like ok:false');
+
+  const c9 = LFG.combineFilingBlockers([], failResult('catalogue threw'), { catalogueOnly: true });
+  check(
+    c9.usedCatalogue === false && c9.blockers.length === 1 && c9.blockers[0] === LFG.CATALOGUE_UNAVAILABLE_BLOCKER,
+    'catalogue ok:false with no legacy profile (catalogueOnly) BLOCKS — filing must not proceed on the generic baseline'
+  );
+  const c10 = LFG.combineFilingBlockers(['legacy blocker'], failResult('catalogue threw'), { catalogueOnly: false });
+  check(
+    c10.blockers.length === 1 &&
+      c10.blockers[0] === 'legacy blocker' &&
+      !c10.blockers.includes(LFG.CATALOGUE_UNAVAILABLE_BLOCKER),
+    'catalogue ok:false with a legacy blocker and catalogueOnly false keeps that blocker and does not add the catalogue-only deny'
+  );
+  const c11 = LFG.combineFilingBlockers([], okResult([]), { pendingCatalogueMissing: true });
+  check(
+    c11.usedCatalogue === true && c11.blockers.includes(LFG.PENDING_CATALOGUE_BLOCKER),
+    'a missing pending catalogue adds a blocker even when the approved catalogue itself is clean — an unapproved range must not fall back to the lab range'
+  );
+  const c12 = LFG.combineFilingBlockers(['legacy says no'], failResult('x'), {
+    catalogueOnly: false,
+    pendingCatalogueMissing: true,
+  });
+  check(
+    c12.usedCatalogue === false &&
+      c12.blockers.includes('legacy says no') &&
+      c12.blockers.includes(LFG.PENDING_CATALOGUE_BLOCKER) &&
+      !c12.blockers.includes(LFG.CATALOGUE_UNAVAILABLE_BLOCKER),
+    'pending catalogue missing still blocks alongside a legacy profile, without turning ok:false into a blanket catalogue deny'
+  );
+  const c13 = LFG.combineFilingBlockers([], okResult(['catalogue says no']), { pendingCatalogueMissing: true });
+  check(
+    c13.blockers.includes('catalogue says no') && c13.blockers.includes(LFG.PENDING_CATALOGUE_BLOCKER),
+    'the pending-load blocker is added on top of real catalogue blockers, not instead of them'
+  );
 }
 
 console.log('\n--- buildShadowLogEntry: shape and the two directions ---');
@@ -237,22 +271,29 @@ console.log(
       /filingEnginePref = tc && tc\.prefs && tc\.prefs\.filingEngine === 'catalogue' \? 'catalogue' : 'legacy'/.test(
         src
       ),
-    "the engine choice is opt-in, off (legacy) by default, read from triagelens.config.prefs.filingEngine (not labfiling.config) so it gets defaults.json governance and practice-wide publishing, same as oirEngine"
+    'the engine choice is opt-in, off (legacy) by default, read from triagelens.config.prefs.filingEngine (not labfiling.config) so it gets defaults.json governance and practice-wide publishing, same as oirEngine'
   );
   check(
-    /async function combineWithCatalogueIfWanted\(rs, legacyBlockers\)/.test(src) &&
-      /LFG\.combineFilingBlockers\(\[\.\.\.legacyBlockers, \.\.\.extraBlockers\], catResult\)/.test(src),
-    'one shared helper does the union-only combine (engine/lab-filing-gate.js\'s own contract), used by both call sites below'
+    /async function combineWithCatalogueIfWanted\(rs, legacyBlockers, opts\)/.test(src) &&
+      /LFG\.combineFilingBlockers\(\[\.\.\.legacyBlockers, \.\.\.extraBlockers\], catResult, \{/.test(src) &&
+      /catalogueOnly,/.test(src) &&
+      /pendingCatalogueMissing: !pendingCatalogue/.test(src),
+    "one shared helper does the union-only combine (engine/lab-filing-gate.js's own contract), and tells it when this is catalogue-only and when the pending catalogue failed to load"
   );
   check(
-    (src.match(/combineWithCatalogueIfWanted\(rs, blockers\)/g) || []).length === 2,
-    'the combine runs from BOTH the poll-time gate (evaluateGate, what is offered) and the click-time re-verification (onAction, what actually proceeds) — they must never disagree about what is blocked'
+    (src.match(/combineWithCatalogueIfWanted\(rs, blockers, \{ catalogueOnly: !/g) || []).length === 2,
+    'the combine runs from BOTH the poll-time gate (evaluateGate, what is offered) and the click-time re-verification (onAction, what actually proceeds) — they must never disagree about what is blocked, and each passes catalogueOnly from the real legacy profile'
   );
   check(
-    /if \(!filingEngineWanted\(\) \|\| !LFC \|\| !LFG \|\| !rs \|\| !rs\.report\) {\s*\n\s*return { blockers: legacyBlockers, engine: 'legacy', catalogueUnresolvedComments: \[\] };/.test(
+    /if \(!filingEngineWanted\(\) \|\| !rs \|\| !rs\.report\) {\s*\n\s*return { blockers: legacyBlockers, engine: 'legacy', catalogueUnresolvedComments: \[\] };/.test(
       src
     ),
-    'when the catalogue engine is not opted in (or unavailable), the legacy blockers pass through UNCHANGED'
+    'when the catalogue engine is not opted in, the legacy blockers pass through UNCHANGED'
+  );
+  check(
+    /if \(!LFC \|\| !LFG\) \{/.test(src) &&
+      /LFG\.combineFilingBlockers\(legacyBlockers, \{ ok: false \}, \{ catalogueOnly \}\)/.test(src),
+    'if the catalogue adapter is missing while the engine is opted in, catalogue-only fail-closes and a legacy profile stays on its own blockers'
   );
   check(
     /const anyMedGuard =[\s\S]{0,220}excludeIfMeds\.length\)/.test(src) &&
@@ -274,7 +315,7 @@ console.log('\n--- wiring: the filing-engine choice lives on the Lab filing sett
   const src = fs.readFileSync(path.join(__dirname, 'options', 'labfiling-section.js'), 'utf8');
   check(
     /data-act="set-filing-engine"/.test(src) && /await persistFilingEngine\(el\.value\)/.test(src),
-    'a select control on the Lab filing settings page sets it — persisted into triagelens.config.prefs, not labfiling.config (persistFilingEngine), mirroring Outstanding Requests\' own engine pref'
+    "a select control on the Lab filing settings page sets it — persisted into triagelens.config.prefs, not labfiling.config (persistFilingEngine), mirroring Outstanding Requests' own engine pref"
   );
   check(
     /await chrome\.storage\.local\.get\('triagelens\.config'\)/.test(src) &&
@@ -287,9 +328,7 @@ console.log('\n--- wiring: the filing-engine choice lives on the Lab filing sett
   );
 }
 
-console.log(
-  '\n--- wiring: the catalogue engine can operate with ZERO legacy profiles (2026-09-25 fix) ---'
-);
+console.log('\n--- wiring: the catalogue engine can operate with ZERO legacy profiles (2026-09-25 fix) ---');
 {
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
   check(
@@ -313,10 +352,18 @@ console.log(
     'blocker computation uses the REAL (possibly null) legacy profile, not a synthetic one — a truthy-but-empty profile object would make unrecognisedAnalyteBlockers flag every result as unrecognised, which is the opposite of what catalogue-only mode needs'
   );
   check(
-    /const displayProfile = profile \|\| { name: 'Lab Result Catalogue', commitMode: 'confirm', filing: screenText };/.test(
-      src
-    ) && /showButton\(displayProfile\);/.test(src),
-    'a synthetic display profile — name/commitMode/filing text ONLY, deliberately no analytes/parameters/exclusions — is used for the button UI and DOM interaction when there is no real legacy profile'
+    /function catalogueDisplayProfile\(screenText, limits\)/.test(src) &&
+      /paramsOverrideLabFlags: lim\.paramsOverrideLabFlags === true/.test(src) &&
+      /profile \|\|\s*\n?\s*catalogueDisplayProfile\(/.test(src) &&
+      /showButton\(displayProfile\);/.test(src) &&
+      /LFC\.practiceConfirmLimits\(rs\.report, catalogueForScreen\)/.test(src),
+    'catalogue-only builds a display profile whose confirm-dialog parameters are the practice ranges (and the lab-flag override flag), not an empty profile that would reprint the lab range'
+  );
+  check(
+    /const confirmProfile = legacyProfile/.test(src) &&
+      /LFC\.practiceConfirmLimits\(rs\.report, catalogueForAction\)/.test(src) &&
+      /profile: confirmProfile,/.test(src),
+    'the click-time confirm is rebuilt from the catalogue fetched for this report, so the dialog matches the ranges that just cleared the file'
   );
   check(
     /commitMode 'confirm' \(not the 'manual' pre-fill-only default\)/.test(src),
@@ -387,7 +434,7 @@ console.log(
     "the catalogue engine's structured unresolvedComments are carried out of combineWithCatalogueIfWanted, not discarded"
   );
   check(
-    /showBlockedHint\(combined\.blockers, profile, commentedResults, currentMatchedProfiles, combined\.catalogueUnresolvedComments\)/.test(
+    /showBlockedHint\(\s*combined\.blockers,\s*profile,\s*commentedResults,\s*currentMatchedProfiles,\s*combined\.catalogueUnresolvedComments\s*\)/.test(
       src
     ),
     'they reach the blocked card, alongside the existing legacy-profile comment list — two separate sources, not conflated'
@@ -433,11 +480,11 @@ console.log(
   );
   check(
     /const commentProfile = allow\.length \? { allowComments: allow } : null;/.test(src),
-    "the comment-only pseudo-profile is built ONLY inside the no-legacy-profile branch — used for the comment check (fileabilityBlockers/logCommentDebug), never returned or passed anywhere else, so it cannot reintroduce the unrecognisedAnalyteBlockers-blocks-everything bug (that lives in computeProfileBlockers, a completely separate function this pseudo-profile never reaches)"
+    'the comment-only pseudo-profile is built ONLY inside the no-legacy-profile branch — used for the comment check (fileabilityBlockers/logCommentDebug), never returned or passed anywhere else, so it cannot reintroduce the unrecognisedAnalyteBlockers-blocks-everything bug (that lives in computeProfileBlockers, a completely separate function this pseudo-profile never reaches)'
   );
   check(
     /effectiveScore\(rs, profile, catalogueForScreen\)/.test(src),
-    "evaluateGate() passes the catalogue it already fetched for screen-text lookup straight through — no extra fetch"
+    'evaluateGate() passes the catalogue it already fetched for screen-text lookup straight through — no extra fetch'
   );
   check(
     /const catalogueForAction = !legacyProfile && filingEngineWanted\(\) \? await ensureFilingCatalogue\(\) : null;/.test(
@@ -448,14 +495,16 @@ console.log(
 }
 
 console.log(
-  '\n--- regression: the catalogue lab-flag override must reach the baseline severity gate, not just this engine\'s own blockers (2026-09-25, Nick live-caught) ---'
+  "\n--- regression: the catalogue lab-flag override must reach the baseline severity gate, not just this engine's own blockers (2026-09-25, Nick live-caught) ---"
 );
 {
   const engineSrc = fs.readFileSync(path.join(__dirname, 'engine', 'lab-filing-catalogue.js'), 'utf8');
   check(
     /function applyCatalogueOverrides\(report, catalogue\)/.test(engineSrc) &&
-      /const api = { evaluateFilingCatalogue, buildActingIndex, applyCatalogueOverrides };/.test(engineSrc),
-    'engine/lab-filing-catalogue.js exports a pure applyCatalogueOverrides mirroring shared/lab-filing-utils.js\'s applyParamOverrides — same safety bounds (never touches urgent, unit-safe, comparator-censored never clears, only within-bounds values clear)'
+      /const api = { evaluateFilingCatalogue, buildActingIndex, applyCatalogueOverrides, practiceConfirmLimits };/.test(
+        engineSrc
+      ),
+    "engine/lab-filing-catalogue.js exports a pure applyCatalogueOverrides mirroring shared/lab-filing-utils.js's applyParamOverrides — same safety bounds (never touches urgent, unit-safe, comparator-censored never clears, only within-bounds values clear)"
   );
   const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
   check(
@@ -463,7 +512,7 @@ console.log(
       /const severity = useCatalogue\s*\n\s*\? SEV\.evaluateReportSeverity\(adj, { priorityDisplay: '', resultRules, problems: \[\] }\)\s*\n\s*: rs\.severity;/.test(
         btnSrc
       ),
-    "effectiveScore()'s no-legacy-profile branch applies the catalogue override and RE-SCORES severity on the adjusted report — mirroring exactly what the legacy paramsOverrideLabFlags branch below it already does for a legacy profile, so a catalogue-approved override guard can actually clear the baseline \"not every result is within normal limits\" block, not just this engine's own \"lab-flagged-abnormal\" reason"
+    'effectiveScore()\'s no-legacy-profile branch applies the catalogue override and RE-SCORES severity on the adjusted report — mirroring exactly what the legacy paramsOverrideLabFlags branch below it already does for a legacy profile, so a catalogue-approved override guard can actually clear the baseline "not every result is within normal limits" block, not just this engine\'s own "lab-flagged-abnormal" reason'
   );
 }
 

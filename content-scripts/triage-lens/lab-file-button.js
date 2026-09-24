@@ -520,8 +520,12 @@
           id: el.id || null,
           enabled: isEnabled(el),
           top: el.getBoundingClientRect ? Math.round(el.getBoundingClientRect().top) : null,
-          nearbyText: (el.closest('section,div[class*="card"],div[class*="panel"]') || el.parentElement || el)
-            .textContent.trim()
+          nearbyText: (
+            el.closest('section,div[class*="card"],div[class*="panel"]') ||
+            el.parentElement ||
+            el
+          ).textContent
+            .trim()
             .slice(0, 80),
         }))
       );
@@ -705,7 +709,11 @@
     if (!DEBUG || !LF || !report || !Array.isArray(report.results)) return;
     const rowsForSignature = report.results
       .filter((r) => r && typeof r === 'object' && r.text)
-      .map((r) => [r.name, LF.numericCommentResidue(r), LF.profilesOwningResult(currentMatchedProfiles, r).map((p) => p.id)]);
+      .map((r) => [
+        r.name,
+        LF.numericCommentResidue(r),
+        LF.profilesOwningResult(currentMatchedProfiles, r).map((p) => p.id),
+      ]);
     const signature = JSON.stringify([
       profile && profile.name,
       (profile && profile.allowComments) || [],
@@ -728,7 +736,9 @@
     // expanded first; this line is readable as pasted, with no extra step.
     log(
       'matched profiles (candidates for whitelist ownership):',
-      JSON.stringify(currentMatchedProfiles.map((p) => ({ id: p.id, name: p.name, match: p.match, enabled: p.enabled })))
+      JSON.stringify(
+        currentMatchedProfiles.map((p) => ({ id: p.id, name: p.name, match: p.match, enabled: p.enabled }))
+      )
     );
     report.results.forEach((r) => {
       if (!r || typeof r !== 'object' || !r.text) return;
@@ -759,7 +769,9 @@
   //      Investigations page. Falls back to every report group's allowComments practice-wide (not narrowed to this
   //      report's own lab — simpler, and safe: the catalogue engine's own PRECISE per-lab-per-heading check still
   //      independently re-blocks a comment only allowed for a different heading, so this can only ever be as
-  //      permissive as that check already allows, never more).
+  //      permissive as that check already allows, never more). That precise check only runs when the catalogue
+  //      evaluates. If it returns ok:false, catalogue-only filing is blocked (combineWithCatalogueIfWanted) —
+  //      this practice-wide list must not be what lets the file through.
   //   2. A report group's overrideLabFlag (H-081 control d — one decision per test at a lab, on the group entry)
   //      only ever affected the catalogue engine's OWN blocker list — it never reached this baseline severity gate,
   //      so a result the practice had explicitly said should override the lab's flag still showed "not every result
@@ -849,7 +861,8 @@
   }
   function ensureFilingCatalogue() {
     if (_filingCataloguePromise) return _filingCataloguePromise;
-    if (typeof window.labcatalogueLoadEffective !== 'function') return (_filingCataloguePromise = Promise.resolve(null));
+    if (typeof window.labcatalogueLoadEffective !== 'function')
+      return (_filingCataloguePromise = Promise.resolve(null));
     _filingCataloguePromise = window
       .labcatalogueLoadEffective()
       .then((eff) => (eff && eff.catalogue) || null)
@@ -881,6 +894,20 @@
   // re-verification that decides whether filing actually proceeds) so the two can never disagree about what's
   // blocked — duplicating this logic at both call sites was the risk to avoid, not a convenience to skip.
   const filingEngineWanted = () => filingEnginePref === 'catalogue';
+  // Catalogue-only display object for the button and the confirm dialog. parameters / paramsOverrideLabFlags are
+  // for buildFilingConfirmMessage ONLY (the practice range that cleared the file, and the lab-flag override note).
+  // They must never be passed to computeProfileBlockers or effectiveScore — those keep the real legacy profile,
+  // which is null in this mode. A truthy-but-empty profile there makes unrecognisedAnalyteBlockers flag every result.
+  function catalogueDisplayProfile(screenText, limits) {
+    const lim = limits && typeof limits === 'object' ? limits : {};
+    return {
+      name: 'Lab Result Catalogue',
+      commitMode: 'confirm',
+      filing: screenText,
+      parameters: Array.isArray(lim.parameters) ? lim.parameters : [],
+      paramsOverrideLabFlags: lim.paramsOverrideLabFlags === true,
+    };
+  }
   // Mirrors shared/lab-catalogue-overlay.js's own FILING_DEFAULT_NORMAL_OPTION/FILING_DEFAULT_FILE_BUTTON constants
   // — that module is not loaded in this content-script group, so the two stable default strings are repeated here
   // rather than pulled in. Used only when the catalogue engine is operating WITHOUT a legacy profile (see
@@ -892,15 +919,32 @@
     return catalogue.filing.groups.flatMap((g) => (Array.isArray(g.allowComments) ? g.allowComments : []));
   }
   function catalogueScreenText(catalogue) {
-    const s = catalogue && catalogue.filing && Array.isArray(catalogue.filing.screen) ? catalogue.filing.screen[0] : null;
+    const s =
+      catalogue && catalogue.filing && Array.isArray(catalogue.filing.screen) ? catalogue.filing.screen[0] : null;
     return {
       fileButtonText: (s && s.fileButtonText) || CATALOGUE_DEFAULT_FILE_BUTTON,
       normalOptionText: (s && s.normalOptionText) || CATALOGUE_DEFAULT_NORMAL_OPTION,
     };
   }
-  async function combineWithCatalogueIfWanted(rs, legacyBlockers) {
-    if (!filingEngineWanted() || !LFC || !LFG || !rs || !rs.report) {
+  async function combineWithCatalogueIfWanted(rs, legacyBlockers, opts) {
+    const catalogueOnly = !!(opts && opts.catalogueOnly);
+    if (!filingEngineWanted() || !rs || !rs.report) {
       return { blockers: legacyBlockers, engine: 'legacy', catalogueUnresolvedComments: [] };
+    }
+    // The engine is the one the practice asked for, but the adapter is not on the page. Catalogue-only has nothing
+    // else to stand on. A legacy profile still files on its own gate.
+    if (!LFC || !LFG) {
+      const gated = LFG
+        ? LFG.combineFilingBlockers(legacyBlockers, { ok: false }, { catalogueOnly })
+        : {
+            blockers: catalogueOnly
+              ? [
+                  ...(Array.isArray(legacyBlockers) ? legacyBlockers : []),
+                  'the Lab Result Catalogue could not be checked — file manually',
+                ]
+              : legacyBlockers,
+          };
+      return { blockers: gated.blockers, engine: 'catalogue-fallback', catalogueUnresolvedComments: [] };
     }
     try {
       const [catalogue, pendingCatalogue] = await Promise.all([
@@ -926,7 +970,13 @@
         meds,
         pendingCatalogue,
       });
-      const combined = LFG.combineFilingBlockers([...legacyBlockers, ...extraBlockers], catResult);
+      // pendingCatalogue null means the unapproved-edits view failed to load (or was missing). Do not treat that
+      // as "nothing pending" — an edited range would otherwise fall back to the lab range. The flag only adds a
+      // blocker, including when a legacy profile is also present.
+      const combined = LFG.combineFilingBlockers([...legacyBlockers, ...extraBlockers], catResult, {
+        catalogueOnly,
+        pendingCatalogueMissing: !pendingCatalogue,
+      });
       return {
         blockers: combined.blockers,
         engine: combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',
@@ -936,8 +986,12 @@
           catResult && catResult.ok && Array.isArray(catResult.unresolvedComments) ? catResult.unresolvedComments : [],
       };
     } catch (_) {
-      // combining must never break the real gate — fall back to legacy blockers alone.
-      return { blockers: legacyBlockers, engine: 'catalogue-fallback', catalogueUnresolvedComments: [] };
+      // A throw is "could not check". Catalogue-only must not file on the generic baseline. A legacy profile stays
+      // on its own blockers — a broken catalogue must not blanket-deny a file that gate already cleared, and must
+      // not erase a legacy blocker. (A pending-catalogue load that fails returns null rather than throwing; that
+      // path sets pendingCatalogueMissing above and blocks even when a legacy profile is present.)
+      const combined = LFG.combineFilingBlockers(legacyBlockers, { ok: false }, { catalogueOnly });
+      return { blockers: combined.blockers, engine: 'catalogue-fallback', catalogueUnresolvedComments: [] };
     }
   }
 
@@ -1376,7 +1430,12 @@
     if (catalogueWhitelistBusy) return;
     const ticked = (checks || []).filter((c) => c.checkbox.checked && c.labId && c.heading);
     if (!ticked.length) return;
-    if (!LF || !OV || typeof window.labcatalogueLoadEffective !== 'function' || typeof window.labcatalogueSaveOverlay !== 'function') {
+    if (
+      !LF ||
+      !OV ||
+      typeof window.labcatalogueLoadEffective !== 'function' ||
+      typeof window.labcatalogueSaveOverlay !== 'function'
+    ) {
       toast('Could not save — extension utilities not loaded.', 'err');
       return;
     }
@@ -1469,7 +1528,9 @@
   // machine's practice-profile sync) with a stale local copy.
   async function whitelistSelectedComments(checks, saveBtn) {
     if (whitelistBusy) return;
-    const ticked = (checks || []).filter((c) => c.checkbox.checked && Array.isArray(c.targetProfiles) && c.targetProfiles.length);
+    const ticked = (checks || []).filter(
+      (c) => c.checkbox.checked && Array.isArray(c.targetProfiles) && c.targetProfiles.length
+    );
     if (!ticked.length) return;
     if (!LF || typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
       toast('Could not save — extension utilities not loaded.', 'err');
@@ -1498,7 +1559,9 @@
       saveBtn.textContent = 'Saving…';
     }
     try {
-      const r = await new Promise((resolve) => chrome.storage.local.get([STORE_PROFILES, 'suite.feedbackEmail'], resolve));
+      const r = await new Promise((resolve) =>
+        chrome.storage.local.get([STORE_PROFILES, 'suite.feedbackEmail'], resolve)
+      );
       const stored = Array.isArray(r[STORE_PROFILES]) ? r[STORE_PROFILES] : [];
       const updatedNames = [];
       const missing = [];
@@ -1509,8 +1572,21 @@
           continue;
         }
         const existingAllow = Array.isArray(stored[idx].allowComments) ? stored[idx].allowComments : [];
-        const existingNorm = new Set(existingAllow.map((s) => String(s || '').toLowerCase().trim()));
-        const toAdd = texts.filter((t) => !existingNorm.has(String(t || '').toLowerCase().trim()));
+        const existingNorm = new Set(
+          existingAllow.map((s) =>
+            String(s || '')
+              .toLowerCase()
+              .trim()
+          )
+        );
+        const toAdd = texts.filter(
+          (t) =>
+            !existingNorm.has(
+              String(t || '')
+                .toLowerCase()
+                .trim()
+            )
+        );
         const draft = Object.assign({}, stored[idx], {
           allowComments: existingAllow.concat(toAdd),
           enabled: false,
@@ -1524,7 +1600,9 @@
         updatedNames.push(clean.name || 'Profile');
       }
       if (!updatedNames.length) {
-        console.error('[LabFiling] whitelist save found no matching stored profile(s) for ids:', [...byProfileId.keys()]);
+        console.error('[LabFiling] whitelist save found no matching stored profile(s) for ids:', [
+          ...byProfileId.keys(),
+        ]);
         toast('Could not save — the matching profile(s) no longer exist (may have been deleted or renamed).', 'err');
         return;
       }
@@ -1615,16 +1693,29 @@
       runFilingShadow(rs, blockers);
       // Phase E stage E2 — same union-only combine as evaluateGate(), re-run here on the FRESH fetch: this is the
       // check that actually decides whether filing proceeds, so it must never disagree with what was offered.
-      const combined = rs ? await combineWithCatalogueIfWanted(rs, blockers) : { blockers, engine: 'legacy' };
+      const combined = rs
+        ? await combineWithCatalogueIfWanted(rs, blockers, { catalogueOnly: !legacyProfile })
+        : { blockers, engine: 'legacy' };
       if (!rs || combined.blockers.length) {
         toast('Not filing — ' + (combined.blockers[0] || 'review manually') + '. Review manually.', 'err');
         hideButton();
         return;
       }
       const mode = LF && LF.LF_COMMIT_MODES.includes(profile.commitMode) ? profile.commitMode : 'manual';
+      // Catalogue-only: rebuild the confirm profile from the catalogue just fetched, so the dialog names the
+      // practice range that cleared THIS report and the lab-flag override when that path applied. The legacy
+      // profile, when there is one, already carries its own parameters.
+      const confirmProfile = legacyProfile
+        ? profile
+        : catalogueDisplayProfile(
+            profile.filing,
+            catalogueForAction && LFC && typeof LFC.practiceConfirmLimits === 'function'
+              ? LFC.practiceConfirmLimits(rs.report, catalogueForAction)
+              : null
+          );
       const res = await fileAllNormal({
         root: document.body,
-        profile,
+        profile: confirmProfile,
         action,
         severity: eff.severity,
         blockers,
@@ -1735,7 +1826,12 @@
       return;
     }
     const engineWanted = filingEngineWanted();
-    log('gate: filingEngine =', filingEnginePref, '| enabled legacy profiles =', profiles.filter((p) => p && p.enabled).length);
+    log(
+      'gate: filingEngine =',
+      filingEnginePref,
+      '| enabled legacy profiles =',
+      profiles.filter((p) => p && p.enabled).length
+    );
     // The catalogue engine can operate entirely on its own, even with ZERO enabled legacy profiles (Nick,
     // 2026-09-25: deleting every legacy profile to test the catalogue alone revealed this early exit was blocking
     // it before the catalogue was ever consulted — there was no way to test "catalogue only" at all). With neither
@@ -1775,7 +1871,9 @@
       }
       catalogueForScreen = await ensureFilingCatalogue();
       if (!catalogueForScreen) {
-        log('gate: hidden — no legacy profile, and ensureFilingCatalogue() returned nothing (unreadable/invalid catalogue, or window.labcatalogueLoadEffective is missing — check the manifest/load order)');
+        log(
+          'gate: hidden — no legacy profile, and ensureFilingCatalogue() returned nothing (unreadable/invalid catalogue, or window.labcatalogueLoadEffective is missing — check the manifest/load order)'
+        );
         hideButton();
         return;
       }
@@ -1813,26 +1911,38 @@
     // must not slow down or affect what follows, and runFilingShadow() never throws out of its own promise chain.
     runFilingShadow(rs, blockers);
     // Phase E stage E2 — union-only combine with the catalogue engine when opted in (see combineWithCatalogueIfWanted).
-    const combined = await combineWithCatalogueIfWanted(rs, blockers);
+    const combined = await combineWithCatalogueIfWanted(rs, blockers, { catalogueOnly: !profile });
     log('gate: combined engine =', combined.engine, '| combined blockers =', combined.blockers);
     if (combined.blockers.length) {
-      const commentedResults = LF
-        ? LF.unresolvedCommentedResults(eff.report, profile, currentMatchedProfiles)
-        : [];
-      showBlockedHint(combined.blockers, profile, commentedResults, currentMatchedProfiles, combined.catalogueUnresolvedComments);
+      const commentedResults = LF ? LF.unresolvedCommentedResults(eff.report, profile, currentMatchedProfiles) : [];
+      showBlockedHint(
+        combined.blockers,
+        profile,
+        commentedResults,
+        currentMatchedProfiles,
+        combined.catalogueUnresolvedComments
+      );
       return;
     }
     // A profile-shaped object for the DOM-interaction/display code below (showButton, fileAllNormal) is required
-    // even with no legacy profile — those read .name/.commitMode/.filing directly. Deliberately carries NOTHING
-    // legacy-specific (no .analytes/.parameters/.excludeIfMeds/.suppressIfText/.trend/messaging): those must stay
-    // absent so the blocker functions above keep treating this as "no legacy profile", not "an empty one".
+    // even with no legacy profile — those read .name/.commitMode/.filing directly. The blocker functions above
+    // already ran on the real (possibly null) legacy profile; this object is not fed back into them.
+    // parameters / paramsOverrideLabFlags are confirm-dialog display only: the practice range that cleared the
+    // file, and the lab-flag override warning when that path applied. They are not analytes/exclusions/trend.
     // commitMode 'confirm' (not the 'manual' pre-fill-only default) — Nick, 2026-09-25: catalogue-only mode has no
     // profile setting to read a preference from, and defaulting to 'manual' forced a double click every time (the
     // suite's own button pre-fills, then the clinician must ALSO press Medicus's own File button). 'confirm' is an
     // already-reviewed legacy mode, not a new one: one click on the suite's button, one window.confirm() the
     // clinician reads and presses OK on, then the macro itself clicks File — a human still presses to file, just
     // once, the same as this mode already works for any legacy profile set to it.
-    const displayProfile = profile || { name: 'Lab Result Catalogue', commitMode: 'confirm', filing: screenText };
+    const displayProfile =
+      profile ||
+      catalogueDisplayProfile(
+        screenText,
+        catalogueForScreen && LFC && typeof LFC.practiceConfirmLimits === 'function'
+          ? LFC.practiceConfirmLimits(rs.report, catalogueForScreen)
+          : null
+      );
     log('gate: shown — nothing blocked', displayProfile.name);
     showButton(displayProfile);
   }

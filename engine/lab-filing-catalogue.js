@@ -30,8 +30,9 @@
 //                 include anything unreviewed.
 //
 // Output: { ok: true, blockers: string[], reasonKinds: string[], meta: {...}, unresolvedComments: {...}[] } or
-// { ok: false, error: string } — NEVER throws; a caller falls back to legacy alone on ok:false, exactly as
-// engine/outstanding-match-catalogue.js's fail-safe contract (Phase D). `blockers` are human-readable and MAY embed
+// { ok: false, error: string } — NEVER throws. A caller with a legacy profile falls back to legacy alone on
+// ok:false (engine/lab-filing-gate.js). Catalogue-only (no legacy profile) must NOT: the gate adds a fail-closed
+// blocker instead of filing on the generic baseline. `blockers` are human-readable and MAY embed
 // this patient's value (e.g. "77 u/L is above your maximum of 130") — fine for the confirm dialog, NOT fine for a
 // log. `reasonKinds` is the value-free twin (engine/lab-filing-gate.js's shadow log uses this one; see its own
 // header for why). `unresolvedComments` ({name, residue, labId, heading}[]) is structured data for a "whitelist
@@ -88,7 +89,9 @@
   // gap one level down, for a single result's range/guard edited AFTER its group was already approved.
   function findPendingRange(pendingCatalogue, resultId, labId, code) {
     const ranges = (pendingCatalogue && pendingCatalogue.filing && pendingCatalogue.filing.ranges) || [];
-    return ranges.find((r) => r.result === resultId && r.lab === labId && r.code === code && r.reviewed !== true) || null;
+    return (
+      ranges.find((r) => r.result === resultId && r.lab === labId && r.code === code && r.reviewed !== true) || null
+    );
   }
   function findPendingGuard(pendingCatalogue, resultId, labId) {
     const guards = (pendingCatalogue && pendingCatalogue.filing && pendingCatalogue.filing.guards) || [];
@@ -247,6 +250,61 @@
     return { reasons, resultId, guard };
   }
 
+  // The practice ranges (and whether a lab-flag override actually cleared a flagged value) that a catalogue-only
+  // confirm dialog must show. Shape matches a legacy profile's parameters / paramsOverrideLabFlags so
+  // shared/lab-filing-utils.js buildFilingConfirmMessage can print them unchanged. Display only — never feed this
+  // object into computeProfileBlockers (that must keep seeing a genuinely null legacy profile).
+  // Returns { parameters: {analyte,low,high,unit}[], paramsOverrideLabFlags: boolean }. Empty when the catalogue
+  // cannot be read; the caller fail-closes filing separately.
+  function practiceConfirmLimits(report, catalogue) {
+    const empty = { parameters: [], paramsOverrideLabFlags: false };
+    try {
+      if (!report || !Array.isArray(report.results) || !catalogue || typeof catalogue !== 'object') return empty;
+      const index = buildActingIndex(catalogue);
+      if (!index) return empty;
+      const labInfo = report.lab && typeof report.lab === 'object' ? report.lab : {};
+      if (!isStr(labInfo.organisation) || !labInfo.organisation) return empty;
+      const lab = LC.identifyLab(index, labInfo);
+      if (!lab) return empty;
+      const labId = lab.def.id;
+      const parameters = [];
+      let paramsOverrideLabFlags = false;
+      for (const r of report.results) {
+        if (!r || typeof r !== 'object' || !isStr(r.code) || !r.code) continue;
+        const hit = index.byCode.get(r.code);
+        if (!hit) continue;
+        const heading = isStr(r.specimen) ? r.specimen : '';
+        const group = heading ? findGroup(catalogue, labId, heading) : null;
+        if (!group || group.enabled !== true) continue;
+        const range = findRange(catalogue, hit.resultId, labId, r.code);
+        if (!range || !LFU.unitsSafeToApply(range.unit, r.unit)) continue;
+        const name = isStr(r.name) && r.name.trim() ? r.name.trim() : '';
+        if (!name) continue;
+        parameters.push({
+          analyte: name,
+          low: range.low,
+          high: range.high,
+          unit: range.unit || '',
+        });
+        // The warning is for the path that actually set the lab flag aside: group switch on, value inside the
+        // practice range, lab flagged, not urgent, not comparator-censored (same bounds as applyCatalogueOverrides).
+        if (group.overrideLabFlag === true && (r.isAbove || r.isBelow) && !r.urgent) {
+          const val = Number(r.value);
+          const comp = isStr(r.comparator) ? r.comparator.trim() : '';
+          const within =
+            Number.isFinite(val) &&
+            !comp &&
+            (range.low == null || val >= range.low) &&
+            (range.high == null || val <= range.high);
+          if (within) paramsOverrideLabFlags = true;
+        }
+      }
+      return { parameters, paramsOverrideLabFlags };
+    } catch (_) {
+      return empty;
+    }
+  }
+
   function ok(reasonPairs, meta, unresolvedComments) {
     return {
       ok: true,
@@ -354,7 +412,7 @@
     }
   }
 
-  const api = { evaluateFilingCatalogue, buildActingIndex, applyCatalogueOverrides };
+  const api = { evaluateFilingCatalogue, buildActingIndex, applyCatalogueOverrides, practiceConfirmLimits };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

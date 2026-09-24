@@ -8,6 +8,7 @@ const path = require('path');
 const LC = require('./shared/lab-catalogue-core.js');
 const OV = require('./shared/lab-catalogue-overlay.js');
 const FC = require('./engine/lab-filing-catalogue.js');
+const LF = require('./shared/lab-filing-utils.js');
 
 let passed = 0,
   failed = 0;
@@ -78,7 +79,10 @@ console.log('\n--- golden shape ---');
     Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds,unresolvedComments',
     'success shape is exactly { ok, blockers, reasonKinds, meta, unresolvedComments }'
   );
-  check(Array.isArray(res.unresolvedComments) && res.unresolvedComments.length === 0, 'no unresolved comments on the golden path');
+  check(
+    Array.isArray(res.unresolvedComments) && res.unresolvedComments.length === 0,
+    'no unresolved comments on the golden path'
+  );
   check(
     Object.keys(res.meta).sort().join(',') === 'groupsUsed,labId,recognisedCount,unrecognisedCount',
     'meta shape is exactly { labId, recognisedCount, unrecognisedCount, groupsUsed }'
@@ -266,10 +270,7 @@ console.log('\n--- lab-flag override, off by default (H-081 control d) ---');
     defaultOff.ok && defaultOff.blockers.some((b) => /flagged by the lab/.test(b)),
     'in range by our own calc, but the lab flagged it, and override is not set -> still blocks'
   );
-  const explicitOn = FC.evaluateFilingCatalogue(
-    report([result({ isAbove: true })]),
-    acting(overlayWithOverride(true))
-  );
+  const explicitOn = FC.evaluateFilingCatalogue(report([result({ isAbove: true })]), acting(overlayWithOverride(true)));
   check(
     explicitOn.ok && explicitOn.blockers.length === 0,
     'the same case with overrideLabFlag explicitly approved on the report group -> the practice range wins, clean'
@@ -439,7 +440,7 @@ console.log('\n--- fail-closed / never throws ---');
 }
 
 console.log(
-  '\n--- pending (edited-but-not-yet-approved) range/guard must BLOCK, not silently fall back to the lab\'s own range (Nick, 2026-09-25) ---'
+  "\n--- pending (edited-but-not-yet-approved) range/guard must BLOCK, not silently fall back to the lab's own range (Nick, 2026-09-25) ---"
 );
 {
   const pending = (overlay) => OV.mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
@@ -519,13 +520,25 @@ console.log(
     withOverride.results[0].isBelow === false && withOverride.results[0].isAbove === false,
     'with the group override set AND the value inside the practice range, the lab flag IS cleared — this is what lets the baseline severity re-score to level:none and the result actually auto-file'
   );
-  check(withOverride.results[0]._labFlagOverridden === true, 'the override is marked, same traceability as the legacy applyParamOverrides');
-  check(withOverride !== rep && withOverride.results[0] !== flaggedResult, 'the input report/result are never mutated — a new copy is returned');
+  check(
+    withOverride.results[0]._labFlagOverridden === true,
+    'the override is marked, same traceability as the legacy applyParamOverrides'
+  );
+  check(
+    withOverride !== rep && withOverride.results[0] !== flaggedResult,
+    'the input report/result are never mutated — a new copy is returned'
+  );
 
   const urgent = FC.applyCatalogueOverrides(report([result({ isBelow: true, value: 77, urgent: true })]), acting(o));
-  check(urgent.results[0].isBelow === true, 'an urgent flag is NEVER cleared, even with the group override and a matching range — same bound as legacy');
+  check(
+    urgent.results[0].isBelow === true,
+    'an urgent flag is NEVER cleared, even with the group override and a matching range — same bound as legacy'
+  );
 
-  const outOfRange = FC.applyCatalogueOverrides(report([result({ isBelow: true, value: 10, rawValue: '10' })]), acting(o));
+  const outOfRange = FC.applyCatalogueOverrides(
+    report([result({ isBelow: true, value: 10, rawValue: '10' })]),
+    acting(o)
+  );
   check(
     outOfRange.results[0].isBelow === true,
     'a value genuinely outside the practice range is never cleared just because the group override is on — it only applies when the value is within bounds'
@@ -535,17 +548,100 @@ console.log(
     report([result({ isBelow: true, value: 77, rawValue: '77', comparator: '<' })]),
     acting(o)
   );
-  check(censored.results[0].isBelow === true, 'a comparator-censored value never has its lab flag cleared — the true value is only bounded, not equal, to the parse');
+  check(
+    censored.results[0].isBelow === true,
+    'a comparator-censored value never has its lab flag cleared — the true value is only bounded, not equal, to the parse'
+  );
 
   const wrongUnit = FC.applyCatalogueOverrides(
     report([result({ isBelow: true, value: 77, rawValue: '77', unit: 'mg/dL' })]),
     acting(o)
   );
-  check(wrongUnit.results[0].isBelow === true, "a unit that does not positively match the practice range's own unit never clears a flag");
+  check(
+    wrongUnit.results[0].isBelow === true,
+    "a unit that does not positively match the practice range's own unit never clears a flag"
+  );
 
   check(
     FC.applyCatalogueOverrides(report([result()]), acting(o)).results[0].isAbove === false,
     'a result the lab never flagged at all is untouched (nothing to clear) — same shape either way'
+  );
+}
+
+console.log(
+  '\n--- catalogue-only confirm names the practice range that cleared the file, and the lab-flag override when that path applied ---'
+);
+{
+  const cat = acting(baseOverlay());
+  const rep = report([result()]);
+  const limits = FC.practiceConfirmLimits(rep, cat);
+  check(
+    limits.parameters.length === 1 &&
+      limits.parameters[0].analyte === 'ALP' &&
+      limits.parameters[0].low === 30 &&
+      limits.parameters[0].high === 130 &&
+      limits.paramsOverrideLabFlags === false,
+    'the confirm limits are the approved practice range (30–130), not the lab range (20–140), and the override warning is off when the lab did not flag the result'
+  );
+  const msg = LF.buildFilingConfirmMessage(
+    rep,
+    {
+      name: 'Lab Result Catalogue',
+      parameters: limits.parameters,
+      paramsOverrideLabFlags: limits.paramsOverrideLabFlags,
+      filing: { normalOptionText: 'Normal result, no action required' },
+    },
+    'confirm'
+  );
+  check(/≥30 ≤130/.test(msg), 'the confirm dialog prints the practice bounds');
+  check(
+    !/20–140/.test(msg),
+    'the confirm dialog does not fall back to printing the lab range once a practice range cleared the value'
+  );
+
+  let o = baseOverlay();
+  o = OV.setFilingGroup(builtin, o, { lab: LAB, heading: 'LFTs', enabled: true, overrideLabFlag: true }, TODAY);
+  o = OV.approveFiling(o, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'LFTs' }), 'Dr Test', TODAY);
+  const flagged = report([result({ isBelow: true })]);
+  const over = FC.practiceConfirmLimits(flagged, acting(o));
+  check(
+    over.paramsOverrideLabFlags === true && over.parameters[0].low === 30 && over.parameters[0].high === 130,
+    'when the report-group lab-flag override cleared a flagged value that sits inside the practice range, the confirm profile says so'
+  );
+  const overMsg = LF.buildFilingConfirmMessage(
+    flagged,
+    {
+      name: 'Lab Result Catalogue',
+      parameters: over.parameters,
+      paramsOverrideLabFlags: over.paramsOverrideLabFlags,
+      filing: { normalOptionText: 'Normal' },
+    },
+    'confirm'
+  );
+  check(/≥30 ≤130/.test(overMsg), 'the override confirm still names the practice range');
+  check(
+    /lab flagged low — accepted by your set range/.test(overMsg),
+    'the override confirm shows the lab-flag warning on the analyte the practice range accepted'
+  );
+
+  const noOver = FC.practiceConfirmLimits(flagged, cat);
+  check(
+    noOver.paramsOverrideLabFlags === false,
+    'without the report-group switch, a lab flag is not described as accepted'
+  );
+  const noOverMsg = LF.buildFilingConfirmMessage(
+    flagged,
+    {
+      name: 'Lab Result Catalogue',
+      parameters: noOver.parameters,
+      paramsOverrideLabFlags: noOver.paramsOverrideLabFlags,
+      filing: { normalOptionText: 'Normal' },
+    },
+    'confirm'
+  );
+  check(
+    !/accepted by your set range/.test(noOverMsg) && /≥30 ≤130/.test(noOverMsg),
+    'the warning is absent when the override path did not apply, and the practice range is still the limit shown'
   );
 }
 

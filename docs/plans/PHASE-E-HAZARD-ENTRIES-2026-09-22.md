@@ -1,6 +1,6 @@
 # Phase E — proposed hazard-log entries (Lab Filing on the Lab Result Catalogue)
 
-**Status:** DRAFT for Nick and CSO review — **not yet added to `docs/HAZARD-LOG.md`** (a controlled document; adding them also needs the §6 summary rows, the version-history line and a document-version bump, done by the CSO at sign-off).
+**Status:** SIGNED 2026-09-24 and copied into `docs/HAZARD-LOG.md` document version 3.69 (H-080, H-081, H-073 control (j) and re-sign). Dr D. Triska, CSO, GMC 6159481. The controlled log is the signed copy; this file remains the drafting note. `filingEngine` and `oirEngine` stay `legacy`. Draft H-078 / H-079 are not signed.
 **Author:** Claude (drafted 2026-09-22) for Dr Dave Triska / Nick Grundy.
 **Context:** `docs/plans/PHASE-E-LAB-FILING-ON-THE-CATALOGUE-2026-09-22.md` (design), `docs/plans/PHASE-D-OUTSTANDING-MATCHER-ON-CATALOGUE-2026-09-22.md` (H-078 / H-079 — the Outstanding Requests matcher and catalogue authoring hazards, also awaiting the CSO).
 **Numbering:** assumes H-077 is the last entry in the log (H-078 / H-079 are proposed in the Phase D plan). Two new entries (H-080, H-081) and addenda to two existing ones (H-073, H-074).

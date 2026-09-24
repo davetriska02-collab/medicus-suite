@@ -3,10 +3,14 @@
 // PURE: no DOM, no chrome.*, no fetch, no storage — a caller (content-scripts/triage-lens/lab-file-button.js)
 // does the actual reading/writing. This file holds the two small rules that make E1 safe to wire in:
 //
-//   combineFilingBlockers(legacyBlockers, catalogueResult) — the union-only contract (H-080 control a): the
+//   combineFilingBlockers(legacyBlockers, catalogueResult, opts) — the union-only contract (H-080 control a): the
 //   catalogue engine's blockers are ADDED to the legacy ones, NEVER used to remove one. When the catalogue engine
 //   could not evaluate at all (catalogueResult.ok === false) the combination is legacy alone — a broken or absent
-//   catalogue must never be read as "nothing to add".
+//   catalogue must never be read as "nothing to add", and must not blanket-deny a file a legacy profile already
+//   cleared. The one exception is catalogue-only mode (opts.catalogueOnly, no legacy profile): ok:false then ADDS
+//   a fail-closed blocker, because there is no legacy gate left to stand on (including the practice-wide comment
+//   whitelist). opts.pendingCatalogueMissing likewise ADDS a blocker whenever the unapproved-edits catalogue could
+//   not be loaded — an edited range must not fall back to the lab range. Both flags only ever add a blocker.
 //
 //   buildShadowLogEntry(...) — a MANDATORY, value-free comparison record (H-080 control b): "where would the
 //   catalogue engine have unblocked something legacy blocks, or blocked something legacy allows" — reviewed before
@@ -14,10 +18,9 @@
 //   engine/lab-filing-catalogue.js's `reasonKinds` (short tags), never its `blockers` (human sentences, which MAY
 //   embed a value like "77 u/L is above your maximum of 130") — see that file's own header.
 //
-// This file does not itself decide WHAT gets offered — at this stage the live gate still acts on legacy blockers
-// alone; combineFilingBlockers exists so the wiring can compute "what WOULD the combined verdict be" for the
-// shadow log without duplicating the union rule at the call site. Only a later stage (E2, the `filingEngine` pref)
-// makes the combined result the one that is actually offered.
+// E2 is live. When the caller has opted in (`filingEngine: 'catalogue'`), the combined blockers are what the
+// filing button offers and what the click-time re-check acts on. This file still does not read storage or decide
+// the preference; the button does, and passes catalogueOnly / pendingCatalogueMissing in.
 //
 // Run tests: node test-lab-filing-gate.js
 
@@ -26,15 +29,32 @@
 
   const asArr = (v) => (Array.isArray(v) ? v : []);
 
+  // Fail-closed reasons. Human sentences for the filing card, not the shadow log.
+  const CATALOGUE_UNAVAILABLE_BLOCKER = 'the Lab Result Catalogue could not be checked — file manually';
+  const PENDING_CATALOGUE_BLOCKER =
+    'the catalogue of unapproved edits could not be loaded — file manually until it can be checked';
+
   // legacyBlockers: string[]. catalogueResult: engine/lab-filing-catalogue.js's return value.
+  // opts (optional): { catalogueOnly: boolean, pendingCatalogueMissing: boolean }.
   // Returns { blockers: string[], usedCatalogue: boolean } — usedCatalogue is false whenever the catalogue engine
   // had a problem (ok:false), so a caller can tell "legacy alone" apart from "legacy, and the catalogue agreed".
-  function combineFilingBlockers(legacyBlockers, catalogueResult) {
+  // catalogueOnly / pendingCatalogueMissing only ever append a blocker; they never drop a legacy one.
+  function combineFilingBlockers(legacyBlockers, catalogueResult, opts) {
     const legacy = asArr(legacyBlockers);
+    const o = opts && typeof opts === 'object' && !Array.isArray(opts) ? opts : {};
+    const failClosed = [];
+    if (o.pendingCatalogueMissing === true) failClosed.push(PENDING_CATALOGUE_BLOCKER);
     if (!catalogueResult || catalogueResult.ok !== true) {
-      return { blockers: [...legacy], usedCatalogue: false };
+      // No legacy profile: the generic baseline (including a practice-wide comment whitelist) is not a catalogue
+      // check. Block. A legacy profile stays legacy-alone — do not invent a blanket deny on top of a clearance,
+      // and do not drop a legacy blocker.
+      if (o.catalogueOnly === true) failClosed.push(CATALOGUE_UNAVAILABLE_BLOCKER);
+      return { blockers: [...legacy, ...failClosed], usedCatalogue: false };
     }
-    return { blockers: Array.from(new Set([...legacy, ...asArr(catalogueResult.blockers)])), usedCatalogue: true };
+    return {
+      blockers: Array.from(new Set([...legacy, ...asArr(catalogueResult.blockers), ...failClosed])),
+      usedCatalogue: true,
+    };
   }
 
   // opts: { taskUuid, labId, legacyBlockers: string[], catalogueResult }. Never throws — a shadow log entry that
@@ -69,7 +89,12 @@
     };
   }
 
-  const api = { combineFilingBlockers, buildShadowLogEntry };
+  const api = {
+    combineFilingBlockers,
+    buildShadowLogEntry,
+    CATALOGUE_UNAVAILABLE_BLOCKER,
+    PENDING_CATALOGUE_BLOCKER,
+  };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {
