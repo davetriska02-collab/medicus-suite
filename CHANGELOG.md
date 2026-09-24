@@ -2,6 +2,68 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.7] — 2026-09-24
+
+### Document open, launcher clearance, default on
+
+Opening a document clicked Medicus’s `#id-document` item and stopped. That item is the same step as `/documents`: the New Document chooser (From a template / Upload from my computer), not the catalogue row. Document open now clicks **From a template**, then Medicus’s **Create {title}** control. If the row is not in the open list, it types the title into Medicus’s own “Search templates” field, and if it is still missing it selects the other Document or Referral Form tab and searches there. It does not click Upload from my computer, and it still does not POST a create body. Templates still use **Use template**.
+
+The launcher clears the whole footer cluster beside Complete consultation, including More, so it no longer sits on those buttons. When there is no room to the left, it moves above the row.
+
+`suite.ui.templateOrganiser` is on when the key is missing, same as the other default-on packs. An explicit false stays off. Group layout is a practice default (`templateOrganiser.config`, including a practice profile) with each person’s overlay in `templateOrganiser.personal`. Saving in the canvas writes only the personal overlay. A practice profile never writes that personal key.
+
+## [v3.265.6] — 2026-09-24
+
+### Document catalogue and launcher position
+
+Templates could list from the consultation topic while Documents stayed empty. Document search needs a heading id as well as the patient. When overview `consultationTopics[].headings` does not carry that id, the canvas now reads `draft-consultation-topic/{topicId}` and uses the History, Examination, Impression, or Plan heading on that topic. A document response shaped as tabs (`document`, `referralForm`, and the same under other keys) is read even when `items` is empty. An encounter `consultationTopics` array is not treated as document rows. Catalogue GETs stay on `{siteId}.api.{hostname}`. A missing heading is still a footer gap.
+
+The launcher is no longer fixed to the bottom-right of the browser window. It sits to the left of Complete consultation (or the same row’s Save, Park, End, or Finish consultation control), and above that control when there is no room on the left.
+
+## [v3.265.5] — 2026-09-24
+
+### Document catalogue on History, Examination, Impression, and Plan
+
+Templates could fill from encounter overview `consultationTopics[]` while Documents stayed empty. Document search needs a patient id, a heading context id, and context type `consultation-topic-heading`. Those now come from the focused `heading-(history|examination|impression|plan)-{uuid}` (including when that id sits on an ancestor of the field), from `consultationTopics[].headings[]` when the focused field names exactly one of those four headings, and from the clinical-summary and draft-consultation-topic URLs. Overview is read when that document context is still missing, not only when the template topic is missing. Catalogue GETs stay on `{siteId}.api.{hostname}`. A missing context is a footer gap and is not an empty catalogue. The pack stays opt-in.
+
+## [v3.265.4] — 2026-09-24
+
+### Document and Template Organiser — Open from a group
+
+Open on a card filed into a group did not launch Medicus. The click sat inside a draggable card, and when Medicus’s Use template or Create control was not already on the page the fallback only dispatched a synthetic slash keydown. That is not the keystroke the clinical field uses to open its menu, so nothing was inserted. Open now uses one plan for a grouped card and a card in Not in a group: click the mounted control, or type `/`, click `#id-template` or `#id-document`, then the same control. The slash is removed. The suite still does not POST a create body. The pack stays opt-in. Catalogue GETs stay on `{siteId}.api.{hostname}`.
+
+## [v3.265.3] — 2026-09-24
+
+### Document and Template Organiser search
+
+Templates and Documents each have a search field. Typing filters that list by title, preview, or category, ignoring case, and leaves every group on the board. Cards that do not match are hidden. Clearing the field shows the full organised board again. The pack stays off until a practice turns it on. Catalogue reads stay on the practice API host.
+
+## [v3.265.2] — 2026-09-24
+
+### Document and Template Organiser catalogue
+
+Opening the organiser from History, Examination, Impression, or Plan left the template list empty when the list URL had already left the performance resource buffer. The consultation topic is now taken from encounter overview `consultationTopics[]` (the topic that owns the focused heading when several exist). A clinical-summary URL supplies the patient id. `heading-history-{uuid}` (and the same shape for examination, impression, and plan) supplies the document context. A short ring keeps recent practice-API URLs after that buffer rotates. Catalogue GETs stay on `{siteId}.api.{hostname}`. A missing id is shown at the bottom of the canvas.
+
+## [v3.265.1] — 2026-09-24
+
+### Document and Template Organiser
+
+The launcher is named **Document and Template Organiser**. It shows while the cursor is in History, Examination, Impression, or Plan on a consultation or plan page, and hides when that focus leaves. An open template drawer is not required. Pack key `suite.ui.templateOrganiser` and storage key `templateOrganiser.config` are unchanged.
+
+Open on a card uses Medicus’s own template form (the slash **Use template** / **Create** control, or that menu item when the control is not already on the page). Medicus places the finished item at the cursor. The suite no longer POSTs a create body and no longer asks “Insert into consultation”.
+
+Catalogue reads still use `https://{siteId}.api.{page hostname}`, preferring a resource URL that already contains `.api.`. The page host returns the SPA HTML shell for those paths, which was the “Unexpected response” on the list.
+
+## [v3.265.0] — 2026-09-24
+
+### Template and document organiser (off by default)
+
+Practice staff can group Medicus data-entry templates and document templates on a full-bleed canvas, and insert a card with the same slash-menu request the consultation already uses.
+
+- Pack `suite.ui.templateOrganiser` is **opt-in** (missing means off). The **Organise templates…** button shows on a consultation or plan page, and while the Data Entry Templates, Document Templates, or New Document drawer is open.
+- Groups (Nursing, Co-op, Admin, plus any the practice adds) persist in `chrome.storage.local` under `templateOrganiser.config`, keyed by Medicus template id. Saving groups does not call Medicus. Medicus has no group field on these lists.
+- **Use** then **Insert into consultation** runs the captured create POST only after the matching form GET supplies the fields that POST requires. A missing version id, form, visibility flags, or consult `sortOrder` / `sortOrderHash` does not POST. See `content-scripts/template-organiser/README.md` for endpoints and capture gaps. W25, H-082 (pending CSO review).
+
 ## [v3.264.35] — 2026-09-24
 
 ### Lab Result Catalogue opt-in, rebased onto v3.264.34, with fail-closed filing fixes

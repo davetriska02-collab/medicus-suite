@@ -1,0 +1,1668 @@
+// © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
+// Medicus Suite — template & document organiser canvas
+//
+// Full-bleed overlay, same mount shape as the allocate canvases. Group
+// edits confirm into chrome.storage.local only. Open on a card uses
+// Medicus’s own template form (the same control the slash menu uses).
+// This canvas does not POST a create body. The pack
+// suite.ui.templateOrganiser is on when the key is missing (an explicit
+// false stays off). The launcher shows while the cursor is in History,
+// Examination, Impression, or Plan on a consultation or plan page.
+'use strict';
+
+(function () {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  if (window.__msTemplateOrganiserCanvas) return;
+  window.__msTemplateOrganiserCanvas = true;
+
+  var C = window.TemplateOrganiserCore;
+  if (!C) return;
+
+  var OVERLAY_ID = 'ms-toc-overlay';
+  var LAUNCH_ID = 'ms-toc-launch';
+  var FEATURE_NAME = 'Document and Template Organiser';
+  var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.templateOrganiser) || 'suite.ui.templateOrganiser';
+  var CONFIG_KEY = 'templateOrganiser.config';
+  var PERSONAL_KEY = 'templateOrganiser.personal';
+  // Same as the other default-on packs: a missing PracticePacks helper stays on.
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
+
+  var _open = false;
+  var _surface = 'templates';
+  var _practice = null;
+  var _personal = null;
+  var _saved = null;
+  var _draft = null;
+  var _persisted = false;
+  var _catalogue = null;
+  var _loading = false;
+  var _writing = false;
+  var _error = null;
+  var _pending = null;
+  var _dragId = '';
+  var _harvestGen = 0;
+  var _editingGroupId = '';
+  var _editingName = '';
+  var _newGroupName = '';
+  var _query = '';
+  var _focusSearch = false;
+  var _focusClose = false;
+  var _session = null;
+  var _client = null;
+  var _clientBase = '';
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function announce(text) {
+    setTimeout(function () {
+      var live = document.querySelector('#' + OVERLAY_ID + ' .ms-toc-live');
+      if (live) live.textContent = text || '';
+    }, 0);
+  }
+
+  function currentSurfaceState() {
+    if (!_draft || !_draft.surfaces) return C.sanitiseConfig(null).surfaces.templates;
+    return _draft.surfaces[_surface];
+  }
+
+  function dirty() {
+    if (!_saved || !_draft) return false;
+    return !C.sameConfig(_saved, _draft);
+  }
+
+  function canSave() {
+    return !_loading && !_writing && (!!dirty() || !_persisted);
+  }
+
+  function itemsForSurface() {
+    if (!_catalogue) return [];
+    var list = _catalogue[_surface];
+    return Array.isArray(list) ? list : [];
+  }
+
+  function applySurface(result) {
+    if (!result || !result.ok) {
+      announce((result && result.error) || 'Could not change that group.');
+      return;
+    }
+    _draft = C.replaceSurface(_draft, _surface, result.surface);
+    _pending = null;
+    render();
+  }
+
+  // Group save stays on this install. Medicus template rows are not rewritten.
+  function persistDraft() {
+    if (_writing || !_draft) return;
+    _writing = true;
+    _error = null;
+    var payload = C.confirmPayload(_draft, _catalogue);
+    render();
+    try {
+      var stored = {};
+      stored[PERSONAL_KEY] = C.personalDelta(_practice, payload);
+      chrome.storage.local.set(stored, function () {
+        _writing = false;
+        var runtimeError = chrome.runtime && chrome.runtime.lastError;
+        if (runtimeError) {
+          _error = 'Could not save on this install.';
+          _pending = null;
+          announce(_error);
+          render();
+          return;
+        }
+        _personal = C.personalDelta(_practice, payload);
+        _saved = C.overlayConfig(_practice, _personal);
+        _draft = C.cloneConfig(_saved);
+        _persisted = true;
+        _pending = null;
+        announce('Saved for you. The practice default is unchanged. Medicus lists are unchanged.');
+        render();
+      });
+    } catch (err) {
+      _writing = false;
+      _error = 'Could not save on this install.';
+      _pending = null;
+      announce(_error);
+      render();
+    }
+  }
+
+  function loadConfig() {
+    return new Promise(function (resolve) {
+      function useSeed() {
+        _practice = C.seedConfig();
+        _personal = C.emptyPersonal();
+        _saved = C.overlayConfig(_practice, _personal);
+        _draft = C.cloneConfig(_saved);
+        _persisted = false;
+        resolve();
+      }
+      try {
+        if (!chrome.storage || !chrome.storage.local) {
+          useSeed();
+          return;
+        }
+        chrome.storage.local.get([CONFIG_KEY, PERSONAL_KEY], function (r) {
+          var practiceRaw = r ? r[CONFIG_KEY] : undefined;
+          var personalRaw = r ? r[PERSONAL_KEY] : undefined;
+          if (practiceRaw == null && personalRaw == null) useSeed();
+          else {
+            _practice = practiceRaw == null ? C.seedConfig() : C.sanitiseConfig(practiceRaw);
+            _personal = personalRaw == null ? C.emptyPersonal() : C.sanitisePersonal(personalRaw);
+            _saved = C.overlayConfig(_practice, _personal);
+            _draft = C.cloneConfig(_saved);
+            _persisted = true;
+            resolve();
+          }
+        });
+      } catch (err) {
+        useSeed();
+      }
+    });
+  }
+
+  var _apiRing = [];
+
+  function noteClinicalUrl(url) {
+    _apiRing = C.rememberClinicalUrl(_apiRing, url);
+  }
+
+  function watchClinicalUrls() {
+    try {
+      var existing = performance.getEntriesByType('resource') || [];
+      existing.forEach(function (entry) {
+        if (entry && entry.name) noteClinicalUrl(entry.name);
+      });
+      if (typeof PerformanceObserver !== 'function') return;
+      var observer = new PerformanceObserver(function (list) {
+        var entries = list.getEntries();
+        for (var i = 0; i < entries.length; i += 1) {
+          if (entries[i] && entries[i].name) noteClinicalUrl(entries[i].name);
+        }
+      });
+      observer.observe({ type: 'resource', buffered: true });
+    } catch (err) {
+      /* resource timing is optional; overview hydrate still runs */
+    }
+  }
+
+  function resourceUrls() {
+    var live = [];
+    try {
+      live = performance.getEntriesByType('resource').map(function (entry) {
+        return entry && entry.name;
+      });
+    } catch (err) {
+      live = [];
+    }
+    return C.mergeResourceUrls(_apiRing, live);
+  }
+
+  function readLiveContext() {
+    return C.readSessionContext({
+      href: location.href,
+      resourceUrls: resourceUrls(),
+      headingId: _headingId,
+      headingKind: _fieldKind,
+    });
+  }
+
+  function practiceCodeHint() {
+    try {
+      var helper = window.PracticeCode;
+      if (!helper || typeof helper.getPracticeCodeSync !== 'function') return '';
+      var code = helper.getPracticeCodeSync();
+      if (helper.isValidPracticeCode && !helper.isValidPracticeCode(code)) return '';
+      return code || '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function apiBase() {
+    return C.resolveApiBase({
+      href: location.href,
+      pathname: location.pathname,
+      hostname: location.hostname,
+      resourceUrls: resourceUrls(),
+      practiceCode: practiceCodeHint(),
+    });
+  }
+
+  function client() {
+    var factory = window.TemplateOrganiserClient;
+    if (!factory || typeof factory.createClient !== 'function') return null;
+    var base = apiBase();
+    if (!base) return null;
+    if (_client && _clientBase === base) return _client;
+    _clientBase = base;
+    _client = factory.createClient({ apiBase: base });
+    return _client;
+  }
+
+  function runHarvest() {
+    var gen = ++_harvestGen;
+    _loading = true;
+    _error = null;
+    render();
+    var api = client();
+    var href = location.href;
+    var urls = resourceUrls();
+    Promise.resolve()
+      .then(function () {
+        if (!window.TemplateOrganiserClient) throw new Error('Template list client is not loaded.');
+        if (!api) throw new Error('No practice API host on this page. Nothing was read.');
+        return api.hydrate(
+          C.readSessionContext({
+            href: href,
+            resourceUrls: urls,
+            headingId: _headingId,
+            headingKind: _fieldKind,
+          }),
+          href,
+          urls,
+          _headingId,
+          _fieldKind
+        );
+      })
+      .then(function (ctx) {
+        if (gen !== _harvestGen) return null;
+        _session = ctx;
+        return Promise.all([
+          api.listTemplates(ctx),
+          api.listDocuments(ctx).catch(function (err) {
+            return {
+              ok: false,
+              items: [],
+              gap: err && err.message ? err.message : 'Document list was not read.',
+            };
+          }),
+        ]);
+      })
+      .then(function (lists) {
+        if (gen !== _harvestGen || !lists) return;
+        var templates = lists[0] || { items: [], gap: '' };
+        var documents = lists[1] || { items: [], gap: '' };
+        _catalogue = {
+          source: 'medicus',
+          templates: templates.items || [],
+          documents: documents.items || [],
+          gaps: {
+            templates: templates.ok === false ? templates.gap || 'Template list was not read.' : '',
+            documents: documents.ok === false ? documents.gap || 'Document list was not read.' : '',
+          },
+        };
+      })
+      .catch(function (err) {
+        if (gen !== _harvestGen) return;
+        _error = err && err.message ? err.message : 'Could not read the Medicus lists.';
+        _catalogue = {
+          source: 'medicus',
+          templates: [],
+          documents: [],
+          gaps: { templates: _error, documents: _error },
+        };
+      })
+      .then(function () {
+        if (gen !== _harvestGen) return;
+        _loading = false;
+        _focusClose = true;
+        render();
+      });
+  }
+
+  function cardHtml(item) {
+    var dragging = _dragId === item.id ? ' ms-toc-dragging' : '';
+    return (
+      '<article class="ms-toc-card' +
+      dragging +
+      '" draggable="true" data-item-id="' +
+      esc(item.id) +
+      '">' +
+      '<h3 class="ms-toc-card-title">' +
+      esc(item.title) +
+      '</h3>' +
+      '<p class="ms-toc-card-preview">' +
+      esc(item.preview) +
+      '</p>' +
+      (item.category ? '<span class="ms-toc-tag">' + esc(item.category) + '</span>' : '') +
+      '<button type="button" draggable="false" class="ms-toc-text ms-toc-use" data-open="' +
+      esc(item.id) +
+      '" aria-label="Open ' +
+      esc(item.title) +
+      ' with Medicus">Open</button>' +
+      '</article>'
+    );
+  }
+
+  function columnHtml(group) {
+    var count = group.items.length;
+    var head;
+    if (!group.locked && _editingGroupId === group.id) {
+      head =
+        '<div class="ms-toc-col-head">' +
+        '<input class="ms-toc-rename" data-rename="' +
+        esc(group.id) +
+        '" value="' +
+        esc(_editingName) +
+        '" maxlength="60" aria-label="Group name" />' +
+        '<button type="button" class="ms-toc-text" data-commit-rename="' +
+        esc(group.id) +
+        '">Save name</button>' +
+        '<button type="button" class="ms-toc-text" data-cancel-rename="1">Cancel</button>' +
+        '</div>';
+    } else if (group.locked) {
+      head =
+        '<div class="ms-toc-col-head">' +
+        '<h2 class="ms-toc-col-title">' +
+        esc(group.name) +
+        '</h2>' +
+        '<span class="ms-toc-count">' +
+        count +
+        '</span>' +
+        '</div>';
+    } else {
+      head =
+        '<div class="ms-toc-col-head">' +
+        '<h2 class="ms-toc-col-title">' +
+        esc(group.name) +
+        '</h2>' +
+        '<span class="ms-toc-count">' +
+        count +
+        '</span>' +
+        '<button type="button" class="ms-toc-text" data-edit-group="' +
+        esc(group.id) +
+        '">Rename</button>' +
+        '<button type="button" class="ms-toc-text ms-toc-danger" data-delete-group="' +
+        esc(group.id) +
+        '" aria-label="Delete group ' +
+        esc(group.name) +
+        '">Delete</button>' +
+        '</div>';
+    }
+    var cards = group.items.map(cardHtml).join('');
+    if (!cards) {
+      var hint = group.locked ? 'Drop a card here to take it out of a group.' : 'Drop cards here.';
+      if (String(_query || '').trim()) hint = 'No matches in this group.';
+      cards = '<p class="ms-toc-empty">' + hint + '</p>';
+    }
+    return (
+      '<section class="ms-toc-col' +
+      (group.locked ? ' ms-toc-col-locked' : '') +
+      '" data-group-id="' +
+      esc(group.id) +
+      '">' +
+      head +
+      '<div class="ms-toc-cards">' +
+      cards +
+      '</div></section>'
+    );
+  }
+
+  function confirmHtml() {
+    if (_error && (!_pending || _pending.kind !== 'confirm')) {
+      return (
+        '<div class="ms-toc-confirm ms-toc-confirm-error" role="status">' +
+        esc(_error) +
+        ' <button type="button" class="ms-toc-text" id="ms-toc-dismiss-error">Dismiss</button></div>'
+      );
+    }
+    if (!_pending) return '';
+    if (_pending.kind === 'abandon') {
+      return (
+        '<div class="ms-toc-confirm" role="region" aria-label="Discard unsaved organisation">' +
+        '<p>You have unsaved group changes. Discard them and close?</p>' +
+        '<div class="ms-toc-confirm-actions">' +
+        '<button type="button" class="ms-toc-ghost" id="ms-toc-cancel-pending">Keep organising</button>' +
+        '<button type="button" class="ms-toc-primary" id="ms-toc-confirm-pending">Discard and close</button>' +
+        '</div></div>'
+      );
+    }
+    var lines = (_pending.lines || []).map(function (line) {
+      return '<li>' + esc(line) + '</li>';
+    });
+    var frozen = _writing ? ' disabled' : '';
+    return (
+      '<div class="ms-toc-confirm" role="region" aria-label="Save your layout">' +
+      '<p>Save this layout for you? It sits on top of the practice default. Medicus template and document lists stay as they are.</p>' +
+      '<ul class="ms-toc-diff">' +
+      lines.join('') +
+      '</ul>' +
+      '<div class="ms-toc-confirm-actions">' +
+      '<button type="button" class="ms-toc-ghost" id="ms-toc-cancel-pending"' +
+      frozen +
+      '>Keep editing</button>' +
+      '<button type="button" class="ms-toc-primary" id="ms-toc-confirm-pending"' +
+      frozen +
+      '>Save for me</button>' +
+      '</div></div>'
+    );
+  }
+
+  function searchHtml(view) {
+    var label = _surface === 'documents' ? 'Search documents' : 'Search templates';
+    var note = '';
+    if (String(_query || '').trim() && view) {
+      var shown = 0;
+      view.groups.forEach(function (group) {
+        shown += group.items.length;
+      });
+      note = '<p class="ms-toc-search-note">' + shown + ' shown</p>';
+    }
+    return (
+      '<div class="ms-toc-search">' +
+      '<label class="ms-toc-search-label" for="ms-toc-search">' +
+      esc(label) +
+      '</label>' +
+      '<input id="ms-toc-search" class="ms-toc-search-input" type="search" autocomplete="off" value="' +
+      esc(_query) +
+      '" />' +
+      '<button type="button" class="ms-toc-text" id="ms-toc-search-clear">Clear</button>' +
+      note +
+      '</div>'
+    );
+  }
+
+  function shellHtml() {
+    var gaps = (_catalogue && _catalogue.gaps) || {};
+    var surfaceGap = _surface === 'documents' ? gaps.documents || '' : gaps.templates || '';
+    var banner =
+      'Your layout sits on the practice default. Open uses Medicus’s own template form. Medicus places the finished item at the cursor.';
+    var templatesN = _catalogue && _catalogue.templates ? _catalogue.templates.length : 0;
+    var documentsN = _catalogue && _catalogue.documents ? _catalogue.documents.length : 0;
+    var board = '';
+    var view = null;
+    if (_loading) {
+      board = '<p class="ms-toc-status">Reading Medicus template lists…</p>';
+    } else if (_draft) {
+      // Search hides cards in the view. Group membership in the draft stays put.
+      view = C.filterBoard(C.buildBoard(itemsForSurface(), currentSurfaceState()), _query);
+      board =
+        '<div class="ms-toc-board">' +
+        view.groups.map(columnHtml).join('') +
+        '<section class="ms-toc-new">' +
+        '<h2 class="ms-toc-col-title">New group</h2>' +
+        '<input id="ms-toc-new-name" class="ms-toc-rename" maxlength="60" placeholder="Group name" aria-label="New group name" value="' +
+        esc(_newGroupName) +
+        '" />' +
+        '<button type="button" class="ms-toc-ghost" id="ms-toc-add-group">Add group</button>' +
+        '</section></div>';
+    }
+    var foot = 'Practice default — not saved as your layout yet.';
+    if (_persisted && !dirty()) foot = 'Saved for you. The practice default is unchanged.';
+    else if (dirty()) foot = 'Unsaved changes on this canvas.';
+    var saveDisabled = canSave() ? '' : ' disabled';
+    return (
+      '<div class="ms-toc-panel" role="document">' +
+      '<header class="ms-toc-header">' +
+      '<div class="ms-toc-heading">' +
+      '<h1 class="ms-toc-title">' +
+      esc(FEATURE_NAME) +
+      '</h1>' +
+      '<p class="ms-toc-banner">' +
+      esc(banner) +
+      '</p>' +
+      '</div>' +
+      '<div class="ms-toc-tabs" role="tablist" aria-label="List surface">' +
+      '<button type="button" class="ms-toc-tab' +
+      (_surface === 'templates' ? ' is-on' : '') +
+      '" role="tab" aria-selected="' +
+      (_surface === 'templates' ? 'true' : 'false') +
+      '" data-surface="templates">Templates (' +
+      templatesN +
+      ')</button>' +
+      '<button type="button" class="ms-toc-tab' +
+      (_surface === 'documents' ? ' is-on' : '') +
+      '" role="tab" aria-selected="' +
+      (_surface === 'documents' ? 'true' : 'false') +
+      '" data-surface="documents">Documents (' +
+      documentsN +
+      ')</button>' +
+      '</div>' +
+      '<button type="button" class="ms-toc-close" id="ms-toc-close">Close</button>' +
+      '</header>' +
+      searchHtml(view) +
+      board +
+      '<footer class="ms-toc-footer">' +
+      (surfaceGap ? '<p class="ms-toc-gap" role="status">' + esc(surfaceGap) + '</p>' : '') +
+      '<p class="ms-toc-foot-note">' +
+      esc(foot) +
+      '</p>' +
+      '<button type="button" class="ms-toc-primary" id="ms-toc-save"' +
+      saveDisabled +
+      '>Save organisation</button>' +
+      '</footer>' +
+      confirmHtml() +
+      '</div>'
+    );
+  }
+
+  function render() {
+    var root = document.getElementById(OVERLAY_ID);
+    if (!root) return;
+    var shell = root.querySelector('.ms-toc-shell');
+    if (!shell) return;
+    var active = document.activeElement;
+    var keepSearch = _focusSearch || (active && active.id === 'ms-toc-search');
+    var caretStart = keepSearch && active && active.id === 'ms-toc-search' ? active.selectionStart : null;
+    var caretEnd = keepSearch && active && active.id === 'ms-toc-search' ? active.selectionEnd : null;
+    shell.innerHTML = shellHtml();
+    try {
+      _focusSearch = false;
+      if (keepSearch && !_editingGroupId) {
+        _focusClose = false;
+        var search = shell.querySelector('#ms-toc-search');
+        if (search) {
+          search.focus();
+          var start = caretStart == null ? search.value.length : caretStart;
+          var end = caretEnd == null ? start : caretEnd;
+          try {
+            search.setSelectionRange(start, end);
+          } catch (err) {
+            /* input type may reject selection */
+          }
+        }
+        return;
+      }
+      if (_editingGroupId) {
+        var input = shell.querySelector('[data-rename="' + _editingGroupId + '"]');
+        if (input) {
+          input.focus();
+          var end = input.value.length;
+          try {
+            input.setSelectionRange(end, end);
+          } catch (err) {
+            /* input type may reject selection */
+          }
+        }
+        return;
+      }
+      if (_focusClose) {
+        _focusClose = false;
+        var closeBtn = shell.querySelector('#ms-toc-close');
+        if (closeBtn) closeBtn.focus();
+      }
+    } finally {
+      // The catalogue can bring up a scrollbar. A right-pinned footer then
+      // shifts left under a pill that was placed a moment earlier.
+      repositionLauncher();
+    }
+  }
+
+  function closeOverlay() {
+    _harvestGen += 1;
+    _open = false;
+    _pending = null;
+    _dragId = '';
+    _editingGroupId = '';
+    _editingName = '';
+    _query = '';
+    _focusSearch = false;
+    _loading = false;
+    _writing = false;
+    _error = null;
+    var el = document.getElementById(OVERLAY_ID);
+    if (el) el.remove();
+    if (_fieldEl && _fieldEl.isConnected) {
+      try {
+        _fieldEl.focus();
+      } catch (err) {
+        /* the field may reject focus */
+      }
+    }
+  }
+
+  function requestClose() {
+    if (_writing) return;
+    if (dirty()) {
+      _pending = { kind: 'abandon' };
+      announce('Unsaved group changes.');
+      render();
+      return;
+    }
+    closeOverlay();
+  }
+
+  function requestSave() {
+    if (!canSave() || !_draft || !_saved) return;
+    _pending = { kind: 'confirm', lines: C.diffSummary(_saved, _draft) };
+    announce('Review the local save. Medicus lists stay as they are.');
+    render();
+  }
+
+  function onConfirmPending() {
+    if (!_pending || _writing) return;
+    if (_pending.kind === 'abandon') {
+      closeOverlay();
+      return;
+    }
+    if (_pending.kind === 'confirm') persistDraft();
+  }
+
+  function commitRename(groupId) {
+    var shell = document.querySelector('#' + OVERLAY_ID + ' .ms-toc-shell');
+    var input = shell && shell.querySelector('[data-rename="' + groupId + '"]');
+    var name = input ? input.value : _editingName;
+    _editingGroupId = '';
+    _editingName = '';
+    applySurface(C.renameGroup(currentSurfaceState(), groupId, name));
+  }
+
+  function addGroup() {
+    var shell = document.querySelector('#' + OVERLAY_ID + ' .ms-toc-shell');
+    var input = shell && shell.querySelector('#ms-toc-new-name');
+    var name = input ? input.value : _newGroupName;
+    _newGroupName = '';
+    var result = C.createGroup(currentSurfaceState(), name);
+    if (!result.ok) {
+      _newGroupName = name;
+      announce(result.error);
+      render();
+      return;
+    }
+    applySurface(result);
+    announce('Group added on this canvas. Save to keep it on this install.');
+  }
+
+  function onClick(e) {
+    if (!_open) return;
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.id === 'ms-toc-close' || t.closest('#ms-toc-close')) {
+      e.preventDefault();
+      requestClose();
+      return;
+    }
+    if (t.classList && t.classList.contains('ms-toc-shell')) {
+      requestClose();
+      return;
+    }
+    var surfaceBtn = t.closest('[data-surface]');
+    if (surfaceBtn && surfaceBtn.closest('#' + OVERLAY_ID)) {
+      var next = surfaceBtn.getAttribute('data-surface');
+      if (next === 'templates' || next === 'documents') {
+        _surface = next;
+        _editingGroupId = '';
+        _pending = null;
+        render();
+      }
+      return;
+    }
+    var editBtn = t.closest('[data-edit-group]');
+    if (editBtn) {
+      _editingGroupId = editBtn.getAttribute('data-edit-group');
+      var group = currentSurfaceState().groups.filter(function (g) {
+        return g.id === _editingGroupId;
+      })[0];
+      _editingName = group ? group.name : '';
+      _pending = null;
+      render();
+      return;
+    }
+    if (t.closest('[data-cancel-rename]')) {
+      _editingGroupId = '';
+      _editingName = '';
+      render();
+      return;
+    }
+    var commitBtn = t.closest('[data-commit-rename]');
+    if (commitBtn) {
+      commitRename(commitBtn.getAttribute('data-commit-rename'));
+      return;
+    }
+    var deleteBtn = t.closest('[data-delete-group]');
+    if (deleteBtn) {
+      var gid = deleteBtn.getAttribute('data-delete-group');
+      var deleted = C.deleteGroup(currentSurfaceState(), gid);
+      if (!deleted.ok) {
+        announce(deleted.error);
+        return;
+      }
+      _editingGroupId = '';
+      applySurface(deleted);
+      announce('Group removed on this canvas. Its cards moved to Not in a group.');
+      return;
+    }
+    var openBtn = t.closest('[data-open]');
+    if (openBtn) {
+      _openArm += 1;
+      releaseHeldCards();
+      var openId = openBtn.getAttribute('data-open');
+      var opened = itemsForSurface().filter(function (item) {
+        return item.id === openId;
+      })[0];
+      if (!opened) return;
+      openNative(opened);
+      return;
+    }
+    if (t.closest('#ms-toc-search-clear')) {
+      _query = '';
+      _focusSearch = true;
+      render();
+      return;
+    }
+    if (t.closest('#ms-toc-add-group')) {
+      addGroup();
+      return;
+    }
+    if (t.closest('#ms-toc-save')) {
+      requestSave();
+      return;
+    }
+    if (t.closest('#ms-toc-dismiss-error')) {
+      _error = null;
+      render();
+      return;
+    }
+    if (t.closest('#ms-toc-cancel-pending')) {
+      _pending = null;
+      render();
+      return;
+    }
+    if (t.closest('#ms-toc-confirm-pending')) {
+      onConfirmPending();
+    }
+  }
+
+  function onInput(e) {
+    var t = e.target;
+    if (!t || !t.closest || !t.closest('#' + OVERLAY_ID)) return;
+    if (t.id === 'ms-toc-search') {
+      _query = t.value;
+      render();
+      return;
+    }
+    if (t.id === 'ms-toc-new-name') _newGroupName = t.value;
+    if (t.getAttribute && t.getAttribute('data-rename')) _editingName = t.value;
+  }
+
+  function onKeyDown(e) {
+    if (!_open) return;
+    var rename = e.target && e.target.getAttribute && e.target.getAttribute('data-rename');
+    if (e.key === 'Enter' && rename) {
+      e.preventDefault();
+      commitRename(rename);
+      return;
+    }
+    if (e.key === 'Enter' && e.target && e.target.id === 'ms-toc-new-name') {
+      e.preventDefault();
+      addGroup();
+    }
+  }
+
+  function healIfWiped() {
+    if (_open && !document.getElementById(OVERLAY_ID)) {
+      _harvestGen += 1;
+      _open = false;
+      _writing = false;
+      _loading = false;
+      _pending = null;
+      _dragId = '';
+    }
+  }
+
+  document.addEventListener(
+    'keydown',
+    function (e) {
+      if (!_open || e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (_writing) return;
+      if (_editingGroupId) {
+        _editingGroupId = '';
+        _editingName = '';
+        render();
+        return;
+      }
+      if (_pending) {
+        _pending = null;
+        announce('Still organising.');
+        render();
+        return;
+      }
+      requestClose();
+    },
+    true
+  );
+
+  function holdCardForOpen(card) {
+    if (!card) return;
+    card.setAttribute('data-drag-hold', '1');
+    card.setAttribute('draggable', 'false');
+  }
+
+  function releaseHeldCards() {
+    var root = document.getElementById(OVERLAY_ID);
+    if (!root) return;
+    root.querySelectorAll('[data-drag-hold]').forEach(function (card) {
+      card.removeAttribute('data-drag-hold');
+      card.setAttribute('draggable', 'true');
+    });
+  }
+
+  // Open sits inside a draggable card. Clearing draggable on mousedown, in
+  // capture, stops the drag before dragstart. preventDefault on dragstart
+  // also swallows the click, which is how Open on a filed card did nothing.
+  var _openArm = 0;
+
+  function onOpenMouseDown(e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var openBtn = t.closest('[data-open]');
+    if (!openBtn || !openBtn.closest('#' + OVERLAY_ID)) return;
+    holdCardForOpen(openBtn.closest('[data-item-id]'));
+  }
+
+  // Click is the normal Open path. If dragstart already ran and its
+  // preventDefault swallowed that click, mouseup still opens the same card.
+  function onOpenMouseUp(e) {
+    var t = e.target;
+    var openBtn = t && t.closest ? t.closest('[data-open]') : null;
+    var inOverlay = openBtn && openBtn.closest('#' + OVERLAY_ID);
+    releaseHeldCards();
+    if (!inOverlay || !_open) return;
+    var openId = openBtn.getAttribute('data-open');
+    var token = ++_openArm;
+    setTimeout(function () {
+      if (token !== _openArm || !_open) return;
+      var opened = itemsForSurface().filter(function (item) {
+        return item.id === openId;
+      })[0];
+      if (!opened) return;
+      openNative(opened);
+    }, 0);
+  }
+
+  function onDragStart(e) {
+    if (_writing || _loading) {
+      e.preventDefault();
+      return;
+    }
+    var card = e.target && e.target.closest ? e.target.closest('[data-item-id]') : null;
+    if (!card || !card.closest('#' + OVERLAY_ID)) return;
+    if (e.target.closest && e.target.closest('[data-open]')) {
+      holdCardForOpen(card);
+      e.preventDefault();
+      return;
+    }
+    _dragId = card.getAttribute('data-item-id') || '';
+    if (!_dragId) return;
+    try {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', _dragId);
+    } catch (err) {
+      /* dataTransfer can throw in odd hosts; _dragId still drives the drop */
+    }
+    card.classList.add('ms-toc-dragging');
+  }
+
+  function onDragOver(e) {
+    if (!_dragId || !_open) return;
+    var col = e.target && e.target.closest ? e.target.closest('[data-group-id]') : null;
+    if (!col || !col.closest('#' + OVERLAY_ID)) return;
+    e.preventDefault();
+    try {
+      e.dataTransfer.dropEffect = 'move';
+    } catch (err) {
+      /* ignore */
+    }
+    var prev = document.querySelector('#' + OVERLAY_ID + ' .ms-toc-drop');
+    if (prev && prev !== col) prev.classList.remove('ms-toc-drop');
+    col.classList.add('ms-toc-drop');
+  }
+
+  function clearDropMarks() {
+    document.querySelectorAll('#' + OVERLAY_ID + ' .ms-toc-drop').forEach(function (node) {
+      node.classList.remove('ms-toc-drop');
+    });
+  }
+
+  function onDrop(e) {
+    if (!_dragId || !_open) return;
+    var col = e.target && e.target.closest ? e.target.closest('[data-group-id]') : null;
+    if (!col || !col.closest('#' + OVERLAY_ID)) return;
+    e.preventDefault();
+    var toGroup = col.getAttribute('data-group-id');
+    var card = e.target.closest('[data-item-id]');
+    var beforeId = '';
+    if (card) beforeId = card.getAttribute('data-item-id') || '';
+    if (beforeId === _dragId) beforeId = '';
+    var moving = _dragId;
+    _dragId = '';
+    clearDropMarks();
+    var result = C.moveItem(currentSurfaceState(), moving, toGroup, beforeId || null);
+    if (!result.ok) {
+      announce(result.error);
+      render();
+      return;
+    }
+    applySurface(result);
+  }
+
+  function onDragEnd() {
+    _dragId = '';
+    clearDropMarks();
+    document.querySelectorAll('#' + OVERLAY_ID + ' .ms-toc-dragging').forEach(function (node) {
+      node.classList.remove('ms-toc-dragging');
+    });
+  }
+
+  function wireOverlay(el) {
+    el.addEventListener('mousedown', onOpenMouseDown, true);
+    el.addEventListener('mouseup', onOpenMouseUp, true);
+    el.addEventListener('click', onClick);
+    el.addEventListener('input', onInput);
+    el.addEventListener('keydown', onKeyDown);
+    el.addEventListener('dragstart', onDragStart);
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('drop', onDrop);
+    el.addEventListener('dragend', onDragEnd);
+  }
+
+  function openOverlay() {
+    healIfWiped();
+    if (!_packOn || _open) return;
+    _open = true;
+    _surface = 'templates';
+    _pending = null;
+    _error = null;
+    _editingGroupId = '';
+    _editingName = '';
+    _newGroupName = '';
+    _query = '';
+    _focusSearch = false;
+    _catalogue = null;
+    _loading = true;
+    var el = document.getElementById(OVERLAY_ID);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = OVERLAY_ID;
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
+      el.setAttribute('aria-label', FEATURE_NAME);
+      el.innerHTML = '<div class="ms-toc-live" aria-live="polite"></div><div class="ms-toc-shell"></div>';
+      wireOverlay(el);
+      document.documentElement.appendChild(el);
+    }
+    render();
+    loadConfig().then(function () {
+      if (!_open) return;
+      runHarvest();
+    });
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) placeLauncherSoon(launch);
+  }
+
+  function muteOrganiserChrome() {
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) launch.remove();
+    if (_open) closeOverlay();
+    else {
+      var el = document.getElementById(OVERLAY_ID);
+      if (el) el.remove();
+    }
+  }
+
+  var _fieldEl = null;
+  var _fieldKind = '';
+  var _headingId = '';
+
+  function consultPage() {
+    try {
+      var path = String(location.pathname || '');
+      if (path.indexOf('/clinical/encounter/') !== -1) return true;
+      if (path.indexOf('/clinical/plan') !== -1) return true;
+    } catch (err) {
+      /* location can throw in a torn-down frame */
+    }
+    return false;
+  }
+
+  function nodeEditable(el) {
+    if (!el || el.nodeType !== 1) return false;
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'textarea') return true;
+    if (tag === 'input') {
+      var type = String(el.getAttribute('type') || 'text').toLowerCase();
+      return type === '' || type === 'text' || type === 'search';
+    }
+    if (el.isContentEditable) return true;
+    return el.getAttribute && el.getAttribute('role') === 'textbox';
+  }
+
+  function inOrganiser(node) {
+    if (!node || !node.closest) return false;
+    if (node.id === LAUNCH_ID) return true;
+    if (node.closest('#' + LAUNCH_ID)) return true;
+    if (node.closest('#' + OVERLAY_ID)) return true;
+    return false;
+  }
+
+  // The uuid often sits on an ancestor (heading-history-{uuid}) while the
+  // visible word History is a sibling with no id. Stopping at that sibling
+  // leaves document search without a context id.
+  function headingIdNear(el) {
+    var node = el;
+    for (var i = 0; i < 8 && node && node.nodeType === 1; i += 1) {
+      if (C.headingContextId(node.id || '')) return node.id;
+      var labelled = node.getAttribute ? node.getAttribute('aria-labelledby') || '' : '';
+      if (C.headingContextId(labelled)) return labelled;
+      var prev = node.previousElementSibling;
+      var steps = 0;
+      while (prev && steps < 6) {
+        if (C.headingContextId(prev.id || '')) return prev.id;
+        prev = prev.previousElementSibling;
+        steps += 1;
+      }
+      node = node.parentElement;
+    }
+    return '';
+  }
+
+  // The heading id often sits on a section wrapper, not on the editor or its
+  // previous sibling. The first ancestor that contains exactly one
+  // heading-{kind}-{uuid} is that field's context.
+  function headingIdForField(el, kind) {
+    var near = headingIdNear(el);
+    if (near) return near;
+    if (!kind || !el || !el.parentElement) return '';
+    var node = el.parentElement;
+    for (var i = 0; i < 12 && node && node.nodeType === 1; i += 1) {
+      if (node.querySelectorAll) {
+        var hits = node.querySelectorAll('[id^="heading-' + kind + '-"]');
+        var ids = [];
+        for (var j = 0; j < hits.length; j += 1) {
+          if (C.headingKindToken(hits[j].id) === kind && C.headingContextId(hits[j].id)) ids.push(hits[j].id);
+        }
+        if (ids.length === 1) return ids[0];
+      }
+      node = node.parentElement;
+    }
+    return '';
+  }
+
+  // Walk from the focused node to a History / Examination / Impression / Plan
+  // signal. Heading ids (heading-history-{uuid}) are the slash-menu label.
+  // A sibling or ancestor heading with that exact word counts when the
+  // focused node is an editor.
+  function headingKindFrom(el) {
+    if (!el || el.nodeType !== 1) return '';
+    var tag = String(el.tagName || '').toLowerCase();
+    var role = el.getAttribute && el.getAttribute('role');
+    var isHeading = tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' || role === 'heading';
+    if (!isHeading) return '';
+    return C.clinicalFieldKind({
+      id: el.id || '',
+      labelledBy: '',
+      headingText: (el.textContent || '').replace(/\s+/g, ' ').trim(),
+      editable: true,
+    });
+  }
+
+  function fieldSignal(el) {
+    if (!el || el.nodeType !== 1 || !nodeEditable(el)) return null;
+    var node = el;
+    for (var i = 0; i < 8 && node && node.nodeType === 1; i += 1) {
+      var labelled = node.getAttribute ? node.getAttribute('aria-labelledby') || '' : '';
+      var kind = C.clinicalFieldKind({
+        id: node.id || '',
+        labelledBy: labelled,
+        headingText: '',
+        editable: true,
+      });
+      if (kind) {
+        return {
+          kind: kind,
+          el: el,
+          headingId: headingIdForField(el, kind) || (C.headingContextId(node.id || '') ? node.id : labelled),
+        };
+      }
+      var prev = node.previousElementSibling;
+      var steps = 0;
+      var textKind = '';
+      while (prev && steps < 6) {
+        var sib = headingKindFrom(prev);
+        if (sib) {
+          textKind = sib;
+          break;
+        }
+        prev = prev.previousElementSibling;
+        steps += 1;
+      }
+      if (textKind) return { kind: textKind, el: el, headingId: headingIdForField(el, textKind) };
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function syncFieldFrom(node) {
+    if (inOrganiser(node)) return;
+    var hit = fieldSignal(node);
+    if (hit) {
+      _fieldEl = hit.el;
+      _fieldKind = hit.kind;
+      _headingId = hit.headingId || '';
+      return;
+    }
+    _fieldEl = null;
+    _fieldKind = '';
+    _headingId = '';
+  }
+
+  function launcherWanted() {
+    if (!_packOn || !consultPage()) return false;
+    if (_open) return true;
+    if (_fieldKind) return true;
+    var active = document.activeElement;
+    if (active && active.id === LAUNCH_ID) return true;
+    return false;
+  }
+
+  function noteOutside(text) {
+    var host = document.getElementById('ms-toc-note');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'ms-toc-note';
+      host.setAttribute('aria-live', 'polite');
+      host.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;';
+      document.documentElement.appendChild(host);
+    }
+    host.textContent = text || '';
+  }
+
+  function clickNative(el) {
+    if (!el || typeof el.click !== 'function') return false;
+    el.click();
+    return true;
+  }
+
+  function controlSpec(el) {
+    var card = el.closest ? el.closest('.m-card, .template-list-item, .m-list-item, li') : null;
+    var cardTitle = '';
+    if (card && card.querySelector) {
+      var label = card.querySelector('.description-list-item--label, .m-list-item--content');
+      cardTitle = label ? label.textContent || '' : '';
+    }
+    return {
+      text: el.textContent || '',
+      title: el.getAttribute ? el.getAttribute('title') || '' : '',
+      cardTitle: cardTitle,
+    };
+  }
+
+  function findNativeControl(item) {
+    var nodes = document.querySelectorAll('button, a, [role="button"]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      if (C.nativeControlMatches(item, controlSpec(el))) return el;
+    }
+    return null;
+  }
+
+  function findChooserControl(item) {
+    var nodes = document.querySelectorAll('button, a, [role="button"]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      if (C.chooserControlMatches(item, controlSpec(el))) return el;
+    }
+    return null;
+  }
+
+  function documentListReady() {
+    if (document.querySelector('.template-list-item')) return true;
+    var inputs = document.querySelectorAll('input[type="search"]');
+    for (var i = 0; i < inputs.length; i += 1) {
+      var el = inputs[i];
+      if (el.closest && el.closest('#' + OVERLAY_ID)) continue;
+      if (C.documentSearchPlaceholder(el.getAttribute('placeholder'))) return true;
+    }
+    return false;
+  }
+
+  function findOtherDocumentTab() {
+    var nodes = document.querySelectorAll('[role="tab"][data-name]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.closest && el.closest('#' + OVERLAY_ID)) continue;
+      var name = el.getAttribute('data-name') || '';
+      if (!C.isDocumentListTab(name)) continue;
+      if (el.getAttribute('aria-selected') === 'true') continue;
+      return el;
+    }
+    return null;
+  }
+
+  function documentSearchField() {
+    var inputs = document.querySelectorAll('input[type="search"]');
+    for (var i = 0; i < inputs.length; i += 1) {
+      var el = inputs[i];
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      if (C.documentSearchPlaceholder(el.getAttribute('placeholder'))) return el;
+    }
+    return null;
+  }
+
+  function fillDocumentSearch(item) {
+    var title = item && item.title ? String(item.title) : '';
+    if (!title) return false;
+    var el = documentSearchField();
+    if (!el) return false;
+    if (el.value === title) return true;
+    el.value = title;
+    try {
+      el.dispatchEvent(
+        new InputEvent('input', { bubbles: true, cancelable: true, data: title, inputType: 'insertText' })
+      );
+    } catch (err) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return true;
+  }
+
+  function freshOpenStep() {
+    return { chooser: false, tab: false, search: false, listSeen: 0 };
+  }
+
+  function fieldText(el) {
+    if (!el) return '';
+    var tag = String(el.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'input') return String(el.value || '');
+    return String(el.textContent || '');
+  }
+
+  function undoAccidentalSlash(el, before) {
+    if (!el) return;
+    var tag = String(el.tagName || '').toLowerCase();
+    function restoreEnds() {
+      var now = fieldText(el);
+      if (now === before) return;
+      if (now !== before + '/' && now !== '/' + before) return;
+      if (tag === 'textarea' || tag === 'input') el.value = before;
+      else el.textContent = before;
+    }
+    if (tag === 'textarea' || tag === 'input') {
+      var value = String(el.value || '');
+      var at = typeof el.selectionStart === 'number' ? el.selectionStart : value.length;
+      if (at > 0 && value.charAt(at - 1) === '/' && value.slice(0, at - 1) + value.slice(at) === before) {
+        el.value = before;
+        try {
+          el.selectionStart = at - 1;
+          el.selectionEnd = at - 1;
+        } catch (err) {
+          /* selection may be unsupported */
+        }
+        return;
+      }
+      restoreEnds();
+      return;
+    }
+    try {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && sel.rangeCount && sel.anchorNode && el.contains(sel.anchorNode)) {
+        var node = sel.anchorNode;
+        var offset = sel.anchorOffset;
+        if (node.nodeType === 3 && offset > 0 && node.data.charAt(offset - 1) === '/') {
+          node.deleteData(offset - 1, 1);
+          if (fieldText(el) === before) return;
+        }
+      }
+    } catch (err2) {
+      /* selection may be unavailable */
+    }
+    restoreEnds();
+  }
+
+  // Medicus opens its template menu when '/' is typed into the clinical field.
+  // A KeyboardEvent alone is not that keystroke, so the menu stayed shut when
+  // the matching control was not already on the page. A card in a group and a
+  // card in Not in a group both come through here. The slash is removed once
+  // the menu is up. This does not POST.
+  function revealSlashMenu(field) {
+    if (!field) return false;
+    try {
+      field.focus();
+    } catch (err) {
+      /* focus can throw; still try to type */
+    }
+    var before = fieldText(field);
+    try {
+      document.execCommand('insertText', false, '/');
+    } catch (err2) {
+      /* insertText is missing in some hosts */
+    }
+    if (fieldText(field) !== before) return true;
+    var tag = String(field.tagName || '').toLowerCase();
+    if (tag === 'textarea' || tag === 'input') {
+      var value = String(field.value || '');
+      var start = typeof field.selectionStart === 'number' ? field.selectionStart : value.length;
+      var end = typeof field.selectionEnd === 'number' ? field.selectionEnd : start;
+      field.value = value.slice(0, start) + '/' + value.slice(end);
+      try {
+        field.selectionStart = start + 1;
+        field.selectionEnd = start + 1;
+      } catch (err3) {
+        /* selection may be unsupported */
+      }
+      try {
+        field.dispatchEvent(
+          new InputEvent('input', { bubbles: true, cancelable: true, data: '/', inputType: 'insertText' })
+        );
+      } catch (err4) {
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (fieldText(field) !== before) return true;
+    }
+    try {
+      field.dispatchEvent(new KeyboardEvent('keydown', { key: '/', code: 'Slash', bubbles: true, cancelable: true }));
+      return true;
+    } catch (err5) {
+      return false;
+    }
+  }
+
+  function finishOpen(item) {
+    noteOutside(
+      'Medicus’s own template control was used for ' +
+        item.title +
+        '. Finish that form in Medicus. This canvas does not write the record.'
+    );
+  }
+
+  function waitForControl(item, step, n) {
+    var el = findNativeControl(item);
+    if (el && clickNative(el)) {
+      finishOpen(item);
+      return;
+    }
+    var plan = C.nativeOpenPlan(item);
+    var wantsChooser = !!(plan && plan.chooser && !plan.posts);
+    if (wantsChooser && !step.chooser) {
+      var chooser = findChooserControl(item);
+      if (chooser && clickNative(chooser)) step.chooser = true;
+    }
+    if (wantsChooser && step.chooser && documentListReady()) step.listSeen += 1;
+    // Search the list already on screen before leaving it for the other tab.
+    if (wantsChooser && step.chooser && !step.search && step.listSeen >= 4) {
+      if (fillDocumentSearch(item)) {
+        step.search = true;
+        step.listSeen = 0;
+      } else if (!documentSearchField()) step.search = true;
+    }
+    if (wantsChooser && step.search && !step.tab && step.listSeen >= 8) {
+      var tab = findOtherDocumentTab();
+      if (tab && clickNative(tab)) {
+        step.tab = true;
+        step.search = false;
+        step.listSeen = 0;
+      } else {
+        step.tab = true;
+      }
+    }
+    if (n > 80) {
+      noteOutside('Medicus’s template control for ' + item.title + ' was not on the page. Nothing was written.');
+      return;
+    }
+    setTimeout(function () {
+      waitForControl(item, step, n + 1);
+    }, 50);
+  }
+
+  function waitForMenu(item, field, before, n) {
+    var plan = C.nativeOpenPlan(item);
+    var menuId = plan && !plan.posts ? plan.menuId : '';
+    var menu = menuId ? document.getElementById(menuId) : null;
+    if (menu) {
+      undoAccidentalSlash(field, before);
+      if (clickNative(menu)) waitForControl(item, freshOpenStep(), 0);
+      return;
+    }
+    if (n > 20) {
+      undoAccidentalSlash(field, before);
+      noteOutside('Medicus’s template menu did not open. Nothing was written.');
+      return;
+    }
+    setTimeout(function () {
+      waitForMenu(item, field, before, n + 1);
+    }, 50);
+  }
+
+  function openNative(item) {
+    if (_writing || !item) return;
+    var plan = C.nativeOpenPlan(item);
+    if (!plan || plan.posts || !plan.menuId) {
+      _error = 'Medicus’s template form was not opened. Nothing was written.';
+      announce(_error);
+      render();
+      return;
+    }
+    var live = readLiveContext();
+    if (C.sessionDrift(_session, live)) {
+      _error = 'The consultation on screen changed. Medicus’s template form was not opened.';
+      _pending = null;
+      announce(_error);
+      render();
+      return;
+    }
+    var field = _fieldEl && _fieldEl.isConnected ? _fieldEl : null;
+    var before = fieldText(field);
+    closeOverlay();
+    if (field) {
+      try {
+        field.focus();
+      } catch (err) {
+        /* keep going; Medicus still inserts into the field that has focus */
+      }
+    }
+    var direct = findNativeControl(item);
+    if (direct && clickNative(direct)) {
+      finishOpen(item);
+      return;
+    }
+    var menu = plan.menuId ? document.getElementById(plan.menuId) : null;
+    if (menu && clickNative(menu)) {
+      waitForControl(item, freshOpenStep(), 0);
+      return;
+    }
+    if (!field) {
+      noteOutside('The cursor is not in History, Examination, Impression, or Plan. Nothing was opened.');
+      return;
+    }
+    if (!revealSlashMenu(field)) {
+      noteOutside('Medicus’s template menu did not open. Nothing was written.');
+      return;
+    }
+    waitForMenu(item, field, before, 0);
+  }
+
+  function consultActionButton() {
+    var nodes = document.querySelectorAll('button, a, [role="button"]');
+    var fallback = null;
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (!el || el.id === LAUNCH_ID) continue;
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      var label = el.getAttribute('aria-label') || '';
+      var text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!C.consultActionLabel(label) && !C.consultActionLabel(text)) continue;
+      var rect = el.getBoundingClientRect();
+      if (!rect || rect.width < 8 || rect.height < 8) continue;
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      if (C.consultActionLabel(label) && /complete consultation/i.test(label)) return el;
+      if (/complete consultation/i.test(text)) return el;
+      if (!fallback) fallback = el;
+    }
+    return fallback;
+  }
+
+  function mainPaneRect() {
+    var main = document.querySelector('main');
+    if (!main || !main.getBoundingClientRect) return null;
+    var rect = main.getBoundingClientRect();
+    if (!rect || rect.width < 80 || rect.height < 80) return null;
+    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  }
+
+  function pushObstacle(out, el, anchor) {
+    if (!el || el === anchor || el.id === LAUNCH_ID) return;
+    if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) return;
+    var rect = el.getBoundingClientRect();
+    if (!rect || rect.width < 8 || rect.height < 8) return;
+    out.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }
+
+  function footerObstacles(anchor) {
+    var nodes = document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]');
+    var out = [];
+    for (var i = 0; i < nodes.length; i += 1) pushObstacle(out, nodes[i], anchor);
+    // More can be a sibling of Complete consultation without being a <button>.
+    var parent = anchor && anchor.parentElement;
+    if (parent && parent.children) {
+      for (var c = 0; c < parent.children.length; c += 1) pushObstacle(out, parent.children[c], anchor);
+    }
+    return out;
+  }
+
+  function positionLauncher(launch) {
+    if (!launch) return;
+    var size = { width: launch.offsetWidth || 240, height: launch.offsetHeight || 32 };
+    var viewport = { width: window.innerWidth || 1280, height: window.innerHeight || 800 };
+    var anchor = consultActionButton();
+    var box = null;
+    var blockers = [];
+    if (anchor) {
+      var rect = anchor.getBoundingClientRect();
+      var anchorBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      blockers = footerObstacles(anchor);
+      blockers.push(anchorBox);
+      var cluster = C.footerClusterBox(anchorBox, blockers) || anchorBox;
+      var placed = C.launcherAnchorBox(cluster, size, viewport);
+      box = C.clearLauncherBox(placed, size, blockers, viewport);
+    } else {
+      box = C.launcherPaneBox(mainPaneRect(), size);
+    }
+    if (!box) return;
+    launch.style.position = 'fixed';
+    launch.style.left = Math.round(box.left) + 'px';
+    launch.style.top = Math.round(box.top) + 'px';
+    launch.style.right = 'auto';
+    launch.style.bottom = 'auto';
+    if (!anchor) return;
+    var live = launch.getBoundingClientRect();
+    var cleared = C.clearLauncherBox(
+      { left: live.left, top: live.top },
+      { width: live.width, height: live.height },
+      blockers,
+      viewport
+    );
+    launch.style.left = Math.round(cleared.left) + 'px';
+    launch.style.top = Math.round(cleared.top) + 'px';
+  }
+
+  function repositionLauncher() {
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) positionLauncher(launch);
+  }
+
+  function ensureLauncher() {
+    healIfWiped();
+    if (!launcherWanted()) {
+      if (!_open) muteOrganiserChrome();
+      else {
+        var stray = document.getElementById(LAUNCH_ID);
+        if (stray) stray.remove();
+      }
+      return;
+    }
+    var launch = document.getElementById(LAUNCH_ID);
+    if (!launch) {
+      launch = document.createElement('button');
+      launch.type = 'button';
+      launch.id = LAUNCH_ID;
+      launch.textContent = FEATURE_NAME;
+      launch.setAttribute('aria-label', FEATURE_NAME);
+      launch.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openOverlay();
+      });
+      document.documentElement.appendChild(launch);
+    }
+    placeLauncherSoon(launch);
+  }
+
+  function placeLauncherSoon(launch) {
+    positionLauncher(launch);
+    if (typeof requestAnimationFrame !== 'function') return;
+    requestAnimationFrame(function () {
+      if (launch && launch.isConnected) positionLauncher(launch);
+    });
+  }
+
+  function startHeavyChrome() {
+    ensureLauncher();
+  }
+
+  function stopHeavyChrome() {
+    muteOrganiserChrome();
+  }
+
+  watchClinicalUrls();
+
+  var Runtime = window.InjectorRuntime;
+  if (Runtime && typeof Runtime.register === 'function') {
+    Runtime.register('template-organiser', {
+      match: function () {
+        return launcherWanted();
+      },
+      start: startHeavyChrome,
+      place: ensureLauncher,
+      stop: stopHeavyChrome,
+    });
+    if (window.PracticePacks && window.PracticePacks.bindInjector) {
+      window.PracticePacks.bindInjector(PACK_KEY, {
+        on: function () {
+          _packOn = true;
+          Runtime.sync();
+        },
+        off: function () {
+          _packOn = false;
+          Runtime.sync();
+        },
+      });
+    }
+  } else if (window.PracticePacks && window.PracticePacks.bindInjector) {
+    window.PracticePacks.bindInjector(PACK_KEY, {
+      on: function () {
+        _packOn = true;
+        startHeavyChrome();
+      },
+      off: function () {
+        _packOn = false;
+        stopHeavyChrome();
+      },
+    });
+  }
+
+  window.addEventListener('resize', repositionLauncher);
+
+  document.addEventListener(
+    'focusin',
+    function (e) {
+      syncFieldFrom(e.target);
+      if (window.InjectorRuntime && typeof window.InjectorRuntime.sync === 'function') {
+        window.InjectorRuntime.sync();
+      } else {
+        ensureLauncher();
+      }
+    },
+    true
+  );
+})();

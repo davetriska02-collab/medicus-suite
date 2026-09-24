@@ -1125,6 +1125,32 @@ const PracticeProfile = (() => {
       }
     }
 
+    // Document and Template Organiser layout. config is the practice default
+    // that ships in practice-profile.json. personal is this person's overlay
+    // and is never written from a profile, even if the envelope carries it.
+    if (modMap.has('templateOrganiser') && mods.templateOrganiser && typeof mods.templateOrganiser === 'object') {
+      try {
+        const merge = modMap.get('templateOrganiser') === 'merge';
+        const templateOrganiserImport = _io('templateOrganiserImport');
+        if (!templateOrganiserImport) throw new Error('templateOrganiserImport not available in this context.');
+        const incoming = mods.templateOrganiser.config;
+        if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+          if (merge) {
+            const ex = await chrome.storage.local.get('templateOrganiser.config');
+            if (ex['templateOrganiser.config'] == null) {
+              await templateOrganiserImport({ config: incoming });
+              applied.push('templateOrganiser');
+            }
+          } else {
+            await templateOrganiserImport({ config: incoming });
+            applied.push('templateOrganiser');
+          }
+        }
+      } catch (e) {
+        errors.push(`templateOrganiser: ${e.message}`);
+      }
+    }
+
     if (modMap.has('suite') && suiteModData && typeof suiteModData === 'object') {
       try {
         const merge = modMap.get('suite') === 'merge';
@@ -1141,6 +1167,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton',
           'ui.quickActionsWidget',
           'ui.focusAlerts',
+          'ui.templateOrganiser',
         ];
         const BOOLEAN_PACK_KEYS = [
           'signing.softFlags',
@@ -1149,6 +1176,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton',
           'ui.quickActionsWidget',
           'ui.focusAlerts',
+          'ui.templateOrganiser',
         ];
         const GRANDFATHER_PACK_KEYS = [
           'ui.allocateCanvases',
@@ -1156,6 +1184,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton',
           'ui.quickActionsWidget',
           'ui.focusAlerts',
+          'ui.templateOrganiser',
         ];
         const ENVELOPE_ALIASES = {
           'signing.softFlags': 'signingSoftFlags',
@@ -1164,6 +1193,7 @@ const PracticeProfile = (() => {
           'ui.routineRxButton': 'routineRxButton',
           'ui.quickActionsWidget': 'quickActionsWidget',
           'ui.focusAlerts': 'focusAlerts',
+          'ui.templateOrganiser': 'templateOrganiser',
         };
 
         for (const key of ALLOWED_SUITE_KEYS) {

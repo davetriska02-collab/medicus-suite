@@ -60,6 +60,7 @@ const { requestMonitorImport } = require('./shared/io/request-monitor-io.js');
 const TriageAlertIO = require('./shared/io/triage-alert-io.js');
 const KnowledgeUtils = require('./shared/knowledge-utils.js');
 const { problemDescriptionCleanupImport } = require('./shared/io/problem-description-cleanup-io.js');
+const { templateOrganiserImport } = require('./shared/io/template-organiser-io.js');
 global.knowledgeImport = knowledgeImport;
 global.receptionImport = receptionImport;
 global.sentinelImport = sentinelImport;
@@ -71,6 +72,7 @@ global.requestMonitorImport = requestMonitorImport;
 global.TriageAlertIO = TriageAlertIO;
 global.KnowledgeUtils = KnowledgeUtils;
 global.problemDescriptionCleanupImport = problemDescriptionCleanupImport;
+global.templateOrganiserImport = templateOrganiserImport;
 global.chrome.runtime = {
   getURL: (p) => `chrome-extension://test/${p}`,
   getManifest: () => ({ version: '3.261.15' }),
@@ -115,6 +117,7 @@ const NEW_PACKS = [
   { suffix: 'ui.routineRxButton', key: 'suite.ui.routineRxButton', alias: 'routineRxButton' },
   { suffix: 'ui.quickActionsWidget', key: 'suite.ui.quickActionsWidget', alias: 'quickActionsWidget' },
   { suffix: 'ui.focusAlerts', key: 'suite.ui.focusAlerts', alias: 'focusAlerts' },
+  { suffix: 'ui.templateOrganiser', key: 'suite.ui.templateOrganiser', alias: 'templateOrganiser' },
 ];
 
 (async () => {
@@ -122,6 +125,11 @@ const NEW_PACKS = [
   check(Packs.isEnabled(Packs.KEYS.softFlags, undefined) === false, 'softFlags missing === OFF');
   check(Packs.isEnabled(Packs.KEYS.softFlags, false) === false, 'softFlags false === OFF');
   check(Packs.isEnabled(Packs.KEYS.softFlags, true) === true, 'softFlags true === ON');
+  check(Packs.KEYS.templateOrganiser === 'suite.ui.templateOrganiser', 'templateOrganiser key');
+  check(Packs.isGrandfather(Packs.KEYS.templateOrganiser) === true, 'templateOrganiser is default-on');
+  check(Packs.isEnabled(Packs.KEYS.templateOrganiser, undefined) === true, 'templateOrganiser missing === ON');
+  check(Packs.isEnabled(Packs.KEYS.templateOrganiser, false) === false, 'templateOrganiser false === OFF');
+  check(Packs.isEnabled(Packs.KEYS.templateOrganiser, true) === true, 'templateOrganiser true === ON');
   NEW_PACKS.forEach((p) => {
     check(Packs.isEnabled(p.key, undefined) === true, `${p.key} missing === ON (grandfather)`);
     check(Packs.isEnabled(p.key, false) === false, `${p.key} explicit false === OFF`);
@@ -277,6 +285,7 @@ const NEW_PACKS = [
   check(/'ui\.routineRxButton'/.test(allowList), 'allow-list includes ui.routineRxButton');
   check(/'ui\.quickActionsWidget'/.test(allowList), 'allow-list includes ui.quickActionsWidget');
   check(/'ui\.focusAlerts'/.test(allowList), 'allow-list includes ui.focusAlerts');
+  check(/'ui\.templateOrganiser'/.test(allowList), 'allow-list includes ui.templateOrganiser');
   check(!/practiceAcceptedAt/.test(allowList), 'practiceAcceptedAt is not on the pack allow-list');
   check(!/hiddenTabs/.test(allowList), 'hiddenTabs is not on the pack allow-list');
 
@@ -299,6 +308,72 @@ const NEW_PACKS = [
     packErr = e.message;
   }
   check(packErr && packErr.includes('boolean'), 'suiteImport rejects non-boolean allocateCanvases');
+  await suiteIo.suiteImport({ templateOrganiser: true });
+  check(store['suite.ui.templateOrganiser'] === true, 'suiteImport writes suite.ui.templateOrganiser');
+  const tocPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { templateOrganiser: true } }));
+  check(
+    tocPreview.some((l) => /Document and Template Organiser canvas ON/.test(l)),
+    'previewEnvelope mentions template organiser when ON'
+  );
+
+  console.log('\n--- template organiser profile: default-on, layout is practice config only ---');
+  resetStore();
+  await PP.applyProfile(
+    makeProfile({
+      profileVersion: 'pf-toc-merge-off',
+      apply: { modules: { suite: 'merge' } },
+      envelope: { modules: { suite: { 'ui.templateOrganiser': false } } },
+    })
+  );
+  check(store['suite.ui.templateOrganiser'] === undefined, 'merge false does not mute a missing templateOrganiser key');
+  resetStore();
+  store['suite.ui.templateOrganiser'] = false;
+  await PP.applyProfile(
+    makeProfile({
+      profileVersion: 'pf-toc-merge-on',
+      apply: { modules: { suite: 'merge' } },
+      envelope: { modules: { suite: { templateOrganiser: true } } },
+    })
+  );
+  check(store['suite.ui.templateOrganiser'] === true, 'merge true turns a local off templateOrganiser back on');
+  resetStore();
+  store['templateOrganiser.personal'] = { version: 1, surfaces: {} };
+  await PP.applyProfile(
+    makeProfile({
+      profileVersion: 'pf-toc-layout-replace',
+      apply: { modules: { templateOrganiser: 'replace' } },
+      envelope: {
+        modules: {
+          templateOrganiser: {
+            config: {
+              version: 1,
+              surfaces: { templates: { groups: [{ id: 'nursing', name: 'Nursing' }], order: {} } },
+            },
+            personal: { version: 1, surfaces: { templates: { groups: [{ id: 'mine', name: 'Mine' }] } } },
+          },
+        },
+      },
+    })
+  );
+  check(
+    store['templateOrganiser.config'] &&
+      store['templateOrganiser.config'].surfaces.templates.groups.some((g) => g.name === 'Nursing'),
+    'replace writes the practice organiser layout'
+  );
+  check(
+    JSON.stringify(store['templateOrganiser.personal']) === JSON.stringify({ version: 1, surfaces: {} }),
+    'a profile does not write the personal organiser overlay'
+  );
+  resetStore();
+  store['suite.ui.templateOrganiser'] = true;
+  await PP.applyProfile(
+    makeProfile({
+      profileVersion: 'pf-toc-replace-off',
+      apply: { modules: { suite: 'replace' } },
+      envelope: { modules: { suite: { 'ui.templateOrganiser': false } } },
+    })
+  );
+  check(store['suite.ui.templateOrganiser'] === false, 'replace may write templateOrganiser false');
   const preview = suiteEnv.previewEnvelope(
     suiteEnv.wrap('suite', { suite: { allocateCanvases: true, contactsCanvas: true } })
   );
@@ -319,6 +394,11 @@ const NEW_PACKS = [
   check(/id="pfRoutineRxButton"/.test(optionsHtml), 'routine-Rx pack lives on the practice board');
   check(/id="pfQuickActionsWidget"/.test(optionsHtml), 'quick-actions pack lives on the practice board');
   check(/id="pfFocusAlerts"/.test(optionsHtml), 'focus-alerts pack lives on the practice board');
+  check(/id="pfTemplateOrganiser"/.test(optionsHtml), 'template organiser pack lives on the practice board');
+  check(
+    /suite\.ui\.templateOrganiser[\s\S]{0,120}grandfather:\s*true/.test(optionsJs),
+    'template organiser toggle is default-on (grandfather true)'
+  );
   check(/id="signingSoftFlags"/.test(optionsHtml), 'Suite still mirrors softFlags (same key)');
   check(/id="sgSoftFlags"/.test(signingSrc), 'Signing Queue still mirrors softFlags (same key)');
   check(!/id="signingAllocateCanvases"/.test(optionsHtml), 'new packs are not mirrored on Suite');
@@ -330,7 +410,10 @@ const NEW_PACKS = [
   check(/sg-soft-toggle:has\(input:checked\)/.test(signingCss), 'Signing armed colour matches the board station');
   check(/role="switch"/.test(optionsHtml) && /role="switch"/.test(signingSrc), 'switches expose role=switch');
   check(/Accept for practice stays separate/.test(optionsHtml), 'Accept copy sits above the fold on the board');
-  check(/sticky-on/.test(optionsHtml) && /Suite replace/.test(optionsHtml), 'one briefing strip documents sticky-on + replace');
+  check(
+    /sticky-on/.test(optionsHtml) && /Suite replace/.test(optionsHtml),
+    'one briefing strip documents sticky-on + replace'
+  );
   check(
     (optionsHtml.match(/Accept for practice does not enable this pack/g) || []).length === 0,
     'pack stations do not repeat the Accept essay'
@@ -343,7 +426,10 @@ const NEW_PACKS = [
   check(/\.pf-armed \{[\s\S]*?color: var\(--green\)/.test(optionsHtml), 'Armed label uses Suite green status token');
   check(/class="pf-armed">Armed<\/span>/.test(signingSrc), 'Signing softFlags mirror has the Armed label');
   check(/\.sg-soft-toggle:has\(input:checked\) \.pf-armed/.test(signingCss), 'Signing Armed label gated on ON');
-  check(/class="pf-deck"/.test(optionsHtml) && /class="pf-station"/.test(optionsHtml), 'board is a compact station deck');
+  check(
+    /class="pf-deck"/.test(optionsHtml) && /class="pf-station"/.test(optionsHtml),
+    'board is a compact station deck'
+  );
   check(
     /PRACTICE_PACK_TOGGLES/.test(optionsJs) && /bindPracticePackToggle/.test(optionsJs),
     'Options binds each pack toggle to its storage key'
@@ -359,6 +445,7 @@ const NEW_PACKS = [
       !/routineRxButton/.test(acceptFn[0]) &&
       !/quickActionsWidget/.test(acceptFn[0]) &&
       !/focusAlerts/.test(acceptFn[0]) &&
+      !/templateOrganiser/.test(acceptFn[0]) &&
       !/signing\.softFlags/.test(acceptFn[0]),
     'tick Accept does not write any pack key'
   );
@@ -380,6 +467,11 @@ const NEW_PACKS = [
     ['content-scripts/triage-lens/routine-rx-button.js', 'suite.ui.routineRxButton', 'removeHost'],
     ['content-scripts/reception-quick-actions.js', 'suite.ui.quickActionsWidget', 'removeWidget'],
     ['content-scripts/triage-lens/content.js', 'suite.ui.focusAlerts', 'removeQueueStatusBar'],
+    [
+      'content-scripts/template-organiser/template-organiser-canvas.js',
+      'suite.ui.templateOrganiser',
+      'muteOrganiserChrome',
+    ],
   ];
   const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
   check(/shared\/practice-packs\.js/.test(manifest), 'practice-packs.js is in the manifest');

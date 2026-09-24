@@ -3113,6 +3113,20 @@
                 ></span>
               </span>
             </label>
+
+            <label class="pf-station" id="row-templateOrganiser">
+              <span class="pf-copy">
+                <span class="pf-label">Document and Template Organiser</span>
+                <span class="pf-sub">Groups Medicus templates and documents. Shows when the cursor is in History, Examination, Impression, or Plan. On unless switched off. Practice default, plus each person’s layout.</span>
+              </span>
+              <span class="pf-armed">Armed</span>
+              <span class="suite-toggle">
+                <input type="checkbox" id="pfTemplateOrganiser" role="switch" />
+                <span class="suite-toggle-track" aria-hidden="true"
+                  ><span class="suite-toggle-thumb"></span
+                ></span>
+              </span>
+            </label>
           </div>
         </section>
 
@@ -3906,6 +3920,20 @@
                 </div>
               </div>
               <div class="module-export-card">
+                <div class="mec-name">Document and Template Organiser</div>
+                <div class="mec-actions">
+                  <button class="ghost" data-mod-export="templateOrganiser">Export</button>
+                  <button class="ghost" data-mod-import="templateOrganiser">Import</button>
+                  <input
+                    type="file"
+                    class="mod-file-input"
+                    data-mod="templateOrganiser"
+                    accept=".json"
+                    style="display: none"
+                  />
+                </div>
+              </div>
+              <div class="module-export-card">
                 <div class="mec-name">Phrases</div>
                 <div class="mec-actions">
                   <button class="ghost" data-mod-export="phrases">Export</button>
@@ -4092,6 +4120,8 @@
     <script src="../shared/io/allocation-groups-io.js"></script>
     <script src="../shared/phrases-core.js"></script>
     <script src="../shared/io/phrases-io.js"></script>
+    <script src="../shared/template-organiser-core.js"></script>
+    <script src="../shared/io/template-organiser-io.js"></script>
     <script src="../shared/quick-actions-core.js"></script>
     <script src="../shared/lab-filing-utils.js"></script>
     <script src="../shared/presence-folder.js"></script>

@@ -8,7 +8,8 @@
 //
 // Grandfather: chrome that was always-on before these keys existed treats a
 // missing key as ON at runtime so upgrade day does not hide buttons. Options
-// materialises an explicit true on first load. softFlags stays opt-in
+// materialises an explicit true on first load. The Document and Template
+// Organiser uses the same default-on rule. softFlags stays opt-in
 // (missing === OFF). An explicit false always wins.
 
 (function (global) {
@@ -22,6 +23,8 @@
     routineRxButton: 'suite.ui.routineRxButton',
     quickActionsWidget: 'suite.ui.quickActionsWidget',
     focusAlerts: 'suite.ui.focusAlerts',
+    // Default on, like the other UI packs: missing storage means ON.
+    templateOrganiser: 'suite.ui.templateOrganiser',
   };
 
   const GRANDFATHER_KEYS = [
@@ -30,6 +33,7 @@
     KEYS.routineRxButton,
     KEYS.quickActionsWidget,
     KEYS.focusAlerts,
+    KEYS.templateOrganiser,
   ];
 
   const ALL_PACK_KEYS = [KEYS.softFlags].concat(GRANDFATHER_KEYS);
@@ -41,6 +45,7 @@
     'ui.routineRxButton': 'routineRxButton',
     'ui.quickActionsWidget': 'quickActionsWidget',
     'ui.focusAlerts': 'focusAlerts',
+    'ui.templateOrganiser': 'templateOrganiser',
   };
 
   const _raw = Object.create(null);

@@ -108,6 +108,7 @@ const VALID_SCOPES = [
   'rota',
   'allocationGroups',
   'stackchan',
+  'templateOrganiser',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -547,6 +548,24 @@ function previewEnvelope(envelope) {
     if (m) lines.push(m);
   }
 
+  if (mods.templateOrganiser) {
+    const cfg = mods.templateOrganiser.config || {};
+    const surfaces = cfg.surfaces || {};
+    const templateGroups = Array.isArray(surfaces.templates && surfaces.templates.groups)
+      ? surfaces.templates.groups.length
+      : 0;
+    const documentGroups = Array.isArray(surfaces.documents && surfaces.documents.groups)
+      ? surfaces.documents.groups.length
+      : 0;
+    const personalNote = mods.templateOrganiser.personal ? ', plus a personal layout' : '';
+    lines.push(
+      `Document and Template Organiser: ${templateGroups} template group(s), ${documentGroups} document group(s)${personalNote} (practice default, Medicus lists unchanged)`
+    );
+  } else {
+    const m = missing('Document and Template Organiser');
+    if (m) lines.push(m);
+  }
+
   if (mods.suite) {
     if (mods.suite.practiceCode) lines.push(`Practice code: ${mods.suite.practiceCode}`);
     if (mods.suite.feedbackEmail) lines.push(`Feedback email: ${mods.suite.feedbackEmail}`);
@@ -578,6 +597,9 @@ function previewEnvelope(envelope) {
     }
     if (mods.suite.focusAlerts === true || mods.suite['ui.focusAlerts'] === true) {
       lines.push('Focus alerts (queue) ON');
+    }
+    if (mods.suite.templateOrganiser === true || mods.suite['ui.templateOrganiser'] === true) {
+      lines.push('Document and Template Organiser canvas ON');
     }
   }
 
