@@ -119,6 +119,7 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.quickActionsWidget', ids: ['pfQuickActionsWidget'], grandfather: true },
   { key: 'suite.ui.focusAlerts', ids: ['pfFocusAlerts'], grandfather: true },
   { key: 'suite.ui.templateOrganiser', ids: ['pfTemplateOrganiser'], grandfather: true },
+  { key: 'suite.ui.taskPresence', ids: ['pfTaskPresence'], grandfather: true },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);
@@ -163,6 +164,19 @@ const testConnectionResult = document.getElementById('testConnectionResult');
     }
     const PP = typeof PracticePacks !== 'undefined' ? PracticePacks : null;
     if (PP && typeof PP.materializeGrandfather === 'function') {
+      const presenceSeed = await chrome.storage.local.get(['presence.enabled', 'suite.ui.taskPresence']);
+      // A machine that already unticked presence stays off. Materialise must
+      // not write the new pack key true over that explicit false.
+      if (
+        presenceSeed['presence.enabled'] === false &&
+        presenceSeed['suite.ui.taskPresence'] !== true &&
+        presenceSeed['suite.ui.taskPresence'] !== false
+      ) {
+        await chrome.storage.local.set({ 'suite.ui.taskPresence': false });
+      }
+      if (presenceSeed['presence.enabled'] !== true && presenceSeed['presence.enabled'] !== false) {
+        await chrome.storage.local.set({ 'presence.enabled': true });
+      }
       await PP.materializeGrandfather();
     }
     const packKeys = PRACTICE_PACK_TOGGLES.map((spec) => spec.key);
@@ -224,7 +238,11 @@ saveSuiteBtn?.addEventListener('click', async () => {
 
 function bindPracticePackToggle(el, key) {
   el?.addEventListener('change', async () => {
-    await chrome.storage.local.set({ [key]: el.checked === true });
+    const on = el.checked === true;
+    const payload = { [key]: on };
+    // One switch: the Task Presence section checkbox reads presence.enabled.
+    if (key === 'suite.ui.taskPresence') payload['presence.enabled'] = on;
+    await chrome.storage.local.set(payload);
   });
 }
 PRACTICE_PACK_TOGGLES.forEach((spec) => {
@@ -238,6 +256,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
     const stored = changes[spec.key].newValue;
     const on = PP ? PP.isEnabled(spec.key, stored) : stored === true;
     setPackToggleChecked(spec, on);
+    if (spec.key === 'suite.ui.taskPresence' && presenceEnabledInput && stored === true) {
+      presenceEnabledInput.checked = true;
+    }
+    if (spec.key === 'suite.ui.taskPresence' && presenceEnabledInput && stored === false) {
+      presenceEnabledInput.checked = false;
+    }
   });
 });
 
@@ -583,8 +607,10 @@ const presenceSaved = document.getElementById('presenceSaved');
       'presence.fileCache',
       'suite.display',
     ]);
-    // "On unless explicitly opted out" — matches task-presence.js's gate.
-    if (presenceEnabledInput) presenceEnabledInput.checked = res['presence.enabled'] !== false;
+    const pack = res['suite.ui.taskPresence'];
+    const legacy = res['presence.enabled'];
+    const presenceOn = pack === false ? false : pack === true ? true : legacy !== false;
+    if (presenceEnabledInput) presenceEnabledInput.checked = presenceOn;
     if (presenceUrlInput) presenceUrlInput.value = res['presence.url'] || '';
     if (presenceKeyInput) presenceKeyInput.value = res['presence.key'] || '';
     if (presenceNameInput) presenceNameInput.value = res['presence.name'] || '';
@@ -813,8 +839,10 @@ savePresenceBtn?.addEventListener('click', async () => {
       return;
     }
   }
+  const presenceOn = presenceEnabledInput ? presenceEnabledInput.checked === true : true;
   await chrome.storage.local.set({
-    'presence.enabled': presenceEnabledInput ? presenceEnabledInput.checked : false,
+    'presence.enabled': presenceOn,
+    'suite.ui.taskPresence': presenceOn,
     'presence.url': url,
     'presence.key': (presenceKeyInput?.value || '').trim(),
     'presence.name': (presenceNameInput?.value || '').trim(),
@@ -2861,7 +2889,9 @@ async function scEnsureOriginPermission(baseUrl) {
   if (!origin) return { ok: false, error: 'Set a valid http(s) base URL first' };
   try {
     const granted = await chrome.permissions.request({ origins: [origin + '/*'] });
-    return granted ? { ok: true } : { ok: false, error: 'LAN permission denied — Edge/Chrome blocked the robot origin' };
+    return granted
+      ? { ok: true }
+      : { ok: false, error: 'LAN permission denied — Edge/Chrome blocked the robot origin' };
   } catch (e) {
     return { ok: false, error: (e && e.message) || 'permission request failed' };
   }
@@ -2943,9 +2973,10 @@ scHealthBtn?.addEventListener('click', async () => {
   try {
     const res = await scCallWorker('stackchan:health');
     if (scStatus) {
-      scStatus.textContent = res && res.ok
-        ? `ok  v${res.version || '?'}  cmd=${res.cmd || '?'}  camera=${res.camera}  mic=${res.mic}`
-        : (res && res.error) || 'no response';
+      scStatus.textContent =
+        res && res.ok
+          ? `ok  v${res.version || '?'}  cmd=${res.cmd || '?'}  camera=${res.camera}  mic=${res.mic}`
+          : (res && res.error) || 'no response';
     }
   } catch (e) {
     if (scStatus) scStatus.textContent = (e && e.message) || 'ping failed';
@@ -3776,8 +3807,7 @@ initPdcTallySection({
 
     // Re-render whenever the stored update state changes
     chrome.storage.onChanged.addListener((changes) => {
-      if (Object.keys(changes).some((k) => k.startsWith('suite.update.') || k.startsWith('suite.localBits.')))
-        render();
+      if (Object.keys(changes).some((k) => k.startsWith('suite.update.') || k.startsWith('suite.localBits.'))) render();
     });
 
     // Buttons
@@ -3842,7 +3872,9 @@ initPdcTallySection({
       }
     }
 
-    window.LocalBits.checkAndPersist().then(render).catch(() => render());
+    window.LocalBits.checkAndPersist()
+      .then(render)
+      .catch(() => render());
 
     chrome.storage.onChanged.addListener((changes) => {
       if (Object.keys(changes).some((k) => k.startsWith('suite.localBits.'))) render();
@@ -5431,9 +5463,7 @@ initPdcTallySection({
     const swBanner = document.getElementById('swLoadBanner');
     if (swBanner) {
       if (swErrors.length) {
-        const scripts = swErrors
-          .map((e) => (e && e.script) || 'module')
-          .filter((s, i, arr) => arr.indexOf(s) === i);
+        const scripts = swErrors.map((e) => (e && e.script) || 'module').filter((s, i, arr) => arr.indexOf(s) === i);
         swBanner.style.display = 'block';
         swBanner.textContent =
           'Extension module failed to load — some tools may be missing. Failed: ' +

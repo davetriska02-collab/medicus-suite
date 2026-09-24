@@ -48,12 +48,33 @@ practices whose Medicus build does not yet expose the presence channel.
   fallback rows still say `Seen N min ago`.
 
 - **Occupancy token** (avatar icon + highlighted display name) on:
-  - any **list row** a colleague currently has open (folder / hosted store,
-    when configured — native Pusher is only on the open request)
+  - any **list row** a colleague currently has open. The row token is a
+    fluoro **Open** pill with their name, so you can see it while scanning
+    the queue. It means they have that request's overview open. It is not
+    a lock and it does not mean the request is in progress. You can still
+    work it. The token comes from the folder / hosted store (heartbeats
+    from the open overview). Native per-task Pusher is only available on
+    the open request, not on the list. If the store is not set up, the
+    queue stays quiet — the Suite does not invent a chip.
   - the **request / prescription message** chrome (left/main card)
   - the **Clinical Summary RHS** for that item
-  Initials stay on the icon; the name hides when the cell is tight. Same
-  occupants as the masthead. Hide-for-now does not clear these tokens.
+  Initials stay on the icon. On the message and the summary the name hides
+  when the cell is tight; on a list row the word Open stays visible and the
+  name ellipsises. Same occupants as the masthead. Hide-for-now does not
+  clear these tokens.
+
+The feature is **on unless this machine switches it off** (Options →
+Practice features → Task Presence, or the checkbox on this page). A missing
+key is on. An explicit off stays off. Turning it on does not create a
+store. List-row chips still need either:
+
+- the practice folder (`ms-presence/`), one **Choose folder…** click per
+  machine (Chrome will not write the shared drive until you pick it), or
+- a hosted `task_presence` table (`presence-config.json` in the extension
+  folder, or the URL and key on this page).
+
+There is no default folder path. A shared-drive install still needs that
+one click on each machine before list tokens have anywhere to read.
 
 The strip is advisory. It never claims the request is locked, never blocks
 Medicus's own UI, and never asks you to leave.

@@ -118,6 +118,7 @@ const NEW_PACKS = [
   { suffix: 'ui.quickActionsWidget', key: 'suite.ui.quickActionsWidget', alias: 'quickActionsWidget' },
   { suffix: 'ui.focusAlerts', key: 'suite.ui.focusAlerts', alias: 'focusAlerts' },
   { suffix: 'ui.templateOrganiser', key: 'suite.ui.templateOrganiser', alias: 'templateOrganiser' },
+  { suffix: 'ui.taskPresence', key: 'suite.ui.taskPresence', alias: 'taskPresence' },
 ];
 
 (async () => {
@@ -286,6 +287,7 @@ const NEW_PACKS = [
   check(/'ui\.quickActionsWidget'/.test(allowList), 'allow-list includes ui.quickActionsWidget');
   check(/'ui\.focusAlerts'/.test(allowList), 'allow-list includes ui.focusAlerts');
   check(/'ui\.templateOrganiser'/.test(allowList), 'allow-list includes ui.templateOrganiser');
+  check(/'ui\.taskPresence'/.test(allowList), 'allow-list includes ui.taskPresence');
   check(!/practiceAcceptedAt/.test(allowList), 'practiceAcceptedAt is not on the pack allow-list');
   check(!/hiddenTabs/.test(allowList), 'hiddenTabs is not on the pack allow-list');
 
@@ -310,6 +312,13 @@ const NEW_PACKS = [
   check(packErr && packErr.includes('boolean'), 'suiteImport rejects non-boolean allocateCanvases');
   await suiteIo.suiteImport({ templateOrganiser: true });
   check(store['suite.ui.templateOrganiser'] === true, 'suiteImport writes suite.ui.templateOrganiser');
+  await suiteIo.suiteImport({ taskPresence: true });
+  check(store['suite.ui.taskPresence'] === true, 'suiteImport writes suite.ui.taskPresence');
+  const tpPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { taskPresence: true } }));
+  check(
+    tpPreview.some((l) => /Task Presence ON/.test(l)),
+    'previewEnvelope mentions task presence when ON'
+  );
   const tocPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { templateOrganiser: true } }));
   check(
     tocPreview.some((l) => /Document and Template Organiser canvas ON/.test(l)),
@@ -395,6 +404,11 @@ const NEW_PACKS = [
   check(/id="pfQuickActionsWidget"/.test(optionsHtml), 'quick-actions pack lives on the practice board');
   check(/id="pfFocusAlerts"/.test(optionsHtml), 'focus-alerts pack lives on the practice board');
   check(/id="pfTemplateOrganiser"/.test(optionsHtml), 'template organiser pack lives on the practice board');
+  check(/id="pfTaskPresence"/.test(optionsHtml), 'task presence pack lives on the practice board');
+  check(
+    /suite\.ui\.taskPresence[\s\S]{0,80}grandfather:\s*true/.test(optionsJs),
+    'task presence toggle is default-on (grandfather true)'
+  );
   check(
     /suite\.ui\.templateOrganiser[\s\S]{0,120}grandfather:\s*true/.test(optionsJs),
     'template organiser toggle is default-on (grandfather true)'
@@ -446,6 +460,7 @@ const NEW_PACKS = [
       !/quickActionsWidget/.test(acceptFn[0]) &&
       !/focusAlerts/.test(acceptFn[0]) &&
       !/templateOrganiser/.test(acceptFn[0]) &&
+      !/taskPresence/.test(acceptFn[0]) &&
       !/signing\.softFlags/.test(acceptFn[0]),
     'tick Accept does not write any pack key'
   );

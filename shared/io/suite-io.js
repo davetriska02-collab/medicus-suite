@@ -26,8 +26,10 @@ const SUITE_KEYS = [
   'suite.ui.routineRxButton',
   'suite.ui.quickActionsWidget',
   'suite.ui.focusAlerts',
-  // Template organiser canvas. Default OFF — absent/null. Not grandfathered.
+  // Template organiser canvas. Default on — missing key stays on at runtime.
   'suite.ui.templateOrganiser',
+  // Task Presence. Default on — missing key stays on at runtime.
+  'suite.ui.taskPresence',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -74,6 +76,7 @@ async function suiteExport() {
     quickActionsWidget: r['suite.ui.quickActionsWidget'] ?? null,
     focusAlerts: r['suite.ui.focusAlerts'] ?? null,
     templateOrganiser: r['suite.ui.templateOrganiser'] ?? null,
+    taskPresence: r['suite.ui.taskPresence'] ?? null,
   };
 }
 
@@ -178,6 +181,7 @@ async function suiteImport(data) {
     ['quickActionsWidget', 'suite.ui.quickActionsWidget'],
     ['focusAlerts', 'suite.ui.focusAlerts'],
     ['templateOrganiser', 'suite.ui.templateOrganiser'],
+    ['taskPresence', 'suite.ui.taskPresence'],
   ];
   for (const [alias, storageKey] of packAliases) {
     if (data[alias] == null) continue;

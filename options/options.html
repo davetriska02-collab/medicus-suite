@@ -2241,11 +2241,14 @@
           <h1>Task Presence</h1>
           <p class="section-desc">
             Shows when a colleague already has a triage request open, so two people don't work the same request without
-            knowing. A "&#128065;" chip appears on the queue row and an advisory banner on the open request. Medicus
-            records nothing when a request is opened, so the Suite keeps its own signal —
-            <strong>in the practice's shared folder, on your own network. Nothing is sent anywhere else.</strong> Setup
-            is one click below, once per machine: point it at the Medicus Suite shared folder (tiny presence files live
-            in an <code>ms-presence</code> subfolder there, one per staff member, self-expiring).
+            knowing. On the queue, each row carries a yellow <strong>Open</strong> token with their name. An advisory
+            banner stays on the open request. Medicus records nothing when a request is opened, so the Suite keeps its
+            own signal —
+            <strong>in the practice's shared folder, on your own network. Nothing is sent anywhere else.</strong>
+            The feature is on unless you switch it off. List-row tokens need a store: one click below, once per
+            machine, pointing at the Medicus Suite shared folder (tiny presence files live in an
+            <code>ms-presence</code> subfolder there, one per staff member, self-expiring). Chrome cannot see that
+            folder until you pick it.
           </p>
           <p class="section-desc" style="color: var(--amber)">
             &#9888; Advisory only — it is never a lock, and <strong>no chip does not mean no one</strong> (a colleague
@@ -2279,11 +2282,12 @@
 
           <div class="field">
             <label class="field-label" style="display: flex; align-items: center; gap: 8px">
-              <input type="checkbox" id="presenceEnabled" style="width: auto" />
+              <input type="checkbox" id="presenceEnabled" checked style="width: auto" />
               Presence active on this machine
             </label>
             <span class="field-help">
-              On by default whenever a store is configured (shared folder or below) — untick to opt this machine out.
+              On unless this machine is switched off (here or under Practice features). List-row chips still need the
+              shared folder below, or a hosted store. No chip does not mean nobody is on the request.
             </span>
           </div>
 
@@ -3122,6 +3126,23 @@
               <span class="pf-armed">Armed</span>
               <span class="suite-toggle">
                 <input type="checkbox" id="pfTemplateOrganiser" role="switch" />
+                <span class="suite-toggle-track" aria-hidden="true"
+                  ><span class="suite-toggle-thumb"></span
+                ></span>
+              </span>
+            </label>
+
+            <label class="pf-station" id="row-taskPresence">
+              <span class="pf-copy">
+                <span class="pf-label">Task Presence</span>
+                <span class="pf-sub"
+                  >Who has a request open. On unless switched off. List chips need the shared folder or a hosted
+                  store.</span
+                >
+              </span>
+              <span class="pf-armed">Armed</span>
+              <span class="suite-toggle">
+                <input type="checkbox" id="pfTaskPresence" role="switch" />
                 <span class="suite-toggle-track" aria-hidden="true"
                   ><span class="suite-toggle-thumb"></span
                 ></span>

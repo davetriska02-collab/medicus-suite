@@ -391,10 +391,10 @@ const PracticeProfile = (() => {
               // profile carries it and it is applied whenever the profile is applied — a practice chooses the engine
               // once, not per PC. Whitelisted values only; anything else (or an absent key from an older publisher)
               // leaves the local choice alone. Every failure mode of the catalogue engine falls back to the legacy one.
-              const publishedEngine = config.prefs && typeof config.prefs === 'object' ? config.prefs.oirEngine : undefined;
+              const publishedEngine =
+                config.prefs && typeof config.prefs === 'object' ? config.prefs.oirEngine : undefined;
               const applyEngine = publishedEngine === 'legacy' || publishedEngine === 'catalogue';
-              const engineChanged =
-                applyEngine && !(local.prefs && local.prefs.oirEngine === publishedEngine);
+              const engineChanged = applyEngine && !(local.prefs && local.prefs.oirEngine === publishedEngine);
               // Same practice-published discipline for the Lab Filing engine choice (Phase E, stage E2): one choice
               // for the whole practice, not per PC, whitelisted values only, absent/unrecognised leaves the local
               // choice alone. UNION-ONLY when catalogue: it can only add filing blockers, never remove one.
@@ -1168,6 +1168,7 @@ const PracticeProfile = (() => {
           'ui.quickActionsWidget',
           'ui.focusAlerts',
           'ui.templateOrganiser',
+          'ui.taskPresence',
         ];
         const BOOLEAN_PACK_KEYS = [
           'signing.softFlags',
@@ -1177,6 +1178,7 @@ const PracticeProfile = (() => {
           'ui.quickActionsWidget',
           'ui.focusAlerts',
           'ui.templateOrganiser',
+          'ui.taskPresence',
         ];
         const GRANDFATHER_PACK_KEYS = [
           'ui.allocateCanvases',
@@ -1185,6 +1187,7 @@ const PracticeProfile = (() => {
           'ui.quickActionsWidget',
           'ui.focusAlerts',
           'ui.templateOrganiser',
+          'ui.taskPresence',
         ];
         const ENVELOPE_ALIASES = {
           'signing.softFlags': 'signingSoftFlags',
@@ -1194,6 +1197,7 @@ const PracticeProfile = (() => {
           'ui.quickActionsWidget': 'quickActionsWidget',
           'ui.focusAlerts': 'focusAlerts',
           'ui.templateOrganiser': 'templateOrganiser',
+          'ui.taskPresence': 'taskPresence',
         };
 
         for (const key of ALLOWED_SUITE_KEYS) {

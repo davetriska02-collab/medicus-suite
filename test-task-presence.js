@@ -29,6 +29,9 @@ const {
   occupantTokenHtml,
   occupantTokenAria,
   occupantTokenTitle,
+  presenceFeatureOn,
+  queueSortSignatureFromCells,
+  queueSortCanaryStep,
   overviewColumnSide,
   isClinicalSummaryHeading,
   isMessageChromeHeading,
@@ -1022,6 +1025,8 @@ console.log('--- occupancy token: icon + highlighted name, same sources as the b
   check(html.indexOf('ms-tp-token') >= 0, 'token root class');
   check(html.indexOf('ms-tp-token-row') >= 0, 'row surface class');
   check(html.indexOf('ms-tp-token-who') >= 0 && html.indexOf('Dr Priya Nair') >= 0, 'display name is highlighted');
+  check(html.indexOf('ms-tp-token-status') >= 0 && html.indexOf('>Open<') >= 0, 'row token says Open');
+  check(!/in progress|locked|lock\b/i.test(html), 'row token is not a lock or in-progress');
   check(html.indexOf('>PN<') >= 0, 'avatar icon carries initials');
   check(/role="status"/.test(html), 'token is a status');
   check(/aria-label="/.test(html) && occupantTokenAria(one).indexOf('Dr Priya Nair') >= 0, 'aria names the colleague');
@@ -1036,7 +1041,11 @@ console.log('--- occupancy token: icon + highlighted name, same sources as the b
   ];
   const twoHtml = occupantTokenHtml(two, { surface: 'message' });
   check(twoHtml.indexOf('ms-tp-token-message') >= 0, 'message surface class');
-  check(twoHtml.indexOf('ms-tp-token-more') >= 0 && twoHtml.indexOf('+1') >= 0, 'second occupant is +1, name still preferred');
+  check(twoHtml.indexOf('ms-tp-token-status') < 0, 'message token does not use the list Open word');
+  check(
+    twoHtml.indexOf('ms-tp-token-more') >= 0 && twoHtml.indexOf('+1') >= 0,
+    'second occupant is +1, name still preferred'
+  );
   check(occupantTokenHtml(two, { surface: 'rhs' }).indexOf('ms-tp-token-rhs') >= 0, 'rhs surface class');
   check(!/Hide for now/.test(twoHtml), 'token is not the dismissable masthead');
   check(!/patient|nhs|dob/i.test(twoHtml), 'token HTML carries no patient-shaped fields');
@@ -1058,13 +1067,18 @@ console.log('--- occupantsForTask: banner sources only; list occupancy is not a 
     merged.some((o) => o.staffId === UUID_B) && merged.some((o) => o.staffId === UUID_ME),
     'both banner sources kept'
   );
-  check(
-    occupantsForTask(UUID_A, [], [], listOnly).length === 0,
-    'list-channel members never become row occupants'
-  );
+  check(occupantsForTask(UUID_A, [], [], listOnly).length === 0, 'list-channel members never become row occupants');
   check(occupantsForTask(UUID_B, store, native, listOnly).length === 0, 'wrong task uuid -> empty');
   check(occupantsForTask('not-a-uuid', store, native, []).length === 0, 'malformed uuid -> empty');
   check(occupantsForTask(UUID_A, null, null, listOnly).length === 0, 'null sources + list leftovers -> empty');
+  const fromStore = occupantsForTask(UUID_A, store, [], []);
+  const storeHtml = occupantTokenHtml(fromStore, { surface: 'row' });
+  check(fromStore.length === 1 && storeHtml.indexOf('Dr Priya Nair') >= 0, 'store occupant becomes the list token');
+  check(storeHtml.indexOf('>Open<') >= 0, 'store occupant list token says Open');
+  check(
+    occupantTokenHtml(occupantsForTask(UUID_A, [], [], listOnly), { surface: 'row' }) === '',
+    'list-channel members do not paint a row token'
+  );
 }
 
 console.log('--- overview hosts: left message + RHS summary; never book-signing ---');
@@ -1099,9 +1113,18 @@ console.log('--- overview hosts: left message + RHS summary; never book-signing 
     { id: 'sum', side: 'right', clinicalSummary: true, inMain: true },
   ]);
   check(pickedRhs && pickedRhs.id === 'sum', 'RHS host is Clinical Summary, not book-signing');
-  check(pickOverviewRhsHost([{ id: 'sign', side: 'right', kind: 'book-signing', clinicalSummary: true }]) === null, 'book-signing alone -> no RHS token');
-  check(pickOverviewMessageHost([{ id: 'ms-tp-banner', side: 'left', messageHeading: true }]) === null, 'masthead is not message chrome');
-  check(pickOverviewMessageHost([{ id: 'ms-tp-msg', side: 'left', messageHeading: true }]) === null, 'message token is not its own host');
+  check(
+    pickOverviewRhsHost([{ id: 'sign', side: 'right', kind: 'book-signing', clinicalSummary: true }]) === null,
+    'book-signing alone -> no RHS token'
+  );
+  check(
+    pickOverviewMessageHost([{ id: 'ms-tp-banner', side: 'left', messageHeading: true }]) === null,
+    'masthead is not message chrome'
+  );
+  check(
+    pickOverviewMessageHost([{ id: 'ms-tp-msg', side: 'left', messageHeading: true }]) === null,
+    'message token is not its own host'
+  );
 }
 
 console.log('--- overview injects must not oscillate on single-child request chrome ---');
@@ -1117,24 +1140,14 @@ console.log('--- overview injects must not oscillate on single-child request chr
   check(foreignPresenceChildCount([{ id: 'wrap' }]) === 1, 'single real child still climbs');
 
   const beforeInsert = [[{ id: 'headingParent' }], [{ id: 'wrap' }]];
-  const afterInsert = [
-    [{ id: 'headingParent' }],
-    [
-      { id: 'ms-tp-msg', className: 'ms-tp-token-host' },
-      { id: 'wrap' },
-    ],
-  ];
+  const afterInsert = [[{ id: 'headingParent' }], [{ id: 'ms-tp-msg', className: 'ms-tp-token-host' }, { id: 'wrap' }]];
   const hopsBefore = insertionAnchorHopCount(beforeInsert);
   const hopsAfter = insertionAnchorHopCount(afterInsert);
   check(hopsBefore === 2, 'single-child shells climb to the card');
   check(hopsAfter === hopsBefore, 'token insert must not change the climb (the v3.263.1 oscillation)');
   check(
     insertionAnchorHopCount([
-      [
-        { id: 'ms-tp-msg', className: 'ms-tp-token-host' },
-        { id: 'headingParent' },
-        { id: 'other' },
-      ],
+      [{ id: 'ms-tp-msg', className: 'ms-tp-token-host' }, { id: 'headingParent' }, { id: 'other' }],
     ]) === 0,
     'two real siblings still stop the climb'
   );
@@ -1175,10 +1188,7 @@ console.log('--- overview injects must not oscillate on single-child request chr
     }) === true,
     'unrelated host (Vue rebuilt the card) may move'
   );
-  check(
-    shouldRelocatePresenceToken({ connected: false, foundHost: 'card' }) === true,
-    'disconnected token re-homes'
-  );
+  check(shouldRelocatePresenceToken({ connected: false, foundHost: 'card' }) === true, 'disconnected token re-homes');
 
   check(mutationBatchIsOwnPresence([]) === false, 'empty batch is not own');
   check(
@@ -1199,8 +1209,12 @@ console.log('--- overview injects must not oscillate on single-child request chr
   );
 
   check(
-    presenceMutationPaintDecision({ ownMutationsOnly: true, hrefChanged: false, isOverview: true, hasOccupants: true }) ===
-      'skip',
+    presenceMutationPaintDecision({
+      ownMutationsOnly: true,
+      hrefChanged: false,
+      isOverview: true,
+      hasOccupants: true,
+    }) === 'skip',
     'own mutations skip paint (breaks the hub loop)'
   );
   check(
@@ -1269,6 +1283,47 @@ console.log('--- overview injects must not oscillate on single-child request chr
   check(other.path === '/t/2' && other.banner === 1, 'href change resets wipe state');
 }
 
+console.log('--- queue sort canary + default-on gate ---');
+{
+  const makeCells = (pairs) =>
+    pairs.map(([colId, dir]) => ({
+      getAttribute: (a) => (a === 'col-id' ? colId : null),
+      classList: { contains: (c) => c === `ag-header-cell-sorted-${dir}` },
+    }));
+  check(queueSortSignatureFromCells([]) === '', 'unsorted grid produces empty signature');
+  check(queueSortSignatureFromCells(null) === '', 'null cells produce empty signature');
+  const sigA = queueSortSignatureFromCells(
+    makeCells([
+      ['patientName', 'asc'],
+      ['dueDate', 'desc'],
+    ])
+  );
+  const sigB = queueSortSignatureFromCells(
+    makeCells([
+      ['dueDate', 'desc'],
+      ['patientName', 'asc'],
+    ])
+  );
+  check(sigA === sigB, 'signature is stable across header-cell DOM order');
+  check(sigA.includes('patientName:asc') && sigA.includes('dueDate:desc'), 'signature encodes col-id and direction');
+  const base = queueSortCanaryStep(undefined, sigA);
+  check(base.drop === false && base.sig === sigA, 'first signature establishes a baseline and does not drop');
+  const same = queueSortCanaryStep(base.sig, sigA);
+  check(same.drop === false, 'unchanged sort does not drop the row map');
+  const changed = queueSortCanaryStep(base.sig, queueSortSignatureFromCells(makeCells([['patientName', 'desc']])));
+  check(changed.drop === true, 'direction flip drops the row map');
+  const cleared = queueSortCanaryStep(changed.sig, '');
+  check(cleared.drop === true && cleared.sig === '', 'clearing the sort drops the row map');
+  const rebased = queueSortCanaryStep(undefined, 'dueDate:asc');
+  check(rebased.drop === false, 're-baseline after a task-list payload does not drop');
+
+  check(presenceFeatureOn(undefined, true) === true, 'missing pack + legacy on → on');
+  check(presenceFeatureOn(undefined, false) === false, 'missing pack + legacy off → off');
+  check(presenceFeatureOn(false, true) === false, 'explicit pack false stays off');
+  check(presenceFeatureOn(true, false) === true, 'explicit pack true wins over a legacy opt-out');
+  check(presenceFeatureOn(true, true) === true, 'explicit pack true stays on');
+}
+
 console.log('--- source of truth: row tokens reuse banner pipeline, not a second channel ---');
 {
   const fs = require('fs');
@@ -1276,21 +1331,67 @@ console.log('--- source of truth: row tokens reuse banner pipeline, not a second
   const src = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, 'content-scripts/task-presence.css'), 'utf8');
   check(/function occupantsForTask\(/.test(src), 'occupantsForTask is the shared merge');
-  check(/occupantsForTask\(data\.taskUuid, store, _nativeOthers, _nativeListOthers\)/.test(src), 'list rows call occupantsForTask');
+  check(
+    /occupantsForTask\(data\.taskUuid, store, _nativeOthers, _nativeListOthers\)/.test(src),
+    'list rows call occupantsForTask'
+  );
   check(/function paintOverviewTokens\(/.test(src), 'overview tokens painted from the same occupants');
   check(/occupantTokenHtml\(scoped, \{ surface: 'message' \}\)/.test(src), 'message chrome uses the token');
   check(/occupantTokenHtml\(scoped, \{ surface: 'rhs' \}\)/.test(src), 'RHS uses the token');
   check(/Hide-for-now is masthead-only/.test(src), 'dismiss does not clear row/message/RHS tokens');
   check(!/\.subscribe\s*\(\s*['"]presence-/.test(src), 'content script still does not subscribe to presence channels');
-  check(/#ms-tp-msg/.test(css) && /#ms-tp-rhs/.test(css) && /\.ms-tp-token/.test(css), 'token CSS covers all three surfaces');
+  check(
+    /#ms-tp-msg/.test(css) && /#ms-tp-rhs/.test(css) && /\.ms-tp-token/.test(css),
+    'token CSS covers all three surfaces'
+  );
   check(/@container \(max-width: 5\.5rem\)/.test(css), 'tight cells hide the name, keep the icon initials');
-  check(/foreignPresenceChildCount\(foreignChildrenOf\(el\.parentElement\)\)/.test(src), 'insertionAnchor ignores own presence siblings');
-  check(!/function insertionAnchor\(node\) \{[\s\S]*?kids\.length !== 1/.test(src), 'insertionAnchor does not use raw child count');
+  check(
+    /foreignPresenceChildCount\(foreignChildrenOf\(el\.parentElement\)\)/.test(src),
+    'insertionAnchor ignores own presence siblings'
+  );
+  check(
+    !/function insertionAnchor\(node\) \{[\s\S]*?kids\.length !== 1/.test(src),
+    'insertionAnchor does not use raw child count'
+  );
   check(/presenceMutationPaintDecision\(/.test(src), 'hub paints only when injects are missing or the route changed');
   check(/mutationBatchIsOwnPresence\(batch\)/.test(src), 'own token/banner mutations do not retrigger paint');
   check(/shouldRelocatePresenceToken\(/.test(src), 'connected tokens stay on the same lineage host');
-  check(/ms-tp-banner-overlay/.test(src) && /ms-tp-banner-overlay/.test(css), 'wipe-loop fallback pins the masthead out of <main>');
+  check(
+    /ms-tp-banner-overlay/.test(src) && /ms-tp-banner-overlay/.test(css),
+    'wipe-loop fallback pins the masthead out of <main>'
+  );
   check(/resetPresenceInjectState\(\)/.test(src), 'href change resets wipe counters and overlay mode');
+  check(
+    /\.ms-tp-chips \.ms-tp-token[\s\S]*background:\s*var\(--ms-tp-wash/.test(css),
+    'list token uses the fluoro wash'
+  );
+  check(/ms-tp-token-status/.test(css), 'list token status word is styled');
+  check(!/\.ms-tp-chips[\s\S]{0,80}ch-queue-chips/.test(src), 'presence inject does not target triage chips');
+  check(/querySelectorAll\('\.ms-tp-chips'\)/.test(src), 'sort drop removes presence chips only');
+  check(/function checkQueueSortCanary\(/.test(src), 'presence list inject has a sort canary');
+  const canaryFn = src.match(/function checkQueueSortCanary\(\) \{[\s\S]*?\n  \}/);
+  check(!!canaryFn && /_rows\.clear\(\)/.test(canaryFn[0]), 'canary drops the row map');
+  check(!!canaryFn && /removeQueuePresenceChips\(\)/.test(canaryFn[0]), 'canary removes list tokens');
+  check(!!canaryFn && !/ch-queue-chips/.test(canaryFn[0]), 'canary does not touch triage chips');
+  const bridge = src.match(/addEventListener\('ch-task-list-data',[\s\S]*?\n  \}\);/);
+  check(!!bridge, 'ch-task-list-data listener found');
+  if (bridge) {
+    const clearAt = bridge[0].indexOf('_rows.clear()');
+    const rebaseAt = bridge[0].indexOf('_queueSortSig = undefined');
+    check(clearAt !== -1 && rebaseAt > clearAt, 'bridge re-baselines the canary after rebuilding the row map');
+  }
+  const injectFn = src.match(/function injectQueueChips\(\) \{[\s\S]*?\n  \}/);
+  check(!!injectFn && /checkQueueSortCanary\(\)/.test(injectFn[0]), 'inject runs the sort canary');
+  check(
+    !!injectFn && injectFn[0].indexOf('checkQueueSortCanary()') < injectFn[0].indexOf('occupantsForTask('),
+    'canary runs before a row token is painted'
+  );
+  check(
+    /function readManyRows\(/.test(src) && /presence:folderRead/.test(src),
+    'queue read can use the practice folder'
+  );
+  check(/return storeReadMany\(site, uuids\)/.test(src), 'queue read falls through to the hosted store');
+  check(/if \(!onQueuePage\(\) \|\| !presenceReady\(\)/.test(src), 'queue poll stays quiet when the store is off');
   const beat = buildHeartbeatPayload('560b6c', UUID_A, UUID_ME, 'Dr D', '2026-08-04T12:00:00.000Z', null);
   check(
     Object.keys(beat).sort().join(',') === 'last_seen,site,staff_id,staff_label,task_uuid',

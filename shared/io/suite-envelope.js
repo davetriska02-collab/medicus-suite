@@ -601,6 +601,9 @@ function previewEnvelope(envelope) {
     if (mods.suite.templateOrganiser === true || mods.suite['ui.templateOrganiser'] === true) {
       lines.push('Document and Template Organiser canvas ON');
     }
+    if (mods.suite.taskPresence === true || mods.suite['ui.taskPresence'] === true) {
+      lines.push('Task Presence ON');
+    }
   }
 
   return lines;

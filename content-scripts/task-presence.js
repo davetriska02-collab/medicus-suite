@@ -26,13 +26,18 @@
 //   practice-configured Supabase table. Consumers:
 //     • queue rows, the request/Rx message chrome, and the Clinical Summary
 //       RHS get the same occupancy token (icon + display name) while a
-//       colleague's presence is fresh — same occupants as the masthead
+//       colleague's presence is fresh — same occupants as the masthead.
+//       The list-row token says "Open" so a scan of the queue shows who
+//       has that request's overview open. It is not a lock and not
+//       "in progress".
 //     • opening a task someone else has open can still paint the occupied
 //       strip from store rows when native Pusher membership is empty
-//   Presence store is DORMANT until the practice configures a store URL + key
-//   in Options → Task presence. Identity comes from the page's own Pusher
-//   channel names (staff UUID + login email, stamped by page-world.js as
-//   'data-ch-staff') — never guessed, never typed per-machine.
+//   The feature is on unless this machine explicitly switched it off
+//   (suite.ui.taskPresence / presence.enabled). List-row occupancy still
+//   needs a store: the practice folder (ms-presence/) or a hosted
+//   task_presence table. With neither, the queue stays quiet — no invented
+//   chips. Identity comes from the page's own Pusher channel names (staff
+//   UUID + login email, stamped by page-world.js as 'data-ch-staff').
 //
 // WHAT LEAVES THE BROWSER (layer 2 only, and only when configured): the
 // opaque task UUID, the site code, the staff UUID, a staff display label and
@@ -272,6 +277,44 @@
     return who + ' have this request open. You can still work it.';
   }
 
+  // Practice-pack gate. Missing pack = on. Explicit pack true wins over a
+  // legacy presence.enabled false (a profile push turns the machine back on).
+  // Pack missing + legacy false stays off. legacyEnabled is the resolved
+  // boolean (missing presence.enabled is already true).
+  function presenceFeatureOn(packStored, legacyEnabled) {
+    if (packStored === false) return false;
+    if (packStored === true) return true;
+    return legacyEnabled !== false;
+  }
+
+  // AG-Grid sort signature for the queue canary. Same shape as Triage Lens:
+  // col-id + direction, order-independent. Empty when nothing is sorted.
+  function queueSortSignatureFromCells(cells) {
+    if (!cells || typeof cells.length !== 'number' || !cells.length) return '';
+    var parts = [];
+    for (var i = 0; i < cells.length; i++) {
+      var c = cells[i];
+      if (!c || typeof c.getAttribute !== 'function') continue;
+      var col = c.getAttribute('col-id') || '?';
+      var asc = !!(
+        c.classList &&
+        typeof c.classList.contains === 'function' &&
+        c.classList.contains('ag-header-cell-sorted-asc')
+      );
+      parts.push(col + ':' + (asc ? 'asc' : 'desc'));
+    }
+    parts.sort();
+    return parts.join(',');
+  }
+
+  // prevSig undefined = no baseline yet. A change drops the row map; the
+  // caller must not paint until the next task-list payload re-baselines.
+  function queueSortCanaryStep(prevSig, nextSig) {
+    if (prevSig === undefined) return { sig: nextSig, drop: false };
+    if (nextSig === prevSig) return { sig: prevSig, drop: false };
+    return { sig: nextSig, drop: true };
+  }
+
   function occupantTokenTitle(others) {
     return occupiedBannerTitle(others);
   }
@@ -296,9 +339,7 @@
     var hue = initials === '?' ? '' : safeAvatarHue(first && first.hue);
     var title = occupantTokenTitle(list);
     var aria = occupantTokenAria(list);
-    var nameHtml = extra
-      ? esc(name) + ' <span class="ms-tp-token-more">+' + extra + '</span>'
-      : esc(name);
+    var nameHtml = extra ? esc(name) + ' <span class="ms-tp-token-more">+' + extra + '</span>' : esc(name);
     return (
       '<span class="ms-tp-token ms-tp-token-' +
       surface +
@@ -314,6 +355,7 @@
       '>' +
       esc(initials) +
       '</span>' +
+      (surface === 'row' ? '<span class="ms-tp-token-status">Open</span>' : '') +
       '<span class="ms-tp-token-who">' +
       nameHtml +
       '</span>' +
@@ -335,11 +377,17 @@
   }
 
   function isClinicalSummaryHeading(text) {
-    return /^clinical summary$/i.test(String(text || '').replace(/\s+/g, ' ').trim());
+    return /^clinical summary$/i.test(
+      String(text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+    );
   }
 
   function isMessageChromeHeading(text) {
-    var t = String(text || '').replace(/\s+/g, ' ').trim();
+    var t = String(text || '')
+      .replace(/\s+/g, ' ')
+      .trim();
     if (!t || t.length > 80) return false;
     return /^(next repeat prescribing|prescription request|patient request|message from|requested by|message)\b/i.test(
       t
@@ -701,7 +749,8 @@
     // means the socket is down or the subscription errored — fail closed, hide.
     if (detail.live === false) return [];
     var hint = selfHint && typeof selfHint === 'object' ? selfHint : {};
-    if (!hint.selfId && typeof detail.selfId === 'string') hint = { selfId: detail.selfId, email: hint.email, name: hint.name };
+    if (!hint.selfId && typeof detail.selfId === 'string')
+      hint = { selfId: detail.selfId, email: hint.email, name: hint.name };
     if (!hasSelfIdentity(myStaffId, hint)) return [];
     if (typeof expectedTaskUuid !== 'string' || !UUID_RE.test(expectedTaskUuid)) return [];
     if (typeof detail.taskUuid !== 'string' || !UUID_RE.test(detail.taskUuid)) return [];
@@ -730,7 +779,8 @@
     if (!detail || typeof detail !== 'object') return [];
     if (detail.live === false) return [];
     var hint = selfHint && typeof selfHint === 'object' ? selfHint : {};
-    if (!hint.selfId && typeof detail.selfId === 'string') hint = { selfId: detail.selfId, email: hint.email, name: hint.name };
+    if (!hint.selfId && typeof detail.selfId === 'string')
+      hint = { selfId: detail.selfId, email: hint.email, name: hint.name };
     if (!hasSelfIdentity(myStaffId, hint)) return [];
     if (typeof expectedSlug !== 'string' || !expectedSlug) return [];
     if (typeof detail.slug !== 'string' || !detail.slug) return [];
@@ -908,9 +958,7 @@
       );
     }
     var who = occupiedNameList(shown);
-    return withNoteLead(
-      who + (shown.length === 1 ? ' is also on this list.' : ' are also on this list.') + work
-    );
+    return withNoteLead(who + (shown.length === 1 ? ' is also on this list.' : ' are also on this list.') + work);
   }
 
   function listOccupiedBannerTitle() {
@@ -1162,6 +1210,9 @@
       occupantTokenHtml: occupantTokenHtml,
       occupantTokenAria: occupantTokenAria,
       occupantTokenTitle: occupantTokenTitle,
+      presenceFeatureOn: presenceFeatureOn,
+      queueSortSignatureFromCells: queueSortSignatureFromCells,
+      queueSortCanaryStep: queueSortCanaryStep,
       overviewColumnSide: overviewColumnSide,
       isClinicalSummaryHeading: isClinicalSummaryHeading,
       isMessageChromeHeading: isMessageChromeHeading,
@@ -1219,16 +1270,20 @@
   }
 
   // ── config (chrome.storage; dormant until a store is configured) ──────────
-  var _cfg = { enabled: false, url: '', key: '', name: '', source: 'none' };
+  var _cfg = { enabled: true, url: '', key: '', name: '', source: 'none' };
+  var _gateReady = false;
+  var _packValue; // true | false | undefined (missing), once storage has been read
   var _look =
-    typeof PresenceLook !== 'undefined' ? PresenceLook.sanitizePresenceLook(null) : {
-      colour: 'fluoro',
-      size: 'medium',
-      highlight: 'fill',
-      avatars: true,
-      quiet: true,
-      weight: 'bold',
-    };
+    typeof PresenceLook !== 'undefined'
+      ? PresenceLook.sanitizePresenceLook(null)
+      : {
+          colour: 'fluoro',
+          size: 'medium',
+          highlight: 'fill',
+          avatars: true,
+          quiet: true,
+          weight: 'bold',
+        };
 
   function applyLookNow() {
     if (typeof PresenceLook === 'undefined') return;
@@ -1249,10 +1304,7 @@
       chrome.storage.local.get('suite.display', function (r) {
         if (chrome.runtime.lastError) return;
         var d = r && r['suite.display'];
-        _look =
-          typeof PresenceLook !== 'undefined'
-            ? PresenceLook.sanitizePresenceLook(d && d.presenceLook)
-            : _look;
+        _look = typeof PresenceLook !== 'undefined' ? PresenceLook.sanitizePresenceLook(d && d.presenceLook) : _look;
         applyLookNow();
         refreshLookPopover();
       });
@@ -1270,9 +1322,10 @@
     try {
       chrome.storage.local.get('suite.display', function (r) {
         if (chrome.runtime.lastError) return;
-        var cur = r && r['suite.display'] && typeof r['suite.display'] === 'object' && !Array.isArray(r['suite.display'])
-          ? r['suite.display']
-          : {};
+        var cur =
+          r && r['suite.display'] && typeof r['suite.display'] === 'object' && !Array.isArray(r['suite.display'])
+            ? r['suite.display']
+            : {};
         var merged = {};
         Object.keys(cur).forEach(function (k) {
           merged[k] = cur[k];
@@ -1286,10 +1339,33 @@
   function refreshConfig() {
     try {
       chrome.storage.local.get(
-        ['presence.enabled', 'presence.url', 'presence.key', 'presence.name', 'presence.fileCache'],
+        [
+          'presence.enabled',
+          'presence.url',
+          'presence.key',
+          'presence.name',
+          'presence.fileCache',
+          'suite.ui.taskPresence',
+        ],
         function (res) {
-          if (chrome.runtime.lastError) return;
-          _cfg = resolvePresenceConfig(res);
+          if (chrome.runtime.lastError) {
+            _gateReady = true;
+            return;
+          }
+          var snap = res || {};
+          _cfg = resolvePresenceConfig(snap);
+          var pack = snap['suite.ui.taskPresence'];
+          _packValue = pack === true ? true : pack === false ? false : undefined;
+          _gateReady = true;
+          if (!presenceFeatureOn(_packValue, _cfg.enabled)) {
+            clearPresenceSurfaces();
+            return;
+          }
+          syncBeacon();
+          applyNativePresence();
+          applyNativeListPresence();
+          scheduleInject();
+          pollQueuePresence(true);
         }
       );
     } catch (_) {}
@@ -1312,7 +1388,8 @@
         changes['presence.url'] ||
         changes['presence.key'] ||
         changes['presence.name'] ||
-        changes['presence.fileCache']
+        changes['presence.fileCache'] ||
+        changes['suite.ui.taskPresence']
       ) {
         refreshConfig();
         if (changes['presence.name']) {
@@ -1322,10 +1399,7 @@
       }
       if (changes['suite.display']) {
         var d = changes['suite.display'].newValue;
-        _look =
-          typeof PresenceLook !== 'undefined'
-            ? PresenceLook.sanitizePresenceLook(d && d.presenceLook)
-            : _look;
+        _look = typeof PresenceLook !== 'undefined' ? PresenceLook.sanitizePresenceLook(d && d.presenceLook) : _look;
         applyLookNow();
         refreshLookPopover();
       }
@@ -1374,8 +1448,22 @@
     return _folder.configured && _folder.permission === 'granted';
   }
 
+  function hostedStoreConfigured() {
+    if (!_cfg) return false;
+    return validPresenceConfig({ enabled: true, url: _cfg.url, key: _cfg.key });
+  }
+
+  function storeWritable() {
+    return folderUsable() || hostedStoreConfigured();
+  }
+
+  function presenceSurfacesAllowed() {
+    return _gateReady && presenceFeatureOn(_packValue, _cfg && _cfg.enabled);
+  }
+
   function presenceReady() {
-    return folderUsable() || validPresenceConfig(_cfg);
+    if (!presenceSurfacesAllowed()) return false;
+    return storeWritable();
   }
 
   // ── identity (stamped by page-world.js) ───────────────────────────────────
@@ -1513,7 +1601,7 @@
     var b = _beat;
     _beat = null;
     if (b.timer) clearInterval(b.timer);
-    if (sendDelete && presenceReady()) {
+    if (sendDelete && storeWritable()) {
       var me = myIdentity();
       if (me) {
         Promise.resolve(beatClear(b.site, b.taskUuid, me.staffId)).catch(function (e) {
@@ -1697,7 +1785,10 @@
     if (!el) return false;
     try {
       if (isOwnPresenceSpec(specFromNode(el))) return true;
-      if (el.closest && el.closest('#ms-tp-banner, #ms-tp-list, #ms-tp-look, #ms-tp-msg, #ms-tp-rhs, .ms-tp-token-host')) {
+      if (
+        el.closest &&
+        el.closest('#ms-tp-banner, #ms-tp-list, #ms-tp-look, #ms-tp-msg, #ms-tp-rhs, .ms-tp-token-host')
+      ) {
         return true;
       }
     } catch (_) {}
@@ -2134,7 +2225,12 @@
       '<div class="ms-tp-look-row"><span class="ms-tp-look-label">Show</span><span class="ms-tp-look-choices">' +
       lookChoiceBtn('avatars', safe.avatars ? '0' : '1', safe.avatars ? 'Hide avatars' : 'Show avatars', false) +
       lookChoiceBtn('quiet', safe.quiet ? '0' : '1', safe.quiet ? 'Hide quiet clause' : 'Show quiet clause', false) +
-      lookChoiceBtn('weight', safe.weight === 'bold' ? 'regular' : 'bold', safe.weight === 'bold' ? 'Regular type' : 'Bold type', false) +
+      lookChoiceBtn(
+        'weight',
+        safe.weight === 'bold' ? 'regular' : 'bold',
+        safe.weight === 'bold' ? 'Regular type' : 'Bold type',
+        false
+      ) +
       '</span></div>' +
       '<button type="button" class="ms-tp-look-close">Close</button>'
     );
@@ -2257,6 +2353,10 @@
   }
 
   function paintOccupied() {
+    if (!presenceSurfacesAllowed()) {
+      clearPresenceSurfaces();
+      return;
+    }
     var path = location.pathname;
     var ctx = parseTaskOverviewPath(path);
     var others = ctx ? othersOnTask(mergedOthers(), ctx.taskUuid) : [];
@@ -2590,6 +2690,11 @@
   }
 
   function paintListOccupied() {
+    if (!presenceSurfacesAllowed()) {
+      var listEl = document.getElementById(LIST_ID);
+      if (listEl) listEl.remove();
+      return;
+    }
     var path = location.pathname;
     var ctx = parseTaskListPath(path);
     var others = ctx ? mergeListOthers(_nativeListOthers) : [];
@@ -2713,6 +2818,66 @@
   var _presence = new Map(); // taskUuid → [activeOthers entries]
   var _bridgeCount = 0;
   var _bridgeTimer = null;
+  var _queueSortSig; // undefined = no baseline yet (fresh queue entry)
+  var _queueListSlug = (function () {
+    var ctx0 = onQueuePage() ? parseTaskListPath(location.pathname) : null;
+    return ctx0 ? ctx0.slug : '';
+  })();
+
+  function removeQueuePresenceChips() {
+    var chips = document.querySelectorAll('.ms-tp-chips');
+    for (var i = 0; i < chips.length; i++) {
+      if (chips[i] && chips[i].parentNode) chips[i].parentNode.removeChild(chips[i]);
+    }
+  }
+
+  function clearPresenceSurfaces() {
+    stopBeacon(true);
+    removeQueuePresenceChips();
+    var ids = ['ms-tp-banner', 'ms-tp-list', 'ms-tp-msg', 'ms-tp-rhs'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+  }
+
+  function queueSortCells() {
+    var root = document;
+    try {
+      var grid = document.querySelector('.ag-root-wrapper, .ag-root');
+      if (grid) root = grid;
+    } catch (_) {}
+    try {
+      return root.querySelectorAll('.ag-header-cell-sorted-asc, .ag-header-cell-sorted-desc');
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // Client-side sort reassigns row-index without a new task-list fetch.
+  // Drop the row→uuid map and the chips. Absence is safer than a token on
+  // the wrong request. The next ch-task-list-data rebuilds the map.
+  function checkQueueSortCanary() {
+    if (!onQueuePage()) return false;
+    var sig = queueSortSignatureFromCells(queueSortCells());
+    var step = queueSortCanaryStep(_queueSortSig, sig);
+    _queueSortSig = step.sig;
+    if (!step.drop) return false;
+    _rows.clear();
+    removeQueuePresenceChips();
+    log('queue: sort change detected — row map dropped, sig=' + (sig || 'none'));
+    return true;
+  }
+
+  function noteQueueListRoute() {
+    var ctx = onQueuePage() ? parseTaskListPath(location.pathname) : null;
+    var slug = ctx ? ctx.slug : '';
+    if (slug === _queueListSlug) return;
+    _queueListSlug = slug;
+    _rows.clear();
+    _queueSortSig = undefined;
+    removeQueuePresenceChips();
+  }
 
   window.addEventListener('ch-task-list-data', function (e) {
     // Rate-limit + validate: bridged detail is untrusted (see content.js).
@@ -2732,6 +2897,7 @@
       var row = sanitizeBridgeRow(capped[i]);
       if (row) _rows.set(row.rowIndex, row);
     }
+    _queueSortSig = undefined;
     scheduleInject();
     pollQueuePresence();
   });
@@ -2771,7 +2937,13 @@
   }
 
   function injectQueueChips() {
-    if (!onQueuePage() || !_rows.size) return;
+    if (!presenceSurfacesAllowed()) {
+      removeQueuePresenceChips();
+      return;
+    }
+    if (!onQueuePage()) return;
+    if (checkQueueSortCanary()) return;
+    if (!_rows.size) return;
     _rows.forEach(function (data, rowIndex) {
       var row = document.querySelector('.ag-row[row-index="' + rowIndex + '"]:not(.ag-full-width-row)');
       if (!row) return;
@@ -2877,6 +3049,7 @@
     if (hrefChanged) {
       _lastHref = location.href;
       resetPresenceInjectState();
+      noteQueueListRoute();
       var ctxNav = parseTaskOverviewPath(location.pathname);
       if (!ctxNav || ctxNav.taskUuid !== _nativeTaskUuid) {
         _nativeOthers = [];
