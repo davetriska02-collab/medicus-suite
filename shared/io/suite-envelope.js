@@ -557,8 +557,9 @@ function previewEnvelope(envelope) {
     const documentGroups = Array.isArray(surfaces.documents && surfaces.documents.groups)
       ? surfaces.documents.groups.length
       : 0;
+    const personalNote = mods.templateOrganiser.personal ? ', plus a personal layout' : '';
     lines.push(
-      `Document and Template Organiser: ${templateGroups} template group(s), ${documentGroups} document group(s) (local overlay, Medicus lists unchanged)`
+      `Document and Template Organiser: ${templateGroups} template group(s), ${documentGroups} document group(s)${personalNote} (practice default, Medicus lists unchanged)`
     );
   } else {
     const m = missing('Document and Template Organiser');

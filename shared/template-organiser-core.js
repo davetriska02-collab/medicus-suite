@@ -16,6 +16,7 @@
 
 (function (global) {
   const CONFIG_KEY = 'templateOrganiser.config';
+  const PERSONAL_KEY = 'templateOrganiser.personal';
   const CONFIG_VERSION = 1;
   const SURFACES = ['templates', 'documents'];
   const UNGROUPED_ID = 'ungrouped';
@@ -188,6 +189,172 @@
 
   function cloneConfig(config) {
     return sanitiseConfig(config);
+  }
+
+  function sanitiseIdList(list, used) {
+    const clean = [];
+    (Array.isArray(list) ? list : []).forEach((itemId) => {
+      if (typeof itemId !== 'string') return;
+      const id = clamp(itemId, LIMITS.id);
+      if (!id || badKey(id) || !ID_RE.test(id) || used.has(id)) return;
+      used.add(id);
+      clean.push(id);
+    });
+    return clean.slice(0, LIMITS.items);
+  }
+
+  function sanitiseNameMap(raw) {
+    const out = {};
+    if (!plain(raw)) return out;
+    Object.keys(raw).forEach((key) => {
+      if (badKey(key)) return;
+      const id = slugify(key);
+      if (!id || badKey(id) || id === UNGROUPED_ID) return;
+      const name = clamp(raw[key], LIMITS.name);
+      if (!name || badKey(name)) return;
+      out[id] = name;
+    });
+    return out;
+  }
+
+  // Personal overlay only: extra folders, renamed practice folders, hidden
+  // practice folders, and order lists that differ from the practice default.
+  // Practice group definitions are not copied in here.
+  function sanitisePersonalSurface(raw) {
+    const src = plain(raw) ? raw : {};
+    const groups = sanitiseSurface({ groups: src.groups, order: {} }).groups;
+    const groupIds = new Set(groups.map((g) => g.id));
+    const removed = [];
+    (Array.isArray(src.removed) ? src.removed : []).forEach((value) => {
+      if (removed.length >= LIMITS.groups) return;
+      const id = slugify(value);
+      if (!id || badKey(id) || id === UNGROUPED_ID || removed.indexOf(id) !== -1) return;
+      removed.push(id);
+    });
+    const names = sanitiseNameMap(src.names);
+    removed.forEach((id) => {
+      delete names[id];
+    });
+    const used = new Set();
+    const order = {};
+    const rawOrder = plain(src.order) ? src.order : {};
+    Object.keys(rawOrder).forEach((key) => {
+      if (badKey(key)) return;
+      const gid = key === UNGROUPED_ID ? UNGROUPED_ID : slugify(key);
+      if (!gid || badKey(gid) || removed.indexOf(gid) !== -1) return;
+      if (gid !== UNGROUPED_ID && !groupIds.has(gid) && !ID_RE.test(gid)) return;
+      order[gid] = sanitiseIdList(rawOrder[key], used);
+    });
+    return { groups, order, removed, names };
+  }
+
+  function emptyPersonal() {
+    const surfaces = {};
+    SURFACES.forEach((name) => {
+      surfaces[name] = { groups: [], order: {}, removed: [], names: {} };
+    });
+    return { version: CONFIG_VERSION, surfaces };
+  }
+
+  function sanitisePersonal(raw) {
+    const src = plain(raw) ? raw : {};
+    const surfacesIn = plain(src.surfaces) ? src.surfaces : {};
+    const surfaces = {};
+    SURFACES.forEach((name) => {
+      surfaces[name] = sanitisePersonalSurface(surfacesIn[name]);
+    });
+    return { version: CONFIG_VERSION, surfaces };
+  }
+
+  // Practice default underneath, personal overlay on top. A card the person
+  // has not moved stays where the practice put it. A new catalogue id that
+  // neither side has filed still falls through to Not in a group at render.
+  function overlayConfig(practice, personal) {
+    const base = sanitiseConfig(practice);
+    const over = personal == null ? emptyPersonal() : sanitisePersonal(personal);
+    const surfaces = {};
+    SURFACES.forEach((name) => {
+      const p = base.surfaces[name];
+      const o = over.surfaces[name];
+      const removed = new Set(o.removed);
+      const groups = [];
+      p.groups.forEach((g) => {
+        if (removed.has(g.id)) return;
+        groups.push({ id: g.id, name: o.names[g.id] || g.name });
+      });
+      o.groups.forEach((g) => {
+        if (removed.has(g.id) || groups.some((existing) => existing.id === g.id)) return;
+        groups.push(g);
+      });
+      const trimmed = groups.slice(0, LIMITS.groups);
+      const groupIds = [UNGROUPED_ID].concat(trimmed.map((g) => g.id));
+      const order = {};
+      const used = new Set();
+      groupIds.forEach((gid) => {
+        order[gid] = [];
+      });
+      groupIds.forEach((gid) => {
+        if (!Object.prototype.hasOwnProperty.call(o.order, gid)) return;
+        (o.order[gid] || []).forEach((id) => {
+          if (used.has(id) || order[gid].length >= LIMITS.items) return;
+          used.add(id);
+          order[gid].push(id);
+        });
+      });
+      groupIds.forEach((gid) => {
+        if (Object.prototype.hasOwnProperty.call(o.order, gid)) return;
+        (p.order[gid] || []).forEach((id) => {
+          if (used.has(id) || order[gid].length >= LIMITS.items) return;
+          used.add(id);
+          order[gid].push(id);
+        });
+      });
+      Object.keys(p.order).forEach((gid) => {
+        (p.order[gid] || []).forEach((id) => {
+          if (used.has(id) || order[UNGROUPED_ID].length >= LIMITS.items) return;
+          used.add(id);
+          order[UNGROUPED_ID].push(id);
+        });
+      });
+      surfaces[name] = sanitiseSurface({ groups: trimmed, order });
+    });
+    return { version: CONFIG_VERSION, surfaces };
+  }
+
+  function listsEqual(a, b) {
+    const left = Array.isArray(a) ? a : [];
+    const right = Array.isArray(b) ? b : [];
+    if (left.length !== right.length) return false;
+    for (let i = 0; i < left.length; i += 1) {
+      if (left[i] !== right[i]) return false;
+    }
+    return true;
+  }
+
+  function personalDelta(practice, effective) {
+    const base = sanitiseConfig(practice);
+    const next = sanitiseConfig(effective);
+    const surfaces = {};
+    SURFACES.forEach((name) => {
+      const p = base.surfaces[name];
+      const e = next.surfaces[name];
+      const practiceIds = new Set(p.groups.map((g) => g.id));
+      const effectiveIds = new Set(e.groups.map((g) => g.id));
+      const removed = p.groups.filter((g) => !effectiveIds.has(g.id)).map((g) => g.id);
+      const groups = e.groups.filter((g) => !practiceIds.has(g.id));
+      const names = {};
+      e.groups.forEach((g) => {
+        const prior = p.groups.find((item) => item.id === g.id);
+        if (prior && prior.name !== g.name) names[g.id] = g.name;
+      });
+      const order = {};
+      const ids = [UNGROUPED_ID].concat(e.groups.map((g) => g.id));
+      ids.forEach((gid) => {
+        if (!listsEqual(p.order[gid], e.order[gid])) order[gid] = (e.order[gid] || []).slice();
+      });
+      surfaces[name] = { groups, order, removed, names };
+    });
+    return sanitisePersonal({ version: CONFIG_VERSION, surfaces });
   }
 
   function asList(json) {
@@ -760,6 +927,104 @@
     };
   }
 
+  function unionRect(rects) {
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    rects.forEach((rect) => {
+      const r = plain(rect) ? rect : {};
+      left = Math.min(left, Number(r.left) || 0);
+      top = Math.min(top, Number(r.top) || 0);
+      right = Math.max(right, Number(r.right) || 0);
+      bottom = Math.max(bottom, Number(r.bottom) || 0);
+    });
+    if (left === Infinity) return null;
+    return { left, top, right, bottom };
+  }
+
+  function sameActionRow(rect, band) {
+    const mid = ((Number(rect.top) || 0) + (Number(rect.bottom) || 0)) / 2;
+    const top = Number(band.top) || 0;
+    const bottom = Number(band.bottom) || 0;
+    return mid >= top - 6 && mid <= bottom + 6;
+  }
+
+  function adjacentToCluster(union, rect) {
+    const width = (Number(rect.right) || 0) - (Number(rect.left) || 0);
+    const height = (Number(rect.bottom) || 0) - (Number(rect.top) || 0);
+    if (width < 8 || height < 8 || width > 360 || height > 80) return false;
+    if (!sameActionRow(rect, union)) return false;
+    const gap = 24;
+    return (Number(rect.right) || 0) >= union.left - gap && (Number(rect.left) || 0) <= union.right + gap;
+  }
+
+  function overlapsBox(box, size, rect) {
+    const left = Number(box && box.left) || 0;
+    const top = Number(box && box.top) || 0;
+    const right = left + (Number(size && size.width) || 0);
+    const bottom = top + (Number(size && size.height) || 0);
+    const r = plain(rect) ? rect : {};
+    return (
+      left < (Number(r.right) || 0) - 1 &&
+      right > (Number(r.left) || 0) + 1 &&
+      top < (Number(r.bottom) || 0) - 1 &&
+      bottom > (Number(r.top) || 0) + 1
+    );
+  }
+
+  // After the button has its real width, step it off any footer control it
+  // still covers. Measurement can be a few pixels short of the painted pill.
+  function clearLauncherBox(box, size, blockers, viewport) {
+    const w = Math.max(1, Number(size && size.width) || 220);
+    const h = Math.max(1, Number(size && size.height) || 32);
+    const vw = Math.max(1, Number(viewport && viewport.width) || 1280);
+    const vh = Math.max(1, Number(viewport && viewport.height) || 800);
+    const gap = 8;
+    let left = Number(box && box.left) || 0;
+    let top = Number(box && box.top) || 0;
+    const list = Array.isArray(blockers) ? blockers : [];
+    for (let n = 0; n < 8; n += 1) {
+      let hit = null;
+      for (let i = 0; i < list.length; i += 1) {
+        if (overlapsBox({ left, top }, { width: w, height: h }, list[i])) {
+          hit = list[i];
+          break;
+        }
+      }
+      if (!hit) break;
+      const nextLeft = (Number(hit.left) || 0) - w - gap;
+      if (nextLeft >= gap) left = nextLeft;
+      else top = (Number(hit.top) || 0) - h - gap;
+    }
+    if (top < gap) top = gap;
+    if (left < gap) left = gap;
+    if (left + w > vw - gap) left = Math.max(gap, vw - w - gap);
+    if (top + h > vh - gap) top = Math.max(gap, vh - h - gap);
+    return { left, top };
+  }
+
+  // Complete consultation plus the More / Save / Park buttons packed against it.
+  // The launcher clears the whole cluster, not only the blue button.
+  function footerClusterBox(anchor, others) {
+    if (!plain(anchor)) return null;
+    const cluster = [anchor];
+    let guard = 0;
+    let changed = true;
+    while (changed && guard < 12) {
+      changed = false;
+      guard += 1;
+      const union = unionRect(cluster);
+      (Array.isArray(others) ? others : []).forEach((rect) => {
+        if (!plain(rect) || cluster.indexOf(rect) !== -1) return;
+        if (!adjacentToCluster(union, rect)) return;
+        cluster.push(rect);
+        changed = true;
+      });
+    }
+    return unionRect(cluster);
+  }
+
   function pathsFor() {
     return {
       dataEntryList(topicId) {
@@ -859,12 +1124,38 @@
     return '';
   }
 
+  // #id-document is Medicus's /documents entry. It opens the New Document
+  // chooser (From a template / Upload from my computer). It does not open
+  // the catalogue row. The next native step is From a template.
+  function nativeChooserText(item) {
+    const src = plain(item) ? item : {};
+    if (src.insert === 'document' || src.insert === 'reflow') return 'From a template';
+    return '';
+  }
+
+  function chooserControlMatches(item, control) {
+    const want = normaliseLabel(nativeChooserText(item));
+    if (!want) return false;
+    const ctl = plain(control) ? control : {};
+    return normaliseLabel(ctl.text) === want;
+  }
+
+  const DOCUMENT_LIST_TABS = ['document', 'referral-form'];
+
+  function isDocumentListTab(name) {
+    return DOCUMENT_LIST_TABS.indexOf(String(name || '')) !== -1;
+  }
+
+  function documentSearchPlaceholder(value) {
+    return normaliseLabel(value) === 'search templates';
+  }
+
   // One plan for every card. Which column holds the card is not an input.
   // posts stays false: the suite does not build or send a create body.
   function nativeOpenPlan(item) {
     const src = plain(item) ? item : {};
     const insert = INSERTS.indexOf(src.insert) !== -1 ? src.insert : '';
-    return { posts: false, menuId: nativeMenuId(src), insert };
+    return { posts: false, menuId: nativeMenuId(src), insert, chooser: nativeChooserText(src) };
   }
 
   // True when a live Medicus control is the open path for this card.
@@ -1093,6 +1384,7 @@
 
   const api = {
     CONFIG_KEY,
+    PERSONAL_KEY,
     CONFIG_VERSION,
     SURFACES,
     UNGROUPED_ID,
@@ -1102,6 +1394,10 @@
     PATHS,
     seedConfig,
     sanitiseConfig,
+    sanitisePersonal,
+    emptyPersonal,
+    overlayConfig,
+    personalDelta,
     sanitiseItem,
     cloneConfig,
     parseList,
@@ -1112,6 +1408,8 @@
     consultActionLabel,
     launcherAnchorBox,
     launcherPaneBox,
+    footerClusterBox,
+    clearLauncherBox,
     rememberClinicalUrl,
     mergeResourceUrls,
     mergeSession,
@@ -1119,6 +1417,10 @@
     resolveApiBase,
     clinicalFieldKind,
     nativeMenuId,
+    nativeChooserText,
+    chooserControlMatches,
+    isDocumentListTab,
+    documentSearchPlaceholder,
     nativeOpenPlan,
     nativeControlMatches,
     buildBoard,

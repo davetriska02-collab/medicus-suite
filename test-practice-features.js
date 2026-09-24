@@ -60,6 +60,7 @@ const { requestMonitorImport } = require('./shared/io/request-monitor-io.js');
 const TriageAlertIO = require('./shared/io/triage-alert-io.js');
 const KnowledgeUtils = require('./shared/knowledge-utils.js');
 const { problemDescriptionCleanupImport } = require('./shared/io/problem-description-cleanup-io.js');
+const { templateOrganiserImport } = require('./shared/io/template-organiser-io.js');
 global.knowledgeImport = knowledgeImport;
 global.receptionImport = receptionImport;
 global.sentinelImport = sentinelImport;
@@ -71,6 +72,7 @@ global.requestMonitorImport = requestMonitorImport;
 global.TriageAlertIO = TriageAlertIO;
 global.KnowledgeUtils = KnowledgeUtils;
 global.problemDescriptionCleanupImport = problemDescriptionCleanupImport;
+global.templateOrganiserImport = templateOrganiserImport;
 global.chrome.runtime = {
   getURL: (p) => `chrome-extension://test/${p}`,
   getManifest: () => ({ version: '3.261.15' }),
@@ -115,6 +117,7 @@ const NEW_PACKS = [
   { suffix: 'ui.routineRxButton', key: 'suite.ui.routineRxButton', alias: 'routineRxButton' },
   { suffix: 'ui.quickActionsWidget', key: 'suite.ui.quickActionsWidget', alias: 'quickActionsWidget' },
   { suffix: 'ui.focusAlerts', key: 'suite.ui.focusAlerts', alias: 'focusAlerts' },
+  { suffix: 'ui.templateOrganiser', key: 'suite.ui.templateOrganiser', alias: 'templateOrganiser' },
 ];
 
 (async () => {
@@ -123,8 +126,8 @@ const NEW_PACKS = [
   check(Packs.isEnabled(Packs.KEYS.softFlags, false) === false, 'softFlags false === OFF');
   check(Packs.isEnabled(Packs.KEYS.softFlags, true) === true, 'softFlags true === ON');
   check(Packs.KEYS.templateOrganiser === 'suite.ui.templateOrganiser', 'templateOrganiser key');
-  check(Packs.isGrandfather(Packs.KEYS.templateOrganiser) === false, 'templateOrganiser is not grandfathered');
-  check(Packs.isEnabled(Packs.KEYS.templateOrganiser, undefined) === false, 'templateOrganiser missing === OFF');
+  check(Packs.isGrandfather(Packs.KEYS.templateOrganiser) === true, 'templateOrganiser is default-on');
+  check(Packs.isEnabled(Packs.KEYS.templateOrganiser, undefined) === true, 'templateOrganiser missing === ON');
   check(Packs.isEnabled(Packs.KEYS.templateOrganiser, false) === false, 'templateOrganiser false === OFF');
   check(Packs.isEnabled(Packs.KEYS.templateOrganiser, true) === true, 'templateOrganiser true === ON');
   NEW_PACKS.forEach((p) => {
@@ -140,7 +143,6 @@ const NEW_PACKS = [
     check(wrote[p.key] === true && store[p.key] === true, `first load materialises ${p.key}=true`);
   });
   check(store['suite.signing.softFlags'] === undefined, 'materialize does not touch softFlags');
-  check(store['suite.ui.templateOrganiser'] === undefined, 'materialize does not touch templateOrganiser');
   const wroteAgain = await Packs.materializeGrandfather();
   check(Object.keys(wroteAgain).length === 0, 'second load does not rewrite explicit booleans');
   store['suite.ui.allocateCanvases'] = false;
@@ -314,7 +316,7 @@ const NEW_PACKS = [
     'previewEnvelope mentions template organiser when ON'
   );
 
-  console.log('\n--- template organiser profile: opt-in, not grandfather ---');
+  console.log('\n--- template organiser profile: default-on, layout is practice config only ---');
   resetStore();
   await PP.applyProfile(
     makeProfile({
@@ -323,8 +325,9 @@ const NEW_PACKS = [
       envelope: { modules: { suite: { 'ui.templateOrganiser': false } } },
     })
   );
-  check(store['suite.ui.templateOrganiser'] === undefined, 'merge false does not materialise templateOrganiser');
+  check(store['suite.ui.templateOrganiser'] === undefined, 'merge false does not mute a missing templateOrganiser key');
   resetStore();
+  store['suite.ui.templateOrganiser'] = false;
   await PP.applyProfile(
     makeProfile({
       profileVersion: 'pf-toc-merge-on',
@@ -332,7 +335,35 @@ const NEW_PACKS = [
       envelope: { modules: { suite: { templateOrganiser: true } } },
     })
   );
-  check(store['suite.ui.templateOrganiser'] === true, 'merge true enables templateOrganiser via envelope alias');
+  check(store['suite.ui.templateOrganiser'] === true, 'merge true turns a local off templateOrganiser back on');
+  resetStore();
+  store['templateOrganiser.personal'] = { version: 1, surfaces: {} };
+  await PP.applyProfile(
+    makeProfile({
+      profileVersion: 'pf-toc-layout-replace',
+      apply: { modules: { templateOrganiser: 'replace' } },
+      envelope: {
+        modules: {
+          templateOrganiser: {
+            config: {
+              version: 1,
+              surfaces: { templates: { groups: [{ id: 'nursing', name: 'Nursing' }], order: {} } },
+            },
+            personal: { version: 1, surfaces: { templates: { groups: [{ id: 'mine', name: 'Mine' }] } } },
+          },
+        },
+      },
+    })
+  );
+  check(
+    store['templateOrganiser.config'] &&
+      store['templateOrganiser.config'].surfaces.templates.groups.some((g) => g.name === 'Nursing'),
+    'replace writes the practice organiser layout'
+  );
+  check(
+    JSON.stringify(store['templateOrganiser.personal']) === JSON.stringify({ version: 1, surfaces: {} }),
+    'a profile does not write the personal organiser overlay'
+  );
   resetStore();
   store['suite.ui.templateOrganiser'] = true;
   await PP.applyProfile(
@@ -365,8 +396,8 @@ const NEW_PACKS = [
   check(/id="pfFocusAlerts"/.test(optionsHtml), 'focus-alerts pack lives on the practice board');
   check(/id="pfTemplateOrganiser"/.test(optionsHtml), 'template organiser pack lives on the practice board');
   check(
-    /suite\.ui\.templateOrganiser[\s\S]{0,120}grandfather:\s*false/.test(optionsJs),
-    'template organiser toggle is opt-in (grandfather false)'
+    /suite\.ui\.templateOrganiser[\s\S]{0,120}grandfather:\s*true/.test(optionsJs),
+    'template organiser toggle is default-on (grandfather true)'
   );
   check(/id="signingSoftFlags"/.test(optionsHtml), 'Suite still mirrors softFlags (same key)');
   check(/id="sgSoftFlags"/.test(signingSrc), 'Signing Queue still mirrors softFlags (same key)');

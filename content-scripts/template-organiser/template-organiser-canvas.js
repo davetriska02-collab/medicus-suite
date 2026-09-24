@@ -5,9 +5,9 @@
 // edits confirm into chrome.storage.local only. Open on a card uses
 // Medicus’s own template form (the same control the slash menu uses).
 // This canvas does not POST a create body. The pack
-// suite.ui.templateOrganiser stays off until a practice switches it on.
-// The launcher shows while the cursor is in History, Examination,
-// Impression, or Plan on a consultation or plan page.
+// suite.ui.templateOrganiser is on when the key is missing (an explicit
+// false stays off). The launcher shows while the cursor is in History,
+// Examination, Impression, or Plan on a consultation or plan page.
 'use strict';
 
 (function () {
@@ -23,11 +23,14 @@
   var FEATURE_NAME = 'Document and Template Organiser';
   var PACK_KEY = (window.PracticePacks && window.PracticePacks.KEYS.templateOrganiser) || 'suite.ui.templateOrganiser';
   var CONFIG_KEY = 'templateOrganiser.config';
-  // Opt-in pack: a missing PracticePacks helper stays off (unlike grandfathered canvases).
-  var _packOn = !!(window.PracticePacks && window.PracticePacks.peek(PACK_KEY));
+  var PERSONAL_KEY = 'templateOrganiser.personal';
+  // Same as the other default-on packs: a missing PracticePacks helper stays on.
+  var _packOn = !window.PracticePacks || window.PracticePacks.peek(PACK_KEY);
 
   var _open = false;
   var _surface = 'templates';
+  var _practice = null;
+  var _personal = null;
   var _saved = null;
   var _draft = null;
   var _persisted = false;
@@ -102,7 +105,7 @@
     render();
     try {
       var stored = {};
-      stored[CONFIG_KEY] = payload;
+      stored[PERSONAL_KEY] = C.personalDelta(_practice, payload);
       chrome.storage.local.set(stored, function () {
         _writing = false;
         var runtimeError = chrome.runtime && chrome.runtime.lastError;
@@ -113,11 +116,12 @@
           render();
           return;
         }
-        _saved = C.cloneConfig(payload);
-        _draft = C.cloneConfig(payload);
+        _personal = C.personalDelta(_practice, payload);
+        _saved = C.overlayConfig(_practice, _personal);
+        _draft = C.cloneConfig(_saved);
         _persisted = true;
         _pending = null;
-        announce('Saved on this install. Medicus lists are unchanged.');
+        announce('Saved for you. The practice default is unchanged. Medicus lists are unchanged.');
         render();
       });
     } catch (err) {
@@ -132,7 +136,9 @@
   function loadConfig() {
     return new Promise(function (resolve) {
       function useSeed() {
-        _saved = C.seedConfig();
+        _practice = C.seedConfig();
+        _personal = C.emptyPersonal();
+        _saved = C.overlayConfig(_practice, _personal);
         _draft = C.cloneConfig(_saved);
         _persisted = false;
         resolve();
@@ -142,11 +148,14 @@
           useSeed();
           return;
         }
-        chrome.storage.local.get(CONFIG_KEY, function (r) {
-          var raw = r ? r[CONFIG_KEY] : undefined;
-          if (raw == null) useSeed();
+        chrome.storage.local.get([CONFIG_KEY, PERSONAL_KEY], function (r) {
+          var practiceRaw = r ? r[CONFIG_KEY] : undefined;
+          var personalRaw = r ? r[PERSONAL_KEY] : undefined;
+          if (practiceRaw == null && personalRaw == null) useSeed();
           else {
-            _saved = C.sanitiseConfig(raw);
+            _practice = practiceRaw == null ? C.seedConfig() : C.sanitiseConfig(practiceRaw);
+            _personal = personalRaw == null ? C.emptyPersonal() : C.sanitisePersonal(personalRaw);
+            _saved = C.overlayConfig(_practice, _personal);
             _draft = C.cloneConfig(_saved);
             _persisted = true;
             resolve();
@@ -420,8 +429,8 @@
     });
     var frozen = _writing ? ' disabled' : '';
     return (
-      '<div class="ms-toc-confirm" role="region" aria-label="Save organisation on this install">' +
-      '<p>Save this organisation on this install? Medicus template and document lists stay as they are.</p>' +
+      '<div class="ms-toc-confirm" role="region" aria-label="Save your layout">' +
+      '<p>Save this layout for you? It sits on top of the practice default. Medicus template and document lists stay as they are.</p>' +
       '<ul class="ms-toc-diff">' +
       lines.join('') +
       '</ul>' +
@@ -431,7 +440,7 @@
       '>Keep editing</button>' +
       '<button type="button" class="ms-toc-primary" id="ms-toc-confirm-pending"' +
       frozen +
-      '>Save on this install</button>' +
+      '>Save for me</button>' +
       '</div></div>'
     );
   }
@@ -464,7 +473,7 @@
     var gaps = (_catalogue && _catalogue.gaps) || {};
     var surfaceGap = _surface === 'documents' ? gaps.documents || '' : gaps.templates || '';
     var banner =
-      'Groups are kept on this install. Open uses Medicus’s own template form. Medicus places the finished item at the cursor.';
+      'Your layout sits on the practice default. Open uses Medicus’s own template form. Medicus places the finished item at the cursor.';
     var templatesN = _catalogue && _catalogue.templates ? _catalogue.templates.length : 0;
     var documentsN = _catalogue && _catalogue.documents ? _catalogue.documents.length : 0;
     var board = '';
@@ -485,8 +494,8 @@
         '<button type="button" class="ms-toc-ghost" id="ms-toc-add-group">Add group</button>' +
         '</section></div>';
     }
-    var foot = 'Sample organisation — not saved on this install yet.';
-    if (_persisted && !dirty()) foot = 'Saved on this install. Medicus lists are unchanged.';
+    var foot = 'Practice default — not saved as your layout yet.';
+    if (_persisted && !dirty()) foot = 'Saved for you. The practice default is unchanged.';
     else if (dirty()) foot = 'Unsaved changes on this canvas.';
     var saveDisabled = canSave() ? '' : ' disabled';
     return (
@@ -544,39 +553,45 @@
     var caretStart = keepSearch && active && active.id === 'ms-toc-search' ? active.selectionStart : null;
     var caretEnd = keepSearch && active && active.id === 'ms-toc-search' ? active.selectionEnd : null;
     shell.innerHTML = shellHtml();
-    _focusSearch = false;
-    if (keepSearch && !_editingGroupId) {
-      _focusClose = false;
-      var search = shell.querySelector('#ms-toc-search');
-      if (search) {
-        search.focus();
-        var start = caretStart == null ? search.value.length : caretStart;
-        var end = caretEnd == null ? start : caretEnd;
-        try {
-          search.setSelectionRange(start, end);
-        } catch (err) {
-          /* input type may reject selection */
+    try {
+      _focusSearch = false;
+      if (keepSearch && !_editingGroupId) {
+        _focusClose = false;
+        var search = shell.querySelector('#ms-toc-search');
+        if (search) {
+          search.focus();
+          var start = caretStart == null ? search.value.length : caretStart;
+          var end = caretEnd == null ? start : caretEnd;
+          try {
+            search.setSelectionRange(start, end);
+          } catch (err) {
+            /* input type may reject selection */
+          }
         }
+        return;
       }
-      return;
-    }
-    if (_editingGroupId) {
-      var input = shell.querySelector('[data-rename="' + _editingGroupId + '"]');
-      if (input) {
-        input.focus();
-        var end = input.value.length;
-        try {
-          input.setSelectionRange(end, end);
-        } catch (err) {
-          /* input type may reject selection */
+      if (_editingGroupId) {
+        var input = shell.querySelector('[data-rename="' + _editingGroupId + '"]');
+        if (input) {
+          input.focus();
+          var end = input.value.length;
+          try {
+            input.setSelectionRange(end, end);
+          } catch (err) {
+            /* input type may reject selection */
+          }
         }
+        return;
       }
-      return;
-    }
-    if (_focusClose) {
-      _focusClose = false;
-      var closeBtn = shell.querySelector('#ms-toc-close');
-      if (closeBtn) closeBtn.focus();
+      if (_focusClose) {
+        _focusClose = false;
+        var closeBtn = shell.querySelector('#ms-toc-close');
+        if (closeBtn) closeBtn.focus();
+      }
+    } finally {
+      // The catalogue can bring up a scrollbar. A right-pinned footer then
+      // shifts left under a pill that was placed a moment earlier.
+      repositionLauncher();
     }
   }
 
@@ -980,6 +995,8 @@
       if (!_open) return;
       runHarvest();
     });
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) placeLauncherSoon(launch);
   }
 
   function muteOrganiserChrome() {
@@ -1189,6 +1206,71 @@
     return null;
   }
 
+  function findChooserControl(item) {
+    var nodes = document.querySelectorAll('button, a, [role="button"]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      if (C.chooserControlMatches(item, controlSpec(el))) return el;
+    }
+    return null;
+  }
+
+  function documentListReady() {
+    if (document.querySelector('.template-list-item')) return true;
+    var inputs = document.querySelectorAll('input[type="search"]');
+    for (var i = 0; i < inputs.length; i += 1) {
+      var el = inputs[i];
+      if (el.closest && el.closest('#' + OVERLAY_ID)) continue;
+      if (C.documentSearchPlaceholder(el.getAttribute('placeholder'))) return true;
+    }
+    return false;
+  }
+
+  function findOtherDocumentTab() {
+    var nodes = document.querySelectorAll('[role="tab"][data-name]');
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.closest && el.closest('#' + OVERLAY_ID)) continue;
+      var name = el.getAttribute('data-name') || '';
+      if (!C.isDocumentListTab(name)) continue;
+      if (el.getAttribute('aria-selected') === 'true') continue;
+      return el;
+    }
+    return null;
+  }
+
+  function documentSearchField() {
+    var inputs = document.querySelectorAll('input[type="search"]');
+    for (var i = 0; i < inputs.length; i += 1) {
+      var el = inputs[i];
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      if (C.documentSearchPlaceholder(el.getAttribute('placeholder'))) return el;
+    }
+    return null;
+  }
+
+  function fillDocumentSearch(item) {
+    var title = item && item.title ? String(item.title) : '';
+    if (!title) return false;
+    var el = documentSearchField();
+    if (!el) return false;
+    if (el.value === title) return true;
+    el.value = title;
+    try {
+      el.dispatchEvent(
+        new InputEvent('input', { bubbles: true, cancelable: true, data: title, inputType: 'insertText' })
+      );
+    } catch (err) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return true;
+  }
+
+  function freshOpenStep() {
+    return { chooser: false, tab: false, search: false, listSeen: 0 };
+  }
+
   function fieldText(el) {
     if (!el) return '';
     var tag = String(el.tagName || '').toLowerCase();
@@ -1294,18 +1376,42 @@
     );
   }
 
-  function waitForControl(item, n) {
+  function waitForControl(item, step, n) {
     var el = findNativeControl(item);
     if (el && clickNative(el)) {
       finishOpen(item);
       return;
     }
-    if (n > 40) {
+    var plan = C.nativeOpenPlan(item);
+    var wantsChooser = !!(plan && plan.chooser && !plan.posts);
+    if (wantsChooser && !step.chooser) {
+      var chooser = findChooserControl(item);
+      if (chooser && clickNative(chooser)) step.chooser = true;
+    }
+    if (wantsChooser && step.chooser && documentListReady()) step.listSeen += 1;
+    // Search the list already on screen before leaving it for the other tab.
+    if (wantsChooser && step.chooser && !step.search && step.listSeen >= 4) {
+      if (fillDocumentSearch(item)) {
+        step.search = true;
+        step.listSeen = 0;
+      } else if (!documentSearchField()) step.search = true;
+    }
+    if (wantsChooser && step.search && !step.tab && step.listSeen >= 8) {
+      var tab = findOtherDocumentTab();
+      if (tab && clickNative(tab)) {
+        step.tab = true;
+        step.search = false;
+        step.listSeen = 0;
+      } else {
+        step.tab = true;
+      }
+    }
+    if (n > 80) {
       noteOutside('Medicus’s template control for ' + item.title + ' was not on the page. Nothing was written.');
       return;
     }
     setTimeout(function () {
-      waitForControl(item, n + 1);
+      waitForControl(item, step, n + 1);
     }, 50);
   }
 
@@ -1315,7 +1421,7 @@
     var menu = menuId ? document.getElementById(menuId) : null;
     if (menu) {
       undoAccidentalSlash(field, before);
-      if (clickNative(menu)) waitForControl(item, 0);
+      if (clickNative(menu)) waitForControl(item, freshOpenStep(), 0);
       return;
     }
     if (n > 20) {
@@ -1362,7 +1468,7 @@
     }
     var menu = plan.menuId ? document.getElementById(plan.menuId) : null;
     if (menu && clickNative(menu)) {
-      waitForControl(item, 0);
+      waitForControl(item, freshOpenStep(), 0);
       return;
     }
     if (!field) {
@@ -1404,19 +1510,41 @@
     return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
   }
 
+  function pushObstacle(out, el, anchor) {
+    if (!el || el === anchor || el.id === LAUNCH_ID) return;
+    if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) return;
+    var rect = el.getBoundingClientRect();
+    if (!rect || rect.width < 8 || rect.height < 8) return;
+    out.push({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+  }
+
+  function footerObstacles(anchor) {
+    var nodes = document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]');
+    var out = [];
+    for (var i = 0; i < nodes.length; i += 1) pushObstacle(out, nodes[i], anchor);
+    // More can be a sibling of Complete consultation without being a <button>.
+    var parent = anchor && anchor.parentElement;
+    if (parent && parent.children) {
+      for (var c = 0; c < parent.children.length; c += 1) pushObstacle(out, parent.children[c], anchor);
+    }
+    return out;
+  }
+
   function positionLauncher(launch) {
     if (!launch) return;
     var size = { width: launch.offsetWidth || 240, height: launch.offsetHeight || 32 };
     var viewport = { width: window.innerWidth || 1280, height: window.innerHeight || 800 };
     var anchor = consultActionButton();
     var box = null;
+    var blockers = [];
     if (anchor) {
       var rect = anchor.getBoundingClientRect();
-      box = C.launcherAnchorBox(
-        { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
-        size,
-        viewport
-      );
+      var anchorBox = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+      blockers = footerObstacles(anchor);
+      blockers.push(anchorBox);
+      var cluster = C.footerClusterBox(anchorBox, blockers) || anchorBox;
+      var placed = C.launcherAnchorBox(cluster, size, viewport);
+      box = C.clearLauncherBox(placed, size, blockers, viewport);
     } else {
       box = C.launcherPaneBox(mainPaneRect(), size);
     }
@@ -1426,6 +1554,21 @@
     launch.style.top = Math.round(box.top) + 'px';
     launch.style.right = 'auto';
     launch.style.bottom = 'auto';
+    if (!anchor) return;
+    var live = launch.getBoundingClientRect();
+    var cleared = C.clearLauncherBox(
+      { left: live.left, top: live.top },
+      { width: live.width, height: live.height },
+      blockers,
+      viewport
+    );
+    launch.style.left = Math.round(cleared.left) + 'px';
+    launch.style.top = Math.round(cleared.top) + 'px';
+  }
+
+  function repositionLauncher() {
+    var launch = document.getElementById(LAUNCH_ID);
+    if (launch) positionLauncher(launch);
   }
 
   function ensureLauncher() {
@@ -1452,7 +1595,15 @@
       });
       document.documentElement.appendChild(launch);
     }
+    placeLauncherSoon(launch);
+  }
+
+  function placeLauncherSoon(launch) {
     positionLauncher(launch);
+    if (typeof requestAnimationFrame !== 'function') return;
+    requestAnimationFrame(function () {
+      if (launch && launch.isConnected) positionLauncher(launch);
+    });
   }
 
   function startHeavyChrome() {
@@ -1499,6 +1650,8 @@
       },
     });
   }
+
+  window.addEventListener('resize', repositionLauncher);
 
   document.addEventListener(
     'focusin',

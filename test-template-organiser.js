@@ -285,6 +285,25 @@ function names(surface) {
     'document matches the Create control'
   );
   check(C.nativeMenuId(letter) === 'id-document', 'documents open from the document menu item');
+  check(C.nativeChooserText(letter) === 'From a template', 'document open continues past the New Document chooser');
+  check(C.nativeChooserText(asthma) === '', 'templates do not open the New Document chooser');
+  check(
+    C.chooserControlMatches(letter, { text: 'From a template' }) === true,
+    'From a template is the document chooser step'
+  );
+  check(
+    C.chooserControlMatches(letter, { text: 'Upload from my computer' }) === false,
+    'Upload from my computer is not the open path'
+  );
+  check(
+    C.nativeOpenPlan(letter).chooser === 'From a template' && C.nativeOpenPlan(letter).posts === false,
+    'document plan clicks From a template and does not POST'
+  );
+  check(
+    C.isDocumentListTab('document') && C.isDocumentListTab('referral-form') && !C.isDocumentListTab('upload'),
+    'document lists have Document and Referral Form tabs'
+  );
+  check(C.documentSearchPlaceholder('Search templates') === true, 'document list search is Medicus’s templates field');
   check(
     C.nativeMenuId({ insert: 'reflow', title: 'Referral letter' }) === 'id-document',
     'built-in letters use the document menu'
@@ -744,6 +763,74 @@ function names(surface) {
     'a permission prefix still matches Complete consultation'
   );
   check(C.consultActionLabel('Document and Template Organiser') === false, 'the launcher is not its own anchor');
+  const more = { left: 540, top: 700, right: 632, bottom: 736 };
+  const complete = { left: 640, top: 700, right: 860, bottom: 736 };
+  const cluster = C.footerClusterBox(complete, [more, { left: 10, top: 80, right: 40, bottom: 700 }]);
+  const clear = C.launcherAnchorBox(cluster, { width: 220, height: 32 }, { width: 1280, height: 800 });
+  function overlaps(a, b, w, h) {
+    return a.left < b.right - 1 && a.left + w > b.left + 1 && a.top < b.bottom - 1 && a.top + h > b.top + 1;
+  }
+  check(cluster.left === 540 && cluster.right === 860, 'More joins the Complete consultation cluster');
+  check(
+    !overlaps(clear, more, 220, 32) && !overlaps(clear, complete, 220, 32),
+    'launcher does not cover More or Complete'
+  );
+  const paintedMore = { left: 1579, top: 976, right: 1625, bottom: 997 };
+  const paintedComplete = { left: 1633, top: 976, right: 1781, bottom: 997 };
+  const nudged = C.clearLauncherBox(
+    { left: 1364, top: 976 },
+    { width: 222, height: 21 },
+    [paintedMore, paintedComplete],
+    { width: 1820, height: 1013 }
+  );
+  check(nudged.left === paintedMore.left - 222 - 8, 'a painted pill that still covers More is shifted clear');
+  const tight = C.footerClusterBox({ left: 4, top: 700, right: 200, bottom: 736 }, [complete]);
+  const above = C.launcherAnchorBox(tight, { width: 220, height: 32 }, { width: 1280, height: 800 });
+  check(above.top + 32 <= 700, 'launcher moves above the row when the left side is full');
+
+  const practiceBase = C.replaceSurface(
+    C.seedConfig(),
+    'templates',
+    C.moveItem(C.seedConfig().surfaces.templates, TPL, 'nursing', null).surface
+  );
+  const movedAway = C.moveItem(practiceBase.surfaces.templates, TPL, 'admin', null);
+  const movedCfg = C.replaceSurface(practiceBase, 'templates', movedAway.surface);
+  const moveDelta = C.personalDelta(practiceBase, movedCfg);
+  check(C.sameConfig(C.overlayConfig(practiceBase, moveDelta), movedCfg), 'personal overlay round-trips a move');
+  check(moveDelta.surfaces.templates.groups.length === 0, 'a move does not copy practice groups into the overlay');
+  const renamedGroup = C.renameGroup(practiceBase.surfaces.templates, 'nursing', 'Nurses');
+  const renamedCfg = C.replaceSurface(practiceBase, 'templates', renamedGroup.surface);
+  const nameDelta = C.personalDelta(practiceBase, renamedCfg);
+  check(nameDelta.surfaces.templates.names.nursing === 'Nurses', 'personal overlay stores a renamed practice group');
+  check(
+    C.overlayConfig(practiceBase, nameDelta).surfaces.templates.groups.find((g) => g.id === 'nursing').name ===
+      'Nurses',
+    'overlay applies the personal name'
+  );
+  const personalFolder = C.createGroup(practiceBase.surfaces.documents, 'Mine');
+  const createdCfg = C.replaceSurface(practiceBase, 'documents', personalFolder.surface);
+  const addDelta = C.personalDelta(practiceBase, createdCfg);
+  check(
+    addDelta.surfaces.documents.groups.some((g) => g.name === 'Mine'),
+    'a new folder is stored on the personal overlay'
+  );
+  check(
+    C.sameConfig(C.overlayConfig(C.seedConfig(), C.emptyPersonal()), C.seedConfig()),
+    'no personal overlay leaves the practice default'
+  );
+  const hiddenGroup = C.deleteGroup(practiceBase.surfaces.templates, 'nursing');
+  const deletedCfg = C.replaceSurface(practiceBase, 'templates', hiddenGroup.surface);
+  const delDelta = C.personalDelta(practiceBase, deletedCfg);
+  check(
+    delDelta.surfaces.templates.removed.indexOf('nursing') !== -1,
+    'hiding a practice group is a personal override'
+  );
+  const hidden = C.overlayConfig(practiceBase, delDelta);
+  check(!hidden.surfaces.templates.groups.some((g) => g.id === 'nursing'), 'overlay hides the practice group');
+  check(
+    hidden.surfaces.templates.order.ungrouped.indexOf(TPL) !== -1,
+    'cards from a hidden practice group stay on the board'
+  );
 
   const summaryUrls = [
     'https://560b6c.api.england.medicus.health/clinical/data/clinical-summary/summary/' +
@@ -820,11 +907,24 @@ function names(surface) {
 
   console.log('\n--- storage round-trip ---');
   check(io.TEMPLATE_ORGANISER_KEYS.includes('templateOrganiser.config'), 'io owns templateOrganiser.config');
+  check(io.TEMPLATE_ORGANISER_KEYS.includes('templateOrganiser.personal'), 'io owns templateOrganiser.personal');
   let empty = await io.templateOrganiserExport();
-  check(empty.config === null, 'export is null when unset');
+  check(empty.config === null && empty.personal === null, 'export is null when unset');
   await io.templateOrganiserImport({ config: seed });
   const again = await io.templateOrganiserExport();
   check(C.sameConfig(again.config, seed), 'import sanitises and round-trips the practice config');
+  check(again.personal === null, 'importing a practice default does not invent a personal overlay');
+  const mine = C.personalDelta(
+    seed,
+    C.replaceSurface(seed, 'documents', C.createGroup(seed.surfaces.documents, 'Mine').surface)
+  );
+  await io.templateOrganiserImport({ personal: mine });
+  const withPersonal = await io.templateOrganiserExport();
+  check(C.sameConfig(withPersonal.config, seed), 'a personal import leaves the practice default');
+  check(
+    withPersonal.personal.surfaces.documents.groups.some((g) => g.name === 'Mine'),
+    'personal import round-trips the overlay'
+  );
   let threw = false;
   try {
     await io.templateOrganiserImport({ config: ['nope'] });
@@ -912,6 +1012,11 @@ function names(surface) {
     'groups still save locally'
   );
   check(/templateOrganiser\.config/.test(canvas), 'canvas names the practice config key');
+  check(/templateOrganiser\.personal/.test(canvas), 'canvas names the personal overlay key');
+  check(
+    /overlayConfig/.test(canvas) && /personalDelta/.test(canvas),
+    'canvas merges the practice default with the personal overlay'
+  );
   check(/suite\.ui\.templateOrganiser/.test(canvas), 'canvas names the pack key');
   check(
     /consultPage/.test(canvas) && /\/clinical\/encounter\//.test(canvas) && /clinicalFieldKind/.test(canvas),
@@ -948,6 +1053,15 @@ function names(surface) {
   );
   check(!/Use template/.test(canvas), 'canvas does not label its own button Use template');
   check(/nativeControlMatches/.test(canvas), 'open matches Medicus’s own control');
+  check(
+    /chooserControlMatches/.test(canvas) && /From a template/.test(coreSrc),
+    'document open clicks From a template'
+  );
+  check(!/Upload from my computer/.test(canvas), 'canvas does not choose upload');
+  check(
+    /footerClusterBox/.test(canvas) && /footerClusterBox/.test(coreSrc),
+    'launcher clears the footer action cluster'
+  );
   check(!/Insert into consultation/.test(canvas), 'suite insert confirm is gone');
   check(!/Submitted|Booked|\bSent\b|\bDone\b/.test(canvas), 'canvas does not claim a completed send');
   check(!/Medicus accepted the insert/.test(canvas), 'canvas does not claim a suite insert');
@@ -975,8 +1089,8 @@ function names(surface) {
   check(/PerformanceObserver/.test(canvas), 'canvas watches practice API resource URLs');
   check(/ms-toc-gap/.test(canvas), 'a missing id is shown at the bottom of the canvas');
   check(
-    /launcherAnchorBox/.test(canvas) && /consultActionLabel/.test(canvas),
-    'launcher anchors to the consult action'
+    /launcherAnchorBox/.test(canvas) && /consultActionLabel/.test(canvas) && /footerClusterBox/.test(canvas),
+    'launcher anchors beside the consult actions'
   );
   check(/draftTopic/.test(clientSrc), 'client reads the draft consultation topic for document context');
   const canvasCss = fs.readFileSync(
@@ -1004,8 +1118,8 @@ function names(surface) {
   const packs = fs.readFileSync(path.join(__dirname, 'shared/practice-packs.js'), 'utf8');
   const grandfather = packs.slice(packs.indexOf('const GRANDFATHER_KEYS'), packs.indexOf('const ALL_PACK_KEYS'));
   check(
-    /templateOrganiser: 'suite\.ui\.templateOrganiser'/.test(packs) && !/templateOrganiser/.test(grandfather),
-    'template organiser pack stays opt-in'
+    /templateOrganiser: 'suite\.ui\.templateOrganiser'/.test(packs) && /templateOrganiser/.test(grandfather),
+    'template organiser pack defaults on'
   );
 
   console.log(`\n--- Results: ${passed} passed, ${failed} failed ---\n`);

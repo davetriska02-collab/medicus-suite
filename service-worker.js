@@ -173,6 +173,19 @@ try {
   recordSwLoadError('shared/io/suite-io.js', e);
 }
 try {
+  // template-organiser-io.js reads TemplateOrganiserCore at load time.
+  importScripts('shared/template-organiser-core.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/template-organiser-core.js failed:', e && e.message);
+  recordSwLoadError('shared/template-organiser-core.js', e);
+}
+try {
+  importScripts('shared/io/template-organiser-io.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/io/template-organiser-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/template-organiser-io.js', e);
+}
+try {
   // Dependency order matters: problem-description-cleanup-io.js resolves
   // MSPreferredDescriptions at import time, so preferred-descriptions.js must
   // be imported first or the io file fails to load (and applyProfile's pdc
@@ -767,7 +780,10 @@ async function _checkForCodeUpdate() {
       !result.diskVersion ||
       !_VERSION_RE.test(result.diskVersion)
     ) {
-      if (result && (result.status === 'current' || result.status === 'older-ignored' || result.status === 'not-ready')) {
+      if (
+        result &&
+        (result.status === 'current' || result.status === 'older-ignored' || result.status === 'not-ready')
+      ) {
         _pendingUpdateVersion = null;
         _updateDeferCount = 0;
       }
@@ -1138,9 +1154,11 @@ async function pollRequestMonitor() {
     // Keys only — never the bucket items (those can hold initials / summaries).
     if (!result.isFirstPoll && Object.keys(result.freshByBucket).length > 0) {
       try {
-        const mapped = self.StackchanBridge && self.StackchanBridge.mapRequestMonitorEvent({
-          buckets: Object.keys(result.freshByBucket),
-        });
+        const mapped =
+          self.StackchanBridge &&
+          self.StackchanBridge.mapRequestMonitorEvent({
+            buckets: Object.keys(result.freshByBucket),
+          });
         dispatchStackchan(mapped, {}).catch(() => {});
       } catch (_) {}
     }
@@ -1403,8 +1421,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'stackchan:test') {
     try {
       const mapped =
-        self.StackchanBridge &&
-        self.StackchanBridge.mapSuiteEvent({ source: 'options.test', command: msg.command });
+        self.StackchanBridge && self.StackchanBridge.mapSuiteEvent({ source: 'options.test', command: msg.command });
       dispatchStackchan(mapped, { isTest: true })
         .then(sendResponse)
         .catch((e) => sendResponse({ ok: false, error: String((e && e.message) || e) }));

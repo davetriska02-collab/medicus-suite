@@ -46,7 +46,16 @@ function pageHtml() {
 <head><meta charset="utf-8"><title>document catalogue harness</title></head>
 <body>
 <main id="host"></main>
-<footer><button type="button" id="complete">Complete consultation</button></footer>
+<footer id="actions" style="position:fixed;right:24px;bottom:16px;display:flex;gap:8px;">
+  <button type="button" id="more">More</button>
+  <button type="button" id="complete">Complete consultation</button>
+</footer>
+<div id="id-document" hidden>Document</div>
+<div id="new-doc" hidden>
+  <h2>New Document</h2>
+  <button type="button" id="from-template">From a template</button>
+  <button type="button" id="upload">Upload from my computer</button>
+</div>
 <pre id="result">PENDING</pre>
 <script>
   window.chrome = {
@@ -82,6 +91,27 @@ function pageHtml() {
   const calls = [];
   let overview = { consultationTopics: [{ id: TOPIC, patientId: PATIENT, headings: [] }] };
   let draftHeadings = [];
+  window.__docOpen = '';
+  document.getElementById('id-document').addEventListener('click', function () {
+    document.getElementById('new-doc').hidden = false;
+  });
+  document.getElementById('from-template').addEventListener('click', function () {
+    window.__docOpen = 'chooser';
+    if (document.getElementById('create-doc')) return;
+    const list = document.createElement('div');
+    list.id = 'doc-list';
+    list.innerHTML = '<div class="m-tabs__tab" role="tab" data-name="document" aria-selected="true">Document</div>' +
+      '<div class="template-list-item"><li class="m-list-item"><div class="m-list-item--content">Food bank letter</div>' +
+      '<button type="button" id="create-doc" title="Create Food bank letter">Create</button></li></div>';
+    document.body.appendChild(list);
+    document.getElementById('create-doc').addEventListener('click', function () {
+      window.__docOpen = 'created';
+    });
+  });
+  document.getElementById('upload').addEventListener('click', function () {
+    window.__docOpen = 'upload';
+  });
+
   window.fetch = function (url) {
     const target = String(url);
     calls.push(target);
@@ -199,7 +229,45 @@ function pageHtml() {
         const c = complete.getBoundingClientRect();
         const beside = l.right <= c.left + 4 || l.bottom <= c.top + 4;
         const corner = l.left > window.innerWidth - 280 && l.top > window.innerHeight - 80;
-        lines.push('launcher beside complete ' + (beside && !corner ? 'ok' : 'MISSING'));
+        const moreEl = document.getElementById('more');
+        const m = moreEl.getBoundingClientRect();
+        function hits(a, b) {
+          return a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+        }
+        const clear = !hits(l, m) && !hits(l, c);
+        lines.push(
+          'launcher beside complete ' +
+            (beside && !corner && clear
+              ? 'ok'
+              : 'MISSING l=' +
+                Math.round(l.left) +
+                ',' +
+                Math.round(l.top) +
+                '-' +
+                Math.round(l.right) +
+                ',' +
+                Math.round(l.bottom) +
+                ' more=' +
+                Math.round(m.left) +
+                ',' +
+                Math.round(m.top) +
+                '-' +
+                Math.round(m.right) +
+                ',' +
+                Math.round(m.bottom) +
+                ' c=' +
+                Math.round(c.left) +
+                ',' +
+                Math.round(c.top) +
+                '-' +
+                Math.round(c.right) +
+                ',' +
+                Math.round(c.bottom) +
+                ' vw=' +
+                window.innerWidth +
+                'x' +
+                window.innerHeight)
+        );
       }
       closeOrganiser();
       await waitFor(function () { return !document.getElementById('ms-toc-overlay'); });
@@ -251,6 +319,16 @@ function pageHtml() {
     const draftCard = document.querySelector('#ms-toc-overlay .ms-toc-card-title');
     lines.push('draft heading search ' + (draftHit ? 'ok' : 'MISSING'));
     lines.push('draft heading card ' + (draftCard && draftCard.textContent === 'Food bank letter' ? 'ok' : 'MISSING'));
+    const openBtn = document.querySelector('#ms-toc-overlay [data-open="' + DOC + '"]');
+    if (openBtn) openBtn.click();
+    try {
+      await waitFor(function () { return window.__docOpen === 'created' || window.__docOpen === 'upload'; });
+    } catch (err) {
+      window.__docOpen = window.__docOpen || 'timeout';
+    }
+    const note = document.getElementById('ms-toc-note');
+    lines.push('document open ' + (window.__docOpen === 'created' ? 'ok' : 'MISSING ' + window.__docOpen + ' ' + (note ? note.textContent : '')));
+    lines.push('upload left alone ' + (window.__docOpen === 'upload' ? 'MISSING' : 'ok'));
     document.getElementById('result').textContent = lines.join('\\n');
   }
 

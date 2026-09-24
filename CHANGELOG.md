@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.7] — 2026-09-24
+
+### Document open, launcher clearance, default on
+
+Opening a document clicked Medicus’s `#id-document` item and stopped. That item is the same step as `/documents`: the New Document chooser (From a template / Upload from my computer), not the catalogue row. Document open now clicks **From a template**, then Medicus’s **Create {title}** control. If the row is not in the open list, it types the title into Medicus’s own “Search templates” field, and if it is still missing it selects the other Document or Referral Form tab and searches there. It does not click Upload from my computer, and it still does not POST a create body. Templates still use **Use template**.
+
+The launcher clears the whole footer cluster beside Complete consultation, including More, so it no longer sits on those buttons. When there is no room to the left, it moves above the row.
+
+`suite.ui.templateOrganiser` is on when the key is missing, same as the other default-on packs. An explicit false stays off. Group layout is a practice default (`templateOrganiser.config`, including a practice profile) with each person’s overlay in `templateOrganiser.personal`. Saving in the canvas writes only the personal overlay. A practice profile never writes that personal key.
+
 ## [v3.265.6] — 2026-09-24
 
 ### Document catalogue and launcher position

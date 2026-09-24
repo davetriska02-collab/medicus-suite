@@ -118,7 +118,7 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.routineRxButton', ids: ['pfRoutineRxButton'], grandfather: true },
   { key: 'suite.ui.quickActionsWidget', ids: ['pfQuickActionsWidget'], grandfather: true },
   { key: 'suite.ui.focusAlerts', ids: ['pfFocusAlerts'], grandfather: true },
-  { key: 'suite.ui.templateOrganiser', ids: ['pfTemplateOrganiser'], grandfather: false },
+  { key: 'suite.ui.templateOrganiser', ids: ['pfTemplateOrganiser'], grandfather: true },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);
