@@ -589,8 +589,8 @@ function names(surface) {
   );
   check(placedIds(C.filterBoard(fullBoard, '')) === placedIds(fullBoard), 'clear restores every card in its pot');
   check(placedIds(C.filterBoard(fullBoard, '   ')) === placedIds(fullBoard), 'a blank query restores every card');
-  const docSurface = C.moveItem(seed.surfaces.documents, 'bp-check', 'admin', null).surface;
-  const docBoard = C.buildBoard(searchItems, docSurface);
+  const searchDocSurface = C.moveItem(seed.surfaces.documents, 'bp-check', 'admin', null).surface;
+  const docBoard = C.buildBoard(searchItems, searchDocSurface);
   const docFiltered = C.filterBoard(docBoard, 'blood');
   check(potIds(docFiltered) === potIds(docBoard), 'document pots stay while a card is hidden');
   check(
