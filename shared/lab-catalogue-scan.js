@@ -110,7 +110,38 @@
   }
 
   // ── Name similarity (a HINT for the person, never a decision) ───────────────────────────────────────────────────
-  const STOP = new Set(['and', 'the', 'of', 'level', 'test', 'serum', 'plasma', 'blood', 'total', 'with', 'without']);
+  // Imaging modality words (x, ray, radiography, radiograph) belong here too — an imaging result's name is almost
+  // entirely modality + body part ("X-ray of wrist", "Radiography of chest"), so without stripping the modality the
+  // shared "x"/"ray" tokens alone push two otherwise-unrelated body parts over the similarity threshold: EVERY X-ray
+  // ended up suggested as similar to every other one (Nick, 2026-09-25, live-caught). Stripping them leaves the
+  // BODY PART as what actually has to match, which is the real question this hint exists to answer.
+  // "culture"/"ratio" are the same class of problem, one step further round (Nick, 2026-09-26): a microbiology
+  // result's name is almost entirely SPECIMEN + "culture" ("Urine culture", "Throat culture", "Blood culture" — all
+  // genuinely different tests), and "Cholesterol/HDL ratio" vs "Urine albumin:creatinine ratio" share nothing BUT
+  // "ratio". Both plural AND singular are listed — tokens() filters against STOP BEFORE it strips a trailing "s", so
+  // "cultures"/"ratios" would slip through unfiltered if only the singular were listed (unlike every OTHER stop word
+  // here, which happens to only ever appear singular in this catalogue).
+  const STOP = new Set([
+    'and',
+    'the',
+    'of',
+    'level',
+    'test',
+    'serum',
+    'plasma',
+    'blood',
+    'total',
+    'with',
+    'without',
+    'x',
+    'ray',
+    'radiography',
+    'radiograph',
+    'culture',
+    'cultures',
+    'ratio',
+    'ratios',
+  ]);
   function tokens(s) {
     const LC = need();
     return new Set(

@@ -2,6 +2,38 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.266.0] — 2026-09-26
+
+### Lab Filing on the Lab Result Catalogue — live-caught follow-ups to the E2 cutover
+
+- **A blocked comment now offers a whitelist checkbox even when its test has no assisted-filing setup at all.**
+  The comment-whitelist offer used to run through the same per-heading loop that decides whether to file, which
+  skips a group entirely once it isn't approved+enabled — so a result whose test had never been set up got the
+  baseline "carries a comment the suite cannot score" blocker with nowhere on the card to act on it. It's now
+  computed separately, keyed off each heading's own `allowComments` (never a hardcoded "nothing is ever allowed"),
+  and a comment already whitelisted-and-approved stops being re-offered every single poll.
+- **A blocked card for a group-not-approved heading that resolves, by code only, to exactly one known test now
+  offers "Set up on Investigations page"** — a deep link (via the service worker, since a content script's own
+  `window.open()` to a `chrome-extension://` URL is blocked outright on Edge) straight onto that test's own Review
+  screen, scrolled to its assisted-filing bar.
+- **The full blocked-reasons list is now available inline** (a collapsed `<details>` under the truncated summary
+  line) instead of only via a hover tooltip, which was easy to miss and unusable on a touch device.
+- **A storage-driven cache reset on the Lab Filing card now also re-runs the gate.** Approving a comment or an
+  assisted-filing setup on the Investigations page (a separate tab) fired the cache-invalidating storage event, but
+  nothing then re-evaluated the card — it could sit showing the pre-approval blocked state indefinitely.
+- **Investigations page: "Review" and "Edit" collapsed into one entry point**, and "Approve" became "Save and
+  approve", which now settles whatever is actually pending for a test — its own wordings/results/codes, its
+  assisted-filing setup, or both — in one click. Previously, approving required reopening the identical screen a
+  second time to reach the other track's own Approve button.
+- **A result's `interpretation` field auto-restating "Above/below reference range"** (Medicus generates this
+  whenever the numeric flag is set) no longer triggers a false "carries a comment" blocker or whitelist offer — it
+  restates a flag the gate already reads directly, not clinician-written comment content.
+- **Imaging and microbiology name-similarity false positives fixed**: modality words ("x", "ray", "radiography")
+  and "culture"/"ratio" (plural and singular) are now stripped before comparing result names, so e.g. every X-ray
+  stopped being suggested as similar to every other X-ray, and "Cholesterol/HDL ratio" to "Urine
+  albumin:creatinine ratio".
+- Catalogue coverage additions in `rules/lab-catalogue.json`.
+
 ## [v3.265.8] — 2026-09-24
 
 ### Task Presence on the queue, and on by default

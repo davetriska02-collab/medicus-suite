@@ -705,6 +705,65 @@ check(
   'each entry carries the raw result row, not just its derived name/residue'
 );
 
+// Real-world regression (Nick, 2026-09-25, live-caught): Medicus auto-generates `interpretation: 'Above reference
+// range'` / `'Below reference range'` alongside isAboveReferenceRange/isBelowReferenceRange (confirmed by
+// test-normalise-investigation-report.js's own fixtures) — it restates the numeric flag, never something a
+// clinician wrote. engine/normalisers.js folds `interpretation` into `text` for OTHER consumers (microbiology
+// text-classification rules), so it used to leak into the comment residue here too: a result with NO real comment
+// at all was offered as "carries a comment the suite cannot score" with a "whitelist this comment" checkbox for
+// text that was never a comment — for a bilirubin result whose actual (real) blocker was simply "flagged above
+// range", already correctly reported elsewhere.
+const bareInterpretationReport = {
+  unmatched: false,
+  results: [
+    {
+      name: 'Serum bilirubin level',
+      value: 23,
+      unit: 'umol/L',
+      rawValue: '23',
+      interpretation: 'Above reference range',
+      isAbove: true,
+      // mirrors engine/normalisers.js's own textParts join: rawValue + interpretation, nothing else
+      text: '23 Above reference range',
+    },
+  ],
+};
+check(
+  LF.numericCommentResidue(bareInterpretationReport.results[0]) === '',
+  'a result flagged only by Medicus’s own auto-generated "Above reference range" interpretation label has NO comment residue — it is not commentary'
+);
+check(
+  LF.unresolvedCommentedResults(bareInterpretationReport, null).length === 0,
+  'and so it is never offered as an unresolved comment / "whitelist this comment" checkbox'
+);
+const belowInterpretationResult = {
+  name: 'eGFR (MDRD)',
+  value: 45,
+  unit: 'mL/min/1.73m2',
+  rawValue: '45',
+  interpretation: 'Below reference range',
+  isBelow: true,
+  text: '45 Below reference range',
+};
+check(
+  LF.numericCommentResidue(belowInterpretationResult) === '',
+  'the same holds for "Below reference range"'
+);
+// A GENUINE free-text interpretation (microbiology) must still be treated as real commentary — only the exact
+// known auto-generated range labels are stripped, nothing else.
+const microGrowthResult = {
+  name: 'Urine culture',
+  value: NaN,
+  unit: '',
+  rawValue: 'positive',
+  interpretation: 'Significant growth identified',
+  text: 'positive Significant growth identified',
+};
+check(
+  LF.numericCommentResidue(microGrowthResult) === 'Significant growth identified',
+  'a genuine free-text interpretation (e.g. a microbiology finding) is NOT stripped — only the two known auto-generated reference-range labels are'
+);
+
 // ── profilesOwningResult (attributes a comment to ONE profile when several
 // matched a combined report — e.g. a lipids panel: cholesterol,
 // triglycerides and LDL each under their own profile) ────────────────────────

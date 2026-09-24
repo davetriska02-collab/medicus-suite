@@ -634,10 +634,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       break;
     }
 
+    // `review` (content-scripts/triage-lens/lab-file-button.js's "Set up on Investigations page" button, Nick,
+    // 2026-09-26): deep-links straight onto one catalogue investigation's own Review screen. Validated against the
+    // same slug shape every investigation id already has (shared/lab-catalogue-overlay.js's freshId/slugify) — a
+    // content script must never be able to steer this query param at anything but a plain id.
     case 'ms-open-options': {
       const section = String((msg && msg.section) || '');
+      const review = String((msg && msg.review) || '');
       const suffix = /^[a-z-]+$/.test(section) ? `#sect-${section}` : '';
-      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') + suffix });
+      const query = /^[a-z0-9-]+$/.test(review) ? `?review=${review}` : '';
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') + query + suffix });
       break;
     }
 

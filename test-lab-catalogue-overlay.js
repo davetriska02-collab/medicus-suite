@@ -416,12 +416,17 @@ console.log('\n── settings-page operations (C2) ──');
       analytes: ['CRP lab wording'],
       singleAnalyte: true,
     },
+    // Deliberately a fictional test, not a real one — this exercises the "fresh practice-only import" path (no
+    // matching built-in at all), as a contrast to CRP's "extends a built-in" path above. It used to be 'esr', but
+    // ESR became a real shipped built-in on 2026-09-26 (from the practice's own unreconciled-requests listing), so
+    // it started exercising the EXTENDS path instead and stopped creating an orphanable new result — moved to a
+    // name no builtin will ever shadow.
     {
-      key: 'esr',
-      label: 'ESR',
-      req: ['Erythrocyte sedimentation rate'],
-      rep: ['ESR'],
-      analytes: ['ESR'],
+      key: 'zzz-fictional-test',
+      label: 'Zzz Fictional Test',
+      req: ['Zzz Fictional Test Request'],
+      rep: ['Zzz Fictional Test'],
+      analytes: ['Zzz Fictional Test'],
       singleAnalyte: true,
     },
   ];
@@ -439,8 +444,8 @@ console.log('\n── settings-page operations (C2) ──');
     'setContext rejects an over-long value'
   );
 
-  const ap = OV.approveInvestigation(builtin, imp.overlay, 'practice-esr', 'Nick', '2026-09-19');
-  const esrInv = ap.overlay.investigations.find((i) => i.id === 'practice-esr');
+  const ap = OV.approveInvestigation(builtin, imp.overlay, 'practice-zzz-fictional-test', 'Nick', '2026-09-19');
+  const esrInv = ap.overlay.investigations.find((i) => i.id === 'practice-zzz-fictional-test');
   check(
     esrInv.provenance.reviewed === true && esrInv.provenance.reviewedBy === 'Nick',
     'approve marks the investigation reviewed'
@@ -448,7 +453,7 @@ console.log('\n── settings-page operations (C2) ──');
   check(ap.approvedResults.length === 1, 'its dependent new result is approved with it');
   const mm = OV.mergeCatalogue(builtin, ap.overlay, {});
   check(
-    mm.catalogue.investigations.some((i) => i.id === 'practice-esr') && mm.problems.length === 0,
+    mm.catalogue.investigations.some((i) => i.id === 'practice-zzz-fictional-test') && mm.problems.length === 0,
     'approved investigation now appears in the ACTING catalogue'
   );
   check(
@@ -471,18 +476,18 @@ console.log('\n── settings-page operations (C2) ──');
     'approving an unknown id throws'
   );
 
-  const rm = OV.removeInvestigation(builtin, imp.overlay, 'practice-esr');
+  const rm = OV.removeInvestigation(builtin, imp.overlay, 'practice-zzz-fictional-test');
   check(
-    !rm.overlay.investigations.some((i) => i.id === 'practice-esr') && rm.removedResults.length === 1,
+    !rm.overlay.investigations.some((i) => i.id === 'practice-zzz-fictional-test') && rm.removedResults.length === 1,
     'remove drops the investigation and its orphaned unreviewed result'
   );
   check(
     rm.overlay.investigations.some((i) => i.id === 'crp'),
     'other entries are untouched'
   );
-  const keep = OV.removeInvestigation(builtin, ap.overlay, 'practice-esr');
+  const keep = OV.removeInvestigation(builtin, ap.overlay, 'practice-zzz-fictional-test');
   check(
-    keep.removedResults.length === 0 && keep.overlay.results.some((r) => r.label === 'ESR'),
+    keep.removedResults.length === 0 && keep.overlay.results.some((r) => r.label === 'Zzz Fictional Test'),
     'an already-approved result is never removed with the investigation'
   );
   check(
@@ -1394,11 +1399,13 @@ console.log('\n── a note on one of a lab’s report headings (2026-09-24) �
 
 console.log('\n── adding one more request wording Medicus uses, on top of a shorter alias (2026-09-24) ──');
 {
-  const added = OV.addRequestAlias(builtin, OV.emptyOverlay(), 'ue', 'Urea and Electrolytes WITH potassium', 'any');
+  // Deliberately NOT "...WITH/WITHOUT Potassium" — those became known synonyms of 'ue' on 2026-09-26 (from the
+  // practice's own unreconciled-requests listing), so a wording tiling exercise needs a genuinely still-unknown one.
+  const added = OV.addRequestAlias(builtin, OV.emptyOverlay(), 'ue', 'Urea and Electrolytes WITH Bicarbonate', 'any');
   const merged = OV.mergeCatalogue(builtin, added, { includeUnreviewed: true }).catalogue;
   const ue = merged.investigations.find((i) => i.id === 'ue');
   check(
-    ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITH potassium') &&
+    ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITH Bicarbonate') &&
       ue.synonyms.some((s) => s === 'electrolyte'), // the existing (legacy) synonym survives untouched
     'the new exact wording is added alongside the existing synonyms, not instead of them'
   );
@@ -1406,10 +1413,10 @@ console.log('\n── adding one more request wording Medicus uses, on top of a 
     added.investigations[0].provenance.reviewed === false,
     'the change arrives unapproved, like any other edit to a built-in test'
   );
-  const again = OV.addRequestAlias(builtin, added, 'ue', 'urea and electrolytes with potassium', 'any');
+  const again = OV.addRequestAlias(builtin, added, 'ue', 'urea and electrolytes with bicarbonate', 'any');
   check(
     OV.mergeCatalogue(builtin, again, { includeUnreviewed: true }).catalogue.investigations.find((i) => i.id === 'ue')
-      .requestAliases.filter((a) => /with potassium/i.test(a.text)).length === 1,
+      .requestAliases.filter((a) => /with bicarbonate/i.test(a.text)).length === 1,
     'adding the same wording again (case/spacing aside) is a no-op, not a duplicate'
   );
   check(

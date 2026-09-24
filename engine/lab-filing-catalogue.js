@@ -98,6 +98,57 @@
     return guards.find((g) => g.result === resultId && g.lab === labId && g.reviewed !== true) || null;
   }
 
+  // Every commented, non-benign result on the report whose OWN heading (r.specimen) is one the identified lab is
+  // already KNOWN to send — an entry exists in lab.groupHeadings, whatever its enabled/approved state for assisted
+  // filing. Used ONLY to offer a "whitelist this comment" checkbox in the UI, deliberately independent of
+  // evaluateFilingCatalogue's own per-heading loop: that loop `continue`s past a group's results entirely (comment
+  // check included) the moment the group isn't approved+enabled, so a result whose test genuinely has no assisted-
+  // filing setup at all got the baseline "carries a comment the suite cannot score" blocker with nowhere on the card
+  // to act on it (Nick, 2026-09-26, live-caught). NEVER read by anything that decides whether to FILE — only by
+  // what offers to whitelist a comment; the group still has to be approved+enabled before that comment (or anything
+  // else about the group) actually lets a report file.
+  //
+  // BUG (Nick, 2026-09-26, live-caught the SAME day): this used to check "unresolved" with profile:null
+  // unconditionally — which ALWAYS returns not-allowed, regardless of what is actually saved in the group's own
+  // allowComments. A comment already whitelisted AND approved still got offered a checkbox every single time,
+  // forever — "I've just clicked again to whitelist that eGFR comment again, reapproved, and the same thing
+  // appears." Fixed to check each heading's OWN group.allowComments (empty when the group doesn't exist yet, which
+  // correctly reproduces the original "offer it even with no filing setup" behaviour for a genuinely new comment).
+  function commentsForWhitelist(report, catalogue) {
+    if (!report || !Array.isArray(report.results)) return [];
+    if (!catalogue || typeof catalogue !== 'object') return [];
+    const index = buildActingIndex(catalogue);
+    if (!index) return [];
+    const labInfo = report.lab && typeof report.lab === 'object' ? report.lab : {};
+    if (!isStr(labInfo.organisation) || !labInfo.organisation) return [];
+    const lab = LC.identifyLab(index, labInfo);
+    if (!lab) return [];
+    const labId = lab.def.id;
+    const labDef = asArr(catalogue.labs).find((l) => l.id === labId);
+    if (!labDef) return [];
+    // Grouped by the result's OWN heading text (mirrors evaluateFilingCatalogue's own grouping) so each heading's
+    // real allowComments — not a blanket "nothing is ever allowed" — decides whether a comment is still unresolved.
+    const byHeading = new Map();
+    for (const r of report.results) {
+      if (!r || typeof r !== 'object' || !isStr(r.specimen) || !r.specimen) continue;
+      const nh = normHeading(r.specimen);
+      if (!byHeading.has(nh)) byHeading.set(nh, []);
+      byHeading.get(nh).push(r);
+    }
+    const out = [];
+    for (const results of byHeading.values()) {
+      const headingText = results[0].specimen;
+      const headingDef = asArr(labDef.groupHeadings).find((g) => normHeading(g.text) === normHeading(headingText));
+      if (!headingDef) continue; // heading not known to the lab at all — nothing to attach a whitelist to yet
+      const group = findGroup(catalogue, labId, headingText);
+      const pseudo = { allowComments: (group && group.allowComments) || [] };
+      LFU.unresolvedCommentedResults({ results }, pseudo).forEach((u) => {
+        out.push({ name: u.name, residue: u.residue, labId, heading: headingDef.text });
+      });
+    }
+    return out;
+  }
+
   // Mirrors shared/lab-filing-utils.js's applyParamOverrides EXACTLY — same safety bounds (never touches an urgent
   // flag; only clears isAbove/isBelow when a range says the value is genuinely within bounds; units must positively
   // match; a comparator-censored value never has its flag cleared) — but keyed by SNOMED code + identified lab
@@ -305,7 +356,7 @@
     }
   }
 
-  function ok(reasonPairs, meta, unresolvedComments) {
+  function ok(reasonPairs, meta, unresolvedComments, unapprovedGroups) {
     return {
       ok: true,
       blockers: Array.from(new Set(reasonPairs.map((r) => r.text))),
@@ -316,6 +367,12 @@
       // to avoid ever writing a comment's residue text into the value-free shadow log). Safe for the confirm dialog
       // and this UI, same as `blockers` already is — never for a log.
       unresolvedComments: unresolvedComments || [],
+      // Structured data for a caller's "open this test's setup" UI (Nick, 2026-09-26) — one entry per group-not-
+      // approved heading whose results resolve, BY CODE ONLY (this file's own recognition contract, H-074 — never
+      // by alias, so a suggested test is one the filing gate itself will actually recognise once set up), to
+      // EXACTLY ONE investigation. Carries no patient data (heading text + a catalogue id, the same class of value
+      // as `meta.groupsUsed` already is) — safe for a log, but not read by one today; only used by the UI.
+      unapprovedGroups: unapprovedGroups || [],
     };
   }
 
@@ -369,6 +426,7 @@
 
       const groupsUsed = [];
       const unresolvedComments = [];
+      const unapprovedGroups = [];
       let recognisedCount = 0;
       let unrecognisedCount = 0;
       for (const results of byHeading.values()) {
@@ -382,6 +440,21 @@
               : 'a result with no report-group heading cannot be matched to an approved assisted-filing group',
             kind: headingLabel ? 'group-not-approved' : 'no-heading',
           });
+          // Which test to offer opening, if any — by CODE only (never alias), and only when every coded result in
+          // the group agrees on exactly one investigation. Ambiguous or unrecognised results offer nothing: there
+          // must be a genuine result to open, not a guess.
+          if (headingLabel) {
+            const invIds = new Set();
+            for (const r of results) {
+              if (!isStr(r.code) || !r.code) continue;
+              const hit = index.byCode.get(r.code);
+              if (!hit) continue;
+              for (const inv of asArr(catalogue.investigations)) {
+                if (asArr(inv.members).some((m) => m.result === hit.resultId)) invIds.add(inv.id);
+              }
+            }
+            if (invIds.size === 1) unapprovedGroups.push({ heading: headingLabel, labId, investigationId: [...invIds][0] });
+          }
           continue; // the whole group is blocked — no point evaluating individual results under it
         }
         groupsUsed.push(headingLabel);
@@ -406,13 +479,24 @@
           }
         }
       }
-      return ok(reasonPairs, { labId, recognisedCount, unrecognisedCount, groupsUsed }, unresolvedComments);
+      return ok(
+        reasonPairs,
+        { labId, recognisedCount, unrecognisedCount, groupsUsed },
+        unresolvedComments,
+        unapprovedGroups
+      );
     } catch (e) {
       return { ok: false, error: (e && e.message) || String(e) };
     }
   }
 
-  const api = { evaluateFilingCatalogue, buildActingIndex, applyCatalogueOverrides, practiceConfirmLimits };
+  const api = {
+    evaluateFilingCatalogue,
+    buildActingIndex,
+    applyCatalogueOverrides,
+    practiceConfirmLimits,
+    commentsForWhitelist,
+  };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
   } else {

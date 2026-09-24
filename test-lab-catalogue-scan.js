@@ -131,16 +131,16 @@ console.log('\n── new request wordings: Medicus’s own exact text for a req
   const obsWith = { lab: { organisation: 'RJ700', department: 'General Pathology' }, groups: [], ungrouped: [], requests: [] };
   const scanOf = (labels) =>
     SC.analyse(seed, [{ ...obsWith, requests: labels }], { targets: [] });
-  const withK = scanOf(['Urea and Electrolytes WITH potassium']);
+  const withK = scanOf(['Urea and Electrolytes WITH Potassium (fasting)']);
   check(
     withK.newRequestWordings.length === 1 &&
       withK.newRequestWordings[0].investigationId === 'ue' &&
-      withK.newRequestWordings[0].text === 'Urea and Electrolytes WITH potassium',
+      withK.newRequestWordings[0].text === 'Urea and Electrolytes WITH Potassium (fasting)',
     'a request that resolves via a shorter alias ("electrolyte") is still offered by its own exact wording'
   );
-  const withoutK = scanOf(['Urea and Electrolytes WITHOUT potassium']);
+  const withoutK = scanOf(['Urea and Electrolytes WITHOUT Potassium (fasting)']);
   check(
-    withoutK.newRequestWordings[0].text === 'Urea and Electrolytes WITHOUT potassium',
+    withoutK.newRequestWordings[0].text === 'Urea and Electrolytes WITHOUT Potassium (fasting)',
     'WITH and WITHOUT potassium are two distinct wordings, not collapsed into one'
   );
   check(!scanOf([]).newRequestWordings.length, 'no requests -> nothing offered');
@@ -159,15 +159,15 @@ console.log('\n── new request wordings: Medicus’s own exact text for a req
     unknown.newRequestWordings.length === 0,
     'a request the catalogue cannot resolve at all is not offered here — it is unknownRequests’ job'
   );
-  const twice = scanOf(['Urea and Electrolytes WITH potassium', 'Urea and Electrolytes WITH potassium']);
+  const twice = scanOf(['Urea and Electrolytes WITH Potassium (fasting)', 'Urea and Electrolytes WITH Potassium (fasting)']);
   check(twice.newRequestWordings.length === 1, 'the same new wording seen on two reports is offered once');
   const suffixed = SC.analyse(
     seed,
-    [{ ...obsWith, requests: ['Urea and Electrolytes WITH potassium (Dr Test • 22 Sep 2026, 10:00)'] }],
+    [{ ...obsWith, requests: ['Urea and Electrolytes WITH Potassium (fasting) (Dr Test • 22 Sep 2026, 10:00)'] }],
     { targets: [] }
   );
   check(
-    suffixed.newRequestWordings[0].text === 'Urea and Electrolytes WITH potassium',
+    suffixed.newRequestWordings[0].text === 'Urea and Electrolytes WITH Potassium (fasting)',
     'the clinician/date suffix is stripped, same as everywhere else a request label is read'
   );
 }
@@ -273,6 +273,73 @@ console.log('\n── similarResults: a hint for a probable duplicate result, ne
   );
   const none = SC.similarResults(seed, 'Xyzzyflorb nonsense wording', null);
   check(none.length === 0, 'wording sharing nothing with any result finds nothing');
+}
+
+console.log(
+  '\n── imaging modality words (x-ray, radiography) do not by themselves count as similarity (2026-09-25, Nick live-caught: "pretty much any X-ray is being suggested as a match for everything else") ──'
+);
+{
+  const imgCat = OV.saveResult(seed, OV.emptyOverlay(), {
+    label: 'Chest X-ray',
+    valueKind: 'text',
+    codes: [],
+    aliases: [{ text: 'X-ray of chest' }, { text: 'Radiography of chest' }],
+  }).overlay;
+  const withKnee = OV.saveResult(seed, imgCat, {
+    label: 'Knee X-ray',
+    valueKind: 'text',
+    codes: [],
+    aliases: [{ text: 'X-ray of knee' }],
+  }).overlay;
+  const merged = OV.mergeCatalogue(seed, withKnee, { includeUnreviewed: true }).catalogue;
+  const chest = merged.results.find((r) => r.label === 'Chest X-ray');
+  const wrongBodyPart = SC.similarResults(merged, 'X-ray of knee', chest.id);
+  check(
+    !wrongBodyPart.some((h) => h.label === 'Chest X-ray'),
+    'two different body parts sharing only the modality words ("X-ray"/"radiography") are NOT flagged as similar — the body part still has to match'
+  );
+  const sameBodyPartDifferentWording = SC.similarResults(merged, 'Radiography of knee', chest.id);
+  check(
+    sameBodyPartDifferentWording.some((h) => h.label === 'Knee X-ray'),
+    'the same body part under different modality wording ("X-ray" vs "Radiography") IS still flagged — only the modality word itself is stripped, not the thing that actually distinguishes two imaging results'
+  );
+}
+
+console.log(
+  '\n── "culture" / "ratio" are the same class of problem, one step further round (2026-09-26, Nick) ──'
+);
+{
+  // The two "ratio" results ALREADY shipped in the catalogue used to share nothing but that one word.
+  const ratioHits = SC.similarResults(seed, 'Cholesterol/HDL ratio', 'cholesterol-hdl-ratio');
+  check(
+    !ratioHits.some((h) => h.label === 'Urine albumin:creatinine ratio'),
+    'two results sharing only the word "ratio" — otherwise entirely unrelated (lipids vs a urine test) — are not flagged similar'
+  );
+  const microCat = OV.saveResult(seed, OV.emptyOverlay(), {
+    label: 'Urine culture',
+    valueKind: 'text',
+    codes: [],
+    aliases: [{ text: 'MSU culture' }],
+  }).overlay;
+  const withThroat = OV.saveResult(seed, microCat, {
+    label: 'Throat culture',
+    valueKind: 'text',
+    codes: [],
+    aliases: [{ text: 'Throat swab for culture' }],
+  }).overlay;
+  const merged = OV.mergeCatalogue(seed, withThroat, { includeUnreviewed: true }).catalogue;
+  const urine = merged.results.find((r) => r.label === 'Urine culture');
+  const wrongSpecimen = SC.similarResults(merged, 'Throat culture', urine.id);
+  check(
+    !wrongSpecimen.some((h) => h.label === 'Urine culture'),
+    'two different specimens sharing only "culture" (a genuinely different microbiology test each) are not flagged similar'
+  );
+  const sameSpecimenDifferentWording = SC.similarResults(merged, 'MSU sent for culture', null);
+  check(
+    sameSpecimenDifferentWording.some((h) => h.label === 'Urine culture') &&
+      !sameSpecimenDifferentWording.some((h) => h.label === 'Throat culture'),
+    'the same specimen (an MSU wording still resolving to "urine") under different wording still correctly matches — only the shared modality word "culture" is stripped, not the thing that actually distinguishes two microbiology results'
+  );
 }
 
 console.log('\n── gaps ──');
@@ -482,8 +549,15 @@ console.log('\n── ambiguity is never guessed; several cards narrow it ──
 console.log('\n── a known heading with results lacking codes ──');
 {
   const base = withoutReportForms(seed, []);
-  // give CRP a code-less alias-only result under a known heading
+  // give CRP a code-less alias-only result under a known heading, with its OWN lab-specific groupHeading not yet
+  // recorded (the scenario this test is about) — stripped explicitly, not assumed from the shipped seed data, which
+  // may itself gain this exact groupHeading over time (as rj700-general-pathology did for crp/magnesium/vitamin-d,
+  // 2026-09-25 — a seeding gap Nick found live, fixed at the source once verified via this same engine).
   const c = clone(seed);
+  for (const lab of c.labs)
+    lab.groupHeadings = lab.groupHeadings
+      .map((g) => ({ ...g, identifies: g.identifies.filter((x) => x !== 'crp') }))
+      .filter((g) => g.identifies.length || (g.mayContain || []).length);
   const crp = c.investigations.find((i) => i.id === 'crp');
   const crpRes = c.results.find((r) => r.id === crp.members[0].result);
   const oldCode = crpRes.codes[0].conceptId;
@@ -813,12 +887,14 @@ console.log('\n── unlinked groups and unrecognised requests can become new t
     'a group-and-results test can be stored with no request wording yet'
   );
 
-  // request-only tests
-  const rq = SC.fillsForRequests(['US Neck', 'Wound Swab MC&S', 'us neck', 'HAND LT X-ray']);
+  // request-only tests ("Wound Swab MC&S" became a shipped built-in on 2026-09-26, from the practice's own
+  // unreconciled-requests listing — a genuinely unrecognised swab name keeps this exercising "brand new, request
+  // only" rather than "extends a built-in")
+  const rq = SC.fillsForRequests(['US Neck', 'Groin Swab MC&S', 'us neck', 'HAND LT X-ray']);
   check(
     rq.newInvestigations.length === 3 &&
       rq.newInvestigations.find((x) => x.label === 'US Neck').kind === 'imaging' &&
-      rq.newInvestigations.find((x) => x.label === 'Wound Swab MC&S').kind === 'other',
+      rq.newInvestigations.find((x) => x.label === 'Groin Swab MC&S').kind === 'other',
     'request-only tests: duplicates merged; imaging is imaging, anything needing results starts as "other"'
   );
   const ra = OV.applyFills(base, OV.emptyOverlay(), rq);
@@ -831,18 +907,18 @@ console.log('\n── unlinked groups and unrecognised requests can become new t
   );
   // ... and a later scan can complete one
   const eff = mr.catalogue;
-  const wound = ra.overlay.investigations.find((i) => i.label === 'Wound Swab MC&S');
+  const groin = ra.overlay.investigations.find((i) => i.label === 'Groin Swab MC&S');
   const swab = {
     lab: { organisation: 'MB1', department: 'Microbiology' },
     groups: [
-      { heading: 'WOUND SWAB CULTURE', specimenType: 'Swab', results: [res('Culture', '900000000000801', false)] },
+      { heading: 'GROIN SWAB CULTURE', specimenType: 'Swab', results: [res('Culture', '900000000000801', false)] },
     ],
     ungrouped: [],
-    requests: ['Wound Swab MC&S'],
+    requests: ['Groin Swab MC&S'],
   };
-  const an2 = SC.analyse(eff, [swab], { targets: [wound.id] });
+  const an2 = SC.analyse(eff, [swab], { targets: [groin.id] });
   check(
-    an2.proposals.length === 1 && an2.proposals[0].target === wound.id && an2.proposals[0].kind === 'microbiology',
+    an2.proposals.length === 1 && an2.proposals[0].target === groin.id && an2.proposals[0].kind === 'microbiology',
     'a request-only test is then a gap the next scan can fill'
   );
   const f2 = SC.fillsFromProposals(eff, an2.proposals);
@@ -852,8 +928,8 @@ console.log('\n── unlinked groups and unrecognised requests can become new t
   );
   const a2 = OV.applyFills(base, ra.overlay, f2.fills);
   check(
-    a2.overlay.investigations.find((i) => i.id === wound.id).kind === 'microbiology' &&
-      a2.overlay.investigations.find((i) => i.id === wound.id).members.length === 1,
+    a2.overlay.investigations.find((i) => i.id === groin.id).kind === 'microbiology' &&
+      a2.overlay.investigations.find((i) => i.id === groin.id).members.length === 1,
     'the test becomes microbiology with its result'
   );
   // merge helper
