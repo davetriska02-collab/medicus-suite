@@ -43,10 +43,14 @@
 .ms-tp-chips {
   display: inline-flex;
   gap: 3px;
-  max-width: 46%;
+  max-width: 62%;
   margin-right: 5px;
   vertical-align: middle;
   overflow: hidden;
+  --ms-tp-wash: #fff44a;
+  --ms-tp-border: #c9b400;
+  --ms-tp-text: #1a1600;
+  --ms-tp-quiet: #3d3400;
 }
 /* Same-line as triage chips: PREPEND in DOM, CSS order after the name so
    presence does not sit in front of it on flat queues. */
@@ -61,8 +65,8 @@
 [col-id='patientName'] > .ms-tp-chips {
   order: 2;
   flex: 0 1 auto;
-  min-width: 1.75rem;
-  max-width: 46%;
+  min-width: 3.4rem;
+  max-width: 62%;
   margin: 0;
   overflow: hidden;
 }
@@ -147,16 +151,46 @@
   font-weight: 700;
 }
 
+/* List-row occupancy. Separate host from Triage Lens .ch-queue-chips.
+   Fluoro pill + the word Open so a scan down the queue shows who has
+   that request's overview open. Not a lock, not "in progress". The name
+   ellipsises; Open and the initials stay. Look vars inherit from the
+   chip host (applyLookToEl), so a practice colour still lands here. */
 .ms-tp-chips .ms-tp-token {
-  color: var(--amber);
+  --ms-tp-wash: inherit;
+  --ms-tp-border: inherit;
+  --ms-tp-text: inherit;
+  --ms-tp-quiet: inherit;
+  gap: 4px;
+  padding: 1px 7px 1px 2px;
+  background: var(--ms-tp-wash, #fff44a);
+  border: 1px solid var(--ms-tp-border, #c9b400);
+  border-radius: var(--r-pill);
+  color: var(--ms-tp-text, #1a1600);
+  font-weight: 800;
+  line-height: 16px;
 }
 
 .ms-tp-chips .ms-tp-token-who {
-  color: var(--amber);
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ms-tp-text, #1a1600);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.ms-tp-token-status {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
 }
 
 @container (max-width: 5.5rem) {
-  .ms-tp-token-who {
+  .ms-tp-token-message .ms-tp-token-who,
+  .ms-tp-token-rhs .ms-tp-token-who {
     display: none;
   }
 }

@@ -23,8 +23,9 @@
     routineRxButton: 'suite.ui.routineRxButton',
     quickActionsWidget: 'suite.ui.quickActionsWidget',
     focusAlerts: 'suite.ui.focusAlerts',
-    // Default on, like the other UI packs: missing storage means ON.
     templateOrganiser: 'suite.ui.templateOrganiser',
+    // Default on, like the other UI packs: missing storage means ON.
+    taskPresence: 'suite.ui.taskPresence',
   };
 
   const GRANDFATHER_KEYS = [
@@ -34,6 +35,7 @@
     KEYS.quickActionsWidget,
     KEYS.focusAlerts,
     KEYS.templateOrganiser,
+    KEYS.taskPresence,
   ];
 
   const ALL_PACK_KEYS = [KEYS.softFlags].concat(GRANDFATHER_KEYS);
@@ -46,6 +48,7 @@
     'ui.quickActionsWidget': 'quickActionsWidget',
     'ui.focusAlerts': 'focusAlerts',
     'ui.templateOrganiser': 'templateOrganiser',
+    'ui.taskPresence': 'taskPresence',
   };
 
   const _raw = Object.create(null);

@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.8] — 2026-09-24
+
+### Task Presence on the queue, and on by default
+
+Each triage-list row now shows a fluoro **Open** token with the colleague's name when that person has that request's overview open. It is the same fact as the banner on the open request. It is not a lock and it does not mean the request is in progress. The screen reader line still says you can work it.
+
+If the grid is sorted on this machine without a new task-list response, those row tokens are removed until the next list payload. A token on the wrong row is worse than no token.
+
+`suite.ui.taskPresence` is on when the key is missing, same as the other default-on packs. An explicit false stays off. Options writes that key on first load, and a machine that had already unticked `presence.enabled` stays off. List-row tokens still need the practice folder (`ms-presence/`) or a hosted store. There is no default folder path: Chrome still needs one Choose folder click per machine.
+
 ## [v3.265.7] — 2026-09-24
 
 ### Document open, launcher clearance, default on
