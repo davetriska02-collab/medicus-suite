@@ -265,7 +265,16 @@
       .then(function (ctx) {
         if (gen !== _harvestGen) return null;
         _session = ctx;
-        return Promise.all([api.listTemplates(ctx), api.listDocuments(ctx)]);
+        return Promise.all([
+          api.listTemplates(ctx),
+          api.listDocuments(ctx).catch(function (err) {
+            return {
+              ok: false,
+              items: [],
+              gap: err && err.message ? err.message : 'Document list was not read.',
+            };
+          }),
+        ]);
       })
       .then(function (lists) {
         if (gen !== _harvestGen || !lists) return;
@@ -1039,6 +1048,28 @@
     return '';
   }
 
+  // The heading id often sits on a section wrapper, not on the editor or its
+  // previous sibling. The first ancestor that contains exactly one
+  // heading-{kind}-{uuid} is that field's context.
+  function headingIdForField(el, kind) {
+    var near = headingIdNear(el);
+    if (near) return near;
+    if (!kind || !el || !el.parentElement) return '';
+    var node = el.parentElement;
+    for (var i = 0; i < 12 && node && node.nodeType === 1; i += 1) {
+      if (node.querySelectorAll) {
+        var hits = node.querySelectorAll('[id^="heading-' + kind + '-"]');
+        var ids = [];
+        for (var j = 0; j < hits.length; j += 1) {
+          if (C.headingKindToken(hits[j].id) === kind && C.headingContextId(hits[j].id)) ids.push(hits[j].id);
+        }
+        if (ids.length === 1) return ids[0];
+      }
+      node = node.parentElement;
+    }
+    return '';
+  }
+
   // Walk from the focused node to a History / Examination / Impression / Plan
   // signal. Heading ids (heading-history-{uuid}) are the slash-menu label.
   // A sibling or ancestor heading with that exact word counts when the
@@ -1072,7 +1103,7 @@
         return {
           kind: kind,
           el: el,
-          headingId: headingIdNear(el) || (C.headingContextId(node.id || '') ? node.id : labelled),
+          headingId: headingIdForField(el, kind) || (C.headingContextId(node.id || '') ? node.id : labelled),
         };
       }
       var prev = node.previousElementSibling;
@@ -1087,7 +1118,7 @@
         prev = prev.previousElementSibling;
         steps += 1;
       }
-      if (textKind) return { kind: textKind, el: el, headingId: headingIdNear(el) };
+      if (textKind) return { kind: textKind, el: el, headingId: headingIdForField(el, textKind) };
       node = node.parentElement;
     }
     return null;
@@ -1345,6 +1376,58 @@
     waitForMenu(item, field, before, 0);
   }
 
+  function consultActionButton() {
+    var nodes = document.querySelectorAll('button, a, [role="button"]');
+    var fallback = null;
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (!el || el.id === LAUNCH_ID) continue;
+      if (el.closest && (el.closest('#' + OVERLAY_ID) || el.closest('#' + LAUNCH_ID))) continue;
+      var label = el.getAttribute('aria-label') || '';
+      var text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!C.consultActionLabel(label) && !C.consultActionLabel(text)) continue;
+      var rect = el.getBoundingClientRect();
+      if (!rect || rect.width < 8 || rect.height < 8) continue;
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      if (C.consultActionLabel(label) && /complete consultation/i.test(label)) return el;
+      if (/complete consultation/i.test(text)) return el;
+      if (!fallback) fallback = el;
+    }
+    return fallback;
+  }
+
+  function mainPaneRect() {
+    var main = document.querySelector('main');
+    if (!main || !main.getBoundingClientRect) return null;
+    var rect = main.getBoundingClientRect();
+    if (!rect || rect.width < 80 || rect.height < 80) return null;
+    return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  }
+
+  function positionLauncher(launch) {
+    if (!launch) return;
+    var size = { width: launch.offsetWidth || 240, height: launch.offsetHeight || 32 };
+    var viewport = { width: window.innerWidth || 1280, height: window.innerHeight || 800 };
+    var anchor = consultActionButton();
+    var box = null;
+    if (anchor) {
+      var rect = anchor.getBoundingClientRect();
+      box = C.launcherAnchorBox(
+        { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+        size,
+        viewport
+      );
+    } else {
+      box = C.launcherPaneBox(mainPaneRect(), size);
+    }
+    if (!box) return;
+    launch.style.position = 'fixed';
+    launch.style.left = Math.round(box.left) + 'px';
+    launch.style.top = Math.round(box.top) + 'px';
+    launch.style.right = 'auto';
+    launch.style.bottom = 'auto';
+  }
+
   function ensureLauncher() {
     healIfWiped();
     if (!launcherWanted()) {
@@ -1369,6 +1452,7 @@
       });
       document.documentElement.appendChild(launch);
     }
+    positionLauncher(launch);
   }
 
   function startHeavyChrome() {

@@ -4,8 +4,6 @@
 
 #ms-toc-launch {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
   z-index: 2147482990;
   padding: 6px 12px;
   font:

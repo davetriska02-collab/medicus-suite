@@ -88,7 +88,15 @@
         };
       }
       var json = await getJson(C.PATHS.documentSearch(ctx.patientId, ctx.contextId, ctx.contextType));
-      return C.parseList(json, 'documents');
+      var parsed = C.parseList(json, 'documents');
+      if (parsed.ok && (!parsed.items || !parsed.items.length)) {
+        return {
+          ok: false,
+          items: [],
+          gap: 'Medicus returned no document templates for this heading. Nothing was invented.',
+        };
+      }
+      return parsed;
     }
 
     async function hydrate(ctx, href, resourceUrls, headingId, headingKind) {
@@ -116,6 +124,24 @@
           });
         } catch (err) {
           /* named fields may already be on the resource URLs or the heading */
+        }
+      }
+      if (next.consultationTopicId && (!next.patientId || !next.contextId || !next.contextType)) {
+        try {
+          var draft = await getJson(C.PATHS.draftTopic(next.consultationTopicId));
+          var wrapped = C.topicEnvelope(draft);
+          if (wrapped) {
+            var enriched = C.readSessionContext({
+              href: href,
+              resourceUrls: resourceUrls,
+              overview: wrapped,
+              headingId: headingId || '',
+              headingKind: headingKind || '',
+            });
+            next = C.mergeSession(next, enriched);
+          }
+        } catch (err) {
+          /* the overview topic is still enough for the template list */
         }
       }
       return next;

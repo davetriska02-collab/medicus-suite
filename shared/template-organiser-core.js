@@ -193,28 +193,97 @@
   function asList(json) {
     if (Array.isArray(json)) return json;
     if (!plain(json)) return null;
+    // An empty array must not hide a later key that actually holds the rows.
+    // Document search can return items: [] beside the tab arrays.
     function from(node) {
+      if (Array.isArray(node)) return node.length ? node : null;
       if (!plain(node)) return null;
+      let empty = null;
       for (let i = 0; i < LIST_KEYS.length; i += 1) {
         const v = node[LIST_KEYS[i]];
-        if (Array.isArray(v)) return v;
-        if (plain(v)) {
-          if (Array.isArray(v.items)) return v.items;
-          if (Array.isArray(v.content)) return v.content;
-          if (Array.isArray(v.records)) return v.records;
+        if (Array.isArray(v)) {
+          if (v.length) return v;
+          if (!empty) empty = v;
+        } else if (plain(v)) {
+          const nestedKeys = ['items', 'content', 'records'];
+          for (let n = 0; n < nestedKeys.length; n += 1) {
+            const inner = v[nestedKeys[n]];
+            if (!Array.isArray(inner)) continue;
+            if (inner.length) return inner;
+            if (!empty) empty = inner;
+          }
         }
       }
-      return null;
+      return empty;
     }
     const nested = plain(json.data) ? json.data.data : null;
-    return from(json) || from(json.data) || from(nested);
+    const found = from(json) || from(json.data) || from(nested);
+    return found;
+  }
+
+  function templateLike(rows) {
+    if (!Array.isArray(rows) || !rows.length) return false;
+    let good = 0;
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i];
+      if (!plain(row)) return false;
+      if (Array.isArray(row.headings) || Array.isArray(row.consultationTopics)) return false;
+      const title = firstString(row, ['name', 'title', 'label', 'templateName', 'displayName', 'documentName']);
+      const id = firstString(row, ['id', 'templateId', 'documentTemplateId', 'uuid', 'slug', 'template']);
+      if (title || id || plain(row.documentTemplate) || plain(row.template) || plain(row.dataEntryTemplate)) good += 1;
+    }
+    return good > 0 && good >= Math.ceil(rows.length / 2);
+  }
+
+  // Document search is tabbed in Medicus (Document, Referral Form). Those
+  // arrays are not named items. consultationTopics is an encounter, not a list.
+  function documentRows(json) {
+    const direct = asList(json);
+    if (templateLike(direct)) return direct;
+    const buckets = [];
+    function walk(node, depth) {
+      if (node == null || depth > 4) return;
+      if (Array.isArray(node)) {
+        if (templateLike(node)) buckets.push(node);
+        return;
+      }
+      if (!plain(node)) return;
+      Object.keys(node).forEach((key) => {
+        if (!Object.prototype.hasOwnProperty.call(node, key)) return;
+        if (key === '__proto__' || key === 'constructor') return;
+        if (key === 'consultationTopics' || key === 'headings' || key === 'entries' || key === 'linkedProblems') {
+          return;
+        }
+        walk(node[key], depth + 1);
+      });
+    }
+    walk(json, 0);
+    if (!buckets.length) return direct;
+    const out = [];
+    buckets.forEach((bucket) => {
+      bucket.forEach((row) => out.push(row));
+    });
+    return out;
+  }
+
+  function catalogueRow(raw) {
+    if (!plain(raw)) return raw;
+    const nested = plain(raw.documentTemplate)
+      ? raw.documentTemplate
+      : plain(raw.dataEntryTemplate)
+        ? raw.dataEntryTemplate
+        : plain(raw.template)
+          ? raw.template
+          : null;
+    if (!nested) return raw;
+    return Object.assign({}, nested, raw);
   }
 
   // The list GET responses were not in the capture. Accept an array or a
   // short list of envelopes. A shape that matches none of those is a gap,
   // not a guessed row.
   function parseList(json, surface) {
-    const rows = asList(json);
+    const rows = surface === 'documents' ? documentRows(json) : asList(json);
     if (!rows) {
       return {
         ok: false,
@@ -223,11 +292,12 @@
       };
     }
     const items = [];
-    rows.forEach((raw) => {
+    rows.forEach((incoming) => {
+      const raw = catalogueRow(incoming);
       if (!plain(raw)) return;
       const id = firstString(raw, ['id', 'templateId', 'dataEntryTemplateId', 'documentTemplateId', 'uuid', 'value']);
-      const slug = firstString(raw, ['template', 'slug', 'reflowTemplate']);
-      const title = firstString(raw, ['name', 'title', 'label', 'templateName', 'displayName']);
+      const slug = firstString(raw, ['template', 'slug', 'reflowTemplate', 'templateCode', 'medicusTemplate']);
+      const title = firstString(raw, ['name', 'title', 'label', 'templateName', 'displayName', 'documentName']);
       const preview = firstString(raw, ['description', 'summary', 'preview', 'subtitle', 'detail']);
       const category = firstString(raw, [
         'category',
@@ -329,7 +399,14 @@
   function headingRecord(heading) {
     if (!plain(heading)) return null;
     const idText = typeof heading.id === 'string' ? heading.id : '';
-    const altText = typeof heading.headingId === 'string' ? heading.headingId : '';
+    const altText =
+      typeof heading.headingId === 'string'
+        ? heading.headingId
+        : typeof heading.consultationTopicHeadingId === 'string'
+          ? heading.consultationTopicHeadingId
+          : typeof heading.uuid === 'string'
+            ? heading.uuid
+            : '';
     const uuid = takeUuid(idText) || takeUuid(altText) || headingContextId(idText) || headingContextId(altText);
     if (!uuid) return null;
     const kind =
@@ -443,6 +520,34 @@
     if (ctx.contextId && !ctx.contextType && (focusedUuid || uniqueHit)) {
       ctx.contextType = HEADING_CONTEXT_TYPE;
     }
+  }
+
+  // draft-consultation-topic is the topic itself, not an encounter overview.
+  // Wrap it so the same heading walk can fill document context.
+  function topicEnvelope(json) {
+    let node = json;
+    if (
+      plain(node) &&
+      plain(node.data) &&
+      !Array.isArray(node.consultationTopics) &&
+      !Array.isArray(node.headings) &&
+      !Array.isArray(node.consultationTopicHeadings)
+    ) {
+      node = node.data;
+    }
+    if (!plain(node)) return null;
+    if (Array.isArray(node.consultationTopics)) return node;
+    const headings = Array.isArray(node.headings)
+      ? node.headings
+      : Array.isArray(node.consultationTopicHeadings)
+        ? node.consultationTopicHeadings
+        : null;
+    const id = takeUuid(node.id) || takeUuid(node.consultationTopicId);
+    if (!id && !headings) return null;
+    const topic = Object.assign({}, node);
+    if (headings) topic.headings = headings;
+    if (!topic.id && id) topic.id = id;
+    return { consultationTopics: [topic] };
   }
 
   function fillUuid(current, match) {
@@ -602,6 +707,57 @@
     add(ring);
     add(live);
     return out.slice(-80);
+  }
+
+  function consultActionLabel(value) {
+    const text = String(value || '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    if (!text || text.length > 160) return false;
+    return /(?:^|\s)(complete consultation|complete encounter|save consultation|park consultation|end consultation|finish consultation)$/.test(
+      text
+    );
+  }
+
+  // Sit to the left of the consult action, in the main pane. Fall above it
+  // when the left edge has no room. Never pin to the window's bottom-right.
+  function launcherAnchorBox(anchor, size, viewport) {
+    const a = plain(anchor) ? anchor : {};
+    const w = Math.max(1, Number(size && size.width) || 220);
+    const h = Math.max(1, Number(size && size.height) || 32);
+    const vw = Math.max(1, Number(viewport && viewport.width) || 1280);
+    const vh = Math.max(1, Number(viewport && viewport.height) || 800);
+    const gap = 8;
+    const anchorLeft = Number(a.left) || 0;
+    const anchorTop = Number(a.top) || 0;
+    const anchorRight = Number(a.right) || anchorLeft;
+    const anchorBottom = Number(a.bottom) || anchorTop;
+    let left = anchorLeft - w - gap;
+    let top = anchorTop + Math.max(0, (anchorBottom - anchorTop - h) / 2);
+    if (left < gap) {
+      left = Math.min(Math.max(gap, anchorRight - w), vw - w - gap);
+      top = anchorTop - h - gap;
+    }
+    if (top < gap) top = anchorBottom + gap;
+    if (top + h > vh - gap) top = Math.max(gap, vh - h - gap);
+    if (left + w > vw - gap) left = Math.max(gap, vw - w - gap);
+    return { left: left, top: top };
+  }
+
+  function launcherPaneBox(pane, size) {
+    if (!plain(pane)) return null;
+    const w = Math.max(1, Number(size && size.width) || 220);
+    const h = Math.max(1, Number(size && size.height) || 32);
+    const left = Number(pane.left) || 0;
+    const right = Number(pane.right) || left;
+    const topEdge = Number(pane.top) || 0;
+    const bottom = Number(pane.bottom) || topEdge;
+    if (right - left < 80 || bottom - topEdge < 80) return null;
+    return {
+      left: Math.max(left + 8, right - w - 16),
+      top: Math.max(topEdge + 8, bottom - h - 16),
+    };
   }
 
   function pathsFor() {
@@ -950,7 +1106,12 @@
     cloneConfig,
     parseList,
     readSessionContext,
+    topicEnvelope,
     headingContextId,
+    headingKindToken,
+    consultActionLabel,
+    launcherAnchorBox,
+    launcherPaneBox,
     rememberClinicalUrl,
     mergeResourceUrls,
     mergeSession,

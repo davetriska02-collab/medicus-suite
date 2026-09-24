@@ -631,6 +631,120 @@ function names(surface) {
   const searchCount = docCalls.filter((call) => call.url.indexOf('/document/template/search/') !== -1).length;
   check(searchCount === 4, 'document search is not called when the context is missing');
 
+  const groupedDocs = C.parseList(
+    {
+      items: [],
+      document: [{ id: DOC, name: 'Food bank letter' }],
+      referralForm: [{ documentTemplate: { id: TPL, name: 'Referral form' } }],
+    },
+    'documents'
+  );
+  check(
+    groupedDocs.ok &&
+      groupedDocs.items.length === 2 &&
+      groupedDocs.items[0].id === DOC &&
+      groupedDocs.items[1].id === TPL,
+    'document tabs are read when items is empty'
+  );
+  const notEncounter = C.parseList(
+    { consultationTopics: [{ id: TOPIC, title: 'Surgery consultation', headings: [] }] },
+    'documents'
+  );
+  check(notEncounter.ok === false && notEncounter.items.length === 0, 'encounter topics are not document rows');
+
+  const draftCalls = [];
+  const draftClient = Client.createClient({
+    apiBase: fromPath,
+    fetchImpl(url, init) {
+      draftCalls.push({ url: String(url), method: init.method });
+      const target = String(url);
+      if (target.indexOf('/clinical/data/encounter/overview/') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              consultationTopics: [{ id: TOPIC, patientId: PATIENT, headings: [] }],
+            }),
+        });
+      }
+      if (target.indexOf('/draft-consultation-topic/') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              id: TOPIC,
+              patientId: PATIENT,
+              headings: [{ id: HISTORY_ID, title: 'History' }],
+            }),
+        });
+      }
+      if (target.indexOf('/document/template/search/') !== -1) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              items: [],
+              document: [{ id: DOC, name: 'Food bank letter' }],
+            }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ items: [{ id: TPL, name: 'Asthma review' }] }),
+      });
+    },
+  });
+  const drafted = await draftClient.hydrate(
+    C.readSessionContext({ href: pageHref, resourceUrls: [], headingId: '', headingKind: 'history' }),
+    pageHref,
+    [],
+    '',
+    'history'
+  );
+  check(drafted.consultationTopicId === TOPIC, 'draft hydrate keeps the template topic');
+  check(
+    drafted.contextId === HISTORY_ID && drafted.contextType === 'consultation-topic-heading',
+    'draft consultation topic supplies the History heading'
+  );
+  const draftedDocs = await draftClient.listDocuments(drafted);
+  check(
+    draftedDocs.ok && draftedDocs.items[0] && draftedDocs.items[0].title === 'Food bank letter',
+    'draft heading lists documents'
+  );
+  check(
+    draftCalls.some(
+      (call) =>
+        call.method === 'GET' &&
+        call.url ===
+          'https://560b6c.api.england.medicus.health' +
+            C.PATHS.documentSearch(PATIENT, HISTORY_ID, 'consultation-topic-heading')
+    ),
+    'document search after draft uses the practice API host'
+  );
+  check(
+    draftCalls.every((call) => call.url.indexOf('https://560b6c.api.england.medicus.health') === 0),
+    'draft and document GETs stay off the page origin'
+  );
+
+  const beside = C.launcherAnchorBox(
+    { left: 640, top: 700, right: 860, bottom: 736 },
+    { width: 220, height: 32 },
+    { width: 1280, height: 800 }
+  );
+  check(beside.left === 640 - 220 - 8, 'launcher sits to the left of Complete consultation');
+  check(beside.top < 736 && beside.top + 32 <= 800, 'launcher stays on the action row');
+  check(beside.left + 220 < 1280 - 16, 'launcher is not pinned to the window corner');
+  check(C.consultActionLabel('Complete consultation') === true, 'Complete consultation is an anchor');
+  check(
+    C.consultActionLabel("You don't have permission to perform this action. Complete consultation") === true,
+    'a permission prefix still matches Complete consultation'
+  );
+  check(C.consultActionLabel('Document and Template Organiser') === false, 'the launcher is not its own anchor');
+
   const summaryUrls = [
     'https://560b6c.api.england.medicus.health/clinical/data/clinical-summary/summary/' +
       PATIENT +
@@ -860,6 +974,16 @@ function names(surface) {
   check(/headingId/.test(canvas) && /rememberClinicalUrl/.test(canvas), 'canvas passes the heading and the api ring');
   check(/PerformanceObserver/.test(canvas), 'canvas watches practice API resource URLs');
   check(/ms-toc-gap/.test(canvas), 'a missing id is shown at the bottom of the canvas');
+  check(
+    /launcherAnchorBox/.test(canvas) && /consultActionLabel/.test(canvas),
+    'launcher anchors to the consult action'
+  );
+  check(/draftTopic/.test(clientSrc), 'client reads the draft consultation topic for document context');
+  const canvasCss = fs.readFileSync(
+    path.join(__dirname, 'content-scripts/template-organiser/template-organiser-canvas.css'),
+    'utf8'
+  );
+  check(!/bottom:\s*16px/.test(canvasCss), 'launcher CSS is not pinned to the window bottom-right');
   check(/filterBoard/.test(coreSrc) && /filterBoard/.test(canvas), 'canvas filters through the core');
   check(/Search templates/.test(canvas) && /Search documents/.test(canvas), 'both lists have a search label');
   check(

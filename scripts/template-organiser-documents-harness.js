@@ -46,6 +46,7 @@ function pageHtml() {
 <head><meta charset="utf-8"><title>document catalogue harness</title></head>
 <body>
 <main id="host"></main>
+<footer><button type="button" id="complete">Complete consultation</button></footer>
 <pre id="result">PENDING</pre>
 <script>
   window.chrome = {
@@ -80,13 +81,20 @@ function pageHtml() {
   const IDS = ${JSON.stringify(IDS)};
   const calls = [];
   let overview = { consultationTopics: [{ id: TOPIC, patientId: PATIENT, headings: [] }] };
+  let draftHeadings = [];
   window.fetch = function (url) {
     const target = String(url);
     calls.push(target);
     let body = { items: [{ id: TPL, name: 'Asthma review' }] };
     if (target.indexOf('/encounter/overview/') !== -1) body = overview;
-    else if (target.indexOf('/document/template/search/') !== -1) {
-      body = { items: [{ id: DOC, name: 'Food bank letter' }] };
+    else if (target.indexOf('/draft-consultation-topic/') !== -1) {
+      body = { id: TOPIC, patientId: PATIENT, headings: draftHeadings };
+    } else if (target.indexOf('/document/template/search/') !== -1) {
+      body = {
+        items: [],
+        document: [{ id: DOC, name: 'Food bank letter' }],
+        referralForm: [{ id: '88888888-8888-4888-8888-888888888888', name: 'Referral form' }]
+      };
     }
     return Promise.resolve({
       ok: true,
@@ -184,6 +192,15 @@ function pageHtml() {
       lines.push(kind + ' url ' + (hit ? 'ok' : 'MISSING'));
       lines.push(kind + ' host ' + (hostOk ? 'ok' : 'BAD'));
       lines.push(kind + ' card ' + (card && card.textContent === 'Food bank letter' ? 'ok' : 'MISSING'));
+      if (kind === 'history') {
+        const launchEl = document.getElementById('ms-toc-launch');
+        const complete = document.getElementById('complete');
+        const l = launchEl ? launchEl.getBoundingClientRect() : { left: 0, right: 0, top: 0, bottom: 0 };
+        const c = complete.getBoundingClientRect();
+        const beside = l.right <= c.left + 4 || l.bottom <= c.top + 4;
+        const corner = l.left > window.innerWidth - 280 && l.top > window.innerHeight - 80;
+        lines.push('launcher beside complete ' + (beside && !corner ? 'ok' : 'MISSING'));
+      }
       closeOrganiser();
       await waitFor(function () { return !document.getElementById('ms-toc-overlay'); });
     }
@@ -220,6 +237,20 @@ function pageHtml() {
     lines.push('footer gap ' + (gap && gapText.indexOf('Nothing was read') !== -1 ? 'ok' : 'MISSING ' + gapText));
     lines.push('no document search ' + (searched ? 'CALLED' : 'ok'));
     lines.push('no document card ' + (docCard ? 'SHOWN' : 'ok'));
+    closeOrganiser();
+    await waitFor(function () { return !document.getElementById('ms-toc-overlay'); });
+
+    draftHeadings = [{ id: IDS.history, title: 'History' }];
+    overview = { consultationTopics: [{ id: TOPIC, patientId: PATIENT, headings: [] }] };
+    const fromDraft = mount('history', false);
+    const beforeDraft = calls.length;
+    await openOrganiser(fromDraft);
+    document.querySelector('#ms-toc-overlay [data-surface="documents"]').click();
+    const draftWant = '/document/template/search/' + PATIENT + '?contextId=' + IDS.history + '&contextType=consultation-topic-heading';
+    const draftHit = calls.slice(beforeDraft).some(function (url) { return url.indexOf(draftWant) !== -1; });
+    const draftCard = document.querySelector('#ms-toc-overlay .ms-toc-card-title');
+    lines.push('draft heading search ' + (draftHit ? 'ok' : 'MISSING'));
+    lines.push('draft heading card ' + (draftCard && draftCard.textContent === 'Food bank letter' ? 'ok' : 'MISSING'));
     document.getElementById('result').textContent = lines.join('\\n');
   }
 

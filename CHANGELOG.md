@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.6] — 2026-09-24
+
+### Document catalogue and launcher position
+
+Templates could list from the consultation topic while Documents stayed empty. Document search needs a heading id as well as the patient. When overview `consultationTopics[].headings` does not carry that id, the canvas now reads `draft-consultation-topic/{topicId}` and uses the History, Examination, Impression, or Plan heading on that topic. A document response shaped as tabs (`document`, `referralForm`, and the same under other keys) is read even when `items` is empty. An encounter `consultationTopics` array is not treated as document rows. Catalogue GETs stay on `{siteId}.api.{hostname}`. A missing heading is still a footer gap.
+
+The launcher is no longer fixed to the bottom-right of the browser window. It sits to the left of Complete consultation (or the same row’s Save, Park, End, or Finish consultation control), and above that control when there is no room on the left.
+
 ## [v3.265.5] — 2026-09-24
 
 ### Document catalogue on History, Examination, Impression, and Plan

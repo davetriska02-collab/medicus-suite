@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.5
+**Version:** v3.265.6
 **Generated:** 2026-09-24
 
 ## What it is
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.265.6 (24 Sep)** — Documents fill when the template list already can: the heading id is taken from `draft-consultation-topic` when overview headings omit it, and a tabbed document response is read when `items` is empty. The organiser button sits beside Complete consultation in the main pane, not at the bottom-right of the window.
 - **v3.265.5 (24 Sep)** — Document catalogue: History, Examination, Impression, and Plan pass patient id, heading context id, and `consultation-topic-heading` into document search. The heading uuid may sit on an ancestor or on `consultationTopics[].headings[]`. A missing context stays a footer gap. Catalogue reads stay on the practice API host. The pack stays opt-in.
 - **v3.265.4 (24 Sep)** — Document and Template Organiser: Open on a card in a group uses the same Medicus Use template / Create path as a card that is not in a group. The suite does not POST a create body. Still off until a practice turns it on.
 - **v3.265.3 (24 Sep)** — Document and Template Organiser: a search field on Templates and on Documents filters cards by title, preview, or category as you type. Groups stay on the board; clearing the field shows every card again. Still off until a practice turns it on.
