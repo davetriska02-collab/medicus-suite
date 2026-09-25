@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.265.9] — 2026-09-25
+
+### Flu eligibility — unpaid-carer SNOMED concepts
+
+Practices code carers with **Patient themselves providing care**
+(SNOMED `224484003`, the same concept as the legacy synonym **Is a carer**)
+and with more specific carer findings. The flu clause listed the parent
+concept only. The rules engine does not walk SNOMED hierarchy, so a
+descendant never matched on concept id alone.
+
+- Include the verified IS-A closure of `224484003` (24 active descendants)
+  and `824401000000105` **Carer of person with dementia**, which is not
+  under that parent.
+- Preferred description `337525019` matches when Medicus stores the
+  description id without the concept id. Legacy `1222761019` stays.
+- An active **Is no longer a carer** or **Not a carer** code suppresses
+  the carer clause only. **No longer carer of patient with dementia**
+  retires the dementia carer code and leaves a different carer code standing.
+- Has-a-carer, lives-with-carer, carer-details, paid carer, and
+  person/occupation role codes are not included.
+
+`rules/vaccine-rules.json`, `engine/rules-engine.js`. Tests:
+`test-vaccine-rules.js`. Draft hazard H-083 — pending CSO review.
+
 ## [v3.265.8] — 2026-09-24
 
 ### Task Presence on the queue, and on by default
