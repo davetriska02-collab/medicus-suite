@@ -102,7 +102,7 @@ const OPTIONS_SECTIONS = [
   [
     'practice-features',
     'Practice features',
-    'signing soft flags QOF review packs allocate canvases contacts routine-rx quick actions template organiser document and template organiser',
+    'signing soft flags QOF review packs allocate canvases contacts routine-rx quick actions template organiser document and template organiser workload tracker staff teams dashboard',
   ],
   ['notifications', 'Notifications', 'alerts sounds desktop quiet clinic mode mute'],
   ['slots', 'Slot Counter', 'appointments'],

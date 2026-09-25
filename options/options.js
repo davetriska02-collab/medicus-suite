@@ -120,6 +120,7 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.focusAlerts', ids: ['pfFocusAlerts'], grandfather: true },
   { key: 'suite.ui.templateOrganiser', ids: ['pfTemplateOrganiser'], grandfather: true },
   { key: 'suite.ui.taskPresence', ids: ['pfTaskPresence'], grandfather: true },
+  { key: 'suite.ui.workloadTracker', ids: ['pfWorkloadTracker'], grandfather: true },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);

@@ -604,6 +604,9 @@ function previewEnvelope(envelope) {
     if (mods.suite.taskPresence === true || mods.suite['ui.taskPresence'] === true) {
       lines.push('Task Presence ON');
     }
+    if (mods.suite.workloadTracker === true || mods.suite['ui.workloadTracker'] === true) {
+      lines.push('Workload tracker ON');
+    }
   }
 
   return lines;

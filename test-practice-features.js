@@ -119,6 +119,7 @@ const NEW_PACKS = [
   { suffix: 'ui.focusAlerts', key: 'suite.ui.focusAlerts', alias: 'focusAlerts' },
   { suffix: 'ui.templateOrganiser', key: 'suite.ui.templateOrganiser', alias: 'templateOrganiser' },
   { suffix: 'ui.taskPresence', key: 'suite.ui.taskPresence', alias: 'taskPresence' },
+  { suffix: 'ui.workloadTracker', key: 'suite.ui.workloadTracker', alias: 'workloadTracker' },
 ];
 
 (async () => {
@@ -288,6 +289,7 @@ const NEW_PACKS = [
   check(/'ui\.focusAlerts'/.test(allowList), 'allow-list includes ui.focusAlerts');
   check(/'ui\.templateOrganiser'/.test(allowList), 'allow-list includes ui.templateOrganiser');
   check(/'ui\.taskPresence'/.test(allowList), 'allow-list includes ui.taskPresence');
+  check(/'ui\.workloadTracker'/.test(allowList), 'allow-list includes ui.workloadTracker');
   check(!/practiceAcceptedAt/.test(allowList), 'practiceAcceptedAt is not on the pack allow-list');
   check(!/hiddenTabs/.test(allowList), 'hiddenTabs is not on the pack allow-list');
 
@@ -314,6 +316,13 @@ const NEW_PACKS = [
   check(store['suite.ui.templateOrganiser'] === true, 'suiteImport writes suite.ui.templateOrganiser');
   await suiteIo.suiteImport({ taskPresence: true });
   check(store['suite.ui.taskPresence'] === true, 'suiteImport writes suite.ui.taskPresence');
+  await suiteIo.suiteImport({ workloadTracker: true });
+  check(store['suite.ui.workloadTracker'] === true, 'suiteImport writes suite.ui.workloadTracker');
+  const wlPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { workloadTracker: true } }));
+  check(
+    wlPreview.some((l) => /Workload tracker ON/.test(l)),
+    'previewEnvelope mentions the workload tracker when ON'
+  );
   const tpPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { taskPresence: true } }));
   check(
     tpPreview.some((l) => /Task Presence ON/.test(l)),
@@ -405,9 +414,14 @@ const NEW_PACKS = [
   check(/id="pfFocusAlerts"/.test(optionsHtml), 'focus-alerts pack lives on the practice board');
   check(/id="pfTemplateOrganiser"/.test(optionsHtml), 'template organiser pack lives on the practice board');
   check(/id="pfTaskPresence"/.test(optionsHtml), 'task presence pack lives on the practice board');
+  check(/id="pfWorkloadTracker"/.test(optionsHtml), 'workload tracker pack lives on the practice board');
   check(
     /suite\.ui\.taskPresence[\s\S]{0,80}grandfather:\s*true/.test(optionsJs),
     'task presence toggle is default-on (grandfather true)'
+  );
+  check(
+    /suite\.ui\.workloadTracker[\s\S]{0,80}grandfather:\s*true/.test(optionsJs),
+    'workload tracker toggle is default-on (grandfather true)'
   );
   check(
     /suite\.ui\.templateOrganiser[\s\S]{0,120}grandfather:\s*true/.test(optionsJs),
@@ -461,6 +475,7 @@ const NEW_PACKS = [
       !/focusAlerts/.test(acceptFn[0]) &&
       !/templateOrganiser/.test(acceptFn[0]) &&
       !/taskPresence/.test(acceptFn[0]) &&
+      !/workloadTracker/.test(acceptFn[0]) &&
       !/signing\.softFlags/.test(acceptFn[0]),
     'tick Accept does not write any pack key'
   );
@@ -487,6 +502,7 @@ const NEW_PACKS = [
       'suite.ui.templateOrganiser',
       'muteOrganiserChrome',
     ],
+    ['content-scripts/workload-tracker.js', 'suite.ui.workloadTracker', 'muteWorkloadChrome'],
   ];
   const manifest = fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8');
   check(/shared\/practice-packs\.js/.test(manifest), 'practice-packs.js is in the manifest');
