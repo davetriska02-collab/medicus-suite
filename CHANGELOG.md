@@ -10,7 +10,7 @@ The Workflow dashboard (`/tasks/dashboard`) gains a Workload button and a read-o
 
 This is a new view. The allocation canvases reassign individual queues; Activity is a date-range report; nothing else read the dashboard payload.
 
-`suite.ui.workloadTracker` is on when the key is missing, same as the other default-on packs. An explicit false stays off. The panel refreshes every 5 minutes while it is open and the tab is visible, and it does not refresh while the tab is hidden. A failed refresh is an error, not a zero. H-083 is proposed and not signed off.
+`suite.ui.workloadTracker` is on when the key is missing, same as the other default-on packs. An explicit false stays off. The panel refreshes every 5 minutes while it is open and the tab is visible, and it does not refresh while the tab is hidden. A failed refresh is an error, not a zero. H-084 is proposed and not signed off. Draft #474 already proposes H-083, so this hazard is H-084. Manifest 3.266.0 clashes with #473 and is rebumped at merge time.
 
 ## [v3.265.8] — 2026-09-24
 

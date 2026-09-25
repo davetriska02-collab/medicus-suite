@@ -189,5 +189,18 @@ check(
 );
 check(!/#mwt-/.test(css) && !/\.mwt-/.test(src), 'old extension ids are gone');
 
+console.log('\n--- hazard id is H-084 ---');
+const hazard = fs.readFileSync(path.join(__dirname, 'docs/HAZARD-LOG.md'), 'utf8');
+const notice = fs.readFileSync(path.join(__dirname, 'docs/CLINICAL-SAFETY-NOTICE.md'), 'utf8');
+const changelog = fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8');
+const ledger = fs.readFileSync(path.join(__dirname, 'docs/cso-review-ledger.json'), 'utf8');
+check(/### H-084 — Workload counts/.test(hazard), 'hazard log heading is H-084');
+check(!/H-083/.test(hazard), 'hazard log does not keep H-083 for this pack');
+check(/H-084 Workload tracker/.test(notice), 'clinical safety notice names H-084');
+check(!/H-083/.test(notice), 'clinical safety notice does not keep H-083');
+check(/H-084 is proposed and not signed off/.test(changelog), 'changelog names H-084');
+check(/H-084 Workload tracker/.test(ledger), 'review ledger names H-084');
+check(!/H-083/.test(ledger), 'review ledger does not keep H-083');
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
