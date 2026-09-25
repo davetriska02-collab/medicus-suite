@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.7
-**Generated:** 2026-09-24
+**Version:** v3.266.0
+**Generated:** 2026-09-25
 
 ## What it is
 
@@ -11,7 +11,7 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 
 - 20 side-panel tabs covering morning workflow, monitoring, capacity/demand, reception, referrals, staff rota, the Note display board and reference material (two of those tabs open a full-tab tool)
 - 4 full-tab tools reached from the panel or from Medicus's own pages (Duplicate Problem Checker, Rota Manager, Note display board, Contacts Management)
-- around 16 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, appointment-book tally, repeat-authorisation pills)
+- around 17 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, appointment-book tally, repeat-authorisation pills, workload tracker)
 - 8 rule types in the clinical alert engine
 - 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules (16 register + 66 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
 
@@ -116,6 +116,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
+- **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. One GET of the dashboard payload. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
 - **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
@@ -143,7 +144,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 - **Practice Profile** — shared-folder managed deployment so rules, thresholds and pathways can be published once and picked up across every machine in the practice
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
-- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags)
+- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags, workload tracker)
 - **Investigations (Lab Result Catalogue)** — a single, coded, per-practice catalogue of investigations, results and labs with its own settings page (practice context, browse/search, per-test edit and gated per-test review; entries arriving by backup, shared profile or import stay inert until approved on that machine). Outstanding Requests can opt into it (matching engine setting, default off). Lab Filing can opt into it (filing engine setting, default off, union-only with the legacy gate — can only add a blocker, never remove one) and works even with zero legacy Lab Filing profiles configured, driven entirely by the catalogue's own practice ranges, safety guards and lab-comment whitelists. H-080 and H-081 accepted 2026-09-24; shipped defaults stay legacy, so this is not a practice-wide enablement. If the catalogue cannot be checked, filing is blocked.
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
@@ -151,6 +152,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.266.0 (25 Sep)** — Workload tracker on the Workflow dashboard: staff and team task counts, search and sort, read-only. On unless switched off. Refreshes every 5 minutes while the panel is open and the tab is visible. H-084 accepted 2026-09-25.
 - **v3.265.7 (24 Sep)** — Document and Template Organiser is on unless a practice switches it off. Opening a document continues past Medicus’s New Document chooser (From a template, then the chosen row). The button sits clear of More and Complete consultation. Layout is a practice default plus each person’s own folders.
 - **v3.265.6 (24 Sep)** — Documents fill when the template list already can: the heading id is taken from `draft-consultation-topic` when overview headings omit it, and a tabbed document response is read when `items` is empty. The organiser button sits beside Complete consultation in the main pane, not at the bottom-right of the window.
 - **v3.265.5 (24 Sep)** — Document catalogue: History, Examination, Impression, and Plan pass patient id, heading context id, and `consultation-topic-heading` into document search. The heading uuid may sit on an ancestor or on `consultationTopics[].headings[]`. A missing context stays a footer gap. Catalogue reads stay on the practice API host. The pack stays opt-in.

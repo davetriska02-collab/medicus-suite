@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.266.0] — 2026-09-25
+
+### Workload tracker on the Workflow dashboard
+
+The Workflow dashboard (`/tasks/dashboard`) gains a Workload button and a read-only panel of staff and team task counts: overdue high-priority, all high-priority, normal, and snoozed, with search and sort. It is one GET of `/tasks/data/dashboard-data` on `{siteId}.api.{page hostname}`. It does not write to Medicus.
+
+This is a new view. The allocation canvases reassign individual queues; Activity is a date-range report; nothing else read the dashboard payload.
+
+`suite.ui.workloadTracker` is on when the key is missing, same as the other default-on packs. An explicit false stays off. The panel refreshes every 5 minutes while it is open and the tab is visible, and it does not refresh while the tab is hidden. A failed refresh is an error, not a zero. H-084 is accepted (ALARP) — CSO signed off 2026-09-25 (Dr D. Triska, CSO, approved on merge go) at residual 6. Draft #474 already proposes H-083, so this hazard is H-084 and that draft is unchanged. Manifest stays 3.266.0; that number is still free on main.
+
 ## [v3.265.8] — 2026-09-24
 
 ### Task Presence on the queue, and on by default

@@ -30,6 +30,8 @@ const SUITE_KEYS = [
   'suite.ui.templateOrganiser',
   // Task Presence. Default on — missing key stays on at runtime.
   'suite.ui.taskPresence',
+  // Workload tracker. Default on — missing key stays on at runtime.
+  'suite.ui.workloadTracker',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -77,6 +79,7 @@ async function suiteExport() {
     focusAlerts: r['suite.ui.focusAlerts'] ?? null,
     templateOrganiser: r['suite.ui.templateOrganiser'] ?? null,
     taskPresence: r['suite.ui.taskPresence'] ?? null,
+    workloadTracker: r['suite.ui.workloadTracker'] ?? null,
   };
 }
 
@@ -182,6 +185,7 @@ async function suiteImport(data) {
     ['focusAlerts', 'suite.ui.focusAlerts'],
     ['templateOrganiser', 'suite.ui.templateOrganiser'],
     ['taskPresence', 'suite.ui.taskPresence'],
+    ['workloadTracker', 'suite.ui.workloadTracker'],
   ];
   for (const [alias, storageKey] of packAliases) {
     if (data[alias] == null) continue;
