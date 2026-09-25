@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.7
-**Generated:** 2026-09-24
+**Version:** v3.265.9
+**Generated:** 2026-09-25
 
 ## What it is
 
@@ -151,6 +151,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.265.9 (25 Sep)** — Flu chip: unpaid carers coded with Patient themselves providing care (SNOMED 224484003), its verified descendant findings, or Carer of person with dementia (824401000000105). Legacy "Is a carer" still counts. "Has a carer" does not. An active "Is no longer a carer" or "Not a carer" code suppresses the carer reason only.
 - **v3.265.7 (24 Sep)** — Document and Template Organiser is on unless a practice switches it off. Opening a document continues past Medicus’s New Document chooser (From a template, then the chosen row). The button sits clear of More and Complete consultation. Layout is a practice default plus each person’s own folders.
 - **v3.265.6 (24 Sep)** — Documents fill when the template list already can: the heading id is taken from `draft-consultation-topic` when overview headings omit it, and a tabbed document response is read when `items` is empty. The organiser button sits beside Complete consultation in the main pane, not at the bottom-right of the window.
 - **v3.265.5 (24 Sep)** — Document catalogue: History, Examination, Impression, and Plan pass patient id, heading context id, and `consultation-topic-heading` into document search. The heading uuid may sit on an ancestor or on `consultationTopics[].headings[]`. A missing context stays a footer gap. Catalogue reads stay on the practice API host. The pack stays opt-in.

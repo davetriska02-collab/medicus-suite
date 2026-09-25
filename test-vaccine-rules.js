@@ -8,6 +8,7 @@
 
 const path = require('path');
 const engine = require(path.join(__dirname, 'engine', 'rules-engine.js'));
+const norm = require(path.join(__dirname, 'engine', 'normalisers.js'));
 const vaxRules = require(path.join(__dirname, 'rules', 'vaccine-rules.json'));
 const qofRules = require(path.join(__dirname, 'rules', 'qof-rules.json'));
 
@@ -665,12 +666,14 @@ console.log('\n--- shingles severely immunosuppressed 18+ (vax-shingles-immuno, 
 }
 
 // ── Flu carer eligibility (Witley / Karen Edwards, 2026-09-10) ──────────────
-// Match terms: SNOMED phrases "patient themselves providing care" and the UK
-// synonym "is a carer" (descriptionId 1222761019) — NOT a bare "carer" stem.
-// Bare "carer" would false-positive on "carer needs assessment", "carer
-// review", "has a carer", etc.
-// Code match: concept 224484003, description 1222761019, Egton 4928511000006113,
-// via itemCodeHits (conceptId / descriptionId / problemCode.*). Either path is enough.
+// Match terms: SNOMED phrases for 224484003 ("patient themselves providing
+// care", "is a carer", "is a caregiver", "looks after someone") and the UK
+// dementia-carer finding — NOT a bare "carer" stem. Bare "carer" would
+// false-positive on "carer needs assessment", "carer review", "has a carer".
+// Code match is an explicit list (the engine does not walk SNOMED hierarchy):
+// concept 224484003, its description ids, Egton 4928511000006113, the verified
+// IS-A closure, and 824401000000105. Active "Is no longer a carer" / "Not a
+// carer" suppress this clause only.
 console.log('\n--- flu carer eligibility ---');
 {
   const carerClause = (fluRule.eligibility.anyOf || []).find((c) => c.label === 'Carer (provides care)');
@@ -688,9 +691,17 @@ console.log('\n--- flu carer eligibility ---');
   assert(
     Array.isArray(carerClause?.snomed) &&
       carerClause.snomed.includes('224484003') &&
+      carerClause.snomed.includes('337525019') &&
       carerClause.snomed.includes('1222761019') &&
-      carerClause.snomed.includes('4928511000006113'),
-    'carer clause lists concept 224484003, description 1222761019, and Egton 4928511000006113'
+      carerClause.snomed.includes('4928511000006113') &&
+      carerClause.snomed.includes('302767002') &&
+      carerClause.snomed.includes('824401000000105'),
+    'carer clause lists 224484003, its preferred description 337525019, legacy description 1222761019, Egton id, relative 302767002, and dementia carer 824401000000105'
+  );
+  const NOT_CARER_CODES = ['184156005', '184140000', '224498006', '818091000000106', '407543004', '1364141000000107', '1597921000000107', '199361000000101', '506401000000109'];
+  assert(
+    NOT_CARER_CODES.every((id) => !carerClause.snomed.includes(id)),
+    'carer clause does not list has-a-carer, details, lives-with, paid, person-role, or ceased concepts'
   );
   assert(
     /care home residents are not detected/i.test(fluRule.notes) && !/carers and care home/i.test(fluRule.notes),
@@ -817,6 +828,126 @@ console.log('\n--- flu carer eligibility ---');
     };
     const chips = engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
     assert(chips.length === 0, 'flu carer: inactive problem is skipped even with matching code + label');
+  }
+
+  function carerChip(problems) {
+    return engine.evaluateVaccineRule(fluRule, { ...adult(), problems }, IN_CAMPAIGN);
+  }
+
+  // Preferred-term description id alone (unrelated label) — the code practices
+  // now file, not only the legacy "Is a carer" description.
+  {
+    const chips = carerChip([{ label: 'Social support arrangement', descriptionId: '337525019', status: 'active' }]);
+    assert(chips.length === 1, 'flu carer: descriptionId 337525019 alone → chip');
+    assert(chips[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: descriptionId 337525019 → carer clause');
+  }
+
+  // Descendant and the non-descendant dementia finding: code only, unrelated label.
+  {
+    const relative = carerChip([{ label: 'Social support arrangement', conceptId: '302767002', status: 'active' }]);
+    assert(relative.length === 1 && relative[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: descendant 302767002 Cares for a relative → chip');
+    const dementia = carerChip([{ label: 'Social support arrangement', conceptId: '824401000000105', status: 'active' }]);
+    assert(dementia.length === 1 && dementia[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: 824401000000105 Carer of person with dementia → chip');
+    const labelOnly = carerChip([{ label: 'Carer of person with dementia', status: 'active' }]);
+    assert(labelOnly.length === 1, 'flu carer: dementia label alone → chip');
+  }
+
+  // Problem-list shape (problemCode.conceptId), the path practices use.
+  {
+    const listing = norm.normaliseProblemsAll({
+      activeProblems: [
+        {
+          id: 'p-dem',
+          problemCodeDescription: 'Carer of person with dementia',
+          problemCode: { conceptId: '824401000000105', descriptionId: '2145441000000117', description: 'Carer of person with dementia' },
+        },
+      ],
+    });
+    const chips = carerChip(listing.active);
+    assert(listing.active.length === 1 && listing.active[0].conceptId === '824401000000105', 'problem-listing keeps the dementia carer conceptId');
+    assert(chips.length === 1 && chips[0]?.eligibilityReason === 'Carer (provides care)', 'flu carer: problem-list dementia code → chip');
+  }
+
+  // A journal observation is not a problem-list code and does not fire the clause.
+  {
+    const data = {
+      ...adult(),
+      problems: [],
+      observations: [{ name: 'Patient themselves providing care', code: '224484003', date: '2026-01-02' }],
+    };
+    assert(engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN).length === 0, 'flu carer: journal observation alone does NOT match');
+  }
+
+  // Codes that mean the patient receives care, or a person/occupation role.
+  {
+    const cases = [
+      ['184156005', 'Has a carer'],
+      ['224498006', 'Lives with carer'],
+      ['184140000', 'Carer details'],
+      ['818091000000106', 'Has a paid carer'],
+      ['407543004', 'Primary carer'],
+      ['1364141000000107', 'Unpaid carer'],
+      ['407542009', 'Informal carer'],
+      ['1597921000000107', 'Has young carer'],
+      ['755471000000104', 'Has a parent carer'],
+      ['199741000000103', 'Parent is informal carer'],
+      ['707810004', 'Cares for self'],
+    ];
+    cases.forEach(([conceptId, label]) => {
+      const chips = carerChip([{ label, conceptId, status: 'active' }]);
+      assert(chips.length === 0, `flu carer: ${label} (${conceptId}) does NOT match`);
+    });
+  }
+
+  // Ceased / not-a-carer overrides the carer clause, including the "is a carer" substring.
+  {
+    const ceasedLabel = carerChip([{ label: 'Is no longer a carer', status: 'active' }]);
+    assert(ceasedLabel.length === 0, 'flu carer: "Is no longer a carer" label does NOT match');
+    const both = carerChip([
+      { label: 'Is a carer', conceptId: '224484003', status: 'active' },
+      { label: 'Is no longer a carer', conceptId: '199361000000101', status: 'active' },
+    ]);
+    assert(both.length === 0, 'flu carer: active ceased code overrides an active carer code');
+    const notACarer = carerChip([
+      { label: 'Patient themselves providing care', conceptId: '224484003', status: 'active' },
+      { label: 'Social support arrangement', conceptId: '506401000000109', status: 'active' },
+    ]);
+    assert(notACarer.length === 0, 'flu carer: active Not a carer (506401000000109) overrides');
+    const inactiveCease = carerChip([
+      { label: 'Is a carer', status: 'active' },
+      { label: 'Is no longer a carer', conceptId: '199361000000101', status: 'inactive' },
+    ]);
+    assert(inactiveCease.length === 1, 'flu carer: inactive ceased code does not override an active carer code');
+  }
+
+  // Dementia-specific ceased code retires that concept only.
+  {
+    const pair = carerChip([
+      { label: 'Carer of person with dementia', conceptId: '824401000000105', status: 'active' },
+      { label: 'No longer carer of patient with dementia', conceptId: '933581000000105', status: 'active' },
+    ]);
+    assert(pair.length === 0, 'flu carer: dementia ceased code retires the dementia carer code');
+    const stillRelative = carerChip([
+      { label: 'Social support arrangement', conceptId: '302767002', status: 'active' },
+      { label: 'No longer carer of patient with dementia', conceptId: '933581000000105', status: 'active' },
+    ]);
+    assert(
+      stillRelative.length === 1 && stillRelative[0]?.eligibilityReason === 'Carer (provides care)',
+      'flu carer: dementia ceased code does not retire a different carer concept'
+    );
+  }
+
+  // Other flu clauses still fire when the carer clause is suppressed.
+  {
+    const chips = engine.evaluateVaccineRule(
+      fluRule,
+      {
+        ...baseData(70),
+        problems: [{ label: 'Is no longer a carer', conceptId: '199361000000101', status: 'active' }],
+      },
+      IN_CAMPAIGN
+    );
+    assert(chips.length === 1 && chips[0]?.eligibilityReason === 'Age 65+', 'flu carer: ceased carer does not suppress age 65+ eligibility');
   }
 }
 

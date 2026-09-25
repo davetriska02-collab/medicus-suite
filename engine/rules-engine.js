@@ -3383,6 +3383,16 @@
     return null;
   }
 
+  // Active problem matches a clause's text stems and/or code ids.
+  // status "inactive" is skipped. Any other status counts. Shared by the
+  // positive match and by ceased / not-a-carer overrides.
+  function activeVaccineProblemHit(p, matchTerms, snomedIds) {
+    if (!p || p.status === 'inactive') return false;
+    const terms = Array.isArray(matchTerms) ? matchTerms : [];
+    const textHit = terms.length > 0 && matchesAnyTerm(p.label, terms);
+    return textHit || itemCodeHits(p, snomedIds);
+  }
+
   function matchVaccineEligibility(rule, data) {
     const ctx = data.patientContext || {};
     const age = Number.isFinite(ctx.ageYears) ? ctx.ageYears : Number.isFinite(ctx.age) ? ctx.age : null;
@@ -3412,14 +3422,37 @@
         if (clause.sex && sex && clause.sex !== sex[0]) continue;
         if (age != null && clause.ageMin != null && age < clause.ageMin) continue;
         if (age != null && clause.ageMax != null && age > clause.ageMax) continue;
-        const terms = clause.match || [];
+        const problems = data.problems || [];
+        // An active ceased / not-a-carer code suppresses this clause only.
+        // Age and clinical-risk clauses still run. "Is no longer a carer"
+        // contains the stem "is a carer", so the override has to win before
+        // the positive text match.
+        const exclude = clause.exclude || null;
+        if (exclude && problems.some((p) => activeVaccineProblemHit(p, exclude.match, exclude.snomed))) {
+          continue;
+        }
+        // Copy — never mutate the shared rule. A narrow ceased code drops
+        // only the positive codes it retires, so a different active carer
+        // code can still match.
+        let terms = (clause.match || []).slice();
+        let codes = (clause.snomed || []).slice();
+        for (const pair of clause.retire || []) {
+          if (!problems.some((p) => activeVaccineProblemHit(p, pair.whenMatch, pair.whenSnomed))) continue;
+          const dropS = new Set((pair.dropSnomed || []).map((s) => String(s)));
+          const dropM = new Set((pair.dropMatch || []).map((t) => String(t).toLowerCase()));
+          codes = codes.filter((s) => !dropS.has(String(s)));
+          terms = terms.filter((t) => !dropM.has(String(t).toLowerCase()));
+        }
         // Text match OR SNOMED/Egton hit (itemCodeHits). Code-only problems
         // (conceptId present, label not in match[]) used to be invisible —
-        // that is how coded carers never fired vax-flu.
-        const hit = (data.problems || []).find((p) => {
-          if (p.status === 'inactive') return false;
-          const textHit = terms.length > 0 && matchesAnyTerm(p.label, terms);
-          return textHit || itemCodeHits(p, clause.snomed);
+        // that is how coded carers never fired vax-flu. Hierarchy is not
+        // walked at runtime; descendant concept ids are listed on the clause.
+        const hit = problems.find((p) => {
+          if (!activeVaccineProblemHit(p, terms, codes)) return false;
+          if ((clause.retire || []).some((pair) => activeVaccineProblemHit(p, pair.whenMatch, pair.whenSnomed))) {
+            return false;
+          }
+          return true;
         });
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
       }
