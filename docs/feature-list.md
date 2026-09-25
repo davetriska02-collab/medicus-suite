@@ -152,7 +152,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.266.0 (25 Sep)** — Workload tracker on the Workflow dashboard: staff and team task counts, search and sort, read-only. On unless switched off. Refreshes every 5 minutes while the panel is open and the tab is visible.
+- **v3.266.0 (25 Sep)** — Workload tracker on the Workflow dashboard: staff and team task counts, search and sort, read-only. On unless switched off. Refreshes every 5 minutes while the panel is open and the tab is visible. H-084 accepted 2026-09-25.
 - **v3.265.7 (24 Sep)** — Document and Template Organiser is on unless a practice switches it off. Opening a document continues past Medicus’s New Document chooser (From a template, then the chosen row). The button sits clear of More and Complete consultation. Layout is a practice default plus each person’s own folders.
 - **v3.265.6 (24 Sep)** — Documents fill when the template list already can: the heading id is taken from `draft-consultation-topic` when overview headings omit it, and a tabbed document response is read when `items` is empty. The organiser button sits beside Complete consultation in the main pane, not at the bottom-right of the window.
 - **v3.265.5 (24 Sep)** — Document catalogue: History, Examination, Impression, and Plan pass patient id, heading context id, and `consultation-topic-heading` into document search. The heading uuid may sit on an ancestor or on `consultationTopics[].headings[]`. A missing context stays a footer gap. Catalogue reads stay on the practice API host. The pack stays opt-in.

@@ -29,7 +29,7 @@ const payload = {
       allNormalPriority: 1,
       snoozed: 0,
       patientName: 'Secret Patient',
-      nhsNumber: '9999999999',
+      nhsNumber: '9999999990',
     },
     { label: 'Jo Smith', overdueHighPriority: 0, allHighPriority: 8, allNormalPriority: 3, snoozed: 1 },
     {
@@ -198,7 +198,7 @@ check(/### H-084 — Workload counts/.test(hazard), 'hazard log heading is H-084
 check(!/H-083/.test(hazard), 'hazard log does not keep H-083 for this pack');
 check(/H-084 Workload tracker/.test(notice), 'clinical safety notice names H-084');
 check(!/H-083/.test(notice), 'clinical safety notice does not keep H-083');
-check(/H-084 is proposed and not signed off/.test(changelog), 'changelog names H-084');
+check(/H-084 is accepted \(ALARP\)/.test(changelog), 'changelog records the H-084 sign-off');
 check(/H-084 Workload tracker/.test(ledger), 'review ledger names H-084');
 check(!/H-083/.test(ledger), 'review ledger does not keep H-083');
 
