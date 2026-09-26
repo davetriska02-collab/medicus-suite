@@ -23,6 +23,7 @@ import { rankCommands, pushRecent, patientScopedCommands, PATIENT_COMMAND_IDS } 
 import { startTour } from '../tour/tour.js';
 import { openRotaTab } from '../modules/rota/rota-open.js';
 import { openDuplicateCheckerTab } from '../duplicate-checker-open.js';
+import { openAvailabilityTab } from '../../availability/wall-open.js';
 import { orderedMenuIds, paletteGroupFor } from '../tab-sections.js';
 
 const RECENTS_KEY = 'suite.palette.recents';
@@ -175,6 +176,16 @@ function buildCommands(hasPatient) {
         keywords: 'duplicate-checker duplicates duplicate problem checker gp2gp scan',
         icon: offStripIcon('duplicate-checker'),
         run: () => openDuplicateCheckerTab(),
+      });
+    } else if (id === 'availability') {
+      placed.add(id);
+      cmds.push({
+        id: 'open:availability',
+        label: 'Open availability wall',
+        group: paletteGroupFor('availability'),
+        keywords: 'availability wall slots free capacity tv triage room screen',
+        icon: offStripIcon('availability'),
+        run: () => openAvailabilityTab(),
       });
     }
   }

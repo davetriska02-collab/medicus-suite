@@ -1,0 +1,343 @@
+/* Availability wall — TV face. Tokens come from design-system/src/tokens.css. */
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-deep);
+  color: var(--text-1);
+  font-family: var(--sans);
+}
+
+body {
+  padding: 28px 36px 40px;
+  box-sizing: border-box;
+}
+
+.av-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.av-head h1 {
+  margin: 0;
+  font-size: clamp(28px, 3vw, 44px);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+
+.av-date,
+.av-updated {
+  margin: 6px 0 0;
+  color: var(--text-3);
+  font-size: clamp(16px, 1.4vw, 22px);
+}
+
+.av-head-side {
+  text-align: right;
+}
+
+.av-setup,
+.av-btn {
+  font: inherit;
+  font-size: 16px;
+  border-radius: var(--r-md, 6px);
+  border: 1px solid var(--border-hi);
+  background: var(--bg-elev);
+  color: var(--text-1);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.av-btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-deep);
+}
+
+.av-banner {
+  margin: 0 0 18px;
+  padding: 12px 16px;
+  border-radius: var(--r-md, 6px);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  color: var(--text-1);
+  font-size: 20px;
+}
+
+.av-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+
+.av-tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-top: 8px solid var(--border-hi);
+  border-radius: 16px;
+  padding: 18px 20px 16px;
+  min-height: 168px;
+}
+
+.av-tile.tone-green {
+  background: var(--green-dim);
+  border-top-color: var(--green);
+}
+
+.av-tile.tone-amber {
+  background: var(--amber-dim);
+  border-top-color: var(--amber);
+}
+
+.av-tile.tone-red {
+  background: var(--red-dim);
+  border-top-color: var(--red);
+}
+
+.av-tile.tone-empty,
+.av-tile.tone-none {
+  background: var(--bg-elev);
+}
+
+.av-kicker {
+  margin: 0;
+  font-size: clamp(16px, 1.3vw, 20px);
+  font-weight: 650;
+  color: var(--text-2);
+}
+
+.av-primary {
+  margin: 10px 0 0;
+  font-size: clamp(42px, 5vw, 72px);
+  font-weight: 750;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.tone-green .av-primary {
+  color: var(--green);
+}
+.tone-amber .av-primary {
+  color: var(--amber);
+}
+.tone-red .av-primary {
+  color: var(--red);
+}
+
+.av-detail,
+.av-secondary {
+  margin: 8px 0 0;
+  font-size: clamp(18px, 1.6vw, 26px);
+  color: var(--text-2);
+}
+
+.av-icon {
+  display: inline-block;
+  margin-right: 8px;
+  font-weight: 750;
+}
+
+.av-tile.flash {
+  animation: av-flash 1.1s steps(2, end) infinite;
+}
+
+@keyframes av-flash {
+  50% {
+    background: var(--red);
+    color: var(--bg-deep);
+  }
+}
+
+.av-tile.flash .av-primary,
+.av-tile.flash .av-kicker,
+.av-tile.flash .av-secondary,
+.av-tile.flash .av-detail {
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .av-tile.flash {
+    animation: none;
+  }
+}
+
+.av-week {
+  margin-top: 28px;
+}
+
+.av-week h2 {
+  margin: 0 0 12px;
+  font-size: clamp(20px, 2vw, 28px);
+}
+
+.av-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.av-bar {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 10px 12px;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.av-bar.weekend {
+  background: var(--bg-mid);
+}
+
+.av-bar-label {
+  font-size: 16px;
+  color: var(--text-3);
+}
+
+.av-bar-count {
+  font-size: clamp(22px, 2vw, 32px);
+  font-weight: 750;
+  margin-top: 4px;
+}
+
+.av-bar-ext {
+  font-size: 14px;
+  color: var(--text-3);
+  min-height: 1.2em;
+}
+
+.av-meter {
+  margin-top: 8px;
+  height: 10px;
+  border-radius: 99px;
+  background: var(--bg-mid);
+  display: flex;
+  overflow: hidden;
+}
+
+.av-meter > span {
+  display: block;
+  height: 100%;
+}
+
+.av-meter .routine {
+  background: var(--accent);
+}
+
+.av-meter .extended {
+  background: var(--violet, #7c3aed);
+}
+
+.av-total {
+  min-width: 110px;
+  padding: 12px;
+}
+
+.av-total strong {
+  display: block;
+  font-size: clamp(36px, 4vw, 56px);
+  line-height: 1;
+}
+
+.av-note {
+  margin: 16px 0 0;
+  color: var(--text-3);
+  font-size: 16px;
+}
+
+.av-message {
+  font-size: clamp(22px, 2vw, 32px);
+  max-width: 40rem;
+  line-height: 1.35;
+}
+
+.av-editor {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  overflow: auto;
+  padding: 32px 16px;
+}
+
+.av-editor-card {
+  max-width: 920px;
+  margin: 0 auto;
+  background: var(--bg-elev);
+  color: var(--text-1);
+  border-radius: 16px;
+  padding: 22px;
+  border: 1px solid var(--border);
+}
+
+.av-editor-lead {
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.av-tile-edit {
+  border-top: 1px solid var(--border);
+  padding: 14px 0;
+}
+
+.av-tile-edit h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.av-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.av-row label {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.av-row input[type='text'],
+.av-row input[type='number'],
+.av-row select {
+  font: inherit;
+  font-size: 15px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-mid);
+  color: var(--text-1);
+  min-width: 12rem;
+}
+
+.av-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.av-observed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+
+.av-observed button {
+  font: inherit;
+  font-size: 13px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  background: var(--bg-mid);
+  color: var(--text-1);
+  padding: 4px 10px;
+  cursor: pointer;
+}

@@ -58,6 +58,12 @@ export const TAB_CATALOG = [
     blurb: 'Your own per-patient flags — interpreter, safeguarding, behaviour — shown when that patient is open.',
   },
   {
+    // Off the strip. Opens the triage-room availability wall in its own tab.
+    id: 'availability',
+    name: 'Availability',
+    blurb: 'Full-screen free-slot wall for the triage room. Times and counts only.',
+  },
+  {
     // Off the strip, same as Rota manager. The Everything preset still shows it.
     id: 'duplicate-checker',
     name: 'Duplicates',
@@ -73,6 +79,7 @@ export const ROLE_PRESETS = [
     label: 'GP / clinician',
     show: [
       'slots',
+      'availability',
       'sentinel',
       'record',
       'patient-alerts',
@@ -86,7 +93,7 @@ export const ROLE_PRESETS = [
   {
     id: 'reception',
     label: 'Reception',
-    show: ['slots', 'reception', 'patient-alerts', 'submissions', 'knowledge', 'leaflets'],
+    show: ['slots', 'availability', 'reception', 'patient-alerts', 'submissions', 'knowledge', 'leaflets'],
   },
   {
     id: 'manager',
@@ -99,6 +106,7 @@ export const ROLE_PRESETS = [
       'referrals',
       'rota',
       'rota-app',
+      'availability',
       'knowledge',
     ],
   },

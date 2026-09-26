@@ -144,6 +144,7 @@ const MENU_ORDER = [
   'item:rota',
   'item:rota-app',
   'item:duplicate-checker',
+  'item:availability',
   'section:reference',
   'item:knowledge',
   'item:leaflets',
@@ -176,7 +177,7 @@ const MENU_ORDER = [
     'QOF tools': ['sweep', 'signing'],
     'With the patient': ['sentinel', 'record', 'trends', 'patient-alerts'],
     Desk: ['reception', 'submissions'],
-    Practice: ['capacity', 'activity', 'referrals', 'rota', 'rota-app', 'duplicate-checker'],
+    Practice: ['capacity', 'activity', 'referrals', 'rota', 'rota-app', 'duplicate-checker', 'availability'],
     Reference: ['knowledge', 'leaflets'],
   };
   for (const section of TAB_SECTIONS) {
@@ -213,7 +214,10 @@ const MENU_ORDER = [
     !/today|board|tally|note tv|consult/i.test(JSON.stringify(TAB_SECTIONS) + PINNED_IDS.join(',')),
     'no Today, tally, Note TV, or Consult parent'
   );
-  check(OFF_STRIP_IDS.join(',') === 'rota-app,duplicate-checker', 'off-strip set is Rota manager and Duplicates');
+  check(
+    OFF_STRIP_IDS.join(',') === 'rota-app,duplicate-checker,availability',
+    'off-strip set is Rota manager, Duplicates, and the availability wall'
+  );
   check(orderedMenuIds().join(',') === classified.join(','), 'palette order follows the sections');
 
   console.log('\nMenu HTML');
@@ -280,8 +284,11 @@ const MENU_ORDER = [
     'panel strip labels unchanged (Slots, Monitoring, Signing, Pt Alerts)'
   );
   check(
-    !panelNav.includes('rota-app') && !panelNav.includes('duplicate-checker') && !panelNav.includes('phrases'),
-    'Rota manager, Duplicates, and Phrases are not on the panel strip'
+    !panelNav.includes('rota-app') &&
+      !panelNav.includes('duplicate-checker') &&
+      !panelNav.includes('availability') &&
+      !panelNav.includes('phrases'),
+    'Rota manager, Duplicates, the availability wall, and Phrases are not on the panel strip'
   );
   check(!panelNav.includes('nav-parent') && !/>\s*Consult\s*</.test(panelNav), 'the strip has no parent button');
   check(
@@ -294,8 +301,10 @@ const MENU_ORDER = [
   const tpl = panelHtml.slice(tplAt, panelHtml.indexOf('</template>', tplAt));
   check(tplAt > panelHtml.indexOf('class="nav-actions"'), 'launcher template sits outside the strip');
   check(
-    tpl.includes('data-module="rota-app"') && tpl.includes('data-module="duplicate-checker"'),
-    'template keeps both launchers for menu icons'
+    tpl.includes('data-module="rota-app"') &&
+      tpl.includes('data-module="duplicate-checker"') &&
+      tpl.includes('data-module="availability"'),
+    'template keeps the off-strip launchers for menu icons'
   );
   check(!/class="nav-tab"/.test(tpl), 'template buttons are not strip tabs');
 
@@ -313,6 +322,10 @@ const MENU_ORDER = [
   check(
     palette.includes("paletteGroupFor('duplicate-checker')") && palette.includes("id: 'open:duplicates'"),
     'Open Duplicates is a palette command in Practice'
+  );
+  check(
+    palette.includes("paletteGroupFor('availability')") && palette.includes("id: 'open:availability'"),
+    'Open availability wall is a palette command in Practice'
   );
   check(
     palette.includes('openDuplicateCheckerTab') && palette.includes('openRotaTab'),

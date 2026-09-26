@@ -1170,6 +1170,7 @@ const PracticeProfile = (() => {
           'ui.templateOrganiser',
           'ui.taskPresence',
           'ui.workloadTracker',
+          'ui.availabilityWall',
         ];
         const BOOLEAN_PACK_KEYS = [
           'signing.softFlags',
@@ -1181,6 +1182,7 @@ const PracticeProfile = (() => {
           'ui.templateOrganiser',
           'ui.taskPresence',
           'ui.workloadTracker',
+          'ui.availabilityWall',
         ];
         const GRANDFATHER_PACK_KEYS = [
           'ui.allocateCanvases',
@@ -1191,6 +1193,7 @@ const PracticeProfile = (() => {
           'ui.templateOrganiser',
           'ui.taskPresence',
           'ui.workloadTracker',
+          'ui.availabilityWall',
         ];
         const ENVELOPE_ALIASES = {
           'signing.softFlags': 'signingSoftFlags',
@@ -1202,6 +1205,7 @@ const PracticeProfile = (() => {
           'ui.templateOrganiser': 'templateOrganiser',
           'ui.taskPresence': 'taskPresence',
           'ui.workloadTracker': 'workloadTracker',
+          'ui.availabilityWall': 'availabilityWall',
         };
 
         for (const key of ALLOWED_SUITE_KEYS) {

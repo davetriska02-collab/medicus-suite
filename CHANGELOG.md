@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.0] — 2026-09-26
+
+### Availability wall
+
+A full-tab, read-only TV of unbooked appointment slots for the triage room. It shows today's tiles (next unused slot and how many remain) and a 7-day routine GP bar. It does not show demand, queue size, messages, or QOF.
+
+The book is the same GET Slot Counter already uses: `/scheduling/data/appointment-book/embedded-overview?date=YYYY-MM-DD&filterByUsualLocation=false`. There is no captured range parameter, so one refresh is seven of those GETs (today and the next six calendar days, weekends included). Default every 5 minutes, floor 2 minutes, only while `suite.ui.availabilityWall` is on and the wall tab is visible. No service-worker alarm. That is the load-cut rule: the old Today tab and Note TV polled in the background even when nobody was looking. Colour and the countdown tick locally every 20 seconds from the last reading. A failed refresh keeps the previous slots and says so. It is not drawn as zero.
+
+Medicus does not label a slot as GP, registrar, ANP, nurse, visit, embargo, or extended access. The practice maps slot type, session or diary name, and (when the rota is loaded) staff role or employment type onto tiles. Defaults are keyword guesses for Dave's list. Unmapped free slots stay counted in a footer. Patient name, NHS number, and reason are dropped when the book is read. The tile face is a time and a count.
+
+Open it from the All-tabs menu (Practice) or the command palette (`Open availability wall`). Tile names and mapping are set on the wall (Set up tiles). Options has the pack toggle. H-085 is proposed, not signed.
+
 ## [v3.266.0] — 2026-09-25
 
 ### Workload tracker on the Workflow dashboard

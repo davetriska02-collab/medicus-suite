@@ -16,6 +16,7 @@ import { initQuickLeaflet } from './quick-leaflet/quick-leaflet.js';
 import { sanitiseHiddenTabs } from './tab-catalog.js';
 import { initSetup, setSetupActiveModule } from './setup/setup.js';
 import { openRotaTab } from './modules/rota/rota-open.js';
+import { openAvailabilityTab } from '../availability/wall-open.js';
 import { openDuplicateCheckerTab } from './duplicate-checker-open.js';
 import { OFF_STRIP_IDS, digitJumpCaption, renderTabMenuHTML } from './tab-sections.js';
 import { TAB_HELP } from '../shared/tab-help.js';
@@ -142,10 +143,10 @@ const MODULES = {
   },
   rota: { js: () => import('./modules/rota/rota.js'), css: './modules/rota/rota.css' },
 };
-// NOTE: 'rota-app' and 'duplicate-checker' are deliberately absent. They open
-// a full page (All tabs → Practice, and the command palette), not a panel
-// module. 'phrases' is out of this build. The boot guard (`m in MODULES`)
-// refuses to restore the panel into any of them.
+// NOTE: 'rota-app', 'duplicate-checker', and 'availability' are deliberately
+// absent. They open a full page (All tabs → Practice, and the command palette),
+// not a panel module. 'phrases' is out of this build. The boot guard
+// (`m in MODULES`) refuses to restore the panel into any of them.
 
 // ── Help popover (per-tab "what is this?" affordance) ──────────────────────────
 // TAB_HELP content lives in shared/tab-help.js — ONE source consumed by both
@@ -303,6 +304,7 @@ function activateAllTabsItem(mod) {
   }
   if (mod === 'rota-app') openRotaTab();
   else if (mod === 'duplicate-checker') openDuplicateCheckerTab();
+  else if (mod === 'availability') openAvailabilityTab();
 }
 
 function renderAllTabsPopover() {

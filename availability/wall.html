@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Availability — Medicus Suite</title>
+    <link rel="stylesheet" href="../design-system/src/tokens.css" />
+    <link rel="stylesheet" href="wall.css" />
+  </head>
+  <body>
+    <header class="av-head">
+      <div>
+        <h1>Live appointment availability</h1>
+        <p class="av-date" id="avDate">Today</p>
+      </div>
+      <div class="av-head-side">
+        <p class="av-updated" id="avUpdated">Waiting for the book</p>
+        <button type="button" class="av-setup" id="avSetup">Set up tiles</button>
+      </div>
+    </header>
+    <p class="av-banner" id="avBanner" hidden></p>
+    <main id="avMain"></main>
+    <section class="av-week" id="avWeek" hidden></section>
+    <p class="av-note" id="avNote"></p>
+    <div class="av-editor" id="avEditor" hidden>
+      <div class="av-editor-card" role="dialog" aria-labelledby="avEditorTitle">
+        <h2 id="avEditorTitle">Tile mapping</h2>
+        <p class="av-editor-lead" id="avEditorLead"></p>
+        <div id="avEditorBody"></div>
+        <div class="av-editor-actions">
+          <button type="button" class="av-btn" id="avAddTile">Add tile</button>
+          <button type="button" class="av-btn" id="avResetTiles">Suggested names</button>
+          <button type="button" class="av-btn av-btn-primary" id="avSaveTiles">Save</button>
+          <button type="button" class="av-btn" id="avCloseEditor">Close</button>
+        </div>
+      </div>
+    </div>
+    <script src="../shared/display-prefs.js"></script>
+    <script src="../shared/practice-packs.js"></script>
+    <script src="../shared/practice-code.js"></script>
+    <script src="../shared/io/availability-io.js"></script>
+    <script type="module" src="wall.js"></script>
+  </body>
+</html>
