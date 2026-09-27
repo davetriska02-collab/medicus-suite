@@ -1,26 +1,35 @@
 // © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE.
-// Availability wall. Read-only. One fetch loop, only while this tab is visible.
+// Availability wall. Read-only. One leader tab polls, and only while it is
+// visible, inside 07:00–19:00 Europe/London.
 //
-// The v3.264.15 load cut removed Today and the Note TV board because they
-// kept polling Medicus in the background. This page does not register an
-// alarm and does not fetch while hidden. Each refresh is seven GETs of
-// embedded-overview (one calendar day each). Default gap is 5 minutes.
-// The floor is 2 minutes. The countdown ticks locally.
+// Today is fetched on the practice interval (default 5 minutes, floor 2).
+// The other six days are fetched every 30 minutes. A 429 or 5xx aborts the
+// burst and backs off up to 8×. A 401 or 403 stops until someone signs in.
 
+import { fetchSchedulingOverview } from '../shared/medicus-api.js';
 import {
+  FETCH_TIMEOUT_MS,
+  STALE_MS,
   TICK_MS,
-  attention,
+  backoffMs,
   blankTile,
+  bookPayload,
   clockLabel,
+  clockProblem,
   defaultTiles,
   dropPastSlots,
   extractFreeSlots,
+  horizonSlots,
+  isNotCurrent,
   isoFromDate,
   mergeSnapshots,
+  msUntilOpen,
   normaliseConfig,
-  overviewPath,
+  planRefresh,
   pollMsFromConfig,
+  practiceOpen,
   roleIndex,
+  shortDateLabel,
   shouldFetch,
   tileFace,
   todayViews,
@@ -28,24 +37,45 @@ import {
   weekView,
 } from '../shared/availability-board-core.js';
 
+const LOCK_NAME = 'medicus-suite-availability-wall';
 const main = document.getElementById('avMain');
 const weekEl = document.getElementById('avWeek');
 const banner = document.getElementById('avBanner');
-const updatedEl = document.getElementById('avUpdated');
-const dateEl = document.getElementById('avDate');
 const noteEl = document.getElementById('avNote');
+const dateEl = document.getElementById('avDate');
+const clockEl = document.getElementById('avClock');
+const siteEl = document.getElementById('avSite');
 const editor = document.getElementById('avEditor');
 const editorBody = document.getElementById('avEditorBody');
+const editorStatus = document.getElementById('avEditorStatus');
+const setupBtn = document.getElementById('avSetup');
+const stage = document.getElementById('avStage');
+const head = document.getElementById('avHead');
 
 let config = normaliseConfig(null);
 let roleMap = {};
-let snapshot = { days: {}, fetchedAt: null, stale: false, error: false, ready: false };
-let observed = { slotTypes: [], sessions: [], clinicians: [] };
+let division = 'england-and-wales';
+let practiceLabel = '';
+let snapshot = { days: {}, fetchedAt: null, stale: false, error: false, ready: false, staleDates: [] };
+let observed = { slotTypes: [], sessions: [], clinicians: [], sites: [] };
 let reduceMotion = false;
+let stopFlash = false;
 let pollTimer = null;
 let tickTimer = null;
+let clockTimer = null;
+let quietTimer = null;
+let authTimer = null;
 let fetching = false;
+let leader = false;
+let failures = 0;
+let authHold = false;
+let lastWeekAt = null;
+let pinnedCode = '';
 let selectedTile = 0;
+let lastBanner = '';
+let lastMessage = '';
+let holdTimer = null;
+let opener = null;
 
 function esc(s) {
   return String(s ?? '')
@@ -65,8 +95,45 @@ function visible() {
   return document.visibilityState === 'visible' && !document.hidden;
 }
 
+function contextDead(err) {
+  return /Extension context invalidated|context invalidated/i.test(String(err && (err.message || err)));
+}
+
 function readMotion() {
   reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  try {
+    stopFlash = sessionStorage.getItem('av-stop-flash') === '1';
+  } catch {
+    stopFlash = false;
+  }
+}
+
+function steadyFace() {
+  return reduceMotion || stopFlash;
+}
+
+function setBanner(text) {
+  if (text === lastBanner) return;
+  lastBanner = text;
+  banner.hidden = !text;
+  banner.textContent = text || '';
+}
+
+function paintMessage(message) {
+  if (message !== lastMessage) lastMessage = message;
+  main.innerHTML = `<p class="av-message" role="status" aria-live="polite">${esc(message)}</p>`;
+}
+
+function showReload() {
+  document.body.innerHTML = `<main class="av-stage"><p class="av-message">Suite updated, reload this tab.</p><p><button type="button" id="avReload">Reload</button></p></main>`;
+  const btn = document.getElementById('avReload');
+  if (btn) btn.addEventListener('click', () => location.reload());
+}
+
+function paintClock() {
+  const now = Date.now();
+  if (clockEl) clockEl.textContent = clockLabel(now);
+  if (dateEl) dateEl.textContent = shortDateLabel(now);
 }
 
 async function loadConfig() {
@@ -74,219 +141,449 @@ async function loadConfig() {
   config = normaliseConfig(exp && exp.config);
   let staff = [];
   try {
-    const r = await chrome.storage.local.get('rota.staff');
+    const r = await chrome.storage.local.get(['rota.staff', 'capacity.lookahead', 'suite.letterhead']);
     staff = Array.isArray(r['rota.staff']) ? r['rota.staff'] : [];
-  } catch {
+    const lh = r['suite.letterhead'];
+    practiceLabel = lh && typeof lh.practiceName === 'string' ? lh.practiceName.trim() : '';
+    const look = r['capacity.lookahead'];
+    if (look && typeof look.division === 'string') division = look.division;
+  } catch (err) {
+    if (contextDead(err)) showReload();
     staff = [];
   }
   roleMap = roleIndex(staff);
 }
 
-function paintOff(message) {
-  main.innerHTML = `<p class="av-message">${esc(message)}</p>`;
-  weekEl.hidden = true;
-  noteEl.textContent = '';
-  banner.hidden = true;
+function colsFor(n) {
+  const w = window.innerWidth || 1920;
+  const fit = Math.max(1, Math.floor((w - 64) / 196));
+  if (n <= fit) return Math.max(1, n);
+  return Math.max(1, Math.ceil(n / 2));
 }
 
-function faceHtml(view) {
+function faceHtml(view, opts) {
   const face = tileFace(view);
   if (!face) return '';
-  const motion = attention(face.tone, reduceMotion);
-  const icon = motion.icon ? '<span class="av-icon" aria-hidden="true">!</span>' : '';
-  const cls = `av-tile tone-${esc(face.tone)}${motion.flash ? ' flash' : ''}`;
-  const label = `${face.label}, ${face.primary}, ${face.secondary}`;
-  return `<article class="${cls}" aria-label="${esc(label)}">
+  const dead = opts && opts.notCurrent;
+  const zone = !!(opts && opts.clockBad);
+  const tone = dead || zone ? 'none' : face.tone;
+  const flash = !dead && !zone && face.flash && view.flash;
+  const icon = !dead && !zone && face.icon ? '<span class="av-icon">!</span>' : '';
+  const primary = dead ? 'Not current' : zone ? view.nextLabel || face.primary : face.primary;
+  const cue = dead || zone ? '' : face.cue;
+  const cls = `av-tile tone-${esc(tone)}${flash ? ' flash' : ''}${dead ? ' not-current' : ''}`;
+  return `<article class="${cls}">
     <p class="av-kicker">${esc(face.label)}</p>
-    <p class="av-primary">${icon}${esc(face.primary)}</p>
-    ${face.detail ? `<p class="av-detail">${esc(face.detail)}</p>` : ''}
+    ${face.subtitle ? `<p class="av-sub">${esc(face.subtitle)}</p>` : ''}
+    ${face.band && !dead && !zone ? `<p class="av-band">${esc(face.band)}</p>` : ''}
+    <p class="av-primary">${icon}${esc(primary)}</p>
+    ${cue ? `<p class="av-cue">${esc(cue)}</p>` : ''}
+    ${face.detail && !dead && !zone ? `<p class="av-detail">${esc(face.detail)}</p>` : ''}
+    ${face.site ? `<p class="av-sub">${esc(face.site)}</p>` : ''}
     <p class="av-secondary">${esc(face.secondary)}</p>
+    <div class="av-track" aria-hidden="true"><span style="width:${dead || zone ? 0 : face.track}%"></span></div>
   </article>`;
 }
 
+function dayCaption(d) {
+  if (d.routine == null) return '';
+  if (d.stale) return 'old';
+  if (d.noClinic && d.routine === 0 && !d.extended) return 'No clinic';
+  if (d.holidayName && d.extended) return `${d.holidayName} · ${d.extended} extended`;
+  if (d.holidayName) return d.holidayName;
+  if (d.extended) return `${d.extended} extended`;
+  if (d.weekend && d.extended === 0) return 'Weekend';
+  return '';
+}
+
 function render() {
+  paintClock();
   if (!packOn()) {
-    paintOff('The availability wall is switched off. Turn it on under Settings, Practice features.');
+    paintMessage('The availability wall is switched off. Turn it on under Settings, Practice features.');
+    weekEl.hidden = true;
+    noteEl.textContent = '';
+    setBanner('');
     return;
   }
-  const now = new Date();
-  dateEl.textContent = now.toLocaleDateString('en-GB', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
-  if (!snapshot.ready) {
-    paintOff(
-      snapshot.error
-        ? 'The book could not be read. Nothing is shown as zero. Try again when Medicus is signed in.'
-        : 'Reading the appointment book…'
-    );
-    updatedEl.textContent = snapshot.error ? 'No reading yet' : 'Waiting for the book';
+  if (authHold && !snapshot.ready) {
+    paintMessage('Sign in to Medicus in this Chrome. The board is not reading the book.');
+    setBanner('Sign in to Medicus in this Chrome.');
     return;
   }
-  const today = isoFromDate(now);
+  const nowMs = Date.now();
+  const serverMs = fetchSchedulingOverview.lastServerMs;
+  const clockBad = clockProblem(nowMs, serverMs);
+  const today = isoFromDate(nowMs);
   const todayRow = snapshot.days[today];
-  const todaySlots = todayRow && todayRow.slots;
-  if (todaySlots == null) {
-    main.innerHTML = '<p class="av-message">Today’s book has not been read. Slots are not shown as zero.</p>';
-  } else {
-    const views = todayViews(todaySlots, config, now, reduceMotion);
-    main.innerHTML = `<div class="av-grid">${views.tiles.map(faceHtml).join('')}</div>`;
-    noteEl.textContent =
-      views.unmapped > 0
-        ? `${views.unmapped} free slot${views.unmapped === 1 ? '' : 's'} today ${views.unmapped === 1 ? 'is' : 'are'} not on a tile. Set up tiles to place them.`
-        : 'Slots, times and counts only. A slot can be taken between refreshes.';
+  const todayStamp = todayRow && todayRow.fetchedAt ? todayRow.fetchedAt : snapshot.fetchedAt;
+  const todayFailed = !!(todayRow && todayRow.stale);
+  const notCurrent = snapshot.ready && isNotCurrent(todayStamp, nowMs, STALE_MS);
+  const freeze = todayFailed || notCurrent || !!clockBad;
+  const viewNow = freeze && todayStamp ? new Date(todayStamp) : new Date(nowMs);
+
+  if (!snapshot.ready) {
+    paintMessage(
+      authHold
+        ? 'Sign in to Medicus in this Chrome. The board is not reading the book.'
+        : snapshot.error
+          ? 'The book could not be read. Nothing is shown as zero.'
+          : 'Reading the appointment book…'
+    );
+    noteEl.textContent = '';
+    weekEl.hidden = true;
+    return;
   }
+
+  const todaySlots = todayRow && todayRow.slots;
+  const ahead = todaySlots == null ? [] : horizonSlots(snapshot.days, today, new Date(nowMs), freeze);
+  let capacityLine = '';
+  if (todaySlots == null) {
+    paintMessage('Today’s book has not been read. Slots are not shown as zero.');
+  } else if (todayRow && todayRow.noClinic && todaySlots.length === 0 && ahead.length === 0) {
+    paintMessage('No clinic on today’s book.');
+  } else {
+    const footerSlots = freeze ? todaySlots : dropPastSlots(todaySlots, new Date(nowMs));
+    const views = todayViews(footerSlots, config, viewNow, steadyFace() || freeze);
+    const horizon = todayViews(ahead, config, viewNow, steadyFace() || freeze);
+    if (views.unconfirmed) {
+      const n = views.unmapped;
+      capacityLine = n
+        ? `${n} free slot${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} not on a tile yet. Press and hold Set up tiles, then save a mapping. Nothing is shown as None left from a guess.`
+        : 'Set up tiles before this wall shows a clinic. Guesses are not shown as None left.';
+      paintMessage(capacityLine);
+    } else {
+      const cols = colsFor(horizon.tiles.length || 1);
+      main.innerHTML = `<div class="av-grid" style="--av-cols:${cols}">${horizon.tiles
+        .map((view) => faceHtml(view, { notCurrent, clockBad: !!clockBad }))
+        .join('')}</div>`;
+      const parts = [];
+      if (views.unmapped) {
+        parts.push(
+          `${views.unmapped} free slot${views.unmapped === 1 ? '' : 's'} today ${views.unmapped === 1 ? 'is' : 'are'} not on a tile.`
+        );
+      }
+      if (views.offScreen) {
+        const names = views.offScreenNames.length ? ` (${views.offScreenNames.join(', ')})` : '';
+        parts.push(
+          `${views.offScreen} free slot${views.offScreen === 1 ? '' : 's'} ${views.offScreen === 1 ? 'is' : 'are'} not on this screen${names}.`
+        );
+      }
+      if (!parts.length) parts.push('Slots, times and counts only. A slot can be taken between refreshes.');
+      noteEl.textContent = parts.join(' ');
+      if (views.unmapped || views.offScreen) capacityLine = parts.filter((p) => /not on/.test(p)).join(' ');
+    }
+  }
+
   const dates = weekDates(today);
   const rows = dates.map((date) => {
     const row = snapshot.days[date];
-    return { date, slots: row ? row.slots : null };
+    return {
+      date,
+      slots: row ? row.slots : null,
+      stale: !!(row && row.stale),
+      noClinic: !!(row && row.noClinic),
+      partial: !!(row && row.partial),
+    };
   });
-  const week = weekView(rows, config);
-  const peak = Math.max(1, ...week.days.map((d) => (d.routine || 0) + (d.extended || 0)));
+  const week = weekView(rows, config, { division });
+  const peak = Math.max(1, ...week.days.map((d) => (typeof d.routine === 'number' ? d.routine : 0)));
   const bars = week.days
     .map((d) => {
       const routine = d.routine == null ? '—' : String(d.routine);
-      const ext = d.extended ? `${d.extended} extended` : d.weekend ? 'Weekend' : '';
-      const rW = d.routine ? Math.round((d.routine / peak) * 100) : 0;
-      const eW = d.extended ? Math.round((d.extended / peak) * 100) : 0;
-      return `<div class="av-bar${d.weekend ? ' weekend' : ''}">
+      const h = d.routine ? Math.round((d.routine / peak) * 100) : 0;
+      return `<div class="av-bar tone-${esc(d.tone)}">
         <div class="av-bar-label">${esc(d.label)}</div>
         <div class="av-bar-count">${esc(routine)}</div>
-        <div class="av-bar-ext">${esc(ext)}</div>
-        <div class="av-meter" aria-hidden="true"><span class="routine" style="width:${rW}%"></span><span class="extended" style="width:${eW}%"></span></div>
+        <div class="av-bar-ext">${esc(dayCaption(d))}</div>
+        <div class="av-col" aria-hidden="true"><span style="--h:${h}%"></span></div>
       </div>`;
     })
     .join('');
   const total = week.incomplete ? `${week.totalRoutine}+` : String(week.totalRoutine);
+  const extTotal = week.incomplete ? `${week.totalExtended}+` : String(week.totalExtended);
   weekEl.hidden = false;
-  weekEl.innerHTML = `<h2>Next 7 days · routine GP</h2>
+  weekEl.innerHTML = `<h2>Next 7 days · routine GP, including registrar lists</h2>
     <div class="av-bars">${bars}
-      <div class="av-total"><span>Total</span><strong>${esc(total)}</strong>${
-        week.totalExtended ? `<div class="av-bar-ext">${week.totalExtended} extended</div>` : ''
-      }</div>
+      <div class="av-total"><span>Total</span><strong>${esc(total)}</strong>
+        <div class="av-bar-ext">${esc(extTotal)} extended</div>
+      </div>
     </div>`;
-  if (snapshot.fetchedAt) {
-    const stamp = clockLabel(snapshot.fetchedAt);
-    updatedEl.textContent = snapshot.stale ? `Last updated ${stamp} · refresh failed` : `Last updated ${stamp}`;
+
+  const noteBits = [];
+  if (todayStamp && !todayFailed && !notCurrent) noteBits.push(`Last updated ${clockLabel(todayStamp)}`);
+  if (todayFailed || notCurrent) noteBits.push(`Today last read ${todayStamp ? clockLabel(todayStamp) : '—'}`);
+  if (noteEl.textContent) noteBits.push(noteEl.textContent);
+  noteEl.textContent = noteBits.join(' · ');
+
+  const staleNames = (snapshot.staleDates || []).map((date) => (date === today ? 'Today' : date));
+  const alerts = [];
+  if (notCurrent) alerts.push('Not current. The last reading of today is too old to count down from.');
+  if (clockBad === 'zone') alerts.push('This PC is not set to UK time. The countdown is hidden.');
+  else if (clockBad === 'skew') alerts.push("This PC's clock looks wrong. The countdown is hidden.");
+  if (authHold) alerts.push('Sign in to Medicus in this Chrome.');
+  if (staleNames.length) {
+    alerts.push(
+      `${staleNames.join(', ')} ${staleNames.length === 1 ? 'is' : 'are'} still the previous reading, not zeros.`
+    );
   }
-  banner.hidden = !snapshot.stale;
-  banner.textContent = snapshot.stale
-    ? 'The last refresh did not finish. Numbers still on screen are the previous reading, not zeros.'
-    : '';
+  if (capacityLine) alerts.push(capacityLine);
+  setBanner(alerts.join(' '));
 }
 
-async function fetchDay(code, date) {
-  const url = `${window.PracticeCode.apiBaseFor(code)}${overviewPath(date)}`;
-  const r = await fetch(url, { credentials: 'include', method: 'GET' });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+async function resolveCode() {
+  if (pinnedCode && window.PracticeCode.isValidPracticeCode(pinnedCode)) return pinnedCode;
+  let fromTab = null;
+  try {
+    fromTab = await window.PracticeCode.detectFromTab();
+  } catch (err) {
+    if (contextDead(err)) showReload();
+    return '';
+  }
+  if (fromTab && window.PracticeCode.isValidPracticeCode(fromTab)) {
+    pinnedCode = fromTab;
+    return pinnedCode;
+  }
+  try {
+    const stored = await chrome.storage.local.get('suite.practiceCode');
+    const code = stored['suite.practiceCode'] || '';
+    if (window.PracticeCode.isValidPracticeCode(code)) {
+      pinnedCode = code;
+      return pinnedCode;
+    }
+  } catch (err) {
+    if (contextDead(err)) showReload();
+  }
+  return '';
+}
+
+function statusOf(err) {
+  if (err && typeof err.status === 'number') return err.status;
+  const m = /API error (\d+)/.exec(String(err && err.message));
+  if (m) return Number(m[1]);
+  if (err && /Not signed in/.test(err.message)) return 401;
+  return 0;
 }
 
 async function refresh() {
-  if (fetching) return;
+  if (fetching || !leader) return;
   if (!shouldFetch({ packOn: packOn(), visible: visible() })) return;
-  const code = await window.PracticeCode.getPracticeCode();
-  if (!code) {
-    snapshot = {
-      days: snapshot.days,
-      fetchedAt: snapshot.fetchedAt,
-      stale: true,
-      error: !snapshot.ready,
-      ready: snapshot.ready,
-    };
-    if (!snapshot.ready) snapshot.error = true;
-    render();
-    if (!snapshot.ready) paintOff('No practice code yet. Open Medicus, or set the code in Settings.');
+  const now = Date.now();
+  if (!practiceOpen(now)) {
+    armQuiet();
     return;
   }
   fetching = true;
-  const today = isoFromDate(new Date());
-  const dates = weekDates(today);
-  const incoming = { fetchedAt: Date.now(), days: {} };
-  const observedSets = { slotTypes: new Set(), sessions: new Set(), clinicians: new Set() };
-  let cursor = 0;
-  async function worker() {
-    for (;;) {
-      const i = cursor++;
-      if (i >= dates.length) return;
-      const date = dates[i];
-      try {
-        const raw = await fetchDay(code, date);
-        const extracted = extractFreeSlots(raw, {
-          now: new Date(),
-          dateISO: date,
-          roleIndex: roleMap,
-          dropPast: date === today,
-        });
-        incoming.days[date] = { ok: true, slots: extracted.slots };
-        extracted.observed.slotTypes.forEach((n) => observedSets.slotTypes.add(n));
-        extracted.observed.sessions.forEach((n) => observedSets.sessions.add(n));
-        extracted.observed.clinicians.forEach((n) => observedSets.clinicians.add(n));
-      } catch {
-        incoming.days[date] = { ok: false };
+  let burstAbort = false;
+  try {
+    const code = await resolveCode();
+    if (siteEl) {
+      const bits = [];
+      if (practiceLabel) bits.push(practiceLabel);
+      if (code) bits.push(`Site ${code}`);
+      siteEl.textContent = bits.join(' · ');
+    }
+    if (!code || !window.PracticeCode.isValidPracticeCode(code)) {
+      if (!snapshot.ready) paintMessage('No practice code yet. Open Medicus, or set the code in Settings.');
+      return;
+    }
+    const today = isoFromDate(now);
+    const dates = weekDates(today);
+    const plan = planRefresh({ now, lastWeekAt, todayISO: today, dates });
+    if (!plan.dates.length) return;
+    const incoming = { fetchedAt: now, today, days: {} };
+    const observedSets = { slotTypes: new Set(), sessions: new Set(), clinicians: new Set(), sites: new Set() };
+    let cursor = 0;
+    let sawAuth = false;
+    let sawBackoff = false;
+    async function worker() {
+      for (;;) {
+        if (burstAbort) return;
+        const i = cursor++;
+        if (i >= plan.dates.length) return;
+        const date = plan.dates[i];
+        try {
+          const raw = await fetchSchedulingOverview(code, date, {
+            bypassCache: true,
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          });
+          const book = bookPayload(raw);
+          if (!book) {
+            incoming.days[date] = { ok: false, status: 200 };
+            continue;
+          }
+          const extracted = extractFreeSlots(book, {
+            now: new Date(),
+            roleIndex: roleMap,
+            dropPast: date === today,
+          });
+          if (!extracted.ok) {
+            incoming.days[date] = { ok: false, status: 200 };
+            continue;
+          }
+          if (extracted.unexpanded && extracted.slots.length === 0) {
+            incoming.days[date] = { ok: false, unexpanded: true };
+            continue;
+          }
+          incoming.days[date] = {
+            ok: true,
+            slots: extracted.slots,
+            noClinic: extracted.noClinic,
+            partial: extracted.unexpanded,
+          };
+          extracted.observed.slotTypes.forEach((n) => observedSets.slotTypes.add(n));
+          extracted.observed.sessions.forEach((n) => observedSets.sessions.add(n));
+          extracted.observed.clinicians.forEach((n) => observedSets.clinicians.add(n));
+          extracted.observed.sites.forEach((n) => observedSets.sites.add(n));
+        } catch (err) {
+          if (contextDead(err)) {
+            showReload();
+            burstAbort = true;
+            return;
+          }
+          const status = statusOf(err);
+          incoming.days[date] = { ok: false, status };
+          if (status === 401 || status === 403) {
+            sawAuth = true;
+            burstAbort = true;
+          } else if (status === 429 || status >= 500) {
+            sawBackoff = true;
+            burstAbort = true;
+          }
+        }
       }
     }
+    await Promise.all(Array.from({ length: Math.min(2, plan.dates.length) }, () => worker()));
+    if (plan.dates.length > 1 && plan.dates.every((date) => incoming.days[date] && incoming.days[date].ok)) {
+      lastWeekAt = now;
+    }
+    snapshot = mergeSnapshots(snapshot, incoming, { today, keep: dates });
+    if (sawAuth) {
+      authHold = true;
+      failures = 0;
+      holdAuth();
+    } else if (sawBackoff) {
+      authHold = false;
+      failures = Math.min(3, failures + 1);
+    } else if (incoming.days[today] && incoming.days[today].ok) {
+      authHold = false;
+      failures = 0;
+    }
+    observed = {
+      slotTypes: [...observedSets.slotTypes].sort(),
+      sessions: [...observedSets.sessions].sort(),
+      clinicians: [...observedSets.clinicians].sort(),
+      sites: [...observedSets.sites].sort(),
+    };
+    render();
+  } catch (err) {
+    if (contextDead(err)) showReload();
+  } finally {
+    fetching = false;
   }
-  await Promise.all(Array.from({ length: Math.min(2, dates.length) }, () => worker()));
-  fetching = false;
-  snapshot = mergeSnapshots(snapshot, incoming);
-  observed = {
-    slotTypes: [...observedSets.slotTypes].sort(),
-    sessions: [...observedSets.sessions].sort(),
-    clinicians: [...observedSets.clinicians].sort(),
-  };
-  render();
 }
 
 function localTick() {
   if (!visible() || !snapshot.ready) return;
-  const today = isoFromDate(new Date());
+  const today = isoFromDate(Date.now());
   const row = snapshot.days[today];
-  if (row && Array.isArray(row.slots)) {
-    snapshot.days[today] = { slots: dropPastSlots(row.slots, new Date()) };
+  if (row && Array.isArray(row.slots) && !row.stale && !isNotCurrent(row.fetchedAt, Date.now(), STALE_MS)) {
+    snapshot.days[today] = { ...row, slots: dropPastSlots(row.slots, new Date()) };
   }
   render();
 }
 
+function armQuiet() {
+  if (quietTimer) clearTimeout(quietTimer);
+  const wait = msUntilOpen(Date.now());
+  quietTimer = setTimeout(
+    () => {
+      refresh();
+      arm();
+    },
+    Math.max(1000, wait)
+  );
+}
+
+function holdAuth() {
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = null;
+  if (authTimer) clearTimeout(authTimer);
+  authTimer = setTimeout(
+    () => {
+      authHold = false;
+      refresh();
+      arm();
+    },
+    30 * 60 * 1000
+  );
+  render();
+}
+
 function arm() {
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer) clearTimeout(pollTimer);
   if (tickTimer) clearInterval(tickTimer);
+  if (clockTimer) clearInterval(clockTimer);
   pollTimer = null;
   tickTimer = null;
-  if (!packOn()) return;
-  const pollMs = pollMsFromConfig(config);
+  clockTimer = null;
+  if (!packOn() || !leader) return;
   tickTimer = setInterval(localTick, TICK_MS);
-  pollTimer = setInterval(() => {
-    if (!shouldFetch({ packOn: packOn(), visible: visible() })) return;
-    refresh();
-  }, pollMs);
+  clockTimer = setInterval(() => {
+    paintClock();
+    const today = isoFromDate(Date.now());
+    const row = snapshot.days[today];
+    const stamp = row && row.fetchedAt;
+    if (snapshot.ready && isNotCurrent(stamp, Date.now(), STALE_MS)) render();
+  }, 1000);
+  const schedule = () => {
+    pollTimer = setTimeout(
+      async () => {
+        if (!authHold && shouldFetch({ packOn: packOn(), visible: visible() })) await refresh();
+        if (!authHold) schedule();
+      },
+      backoffMs(pollMsFromConfig(config), failures)
+    );
+  };
+  if (!practiceOpen(Date.now())) armQuiet();
+  else schedule();
 }
 
 function onVisibility() {
   if (!visible()) return;
+  if (authHold) {
+    authHold = false;
+    if (authTimer) clearTimeout(authTimer);
+  }
   refresh();
 }
 
 function chipList(title, names, field) {
   if (!names.length) return '';
   const chips = names
-    .map((n) => `<button type="button" data-add-field="${esc(field)}" data-add-value="${esc(n)}">${esc(n)}</button>`)
+    .map((n) => {
+      const tileName = (config.tiles[selectedTile] && config.tiles[selectedTile].label) || 'tile';
+      return `<button type="button" data-add-field="${esc(field)}" data-add-value="${esc(n)}" aria-label="Add ${esc(n)} to ${esc(tileName)}">${esc(n)}</button>`;
+    })
     .join('');
   return `<div><strong>${esc(title)}</strong><div class="av-observed">${chips}</div></div>`;
 }
 
 function renderEditor() {
   const tiles = config.tiles
+    .slice()
+    .sort((a, b) => a.matchOrder - b.matchOrder)
     .map((t, i) => {
       const m = t.match || { types: [], sessions: [], roles: [] };
       const x = t.exclude || { types: [], sessions: [], roles: [] };
-      return `<section class="av-tile-edit" data-index="${i}">
-        <h3><label><input type="radio" name="avSel" ${i === selectedTile ? 'checked' : ''} data-sel="${i}" /> Tile</label></h3>
+      return `<fieldset class="av-tile-edit" data-index="${i}">
+        <legend>${esc(t.label || 'Tile')}</legend>
         <div class="av-row">
+          <label><input type="radio" name="avSel" ${i === selectedTile ? 'checked' : ''} data-sel="${i}" /> Selected tile ${esc(t.label || 'Tile')}</label>
           <label>Name <input type="text" data-k="label" value="${esc(t.label)}" /></label>
+          <label>Subtitle <input type="text" data-k="subtitle" value="${esc(t.subtitle || '')}" /></label>
           <label><input type="checkbox" data-k="hidden" ${t.hidden ? 'checked' : ''} /> Hide</label>
           <label><input type="checkbox" data-k="showOnToday" ${t.showOnToday ? 'checked' : ''} /> Today</label>
+          <label><input type="checkbox" data-k="immediate" ${t.immediate !== false ? 'checked' : ''} /> For immediate booking</label>
           <label>Week
             <select data-k="weekLane">
               <option value="" ${!t.weekLane ? 'selected' : ''}>Not in the 7-day view</option>
@@ -294,21 +591,23 @@ function renderEditor() {
               <option value="extended" ${t.weekLane === 'extended' ? 'selected' : ''}>Extended access</option>
             </select>
           </label>
+          <button type="button" data-move="-1">Match sooner</button>
+          <button type="button" data-move="1">Match later</button>
         </div>
         <div class="av-row"><label>Slot types <input type="text" data-k="match.types" value="${esc(m.types.join(', '))}" /></label></div>
-        <div class="av-row"><label>Session names <input type="text" data-k="match.sessions" value="${esc(m.sessions.join(', '))}" /></label></div>
+        <div class="av-row"><label>Session or diary names <input type="text" data-k="match.sessions" value="${esc(m.sessions.join(', '))}" /></label></div>
         <div class="av-row"><label>Clinician roles <input type="text" data-k="match.roles" value="${esc(m.roles.join(', '))}" /></label></div>
         <div class="av-row"><label>Exclude types <input type="text" data-k="exclude.types" value="${esc(x.types.join(', '))}" /></label></div>
         <div class="av-row"><label>Exclude sessions <input type="text" data-k="exclude.sessions" value="${esc(x.sessions.join(', '))}" /></label></div>
         <div class="av-row"><label>Exclude roles <input type="text" data-k="exclude.roles" value="${esc(x.roles.join(', '))}" /></label></div>
-      </section>`;
+      </fieldset>`;
     })
     .join('');
   editorBody.innerHTML = `
     <div class="av-row"><label>Refresh every
-      <input type="number" id="avPoll" min="2" max="30" step="1" value="${esc(config.pollMinutes)}" /> minutes (2–30)
+      <input type="number" id="avPoll" min="2" max="30" step="1" value="${esc(config.pollMinutes)}" /> minutes (2–30). Today uses this. Later days are every 30 minutes, and nothing runs from 19:00 to 07:00.
     </label></div>
-    <p>Names seen on the last reading. Click one to add it to the selected tile.</p>
+    <p>Names seen on the last reading. Choose a tile, then add a name to it.</p>
     ${chipList('Slot types', observed.slotTypes, 'match.types')}
     ${chipList('Sessions', observed.sessions, 'match.sessions')}
     ${chipList('Diaries', observed.clinicians, 'match.roles')}
@@ -317,103 +616,278 @@ function renderEditor() {
 
 function readEditor() {
   const pollEl = document.getElementById('avPoll');
-  const tiles = [...editorBody.querySelectorAll('.av-tile-edit')].map((section, i) => {
+  const sections = [...editorBody.querySelectorAll('.av-tile-edit')];
+  const ordered = config.tiles.slice().sort((a, b) => a.matchOrder - b.matchOrder);
+  const tiles = sections.map((section, i) => {
     const val = (k) => section.querySelector(`[data-k="${k}"]`);
     const split = (k) =>
       String(val(k).value || '')
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-    const base = config.tiles[i] || blankTile();
+    const base = ordered[i] || blankTile();
     return {
       id: base.id,
       label: val('label').value,
+      subtitle: val('subtitle').value,
       hidden: val('hidden').checked,
       showOnToday: val('showOnToday').checked,
+      immediate: val('immediate').checked,
       weekLane: val('weekLane').value || null,
       displayOrder: base.displayOrder,
+      matchOrder: i,
       match: { types: split('match.types'), sessions: split('match.sessions'), roles: split('match.roles') },
       exclude: { types: split('exclude.types'), sessions: split('exclude.sessions'), roles: split('exclude.roles') },
     };
   });
-  config = normaliseConfig({ pollMinutes: pollEl ? pollEl.value : config.pollMinutes, tiles });
+  config = normaliseConfig({
+    pollMinutes: pollEl ? pollEl.value : config.pollMinutes,
+    confirmed: config.confirmed,
+    tiles,
+  });
+}
+
+function inertBehind(on) {
+  for (const el of [head, banner, stage]) {
+    if (!el) continue;
+    if (on) el.setAttribute('inert', '');
+    else el.removeAttribute('inert');
+  }
+}
+
+function focusables() {
+  return [...editor.querySelectorAll('button, input, select, textarea')].filter(
+    (el) => !el.disabled && el.offsetParent !== null
+  );
 }
 
 function openEditor() {
+  opener = setupBtn;
   renderEditor();
   editor.hidden = false;
+  inertBehind(true);
+  const first = editor.querySelector('input, button, select');
+  if (first) first.focus();
 }
 
 function closeEditor() {
   editor.hidden = true;
+  editorBody.innerHTML = '';
+  if (editorStatus) editorStatus.textContent = '';
+  observed = { slotTypes: [], sessions: [], clinicians: [], sites: [] };
+  inertBehind(false);
+  if (opener && typeof opener.focus === 'function') opener.focus();
 }
 
-document.getElementById('avSetup').addEventListener('click', openEditor);
+function onSetupPointerDown() {
+  holdTimer = setTimeout(() => {
+    holdTimer = null;
+    openEditor();
+  }, 700);
+}
+
+function onSetupPointerUp(event) {
+  if (holdTimer) {
+    clearTimeout(holdTimer);
+    holdTimer = null;
+    if (window.confirm('Open tile setup on this TV?')) openEditor();
+  }
+  event.preventDefault();
+}
+
+setupBtn.addEventListener('pointerdown', onSetupPointerDown);
+setupBtn.addEventListener('pointerup', onSetupPointerUp);
+setupBtn.addEventListener('pointerleave', () => {
+  if (holdTimer) clearTimeout(holdTimer);
+  holdTimer = null;
+});
+setupBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    if (window.confirm('Open tile setup on this TV?')) openEditor();
+  }
+});
+
 document.getElementById('avCloseEditor').addEventListener('click', closeEditor);
 document.getElementById('avAddTile').addEventListener('click', () => {
   readEditor();
-  config.tiles.push(blankTile());
+  const tile = blankTile();
+  tile.matchOrder = config.tiles.length;
+  config.tiles.push(tile);
   config = normaliseConfig(config);
   selectedTile = config.tiles.length - 1;
   renderEditor();
 });
 document.getElementById('avResetTiles').addEventListener('click', () => {
-  config = normaliseConfig({ pollMinutes: config.pollMinutes, tiles: defaultTiles() });
+  if (!window.confirm('Replace the current mapping with the suggested names? Nothing is saved until you press Save.'))
+    return;
+  config = normaliseConfig({ pollMinutes: config.pollMinutes, confirmed: false, tiles: defaultTiles() });
   renderEditor();
 });
 document.getElementById('avSaveTiles').addEventListener('click', async () => {
   readEditor();
-  await window.availabilityImport({ config });
+  config = normaliseConfig({ ...config, confirmed: true });
+  try {
+    await window.availabilityImport({ config });
+  } catch (err) {
+    if (contextDead(err)) showReload();
+    return;
+  }
   closeEditor();
   arm();
   render();
 });
-editorBody.addEventListener('click', (e) => {
-  const sel = e.target.closest('[data-sel]');
+
+editor.addEventListener('keydown', (event) => {
+  if (editor.hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeEditor();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const items = focusables();
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+});
+
+editorBody.addEventListener('click', (event) => {
+  const move = event.target.closest('[data-move]');
+  if (move) {
+    readEditor();
+    const index = Number(move.closest('.av-tile-edit').dataset.index);
+    const next = index + Number(move.dataset.move);
+    if (next >= 0 && next < config.tiles.length) {
+      const ordered = config.tiles.slice().sort((a, b) => a.matchOrder - b.matchOrder);
+      const [row] = ordered.splice(index, 1);
+      ordered.splice(next, 0, row);
+      ordered.forEach((t, i) => {
+        t.matchOrder = i;
+      });
+      config = normaliseConfig({ ...config, tiles: ordered });
+      selectedTile = next;
+      renderEditor();
+    }
+    return;
+  }
+  const sel = event.target.closest('[data-sel]');
   if (sel) selectedTile = Number(sel.dataset.sel);
-  const add = e.target.closest('[data-add-value]');
+  const add = event.target.closest('[data-add-value]');
   if (!add) return;
   const section = editorBody.querySelector(`.av-tile-edit[data-index="${selectedTile}"]`);
   const input = section && section.querySelector(`[data-k="${add.dataset.addField}"]`);
   if (!input) return;
   const cur = input.value.trim();
   input.value = cur ? `${cur}, ${add.dataset.addValue}` : add.dataset.addValue;
+  const tileName = (config.tiles[selectedTile] && config.tiles[selectedTile].label) || 'tile';
+  if (editorStatus) editorStatus.textContent = `Added ${add.dataset.addValue} to ${tileName}`;
+  input.focus();
 });
-editorBody.addEventListener('change', (e) => {
-  const sel = e.target.closest('[data-sel]');
-  if (sel) selectedTile = Number(sel.dataset.sel);
+
+document.getElementById('avStopFlash').addEventListener('click', () => {
+  stopFlash = !stopFlash;
+  try {
+    sessionStorage.setItem('av-stop-flash', stopFlash ? '1' : '0');
+  } catch {
+    /* this tab only */
+  }
+  document.getElementById('avStopFlash').textContent = stopFlash ? 'Flashing is off' : 'Stop flashing';
+  render();
+});
+
+document.getElementById('avCopy').addEventListener('click', async () => {
+  try {
+    const url = chrome.runtime.getURL('availability/wall.html');
+    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(url);
+    noteEl.textContent = 'TV link copied.';
+  } catch (err) {
+    if (contextDead(err)) showReload();
+  }
+});
+
+document.getElementById('avFull').addEventListener('click', () => {
+  const root = document.documentElement;
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (root.requestFullscreen) root.requestFullscreen();
 });
 
 readMotion();
 if (window.matchMedia) {
   const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-  if (mq.addEventListener)
+  if (mq.addEventListener) {
     mq.addEventListener('change', () => {
       readMotion();
       render();
     });
+  }
 }
 
 document.addEventListener('visibilitychange', onVisibility);
 
-window.PracticePacks.read(window.PracticePacks.KEYS.availabilityWall).then(async () => {
-  await loadConfig();
-  if (!packOn()) {
-    paintOff('The availability wall is switched off. Turn it on under Settings, Practice features.');
+if (chrome.tabs && chrome.tabs.onUpdated) {
+  chrome.tabs.onUpdated.addListener((_id, info, tab) => {
+    if (!tab || !tab.url || !/medicus\.health/i.test(tab.url)) return;
+    if (info.status !== 'complete') return;
+    if (!pinnedCode) refresh();
+  });
+}
+
+function claimLock() {
+  const start = () => {
+    leader = true;
+    arm();
+    refresh();
+  };
+  if (!navigator.locks || !navigator.locks.request) {
+    start();
     return;
   }
-  arm();
-  refresh();
+  navigator.locks.request(LOCK_NAME, { ifAvailable: true }, (lock) => {
+    if (!lock) {
+      leader = false;
+      paintMessage('Another availability tab is reading the book. This screen will take over if that tab closes.');
+      setTimeout(claimLock, 30000);
+      return undefined;
+    }
+    start();
+    return new Promise(() => {});
+  });
+}
+
+window.PracticePacks.read(window.PracticePacks.KEYS.availabilityWall).then(async () => {
+  try {
+    await loadConfig();
+  } catch (err) {
+    if (contextDead(err)) showReload();
+    return;
+  }
+  if (!packOn()) {
+    paintMessage('The availability wall is switched off. Turn it on under Settings, Practice features.');
+    return;
+  }
+  claimLock();
 });
 
 window.PracticePacks.watch(window.PracticePacks.KEYS.availabilityWall, async (on) => {
   if (!on) {
-    if (pollTimer) clearInterval(pollTimer);
+    if (pollTimer) clearTimeout(pollTimer);
     if (tickTimer) clearInterval(tickTimer);
-    paintOff('The availability wall is switched off. Turn it on under Settings, Practice features.');
+    if (clockTimer) clearInterval(clockTimer);
+    paintMessage('The availability wall is switched off. Turn it on under Settings, Practice features.');
     return;
   }
   await loadConfig();
-  arm();
-  refresh();
+  if (!leader) claimLock();
+  else {
+    arm();
+    refresh();
+  }
 });

@@ -13,6 +13,8 @@ export async function openAvailabilityTab() {
   try {
     const tabs = await chrome.tabs.query({ url });
     if (tabs && tabs.length) {
+      const extra = tabs.slice(1).map((tab) => tab.id);
+      if (extra.length) await chrome.tabs.remove(extra);
       await chrome.tabs.update(tabs[0].id, { active: true });
       await chrome.windows.update(tabs[0].windowId, { focused: true });
       return;

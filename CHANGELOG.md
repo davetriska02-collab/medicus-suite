@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.2] — 2026-09-27
+
+### Availability wall red-team fixes
+
+The wall no longer paints shipped keyword guesses as "None left". Tiles appear after the practice saves a mapping. Match is whole tokens, so a visiting locum, a hub, a 3-day diary, and a surname prefix do not land on the wrong clinic. A generic GP type stays unmapped.
+
+Today is read on the practice interval. The other six days are every 30 minutes, and nothing is fetched from 19:00 to 07:00 Europe/London. A 429 or 5xx aborts the burst and backs off up to 8×. A 401 or 403 stops and asks for a Medicus sign-in. Each GET times out at 20 seconds and uses the shared book helper with `cache: 'no-store'`. Only one wall tab polls.
+
+"Last updated" moves only when today's read succeeds. After about 10 minutes the tiles grey to "Not current". A 200 that is not a book keeps the previous slots. The page title does not say Live. Times are Europe/London. If this PC is not on UK time, the countdown is hidden.
+
+A free slot stays until it ends, and shows "Now" while it is in progress. Telephone slots stay off face-to-face tiles. More than one site is labelled. The red number stays red; only the edge pulses, and Stop flashing is on the page. Set up tiles is a press-and-hold or a confirm.
+
+H-085 stays Proposed. The control text now matches this behaviour. Not signed.
+
 ## [v3.267.1] — 2026-09-27
 
 ### Availability wall setup stays on one screen

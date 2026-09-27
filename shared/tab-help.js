@@ -106,7 +106,7 @@ export const TAB_HELP = {
     title: 'Availability wall',
     what: 'Opens a full-screen view of free appointment slots for the triage room: today’s lists and a 7-day routine GP count. It shows times and counts only.',
     firstStep:
-      'Open it on the room screen. Use Set up tiles so each list matches this practice’s slot types, session names and roles.',
+      'Open it on the room screen. Press and hold Set up tiles so each list matches this practice’s slot types, session names and roles. Pin the tab, press F11, and set Chrome to continue where you left off. Copy TV link on the wall if the address is needed after a restart.',
   },
   'duplicate-checker': {
     title: 'Duplicates',

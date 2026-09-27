@@ -1627,6 +1627,13 @@ async function isPracticeAccepted() {
         desc: 'LAN URL and enable flag for the desk robot. Off by default. Never carries patient data.',
       },
       {
+        id: 'availability',
+        label: 'Availability wall',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Tile mapping for the triage-room availability wall. Merge fills a PC that has no saved mapping. Replace overwrites it.',
+      },
+      {
         id: 'suite',
         label: 'Practice code, feedback email &amp; Signing soft flags',
         defaultChecked: true,

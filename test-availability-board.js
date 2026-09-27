@@ -18,10 +18,13 @@ function check(cond, msg) {
   }
 }
 
-function at(isoDay, hh, mm) {
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+let at = (isoDay, hh, mm) => {
   const [y, m, d] = isoDay.split('-').map(Number);
   return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
-}
+};
 
 function entry(kind, start, type, extra) {
   return Object.assign(
@@ -52,10 +55,11 @@ function session(service, entries, extra) {
 (async () => {
   const core = await import(pathToFileURL(path.join(__dirname, 'shared/availability-board-core.js')).href);
   const Packs = require('./shared/practice-packs.js');
+  at = (isoDay, hh, mm) => core.parseLocalDateTime(`${isoDay} ${pad2(hh)}:${pad2(mm)}:00`);
 
   console.log('\n--- parsing ---');
   const today = '2026-09-26';
-  const now = new Date(2026, 8, 26, 13, 0, 0, 0);
+  const now = new Date(at(today, 13, 0));
   const raw = {
     staffSchedules: [
       {
@@ -67,13 +71,13 @@ function session(service, entries, extra) {
         schedule: [
           session('On the day GP', [
             entry('appointment', '2026-09-26 09:00:00', 'GP Appointment', {
-              patient: { name: 'Patient Alpha', nhsNumber: '9434765919' },
+              patient: { name: 'Patient Alpha', nhsNumber: '1234567890' },
               compiledReasonForAppointment: 'chest pain',
             }),
             entry('slot', '2026-09-26 12:00:00', 'GP Appointment'),
-            entry('slot', '2026-09-26 14:10:00', 'GP Appointment'),
             entry('slot', '2026-09-26 14:40:00', 'On the day'),
           ]),
+          session('Morning', [entry('slot', '2026-09-26 14:10:00', 'GP Appointment')]),
           session('General Appointments', [entry('slot', '2026-09-26T15:00:00', 'GP Appointment')], {
             scheduleType: 'unavailability-period',
           }),
@@ -128,11 +132,13 @@ function session(service, entries, extra) {
   const extracted = core.extractFreeSlots(raw, { now, dateISO: today, roleIndex: roleMap });
   const dumped = JSON.stringify(extracted);
   check(!dumped.includes('Patient Alpha'), 'patient name is not kept');
-  check(!dumped.includes('9434765919'), 'NHS number is not kept');
+  check(!dumped.includes('1234567890'), 'NHS number is not kept');
   check(!dumped.includes('chest pain'), 'appointment reason is not kept');
   check(
     extracted.slots.every(
-      (s) => Object.keys(s).sort().join(',') === 'clinician,roleHints,sessionHaystack,sessionName,slotType,startMs'
+      (s) =>
+        Object.keys(s).sort().join(',') ===
+        'clinician,dateISO,delivery,endMs,id,roleHints,sessionHaystack,sessionName,site,slotType,startMs'
     ),
     'slot records are times, types, sessions and roles only'
   );
@@ -168,7 +174,7 @@ function session(service, entries, extra) {
   check(tomorrow.slots.length === 1, 'a future morning slot is kept on a later day');
 
   console.log('\n--- mapping, next slot, counts, colour ---');
-  const cfg = core.normaliseConfig(null);
+  const cfg = core.normaliseConfig({ confirmed: true });
   check(
     cfg.tiles.some((t) => t.label === 'On-the-day GP' && t.showOnToday),
     'default today tiles include on-the-day GP'
@@ -205,14 +211,13 @@ function session(service, entries, extra) {
   const views = core.todayViews(extracted.slots, cfg, now, false);
   const byLabel = Object.fromEntries(views.tiles.map((t) => [t.label, t]));
   check(
-    byLabel['On-the-day GP'].remaining === 1 && byLabel['On-the-day GP'].nextLabel === '15:00',
-    'duty session maps to on-the-day GP'
+    byLabel['On-the-day GP'].remaining === 2 && byLabel['On-the-day GP'].nextLabel === '14:40',
+    'on the day and duty beat a registrar role'
   );
   check(
-    byLabel['Registrar / additional GP'].remaining === 2,
-    'registrar role from the rota maps both of that diary’s free slots'
+    byLabel['Registrar / additional GP'].remaining === 1 && byLabel['Registrar / additional GP'].nextLabel === '14:10',
+    'a registrar routine slot stays on the registrar tile'
   );
-  check(byLabel['Registrar / additional GP'].nextLabel === '14:10', 'registrar next time is 14:10');
   check(byLabel.ANP.remaining === 1, 'nurse practitioner diary maps to ANP');
   check(byLabel['Nursing / HCA'].remaining === 1, 'nurse type maps to nursing');
   check(byLabel.Visits.remaining === 1, 'past visit dropped, later visit remains');
@@ -225,7 +230,7 @@ function session(service, entries, extra) {
 
   const redNow = new Date(at(today, 14, 18));
   const redViews = core.todayViews(extracted.slots, cfg, redNow, false);
-  const reg = redViews.tiles.find((t) => t.id === 'registrar');
+  const reg = redViews.tiles.find((t) => t.id === 'otd-gp');
   check(
     reg.tone === 'red' && reg.countdown === '22 min' && reg.flash === true && reg.icon === false,
     'under 30 min is red, flashing, countdown 22 min'
@@ -253,6 +258,7 @@ function session(service, entries, extra) {
   const hiddenViews = core.todayViews(extracted.slots, hidden, now, false);
   check(!hiddenViews.tiles.some((t) => t.id === 'anp'), 'a hidden tile is not shown');
   check(hiddenViews.unmapped === views.unmapped, 'hiding a tile does not pour its slots into another tile');
+  check(hiddenViews.offScreen > views.offScreen, 'a hidden tile is counted as not on this screen');
 
   console.log('\n--- 7-day aggregation ---');
   const dates = core.weekDates(today);
@@ -321,7 +327,20 @@ function session(service, entries, extra) {
   check(core.shouldFetch({ packOn: true, visible: false }) === false, 'a hidden tab does not fetch');
   check(core.DEFAULT_POLL_MS === 5 * 60 * 1000, 'default poll is 5 minutes');
   check(core.MIN_POLL_MS === 2 * 60 * 1000, 'poll floor is 2 minutes');
-  check(core.REQUESTS_PER_REFRESH === 7, 'one refresh is seven day GETs');
+  check(core.REQUESTS_PER_REFRESH === 7, 'a cold week read is still seven day GETs');
+  const openNow = at('2026-09-28', 9, 0);
+  const cold = core.planRefresh({ now: openNow, lastWeekAt: null, todayISO: '2026-09-28' });
+  check(cold.quiet === false && cold.dates.length === 7, 'the first read inside hours asks for seven dates');
+  const later = core.planRefresh({ now: openNow, lastWeekAt: openNow - 5 * 60 * 1000, todayISO: '2026-09-28' });
+  check(later.dates.length === 1 && later.dates[0] === '2026-09-28', 'a later tick asks for today only');
+  const night = core.planRefresh({ now: at('2026-09-28', 21, 0), lastWeekAt: null, todayISO: '2026-09-28' });
+  check(night.quiet === true && night.dates.length === 0, 'nothing is fetched from 19:00 to 07:00');
+  check(core.practiceOpen(at('2026-09-28', 7, 0)) === true, '07:00 London is inside practice hours');
+  check(core.practiceOpen(at('2026-09-28', 18, 59)) === true, '18:59 London is inside practice hours');
+  check(core.backoffMs(core.DEFAULT_POLL_MS, 0) === core.DEFAULT_POLL_MS, 'the first poll uses the base interval');
+  check(core.backoffMs(core.DEFAULT_POLL_MS, 3) === core.DEFAULT_POLL_MS * 8, 'backoff stops at 8×');
+  check(core.WEEK_POLL_MS === 30 * 60 * 1000, 'days 2–7 wait 30 minutes');
+  check(core.STALE_MS === 10 * 60 * 1000, 'a reading older than 10 minutes is not current');
   check(core.TICK_MS >= 15000 && core.TICK_MS <= 30000, 'local tick is between 15 and 30 seconds');
   check(core.pollMsFromConfig({ pollMinutes: 1 }) === core.MIN_POLL_MS, 'a shorter poll is raised to the floor');
   check(
@@ -341,10 +360,459 @@ function session(service, entries, extra) {
     'a local tick keeps session names on the slots that remain'
   );
 
+  console.log('\n--- blockers ---');
+  const confirmed = core.normaliseConfig({ confirmed: true });
+  const guess = core.normaliseConfig(null);
+  check(guess.confirmed === false, 'a saved mapping is required before tiles are confirmed');
+  const unconfirmed = core.todayViews(extracted.slots, guess, now, false);
+  check(unconfirmed.unconfirmed === true && unconfirmed.tiles.length === 0, 'guessed tiles are not painted');
+  check(unconfirmed.unmapped === extracted.slots.length, 'until setup, every free slot is unmapped');
+
+  const chanpreet = core.extractFreeSlots(
+    {
+      staffSchedules: [
+        {
+          name: 'Dr Chanpreet Singh',
+          schedule: [session('Morning', [entry('slot', '2026-09-26 16:00:00', 'GP Appointment')])],
+        },
+      ],
+    },
+    { now, dateISO: today }
+  );
+  check(core.tileForSlot(chanpreet.slots[0], confirmed.tiles) == null, 'a generic GP type stays unmapped');
+  check(
+    !/anp/i.test(JSON.stringify(core.tileForSlot(chanpreet.slots[0], confirmed.tiles) || {})),
+    'Chanpreet is not an ANP'
+  );
+
+  const visiting = {
+    startMs: at(today, 16, 0),
+    endMs: at(today, 16, 10),
+    slotType: 'GP Appointment',
+    sessionName: 'Visiting locum',
+    sessionHaystack: 'Visiting locum Dr Chanpreet Singh',
+    clinician: 'Dr Chanpreet Singh',
+    roleHints: [],
+    delivery: '',
+    site: '',
+    dateISO: today,
+  };
+  check(core.tileForSlot(visiting, confirmed.tiles) == null, 'visiting is not a home visit');
+
+  function lone(name, service, type) {
+    return core.extractFreeSlots(
+      { staffSchedules: [{ name, schedule: [session(service, [entry('slot', '2026-09-28 09:00:00', type)])] }] },
+      { now: new Date(at('2026-09-28', 8, 0)), dateISO: '2026-09-28' }
+    ).slots[0];
+  }
+  const embargoDiary = lone('3-day GP', 'Morning', 'GP Appointment');
+  const aheadDiary = lone('Book ahead 3 days', 'Morning', 'GP consultation');
+  check(core.tileForSlot(embargoDiary, confirmed.tiles).id === 'embargo-gp', 'a diary named 3-day GP is embargo');
+  check(core.tileForSlot(aheadDiary, confirmed.tiles).id === 'embargo-gp', 'Book ahead 3 days is embargo');
+  const embargoWeek = core.weekView([{ date: '2026-09-28', slots: [embargoDiary, aheadDiary] }], confirmed);
+  check(embargoWeek.totalRoutine === 0 && embargoWeek.days[0].routine === 0, 'diary-only embargo is not routine GP');
+
+  const hubDiary = lone('Saturday Hub', 'General Appointments', 'GP Appointment');
+  const extDiary = lone('Extended access', 'General Appointments', 'GP Appointment');
+  check(core.tileForSlot(hubDiary, confirmed.tiles).id === 'extended', 'a diary named hub is extended access');
+  check(core.tileForSlot(extDiary, confirmed.tiles).id === 'extended', 'a diary named extended access is not routine');
+  const hubWeek = core.weekView([{ date: '2026-09-26', slots: [hubDiary, extDiary] }], confirmed);
+  check(hubWeek.totalRoutine === 0 && hubWeek.totalExtended === 2, 'diary-only hub stays on the extended total');
+
+  const smithIndex = core.roleIndex([
+    { name: 'John Smith', employmentType: 'registrar' },
+    { name: 'Anna', role: 'anp' },
+    { name: 'Joanna', role: 'hca' },
+  ]);
+  const smithson = core.extractFreeSlots(
+    {
+      staffSchedules: [
+        { name: 'John Smithson', schedule: [session('Routine', [entry('slot', '2026-09-28 10:00:00', 'Routine')])] },
+        { name: 'Annabelle Crowe', schedule: [session('Routine', [entry('slot', '2026-09-28 10:10:00', 'Routine')])] },
+        { name: 'Jo', schedule: [session('Routine', [entry('slot', '2026-09-28 10:20:00', 'Routine')])] },
+      ],
+    },
+    { now: new Date(at('2026-09-28', 8, 0)), dateISO: '2026-09-28', roleIndex: smithIndex }
+  );
+  check(
+    smithson.slots.every((s) => s.roleHints.length === 0),
+    'Smith does not match Smithson, Anna does not match Annabelle, Jo does not match Joanna'
+  );
+
+  const routineTile = confirmed.tiles.find((t) => t.id === 'routine-gp');
+  function faceFor(startH, startM, nowH, nowM, endExtraMin, date) {
+    const day = date || today;
+    const start = at(day, startH, startM);
+    const slot = {
+      startMs: start,
+      endMs: start + endExtraMin * 60000,
+      dateISO: day,
+      slotType: 'Routine',
+      sessionName: 'Routine',
+      sessionHaystack: 'Routine',
+      clinician: 'Dr Day',
+      roleHints: [],
+      site: 'Example Surgery',
+      delivery: 'face to face',
+    };
+    const view = core.tileView(
+      routineTile,
+      [slot],
+      new Date(at(day, nowH, nowM) + (nowM === startM && nowH === startH ? 0 : 0)),
+      false
+    );
+    return { view, face: core.tileFace(view) };
+  }
+  const at30 = faceFor(14, 30, 14, 0, 15);
+  check(
+    at30.view.tone === 'amber' && at30.face.primary === '14:30' && /30 min/.test(at30.face.cue),
+    'exactly 30 min is amber with a text cue'
+  );
+  const at60 = faceFor(15, 0, 14, 0, 15);
+  check(at60.view.tone === 'amber' && /1 hr/.test(at60.face.cue), 'exactly 60 min is amber with a text cue');
+  const atStart = core.tileView(
+    routineTile,
+    [
+      {
+        startMs: at(today, 14, 0),
+        endMs: at(today, 14, 10),
+        dateISO: today,
+        slotType: 'Routine',
+        sessionName: 'Routine',
+        sessionHaystack: 'Routine',
+        clinician: 'Dr Day',
+        roleHints: [],
+        delivery: '',
+        site: '',
+      },
+    ],
+    new Date(at(today, 14, 0)),
+    false
+  );
+  const startFace = core.tileFace(atStart);
+  check(
+    startFace.primary === 'Now' && atStart.tone === 'red' && atStart.remaining === 1,
+    'a slot at its start reads Now'
+  );
+  const justAfter = core.tileView(
+    routineTile,
+    [
+      {
+        startMs: at(today, 14, 0),
+        endMs: at(today, 14, 0) + 10 * 60000,
+        dateISO: today,
+        slotType: 'Routine',
+        sessionName: 'Routine',
+        sessionHaystack: 'Routine',
+        clinician: 'Dr Day',
+        roleHints: [],
+        delivery: '',
+        site: '',
+      },
+    ],
+    new Date(at(today, 14, 0) + 1000),
+    false
+  );
+  const justFace = core.tileFace(justAfter);
+  check(
+    justFace.primary === 'Now' &&
+      justAfter.tone === 'red' &&
+      justAfter.tone !== 'empty' &&
+      justFace.primary !== 'None left',
+    'one second after the start is still Now, not None left'
+  );
+  const underMinute = core.countdownLabel(0.4);
+  check(underMinute === '<1 min', 'under a minute is not 0 min');
+  const laterSlot = {
+    startMs: at('2026-09-28', 9, 0),
+    endMs: at('2026-09-28', 9, 10),
+    dateISO: '2026-09-28',
+    slotType: 'GP Appointment',
+    sessionName: '3-day GP',
+    sessionHaystack: '3-day GP',
+    clinician: '3-day GP',
+    roleHints: [],
+    delivery: '',
+    site: '',
+  };
+  const laterView = core.tileView(
+    confirmed.tiles.find((t) => t.id === 'embargo-gp'),
+    [laterSlot],
+    new Date(at(today, 13, 0)),
+    false
+  );
+  const laterFace = core.tileFace(laterView);
+  check(
+    laterFace.primary === 'Mon 28 Sep' && /First available in 2 days/.test(laterFace.cue),
+    'a later day shows the date, not a bare time'
+  );
+  const soonEmbargo = {
+    startMs: at(today, 13, 20),
+    endMs: at(today, 13, 30),
+    dateISO: today,
+    slotType: 'GP Appointment',
+    sessionName: '3-day GP',
+    sessionHaystack: '3-day GP',
+    clinician: '3-day GP',
+    roleHints: [],
+    delivery: '',
+    site: '',
+  };
+  const soonView = core.tileView(
+    confirmed.tiles.find((t) => t.id === 'embargo-gp'),
+    [soonEmbargo],
+    new Date(at(today, 13, 0)),
+    false
+  );
+  check(
+    soonView.tone === 'red' && soonView.flash === false && soonView.icon === true,
+    'a same-day embargo tile stays steady red and does not flash'
+  );
+  const horizon = core.horizonSlots(
+    {
+      [today]: { slots: [], stale: false },
+      '2026-09-28': { slots: [laterSlot], stale: false },
+      '2026-09-27': { slots: [{ startMs: 1, endMs: 2, dateISO: '2026-09-27' }], stale: true },
+    },
+    today,
+    new Date(at(today, 13, 0)),
+    false
+  );
+  const horizonViews = core.todayViews(horizon, confirmed, new Date(at(today, 13, 0)), false);
+  const horizonEmbargo = horizonViews.tiles.find((t) => t.id === 'embargo-gp');
+  check(
+    horizon.length === 1 && horizonEmbargo && horizonEmbargo.later && horizonEmbargo.dayHeading === 'Mon 28 Sep',
+    'a later-day embargo slot is the tile, and a stale other day is left out'
+  );
+  const todayRoutine = {
+    ...laterSlot,
+    dateISO: today,
+    startMs: at(today, 16, 0),
+    endMs: at(today, 16, 10),
+    slotType: 'Routine',
+    sessionName: 'Routine',
+    sessionHaystack: 'Routine',
+    clinician: 'Dr Day',
+  };
+  const laterRoutine = {
+    ...todayRoutine,
+    dateISO: '2026-09-28',
+    startMs: at('2026-09-28', 9, 0),
+    endMs: at('2026-09-28', 9, 10),
+  };
+  const mixed = core.todayViews(
+    core.horizonSlots(
+      { [today]: { slots: [todayRoutine] }, '2026-09-28': { slots: [laterRoutine] } },
+      today,
+      new Date(at(today, 13, 0)),
+      false
+    ),
+    confirmed,
+    new Date(at(today, 13, 0)),
+    false
+  );
+  const mixedRoutine = mixed.tiles.find((t) => t.id === 'routine-gp');
+  check(
+    mixedRoutine && mixedRoutine.remaining === 1 && mixedRoutine.later === false,
+    'a later routine slot does not inflate the count on today'
+  );
+
+  const phone = {
+    ...laterSlot,
+    dateISO: today,
+    startMs: at(today, 16, 0),
+    endMs: at(today, 16, 10),
+    slotType: 'Routine',
+    sessionName: 'Routine',
+    sessionHaystack: 'Routine',
+    clinician: 'Dr Day',
+    delivery: 'telephone',
+  };
+  check(core.tileForSlot(phone, confirmed.tiles) == null, 'a telephone slot is not on a face-to-face tile');
+
+  const witley = { ...phone, delivery: '', site: 'Example Surgery', sessionHaystack: 'Routine', slotType: 'Routine' };
+  const milford = { ...witley, site: 'Other Surgery', startMs: at(today, 16, 20), endMs: at(today, 16, 30) };
+  const multi = core.todayViews([witley, milford], confirmed, now, false);
+  check(multi.multiSite === true && multi.tiles.some((t) => t.site), 'more than one site is labelled');
+
+  const shaped = core.extractFreeSlots({ message: 'unauthorised' }, { now });
+  check(shaped.ok === false, 'a 200 without staffSchedules is not a book');
+  const kept = core.mergeSnapshots(
+    { fetchedAt: 1000, days: { [today]: { slots: extracted.slots, fetchedAt: 1000, stale: false } } },
+    {
+      fetchedAt: 9000,
+      today,
+      days: { [today]: { ok: false }, '2026-09-27': { ok: true, slots: [{ startMs: 1, endMs: 2 }] } },
+    },
+    { today, keep: [today, '2026-09-27'] }
+  );
+  check(kept.fetchedAt === 1000, 'a failed today does not move Last updated');
+  check(
+    kept.days[today].slots.length === extracted.slots.length && kept.days[today].stale === true,
+    'today keeps the previous slots and is marked old'
+  );
+  check(
+    kept.staleDates.includes(today) && !kept.staleDates.includes('2026-09-27'),
+    'the banner names only the stale day'
+  );
+  const aged = core.weekView(
+    [
+      { date: today, slots: extracted.slots, stale: true },
+      { date: '2026-09-27', slots: null },
+    ],
+    confirmed
+  );
+  check(aged.totalRoutine === 0 && aged.incomplete === true, 'an old day is not added to the week total as current');
+
+  const xmas = core.weekView(
+    [
+      { date: '2026-12-25', slots: [] },
+      { date: '2026-12-28', slots: [] },
+    ],
+    confirmed
+  );
+  check(
+    xmas.days[0].holiday === true && xmas.days[1].holiday === true,
+    'Christmas and the Boxing Day substitute are bank holidays'
+  );
+  check(
+    core.weekDates('2026-12-22').includes('2026-12-25') && core.weekDates('2026-12-22').includes('2026-12-28'),
+    'bank holidays stay inside the seven days'
+  );
+  const unreadSat = core.weekView([{ date: '2026-09-26', slots: null }], confirmed);
+  check(
+    unreadSat.days[0].routine === null && unreadSat.days[0].extended === null,
+    'an unread day is not a known weekend count'
+  );
+  check(unreadSat.incomplete === true, 'an unread day makes the extended total N+ as well');
+
+  const emptySession = core.extractFreeSlots(
+    {
+      staffSchedules: [
+        {
+          name: 'Dr Example',
+          schedule: [
+            {
+              scheduleType: 'diary',
+              startDateTime: '2026-09-27 09:00:00',
+              endDateTime: '2026-09-27 12:00:00',
+              summary: {
+                status: { isCancelled: false },
+                service: { name: 'Morning' },
+                usualAppointmentDuration: 10,
+                name: 'Patient Example',
+              },
+              entries: [],
+            },
+          ],
+        },
+      ],
+    },
+    { now, dateISO: '2026-09-27', dropPast: false }
+  );
+  check(
+    emptySession.ok === true && emptySession.unexpanded === true && emptySession.slots.length === 0,
+    'an empty session with a duration is not a confident zero'
+  );
+  check(!JSON.stringify(emptySession).includes('Patient Example'), 'summary.name is not kept on the slot');
+
+  const dupes = core.extractFreeSlots(
+    {
+      staffSchedules: [
+        {
+          name: 'Dr Example',
+          schedule: [
+            session('Routine', [
+              entry('slot', '2026-09-28 11:00:00', 'Routine', { id: 'same', isStaffBreakAssignment: false }),
+              entry('slot', '2026-09-28 11:00:00', 'Routine', { id: 'same' }),
+              entry('slot', '2026-09-28 11:15:00', 'Routine', { isStaffBreakAssignment: true }),
+              entry('slot', '2026-09-28 11:30:00', 'Routine', { patient: { id: 'p1' } }),
+              entry('slot', '2026-09-28 11:45:00', 'Routine', { slotReservationId: 'hold-1' }),
+              {
+                diaryEntryType: { isSlot: true },
+                startDateTime: '2026-09-28 12:00:00',
+                appointmentType: { name: 'Routine' },
+              },
+            ]),
+          ],
+        },
+      ],
+    },
+    { now: new Date(at('2026-09-28', 8, 0)), dateISO: '2026-09-28' }
+  );
+  check(dupes.slots.length === 1, 'breaks, holds, patient ids, isSlot-only rows and duplicate ids are dropped');
+
+  const ids = core.normaliseConfig({
+    confirmed: true,
+    tiles: [
+      { id: 'custom-1', label: 'A', match: { types: ['routine'] } },
+      { id: 'custom-2', label: 'B', match: { types: ['nurse'] } },
+      { id: 'custom-1', label: 'C', match: { types: ['visit'] } },
+    ],
+  });
+  check(new Set(ids.tiles.map((t) => t.id)).size === 3, 'custom tile ids stay unique');
+  const short = core.normaliseConfig({
+    confirmed: true,
+    tiles: [{ id: 'routine-gp', label: 'Routine', match: { types: ['gp', 'routine'] } }],
+  });
+  check(
+    !short.tiles[0].match.types.includes('gp') && short.tiles[0].match.types.includes('routine'),
+    'needles shorter than 3 characters are rejected'
+  );
+
+  check(
+    core.parseLocalDateTime('2026-06-15T12:00:00Z') === Date.parse('2026-06-15T12:00:00Z'),
+    'Z is the real instant'
+  );
+  check(
+    core.clockLabel(core.parseLocalDateTime('2026-06-15T12:00:00Z')) === '13:00',
+    'a Z stamp is shown in Europe/London'
+  );
+  check(
+    core.clockLabel(core.parseLocalDateTime('2026-01-15 12:00:00')) === '12:00',
+    'winter wall-clock digits stay 12:00 in London'
+  );
+  check(
+    core.clockProblem(Date.now(), null) === (core.hostIsLondon() ? null : 'zone'),
+    'a PC that is not on UK time is reported'
+  );
+  check(
+    core.isNotCurrent(1000, 1000 + core.STALE_MS, core.STALE_MS) === true,
+    'ten minutes after the read is not current'
+  );
+
+  const pastToday = core.extractFreeSlots(
+    {
+      staffSchedules: [
+        {
+          name: 'Dr Day',
+          schedule: [
+            session('Routine', [
+              entry('slot', '2026-09-26 09:00:00', 'Routine'),
+              entry('slot', '2026-09-26 15:00:00', 'Routine'),
+            ]),
+          ],
+        },
+      ],
+    },
+    { now: new Date(at(today, 13, 0)), dateISO: today }
+  );
+  check(
+    pastToday.slots.length === 1 && pastToday.slots[0].startMs === at(today, 15, 0),
+    'today keeps the 15:00 routine slot and drops the 09:00 one'
+  );
+
   console.log('\n--- page contract ---');
   const wall = fs.readFileSync(path.join(__dirname, 'availability/wall.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, 'availability/wall.css'), 'utf8');
-  check(wall.includes("method: 'GET'") && wall.includes('overviewPath'), 'the wall GETs the overview path');
+  check(
+    wall.includes('fetchSchedulingOverview') && wall.includes('bypassCache: true'),
+    'the wall uses the shared book GET and bypasses the 5-minute cache'
+  );
+  const apiSrc = fs.readFileSync(path.join(__dirname, 'shared/medicus-api.js'), 'utf8');
+  check(apiSrc.includes("cache: 'no-store'"), 'the book GET does not use the HTTP cache');
+  check(wall.includes('navigator.locks'), 'only one wall tab polls');
+  check(wall.includes('planRefresh'), 'the wall splits today from the rest of the week');
   check(!/method:\s*['"]POST['"]/.test(wall) && !wall.includes('chrome.alarms'), 'no writes and no background alarm');
   check(wall.includes('visibilityState') && wall.includes('shouldFetch'), 'refresh pauses while the tab is hidden');
   check(
