@@ -598,10 +598,29 @@
   const LFC = window.LabFilingCatalogue;
   const LFG = window.LabFilingGate;
   const OV = window.LabCatalogueOverlay; // for the catalogue "whitelist this comment" write (setFilingGroup)
+  const LC = window.LabCatalogue; // for the "matched to your request" section — heading lookup, request resolution
 
   // Filing-screen URL gate. A result-review task overview. Kept deliberately
   // narrow; the in-DOM File-control gate (GATE 2 above) is the real guard.
   const FILING_URL_RE = /\/tasks\/data\/[^/]*(investigation|result|report)[^/]*\/overview\//i;
+
+  // ── Companion fold-in, stage 1 (Nick, 2026-09-27) ───────────────────────────────────────────────────────────
+  // The header/title, reasons list and "Matched to your request" box now render inside the Companion widget
+  // (content-scripts/task-actions-panel.js) instead of on this card, for a consistent moveable/minimisable look —
+  // see the plan's reasoning. This file keeps computing everything exactly as before (evaluateGate/showButton/
+  // showBlockedHint/hideButton are UNCHANGED below except that buildUI() no longer appends the moved elements to
+  // this card's DOM) and additionally PUBLISHES the same data Companion needs to a plain window global + a DOM
+  // event, so there is still only ONE place that decides severity/blockers/matching — Companion is a second
+  // renderer of that same data, never a second computation of it. null means "nothing to show" (hidden/kill-
+  // switched/wrong screen/etc.) — Companion must clear its section on null, not keep stale content.
+  function publishLabFileState(state) {
+    window.__chLabFileState = state;
+    try {
+      document.dispatchEvent(new CustomEvent('ch-lab-file-state'));
+    } catch (e) {
+      /* ignore — Companion will still pick this up on its own next poll */
+    }
+  }
 
   let profiles = [];
   let config = { commitMode: 'manual' };
@@ -652,9 +671,20 @@
     if (!force && cached && now - cached.ts < SEV_TTL) return cached;
     const overviewURL = `/tasks/data/${ctx.taskTypeSlug}/overview/${ctx.taskUuid}`;
     let report = null;
+    let outstandingLabels = [];
     try {
       const raw = await API.fetchInvestigationReport(ctx.apiBase, overviewURL);
       report = NORM.normaliseInvestigationReport(raw);
+      // Additive, for the "matched to your request" section only — normaliseInvestigationReport() deliberately
+      // doesn't carry this (other consumers depend on its current narrow shape), so it's read straight off the raw
+      // payload here, same field shared/lab-catalogue-scan.js's observationFromOverview() and shared/lab-allocate-
+      // core.js's requester extraction already read (`data.outstandingInvestigationRequestOptions[].label`, e.g.
+      // "Liver Function (Dr X • 12 Sep 2026)").
+      const rawData = (raw && raw.data) || {};
+      const options = Array.isArray(rawData.outstandingInvestigationRequestOptions)
+        ? rawData.outstandingInvestigationRequestOptions
+        : [];
+      outstandingLabels = options.map((o) => (o && typeof o.label === 'string' ? o.label : '')).filter(Boolean);
     } catch (e) {
       return null;
     }
@@ -665,7 +695,7 @@
     // Beyond numeric severity, fail CLOSED on anything the gate cannot judge
     // (free-text/cultures, unmatched reports, missing result rules).
     const blockers = LF ? LF.fileabilityBlockers(report, severity, resultRules) : ['utilities not loaded'];
-    const entry = { report, severity, blockers, ts: now, taskUuid: ctx.taskUuid };
+    const entry = { report, severity, blockers, outstandingLabels, ts: now, taskUuid: ctx.taskUuid };
     sevCache.set(ctx.taskUuid, entry);
     return entry;
   }
@@ -936,6 +966,108 @@
       normalOptionText: (s && s.normalOptionText) || CATALOGUE_DEFAULT_NORMAL_OPTION,
     };
   }
+
+  // ── "Matched to your request" (Nick, 2026-09-26) ────────────────────────────────────────────────────────────
+  // Independent of filingEngine/legacy-profile choice — this is about REQUEST recognition, not filing decisions, so
+  // it runs the same whichever engine files the result. Every distinct heading actually present on this report.
+  function reportHeadings(report) {
+    const set = new Set();
+    for (const r of (report && report.results) || []) {
+      if (r && typeof r.specimen === 'string' && r.specimen.trim()) set.add(r.specimen.trim());
+    }
+    return [...set];
+  }
+  // The ONE investigation every heading on this report agrees it identifies — never a guess: any heading that is
+  // ambiguous (identifies 0 or >1 investigations) or that the whole report doesn't agree on bails out to null,
+  // same "size === 1" discipline as engine/lab-filing-catalogue.js's unapprovedGroups.
+  function investigationForHeadings(catalogue, headings) {
+    if (!catalogue || !headings.length) return null;
+    const ids = new Set();
+    for (const heading of headings) {
+      const nh = LC.norm(heading);
+      const headingIds = new Set();
+      for (const lab of asArr(catalogue.labs)) {
+        for (const g of asArr(lab.groupHeadings)) {
+          if (LC.norm(g.text) === nh) asArr(g.identifies).forEach((id) => headingIds.add(id));
+        }
+      }
+      if (headingIds.size !== 1) return null;
+      headingIds.forEach((id) => ids.add(id));
+    }
+    return ids.size === 1 ? [...ids][0] : null;
+  }
+  function asArr(v) {
+    return Array.isArray(v) ? v : [];
+  }
+  // rs.outstandingLabels are RAW request-card labels ("Liver Function (Dr X • 12 Sep 2026)") for this patient —
+  // fetched once in loadReportSeverity(). Candidates are the ones that don't resolve to ANY investigation yet
+  // (LC.resolveRequest returns []) — a wording that already resolves elsewhere needs no help. Returns null whenever
+  // there's nothing to offer (report's investigation isn't unambiguous, or nothing is unresolved) — the card simply
+  // doesn't show this section rather than manufacturing an empty state.
+  function computeRequestMatchInfo(rs, catalogue) {
+    try {
+      if (!LC || !catalogue || !rs || !rs.report) return null;
+      const invId = investigationForHeadings(catalogue, reportHeadings(rs.report));
+      if (!invId) return null;
+      const labels = Array.isArray(rs.outstandingLabels) ? rs.outstandingLabels : [];
+      if (!labels.length) return null;
+      const index = LC.buildIndex(catalogue);
+      const seen = new Set();
+      const candidates = [];
+      for (const raw of labels) {
+        const text = LC.parseRequestName(raw);
+        const nt = LC.norm(text);
+        if (!nt || seen.has(nt)) continue;
+        seen.add(nt);
+        if (!LC.resolveRequest(index, text).length) candidates.push(text);
+      }
+      if (!candidates.length) return null;
+      const inv = asArr(catalogue.investigations).find((i) => i.id === invId);
+      if (!inv) return null;
+      return { investigationId: invId, investigationLabel: inv.label, candidates };
+    } catch (e) {
+      return null; // this section must never break the gate
+    }
+  }
+  // Writes the confirmed wording straight into the catalogue overlay (OV.addRequestAlias — the same pure helper
+  // the Investigations page's own "Match requests to lab reports" board already uses for this exact case). Never
+  // touches Medicus's own outstanding-request checkbox — that write, and its own hazard review (H-036), belong
+  // entirely to content.js's separate OIR auto-tick feature and are untouched by this.
+  async function confirmRequestMatch(invId, text, btnEl) {
+    if (
+      !OV ||
+      typeof window.labcatalogueLoadEffective !== 'function' ||
+      typeof window.labcatalogueSaveOverlay !== 'function'
+    ) {
+      toast('Could not save — extension utilities not loaded.', 'err');
+      return;
+    }
+    if (btnEl) btnEl.disabled = true;
+    try {
+      const eff = await window.labcatalogueLoadEffective({ includeUnreviewed: true });
+      if (!eff || !eff.builtin || !eff.overlay) {
+        toast('Could not save — the catalogue could not be read.', 'err');
+        return;
+      }
+      // Same preselect logic as the Investigations page's own "Requested as" box (2026-09-26): only pick a specific
+      // ordering system when the practice has told us it uses exactly one — never a guess.
+      const orderingSystems = (eff.overlay.context && eff.overlay.context.orderingSystems) || [];
+      const system = orderingSystems.length === 1 ? orderingSystems[0] : 'any';
+      const today = new Date().toISOString().slice(0, 10);
+      const overlay = OV.addRequestAlias(eff.builtin, eff.overlay, invId, text, system, today);
+      await window.labcatalogueSaveOverlay(overlay);
+      toast('Recorded — “' + text + '” added as a confirmed request wording, awaiting review.', 'ok');
+      scheduleEval();
+    } catch (e) {
+      toast('Could not save: ' + (e && e.message ? e.message : 'unknown error'), 'err');
+    } finally {
+      if (btnEl) btnEl.disabled = false;
+    }
+  }
+  // Exposed so Companion's own "Matched to your request" rendering (stage 1 fold-in) can call the SAME write path
+  // — never a re-implementation of it — passing its own button element to disable/re-enable during the write.
+  window.__chConfirmRequestMatch = confirmRequestMatch;
+
   async function combineWithCatalogueIfWanted(rs, legacyBlockers, opts) {
     const catalogueOnly = !!(opts && opts.catalogueOnly);
     if (!filingEngineWanted() || !rs || !rs.report) {
@@ -1169,6 +1301,10 @@
   // catalogue.js's unapprovedGroups): "obviously need to check here we have a result to open".
   let unapprovedGroupsBox = null;
   let unapprovedGroupsSignature = null;
+  // "Matched to your request" (Nick, 2026-09-26) — shown in BOTH the ready and blocked states (request recognition
+  // is orthogonal to whether this report can file), so unlike the boxes above it is never reset by showButton().
+  let requestMatchBox = null;
+  let requestMatchSignature = null;
 
   function el(tag, className, text) {
     const n = document.createElement(tag);
@@ -1177,6 +1313,15 @@
     return n;
   }
 
+  // Companion fold-in stage 2 (Nick, 2026-09-27): this file has NO visible DOM of its own any more — every piece
+  // that used to render here (header/reasons/request-match in stage 1; whitelist boxes, unapproved-groups box,
+  // File/message buttons, suppress link, toast in stage 2) now lives in content-scripts/task-actions-panel.js's
+  // own Lab Filing section, reading published data (publishLabFileState()/window.__chLabFileState,
+  // window.__chLabFileToast) rather than a second computation. The elements below are still created and kept
+  // updated exactly as before by evaluateGate()/showButton()/showBlockedHint()/hideButton() (all unchanged) —
+  // simply never attached to `document` at all — so none of that existing, tested logic needs touching to stop
+  // rendering a card nobody sees. A later cleanup can remove this now-fully-dead detached-element machinery once
+  // this stage is confirmed live.
   function buildUI() {
     if (host) return;
     host = el('div', 'chlf-card chlf-hidden');
@@ -1193,6 +1338,7 @@
     reasonsList = el('ul', 'chlf-reasons-list');
     reasonsEl.appendChild(reasonsSummary);
     reasonsEl.appendChild(reasonsList);
+    requestMatchBox = el('div', 'chlf-whitelist chlf-hidden');
     whitelistBox = el('div', 'chlf-whitelist chlf-hidden');
     catalogueWhitelistBox = el('div', 'chlf-whitelist chlf-hidden');
     unapprovedGroupsBox = el('div', 'chlf-whitelist chlf-hidden');
@@ -1217,16 +1363,13 @@
     host.appendChild(titleEl);
     host.appendChild(subEl);
     host.appendChild(reasonsEl);
+    host.appendChild(requestMatchBox);
     host.appendChild(whitelistBox);
     host.appendChild(catalogueWhitelistBox);
     host.appendChild(unapprovedGroupsBox);
     host.appendChild(actions);
     host.appendChild(foot);
-
-    const style = el('style');
-    style.textContent = CSS;
-    document.head.appendChild(style);
-    document.body.appendChild(host);
+    // Deliberately no attaching the style element or `host` itself to the live document — see the comment above.
   }
 
   // Add the open report's patient to the machine-local suppress list. Stores the
@@ -1250,6 +1393,7 @@
       });
     });
   }
+  window.__chSuppressCurrentPatient = suppressCurrentPatient;
 
   function messagingEnabled(profile) {
     return !!(
@@ -1261,7 +1405,7 @@
     );
   }
 
-  function showButton(profile) {
+  function showButton(profile, requestMatchInfo) {
     currentProfile = profile;
     if (reasonsEl) {
       reasonsEl.classList.add('chlf-hidden');
@@ -1312,7 +1456,20 @@
       msgBtn.classList.add('chlf-hidden');
     }
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
+    renderRequestMatchBox(requestMatchInfo);
     host.classList.remove('chlf-hidden');
+    publishLabFileState({
+      mode: 'ready',
+      title: titleEl.textContent,
+      sub: subEl.textContent,
+      requestMatchInfo,
+      fileAction: {
+        buttonText: btn.textContent,
+        messagingEnabled: !msgBtn.classList.contains('chlf-hidden'),
+        msgButtonText: msgBtn.textContent,
+        msgButtonTitle: msgBtn.title || '',
+      },
+    });
   }
   // The not-offered state: a profile fits but the result has something the gate
   // cannot pass (out-of-range, free text, a guard tripped). The card NAMES the rule
@@ -1332,6 +1489,7 @@
       /* ignore */
     }
   }
+  window.__chOpenInvestigationSetup = openInvestigationSetup;
 
   function showBlockedHint(
     blockers,
@@ -1340,7 +1498,8 @@
     matchedProfiles,
     catalogueUnresolvedComments,
     catalogueUnapprovedGroups,
-    catalogue
+    catalogue,
+    requestMatchInfo
   ) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
@@ -1371,10 +1530,21 @@
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     // Still allow opting this patient out, even on the not-offered state.
     if (suppressLink) suppressLink.classList.remove('chlf-hidden');
+    renderRequestMatchBox(requestMatchInfo);
     renderWhitelistBox(commentedResults, matchedProfiles);
     renderCatalogueWhitelistBox(catalogueUnresolvedComments);
     renderUnapprovedGroupsBox(catalogueUnapprovedGroups, catalogue);
     host.classList.remove('chlf-hidden');
+    publishLabFileState({
+      mode: 'blocked',
+      title: titleEl.textContent,
+      sub: subEl.textContent,
+      reasons,
+      requestMatchInfo,
+      whitelistRows: computeWhitelistRows(commentedResults, matchedProfiles),
+      catalogueWhitelistRows: computeCatalogueWhitelistRows(catalogueUnresolvedComments),
+      unapprovedGroupsRows: computeUnapprovedGroupsRows(catalogueUnapprovedGroups, catalogue),
+    });
   }
 
   // Builds the "whitelist this comment" checkbox row(s) inside the blocked card.
@@ -1402,6 +1572,26 @@
   // without an offer to save it somewhere that has nothing to do with it.
   // If it comes back with more than one owner, the phrase is saved to ALL of
   // them — never an arbitrary pick among genuinely tied candidates.
+  // Companion fold-in stage 2 (Nick, 2026-09-27): the SAME computation renderWhitelistBox always did, made callable
+  // on its own so evaluateGate() can publish the result for Companion to render — never a second implementation of
+  // profilesOwningResult matching. Returns plain, publishable rows (profile OBJECTS reduced to id/name — the only
+  // fields the write path or a label actually need).
+  function computeWhitelistRows(commentedResults, matchedProfiles) {
+    const list = Array.isArray(commentedResults) ? commentedResults : [];
+    const profiles = (Array.isArray(matchedProfiles) ? matchedProfiles : []).filter((p) => p && p.id);
+    const multiProfile = profiles.length > 1;
+    return list
+      .map((c) => ({ c, targets: LF ? LF.profilesOwningResult(profiles, c.result) : [] }))
+      .filter((x) => x.targets.length > 0)
+      .map(({ c, targets }) => ({
+        key: c.name + '|' + c.residue,
+        name: c.name,
+        residue: c.residue,
+        targetProfileIds: targets.map((p) => p.id),
+        targetNames: multiProfile ? targets.map((p) => p.name || 'profile') : [],
+      }));
+  }
+
   function renderWhitelistBox(commentedResults, matchedProfiles) {
     if (!whitelistBox) return;
     const list = Array.isArray(commentedResults) ? commentedResults : [];
@@ -1468,6 +1658,21 @@
       saveBtn.classList.toggle('chlf-hidden', !checks.some((c) => c.checkbox.checked));
     };
     checks.forEach((c) => (c.checkbox.onchange = syncButtonVisibility));
+  }
+
+  // Companion fold-in stage 2 — same idea as computeWhitelistRows above, for the catalogue engine's boxes.
+  function computeCatalogueWhitelistRows(comments) {
+    const list = Array.isArray(comments) ? comments : [];
+    const seen = new Set();
+    const rows = [];
+    for (const c of list) {
+      if (!c || !c.residue || !c.labId || !c.heading) continue;
+      const key = c.labId + '|' + norm(c.heading) + '|' + norm(c.residue);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ key, name: c.name, residue: c.residue, labId: c.labId, heading: c.heading });
+    }
+    return rows;
   }
 
   // Same idea as renderWhitelistBox above, for the CATALOGUE engine's per-lab-x-heading comment whitelist
@@ -1629,6 +1834,58 @@
       }
     }
   }
+  window.__chWhitelistCatalogueComments = whitelistSelectedCatalogueComments;
+
+  // One row per outstanding-request wording this patient has that the catalogue doesn't recognise yet (see
+  // computeRequestMatchInfo — never shown unless the report's own heading(s) unambiguously resolve to exactly one
+  // investigation). Confirming writes the wording as a requestAlias via OV.addRequestAlias — never touches
+  // Medicus's own outstanding-request checkbox.
+  function renderRequestMatchBox(info) {
+    if (!requestMatchBox) return;
+    if (!info || !Array.isArray(info.candidates) || !info.candidates.length) {
+      requestMatchBox.classList.add('chlf-hidden');
+      requestMatchBox.innerHTML = '';
+      requestMatchSignature = null;
+      return;
+    }
+    const signature = JSON.stringify([info.investigationId, info.candidates]);
+    if (signature === requestMatchSignature) return;
+    requestMatchSignature = signature;
+    requestMatchBox.innerHTML = '';
+    requestMatchBox.classList.remove('chlf-hidden');
+    requestMatchBox.appendChild(
+      el(
+        'div',
+        'chlf-wl-intro',
+        'This patient has an outstanding request the suite doesn’t recognise yet — is it this test?'
+      )
+    );
+    info.candidates.forEach((text) => {
+      const row = el('div', 'chlf-wl-row chlf-open-row');
+      row.appendChild(el('span', 'chlf-wl-text', '“' + text + '”'));
+      const okBtn = el('button', 'chlf-wl-open', 'This is ' + info.investigationLabel);
+      okBtn.type = 'button';
+      okBtn.onclick = () => confirmRequestMatch(info.investigationId, text, okBtn);
+      row.appendChild(okBtn);
+      requestMatchBox.appendChild(row);
+    });
+  }
+
+  // Companion fold-in stage 2 — same idea as computeWhitelistRows above.
+  function computeUnapprovedGroupsRows(groups, catalogue) {
+    const list = Array.isArray(groups) ? groups : [];
+    const invs = catalogue && Array.isArray(catalogue.investigations) ? catalogue.investigations : [];
+    const seen = new Set();
+    const rows = [];
+    for (const g of list) {
+      if (!g || !g.investigationId || seen.has(g.investigationId)) continue;
+      const inv = invs.find((i) => i.id === g.investigationId);
+      if (!inv) continue; // never offer a test the catalogue can no longer find
+      seen.add(g.investigationId);
+      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label });
+    }
+    return rows;
+  }
 
   // One row per group-not-approved heading that confidently resolved to exactly one test (see
   // engine/lab-filing-catalogue.js's unapprovedGroups — code-only, never a guess), deduplicated by investigation:
@@ -1786,10 +2043,13 @@
       }
     }
   }
+  window.__chWhitelistComments = whitelistSelectedComments;
+
   function hideButton() {
     currentProfile = null;
     currentLegacyProfile = null;
     currentMatchedProfiles = [];
+    publishLabFileState(null);
     if (host) host.classList.add('chlf-hidden');
     if (subEl) subEl.title = '';
     if (reasonsEl) {
@@ -1813,20 +2073,29 @@
       unapprovedGroupsBox.innerHTML = '';
       unapprovedGroupsSignature = null;
     }
+    if (requestMatchBox) {
+      requestMatchBox.classList.add('chlf-hidden');
+      requestMatchBox.innerHTML = '';
+      requestMatchSignature = null;
+    }
     if (msgBtn) msgBtn.classList.add('chlf-hidden');
     if (suppressLink) suppressLink.classList.add('chlf-hidden');
   }
 
+  // Companion fold-in stage 2 (Nick, 2026-09-27): no card of its own left to anchor a corner toast near, so this
+  // publishes instead of building DOM — a SEPARATE global from window.__chLabFileState (which can legitimately be
+  // null, e.g. hidden/no profile fits) so a toast can still fire regardless of the card's own mode. `id` is
+  // monotonic so two identical consecutive messages still register as a fresh toast. Companion owns its own
+  // display + ~5.2s auto-clear timer (matching the old .chlf-toast's dismiss timing) — this file's job ends at
+  // publishing the message. Every existing call site is unchanged, since they all just call toast(msg, kind).
+  let toastSeq = 0;
   function toast(msg, kind) {
-    const t = document.createElement('div');
-    t.className = 'chlf-toast chlf-' + (kind || 'ok');
-    t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(() => t.classList.add('chlf-show'), 10);
-    setTimeout(() => {
-      t.classList.remove('chlf-show');
-      setTimeout(() => t.remove(), 300);
-    }, 5200);
+    window.__chLabFileToast = { msg, kind: kind || 'ok', id: ++toastSeq };
+    try {
+      document.dispatchEvent(new CustomEvent('ch-lab-file-state'));
+    } catch (e) {
+      /* ignore — Companion will still pick this up on its own next poll */
+    }
   }
   function highlight(el) {
     try {
@@ -1971,6 +2240,9 @@
       if (msgBtn) msgBtn.disabled = false;
     }
   }
+  // Exposed for Companion's File/message buttons (Companion fold-in stage 2) — calls the SAME re-fetch-and-
+  // re-verify-at-click-time macro, never a re-implementation of it.
+  window.__chLabFileAction = onAction;
 
   // ── gate evaluation (when to show the button) ────────────────────────────────
   let evalTimer = null;
@@ -2020,6 +2292,11 @@
       return;
     }
     currentReport = rs.report;
+    // Independent of filingEngine/legacy-profile choice below — request recognition runs the same whichever engine
+    // ends up filing this result. ensureFilingCatalogue() is memoized, so this costs nothing extra when the
+    // catalogue branch further down also needs it.
+    const requestMatchCatalogue = await ensureFilingCatalogue();
+    const requestMatchInfo = requestMatchCatalogue ? computeRequestMatchInfo(rs, requestMatchCatalogue) : null;
     // A combined task can carry several panels (Bone + U&E + LFT) under one report
     // and ONE shared File button — so merge EVERY matching profile into one effective
     // profile (union of parameters/guards) and act on the whole task as a unit.
@@ -2094,7 +2371,8 @@
         currentMatchedProfiles,
         combined.catalogueUnresolvedComments,
         combined.catalogueUnapprovedGroups,
-        catalogueForScreen
+        catalogueForScreen,
+        requestMatchInfo
       );
       return;
     }
@@ -2118,87 +2396,12 @@
           : null
       );
     log('gate: shown — nothing blocked', displayProfile.name);
-    showButton(displayProfile);
+    showButton(displayProfile, requestMatchInfo);
   }
 
-  // Injected into the Medicus page (no access to the suite's CSS tokens), so values
-  // are hardcoded but mirror the suite doctrine: calm white --bg-elev card, hairline
-  // border + soft shadow (elevation = both), one left-accent stripe carrying the
-  // state colour, sentence-case sans headers, no emoji in chrome, a single spent accent.
-  const FONT = 'system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
-  const CSS = [
-    // Bottom-LEFT: the filing controls (the "Normal result, no action required" notes
-    // and the File button) live down the left content pane, so the card sits beside
-    // the action — not stranded in the far corner where the eye has to cross the screen.
-    '.chlf-card{position:fixed;left:18px;bottom:18px;z-index:2147483000;width:312px;box-sizing:border-box;',
-    'background:#fff;border:1px solid #e3e8ee;border-left:4px solid #94a3b8;border-radius:10px;',
-    'box-shadow:0 8px 28px rgba(15,23,42,.16);padding:13px 15px;color:#0f172a;font-family:' + FONT + '}',
-    '.chlf-card.chlf-hidden{display:none}',
-    '.chlf-card.chlf-ready{border-left-color:#0d6e5e}',
-    '.chlf-card.chlf-blocked{border-left-color:#b45309}',
-    '.chlf-head{display:flex;align-items:center;gap:7px;margin-bottom:7px}',
-    '.chlf-dot{width:8px;height:8px;border-radius:50%;background:#94a3b8;flex:0 0 auto}',
-    '.chlf-ready .chlf-dot{background:#16a34a}.chlf-blocked .chlf-dot{background:#b45309}',
-    '.chlf-eyebrow{font:700 10px/1 ' + FONT + ';letter-spacing:.07em;text-transform:uppercase;color:#475569}',
-    '.chlf-title{font:600 13px/1.35 ' + FONT + ';color:#0f172a;margin:0 0 3px;word-break:break-word}',
-    '.chlf-sub{font:400 11.5px/1.45 ' + FONT + ';color:#475569;margin:0}',
-    '.chlf-reasons{margin-top:6px}.chlf-reasons.chlf-hidden{display:none}',
-    '.chlf-reasons-summary{font:600 11px/1.3 ' +
-      FONT +
-      ';color:#0d6e5e;cursor:pointer;list-style:none;user-select:none}',
-    '.chlf-reasons-summary::-webkit-details-marker{display:none}',
-    '.chlf-reasons-summary::before{content:"▸ ";display:inline-block}',
-    '.chlf-reasons[open] .chlf-reasons-summary::before{content:"▾ "}',
-    '.chlf-reasons-summary:hover{text-decoration:underline}',
-    '.chlf-reasons-summary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
-    '.chlf-reasons-list{margin:6px 0 0;padding-left:16px}',
-    '.chlf-reasons-list li{font:400 11.5px/1.5 ' + FONT + ';color:#475569;margin-bottom:4px}',
-    '.chlf-actions{display:flex;flex-direction:column;gap:7px;margin-top:11px}',
-    '.chlf-primary{appearance:none;border:0;border-radius:8px;background:#0d6e5e;color:#fff;',
-    'font:600 13px/1.2 ' + FONT + ';padding:10px 12px;cursor:pointer;text-align:center}',
-    '.chlf-primary:hover{background:#0a5a4d}.chlf-primary:disabled{opacity:.55;cursor:default}',
-    '.chlf-primary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
-    '.chlf-primary.chlf-hidden{display:none}',
-    '.chlf-secondary{appearance:none;background:#fff;border:1px solid #cbd5e1;border-radius:8px;color:#0d6e5e;',
-    'font:600 12px/1.2 ' + FONT + ';padding:8px 12px;cursor:pointer}',
-    '.chlf-secondary:hover{border-color:#0d6e5e;background:#f0fdfa}',
-    '.chlf-secondary:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
-    '.chlf-secondary.chlf-hidden{display:none}',
-    '.chlf-whitelist{margin-top:10px;padding-top:10px;border-top:1px solid #e3e8ee}',
-    '.chlf-whitelist.chlf-hidden{display:none}',
-    '.chlf-wl-intro{font:600 11px/1.4 ' + FONT + ';color:#334155;margin-bottom:7px}',
-    '.chlf-wl-row{display:flex;align-items:flex-start;gap:7px;margin-bottom:7px;cursor:pointer}',
-    '.chlf-wl-row input{margin-top:2px;flex:0 0 auto}',
-    '.chlf-wl-text{font:400 11px/1.4 ' + FONT + ';color:#475569;word-break:break-word}',
-    '.chlf-wl-text strong{color:#0f172a}',
-    '.chlf-wl-save{appearance:none;border:0;border-radius:8px;background:#b45309;color:#fff;',
-    'font:600 12px/1.2 ' + FONT + ';padding:9px 12px;cursor:pointer;text-align:center;width:100%;margin-top:2px}',
-    '.chlf-wl-save:hover{background:#92400e}.chlf-wl-save:disabled{opacity:.55;cursor:default}',
-    '.chlf-wl-save:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
-    '.chlf-wl-save.chlf-hidden{display:none}',
-    '.chlf-wl-note{font:400 10.5px/1.4 ' + FONT + ';color:#94a3b8;margin-top:6px}',
-    '.chlf-open-row{cursor:default;justify-content:space-between;align-items:center;flex-wrap:wrap}',
-    '.chlf-wl-open{appearance:none;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#0d6e5e;',
-    'font:600 11px/1.2 ' + FONT + ';padding:6px 10px;cursor:pointer;white-space:nowrap;flex:0 0 auto}',
-    '.chlf-wl-open:hover{border-color:#0d6e5e;background:#f0fdfa}',
-    '.chlf-wl-open:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
-    '.chlf-foot{display:flex;justify-content:flex-end;margin-top:9px}',
-    '.chlf-link{background:none;border:0;color:#64748b;font:500 11px/1.2 ' + FONT + ';cursor:pointer;',
-    'padding:2px;text-decoration:underline;text-underline-offset:2px}',
-    '.chlf-link:hover{color:#334155}.chlf-link:focus-visible{outline:2px solid #2563eb;outline-offset:1px}',
-    '.chlf-link.chlf-hidden{display:none}',
-    // Opposite corner from the card (bottom-right) so the transient confirmation
-    // never sits on top of the action card when both are visible.
-    // z-index one above the card (2147483000). NB: deliberately NOT card+1 — that
-    // particular 10-digit value coincidentally passes NHS Modulus-11 and trips the
-    // patient-data CI guard; card+2 (2147483002) does not.
-    '.chlf-toast{position:fixed;right:18px;bottom:18px;z-index:2147483002;max-width:340px;padding:11px 14px;border-radius:8px;',
-    'color:#fff;font:500 13px/1.4 ' +
-      FONT +
-      ';box-shadow:0 8px 28px rgba(15,23,42,.22);opacity:0;transform:translateY(8px);transition:.28s}',
-    '.chlf-toast.chlf-show{opacity:1;transform:none}',
-    '.chlf-toast.chlf-ok{background:#0d6e5e}.chlf-toast.chlf-warn{background:#b45309}.chlf-toast.chlf-err{background:#b42318}',
-  ].join('');
+  // The .chlf-* CSS that used to be injected here was deleted in Companion fold-in stage 2 (2026-09-27) — this
+  // file has no visible DOM left to style (see buildUI()'s own comment). Styling for the equivalent content now
+  // lives in content-scripts/task-actions-panel.css under the ms-tap-lf- prefix.
 
   loadConfig().then(() => {
     buildUI();

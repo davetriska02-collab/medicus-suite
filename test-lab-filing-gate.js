@@ -363,7 +363,7 @@ console.log('\n--- wiring: the catalogue engine can operate with ZERO legacy pro
     /function catalogueDisplayProfile\(screenText, limits\)/.test(src) &&
       /paramsOverrideLabFlags: lim\.paramsOverrideLabFlags === true/.test(src) &&
       /profile \|\|\s*\n?\s*catalogueDisplayProfile\(/.test(src) &&
-      /showButton\(displayProfile\);/.test(src) &&
+      /showButton\(displayProfile, requestMatchInfo\);/.test(src) &&
       /LFC\.practiceConfirmLimits\(rs\.report, catalogueForScreen\)/.test(src),
     'catalogue-only builds a display profile whose confirm-dialog parameters are the practice ranges (and the lab-flag override flag), not an empty profile that would reprint the lab range'
   );
@@ -440,7 +440,7 @@ console.log(
     "the catalogue engine's structured comment data is carried out of combineWithCatalogueIfWanted, not discarded (now sourced from commentsForWhitelist rather than evaluateFilingCatalogue's own narrower unresolvedComments — see the dedicated 2026-09-26 block below)"
   );
   check(
-    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen\s*\n\s*\)/.test(
+    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\)/.test(
       src
     ),
     'they reach the blocked card, alongside the existing legacy-profile comment list — two separate sources, not conflated'
@@ -525,9 +525,33 @@ console.log(
 );
 {
   const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  // Companion fold-in stage 2 (2026-09-27, Nick): this file has NO visible DOM of its own left at all — every
+  // piece (header/reasons/request-match from stage 1; whitelist boxes, unapproved-groups box, File/message
+  // buttons, suppress link, toast from stage 2) now renders inside content-scripts/task-actions-panel.js's own Lab
+  // Filing section, reading published data rather than a second computation. buildUI() still creates and updates
+  // the same elements (harmless, detached) but never attaches `host`/its old style block to `document` at all.
   check(
-    /host\.appendChild\(subEl\);\s*\n\s*host\.appendChild\(reasonsEl\);/.test(btnSrc),
-    'the expandable reasons list sits right after the truncated summary line in the card'
+    !/document\.body\.appendChild\(host\)/.test(btnSrc) && !/document\.head\.appendChild\(style\)/.test(btnSrc),
+    'buildUI() never attaches the card (or its old style block) to the document at all — there is nothing left worth showing here'
+  );
+  check(
+    !/const CSS = \[/.test(btnSrc) && !/\.chlf-card\{position:fixed/.test(btnSrc),
+    'the old .chlf-card CSS constant is deleted outright — its equivalent styling now lives in task-actions-panel.css'
+  );
+  check(
+    /function publishLabFileState\(state\)/.test(btnSrc) &&
+      /window\.__chLabFileState = state;/.test(btnSrc),
+    'the same severity/blockers/matching data this card computes is published to a plain window global for Companion to render, never recomputed a second time'
+  );
+  check(
+    /publishLabFileState\(null\);/.test(btnSrc) &&
+      /publishLabFileState\(\{\s*\n\s*mode: 'ready'/.test(btnSrc) &&
+      /publishLabFileState\(\{\s*\n\s*mode: 'blocked'/.test(btnSrc),
+    'every terminal state (hidden, ready, blocked) publishes — Companion never shows stale content from a state this card has already moved on from'
+  );
+  check(
+    /window\.__chConfirmRequestMatch = confirmRequestMatch;/.test(btnSrc),
+    "confirmRequestMatch is exposed for Companion's own \"Matched to your request\" rendering to call the SAME write path, never a re-implementation of it"
   );
   check(
     /reasons\.forEach\(\(r\) => reasonsList\.appendChild\(el\('li', null, r\)\)\);/.test(btnSrc),
@@ -599,7 +623,7 @@ console.log(
     'a suggested investigation id the current catalogue can no longer find (deleted since the engine resolved it) is silently dropped, never a broken link'
   );
   check(
-    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen\s*\n\s*\);/.test(
+    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\);/.test(
       btnSrc
     ),
     'evaluateGate() threads the resolved catalogue through too, so the button can show the test\'s real label, not just its id'
@@ -610,6 +634,109 @@ console.log(
   check(
     resets === 3,
     'the button box\'s signature is reset everywhere it can go stale: its own render function, hideButton(), and showButton()'
+  );
+}
+
+console.log(
+  '\n--- "Matched to your request" (2026-09-26, Nick): teach the catalogue a confirmed wording from the report itself ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /const rawData = \(raw && raw\.data\) \|\| \{\};/.test(btnSrc) &&
+      /outstandingInvestigationRequestOptions/.test(btnSrc) &&
+      /outstandingLabels = options\.map/.test(btnSrc) &&
+      /const entry = \{ report, severity, blockers, outstandingLabels, ts: now, taskUuid: ctx\.taskUuid \};/.test(
+        btnSrc
+      ),
+    'loadReportSeverity() reads the outstanding-request labels straight off the raw overview payload, alongside (never instead of) the existing normalised report — normaliseInvestigationReport() itself is untouched'
+  );
+  check(
+    /function investigationForHeadings\(catalogue, headings\)/.test(btnSrc) &&
+      /if \(headingIds\.size !== 1\) return null;/.test(btnSrc) &&
+      /return ids\.size === 1 \? \[\.\.\.ids\]\[0\] : null;/.test(btnSrc),
+    'the report\'s own heading(s) must unambiguously agree on exactly one investigation before anything is offered — never a guess, same "size === 1" discipline as unapprovedGroups'
+  );
+  check(
+    /function computeRequestMatchInfo\(rs, catalogue\)/.test(btnSrc) &&
+      /if \(!LC\.resolveRequest\(index, text\)\.length\) candidates\.push\(text\);/.test(btnSrc) &&
+      /return \{ investigationId: invId, investigationLabel: inv\.label, candidates \};/.test(btnSrc),
+    'only outstanding-request labels that do not resolve to ANY investigation yet are offered as candidates — one already recognised elsewhere needs no help'
+  );
+  check(
+    /async function confirmRequestMatch\(invId, text, btnEl\)/.test(btnSrc) &&
+      /const overlay = OV\.addRequestAlias\(eff\.builtin, eff\.overlay, invId, text, system, today\);/.test(btnSrc) &&
+      /await window\.labcatalogueSaveOverlay\(overlay\);/.test(btnSrc) &&
+      /scheduleEval\(\);/.test(btnSrc),
+    'confirming writes straight into the catalogue overlay via the same pure addRequestAlias helper the Investigations page\'s own "Match requests to lab reports" board already uses — no new overlay-writing logic invented'
+  );
+  check(
+    !/tickRows/.test(btnSrc) && !/readOutstandingRows/.test(btnSrc) && !/OIR_CARD_SEL/.test(btnSrc),
+    'this never touches Medicus\'s own outstanding-request checkbox — that write (and its own hazard review, H-036) stays entirely inside content.js\'s separate OIR auto-tick feature'
+  );
+  check(
+    /const orderingSystems = \(eff\.overlay\.context && eff\.overlay\.context\.orderingSystems\) \|\| \[\];/.test(
+      btnSrc
+    ) && /const system = orderingSystems\.length === 1 \? orderingSystems\[0\] : 'any';/.test(btnSrc),
+    'the ordering system is only preselected when the practice has told us it uses exactly one — same preselect discipline as the Investigations page\'s own "Requested as" box'
+  );
+  check(
+    /renderRequestMatchBox\(requestMatchInfo\);/.test(btnSrc) &&
+      (btnSrc.match(/renderRequestMatchBox\(/g) || []).length >= 3,
+    'the section is rendered from both showButton() (ready state) and showBlockedHint() (blocked state) — request recognition is orthogonal to whether the report can currently file'
+  );
+  check(
+    /if \(requestMatchBox\) \{\s*\n\s*requestMatchBox\.classList\.add\('chlf-hidden'\);\s*\n\s*requestMatchBox\.innerHTML = '';\s*\n\s*requestMatchSignature = null;\s*\n\s*\}/.test(
+      btnSrc
+    ),
+    'hideButton() resets the section too, so a stale row never lingers once the card itself is hidden'
+  );
+  // Superseded by the Companion fold-in (2026-09-27): the card no longer has its own position at all (stage 1
+  // removed the header it used to be judged by; stage 2 deletes the .chlf-card CSS outright), and the toast no
+  // longer measures anything — it publishes instead. See the "no visible DOM of its own" tests above.
+  check(
+    /let toastSeq = 0;/.test(btnSrc) && /window\.__chLabFileToast = \{ msg, kind: kind \|\| 'ok', id: \+\+toastSeq \};/.test(btnSrc),
+    'the toast publishes { msg, kind, id } to a SEPARATE global from window.__chLabFileState (which can legitimately be null) rather than building its own DOM — Companion owns the display and auto-clear timer now'
+  );
+  check(
+    (btnSrc.match(/document\.dispatchEvent\(new CustomEvent\('ch-lab-file-state'\)\);/g) || []).length >= 2,
+    'the toast reuses the SAME event publishLabFileState already dispatches — no second event type for Companion to listen for'
+  );
+}
+
+console.log(
+  '\n--- write functions exposed for Companion to call — never a second implementation (2026-09-27, Nick) ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  const exposed = [
+    ['window.__chConfirmRequestMatch = confirmRequestMatch;', 'confirmRequestMatch'],
+    ['window.__chSuppressCurrentPatient = suppressCurrentPatient;', 'suppressCurrentPatient'],
+    ['window.__chOpenInvestigationSetup = openInvestigationSetup;', 'openInvestigationSetup'],
+    ['window.__chWhitelistCatalogueComments = whitelistSelectedCatalogueComments;', 'whitelistSelectedCatalogueComments'],
+    ['window.__chWhitelistComments = whitelistSelectedComments;', 'whitelistSelectedComments'],
+    ['window.__chLabFileAction = onAction;', 'onAction (File/message buttons)'],
+  ];
+  for (const [line, label] of exposed) {
+    check(btnSrc.includes(line), `${label} is exposed on window for Companion to call directly`);
+  }
+}
+
+console.log('\n--- compute*Rows helpers: the SAME dedup/matching logic, callable independently of rendering ---');
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /function computeWhitelistRows\(commentedResults, matchedProfiles\)/.test(btnSrc) &&
+      /LF\.profilesOwningResult\(profiles, c\.result\)/.test(btnSrc),
+    'computeWhitelistRows reuses LF.profilesOwningResult — the same matching renderWhitelistBox always did'
+  );
+  check(/function computeCatalogueWhitelistRows\(comments\)/.test(btnSrc), 'computeCatalogueWhitelistRows exists');
+  check(/function computeUnapprovedGroupsRows\(groups, catalogue\)/.test(btnSrc), 'computeUnapprovedGroupsRows exists');
+  check(
+    /whitelistRows: computeWhitelistRows\(commentedResults, matchedProfiles\),/.test(btnSrc) &&
+      /catalogueWhitelistRows: computeCatalogueWhitelistRows\(catalogueUnresolvedComments\),/.test(btnSrc) &&
+      /unapprovedGroupsRows: computeUnapprovedGroupsRows\(catalogueUnapprovedGroups, catalogue\),/.test(btnSrc),
+    'showBlockedHint publishes the already-computed rows alongside the reasons text — Companion never re-implements the dedup/matching itself'
   );
 }
 
