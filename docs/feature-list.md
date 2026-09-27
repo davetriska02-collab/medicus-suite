@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.3
+**Version:** v3.267.4
 **Generated:** 2026-09-27
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 stays proposed.
 - **v3.267.3 (27 Sep)** — Availability wall layout matches the triage-room mock: navy title bar with a live clock, icon tiles, a three-line legend, and seven day cards with the routine total on the right. Registrar lists stay in that total. H-085 stays proposed.
 - **v3.267.2 (27 Sep)** — Availability wall: confirmed mapping before any tile is painted, whole-token clinic match, split poll with quiet hours, per-day freshness and a 10-minute "Not current" cap, site label, and a steady red number. H-085 stays proposed.
 - **v3.267.1 (27 Sep)** — Availability wall setup: the tile list scrolls inside the dialog and Save, Close, Add tile and Suggested names stay on a 1080p screen.

@@ -575,7 +575,7 @@ export function defaultTiles() {
     ),
     tile(
       'embargo-gp',
-      '3-day embargo GP',
+      '3-day GP',
       7,
       { types: EMBARGO_WORDS, sessions: EMBARGO_WORDS, roles: EMBARGO_WORDS },
       { subtitle: 'Embargo', immediate: false }
@@ -625,7 +625,7 @@ export function defaultTiles() {
     ),
     tile(
       'registrar',
-      'Registrar / additional GP',
+      'Registrar',
       4,
       {
         types: ['registrar', 'trainee', 'gpst', 'additional gp', 'extra gp'],
@@ -644,7 +644,7 @@ export function defaultTiles() {
     ),
     tile(
       'routine-gp',
-      'Pre-bookable routine GP',
+      'Routine GP',
       6,
       {
         types: ['routine', 'pre-book', 'prebook', 'pre book'],
@@ -784,7 +784,7 @@ function hourPhrase(h) {
 }
 
 function minutePhrase(m) {
-  return m === 1 ? '1 min' : `${m} mins`;
+  return `${m} min`;
 }
 
 export function countdownLabel(minutes) {

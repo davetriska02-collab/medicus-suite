@@ -201,7 +201,7 @@ function faceHtml(view, opts) {
   const cue = dead || zone ? '' : face.cue;
   const cls = `av-tile tone-${esc(tone)}${flash ? ' flash' : ''}${dead ? ' not-current' : ''}`;
   return `<article class="${cls}">
-    <p class="av-kicker">${glyph(view.id)}${esc(face.label)}</p>
+    <p class="av-kicker">${glyph(view.id)}<span class="av-name">${esc(face.label)}</span></p>
     ${face.subtitle ? `<p class="av-sub">${esc(face.subtitle)}</p>` : ''}
     <p class="av-primary">${icon}${esc(primary)}</p>
     ${face.site && !dead && !zone ? `<p class="av-sub">${esc(face.site)}</p>` : ''}

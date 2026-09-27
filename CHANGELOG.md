@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.4] — 2026-09-27
+
+### Availability wall stays on one screen
+
+The 7-day columns stay inside their cards. The colour legend is its own strip under the week, and the week fills the height that is left. Nothing scrolls at 1920×1080 or 1366×768. The large time, countdown, and date stay on one line, sized to the tile. A countdown reads "22 min". The shorter tile names are Registrar, Routine GP, and 3-day GP.
+
 ## [v3.267.3] — 2026-09-27
 
 ### Availability wall matches the triage-room mock

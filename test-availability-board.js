@@ -188,7 +188,7 @@ function session(service, entries, extra) {
     'default includes visits'
   );
   check(
-    cfg.tiles.some((t) => t.label === 'Registrar / additional GP'),
+    cfg.tiles.some((t) => t.label === 'Registrar'),
     'default includes registrar'
   );
   check(
@@ -196,11 +196,11 @@ function session(service, entries, extra) {
     'default includes ANP'
   );
   check(
-    cfg.tiles.some((t) => t.label === 'Pre-bookable routine GP' && t.weekLane === 'routine'),
+    cfg.tiles.some((t) => t.label === 'Routine GP' && t.weekLane === 'routine'),
     'routine GP feeds the 7-day view'
   );
   check(
-    cfg.tiles.some((t) => t.label === '3-day embargo GP'),
+    cfg.tiles.some((t) => t.label === '3-day GP'),
     'default includes embargo'
   );
   check(
@@ -215,25 +215,22 @@ function session(service, entries, extra) {
     'on the day and duty beat a registrar role'
   );
   check(
-    byLabel['Registrar / additional GP'].remaining === 1 && byLabel['Registrar / additional GP'].nextLabel === '14:10',
+    byLabel.Registrar.remaining === 1 && byLabel.Registrar.nextLabel === '14:10',
     'a registrar routine slot stays on the registrar tile'
   );
   check(byLabel.ANP.remaining === 1, 'nurse practitioner diary maps to ANP');
   check(byLabel['Nursing / HCA'].remaining === 1, 'nurse type maps to nursing');
   check(byLabel.Visits.remaining === 1, 'past visit dropped, later visit remains');
-  check(byLabel['3-day embargo GP'].remaining === 1, 'embargo diary maps to the embargo tile');
-  check(
-    byLabel['Pre-bookable routine GP'].remaining === 0,
-    'routine today is empty when those slots were mapped elsewhere'
-  );
+  check(byLabel['3-day GP'].remaining === 1, 'embargo diary maps to the embargo tile');
+  check(byLabel['Routine GP'].remaining === 0, 'routine today is empty when those slots were mapped elsewhere');
   check(!views.tiles.some((t) => t.id === 'extended'), 'extended access is not a today tile by default');
 
   const redNow = new Date(at(today, 14, 18));
   const redViews = core.todayViews(extracted.slots, cfg, redNow, false);
   const reg = redViews.tiles.find((t) => t.id === 'otd-gp');
   check(
-    reg.tone === 'red' && reg.countdown === '22 mins' && reg.flash === true && reg.icon === false,
-    'under 30 min is red, flashing, countdown 22 mins'
+    reg.tone === 'red' && reg.countdown === '22 min' && reg.flash === true && reg.icon === false,
+    'under 30 min is red, flashing, countdown 22 min'
   );
   const steady = core.attention('red', true);
   check(
@@ -242,7 +239,7 @@ function session(service, entries, extra) {
   );
   const face = core.tileFace({ ...reg, flash: false, icon: true, tone: 'red' });
   check(
-    face.primary === '22 mins' &&
+    face.primary === '22 min' &&
       face.cue === 'Next slot 14:40' &&
       face.detail === '' &&
       face.secondary === `${reg.remaining} slots remaining`,
@@ -551,7 +548,7 @@ function session(service, entries, extra) {
       laterFace.secondary === '1 slot available',
     'a later day shows the date, not a bare time'
   );
-  check(core.countdownLabel(242) === '4 hrs 2 mins', 'a long wait reads in hours and mins');
+  check(core.countdownLabel(242) === '4 hrs 2 min', 'a long wait reads in hours and min');
   check(core.countdownLabel(0.4) === '<1 min', 'under a minute stays <1 min');
   check(core.dayHeading('2026-01-09') === 'Fri 9 Jan', 'a day card date is weekday, day and month');
   check(

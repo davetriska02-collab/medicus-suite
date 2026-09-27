@@ -3,11 +3,13 @@
 html,
 body {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-deep);
@@ -76,14 +78,16 @@ html[data-theme='dark'] .av-site {
 }
 
 .av-stage {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  padding: clamp(12px, 1.6vh, 24px) clamp(16px, 2vw, 32px);
+  padding: clamp(8px, 1.2vh, 16px) clamp(12px, 1.6vw, 28px);
   min-height: 0;
+  overflow: hidden;
 }
 
 .av-section {
+  flex: none;
   margin: 0 0 8px;
   color: var(--text-2);
   font-size: clamp(14px, 1.8vh, 22px);
@@ -93,6 +97,7 @@ html[data-theme='dark'] .av-site {
 }
 
 .av-banner {
+  flex: none;
   margin: 0;
   padding: clamp(10px, 1.4vh, 14px) clamp(16px, 2vw, 28px);
   background: color-mix(in srgb, var(--amber) 16%, var(--bg-elev));
@@ -114,12 +119,14 @@ html[data-theme='dark'] .av-site {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  padding: clamp(10px, 1.4vh, 18px);
+  padding: clamp(8px, 1vh, 14px);
   min-height: 0;
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  container-type: inline-size;
 }
 
 .av-tile.tone-green {
@@ -165,10 +172,19 @@ html[data-theme='dark'] .tone-red .av-primary {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: clamp(15px, 1.9vh, 24px);
+  gap: 6px;
+  min-width: 0;
+  font-size: clamp(13px, 1.6vh, 20px);
   font-weight: 700;
   color: var(--text-1);
+  white-space: nowrap;
+}
+
+.av-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .av-glyph {
@@ -189,11 +205,14 @@ html[data-theme='dark'] .tone-red .av-primary {
   margin: 4px 0 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: clamp(36px, 5.6vh, 84px);
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: min(56px, 4.4vh, 14cqi);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 0.95;
+  line-height: 1;
   letter-spacing: -0.03em;
 }
 
@@ -271,16 +290,18 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
 }
 
 .av-legend {
+  flex: none;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px 18px;
+  gap: 4px 18px;
   align-items: center;
   margin: 8px 0 0;
   padding-top: 8px;
   border-top: 1px solid var(--border);
   color: var(--text-2);
-  font-size: clamp(14px, 1.7vh, 20px);
+  font-size: clamp(13px, 1.6vh, 18px);
   font-weight: 700;
+  background: var(--bg-deep);
 }
 .av-legend-item {
   display: flex;
@@ -330,7 +351,8 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  margin-top: clamp(8px, 1.2vh, 16px);
+  margin-top: clamp(6px, 1vh, 12px);
+  overflow: hidden;
 }
 
 .av-week-head {
@@ -396,6 +418,8 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .av-bar.is-today {
@@ -426,14 +450,15 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
 }
 
 .av-col {
-  flex: 1;
+  flex: 1 1 auto;
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  min-height: clamp(96px, 16vh, 200px);
+  min-height: 0;
   margin-top: 6px;
   padding: 0 22%;
   box-sizing: border-box;
+  overflow: hidden;
   background: color-mix(in srgb, var(--text-1) 8%, var(--bg-mid));
   border-radius: var(--r-md);
 }
@@ -479,18 +504,24 @@ html[data-colorblind='true'] .swatch.tone-red {
 }
 
 .av-note {
-  margin: 8px 0 0;
+  flex: none;
+  margin: 6px 0 0;
   color: var(--text-2);
-  font-size: clamp(16px, 2vh, 24px);
+  font-size: clamp(13px, 1.6vh, 18px);
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .av-tools {
+  flex: none;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px 14px;
   align-items: center;
   margin-top: 6px;
+  min-width: 0;
 }
 
 .av-tool,
@@ -519,9 +550,13 @@ html[data-colorblind='true'] .swatch.tone-red {
 
 .av-kiosk {
   margin: 0;
+  min-width: 0;
   color: var(--text-3);
   font-size: 14px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .av-message {
@@ -653,13 +688,13 @@ html[data-colorblind='true'] .swatch.tone-red {
 }
 
 @media (max-height: 800px) {
-  .av-week {
-    flex: 0 0 28%;
-  }
   .av-primary {
-    font-size: clamp(28px, 5vh, 56px);
+    font-size: min(32px, 12cqi);
   }
-  .av-col {
-    min-height: 48px;
+  .av-week-total strong {
+    font-size: clamp(24px, 4vh, 36px);
+  }
+  .av-bar-count {
+    font-size: clamp(20px, 3vh, 32px);
   }
 }
