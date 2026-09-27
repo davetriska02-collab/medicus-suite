@@ -232,8 +232,8 @@ function session(service, entries, extra) {
   const redViews = core.todayViews(extracted.slots, cfg, redNow, false);
   const reg = redViews.tiles.find((t) => t.id === 'otd-gp');
   check(
-    reg.tone === 'red' && reg.countdown === '22 min' && reg.flash === true && reg.icon === false,
-    'under 30 min is red, flashing, countdown 22 min'
+    reg.tone === 'red' && reg.countdown === '22 mins' && reg.flash === true && reg.icon === false,
+    'under 30 min is red, flashing, countdown 22 mins'
   );
   const steady = core.attention('red', true);
   check(
@@ -242,8 +242,11 @@ function session(service, entries, extra) {
   );
   const face = core.tileFace({ ...reg, flash: false, icon: true, tone: 'red' });
   check(
-    face.primary === '22 min' && face.detail === 'Next 14:40' && face.secondary === `${reg.remaining} left`,
-    'red face shows countdown and the clock time'
+    face.primary === '22 mins' &&
+      face.cue === 'Next slot 14:40' &&
+      face.detail === '' &&
+      face.secondary === `${reg.remaining} slots remaining`,
+    'under 30 min shows the countdown as the hero and the clock time underneath'
   );
   check(!JSON.stringify(face).includes('Amy'), 'the tile face has no clinician name');
 
@@ -543,8 +546,40 @@ function session(service, entries, extra) {
   );
   const laterFace = core.tileFace(laterView);
   check(
-    laterFace.primary === 'Mon 28 Sep' && /First available in 2 days/.test(laterFace.cue),
+    laterFace.primary === 'Mon 28 Sep' &&
+      /First available in 2 days/.test(laterFace.cue) &&
+      laterFace.secondary === '1 slot available',
     'a later day shows the date, not a bare time'
+  );
+  check(core.countdownLabel(242) === '4 hrs 2 mins', 'a long wait reads in hours and mins');
+  check(core.countdownLabel(0.4) === '<1 min', 'under a minute stays <1 min');
+  check(core.dayHeading('2026-01-09') === 'Fri 9 Jan', 'a day card date is weekday, day and month');
+  check(
+    core.dayCardSubtitle({
+      routine: 10,
+      extended: 2,
+      weekend: true,
+      stale: false,
+      noClinic: false,
+      holidayName: '',
+    }) === 'Extended Access',
+    'a Saturday with extended access uses that subtitle'
+  );
+  check(
+    core.dayCardSubtitle({ routine: 0, extended: 0, weekend: false, stale: false, noClinic: true, holidayName: '' }) ===
+      'No clinic',
+    'a sessionless day uses the No clinic subtitle'
+  );
+  check(core.dayCardSubtitle({ routine: null, weekend: true }) === '', 'an unread day has no Weekend subtitle');
+  check(
+    core.dayCardCount({ routine: 0, extended: 8 }) === 8 &&
+      core.dayCardTone({ routine: 0, extended: 8, tone: 'none' }) === 'green',
+    'a hub-only day shows its extended count and stays out of the routine total'
+  );
+  check(
+    core.dayCardCount({ routine: 6, extended: 1 }) === 6 &&
+      core.dayCardTone({ routine: 0, extended: 0, tone: 'none' }) === 'none',
+    'a routine day keeps its own count, and a zero weekend stays grey'
   );
   const soonEmbargo = {
     startMs: at(today, 13, 20),
@@ -675,6 +710,7 @@ function session(service, entries, extra) {
     xmas.days[0].holiday === true && xmas.days[1].holiday === true,
     'Christmas and the Boxing Day substitute are bank holidays'
   );
+  check(core.dayCardSubtitle(xmas.days[0]) === 'Christmas Day', 'a bank holiday uses the day-card subtitle slot');
   check(
     core.weekDates('2026-12-22').includes('2026-12-25') && core.weekDates('2026-12-22').includes('2026-12-28'),
     'bank holidays stay inside the seven days'
@@ -805,6 +841,28 @@ function session(service, entries, extra) {
   console.log('\n--- page contract ---');
   const wall = fs.readFileSync(path.join(__dirname, 'availability/wall.js'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, 'availability/wall.css'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, 'availability/wall.html'), 'utf8');
+  check(html.includes('Triage – Appointment Availability'), 'the header title matches the mock and does not say Live');
+  check(html.includes('On the day – next available appointment'), 'the section label sits above the tiles');
+  check(
+    html.includes('&gt; 60 minutes') &&
+      html.includes('Next slot more than 60 mins') &&
+      html.includes('30 – 60 minutes') &&
+      html.includes('&lt; 30 minutes') &&
+      html.includes('use capacity'),
+    'the legend is the three mock lines'
+  );
+  check(html.includes('not a clinical priority'), 'the legend still says colour is not a clinical priority');
+  check(
+    wall.includes('Routine GP availability') &&
+      wall.includes('Total routine GP appointments') &&
+      wall.includes('Including registrar lists'),
+    'the week heading matches the mock and still says registrar lists are included'
+  );
+  check(
+    wall.includes('<svg') && wall.includes('av-glyph') && !/[\u{1F300}-\u{1FAFF}]/u.test(wall),
+    'tile icons are inline SVG'
+  );
   check(
     wall.includes('fetchSchedulingOverview') && wall.includes('bypassCache: true'),
     'the wall uses the shared book GET and bypasses the 5-minute cache'

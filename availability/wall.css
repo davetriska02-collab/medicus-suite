@@ -37,18 +37,21 @@ html[data-theme='dark'] .av-head {
 
 .av-head h1 {
   margin: 0;
-  font-size: clamp(22px, 3vh, 40px);
+  font-size: clamp(22px, 2.8vh, 36px);
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .av-head-clock {
+  display: flex;
+  align-items: baseline;
+  gap: clamp(12px, 1.4vw, 22px);
   text-align: right;
 }
 
 .av-clock {
   margin: 0;
-  font-size: clamp(32px, 5vh, 72px);
+  font-size: clamp(36px, 5.4vh, 72px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -56,10 +59,15 @@ html[data-theme='dark'] .av-head {
 
 .av-head .av-date,
 .av-site {
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--bg-mid);
-  font-size: clamp(16px, 2.2vh, 28px);
+  font-size: clamp(16px, 2.1vh, 26px);
   font-weight: 700;
+}
+
+.av-site {
+  margin-top: 2px;
+  font-size: clamp(14px, 1.7vh, 20px);
 }
 
 html[data-theme='dark'] .av-head .av-date,
@@ -78,8 +86,10 @@ html[data-theme='dark'] .av-site {
 .av-section {
   margin: 0 0 8px;
   color: var(--text-2);
-  font-size: clamp(18px, 2.2vh, 32px);
+  font-size: clamp(14px, 1.8vh, 22px);
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .av-banner {
@@ -96,7 +106,7 @@ html[data-theme='dark'] .av-site {
   display: grid;
   grid-template-columns: repeat(var(--av-cols, 4), minmax(0, 1fr));
   gap: clamp(10px, 1vw, 18px);
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
 }
 
@@ -153,33 +163,44 @@ html[data-theme='dark'] .tone-red .av-primary {
 
 .av-kicker {
   margin: 0;
-  font-size: clamp(18px, 2.2vh, 32px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(15px, 1.9vh, 24px);
   font-weight: 700;
+  color: var(--text-1);
+}
+
+.av-glyph {
+  width: clamp(18px, 2.2vh, 26px);
+  height: clamp(18px, 2.2vh, 26px);
+  flex: none;
   color: var(--text-2);
 }
 
 .av-sub {
   margin: 2px 0 0;
-  font-size: clamp(16px, 2vh, 26px);
+  font-size: clamp(13px, 1.6vh, 18px);
   font-weight: 700;
   color: var(--text-2);
 }
 
 .av-primary {
   margin: 4px 0 0;
-  font-size: clamp(44px, 7.5vh, 140px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: clamp(36px, 5.6vh, 84px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 0.95;
   letter-spacing: -0.03em;
 }
 
-.av-band,
-.av-detail,
 .av-secondary,
 .av-cue {
-  margin: 2px 0 0;
-  font-size: clamp(20px, 2.8vh, 40px);
+  margin: 4px 0 0;
+  font-size: clamp(14px, 1.8vh, 22px);
   font-weight: 700;
   color: var(--text-1);
 }
@@ -189,14 +210,14 @@ html[data-theme='dark'] .tone-red .av-primary {
 }
 
 .av-icon {
-  display: inline-block;
-  margin-right: 0.15em;
-  font-weight: 700;
+  width: 0.42em;
+  height: 0.42em;
+  flex: none;
 }
 
 .av-track {
-  margin-top: auto;
-  height: clamp(10px, 1.4vh, 18px);
+  height: clamp(8px, 1.1vh, 12px);
+  margin-top: 8px;
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--text-1) 8%, var(--bg-elev));
   overflow: hidden;
@@ -250,22 +271,42 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
 }
 
 .av-legend {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px 18px;
   align-items: center;
   margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
   color: var(--text-2);
-  font-size: clamp(16px, 2vh, 24px);
+  font-size: clamp(14px, 1.7vh, 20px);
+  font-weight: 700;
+}
+.av-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.av-legend-item strong,
+.av-legend-sub {
+  display: block;
+}
+.av-legend-item strong {
+  color: var(--text-1);
+  font-size: clamp(15px, 1.8vh, 22px);
+}
+.av-legend-sub {
+  color: var(--text-2);
+  font-size: clamp(13px, 1.5vh, 18px);
   font-weight: 700;
 }
 .av-legend .swatch {
-  display: inline-block;
-  width: 0.85em;
-  height: 0.85em;
-  margin-right: 6px;
-  border-radius: 2px;
-  vertical-align: -0.05em;
+  display: block;
+  width: clamp(16px, 2vh, 22px);
+  height: clamp(16px, 2vh, 22px);
+  border-radius: 50%;
+  flex: none;
 }
 .swatch.tone-green {
   background: var(--green);
@@ -277,34 +318,77 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
   background: var(--red);
 }
 .av-legend-note {
+  grid-column: 1 / -1;
+  margin: 0;
   color: var(--text-2);
+  font-size: clamp(13px, 1.5vh, 16px);
+  font-weight: 700;
 }
 
 .av-week {
-  flex: 1 1 32%;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
   margin-top: clamp(8px, 1.2vh, 16px);
 }
 
-.av-week h2 {
+.av-week-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
   margin: 0 0 8px;
-  font-size: clamp(18px, 2.2vh, 32px);
+}
+
+.av-week h2 {
+  margin: 0;
+  font-size: clamp(16px, 2vh, 26px);
   font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.av-week-include {
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: clamp(13px, 1.5vh, 18px);
+  font-weight: 700;
+}
+
+.av-week-total {
+  margin: 0;
+  text-align: right;
+  font-size: clamp(14px, 1.7vh, 20px);
+  font-weight: 700;
+}
+
+.av-week-total strong {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: clamp(32px, 4.6vh, 56px);
+  font-variant-numeric: tabular-nums;
+  line-height: 0.9;
+  vertical-align: -0.12em;
+}
+
+.av-week-ext {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: clamp(13px, 1.5vh, 18px);
 }
 
 .av-bars {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: clamp(8px, 1vw, 14px);
   align-items: stretch;
   min-height: 0;
 }
 
-.av-bar,
-.av-total {
+.av-bar {
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
@@ -314,35 +398,53 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
   min-height: 0;
 }
 
-.av-bar-label,
+.av-bar.is-today {
+  background: color-mix(in srgb, var(--green) 16%, var(--bg-elev));
+  border-color: color-mix(in srgb, var(--green) 35%, var(--border));
+}
+
+.av-bar-label {
+  font-size: clamp(14px, 1.7vh, 20px);
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.av-bar-date,
 .av-bar-ext {
-  font-size: clamp(14px, 1.8vh, 22px);
+  min-height: 1.15em;
+  font-size: clamp(12px, 1.45vh, 16px);
   color: var(--text-2);
   font-weight: 700;
 }
 
 .av-bar-count {
-  font-size: clamp(28px, 4vh, 56px);
+  font-size: clamp(26px, 3.6vh, 48px);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   line-height: 1;
+  margin-top: 4px;
 }
 
 .av-col {
   flex: 1;
   display: flex;
   align-items: flex-end;
-  min-height: 48px;
+  justify-content: center;
+  min-height: clamp(96px, 16vh, 200px);
   margin-top: 6px;
+  padding: 0 22%;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--text-1) 8%, var(--bg-mid));
+  border-radius: var(--r-md);
 }
 
 .av-col > span {
   display: block;
   width: 100%;
   height: var(--h, 0%);
-  min-height: 8px;
+  min-height: 0;
   background: var(--green);
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  border-radius: var(--r-sm, 4px) var(--r-sm, 4px) 0 0;
 }
 
 .av-bar.tone-amber .av-col > span {
@@ -353,19 +455,27 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
 }
 .av-bar.tone-none .av-col > span,
 .av-bar.tone-unread .av-col > span {
-  background: var(--border-hi);
-  height: 8px;
+  height: 0;
+  min-height: 0;
 }
 .av-bar.tone-unread .av-bar-count {
   color: var(--text-3);
 }
 
-.av-total {
-  justify-content: center;
+html[data-colorblind='true'] .av-bar.tone-green .av-col > span {
+  background: repeating-linear-gradient(90deg, var(--green) 0 8px, transparent 8px 12px);
 }
-.av-total strong {
-  font-size: clamp(28px, 4vh, 56px);
-  font-variant-numeric: tabular-nums;
+html[data-colorblind='true'] .av-bar.tone-amber .av-col > span {
+  background: repeating-linear-gradient(135deg, var(--amber) 0 6px, transparent 6px 10px);
+}
+html[data-colorblind='true'] .swatch.tone-green {
+  outline: 3px dotted var(--green);
+}
+html[data-colorblind='true'] .swatch.tone-amber {
+  outline: 3px dashed var(--amber);
+}
+html[data-colorblind='true'] .swatch.tone-red {
+  outline: 3px solid var(--red);
 }
 
 .av-note {
@@ -544,9 +654,12 @@ html[data-colorblind='true'] .tone-amber .av-track > span {
 
 @media (max-height: 800px) {
   .av-week {
-    flex: 0 0 30%;
+    flex: 0 0 28%;
   }
   .av-primary {
-    font-size: clamp(36px, 6vh, 72px);
+    font-size: clamp(28px, 5vh, 56px);
+  }
+  .av-col {
+    min-height: 48px;
   }
 }

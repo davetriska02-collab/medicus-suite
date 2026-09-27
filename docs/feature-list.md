@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.2
+**Version:** v3.267.3
 **Generated:** 2026-09-27
 
 ## What it is
@@ -108,7 +108,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
-- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band; the red number stays red and only the edge pulses). A later day shows the date. A 7-day bar counts routine GP slots, including registrar lists, with extended access counted apart. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 is proposed, not signed.
+- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 is proposed, not signed.
 - **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.3 (27 Sep)** — Availability wall layout matches the triage-room mock: navy title bar with a live clock, icon tiles, a three-line legend, and seven day cards with the routine total on the right. Registrar lists stay in that total. H-085 stays proposed.
 - **v3.267.2 (27 Sep)** — Availability wall: confirmed mapping before any tile is painted, whole-token clinic match, split poll with quiet hours, per-day freshness and a 10-minute "Not current" cap, site label, and a steady red number. H-085 stays proposed.
 - **v3.267.1 (27 Sep)** — Availability wall setup: the tile list scrolls inside the dialog and Save, Close, Add tile and Suggested names stay on a 1080p screen.
 - **v3.267.0 (26 Sep)** — Availability wall: a full-tab TV of unbooked slots (today's tiles plus a 7-day routine GP bar). Practice-mapped slot types. Seven book GETs every 5 minutes while the tab is visible. A failed refresh is the previous reading, not zero. H-085 proposed, not signed. The Today tab, appointment-book tally and Note TV were already removed in v3.264.15 and are not on this list.

@@ -4,30 +4,46 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Availability — Medicus Suite</title>
+    <title>Triage – Appointment Availability</title>
     <link rel="stylesheet" href="../design-system/src/tokens.css" />
     <link rel="stylesheet" href="wall.css" />
   </head>
   <body>
     <header class="av-head" id="avHead">
-      <h1>Appointment availability</h1>
-      <div class="av-head-clock">
-        <p class="av-clock" id="avClock">––:––</p>
-        <p class="av-date" id="avDate">Today</p>
+      <div class="av-head-title">
+        <h1>Triage – Appointment Availability</h1>
         <p class="av-site" id="avSite"></p>
+      </div>
+      <div class="av-head-clock">
+        <p class="av-date" id="avDate">Today</p>
+        <p class="av-clock" id="avClock">––:––</p>
       </div>
     </header>
     <p class="av-banner" id="avBanner" role="status" aria-live="polite" hidden></p>
     <div class="av-stage" id="avStage">
-      <h2 class="av-section">On the day</h2>
+      <h2 class="av-section">On the day – next available appointment</h2>
       <main id="avMain"></main>
-      <p class="av-legend" id="avLegend">
-        <span><i class="swatch tone-green"></i> Over 1 hr</span>
-        <span><i class="swatch tone-amber"></i> 30–60 min</span>
-        <span><i class="swatch tone-red"></i> Under 30 min</span>
-        <span class="av-legend-note">Colour is how soon the next slot starts. It is not a clinical priority.</span>
-      </p>
       <section class="av-week" id="avWeek" hidden></section>
+      <div class="av-legend" id="avLegend">
+        <p class="av-legend-item">
+          <i class="swatch tone-green" aria-hidden="true"></i>
+          <span><strong>&gt; 60 minutes</strong><span class="av-legend-sub">Next slot more than 60 mins</span></span>
+        </p>
+        <p class="av-legend-item">
+          <i class="swatch tone-amber" aria-hidden="true"></i>
+          <span
+            ><strong>30 – 60 minutes</strong><span class="av-legend-sub">Next slot in 30 – 60 mins</span></span
+          >
+        </p>
+        <p class="av-legend-item">
+          <i class="swatch tone-red" aria-hidden="true"></i>
+          <span
+            ><strong>&lt; 30 minutes</strong
+            ><span class="av-legend-sub">Next slot in less than 30 mins (use capacity)</span></span
+          >
+        </p>
+        <p class="av-legend-note">Colour is how soon the next slot starts. It is not a clinical priority.</p>
+      </div>
       <p class="av-note" id="avNote"></p>
       <div class="av-tools">
         <button type="button" class="av-tool" id="avStopFlash">Stop flashing</button>

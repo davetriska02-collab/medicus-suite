@@ -16,6 +16,10 @@ import {
   bookPayload,
   clockLabel,
   clockProblem,
+  dayCardCount,
+  dayCardSubtitle,
+  dayCardTone,
+  dayHeading,
   defaultTiles,
   dropPastSlots,
   extractFreeSlots,
@@ -161,6 +165,30 @@ function colsFor(n) {
   return Math.max(1, Math.ceil(n / 2));
 }
 
+const GLYPHS = {
+  'otd-gp': '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.5c1.2-3.2 3.6-4.8 6.5-4.8s5.3 1.6 6.5 4.8"/>',
+  anp: '<circle cx="12" cy="8" r="3.2"/><path d="M5.5 19.5c1.2-3.2 3.6-4.8 6.5-4.8s5.3 1.6 6.5 4.8"/><path d="M18 3.5v3.5M16.2 5.2h3.6"/>',
+  nursing:
+    '<rect x="8" y="3" width="8" height="5" rx="1.5"/><path d="M9 8v2.2a3 3 0 0 0 6 0V8"/><path d="M12 13.2V20M9.2 16.6h5.6"/>',
+  visits:
+    '<path d="M3 13.2 5.4 8.2A1.6 1.6 0 0 1 6.8 7.2h8.6a1.6 1.6 0 0 1 1.4 1L19.2 13.2"/><path d="M3 13.2h18V17H3z"/><circle cx="7.2" cy="17" r="1.3"/><circle cx="16.8" cy="17" r="1.3"/>',
+  registrar:
+    '<path d="M2.5 10 12 5l9.5 5L12 15z"/><path d="M7 12.2V16c0 1.4 2.2 2.8 5 2.8s5-1.4 5-2.8v-3.8"/><path d="M21.5 10v6"/>',
+  'routine-gp': '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16"/>',
+  'embargo-gp':
+    '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3.5v4M16 3.5v4M4 10h16M12 13v3.2l2.1 1.2"/>',
+  extended: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/>',
+};
+
+function glyph(id) {
+  const paths = GLYPHS[id] || GLYPHS['routine-gp'];
+  return `<svg class="av-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+}
+
+function attentionIcon() {
+  return '<svg class="av-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" role="img" aria-label="Under 30 minutes"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5h.01"/></svg>';
+}
+
 function faceHtml(view, opts) {
   const face = tileFace(view);
   if (!face) return '';
@@ -168,32 +196,19 @@ function faceHtml(view, opts) {
   const zone = !!(opts && opts.clockBad);
   const tone = dead || zone ? 'none' : face.tone;
   const flash = !dead && !zone && face.flash && view.flash;
-  const icon = !dead && !zone && face.icon ? '<span class="av-icon">!</span>' : '';
+  const icon = !dead && !zone && face.icon ? attentionIcon() : '';
   const primary = dead ? 'Not current' : zone ? view.nextLabel || face.primary : face.primary;
   const cue = dead || zone ? '' : face.cue;
   const cls = `av-tile tone-${esc(tone)}${flash ? ' flash' : ''}${dead ? ' not-current' : ''}`;
   return `<article class="${cls}">
-    <p class="av-kicker">${esc(face.label)}</p>
+    <p class="av-kicker">${glyph(view.id)}${esc(face.label)}</p>
     ${face.subtitle ? `<p class="av-sub">${esc(face.subtitle)}</p>` : ''}
-    ${face.band && !dead && !zone ? `<p class="av-band">${esc(face.band)}</p>` : ''}
     <p class="av-primary">${icon}${esc(primary)}</p>
-    ${cue ? `<p class="av-cue">${esc(cue)}</p>` : ''}
-    ${face.detail && !dead && !zone ? `<p class="av-detail">${esc(face.detail)}</p>` : ''}
-    ${face.site ? `<p class="av-sub">${esc(face.site)}</p>` : ''}
+    ${face.site && !dead && !zone ? `<p class="av-sub">${esc(face.site)}</p>` : ''}
     <p class="av-secondary">${esc(face.secondary)}</p>
     <div class="av-track" aria-hidden="true"><span style="width:${dead || zone ? 0 : face.track}%"></span></div>
+    ${cue ? `<p class="av-cue">${esc(cue)}</p>` : ''}
   </article>`;
-}
-
-function dayCaption(d) {
-  if (d.routine == null) return '';
-  if (d.stale) return 'old';
-  if (d.noClinic && d.routine === 0 && !d.extended) return 'No clinic';
-  if (d.holidayName && d.extended) return `${d.holidayName} · ${d.extended} extended`;
-  if (d.holidayName) return d.holidayName;
-  if (d.extended) return `${d.extended} extended`;
-  if (d.weekend && d.extended === 0) return 'Weekend';
-  return '';
 }
 
 function render() {
@@ -286,28 +301,37 @@ function render() {
     };
   });
   const week = weekView(rows, config, { division });
-  const peak = Math.max(1, ...week.days.map((d) => (typeof d.routine === 'number' ? d.routine : 0)));
+  const peak = Math.max(1, ...week.days.map((d) => dayCardCount(d) || 0));
   const bars = week.days
     .map((d) => {
-      const routine = d.routine == null ? '—' : String(d.routine);
-      const h = d.routine ? Math.round((d.routine / peak) * 100) : 0;
-      return `<div class="av-bar tone-${esc(d.tone)}">
-        <div class="av-bar-label">${esc(d.label)}</div>
+      const count = dayCardCount(d);
+      const routine = count == null ? '—' : String(count);
+      const h = count ? Math.round((count / peak) * 100) : 0;
+      const todayCard = d.label === 'Today';
+      const title = todayCard ? 'Today' : dayHeading(d.date);
+      const dateLine = todayCard ? dayHeading(d.date) : '';
+      return `<div class="av-bar tone-${esc(dayCardTone(d))}${todayCard ? ' is-today' : ''}">
+        <div class="av-bar-label">${esc(title)}</div>
+        <div class="av-bar-date">${esc(dateLine)}</div>
+        <div class="av-bar-ext">${esc(dayCardSubtitle(d))}</div>
         <div class="av-bar-count">${esc(routine)}</div>
-        <div class="av-bar-ext">${esc(dayCaption(d))}</div>
         <div class="av-col" aria-hidden="true"><span style="--h:${h}%"></span></div>
       </div>`;
     })
     .join('');
   const total = week.incomplete ? `${week.totalRoutine}+` : String(week.totalRoutine);
   const extTotal = week.incomplete ? `${week.totalExtended}+` : String(week.totalExtended);
+  const extBit =
+    week.totalExtended || week.incomplete ? `<span class="av-week-ext">${esc(extTotal)} extended</span>` : '';
   weekEl.hidden = false;
-  weekEl.innerHTML = `<h2>Next 7 days · routine GP, including registrar lists</h2>
-    <div class="av-bars">${bars}
-      <div class="av-total"><span>Total</span><strong>${esc(total)}</strong>
-        <div class="av-bar-ext">${esc(extTotal)} extended</div>
+  weekEl.innerHTML = `<div class="av-week-head">
+      <div>
+        <h2>Routine GP availability – next 7 days</h2>
+        <p class="av-week-include">Including registrar lists</p>
       </div>
-    </div>`;
+      <p class="av-week-total">Total routine GP appointments: <strong>${esc(total)}</strong>${extBit}</p>
+    </div>
+    <div class="av-bars">${bars}</div>`;
 
   const noteBits = [];
   if (todayStamp && !todayFailed && !notCurrent) noteBits.push(`Last updated ${clockLabel(todayStamp)}`);

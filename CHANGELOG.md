@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.3] — 2026-09-27
+
+### Availability wall matches the triage-room mock
+
+The week strip is seven day cards under "Routine GP availability – next 7 days". The total sits on the right as "Total routine GP appointments". Today is labelled Today with the short date under it, and that card is highlighted. A Saturday with extended access, a bank holiday, and a day with no clinic use the same subtitle line. A day that only has extended access shows that count on the card. It is still not added to the routine total. Columns sit on a grey track and scale to the week's peak.
+
+Each tile has an inline line icon, a subtitle, a coloured hero (the time, the countdown when it is under 30 minutes, or the date on a later day), "N slots remaining", a progress track, and a "Next slot" line. The legend is three dots: over 60 minutes, 30–60 minutes, and under 30 minutes. The navy bar keeps the title on the left and the short date with a large clock on the right.
+
+The safety behaviour from v3.267.2 is unchanged. Registrar lists are still in the 7-day total, and the week heading still says they are included. H-085 stays Proposed.
+
 ## [v3.267.2] — 2026-09-27
 
 ### Availability wall red-team fixes

@@ -578,7 +578,7 @@ export function defaultTiles() {
       '3-day embargo GP',
       7,
       { types: EMBARGO_WORDS, sessions: EMBARGO_WORDS, roles: EMBARGO_WORDS },
-      { subtitle: 'Booked ahead', immediate: false }
+      { subtitle: 'Embargo', immediate: false }
     ),
     tile(
       'extended',
@@ -779,15 +779,64 @@ export function urgencyForMinutes(minutes) {
   return 'green';
 }
 
+function hourPhrase(h) {
+  return h === 1 ? '1 hr' : `${h} hrs`;
+}
+
+function minutePhrase(m) {
+  return m === 1 ? '1 min' : `${m} mins`;
+}
+
 export function countdownLabel(minutes) {
   const n = Number(minutes);
   if (n > 0 && n < 1) return '<1 min';
   const m = Math.max(0, Math.floor(n || 0));
-  if (m < 60) return `${m} min`;
+  if (m < 60) return minutePhrase(m);
   const h = Math.floor(m / 60);
   const rem = m % 60;
-  if (!rem) return `${h} hr`;
-  return `${h} hr ${rem} min`;
+  if (!rem) return hourPhrase(h);
+  return `${hourPhrase(h)} ${minutePhrase(rem)}`;
+}
+
+/** Count line under the hero. A later day says available; today says remaining. */
+export function slotsRemainingLabel(count, later) {
+  if (count == null) return 'No reading';
+  const n = Number(count) || 0;
+  if (!n) return '0 slots remaining';
+  const noun = n === 1 ? 'slot' : 'slots';
+  return later ? `${n} ${noun} available` : `${n} ${noun} remaining`;
+}
+
+/**
+ * The line under a day card's date. Extended access, a bank holiday, and
+ * "No clinic" share that slot. An unread day stays blank, so it is not called a weekend.
+ */
+export function dayCardSubtitle(day) {
+  if (!day || day.routine == null) return '';
+  if (day.stale) return 'old';
+  if (day.extended) return day.holidayName ? `${day.holidayName} · Extended Access` : 'Extended Access';
+  if (day.holidayName) return day.holidayName;
+  if (day.noClinic && day.routine === 0) return 'No clinic';
+  if (day.weekend && day.routine === 0) return 'Weekend';
+  return '';
+}
+
+/** The figure on a day card. A hub-only day shows its extended count, which stays out of the routine total. */
+export function dayCardCount(day) {
+  if (!day || day.routine == null) return null;
+  if (!day.routine && day.extended) return day.extended;
+  return day.routine;
+}
+
+export function dayCardTone(day) {
+  const n = dayCardCount(day);
+  if (n == null || !day || day.stale || day.tone === 'unread') return (day && day.tone) || 'unread';
+  if (!day.routine && day.extended) {
+    if (n <= 3) return 'red';
+    if (n <= 5) return 'amber';
+    return 'green';
+  }
+  return day.tone;
 }
 
 export function bandLabel(tone) {
@@ -846,28 +895,25 @@ export function tileFace(view) {
   if (!view.remaining) primary = 'None left';
   else if (view.inProgress) {
     primary = 'Now';
-    cue = 'Now';
+    cue = view.nextLabel ? `Next slot ${view.nextLabel}` : 'Now';
   } else if (view.later) {
     primary = view.dayHeading || '—';
     const n = view.dayGap || 0;
     cue = `First available in ${n} day${n === 1 ? '' : 's'}`;
   } else if (view.tone === 'red' && view.countdown) {
     primary = view.countdown;
-    cue = `Next slot in ${view.countdown}`;
+    cue = view.nextLabel ? `Next slot ${view.nextLabel}` : '';
   } else if (view.nextLabel) {
     primary = view.nextLabel;
     cue = view.minutes != null ? `Next slot in ${countdownLabel(view.minutes)}` : '';
   }
-  const detail =
-    !view.later && view.tone === 'red' && view.nextLabel && !view.inProgress ? `Next ${view.nextLabel}` : '';
-  const secondary = view.remaining == null ? 'No reading' : `${view.remaining} left`;
   return {
     label: view.label,
     subtitle: view.subtitle || '',
     primary,
     cue,
-    detail,
-    secondary,
+    detail: '',
+    secondary: slotsRemainingLabel(view.remaining, view.later),
     band: view.band || '',
     site: view.site || '',
     tone: view.tone,
