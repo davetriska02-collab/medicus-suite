@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.0
-**Generated:** 2026-09-26
+**Version:** v3.267.1
+**Generated:** 2026-09-27
 
 ## What it is
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.1 (27 Sep)** — Availability wall setup: the tile list scrolls inside the dialog and Save, Close, Add tile and Suggested names stay on a 1080p screen.
 - **v3.267.0 (26 Sep)** — Availability wall: a full-tab TV of unbooked slots (today's tiles plus a 7-day routine GP bar). Practice-mapped slot types. Seven book GETs every 5 minutes while the tab is visible. A failed refresh is the previous reading, not zero. H-085 proposed, not signed. The Today tab, appointment-book tally and Note TV were already removed in v3.264.15 and are not on this list.
 - **v3.266.0 (25 Sep)** — Workload tracker on the Workflow dashboard: staff and team task counts, search and sort, read-only. On unless switched off. Refreshes every 5 minutes while the panel is open and the tab is visible. H-084 accepted 2026-09-25.
 - **v3.265.7 (24 Sep)** — Document and Template Organiser is on unless a practice switches it off. Opening a document continues past Medicus’s New Document chooser (From a template, then the chosen row). The button sits clear of More and Complete consultation. Layout is a practice default plus each person’s own folders.

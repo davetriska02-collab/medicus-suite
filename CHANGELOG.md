@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.1] — 2026-09-27
+
+### Availability wall setup stays on one screen
+
+Set up tiles opened a dialog taller than a 1080p TV, so Add tile, Suggested names, Save and Close sat below the fold. The card now caps to the viewport. The tile list scrolls inside it. Those actions stay on screen. `display: flex` on the overlay no longer beats the `hidden` attribute, so the dialog stays off the wall until it is opened.
+
 ## [v3.267.0] — 2026-09-26
 
 ### Availability wall

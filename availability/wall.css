@@ -262,18 +262,37 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(15, 23, 42, 0.45);
-  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
   padding: 32px 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.av-editor[hidden] {
+  display: none;
 }
 
 .av-editor-card {
   max-width: 920px;
+  width: 100%;
+  max-height: 100%;
   margin: 0 auto;
   background: var(--bg-elev);
   color: var(--text-1);
   border-radius: 16px;
   padding: 22px;
   border: 1px solid var(--border);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#avEditorBody {
+  overflow: auto;
+  min-height: 0;
 }
 
 .av-editor-lead {
@@ -304,6 +323,13 @@ body {
   color: var(--text-2);
 }
 
+.av-row > label:has(input[type='text']) {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .av-row input[type='text'],
 .av-row input[type='number'],
 .av-row select {
@@ -317,11 +343,17 @@ body {
   min-width: 12rem;
 }
 
+.av-row > label:has(input[type='text']) input {
+  flex: 1 1 auto;
+  min-width: 16rem;
+}
+
 .av-editor-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+  flex: none;
 }
 
 .av-observed {

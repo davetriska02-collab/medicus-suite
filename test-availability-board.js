@@ -352,6 +352,14 @@ function session(service, entries, extra) {
     'reduced motion is wired in the page and the CSS'
   );
   check(css.includes('animation: none'), 'reduced motion stops the flash');
+  check(
+    /\.av-editor\[hidden\]\s*\{[^}]*display:\s*none/.test(css),
+    'author display does not keep the setup overlay up while it is hidden'
+  );
+  check(
+    /\.av-editor-card\s*\{[^}]*max-height:\s*100%/.test(css) && /#avEditorBody\s*\{[^}]*overflow:\s*auto/.test(css),
+    'the setup card fits the viewport and the tile list scrolls inside it'
+  );
   check(wall.includes('KEYS.availabilityWall'), 'the page reads the pack');
   check(
     wall.includes('Last updated') && wall.includes('not zeros'),
