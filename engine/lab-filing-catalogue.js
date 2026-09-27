@@ -98,7 +98,7 @@
     return guards.find((g) => g.result === resultId && g.lab === labId && g.reviewed !== true) || null;
   }
 
-  // Every commented, non-benign result on the report whose OWN heading (r.specimen) is one the identified lab is
+  // Every commented, non-benign result on the report whose OWN heading (r.groupHeading) is one the identified lab is
   // already KNOWN to send — an entry exists in lab.groupHeadings, whatever its enabled/approved state for assisted
   // filing. Used ONLY to offer a "whitelist this comment" checkbox in the UI, deliberately independent of
   // evaluateFilingCatalogue's own per-heading loop: that loop `continue`s past a group's results entirely (comment
@@ -130,14 +130,14 @@
     // real allowComments — not a blanket "nothing is ever allowed" — decides whether a comment is still unresolved.
     const byHeading = new Map();
     for (const r of report.results) {
-      if (!r || typeof r !== 'object' || !isStr(r.specimen) || !r.specimen) continue;
-      const nh = normHeading(r.specimen);
+      if (!r || typeof r !== 'object' || !isStr(r.groupHeading) || !r.groupHeading) continue;
+      const nh = normHeading(r.groupHeading);
       if (!byHeading.has(nh)) byHeading.set(nh, []);
       byHeading.get(nh).push(r);
     }
     const out = [];
     for (const results of byHeading.values()) {
-      const headingText = results[0].specimen;
+      const headingText = results[0].groupHeading;
       const headingDef = asArr(labDef.groupHeadings).find((g) => normHeading(g.text) === normHeading(headingText));
       if (!headingDef) continue; // heading not known to the lab at all — nothing to attach a whitelist to yet
       const group = findGroup(catalogue, labId, headingText);
@@ -164,7 +164,7 @@
   //
   // The override is set on the test's report-group entry (filing.groups), not per result (moved there 2026-09-25 —
   // one decision per test at a lab, not one per analyte) — so here it is looked up via the result's OWN heading
-  // (r.specimen), same as evaluateFilingCatalogue's per-heading loop does.
+  // (r.groupHeading), same as evaluateFilingCatalogue's per-heading loop does.
   function applyCatalogueOverrides(report, catalogue) {
     if (!report || !Array.isArray(report.results)) return report;
     if (!catalogue || typeof catalogue !== 'object') return report;
@@ -180,9 +180,9 @@
       if (r.urgent) return r; // never override an urgent flag
       if (!(r.isAbove || r.isBelow)) return r; // nothing flagged to clear
       if (!isStr(r.code) || !r.code) return r;
-      const hit = index.byCode.get(r.code);
+      const hit = LC.resolveByCode(index, r.code, labId);
       if (!hit) return r;
-      const group = isStr(r.specimen) && r.specimen ? findGroup(catalogue, labId, r.specimen) : null;
+      const group = isStr(r.groupHeading) && r.groupHeading ? findGroup(catalogue, labId, r.groupHeading) : null;
       if (!group || group.overrideLabFlag !== true) return r;
       const range = findRange(catalogue, hit.resultId, labId, r.code);
       if (!range) return r; // nothing to judge "within bounds" against — keep the lab's flag
@@ -211,7 +211,7 @@
         guard: null,
       };
     }
-    const hit = index.byCode.get(r.code);
+    const hit = LC.resolveByCode(index, r.code, labId);
     if (!hit) {
       return {
         reasons: [
@@ -322,9 +322,9 @@
       let paramsOverrideLabFlags = false;
       for (const r of report.results) {
         if (!r || typeof r !== 'object' || !isStr(r.code) || !r.code) continue;
-        const hit = index.byCode.get(r.code);
+        const hit = LC.resolveByCode(index, r.code, labId);
         if (!hit) continue;
-        const heading = isStr(r.specimen) ? r.specimen : '';
+        const heading = isStr(r.groupHeading) ? r.groupHeading : '';
         const group = heading ? findGroup(catalogue, labId, heading) : null;
         if (!group || group.enabled !== true) continue;
         const range = findRange(catalogue, hit.resultId, labId, r.code);
@@ -396,6 +396,8 @@
       const labId = lab.def.id;
 
       // Group by report-group heading (normalised) — a report can span several headings under one File button.
+      // r.groupHeading, NOT r.specimen: an ungrouped result (e.g. AST arriving alone, Nick 2026-09-26) falls back to
+      // its own name there, where specimen stays null (see engine/normalisers.js for why they must stay separate).
       const byHeading = new Map(); // normHeading -> results[]
       const reasonPairs = [];
       for (const r of report.results) {
@@ -406,7 +408,7 @@
           });
           continue;
         }
-        const nh = normHeading(r.specimen);
+        const nh = normHeading(r.groupHeading);
         if (!byHeading.has(nh)) byHeading.set(nh, []);
         byHeading.get(nh).push(r);
       }
@@ -430,7 +432,7 @@
       let recognisedCount = 0;
       let unrecognisedCount = 0;
       for (const results of byHeading.values()) {
-        const headingLabel = results[0] && isStr(results[0].specimen) ? results[0].specimen : null;
+        const headingLabel = results[0] && isStr(results[0].groupHeading) ? results[0].groupHeading : null;
         const group = headingLabel ? findGroup(catalogue, labId, headingLabel) : null;
         if (!group || group.enabled !== true) {
           unrecognisedCount += results.length;
@@ -447,7 +449,7 @@
             const invIds = new Set();
             for (const r of results) {
               if (!isStr(r.code) || !r.code) continue;
-              const hit = index.byCode.get(r.code);
+              const hit = LC.resolveByCode(index, r.code, labId);
               if (!hit) continue;
               for (const inv of asArr(catalogue.investigations)) {
                 if (asArr(inv.members).some((m) => m.result === hit.resultId)) invIds.add(inv.id);

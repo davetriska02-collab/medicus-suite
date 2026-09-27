@@ -2,6 +2,49 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.0] — 2026-09-27
+
+### Companion: Lab Filing folded in (stage 1)
+
+- The standalone "Lab Filing" card is being folded into the general-purpose Companion widget for a
+  consistent, moveable/minimisable UI. Stage 1: the header, subtitle, blocked-reasons list and
+  outstanding-request-match affordance now render inside Companion instead of their own floating
+  card — `lab-file-button.js` keeps 100% of the computation/write logic and simply publishes state
+  for Companion to render; the outstanding-request candidates mark items directly in the existing
+  "OUTSTANDING INVESTIGATIONS" list rather than duplicating it in a second box. Stage 2 (comment
+  whitelist boxes, File buttons, the toast) is still to come.
+
+### Lab Result Catalogue fixes
+
+- **An ungrouped result (e.g. AST arriving alone, with no `investigationGroups` wrapper at all) is
+  no longer invisible to the "Match requests to lab reports" scan.** `fromInvestigationReportPayload`
+  discarded ungrouped results into a field nothing read; a new `groupHeading` field (kept deliberately
+  separate from the existing `specimen` field, which many consumers already treat as "unknown
+  specimen type, never block") carries the result's own name for an ungrouped result, so it now
+  surfaces as its own group and can be matched/filed like any named one.
+- **The manual "add to a test" dropdown no longer hides matches by guessed kind.** A person picking
+  an explicit match for an unlinked report group was silently filtered to only same-kind
+  investigations (e.g. a genuinely-compatible "Urine MC&S" microbiology match was hidden under a
+  "urine" guess) — kind now only ranks/labels candidates, never gates them, matching the rule that
+  code/heading matches must never be text- or kind-gated.
+- **A test with no core member is now a warning, not a hard validation error.** Core/optional is a
+  concept that belongs at the lab-groupHeading level, not the investigation level; a test genuinely
+  awaiting its core result no longer blocks the whole catalogue build.
+- **Scan-imported lab headings no longer block their own already-approved filing setup.** Applying a
+  "Match requests to lab reports" scan match is a deliberate, on-this-machine decision (the heading
+  was learned from a real report the practice actually received) — `applyFills` now marks the lab
+  entries it creates/touches `reviewed: true` immediately, instead of leaving them awaiting a review
+  step nothing ever drove them towards. Previously, an unreviewed lab could silently exclude an
+  unrelated, independently-approved test's filing setup from the acting catalogue entirely (caught
+  live: Vitamin B12 at General Pathology RJ700 showed "blocked" in Companion despite being approved
+  on the Options page). Backup-restore / practice-profile-sync imports are unaffected and still
+  arrive `reviewed: false` (H-073, "approvals never travel") — this only touches the scan-apply path.
+  A lab already sitting unreviewed from before this fix needs a one-off manual "Approve lab" click
+  on the Investigations page; new scan-applies self-heal from now on.
+- Investigations page: request wordings and synonyms brought up to date (requestAliases/synonyms
+  data fix), and Free T3 / Free T4 split out as their own separately-requested tests rather than
+  bundled members of Thyroid function.
+
 ## [v3.266.0] — 2026-09-26
 
 ### Lab Filing on the Lab Result Catalogue — live-caught follow-ups to the E2 cutover

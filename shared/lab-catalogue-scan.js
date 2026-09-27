@@ -121,6 +121,9 @@
   // "ratio". Both plural AND singular are listed — tokens() filters against STOP BEFORE it strips a trailing "s", so
   // "cultures"/"ratios" would slip through unfiltered if only the singular were listed (unlike every OTHER stop word
   // here, which happens to only ever appear singular in this catalogue).
+  // "cell"/"count" are the same problem again, and the one that actually bit us (Nick, 2026-09-26): "White cell
+  // count" (blood, FBC), "Red cell count" (blood), "Pus cells" and "Epithelial cell count" (urine) share only the
+  // generic SPECIMEN-TYPE word "cell"/"count" — never the thing that actually distinguishes them.
   const STOP = new Set([
     'and',
     'the',
@@ -141,6 +144,10 @@
     'cultures',
     'ratio',
     'ratios',
+    'cell',
+    'cells',
+    'count',
+    'counts',
   ]);
   function tokens(s) {
     const LC = need();
@@ -726,7 +733,7 @@
       const memberIds = new Set(asArr(inv.members).map((m) => m.result));
       const wanted = [];
       for (const r of p.results) {
-        const byCode = r.code ? index.byCode.get(r.code) : null;
+        const byCode = r.code ? LC.resolveByCode(index, r.code, labRef) : null;
         let resultId = byCode ? byCode.resultId : r.resultId || null;
         // A result the resolver only matched by a word INSIDE its name ("Urine culture" contains the alias "culture") is a
         // different result, not this one: attaching its code and wording would merge unrelated tests' results (a urine

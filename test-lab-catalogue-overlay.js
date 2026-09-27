@@ -626,19 +626,22 @@ console.log('\n── hand authoring (C3) ──');
     'a lab-specific heading is stored in a complete lab definition (shipped headings kept)'
   );
   check(OV.ownLabHeadings(inv1.overlay, e1.id)[0].text === 'Anticoagulant profile', 'ownLabHeadings reads it back');
-  check(
-    throwsWith(
-      () =>
-        OV.saveInvestigation(builtin, E, {
-          label: 'No core',
-          kind: 'blood',
-          requestAliases: [{ text: 'x', system: 'any' }],
-          members: [{ result: 'sodium', role: 'optional' }],
-        }),
-      /core member/
-    ),
-    'a blood test with no core result is refused'
-  );
+  {
+    // Downgraded to a warning 2026-09-27 (Nick): core/optional is a lab-groupHeading concept, not an
+    // investigation-member one — refusing to save here blocked the request<->group matching phase before any
+    // lab-specific detail exists yet, and did so by failing the WHOLE catalogue (buildIndex throws on any error).
+    const noCore = OV.saveInvestigation(builtin, E, {
+      label: 'No core',
+      kind: 'blood',
+      requestAliases: [{ text: 'x', system: 'any' }],
+      members: [{ result: 'sodium', role: 'optional' }],
+    });
+    const acting = OV.mergeCatalogue(builtin, noCore.overlay, { includeUnreviewed: true }).catalogue;
+    check(
+      !!noCore.overlay && LC.validateCatalogue(acting).errors.length === 0,
+      'a blood test with no core result is ACCEPTED (a warning, not a hard error) — it no longer takes the whole catalogue down to save'
+    );
+  }
   check(
     throwsWith(
       () =>
@@ -803,21 +806,22 @@ console.log('\n── hand authoring (C3) ──');
     labHeadings: [],
   });
   check(acrFix.overlay.investigations[0].kind === 'faeces', 'the sample of a built-in can be changed');
-  check(
-    throwsWith(
-      () =>
-        OV.saveInvestigation(builtin, E, {
-          id: 'bone-profile',
-          label: 'x',
-          kind: 'blood',
-          requestAliases: [],
-          members: [{ result: bone.members[0].result, role: 'optional' }],
-          labHeadings: [],
-        }),
-      /core member/
-    ),
-    'removing every core result is still refused'
-  );
+  {
+    // Downgraded to a warning 2026-09-27 (Nick) — see the matching note above.
+    const noCore2 = OV.saveInvestigation(builtin, E, {
+      id: 'bone-profile',
+      label: 'x',
+      kind: 'blood',
+      requestAliases: [],
+      members: [{ result: bone.members[0].result, role: 'optional' }],
+      labHeadings: [],
+    });
+    const acting2 = OV.mergeCatalogue(builtin, noCore2.overlay, { includeUnreviewed: true }).catalogue;
+    check(
+      !!noCore2.overlay && LC.validateCatalogue(acting2).errors.length === 0,
+      'removing every core result is ACCEPTED (a warning, not a hard error)'
+    );
+  }
   check(
     builtin.investigations.find((i) => i.id === 'urine-acr').kind === 'urine' &&
       builtin.investigations.find((i) => i.id === 'calprotectin').kind === 'faeces',
@@ -1206,6 +1210,74 @@ console.log('\n── dangling links (deleted tests must not poison a lab) ─�
   check(
     throwsWith(() => OV.removeEntry(bad, 'labs', 'nope'), /not found/),
     'removing something that is not there is an error'
+  );
+}
+
+console.log('\n── applyFills marks labs (only) reviewed at once — scan-apply is a deliberate on-machine decision ──');
+{
+  const LAB = 'rj700-general-pathology';
+  let o = OV.emptyOverlay();
+
+  // a brand-new lab, from scratch
+  const withNewLab = OV.applyFills(builtin, o, {
+    labs: [{ ref: 'new-lab', newLab: { org: 'ZZZ', name: 'Zebra Path' }, headings: [] }],
+    results: [],
+    members: [],
+  }).overlay;
+  const newLab = withNewLab.labs.find((l) => l.identifiers && l.identifiers.performerOrg === 'ZZZ');
+  check(newLab && newLab.provenance.reviewed === true, 'a brand-new lab from a fill is reviewed:true at once');
+
+  // the first heading ever added to a builtin lab not yet in the overlay (ensureLab's own copy)
+  const firstHeading = OV.applyFills(builtin, o, {
+    labs: [{ ref: LAB, headings: [{ text: 'FIRST PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  let labEntry = firstHeading.labs.find((l) => l.id === LAB);
+  check(labEntry && labEntry.provenance.reviewed === true, 'the first heading on an existing builtin lab is reviewed:true at once');
+
+  // a second fill, touching the lab overlay entry again, must not knock it back to unreviewed
+  const secondHeading = OV.applyFills(builtin, firstHeading, {
+    labs: [{ ref: LAB, headings: [{ text: 'SECOND PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  labEntry = secondHeading.labs.find((l) => l.id === LAB);
+  check(
+    labEntry.provenance.reviewed === true && labEntry.groupHeadings.some((g) => g.text === 'SECOND PANEL'),
+    'a further heading fill on an already-touched lab keeps it reviewed:true'
+  );
+
+  // the investigation/member side of the SAME fills still needs separate review — this fix is lab-only
+  const withMember = OV.applyFills(builtin, o, {
+    labs: [{ ref: LAB, headings: [{ text: 'ZOOM PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [{ investigation: 'crp', result: 'urate', role: 'optional' }],
+  }).overlay;
+  check(
+    withMember.labs.find((l) => l.id === LAB).provenance.reviewed === true &&
+      withMember.investigations.find((i) => i.id === 'crp').provenance.reviewed === false,
+    'the same fill still leaves the touched investigation awaiting review — only the lab side changed'
+  );
+
+  // the real B12-shaped bug: a lab touched purely by a scan, plus a filing.groups entry independently approved via
+  // setFilingForTest/approveFilingForTest, must both survive the ACTING (approved-only) merge
+  let bug = OV.applyFills(builtin, o, {
+    labs: [{ ref: LAB, headings: [{ text: 'B12-STYLE PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  bug = OV.setFilingForTest(builtin, bug, 'crp', LAB, true);
+  bug = OV.approveFilingForTest(builtin, bug, 'crp', LAB, 'test', '2026-09-27');
+  const acting = OV.mergeCatalogue(builtin, bug).catalogue;
+  check(
+    acting.labs.some((l) => l.id === LAB && l.groupHeadings.some((g) => g.text === 'B12-STYLE PANEL')),
+    'the scan-touched lab and its heading are present in the acting (approved-only) catalogue'
+  );
+  check(
+    Array.isArray(acting.filing && acting.filing.groups) &&
+      acting.filing.groups.some((g) => g.lab === LAB && LC.norm(g.heading) === LC.norm('B12-STYLE PANEL') && g.enabled),
+    "the independently-approved filing.groups entry is no longer vetoed by the lab's own (now moot) review flag"
   );
 }
 

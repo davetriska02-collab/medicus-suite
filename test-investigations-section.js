@@ -43,11 +43,7 @@ check(
   ) && /h\('details', \{ class: 'inv-match-details'/.test(src),
   '"Match requests to lab reports" is collapsible, open by default only until the practice has added its own tests'
 );
-check(/inv-scan-reports/.test(src), 'the "Reports to read" control has its own no-shrink class (fixes the overlap with the lab select)');
-check(
-  /h\('label', \{ class: 'lf-check inv-scan-reports' \}, 'Lab ', labSel\)/.test(src),
-  'the lab select in "Match requests" has its own visible "Lab" label — it read as one run-on control without it'
-);
+check(/inv-scan-reports/.test(src), 'the "Reports to read" control has its own no-shrink class (originally fixed an overlap with the now-removed lab select)');
 {
   const css = read('options/investigations-section.css');
   check(
@@ -371,12 +367,23 @@ check(
   );
 }
 check(
-  /filterLeft/.test(src) &&
-    /filterRight/.test(src) &&
-    !/Filter both sides/.test(src) &&
-    /runMatch/.test(src) &&
-    /IMP\.importOirTests/.test(src),
-  'each side has its own filter (the two sides name things differently), and one button runs the import then the scan'
+  /filterLeft/.test(src) && /filterRight/.test(src) && !/Filter both sides/.test(src) && /runMatch/.test(src),
+  'each side has its own filter (the two sides name things differently)'
+);
+console.log(
+  '\n── the old, pre-catalogue Outstanding Requests test dictionary is no longer auto-imported on every scan (2026-09-26, Nick) ──'
+);
+check(
+  !/IMP\.importOirTests\(/.test(src) && !/readOirTests/.test(src) && !/importNotesEl/.test(src),
+  '"Match requests to lab reports" no longer reads triagelens.config.oirTests and re-imports it into the catalogue on every run — the catalogue now gets its confirmed investigations from reading real request/report/result data directly, so re-seeding from the old free-text dictionary every click was redundant (and kept resurrecting stale manual entries)'
+);
+check(
+  /shared\/lab-catalogue-import\.js/.test(read('options/options.html')) || /IMP\.importOirTests/.test(read('shared/lab-catalogue-import.js')),
+  'the underlying importOirTests helper itself is untouched (still a general-purpose, independently-tested pure function) — only the automatic call from this page is removed'
+);
+check(
+  !/sc\.lab\b/.test(src) && !/test names from/.test(src),
+  'the "which lab do these test names come from" picker is gone too — it only ever existed to tag the removed import, and has no other purpose on this page'
 );
 check(
   /async function applyTicked/.test(src) && /What was just added/.test(src) && /could not be added/.test(src),
@@ -574,6 +581,111 @@ check(
       read('service-worker.js')
     ),
   'the button that opens this link (lab-file-button.js) reuses the SAME query param name via the service worker\'s ms-open-options relay (a content script\'s own window.open() to a chrome-extension:// URL is blocked outright on Edge — ERR_BLOCKED_BY_CLIENT — since options/options.html is not in web_accessible_resources) and the existing #sect-investigations hash-router — no new deep-link mechanism duplicated on the other side'
+);
+
+console.log(
+  '\n── "How it is requested in Medicus" suggests the known synonym instead of an empty box (2026-09-26, Nick) ──'
+);
+check(
+  /const suggestedReq = !st\.reqs\.length && st\.synonyms\.length === 1 \? st\.synonyms\[0\] : '';/.test(src),
+  'with no confirmed wording yet and exactly one legacy synonym on file, that synonym is put straight into the box — not left for someone to notice it sitting collapsed under "Edit synonyms" and retype by hand'
+);
+check(
+  /reqText = input\(\{ placeholder: 'e\.g\. Anti-Xa level', 'aria-label': 'Request wording', value: suggestedReq \}\);/.test(
+    src
+  ),
+  'the suggestion is the actual starting VALUE of the input, not just a placeholder that vanishes on focus — it is visible and one click of Add away from being confirmed'
+);
+check(
+  /const knownSystems = \(S\.overlay\.context\.orderingSystems \|\| \[\]\)\.filter\(\(s\) =>\s*\n\s*SYSTEM_OPTIONS\.some\(\(\[v\]\) => v === s\)\s*\n\s*\);/.test(
+    src
+  ) && /reqSys = sel\(SYSTEM_OPTIONS, knownSystems\.length === 1 \? knownSystems\[0\] : 'any'\);/.test(src),
+  'the ordering-system dropdown is preselected only when the practice\'s own "Your practice" settings name exactly one ordering system this page also offers — two or more configured, or none, and it stays "any system" rather than guessing'
+);
+
+console.log(
+  '\n── a test\'s sole member is auto-marked "enough on its own" (2026-09-26, Nick) ──'
+);
+check(
+  /if \(st\.members\.length === 1 && m\.role === 'core'\) m\.anchor = true;/.test(src),
+  'a single-member test\'s only core result is forced anchor:true on render — there is no other core result it could ever need alongside, so this reflects a known fact rather than a default guess'
+);
+check(
+  /disabled: m\.role !== 'core' \|\| st\.members\.length === 1,/.test(src),
+  'the checkbox is disabled while it\'s genuinely the sole member — nothing meaningful to toggle, and unticking it would be wrong'
+);
+check(
+  /if \(m\.role !== 'core'\) m\.anchor = false;/.test(src),
+  'switching the sole member away from "core" still clears anchor, same as before — the new forcing only ever adds anchor:true for role core, never overrides a real choice for another role'
+);
+
+console.log(
+  '\n── the "filing lab" picker is remembered PER TEST, not one shared value (2026-09-26, Nick, live-caught) ──'
+);
+check(
+  /const filingLabByTest = new Map\(\);/.test(src) && /function currentFilingLab\(invId\)/.test(src),
+  'the picked lab is keyed by investigation id, not a single global — opening a different test no longer silently shows whichever lab was picked last, e.g. Cervical Screening showing RJ700\'s "no heading recorded" warning despite Cervical Screening London\'s own headings being right there'
+);
+check(
+  /const relevant = invId\s*\n\s*\? labs\.filter\(\(l\) => \(l\.groupHeadings \|\| \[\]\)\.some\(\(g\) => \(g\.identifies \|\| \[\]\)\.includes\(invId\)\)\)\s*\n\s*: \[\];/.test(
+    src
+  ),
+  'with no explicit pick yet for this test, it defaults to a lab that actually identifies this test — never an unrelated one carried over from elsewhere'
+);
+check(
+  /if \(labs\.some\(\(l\) => l\.id === picked\)\) return picked;/.test(src),
+  'an explicit pick for THIS test always wins, even when the lab isn\'t "relevant" yet — setting up a brand-new heading at a lab for the first time is this screen\'s own job and must never be silently overridden'
+);
+check(
+  /filingLabByTest\.set\(st\.id, pick\.value\);/.test(src) && /currentFilingLab\(st\.id\)/.test(src),
+  'both the read and the write are keyed by the CURRENT test\'s own id (st.id), not a bare module-level variable'
+);
+
+console.log(
+  '\n── a lab-scoped code\'s practice range/guards use ITS OWN lab, not the test\'s picker lab (2026-09-26, Nick, live-caught) ──'
+);
+check(
+  /const eLab = \(c && c\.lab\) \|\| fLab;/.test(src),
+  'the range cell resolves its lab from the code\'s own scope first — Kingston\'s urine white-cell code no longer inherits whichever lab happens to be selected in the test\'s picker'
+);
+check(
+  /const cand = r && c \? S\.rangeCandidates\.get\(eLab \+ '\|' \+ c\.conceptId\) : null;/.test(src) &&
+    /const e = r && c \? filingEntry\(r\.id, eLab, c\.conceptId\) : null;/.test(src),
+  'both the saved practice-range entry and the suggested-range candidate are looked up by the code\'s own lab — this is what stopped RJ700\'s blood WBC range (4-11) leaking onto Kingston\'s urine white-cell result, which genuinely carries no reference range (confirmed via Medicus\'s own "Result History" — urine entries show "-", only the interleaved blood-style entries show 4-11)'
+);
+check(
+  /const submit = \(\) => applyFiling\(\{ result: r\.id, lab: eLab, code: c\.conceptId, low: lo\.value, high: hi\.value \}\);/.test(
+    src
+  ),
+  'saving a practice range for a lab-scoped code writes it under THAT lab, never under the test\'s picker lab'
+);
+check(
+  /const resultLab = \(r\) => \{\s*\n\s*const scopes = r && r\.codes && r\.codes\.length \? \[\.\.\.new Set\(r\.codes\.map\(\(c\) => c\.lab \|\| null\)\)\] : \[\];\s*\n\s*return scopes\.length === 1 && scopes\[0\] \? scopes\[0\] : fLab;\s*\n\s*\};/.test(
+    src
+  ),
+  'guards (set per result, not per code) use the result\'s own lab only when every one of its codes agrees on a single explicit scope — an ambiguous or unscoped result keeps the existing picker-lab behaviour unchanged'
+);
+check(
+  /const rLab = resultLab\(r\);\s*\n\s*if \(r && rLab\) \{\s*\n\s*const ge = filingGuardEntry\(r\.id, rLab\);/.test(src),
+  'the guards lookup and editor use the resolved result lab (rLab), not the bare picker lab (fLab)'
+);
+
+console.log(
+  '\n── manually matching a lab group to a test is never kind-gated (2026-09-26, Nick, live-caught) ──'
+);
+check(
+  !/\.filter\(\(i\) => i\.kind === u\.kind \|\| i\.kind === 'other'\)/.test(src),
+  'the "add to a test" dropdown no longer filters candidate tests by the group\'s own guessed kind — Kingston\'s urine-specimen "Urine culture" group guesses kind \'urine\', which silently hid \'Urine MC&S (MSU)\' (kind \'microbiology\') from the list even though a person reading the actual report knows they are the same test'
+);
+check(
+  !/unknownRequests\s*\n\s*\.filter\(\(r\) => !r\.kind \|\| r\.kind === u\.kind \|\| u\.kind === 'other'\)/.test(src),
+  'the "unrecognised request" dropdown has the same manual-override fix — a person\'s explicit pick is never blocked by the kind guess either'
+);
+check(
+  /const testOpts = opts\(\s*\n\s*S\.merged\.investigations\s*\n\s*\.sort\(\(x, y\) => x\.label\.localeCompare\(y\.label\)\)/.test(
+    src
+  ),
+  'every test is offered in the manual dropdown, sorted by name — the "Suggested" optgroup above it still surfaces the auto-detected likely matches first'
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

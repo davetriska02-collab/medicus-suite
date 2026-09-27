@@ -1429,6 +1429,48 @@
       ]
     },
     {
+      "id": "urine-pus-cells",
+      "label": "Pus cells (urine)",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "pus cells"
+        },
+        {
+          "text": "urine microscopy: pus cells"
+        },
+        {
+          "text": "urine microscopy pus cells"
+        }
+      ]
+    },
+    {
+      "id": "urine-epithelial-cells",
+      "label": "Epithelial cell count (urine)",
+      "valueKind": "numeric",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "epithelial cell count"
+        },
+        {
+          "text": "epithelial cells"
+        }
+      ]
+    },
+    {
+      "id": "urine-culture",
+      "label": "Culture (urine)",
+      "valueKind": "text",
+      "codes": [],
+      "aliases": [
+        {
+          "text": "urine culture"
+        }
+      ]
+    },
+    {
       "id": "urine-creatinine",
       "label": "Urine creatinine",
       "valueKind": "numeric",
@@ -1631,17 +1673,6 @@
       ]
     },
     {
-      "id": "coagulation-screen",
-      "label": "Coagulation screen",
-      "valueKind": "mixed",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "coagulation screen"
-        }
-      ]
-    },
-    {
       "id": "helicobacter-pylori",
       "label": "Helicobacter pylori antigen",
       "valueKind": "coded",
@@ -1763,72 +1794,6 @@
       ]
     },
     {
-      "id": "blood-film-microscopy",
-      "label": "Blood film microscopy",
-      "valueKind": "text",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "blood film microscopy"
-        }
-      ]
-    },
-    {
-      "id": "urine-mcs",
-      "label": "Urine MC&S (MSU)",
-      "valueKind": "text",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "urine mc&s (msu)"
-        }
-      ]
-    },
-    {
-      "id": "wound-swab-mcs",
-      "label": "Wound swab MC&S",
-      "valueKind": "text",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "wound swab mc&s"
-        }
-      ]
-    },
-    {
-      "id": "skin-swab-mcs",
-      "label": "Skin swab MC&S",
-      "valueKind": "text",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "skin swab mc&s"
-        }
-      ]
-    },
-    {
-      "id": "ear-swab-mcs",
-      "label": "Ear swab MC&S",
-      "valueKind": "text",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "ear swab mc&s"
-        }
-      ]
-    },
-    {
-      "id": "mycology-nail-clippings",
-      "label": "Mycology MC&S (nail clippings)",
-      "valueKind": "text",
-      "codes": [],
-      "aliases": [
-        {
-          "text": "mycology mc&s (nail clippings)"
-        }
-      ]
-    },
-    {
       "id": "fibrosis-4-score",
       "label": "Fibrosis-4 (FIB-4) score",
       "valueKind": "numeric",
@@ -1893,6 +1858,25 @@
           "text": "folate"
         }
       ]
+    },
+    {
+      "id": "urine-white-cells",
+      "label": "White cells (urine)",
+      "valueKind": "text",
+      "codes": [
+        {
+          "conceptId": "1022541000000102",
+          "role": "primary",
+          "lab": "kingston-general-pathology",
+          "refsets": []
+        }
+      ],
+      "aliases": [
+        {
+          "text": "white cells",
+          "lab": "kingston-general-pathology"
+        }
+      ]
     }
   ],
   "investigations": [
@@ -1901,11 +1885,15 @@
       "label": "Lipid profile",
       "kind": "blood",
       "legacyKey": "lipids",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Lipids Blood",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "lipid",
-        "cholesterol",
-        "Lipids Blood"
+        "cholesterol"
       ],
       "headingAliases": [
         "lipid",
@@ -1943,14 +1931,21 @@
       "label": "U&E",
       "kind": "blood",
       "legacyKey": "ue",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Urea and Electrolytes WITH Potassium",
+          "system": "tquest"
+        },
+        {
+          "text": "Urea and Electrolytes WITHOUT Potassium",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "electrolyte",
         "u&e",
         "urea electrolyte",
-        "creatinine + electrolyte",
-        "Urea and Electrolytes WITH Potassium",
-        "Urea and Electrolytes WITHOUT Potassium"
+        "creatinine + electrolyte"
       ],
       "headingAliases": [
         "u&e",
@@ -2073,13 +2068,17 @@
       "label": "HbA1c",
       "kind": "blood",
       "legacyKey": "hba1c",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "HbA1C (Glycated Haemoglobin)",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "hba1c",
         "haemoglobin a1c",
         "glycated haemoglobin",
-        "glycosylated haemoglobin",
-        "HbA1C (Glycated Haemoglobin)"
+        "glycosylated haemoglobin"
       ],
       "headingAliases": [
         "hba1c",
@@ -2164,11 +2163,15 @@
       "label": "Thyroid function",
       "kind": "blood",
       "legacyKey": "tft",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Thyroid Stimulating Hormone",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "thyroid",
-        "tft",
-        "Thyroid Stimulating Hormone"
+        "tft"
       ],
       "headingAliases": [
         "tft",
@@ -2180,17 +2183,9 @@
           "result": "tsh",
           "role": "core",
           "anchor": true
-        },
-        {
-          "result": "free-t4",
-          "role": "optional"
-        },
-        {
-          "result": "free-t3",
-          "role": "optional"
         }
       ],
-      "note": "UK labs reflex-test thyroid (TSH first), so a TSH-only report is the complete thyroid result."
+      "note": "UK labs reflex-test thyroid (TSH first), so a TSH-only report is the complete thyroid result. Free T3 and Free T4 are requested and reported separately at this practice (see the Free T3 / Free T4 tests) — they are not bundled members of Thyroid function here."
     },
     {
       "id": "free-t4",
@@ -2208,6 +2203,27 @@
       "members": [
         {
           "result": "free-t4",
+          "role": "core"
+        }
+      ],
+      "note": "Can be requested on its own or added on to thyroid function."
+    },
+    {
+      "id": "free-t3",
+      "label": "Free T3",
+      "kind": "blood",
+      "requestAliases": [],
+      "synonyms": [
+        "free t3",
+        "ft3"
+      ],
+      "headingAliases": [
+        "free t3",
+        "ft3"
+      ],
+      "members": [
+        {
+          "result": "free-t3",
           "role": "core"
         }
       ],
@@ -2240,10 +2256,14 @@
       "label": "Ferritin",
       "kind": "blood",
       "legacyKey": "ferritin",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Ferritin Blood",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
-        "ferritin",
-        "Ferritin Blood"
+        "ferritin"
       ],
       "headingAliases": [
         "ferritin"
@@ -2260,10 +2280,14 @@
       "label": "Bone profile",
       "kind": "blood",
       "legacyKey": "bone",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Bone Profile (Calcium Studies)",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
-        "bone profile",
-        "Bone Profile (Calcium Studies)"
+        "bone profile"
       ],
       "headingAliases": [
         "bone profile"
@@ -2336,12 +2360,16 @@
       "label": "Vitamin D",
       "kind": "blood",
       "legacyKey": "vitamin_d",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Vitamin D (25-hydroxy)",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "vitamin d",
         "25 hydroxyvitamin d",
-        "25 oh vitamin d",
-        "Vitamin D (25-hydroxy)"
+        "25 oh vitamin d"
       ],
       "headingAliases": [
         "vitamin d",
@@ -2359,11 +2387,15 @@
       "label": "Urate",
       "kind": "blood",
       "legacyKey": "urate",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Urate Blood",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "urate",
-        "uric acid",
-        "Urate Blood"
+        "uric acid"
       ],
       "headingAliases": [
         "urate",
@@ -2381,11 +2413,15 @@
       "label": "C-reactive protein",
       "kind": "blood",
       "legacyKey": "crp",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "C-Reactive Protein Blood",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "c reactive protein",
-        "crp",
-        "C-Reactive Protein Blood"
+        "crp"
       ],
       "headingAliases": [
         "crp",
@@ -2403,11 +2439,15 @@
       "label": "Hepatitis C",
       "kind": "blood",
       "legacyKey": "hepatitis_c",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Hepatitis C IgG",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "hepatitis c",
-        "hep c",
-        "Hepatitis C IgG"
+        "hep c"
       ],
       "headingAliases": [
         "hepatitis c",
@@ -2533,11 +2573,15 @@
       "label": "Oestradiol",
       "kind": "blood",
       "legacyKey": "oestradiol",
-      "requestAliases": [],
+      "requestAliases": [
+        {
+          "text": "Oestradiol Blood",
+          "system": "tquest"
+        }
+      ],
       "synonyms": [
         "oestradiol",
-        "estradiol",
-        "Oestradiol Blood"
+        "estradiol"
       ],
       "headingAliases": [
         "oestradiol",
@@ -2674,10 +2718,13 @@
       "id": "ggt",
       "label": "Gamma-glutamyl transferase (GGT)",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Gamma-glutamyl Transferase (GGT)"
+      "requestAliases": [
+        {
+          "text": "Gamma-glutamyl Transferase (GGT)",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2691,10 +2738,13 @@
       "id": "ast",
       "label": "Aspartate aminotransferase (AST)",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Aspartate Aminotransferase Serum"
+      "requestAliases": [
+        {
+          "text": "Aspartate Aminotransferase Serum",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2708,10 +2758,13 @@
       "id": "coeliac",
       "label": "Coeliac disease antibodies",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Coeliac Disease Antibodies"
+      "requestAliases": [
+        {
+          "text": "Coeliac Disease Antibodies",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2725,10 +2778,13 @@
       "id": "iron-binding-studies",
       "label": "Iron binding studies",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Iron Binding Studies"
+      "requestAliases": [
+        {
+          "text": "Iron Binding Studies",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2742,10 +2798,13 @@
       "id": "alpha-1-antitrypsin",
       "label": "Alpha-1 antitrypsin",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Alpha-1 Antitrypsin Serum"
+      "requestAliases": [
+        {
+          "text": "Alpha-1 Antitrypsin Serum",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2759,10 +2818,13 @@
       "id": "caeruloplasmin",
       "label": "Caeruloplasmin",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Caeruloplasmin Serum"
+      "requestAliases": [
+        {
+          "text": "Caeruloplasmin Serum",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2776,10 +2838,13 @@
       "id": "antinuclear-antibody",
       "label": "Antinuclear antibody (Hep-2)",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Anti Nuclear antibody (Hep-2)"
+      "requestAliases": [
+        {
+          "text": "Anti Nuclear antibody (Hep-2)",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2793,10 +2858,13 @@
       "id": "immunoglobulins",
       "label": "Immunoglobulins",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Immunoglobulins (includes Electrophoresis)"
+      "requestAliases": [
+        {
+          "text": "Immunoglobulins (includes Electrophoresis)",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2810,10 +2878,13 @@
       "id": "liver-anaemia-autoantibody-screen",
       "label": "Liver/anaemia autoantibody screen",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Liver/Anaemia Autoantibody screen"
+      "requestAliases": [
+        {
+          "text": "Liver/Anaemia Autoantibody screen",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2827,10 +2898,13 @@
       "id": "esr",
       "label": "Erythrocyte sedimentation rate (ESR)",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Erythrocyte Sedimentation Rate"
+      "requestAliases": [
+        {
+          "text": "Erythrocyte Sedimentation Rate",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2844,27 +2918,29 @@
       "id": "coagulation-screen",
       "label": "Coagulation screen",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Coagulation Screen"
+      "requestAliases": [
+        {
+          "text": "Coagulation Screen",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
-      "members": [
-        {
-          "result": "coagulation-screen",
-          "role": "core"
-        }
-      ]
+      "members": [],
+      "note": "The report’s real structure (individual result lines) is not yet confirmed — left as a genuine gap (2026-09-26, Nick) rather than a fabricated placeholder result."
     },
     {
       "id": "helicobacter-pylori",
       "label": "Helicobacter pylori antigen",
       "kind": "faeces",
-      "requestAliases": [],
-      "synonyms": [
-        "Helicobacter pylori Antigen"
+      "requestAliases": [
+        {
+          "text": "Helicobacter pylori Antigen",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2878,10 +2954,13 @@
       "id": "cortisol",
       "label": "Cortisol",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Cortisol Blood"
+      "requestAliases": [
+        {
+          "text": "Cortisol Blood",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2895,10 +2974,13 @@
       "id": "ccp-antibody",
       "label": "CCP antibody",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "CCP Antibody"
+      "requestAliases": [
+        {
+          "text": "CCP Antibody",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2912,10 +2994,13 @@
       "id": "creatine-kinase",
       "label": "Creatine kinase",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Creatine Kinase"
+      "requestAliases": [
+        {
+          "text": "Creatine Kinase",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2929,10 +3014,13 @@
       "id": "zinc",
       "label": "Zinc",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Zinc Blood"
+      "requestAliases": [
+        {
+          "text": "Zinc Blood",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2946,10 +3034,13 @@
       "id": "copper",
       "label": "Copper",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Copper Blood"
+      "requestAliases": [
+        {
+          "text": "Copper Blood",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2963,10 +3054,13 @@
       "id": "rast-mixed-grass",
       "label": "RAST mixed grass pollen",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "RAST Mixed Grass"
+      "requestAliases": [
+        {
+          "text": "RAST Mixed Grass",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2980,10 +3074,13 @@
       "id": "rast-mixed-trees",
       "label": "RAST mixed trees",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "RAST Mixed Trees"
+      "requestAliases": [
+        {
+          "text": "RAST Mixed Trees",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -2997,10 +3094,13 @@
       "id": "rast-cat",
       "label": "RAST cat dander",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "RAST Cat"
+      "requestAliases": [
+        {
+          "text": "RAST Cat",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3014,10 +3114,13 @@
       "id": "rast-house-dust-mite",
       "label": "RAST house dust mite",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "RAST House Dust Mite"
+      "requestAliases": [
+        {
+          "text": "RAST House Dust Mite",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3031,10 +3134,13 @@
       "id": "rast-mixed-weeds",
       "label": "RAST mixed weeds",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "RAST Mixed Weeds"
+      "requestAliases": [
+        {
+          "text": "RAST Mixed Weeds",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3048,112 +3154,126 @@
       "id": "blood-film-microscopy",
       "label": "Blood film microscopy",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Blood Film Microscopy"
+      "requestAliases": [
+        {
+          "text": "Blood Film Microscopy",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
-      "members": [
-        {
-          "result": "blood-film-microscopy",
-          "role": "core"
-        }
-      ]
+      "members": [],
+      "note": "The report’s real structure (individual result lines) is not yet confirmed — left as a genuine gap (2026-09-26, Nick) rather than a fabricated placeholder result."
     },
     {
       "id": "urine-mcs",
       "label": "Urine MC&S (MSU)",
       "kind": "microbiology",
-      "requestAliases": [],
-      "synonyms": [
-        "Urine MC&S (MSU)"
+      "requestAliases": [
+        {
+          "text": "Urine MC&S (MSU)",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
         {
-          "result": "urine-mcs",
+          "result": "urine-pus-cells",
           "role": "core"
+        },
+        {
+          "result": "urine-epithelial-cells",
+          "role": "optional"
+        },
+        {
+          "result": "urine-culture",
+          "role": "optional"
+        },
+        {
+          "result": "urine-white-cells",
+          "role": "optional"
         }
-      ]
+      ],
+      "note": "The report splits into three separate lines (pus cells, epithelial cell count, culture) — confirmed live 2026-09-26. Pus cells is the sole core/anchor result (the defining finding); epithelial cell count and culture are optional. A hospital lab (Kingston, General Pathology) separately reports White cells as its own text result under this same test, at that lab only."
     },
     {
       "id": "wound-swab-mcs",
       "label": "Wound swab MC&S",
       "kind": "microbiology",
-      "requestAliases": [],
-      "synonyms": [
-        "Wound Swab MC&S"
+      "requestAliases": [
+        {
+          "text": "Wound Swab MC&S",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
-      "members": [
-        {
-          "result": "wound-swab-mcs",
-          "role": "core"
-        }
-      ]
+      "members": [],
+      "note": "The report’s real structure (individual result lines) is not yet confirmed — left as a genuine gap (2026-09-26, Nick) rather than a fabricated placeholder result."
     },
     {
       "id": "skin-swab-mcs",
       "label": "Skin swab MC&S",
       "kind": "microbiology",
-      "requestAliases": [],
-      "synonyms": [
-        "Skin Swab MC&S"
+      "requestAliases": [
+        {
+          "text": "Skin Swab MC&S",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
-      "members": [
-        {
-          "result": "skin-swab-mcs",
-          "role": "core"
-        }
-      ]
+      "members": [],
+      "note": "The report’s real structure (individual result lines) is not yet confirmed — left as a genuine gap (2026-09-26, Nick) rather than a fabricated placeholder result."
     },
     {
       "id": "ear-swab-mcs",
       "label": "Ear swab MC&S",
       "kind": "microbiology",
-      "requestAliases": [],
-      "synonyms": [
-        "Ear Swab MC&S"
+      "requestAliases": [
+        {
+          "text": "Ear Swab MC&S",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
-      "members": [
-        {
-          "result": "ear-swab-mcs",
-          "role": "core"
-        }
-      ]
+      "members": [],
+      "note": "The report’s real structure (individual result lines) is not yet confirmed — left as a genuine gap (2026-09-26, Nick) rather than a fabricated placeholder result."
     },
     {
       "id": "mycology-nail-clippings",
       "label": "Mycology MC&S (nail clippings)",
       "kind": "microbiology",
-      "requestAliases": [],
-      "synonyms": [
-        "Mycology MC&S (Nail Clippings)"
+      "requestAliases": [
+        {
+          "text": "Mycology MC&S (Nail Clippings)",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
-      "members": [
-        {
-          "result": "mycology-nail-clippings",
-          "role": "core"
-        }
-      ]
+      "members": [],
+      "note": "The report’s real structure (individual result lines) is not yet confirmed — left as a genuine gap (2026-09-26, Nick) rather than a fabricated placeholder result."
     },
     {
       "id": "fibrosis-4-score",
       "label": "Fibrosis-4 (FIB-4) score",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Fibrosis-4-Score"
+      "requestAliases": [
+        {
+          "text": "Fibrosis-4-Score",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3167,10 +3287,13 @@
       "id": "cervical-screening",
       "label": "Cervical screening",
       "kind": "procedure",
-      "requestAliases": [],
-      "synonyms": [
-        "Cervical Screening"
+      "requestAliases": [
+        {
+          "text": "Cervical Screening",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3184,10 +3307,13 @@
       "id": "sacrum-xray",
       "label": "Sacrum AP & lateral X-ray",
       "kind": "imaging",
-      "requestAliases": [],
-      "synonyms": [
-        "Sacrum Ap & Lat X-ray"
+      "requestAliases": [
+        {
+          "text": "Sacrum Ap & Lat X-ray",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": []
@@ -3196,10 +3322,13 @@
       "id": "us-soft-tissue",
       "label": "Ultrasound soft tissue",
       "kind": "imaging",
-      "requestAliases": [],
-      "synonyms": [
-        "US Soft Tissue"
+      "requestAliases": [
+        {
+          "text": "US Soft Tissue",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": []
@@ -3208,10 +3337,13 @@
       "id": "vitamin-b12",
       "label": "Vitamin B12",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Vitamin B12"
+      "requestAliases": [
+        {
+          "text": "Vitamin B12",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3225,10 +3357,13 @@
       "id": "folate",
       "label": "Folate",
       "kind": "blood",
-      "requestAliases": [],
-      "synonyms": [
-        "Folate Blood"
+      "requestAliases": [
+        {
+          "text": "Folate Blood",
+          "system": "tquest"
+        }
       ],
+      "synonyms": [],
       "headingAliases": [],
       "exclude": [],
       "members": [
@@ -3348,6 +3483,29 @@
           "text": "Serum 25-HO vit D3 level",
           "identifies": [
             "vitamin-d"
+          ]
+        },
+        {
+          "text": "Urine microscopy and culture",
+          "identifies": [
+            "urine-mcs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "kingston-general-pathology",
+      "name": "General Pathology (Kingston Hospital NHS Trust)",
+      "identifiers": {
+        "performerOrg": "Kingston Hospital NHS Trust",
+        "department": "General Pathology"
+      },
+      "note": "Hospital lab, not this practice's own community lab (RJ700) — results seen here are low-volume, manually pulled-in historical hospital results, not routine ordered traffic (confirmed live 2026-09-26, Nick).",
+      "groupHeadings": [
+        {
+          "text": "Urine culture",
+          "identifies": [
+            "urine-mcs"
           ]
         }
       ]

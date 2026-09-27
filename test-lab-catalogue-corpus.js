@@ -47,8 +47,14 @@ check(
   `seed size is plausible (${seed.results.length} results, ${seed.investigations.length} investigations)`
 );
 check(
-  seed.investigations.every((i) => i.kind === 'imaging' || i.members.some((m) => m.role === 'core')),
-  'every non-imaging investigation has a core member'
+  seed.investigations.every(
+    (i) => i.kind === 'imaging' || i.members.length === 0 || i.members.some((m) => m.role === 'core')
+  ),
+  // A non-imaging investigation with a NON-EMPTY member list still needs a core member (enforced by
+  // validateCatalogue itself). Zero members is now a legitimate "no results yet" gap (2026-09-26, Nick) for
+  // any kind — the requirement to invent a placeholder result just to have "a member" was removed; see
+  // findGaps' own noResults flag, which is what actually surfaces this state on the Investigations page.
+  'every non-imaging investigation either has a core member, or is a genuine "no results yet" gap'
 );
 
 const codedResults = seed.results.filter((r) => r.codes.length);
@@ -414,18 +420,86 @@ console.log('\n--- robustness: another lab, and lab-neutral fallbacks ---');
     degraded.resolution.results.every((x) => x.confidence !== 'coded'),
     'with every code stripped, none pretend to be "coded"'
   );
-  const grouped = degraded.resolution.results.filter(
-    (x) => !degraded.resolution.groups.find((g) => g.ungrouped).results.includes(x)
-  );
+  // The fixture's one genuinely ungrouped result ("Serum magnesium level") is now its own one-result GROUP, heading
+  // = its own description (Nick, 2026-09-27 — see fromInvestigationReportPayload) — found by that heading, not by
+  // resolveReport's own separate `g.ungrouped` flag, which only ever applies to its trailing (now always-empty)
+  // synthetic group since this adapter no longer populates the `ungrouped` field at all.
+  const magGroup = degraded.resolution.groups.find((g) => g.heading === 'Serum magnesium level');
+  const grouped = degraded.resolution.results.filter((x) => !magGroup.results.includes(x));
   check(
     grouped.length > 0 && grouped.every((x) => x.confidence === 'alias-in-scope'),
     'the lab-tagged aliases still resolve every GROUPED result inside its heading scope'
   );
-  const ung = degraded.resolution.groups.find((g) => g.ungrouped).results[0];
+  // This fixture's ungrouped result's own description ("Serum magnesium level") happens to BE RJ700's own
+  // registered heading for magnesium — so it now heading-matches and resolves 'alias-in-scope', exactly like a
+  // named group would. That is the INTENDED effect of the phase-1 fix (an ungrouped result is no longer invisible
+  // to heading-based recognition) — not a regression. Before the fix this could never reach anything but
+  // 'alias-unscoped', because resolveReport's ungrouped path never attempts a heading match at all.
+  const ung = magGroup.results[0];
   check(
-    ung.confidence === 'alias-unscoped',
-    'an UNGROUPED uncoded result is only "alias-unscoped" (never enough to file)'
+    ung.confidence === 'alias-in-scope' && magGroup.headingConfidence === 'heading',
+    "an ungrouped result whose own description matches a registered heading is now recognised the same way a named group would be"
   );
+}
+
+console.log(
+  '\n--- confirmed tQuest request wordings (2026-09-24 extract, 250 pages of real Medicus investigation requests) land in requestAliases, not synonyms (2026-09-26, Nick) ---'
+);
+{
+  const withReq = seed.investigations.filter((i) => (i.requestAliases || []).length);
+  check(
+    withReq.length >= 45,
+    `at least 45 investigations carry a confirmed request wording (found ${withReq.length}) — the confirmed SWL pathology extract must not regress back into the unconfirmed synonyms fallback`
+  );
+  check(
+    withReq.every((i) => i.requestAliases.every((a) => a.system === 'tquest')),
+    'every confirmed wording from the tQuest extract is tagged system:"tquest" — never "any" (an untagged confirmed wording would default the practice\'s ordering-system dropdown to "any system" instead of naming the real system it was confirmed against)'
+  );
+  check(
+    seed.investigations.every((i) => {
+      const req = new Set((i.requestAliases || []).map((a) => a.text.toLowerCase()));
+      return (i.synonyms || []).every((s) => !req.has(s.toLowerCase()));
+    }),
+    'no investigation carries the same wording in both requestAliases and synonyms — a confirmed wording is removed from the unconfirmed fallback list once promoted, never duplicated'
+  );
+  // Spot-check a handful spanning the batch (a brand-new investigation with nothing else on file, and an existing
+  // investigation that already had legacy free-text synonyms which must survive untouched alongside the new one).
+  const alpha1 = seed.investigations.find((i) => i.id === 'alpha-1-antitrypsin');
+  check(
+    !!alpha1 &&
+      alpha1.requestAliases.length === 1 &&
+      alpha1.requestAliases[0].text === 'Alpha-1 Antitrypsin Serum' &&
+      alpha1.requestAliases[0].system === 'tquest' &&
+      alpha1.synonyms.length === 0,
+    'a brand-new investigation added by the extract (Alpha-1 antitrypsin) has its confirmed wording in requestAliases and no leftover synonym'
+  );
+  const ue = seed.investigations.find((i) => i.id === 'ue');
+  check(
+    !!ue &&
+      ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITH Potassium' && a.system === 'tquest') &&
+      ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITHOUT Potassium' && a.system === 'tquest') &&
+      ue.synonyms.includes('electrolyte') &&
+      ue.synonyms.includes('u&e'),
+    'an existing investigation (U&E) keeps its old free-text synonyms as the fallback AND gains the two new confirmed tQuest wordings, rather than one replacing the other'
+  );
+}
+
+console.log(
+  '\n--- Free T3 / Free T4 are their own report groups at this practice, not bundled members of Thyroid function (2026-09-26, Nick) ---'
+);
+{
+  const tft = seed.investigations.find((i) => i.id === 'tft');
+  check(
+    !!tft && tft.members.length === 1 && tft.members[0].result === 'tsh',
+    'Thyroid function\'s only member is TSH — Free T3 and Free T4 were removed (this practice reports them under their own separate headings, so bundling them here was blocking their own matching/filing)'
+  );
+  const ft3 = seed.investigations.find((i) => i.id === 'free-t3');
+  const ft4 = seed.investigations.find((i) => i.id === 'free-t4');
+  check(
+    !!ft3 && ft3.members.length === 1 && ft3.members[0].result === 'free-t3' && ft3.members[0].role === 'core',
+    'Free T3 exists as its own standalone investigation (mirroring the pre-existing Free T4) so removing it from Thyroid function does not orphan the free-t3 result'
+  );
+  check(!!ft4 && ft4.members.some((m) => m.result === 'free-t4'), 'Free T4 keeps its own pre-existing standalone investigation');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

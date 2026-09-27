@@ -236,7 +236,9 @@ console.log(
 {
   // Nick, 2026-09-24: several duplicate lab entries appeared after applying a batch of matches all from the same
   // not-yet-known lab — each proposal's p.lab.isNew was decided once, at scan time, and never re-checked.
-  const perf = { organisation: 'Kingston Hospital NHS Trust', department: 'General Pathology' };
+  // A fictional org name, deliberately — "Kingston Hospital NHS Trust" (used here until 2026-09-26) became a REAL
+  // shipped lab that same day, which silently invalidated this test's own "not yet in the catalogue" premise.
+  const perf = { organisation: 'Test Hospital NHS Trust', department: 'General Pathology' };
   const propFor = (heading) => ({
     key: 'k:' + heading,
     lab: { isNew: true, id: null, name: 'General Pathology', org: perf.organisation, dept: perf.department },
@@ -388,8 +390,8 @@ console.log('\n── learn a heading + results + codes from a report (sole test
   check(
     applied.overlay.investigations.every((i) => i.provenance.reviewed === false) &&
       applied.overlay.results.every((r) => r.provenance.reviewed === false) &&
-      applied.overlay.labs.every((l) => l.provenance.reviewed === false),
-    'everything written is awaiting review'
+      applied.overlay.labs.every((l) => l.provenance.reviewed === true),
+    'the test and its results are awaiting review; the lab heading (learned from a real report) is not (2026-09-27)'
   );
   check(
     applied.overlay.investigations.concat(applied.overlay.results, applied.overlay.labs).every((e) => !e.override),
@@ -450,8 +452,8 @@ console.log('\n── reviewing what a scan added (the editor save path must not
   );
   const ap = OV.approveInvestigation(base, saved.overlay, 'urine-acr', 'test');
   check(
-    ap.approvedLabs.length === 1 && ap.approvedResults.length === 3,
-    'approving it approves the learned heading and the three coded results'
+    ap.approvedLabs.length === 0 && ap.approvedResults.length === 3,
+    'the lab heading was already reviewed from the scan itself (2026-09-27) — approving the test only approves the three coded results'
   );
   const live = OV.mergeCatalogue(base, ap.overlay, {});
   check(
@@ -1210,9 +1212,9 @@ console.log('\n── an unknown lab is proposed as a new (unreviewed) lab ─�
   check(
     lab.identifiers.performerOrg === 'ZZ999' &&
       lab.identifiers.department === 'Cytology' &&
-      lab.provenance.reviewed === false &&
+      lab.provenance.reviewed === true &&
       lab.groupHeadings[0].text === 'Iron studies here',
-    'the lab and its heading are created, unreviewed'
+    'the lab and its heading are created already reviewed — learned from a real report (2026-09-27)'
   );
   const known = applied.overlay.results.find((r) => r.id === 'ferritin');
   check(
@@ -1507,7 +1509,10 @@ console.log('\n── reading the queue (injected client) ──');
     });
     const rep = (results) => ({
       lab: { organisation: 'RJ700', department: 'Medical Microbiology' },
-      groups: [{ heading: 'URINE MICROSCOPY AND CULTURE', specimenType: 'Urine', results }],
+      // A heading not already known to the catalogue (2026-09-26: "Urine microscopy and culture" is now a REAL
+      // shipped heading, added the same session — this fixture must stay unrecognised on its own for the group to
+      // need building up from scratch, which is the whole point of this test).
+      groups: [{ heading: 'URINE MC&S FIXTURE', specimenType: 'Urine', results }],
       ungrouped: [],
       requests: ['Urine MC&S', 'Urine culture'],
     });
@@ -1709,6 +1714,50 @@ console.log('\n── reading the queue (injected client) ──');
       e1.results.some((x) => x.codes.some((c) => c.conceptId === '1023711000000100') && x.id !== 'practice-culture') &&
         e1.results.some((x) => x.codes.some((c) => c.conceptId === '995241000000109') && x.id !== 'practice-culture'),
       'urine culture and Candida culture each become their own result'
+    );
+  }
+
+  console.log(
+    '\n── an UNGROUPED result is no longer invisible to the scan board (2026-09-27, Nick, live-caught) ──'
+  );
+  {
+    // AST arrives from Medicus as a lone ungroupedResults entry, no investigationGroups wrapper at all — confirmed
+    // live via console capture. Before the phase-1 fix, fromInvestigationReportPayload put it in a separate
+    // `ungrouped` field that analyse() never read, so it could never appear as a candidate card on the scan board no
+    // matter what was registered for it — structurally invisible, not merely unmatched.
+    const rawReport = {
+      performer: { organisationName: 'RJ700', departmentName: 'General Pathology' },
+      investigationGroups: [
+        {
+          description: 'LFTs',
+          specimen: { type: 'Blood' },
+          results: [
+            { description: 'Albumin', resultType: 'unit-value-result', resultValue: '39', resultUnit: 'g/L' },
+          ],
+        },
+      ],
+      ungroupedResults: [
+        {
+          description: 'AST',
+          resultType: 'unit-value-result',
+          resultValue: '43',
+          resultUnit: 'u/L',
+          resultCode: { conceptId: '86738006' },
+        },
+      ],
+    };
+    const obs = SC.observationFromOverview(payloadOf(rawReport));
+    check(
+      obs.groups.some((g) => g.heading === 'AST'),
+      "the ungrouped AST result surfaces as its own group in the observation, heading = its own description — the same shape a real named group would have"
+    );
+    // targets derived exactly as options/investigations-section.js's runMatch() does — every investigation
+    // findGaps() considers incomplete (the real "ast" investigation qualifies: no lab has a heading for it yet).
+    const targets = SC.findGaps(seed, {}).map((g) => g.id);
+    const an = SC.analyse(seed, [obs], { targets });
+    check(
+      an.proposals.some((p) => p.heading === 'AST' && p.target === 'ast'),
+      'AST now appears as its own proposal on the "Match requests to lab reports" board, targeting the real "ast" investigation — before the fix it was structurally invisible, discarded into the unread `ungrouped` field'
     );
   }
 

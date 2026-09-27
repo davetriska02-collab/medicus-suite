@@ -39,25 +39,32 @@ function baseOverlay() {
 const acting = (overlay) => OV.mergeCatalogue(builtin, overlay, {}).catalogue;
 
 // A result row in the shape engine/normalisers.js normaliseInvestigationReport() produces.
-const result = (over) => ({
-  name: 'ALP',
-  value: 77,
-  rawValue: '77',
-  comparator: null,
-  unit: 'u/L',
-  code: ALP.code,
-  low: 20,
-  high: 140, // the LAB's own range — deliberately different from the practice's 30-130, so tests can tell which won
-  isAbove: false,
-  isBelow: false,
-  urgent: false,
-  interpretation: null,
-  date: '2026-09-20',
-  history: [],
-  text: '',
-  specimen: 'LFTs',
-  ...over,
-});
+// groupHeading defaults to whatever `specimen` ends up being — true for every NAMED group in the real normaliser —
+// unless a test passes groupHeading explicitly, which is how a test simulates an UNGROUPED result (specimen: null,
+// groupHeading: the result's own name) — see engine/lab-filing-catalogue.js, which reads groupHeading, not specimen.
+const result = (over) => {
+  const merged = {
+    name: 'ALP',
+    value: 77,
+    rawValue: '77',
+    comparator: null,
+    unit: 'u/L',
+    code: ALP.code,
+    low: 20,
+    high: 140, // the LAB's own range — deliberately different from the practice's 30-130, so tests can tell which won
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    interpretation: null,
+    date: '2026-09-20',
+    history: [],
+    text: '',
+    specimen: 'LFTs',
+    ...over,
+  };
+  if (!over || !('groupHeading' in over)) merged.groupHeading = merged.specimen;
+  return merged;
+};
 const report = (results, over) => ({ lab: { ...ORG }, results, ...over });
 
 console.log('--- golden: recognised, in range, approved group -> clean ---');
@@ -124,11 +131,42 @@ console.log('\n--- report-group heading gate (H-074 generalised) ---');
 }
 
 console.log(
+  '\n--- ungrouped result (specimen: null) is still recognised via its OWN groupHeading (2026-09-26, Nick, live-caught) ---'
+);
+{
+  // A result that arrives from Medicus as a lone ungroupedResults entry gets specimen: null from normalisers.js
+  // (untouched — every OTHER consumer, e.g. result-combo's specimen-scope gate, treats null as "unknown, fail
+  // open") but groupHeading: its own description. This engine must group by groupHeading, not specimen, or an
+  // ungrouped result (AST, live-caught) can never be matched to an approved assisted-filing group no matter what a
+  // person registers for it — even though Medicus's own UI renders it under exactly that heading text. Using the
+  // already-registered 'LFTs' heading here (an ungrouped result can't name a heading the lab hasn't registered) —
+  // the point under test is the grouping mechanism, not this particular heading.
+  const ungrouped = result({ specimen: null, groupHeading: 'LFTs' });
+  const res = FC.evaluateFilingCatalogue(report([ungrouped]), acting(baseOverlay()));
+  check(
+    res.ok && res.meta.recognisedCount === 1 && res.meta.unrecognisedCount === 0,
+    'an ungrouped result (specimen: null) with its own groupHeading is recognised through an approved group for that heading'
+  );
+  const notApproved = FC.evaluateFilingCatalogue(
+    report([result({ specimen: null, groupHeading: 'LFTs' })]),
+    acting(OV.emptyOverlay()) // nothing approved at all
+  );
+  check(
+    notApproved.ok && notApproved.blockers.some((b) => /LFTs.*no approved assisted-filing setup/.test(b)),
+    'without an approved group it blocks BY NAME, not the generic no-heading-at-all message — the heading was found via groupHeading, just not approved yet'
+  );
+}
+
+console.log(
   '\n--- unapprovedGroups: which test to offer opening, for a heading with no approved filing setup (2026-09-26, Nick) ---'
 );
 {
   const TSH = { name: 'TSH', value: 2.5, rawValue: '2.5', comparator: null, unit: 'mIU/L', code: '1022791000000101' };
-  const tshResult = (over) => ({ ...result(over), ...TSH, specimen: 'TSH', low: null, high: null, ...over });
+  const tshResult = (over) => {
+    const merged = { ...result(over), ...TSH, specimen: 'TSH', low: null, high: null, ...over };
+    if (!over || !('groupHeading' in over)) merged.groupHeading = merged.specimen;
+    return merged;
+  };
   const noSetup = FC.evaluateFilingCatalogue(report([tshResult()]), acting(OV.emptyOverlay()));
   check(
     noSetup.ok &&

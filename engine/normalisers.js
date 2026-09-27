@@ -622,7 +622,18 @@
       // Each result from a named group gets a `specimen` field set to the group's
       // human-readable title (trimmed string), or null if none is discoverable.
       // Ungrouped results and results from untitled groups get specimen: null.
-      // This is fail-open: a missing or unrecognised header never drops a result.
+      // This is fail-open: a missing or unrecognised header never drops a result, and MANY consumers (result-combo's
+      // specimen-scope gate, result-rules, result-severity, outstanding-match…) already treat null here as "unknown
+      // specimen type, so never block" — do not repurpose this field; see groupHeading below instead.
+      //
+      // `groupHeading` (Phase E, lab-filing-catalogue.js) is a SEPARATE field for a different question — "what report
+      // group did this arrive under, for matching against a catalogue-registered heading" — not "what specimen type
+      // is this". For a named group it's the same title text as `specimen`. For an UNGROUPED result it falls back to
+      // the result's OWN description (Nick, 2026-09-26, live-caught via console capture: AST arrives as a lone
+      // ungroupedResults entry, description "AST", and Medicus's own UI renders it as its own titled block using
+      // exactly that text). Reusing `specimen` itself for this very nearly shipped: it silently broke the sterile-
+      // pyuria combo's specimen-scope gate for ungrouped urine results, because a result's own NAME ("Pus cells") is
+      // not a specimen-type keyword — never conflate the two again.
       const rawResults = [];
       if (Array.isArray(report.investigationGroups)) {
         report.investigationGroups.forEach((g) => {
@@ -635,12 +646,15 @@
             (typeof g.description === 'string' && g.description.trim()) ||
             null;
           if (Array.isArray(g.results)) {
-            g.results.forEach((r) => rawResults.push({ _raw: r, _specimen: specimenHeader }));
+            g.results.forEach((r) => rawResults.push({ _raw: r, _specimen: specimenHeader, _groupHeading: specimenHeader }));
           }
         });
       }
       if (Array.isArray(report.ungroupedResults)) {
-        report.ungroupedResults.forEach((r) => rawResults.push({ _raw: r, _specimen: null }));
+        report.ungroupedResults.forEach((r) => {
+          const ownName = r && typeof r.description === 'string' && r.description.trim() ? r.description.trim() : null;
+          rawResults.push({ _raw: r, _specimen: null, _groupHeading: ownName });
+        });
       }
 
       // Parse reference range limits from the first entry
@@ -667,11 +681,12 @@
       }
 
       rawResults.forEach((entry) => {
-        // Each entry is { _raw, _specimen } from grouped path, or { _raw, _specimen: null }
-        // from ungrouped. Guard against any stray non-object entries.
+        // Each entry is { _raw, _specimen, _groupHeading } — see the field-by-field note above for why they differ.
+        // Guard against any stray non-object entries.
         if (!entry || typeof entry !== 'object') return;
         const r = entry._raw;
         const specimenHeader = entry._specimen !== undefined ? entry._specimen : null;
+        const groupHeading = entry._groupHeading !== undefined ? entry._groupHeading : null;
         if (!r || typeof r !== 'object') return;
         const name = r.description || null;
         // text-result types (e.g. microbiology / culture) carry their content in
@@ -788,6 +803,9 @@
           history,
           text,
           specimen: specimenHeader,
+          // Additive (Phase E): see the note above `rawResults` — a different question from `specimen`, never read
+          // by the legacy engine or by anything specimen-scope-gated (result-combo, result-rules, etc.).
+          groupHeading,
         });
       });
     } catch (_) {

@@ -1376,6 +1376,9 @@
       createdAt: (old && old.createdAt) || day,
       importedFrom: (old && old.importedFrom) || 'results-scan',
     });
+    // Labs only: applying a scan match is already a deliberate on-this-machine decision (the heading came from a
+    // real report), unlike a cold import (H-073 keeps that path reviewed:false) — nothing left to separately approve.
+    const labProv = (old) => ({ ...prov(old), reviewed: true });
     const added = { labs: 0, results: 0, codes: 0, aliases: 0, members: 0, headings: 0 };
     const touched = [];
 
@@ -1395,7 +1398,7 @@
           name: String(lf.newLab.name || org).trim(),
           identifiers,
           groupHeadings: [],
-          provenance: prov(null),
+          provenance: labProv(null),
         });
         labIdFor.set(lf.ref, id);
         added.labs++;
@@ -1566,7 +1569,7 @@
       if (e) return e;
       const b = asArr(builtin && builtin.labs).find((l) => l.id === id);
       if (!b) fail(`unknown lab "${id}"`);
-      e = { id, name: b.name, identifiers: { ...b.identifiers }, groupHeadings: [], provenance: prov(null) };
+      e = { id, name: b.name, identifiers: { ...b.identifiers }, groupHeadings: [], provenance: labProv(null) };
       if (b.orderingSystem) e.orderingSystem = b.orderingSystem;
       if (b.structured !== undefined) e.structured = b.structured;
       o.labs.push(e);
@@ -1592,7 +1595,7 @@
         else e.groupHeadings.push({ text, identifies: want, mayContain: [] });
         added.headings++;
       }
-      e.provenance = prov(e.provenance);
+      e.provenance = labProv(e.provenance);
       touched.push(id);
     }
 
