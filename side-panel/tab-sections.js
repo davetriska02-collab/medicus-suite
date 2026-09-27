@@ -12,7 +12,7 @@
 export const PINNED_IDS = [];
 
 // Full-tab launchers. Kept out of the strip, the digit jump, and the arrow cycle.
-export const OFF_STRIP_IDS = ['rota-app', 'duplicate-checker'];
+export const OFF_STRIP_IDS = ['rota-app', 'duplicate-checker', 'availability'];
 
 export const TAB_SECTIONS = [
   {
@@ -38,7 +38,7 @@ export const TAB_SECTIONS = [
   {
     id: 'practice',
     label: 'Practice',
-    ids: ['capacity', 'activity', 'referrals', 'rota', 'rota-app', 'duplicate-checker'],
+    ids: ['capacity', 'activity', 'referrals', 'rota', 'rota-app', 'duplicate-checker', 'availability'],
   },
   {
     id: 'reference',

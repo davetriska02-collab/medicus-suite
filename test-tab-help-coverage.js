@@ -6,7 +6,7 @@
 // (previously duplicated per shell; converged in the top-10 plan batch A).
 // This guard mirrors test-tab-catalog.js / test-tour-steps.js: it parses the
 // real data-module set out of BOTH panel.html and pop-out.html and fails CI
-// if any tab — including the off-strip launchers (duplicate-checker, rota-app; see
+// if any tab — including the off-strip launchers (duplicate-checker, rota-app, availability; see
 // CLAUDE.md "Off-strip launchers") — has no TAB_HELP
 // entry, or if an entry's copy is too thin to be useful.
 
@@ -79,7 +79,7 @@ function check(cond, msg) {
   //    appear in both, per CLAUDE.md — same guarantee test-tab-catalog.js
   //    doesn't check across shells, so pin it here too since we're already
   //    parsing both files.
-  const PANEL_ONLY_ALLOWED = new Set(['duplicate-checker', 'rota-app']);
+  const PANEL_ONLY_ALLOWED = new Set(['duplicate-checker', 'rota-app', 'availability']);
   const missingFromPopout = [...panelIds].filter((id) => !popoutIds.has(id) && !PANEL_ONLY_ALLOWED.has(id));
   check(
     missingFromPopout.length === 0,

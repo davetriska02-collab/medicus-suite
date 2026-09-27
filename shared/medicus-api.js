@@ -30,7 +30,7 @@ function apiBase(siteId) {
   return `https://${siteId}.api.england.medicus.health`;
 }
 
-export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = false } = {}) {
+export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = false, signal } = {}) {
   if (!siteId) throw new Error('Practice code not set');
   // F8: Abort if siteId doesn't match the expected Medicus hex site-ID format to
   // prevent building fetch requests to unexpected hosts.
@@ -44,10 +44,29 @@ export async function fetchSchedulingOverview(siteId, dateISO, { bypassCache = f
   }
 
   const url = `${apiBase(siteId)}/scheduling/data/appointment-book/embedded-overview?date=${dateISO}&filterByUsualLocation=false`;
-  const r = await fetch(url, { credentials: 'include' });
+  const init = { credentials: 'include', cache: 'no-store' };
+  if (signal) init.signal = signal;
+  const r = await fetch(url, init);
+  const dateHdr = r.headers && typeof r.headers.get === 'function' ? r.headers.get('date') : null;
+  if (dateHdr) {
+    const serverMs = Date.parse(dateHdr);
+    if (!Number.isNaN(serverMs)) fetchSchedulingOverview.lastServerMs = serverMs;
+  }
+  if (r.redirected && /login|sign-?in/i.test(String(r.url || ''))) {
+    const err = new Error('Not signed in to Medicus');
+    err.status = 401;
+    throw err;
+  }
   if (!r.ok) {
-    if (r.status === 401 || r.status === 403) throw new Error('Not signed in to Medicus');
-    throw new Error(`API error ${r.status}`);
+    const err = new Error(r.status === 401 || r.status === 403 ? 'Not signed in to Medicus' : `API error ${r.status}`);
+    err.status = r.status;
+    throw err;
+  }
+  const ctype = r.headers && typeof r.headers.get === 'function' ? r.headers.get('content-type') || '' : '';
+  if (ctype && !/json/i.test(ctype)) {
+    const err = new Error('API error 200');
+    err.status = 200;
+    throw err;
   }
   const data = await r.json();
   const fetchedAt = Date.now();

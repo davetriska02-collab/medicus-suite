@@ -56,6 +56,7 @@ export default [
       'shared/booking-core.js',
       'shared/uk-calendar.js',
       'shared/uk-bank-holidays-data.js',
+      'shared/availability-board-core.js',
     ],
     languageOptions: { sourceType: 'module' },
   },
@@ -74,6 +75,12 @@ export default [
   {
     files: ['board/**/*.js'],
     languageOptions: { sourceType: 'module' },
+  },
+  {
+    // Full-tab availability wall. Pure core is listed with the other shared ESM
+    // files; the page and opener are modules too.
+    files: ['availability/**/*.js'],
+    languageOptions: { sourceType: 'module', globals: { ...globals.browser, ...globals.webextensions } },
   },
   {
     files: ['test-*.js', 'scripts/**/*.js'],

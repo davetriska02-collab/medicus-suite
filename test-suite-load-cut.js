@@ -79,9 +79,25 @@ const RM = require('./shared/request-monitor.js');
   check(floored.pollSeconds === 120, 'pollSeconds floor is 120 (2 min)');
   check(RM.MIN_POLL_SECONDS === 120, 'MIN_POLL_SECONDS export is 120');
 
+  console.log('\nAvailability wall poll');
+  const wall = read('availability/wall.js');
+  const avCore = read('shared/availability-board-core.js');
+  check(wall.includes('planRefresh'), 'the wall asks planRefresh which dates to fetch');
+  check(wall.includes('fetchSchedulingOverview'), 'the wall uses the shared book GET');
+  check(/WEEK_POLL_MS\s*=\s*30 \* 60 \* 1000/.test(avCore), 'days 2–7 wait 30 minutes');
+  check(
+    avCore.includes('QUIET_FROM_HOUR = 19') && avCore.includes('QUIET_UNTIL_HOUR = 7'),
+    'nothing is fetched from 19:00 to 07:00'
+  );
+  check(wall.includes('backoffMs'), 'a failed burst backs off');
+  check(!wall.includes('weekDates(today).map'), 'the wall does not map a GET across every day on each tick');
+
   console.log('\nRM strip: no panel-side pollAll');
   const panel = read('side-panel/panel.js');
-  const rmBlock = panel.slice(panel.indexOf('async function _doFetchAndRenderRmStrip'), panel.indexOf('function renderRmStrip'));
+  const rmBlock = panel.slice(
+    panel.indexOf('async function _doFetchAndRenderRmStrip'),
+    panel.indexOf('function renderRmStrip')
+  );
   check(!rmBlock.includes('RequestMonitor.pollAll'), 'rm strip does not call pollAll');
 
   console.log(`\n${passed} passed, ${failed} failed`);

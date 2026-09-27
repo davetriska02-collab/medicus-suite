@@ -6,7 +6,7 @@
 // help, NOT clinical decision support. Keep copy concise and clinically careful.
 //
 // Every tab id in side-panel/tab-catalog.js's TAB_CATALOG must have an entry
-// here, including the off-strip launchers (duplicate-checker, rota-app) — see
+// here, including the off-strip launchers (duplicate-checker, rota-app, availability) — see
 // CLAUDE.md "Off-strip launchers". test-tab-help-coverage.js enforces this
 // against both panel.html and pop-out.html's data-module set.
 //
@@ -101,6 +101,12 @@ export const TAB_HELP = {
     what: 'Opens the full rota application in a new browser tab: working patterns, leave (April–March, session-accounted), registrar supervision, duty fairness pro-rata to contracted sessions and a cover worklist.',
     firstStep:
       'Add your staff and their contracted sessions first — everything else (leave, duty fairness, safe-staffing warnings) is calculated from them.',
+  },
+  availability: {
+    title: 'Availability wall',
+    what: 'Opens a full-screen view of free appointment slots for the triage room: today’s lists and a 7-day routine GP count. It shows times and counts only.',
+    firstStep:
+      'Open it on the room screen. Press and hold Set up tiles so each list matches this practice’s slot types, session names and roles. Pin the tab, press F11, and set Chrome to continue where you left off. Copy TV link on the wall if the address is needed after a restart.',
   },
   'duplicate-checker': {
     title: 'Duplicates',

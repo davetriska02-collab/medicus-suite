@@ -2,6 +2,56 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.4] — 2026-09-27
+
+### Availability wall stays on one screen
+
+The 7-day columns stay inside their cards. The colour legend is its own strip under the week, and the week fills the height that is left. Nothing scrolls at 1920×1080 or 1366×768. The large time, countdown, and date stay on one line, sized to the tile. A countdown reads "22 min". The shorter tile names are Registrar, Routine GP, and 3-day GP.
+
+H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
+
+## [v3.267.3] — 2026-09-27
+
+### Availability wall matches the triage-room mock
+
+The week strip is seven day cards under "Routine GP availability – next 7 days". The total sits on the right as "Total routine GP appointments". Today is labelled Today with the short date under it, and that card is highlighted. A Saturday with extended access, a bank holiday, and a day with no clinic use the same subtitle line. A day that only has extended access shows that count on the card. It is still not added to the routine total. Columns sit on a grey track and scale to the week's peak.
+
+Each tile has an inline line icon, a subtitle, a coloured hero (the time, the countdown when it is under 30 minutes, or the date on a later day), "N slots remaining", a progress track, and a "Next slot" line. The legend is three dots: over 60 minutes, 30–60 minutes, and under 30 minutes. The navy bar keeps the title on the left and the short date with a large clock on the right.
+
+The safety behaviour from v3.267.2 is unchanged. Registrar lists are still in the 7-day total, and the week heading still says they are included. H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
+
+## [v3.267.2] — 2026-09-27
+
+### Availability wall red-team fixes
+
+The wall no longer paints shipped keyword guesses as "None left". Tiles appear after the practice saves a mapping. Match is whole tokens, so a visiting locum, a hub, a 3-day diary, and a surname prefix do not land on the wrong clinic. A generic GP type stays unmapped.
+
+Today is read on the practice interval. The other six days are every 30 minutes, and nothing is fetched from 19:00 to 07:00 Europe/London. A 429 or 5xx aborts the burst and backs off up to 8×. A 401 or 403 stops and asks for a Medicus sign-in. Each GET times out at 20 seconds and uses the shared book helper with `cache: 'no-store'`. Only one wall tab polls.
+
+"Last updated" moves only when today's read succeeds. After about 10 minutes the tiles grey to "Not current". A 200 that is not a book keeps the previous slots. The page title does not say Live. Times are Europe/London. If this PC is not on UK time, the countdown is hidden.
+
+A free slot stays until it ends, and shows "Now" while it is in progress. Telephone slots stay off face-to-face tiles. More than one site is labelled. The red number stays red; only the edge pulses, and Stop flashing is on the page. Set up tiles is a press-and-hold or a confirm.
+
+The control text matches this behaviour. H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
+
+## [v3.267.1] — 2026-09-27
+
+### Availability wall setup stays on one screen
+
+Set up tiles opened a dialog taller than a 1080p TV, so Add tile, Suggested names, Save and Close sat below the fold. The card now caps to the viewport. The tile list scrolls inside it. Those actions stay on screen. `display: flex` on the overlay no longer beats the `hidden` attribute, so the dialog stays off the wall until it is opened.
+
+## [v3.267.0] — 2026-09-26
+
+### Availability wall
+
+A full-tab, read-only TV of unbooked appointment slots for the triage room. It shows today's tiles (next unused slot and how many remain) and a 7-day routine GP bar. It does not show demand, queue size, messages, or QOF.
+
+The book is the same GET Slot Counter already uses: `/scheduling/data/appointment-book/embedded-overview?date=YYYY-MM-DD&filterByUsualLocation=false`. There is no captured range parameter, so one refresh is seven of those GETs (today and the next six calendar days, weekends included). Default every 5 minutes, floor 2 minutes, only while `suite.ui.availabilityWall` is on and the wall tab is visible. No service-worker alarm. That is the load-cut rule: the old Today tab and Note TV polled in the background even when nobody was looking. Colour and the countdown tick locally every 20 seconds from the last reading. A failed refresh keeps the previous slots and says so. It is not drawn as zero.
+
+Medicus does not label a slot as GP, registrar, ANP, nurse, visit, embargo, or extended access. The practice maps slot type, session or diary name, and (when the rota is loaded) staff role or employment type onto tiles. Defaults are keyword guesses for Dave's list. Unmapped free slots stay counted in a footer. Patient name, NHS number, and reason are dropped when the book is read. The tile face is a time and a count.
+
+Open it from the All-tabs menu (Practice) or the command palette (`Open availability wall`). Tile names and mapping are set on the wall (Set up tiles). Options has the pack toggle. H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
+
 ## [v3.266.0] — 2026-09-25
 
 ### Workload tracker on the Workflow dashboard

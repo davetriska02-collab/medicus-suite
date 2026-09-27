@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- © 2026 Graysbrook Ltd. Proprietary — all rights reserved. See LICENSE. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Triage – Appointment Availability</title>
+    <link rel="stylesheet" href="../design-system/src/tokens.css" />
+    <link rel="stylesheet" href="wall.css" />
+  </head>
+  <body>
+    <header class="av-head" id="avHead">
+      <div class="av-head-title">
+        <h1>Triage – Appointment Availability</h1>
+        <p class="av-site" id="avSite"></p>
+      </div>
+      <div class="av-head-clock">
+        <p class="av-date" id="avDate">Today</p>
+        <p class="av-clock" id="avClock">––:––</p>
+      </div>
+    </header>
+    <p class="av-banner" id="avBanner" role="status" aria-live="polite" hidden></p>
+    <div class="av-stage" id="avStage">
+      <h2 class="av-section">On the day – next available appointment</h2>
+      <main id="avMain"></main>
+      <section class="av-week" id="avWeek" hidden></section>
+      <div class="av-legend" id="avLegend">
+        <p class="av-legend-item">
+          <i class="swatch tone-green" aria-hidden="true"></i>
+          <span><strong>&gt; 60 minutes</strong><span class="av-legend-sub">Next slot more than 60 mins</span></span>
+        </p>
+        <p class="av-legend-item">
+          <i class="swatch tone-amber" aria-hidden="true"></i>
+          <span
+            ><strong>30 – 60 minutes</strong><span class="av-legend-sub">Next slot in 30 – 60 mins</span></span
+          >
+        </p>
+        <p class="av-legend-item">
+          <i class="swatch tone-red" aria-hidden="true"></i>
+          <span
+            ><strong>&lt; 30 minutes</strong
+            ><span class="av-legend-sub">Next slot in less than 30 mins (use capacity)</span></span
+          >
+        </p>
+        <p class="av-legend-note">Colour is how soon the next slot starts. It is not a clinical priority.</p>
+      </div>
+      <p class="av-note" id="avNote"></p>
+      <div class="av-tools">
+        <button type="button" class="av-tool" id="avStopFlash">Stop flashing</button>
+        <button type="button" class="av-tool" id="avSetup">Set up tiles</button>
+        <button type="button" class="av-tool" id="avCopy">Copy TV link</button>
+        <button type="button" class="av-tool" id="avFull">Full screen</button>
+        <p class="av-kiosk">Pin this tab, press F11, and set Chrome to continue where you left off.</p>
+      </div>
+    </div>
+    <div class="av-editor" id="avEditor" hidden>
+      <div class="av-editor-card" id="avEditorCard" role="dialog" aria-modal="true" aria-labelledby="avEditorTitle">
+        <h2 id="avEditorTitle">Tile mapping</h2>
+        <p class="av-editor-lead" id="avEditorLead">
+          Match whole words from the slot type, the session, or the diary name. Save once the lists look right. Until
+          then the wall does not guess.
+        </p>
+        <div id="avEditorBody"></div>
+        <p class="av-editor-status" id="avEditorStatus" role="status" aria-live="polite"></p>
+        <div class="av-editor-actions">
+          <button type="button" class="av-btn" id="avAddTile">Add tile</button>
+          <button type="button" class="av-btn" id="avResetTiles">Suggested names</button>
+          <button type="button" class="av-btn av-btn-primary" id="avSaveTiles">Save</button>
+          <button type="button" class="av-btn" id="avCloseEditor">Close</button>
+        </div>
+      </div>
+    </div>
+    <script src="../shared/display-prefs.js"></script>
+    <script src="../shared/practice-packs.js"></script>
+    <script src="../shared/practice-code.js"></script>
+    <script src="../shared/io/availability-io.js"></script>
+    <script type="module" src="wall.js"></script>
+  </body>
+</html>

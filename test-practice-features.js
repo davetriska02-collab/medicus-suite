@@ -120,6 +120,7 @@ const NEW_PACKS = [
   { suffix: 'ui.templateOrganiser', key: 'suite.ui.templateOrganiser', alias: 'templateOrganiser' },
   { suffix: 'ui.taskPresence', key: 'suite.ui.taskPresence', alias: 'taskPresence' },
   { suffix: 'ui.workloadTracker', key: 'suite.ui.workloadTracker', alias: 'workloadTracker' },
+  { suffix: 'ui.availabilityWall', key: 'suite.ui.availabilityWall', alias: 'availabilityWall' },
 ];
 
 (async () => {
@@ -290,6 +291,7 @@ const NEW_PACKS = [
   check(/'ui\.templateOrganiser'/.test(allowList), 'allow-list includes ui.templateOrganiser');
   check(/'ui\.taskPresence'/.test(allowList), 'allow-list includes ui.taskPresence');
   check(/'ui\.workloadTracker'/.test(allowList), 'allow-list includes ui.workloadTracker');
+  check(/'ui\.availabilityWall'/.test(allowList), 'allow-list includes ui.availabilityWall');
   check(!/practiceAcceptedAt/.test(allowList), 'practiceAcceptedAt is not on the pack allow-list');
   check(!/hiddenTabs/.test(allowList), 'hiddenTabs is not on the pack allow-list');
 
@@ -318,6 +320,8 @@ const NEW_PACKS = [
   check(store['suite.ui.taskPresence'] === true, 'suiteImport writes suite.ui.taskPresence');
   await suiteIo.suiteImport({ workloadTracker: true });
   check(store['suite.ui.workloadTracker'] === true, 'suiteImport writes suite.ui.workloadTracker');
+  await suiteIo.suiteImport({ availabilityWall: true });
+  check(store['suite.ui.availabilityWall'] === true, 'suiteImport writes suite.ui.availabilityWall');
   const wlPreview = suiteEnv.previewEnvelope(suiteEnv.wrap('suite', { suite: { workloadTracker: true } }));
   check(
     wlPreview.some((l) => /Workload tracker ON/.test(l)),
@@ -415,6 +419,7 @@ const NEW_PACKS = [
   check(/id="pfTemplateOrganiser"/.test(optionsHtml), 'template organiser pack lives on the practice board');
   check(/id="pfTaskPresence"/.test(optionsHtml), 'task presence pack lives on the practice board');
   check(/id="pfWorkloadTracker"/.test(optionsHtml), 'workload tracker pack lives on the practice board');
+  check(/id="pfAvailabilityWall"/.test(optionsHtml), 'availability wall pack lives on the practice board');
   check(
     /suite\.ui\.taskPresence[\s\S]{0,80}grandfather:\s*true/.test(optionsJs),
     'task presence toggle is default-on (grandfather true)'
@@ -422,6 +427,10 @@ const NEW_PACKS = [
   check(
     /suite\.ui\.workloadTracker[\s\S]{0,80}grandfather:\s*true/.test(optionsJs),
     'workload tracker toggle is default-on (grandfather true)'
+  );
+  check(
+    /suite\.ui\.availabilityWall[\s\S]{0,80}grandfather:\s*true/.test(optionsJs),
+    'availability wall toggle is default-on (grandfather true)'
   );
   check(
     /suite\.ui\.templateOrganiser[\s\S]{0,120}grandfather:\s*true/.test(optionsJs),
@@ -476,6 +485,7 @@ const NEW_PACKS = [
       !/templateOrganiser/.test(acceptFn[0]) &&
       !/taskPresence/.test(acceptFn[0]) &&
       !/workloadTracker/.test(acceptFn[0]) &&
+      !/availabilityWall/.test(acceptFn[0]) &&
       !/signing\.softFlags/.test(acceptFn[0]),
     'tick Accept does not write any pack key'
   );

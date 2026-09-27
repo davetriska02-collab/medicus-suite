@@ -57,6 +57,7 @@ const NAV_COVERED_BY_OVERVIEW = new Set([
   'rota', // compact rota status module (panel + pop-out) — overview mention only
   'rota-app', // opens the full rota app in a browser tab — overview mention only
   'duplicate-checker', // opens a full tab, not a panel module — overview mention only
+  'availability', // triage-room wall, full tab — overview mention only
 ]);
 
 let pass = 0;
