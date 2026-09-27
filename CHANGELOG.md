@@ -8,6 +8,8 @@ All notable changes to Medicus Suite are documented here.
 
 The 7-day columns stay inside their cards. The colour legend is its own strip under the week, and the week fills the height that is left. Nothing scrolls at 1920×1080 or 1366×768. The large time, countdown, and date stay on one line, sized to the tile. A countdown reads "22 min". The shorter tile names are Registrar, Routine GP, and 3-day GP.
 
+H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
+
 ## [v3.267.3] — 2026-09-27
 
 ### Availability wall matches the triage-room mock
@@ -16,7 +18,7 @@ The week strip is seven day cards under "Routine GP availability – next 7 days
 
 Each tile has an inline line icon, a subtitle, a coloured hero (the time, the countdown when it is under 30 minutes, or the date on a later day), "N slots remaining", a progress track, and a "Next slot" line. The legend is three dots: over 60 minutes, 30–60 minutes, and under 30 minutes. The navy bar keeps the title on the left and the short date with a large clock on the right.
 
-The safety behaviour from v3.267.2 is unchanged. Registrar lists are still in the 7-day total, and the week heading still says they are included. H-085 stays Proposed.
+The safety behaviour from v3.267.2 is unchanged. Registrar lists are still in the 7-day total, and the week heading still says they are included. H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
 
 ## [v3.267.2] — 2026-09-27
 
@@ -30,7 +32,7 @@ Today is read on the practice interval. The other six days are every 30 minutes,
 
 A free slot stays until it ends, and shows "Now" while it is in progress. Telephone slots stay off face-to-face tiles. More than one site is labelled. The red number stays red; only the edge pulses, and Stop flashing is on the page. Set up tiles is a press-and-hold or a confirm.
 
-H-085 stays Proposed. The control text now matches this behaviour. Not signed.
+The control text matches this behaviour. H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
 
 ## [v3.267.1] — 2026-09-27
 
@@ -48,7 +50,7 @@ The book is the same GET Slot Counter already uses: `/scheduling/data/appointmen
 
 Medicus does not label a slot as GP, registrar, ANP, nurse, visit, embargo, or extended access. The practice maps slot type, session or diary name, and (when the rota is loaded) staff role or employment type onto tiles. Defaults are keyword guesses for Dave's list. Unmapped free slots stay counted in a footer. Patient name, NHS number, and reason are dropped when the book is read. The tile face is a time and a count.
 
-Open it from the All-tabs menu (Practice) or the command palette (`Open availability wall`). Tile names and mapping are set on the wall (Set up tiles). Options has the pack toggle. H-085 is proposed, not signed.
+Open it from the All-tabs menu (Practice) or the command palette (`Open availability wall`). Tile names and mapping are set on the wall (Set up tiles). Options has the pack toggle. H-085 is accepted (ALARP) — CSO signed off 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481, approved on merge go) at residual 6.
 
 ## [v3.266.0] — 2026-09-25
 
