@@ -26,6 +26,8 @@
     templateOrganiser: 'suite.ui.templateOrganiser',
     // Default on, like the other UI packs: missing storage means ON.
     taskPresence: 'suite.ui.taskPresence',
+    workloadTracker: 'suite.ui.workloadTracker',
+    availabilityWall: 'suite.ui.availabilityWall',
   };
 
   const GRANDFATHER_KEYS = [
@@ -36,6 +38,8 @@
     KEYS.focusAlerts,
     KEYS.templateOrganiser,
     KEYS.taskPresence,
+    KEYS.workloadTracker,
+    KEYS.availabilityWall,
   ];
 
   const ALL_PACK_KEYS = [KEYS.softFlags].concat(GRANDFATHER_KEYS);
@@ -49,6 +53,8 @@
     'ui.focusAlerts': 'focusAlerts',
     'ui.templateOrganiser': 'templateOrganiser',
     'ui.taskPresence': 'taskPresence',
+    'ui.workloadTracker': 'workloadTracker',
+    'ui.availabilityWall': 'availabilityWall',
   };
 
   const _raw = Object.create(null);

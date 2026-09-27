@@ -109,6 +109,7 @@ const VALID_SCOPES = [
   'allocationGroups',
   'stackchan',
   'templateOrganiser',
+  'availability',
 ];
 
 // Build an envelope from a scope name and a modules object.
@@ -604,6 +605,22 @@ function previewEnvelope(envelope) {
     if (mods.suite.taskPresence === true || mods.suite['ui.taskPresence'] === true) {
       lines.push('Task Presence ON');
     }
+    if (mods.suite.workloadTracker === true || mods.suite['ui.workloadTracker'] === true) {
+      lines.push('Workload tracker ON');
+    }
+    if (mods.suite.availabilityWall === true || mods.suite['ui.availabilityWall'] === true) {
+      lines.push('Availability wall ON');
+    }
+  }
+
+  if (mods.availability) {
+    const n = Array.isArray(mods.availability.config && mods.availability.config.tiles)
+      ? mods.availability.config.tiles.length
+      : 0;
+    lines.push(`Availability wall: ${n} tile mapping${n === 1 ? '' : 's'} (slot counts are not in this backup)`);
+  } else {
+    const m = missing('Availability wall');
+    if (m) lines.push(m);
   }
 
   return lines;

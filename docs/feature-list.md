@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.265.7
-**Generated:** 2026-09-24
+**Version:** v3.267.4
+**Generated:** 2026-09-27
 
 ## What it is
 
@@ -9,19 +9,16 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 
 ## At a glance
 
-- 20 side-panel tabs covering morning workflow, monitoring, capacity/demand, reception, referrals, staff rota, the Note display board and reference material (two of those tabs open a full-tab tool)
-- 4 full-tab tools reached from the panel or from Medicus's own pages (Duplicate Problem Checker, Rota Manager, Note display board, Contacts Management)
-- around 16 in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, appointment-book tally, repeat-authorisation pills)
+- 15 side-panel tabs covering monitoring, capacity, reception, referrals, staff rota and reference material
+- 4 full-tab tools reached from the All-tabs menu or the command palette (Duplicate Problem Checker, Rota Manager, Contacts Management, Availability wall)
+- in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, repeat-authorisation pills, workload tracker)
 - 8 rule types in the clinical alert engine
 - 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules (16 register + 66 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
 
 ## Side-panel modules
 
-### Today — v1.0
-One morning screen: a headline sentence plus waiting-room count, triage queue load, today's demand, today's available slots, and the last pre-clinic sweep status.
-
 ### Slot Counter — v2.3
-Taken and free appointment counts by type for any date, read live from Medicus's scheduling data. The appointment book itself also carries an injected booked/free tally with the same type toggles.
+Taken and free appointment counts by type for any date, read live from Medicus's scheduling data.
 - Free remaining (with AM/PM) plus taken on this day's book; configurable alert thresholds; CSV export
 - Auto-refresh every 60s while the tab is open (paused when hidden; no skeleton flicker)
 - "First available appointment" lookup with one-click booking handoff
@@ -41,7 +38,6 @@ Charts a patient's blood pressure, renal function, DOAC creatinine clearance, Hb
 A calendar comparing available appointment capacity against the practice's own configured daily minimums, with day/week/month views, per-day red/amber/green status and per-weekday minimum presets — plus a practice-manager look-ahead for days at risk.
 - Bank holidays (bundled GOV.UK calendar, nation selectable) carry no target; the day after a bank-holiday closure gets an editable post-holiday uplift estimate, labelled as an estimate
 - Configurable look-ahead (7–84 days, default 28): banner of days at risk with chips that jump to the day; Print pack (A4, greyscale-safe) and CSV for the ops meeting
-- Today tab "Days at Risk" card rolls up the same scan; chips open that day in Forecast
 - Incomplete scans never claim "no days at risk": unreachable Medicus, a date past the bundled calendar, or a weekday with no sessions in the book yet all show as unchecked
 
 ### Submissions Tracker — v1.0
@@ -88,14 +84,6 @@ The compact, glanceable half of the Rota Manager, available in the panel and pop
 
 The full **Rota Manager** (separate browser tab) additionally covers working-pattern templates, session-accounted leave, Bradford-factor/fit-note flags, a cover worklist and shift swaps, duty fairness, demand-led planning, and a drag-and-drop scheduling grid with an annealing solver. Its safe-staffing rules encode BMA/CQC/NHSE guidance, not law — they warn, never block, and every threshold is a practice setting.
 
-### Note
-Companion tab for the full-tab **Note** display board (waiting-room TV or staff-room monitor). Pick a style, add or rename boards, edit the flap message, toggle widgets, set the words and when the room looks busy, optionally paste a practice YouTube playlist, and open the kiosk.
-- **Waiting room** (public TV) — flap message, people-waiting count, wait-time band (not a named wait in minutes), how-busy from occupancy only by default; optional YouTube playlist (off by default); a dead feed fails loud rather than painting a quiet empty room
-- **Ops overview** (staff) — the same aggregates plus Practice Pressure Index, triage inbox and slots remaining; **Message** (public) — flap text and clock
-- Up to six extra public or staff boards with their own names, tiles and flap text
-- Ten styles (Standard, Clear, Plain, Service, Notice, Sign, Timetable, Console, Lobby, Plaque); Standard also has ten colour options. Paint only — the public-TV lock does not change
-- Public profiles, including custom ones, never show patient names, initials or request wording
-
 ## In-page features (content scripts)
 
 These run directly on live Medicus pages, on top of Medicus's own UI:
@@ -112,17 +100,17 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with suggested links; several tiles can be staged and confirmed together
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance
 - **Clean up alerts** — pill on the patient banner; batch-clears Flag on patient banner only (W24)
-- **Appointment-book tally** — a single button on the appointment book showing booked and free counts for that day, with the same appointment-type checkboxes as Slot Counter (shared `slots.hiddenTypes`). Optional flu / COVID / RSV eligibility toggles count unique booked patients on those types (inferred — double-check before offering a vaccine). Read-only
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
+- **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. One GET of the dashboard payload. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
 - **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
+- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 accepted (ALARP) 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481).
 - **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
-- **Note** — a TV/monitor kiosk (waiting room, staff ops, message, or a practice-made board). Public profiles show aggregates and practice-authored words only — never patient names. An optional YouTube playlist is off by default.
 
 ## Alert engine
 
@@ -143,7 +131,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 - **Practice Profile** — shared-folder managed deployment so rules, thresholds and pathways can be published once and picked up across every machine in the practice
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
-- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags)
+- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags, workload tracker, availability wall)
 - **Investigations (Lab Result Catalogue)** — a single, coded, per-practice catalogue of investigations, results and labs with its own settings page (practice context, browse/search, per-test edit and gated per-test review; entries arriving by backup, shared profile or import stay inert until approved on that machine). Outstanding Requests can opt into it (matching engine setting, default off). Lab Filing can opt into it (filing engine setting, default off, union-only with the legacy gate — can only add a blocker, never remove one) and works even with zero legacy Lab Filing profiles configured, driven entirely by the catalogue's own practice ranges, safety guards and lab-comment whitelists. H-080 and H-081 accepted 2026-09-24; shipped defaults stay legacy, so this is not a practice-wide enablement. If the catalogue cannot be checked, filing is blocked.
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
@@ -151,6 +139,12 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 accepted 2026-09-27.
+- **v3.267.3 (27 Sep)** — Availability wall layout matches the triage-room mock: navy title bar with a live clock, icon tiles, a three-line legend, and seven day cards with the routine total on the right. Registrar lists stay in that total. H-085 accepted 2026-09-27.
+- **v3.267.2 (27 Sep)** — Availability wall: confirmed mapping before any tile is painted, whole-token clinic match, split poll with quiet hours, per-day freshness and a 10-minute "Not current" cap, site label, and a steady red number. H-085 accepted 2026-09-27.
+- **v3.267.1 (27 Sep)** — Availability wall setup: the tile list scrolls inside the dialog and Save, Close, Add tile and Suggested names stay on a 1080p screen.
+- **v3.267.0 (26 Sep)** — Availability wall: a full-tab TV of unbooked slots (today's tiles plus a 7-day routine GP bar). Practice-mapped slot types. Seven book GETs every 5 minutes while the tab is visible. A failed refresh is the previous reading, not zero. H-085 accepted 2026-09-27. The Today tab, appointment-book tally and Note TV were already removed in v3.264.15 and are not on this list.
+- **v3.266.0 (25 Sep)** — Workload tracker on the Workflow dashboard: staff and team task counts, search and sort, read-only. On unless switched off. Refreshes every 5 minutes while the panel is open and the tab is visible. H-084 accepted 2026-09-25.
 - **v3.265.7 (24 Sep)** — Document and Template Organiser is on unless a practice switches it off. Opening a document continues past Medicus’s New Document chooser (From a template, then the chosen row). The button sits clear of More and Complete consultation. Layout is a practice default plus each person’s own folders.
 - **v3.265.6 (24 Sep)** — Documents fill when the template list already can: the heading id is taken from `draft-consultation-topic` when overview headings omit it, and a tabbed document response is read when `items` is empty. The organiser button sits beside Complete consultation in the main pane, not at the bottom-right of the window.
 - **v3.265.5 (24 Sep)** — Document catalogue: History, Examination, Impression, and Plan pass patient id, heading context id, and `consultation-topic-heading` into document search. The heading uuid may sit on an ancestor or on `consultationTopics[].headings[]`. A missing context stays a footer gap. Catalogue reads stay on the practice API host. The pack stays opt-in.

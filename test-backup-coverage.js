@@ -60,6 +60,7 @@ const APP_DIRS = [
   'content-scripts',
   'sentinel-options',
   'rota',
+  'availability',
 ];
 const APP_FILES = [
   // Top-level JS
@@ -127,6 +128,7 @@ const KEY_PREFIXES = [
   'board',
   'allocationGroups',
   'templateOrganiser',
+  'availability',
 ];
 
 function hasKeyPrefix(k) {

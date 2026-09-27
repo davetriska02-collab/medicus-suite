@@ -16,6 +16,7 @@
   --text-3: #475569;
   --text-4: #64748b;
   --text-5: #94a3b8;
+  --scrim: rgba(15, 23, 42, 0.55);
 
   /* Accent & status triads — ink / wash / line */
   --accent: #2563eb;
@@ -61,6 +62,7 @@ html[data-theme='dark'] {
   --text-3: #93a8c5;
   --text-4: #5d7a9d;
   --text-5: #3d5070;
+  --scrim: rgba(0, 0, 0, 0.66);
 
   --accent: #5b8fc7;
   --accent-dim: rgba(91, 143, 199, 0.14);

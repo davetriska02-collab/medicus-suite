@@ -1151,6 +1151,30 @@ const PracticeProfile = (() => {
       }
     }
 
+    // Availability wall tile mapping. Merge only when this PC has never saved one.
+    if (modMap.has('availability') && mods.availability && typeof mods.availability === 'object') {
+      try {
+        const merge = modMap.get('availability') === 'merge';
+        const availabilityImport = _io('availabilityImport');
+        if (!availabilityImport) throw new Error('availabilityImport not available in this context.');
+        const incoming = mods.availability.config;
+        if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+          if (merge) {
+            const ex = await chrome.storage.local.get('availability.config');
+            if (ex['availability.config'] == null) {
+              await availabilityImport({ config: incoming });
+              applied.push('availability');
+            }
+          } else {
+            await availabilityImport({ config: incoming });
+            applied.push('availability');
+          }
+        }
+      } catch (e) {
+        errors.push(`availability: ${e.message}`);
+      }
+    }
+
     if (modMap.has('suite') && suiteModData && typeof suiteModData === 'object') {
       try {
         const merge = modMap.get('suite') === 'merge';
@@ -1169,6 +1193,8 @@ const PracticeProfile = (() => {
           'ui.focusAlerts',
           'ui.templateOrganiser',
           'ui.taskPresence',
+          'ui.workloadTracker',
+          'ui.availabilityWall',
         ];
         const BOOLEAN_PACK_KEYS = [
           'signing.softFlags',
@@ -1179,6 +1205,8 @@ const PracticeProfile = (() => {
           'ui.focusAlerts',
           'ui.templateOrganiser',
           'ui.taskPresence',
+          'ui.workloadTracker',
+          'ui.availabilityWall',
         ];
         const GRANDFATHER_PACK_KEYS = [
           'ui.allocateCanvases',
@@ -1188,6 +1216,8 @@ const PracticeProfile = (() => {
           'ui.focusAlerts',
           'ui.templateOrganiser',
           'ui.taskPresence',
+          'ui.workloadTracker',
+          'ui.availabilityWall',
         ];
         const ENVELOPE_ALIASES = {
           'signing.softFlags': 'signingSoftFlags',
@@ -1198,6 +1228,8 @@ const PracticeProfile = (() => {
           'ui.focusAlerts': 'focusAlerts',
           'ui.templateOrganiser': 'templateOrganiser',
           'ui.taskPresence': 'taskPresence',
+          'ui.workloadTracker': 'workloadTracker',
+          'ui.availabilityWall': 'availabilityWall',
         };
 
         for (const key of ALLOWED_SUITE_KEYS) {

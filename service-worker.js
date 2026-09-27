@@ -186,6 +186,12 @@ try {
   recordSwLoadError('shared/io/template-organiser-io.js', e);
 }
 try {
+  importScripts('shared/io/availability-io.js');
+} catch (e) {
+  console.warn('[Suite] importScripts shared/io/availability-io.js failed:', e && e.message);
+  recordSwLoadError('shared/io/availability-io.js', e);
+}
+try {
   // Dependency order matters: problem-description-cleanup-io.js resolves
   // MSPreferredDescriptions at import time, so preferred-descriptions.js must
   // be imported first or the io file fails to load (and applyProfile's pdc

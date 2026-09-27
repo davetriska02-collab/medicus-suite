@@ -120,6 +120,8 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.focusAlerts', ids: ['pfFocusAlerts'], grandfather: true },
   { key: 'suite.ui.templateOrganiser', ids: ['pfTemplateOrganiser'], grandfather: true },
   { key: 'suite.ui.taskPresence', ids: ['pfTaskPresence'], grandfather: true },
+  { key: 'suite.ui.workloadTracker', ids: ['pfWorkloadTracker'], grandfather: true },
+  { key: 'suite.ui.availabilityWall', ids: ['pfAvailabilityWall'], grandfather: true },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);
@@ -1144,6 +1146,7 @@ async function doFullExport() {
     allocationGroups,
     stackchan,
     templateOrganiser,
+    availability,
   ] = await Promise.all([
     sentinelExport(),
     capacityExport(),
@@ -1167,6 +1170,7 @@ async function doFullExport() {
     allocationGroupsExport(),
     stackchanExport(),
     templateOrganiserExport(),
+    availabilityExport(),
   ]);
   const suite = await suiteExport();
   return window.SuiteEnvelope.wrap(
@@ -1194,6 +1198,7 @@ async function doFullExport() {
       allocationGroups,
       stackchan,
       templateOrganiser,
+      availability,
       suite,
     },
     chrome.runtime.getManifest().version
@@ -1224,6 +1229,7 @@ async function doModuleExport(scope) {
     allocationGroups: () => allocationGroupsExport(),
     stackchan: () => stackchanExport(),
     templateOrganiser: () => templateOrganiserExport(),
+    availability: () => availabilityExport(),
   };
   if (!exporters[scope]) throw new Error('Unknown scope: ' + scope);
   const data = await exporters[scope]();
@@ -1276,6 +1282,7 @@ async function applyEnvelope(envelope) {
     mods.allocationGroups && (() => allocationGroupsImport(mods.allocationGroups)),
     mods.stackchan && (() => stackchanImport(mods.stackchan)),
     mods.templateOrganiser && (() => templateOrganiserImport(mods.templateOrganiser)),
+    mods.availability && (() => availabilityImport(mods.availability)),
     mods.suite && (() => suiteImport(mods.suite)),
   ].filter(Boolean);
   await window.SuiteEnvelope.applyWithRollback(tasks);
@@ -1618,6 +1625,13 @@ async function isPracticeAccepted() {
         defaultChecked: false,
         defaultMode: 'merge',
         desc: 'LAN URL and enable flag for the desk robot. Off by default. Never carries patient data.',
+      },
+      {
+        id: 'availability',
+        label: 'Availability wall',
+        defaultChecked: false,
+        defaultMode: 'merge',
+        desc: 'Tile mapping for the triage-room availability wall. Merge fills a PC that has no saved mapping. Replace overwrites it.',
       },
       {
         id: 'suite',
