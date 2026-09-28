@@ -132,9 +132,19 @@ allSmok002.forEach((r) => {
     firstFour.includes('ex-smoker') && firstFour.includes('never smoked') && firstFour.includes('current smoker'),
     `${r.id}: status terms lead the list (first four: ${firstFour.join(', ')})`
   );
+  check(terms.includes('smoking status'), `${r.id}: dashboard wrapper "smoking status" is kept`);
+  check(terms.includes('cigarette consumption'), `${r.id}: Cigarette consumption rubric is kept (in SMOK_COD)`);
   check(
-    ['smoking status', 'tobacco use', 'smoking cessation', 'nicotine dependence'].every((t) => terms.includes(t)),
-    `${r.id}: process terms are kept`
+    !terms.includes('smoking cessation') && !terms.includes('nicotine dependence') && !terms.includes('tobacco use'),
+    `${r.id}: cessation / dependence / bare tobacco-use substrings are not look-fors`
+  );
+  check(
+    (r.check.snomed || []).includes('77176002') &&
+      (r.check.snomed || []).includes('160604004') &&
+      (r.check.snomed || []).includes('230056004') &&
+      !(r.check.snomed || []).includes('225323000') &&
+      !(r.check.snomed || []).includes('871661000000106'),
+    `${r.id}: SMOK_COD ids present; cessation education and referral codes absent`
   );
   check(
     (r.check.observationExclude || []).includes('passive'),

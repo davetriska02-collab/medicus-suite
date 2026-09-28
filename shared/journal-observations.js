@@ -20,6 +20,12 @@
 //      Sentinel brief/passport BP lines) could not see a journal-coded BP at
 //      all. mergeJournalObsIntoHistory below is the one ingest path that
 //      folds them in.
+//   3. Coded consultation notes (entryType "note" with a
+//      clinicalCodeDescription) were dropped. Medicus files SNOMED terms
+//      such as "Smoker" and "Asthma monitoring check done" as notes, so
+//      SMOK002 and AST015 stayed overdue against an older dashboard row.
+//      Those coded notes are ingested. Uncoded free text is not. A concept
+//      id is stored when the payload has one.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.JournalObservations.<fn>(...)
@@ -139,18 +145,54 @@
       return n || null;
     }
 
-    function pushEntry(name, value, entryDate) {
+    // Concept id, when the payload has one. The bulk journal's confirmed
+    // coded-note field is clinicalCodeDescription; conceptId is not on every
+    // entry. Accept the shapes seen on notes and observations so a rule can
+    // match the code instead of a display string.
+    function conceptIdOf(entry) {
+      if (!entry || typeof entry !== 'object') return null;
+      var direct = entry.conceptId || entry.snomedConceptId || entry.clinicalCodeId;
+      if (direct != null && String(direct).trim()) return String(direct).trim();
+      if (typeof entry.code === 'string' && /^\d{6,18}$/.test(entry.code)) return entry.code;
+      var nests = [entry.clinicalCode, entry.code, entry.noteSNOMEDctCode, entry.noteSNOMEDct, entry.snomed];
+      for (var i = 0; i < nests.length; i++) {
+        var n = nests[i];
+        if (n && n.conceptId != null && String(n.conceptId).trim()) return String(n.conceptId).trim();
+      }
+      return null;
+    }
+
+    function pushEntry(name, value, entryDate, code) {
       if (!name || !entryDate || entryDate < cutoff) return;
       var isoDate = localIsoDate(entryDate);
       var nameKey = String(name).toLowerCase() + '|' + isoDate;
       if (existingKeys[nameKey]) return; // already in the investigation dashboard
       existingKeys[nameKey] = true; // de-dupe within journal results too
-      result.push({
+      var row = {
         name: name,
         value: typeof value === 'string' ? value : '',
         date: isoDate,
         source: 'journal',
-      });
+      };
+      if (code) row.code = String(code);
+      result.push(row);
+    }
+
+    // A coded note is clinical evidence. Medicus files SNOMED terms under
+    // entryType "note" with the preferred term in clinicalCodeDescription.
+    // Uncoded free text (entry.note only) is not a code and stays out.
+    // A note marked incorrect is not evidence.
+    function pushCodedNote(entry, fallbackDate) {
+      if (!entry || entry.entryType !== 'note') return;
+      if (entry.isMarkedIncorrect === true || entry.isMarkedAsIncorrect === true) return;
+      var desc = entry.clinicalCodeDescription == null ? '' : String(entry.clinicalCodeDescription).trim();
+      if (!desc) return;
+      pushEntry(
+        desc,
+        typeof entry.value === 'string' ? entry.value : '',
+        parseDisplayDate(entry.observationDate) || parseDisplayDate(entry.recordDate) || fallbackDate,
+        conceptIdOf(entry)
+      );
     }
 
     try {
@@ -169,8 +211,16 @@
             pushEntry(
               resolveName(fd.type || item.title || null, fd.value),
               fd.value,
-              parseDisplayDate(fd.observationDate) || groupDate
+              parseDisplayDate(fd.observationDate) || groupDate,
+              conceptIdOf(fd)
             );
+            continue;
+          }
+          // Flat coded note (same contract as a nested consultation note).
+          if (item.type === 'note') {
+            var nd = item.data || {};
+            if (!nd.entryType) nd = Object.assign({ entryType: 'note' }, nd);
+            pushCodedNote(nd, parseDisplayDate(nd.observationDate) || groupDate);
             continue;
           }
           // Nested consultation-coded entries (the original path).
@@ -182,13 +232,18 @@
               var entries = (headings[h] && headings[h].entries) || [];
               for (var e = 0; e < entries.length; e++) {
                 var entry = entries[e] || {};
+                if (entry.entryType === 'note') {
+                  pushCodedNote(entry, groupDate);
+                  continue;
+                }
                 // Skip entries missing a type name, or that aren't observations
-                // (e.g. medications, problems, notes).
+                // (e.g. medications, problems, uncoded notes).
                 if (!entry.type || entry.entryType !== 'observation') continue;
                 pushEntry(
                   resolveName(entry.type, entry.value),
                   entry.value,
-                  parseDisplayDate(entry.observationDate) || groupDate
+                  parseDisplayDate(entry.observationDate) || groupDate,
+                  conceptIdOf(entry)
                 );
               }
             }

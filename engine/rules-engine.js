@@ -320,13 +320,15 @@
   // pulse tests. Substring matching also hits prothrombin, thrombin, throat,
   // chronic, threshold — a recent INR ("Prothrombin time") then becomes the
   // latest "pulse" and the pulse row shows in date. Word-boundary keeps a
-  // real "HR" / "resting hr" token. Longer terms stay substrings so "lft"
-  // still matches "LFTs" and "u&e" still matches "U&Es (...)".
+  // real "HR" / "resting hr" token. The same rule applies to "tte": substring
+  // matching hits cigarette and written, so a coded asthma-plan note would
+  // clear HF008. Longer terms stay substrings so "lft" still matches "LFTs"
+  // and "u&e" still matches "U&Es (...)".
   function observationTermHits(text, term) {
     const hay = String(text || '').toLowerCase();
     const t = String(term || '').toLowerCase();
     if (!t) return false;
-    if (t === 'hr') return /\bhr\b/.test(hay);
+    if (t === 'hr' || t === 'tte') return new RegExp('\\b' + t + '\\b').test(hay);
     return hay.includes(t);
   }
 
@@ -334,9 +336,59 @@
   // except DM037's renal slot) or { match, exclude } when a bare analyte must
   // not be satisfied by another specimen. Callers still see `aliases`.
   function observationBundleGroup(group) {
-    if (Array.isArray(group)) return { match: group, exclude: undefined };
-    if (group && Array.isArray(group.match)) return { match: group.match, exclude: group.exclude };
-    return { match: [], exclude: undefined };
+    if (Array.isArray(group)) {
+      return {
+        name: null,
+        match: group,
+        exclude: undefined,
+        snomed: undefined,
+        sameDayAs: null,
+        anchor: null,
+        withinMonthsBefore: null,
+      };
+    }
+    if (group && Array.isArray(group.match)) {
+      return {
+        name: group.name || null,
+        match: group.match,
+        exclude: group.exclude,
+        snomed: group.snomed,
+        sameDayAs: group.sameDayAs || null,
+        anchor: group.anchor || null,
+        withinMonthsBefore: group.withinMonthsBefore == null ? null : group.withinMonthsBefore,
+      };
+    }
+    return {
+      name: null,
+      match: [],
+      exclude: undefined,
+      snomed: undefined,
+      sameDayAs: null,
+      anchor: null,
+      withinMonthsBefore: null,
+    };
+  }
+
+  function observationCheckSpec(check) {
+    return { match: check.observation, exclude: check.observationExclude, snomed: check.snomed };
+  }
+
+  // One calendar month before an ISO day, clamping the day (31 Mar → 28/29 Feb).
+  // Used by AST015's exacerbation window: from 1 month before the review
+  // through the review date (QOF business rules, same as AST007).
+  function calendarMonthsBefore(iso, months) {
+    const day = isoDay(iso);
+    if (!day || !months) return null;
+    const y = parseInt(day.slice(0, 4), 10);
+    const m = parseInt(day.slice(5, 7), 10);
+    const d = parseInt(day.slice(8, 10), 10);
+    const shifted = new Date(Date.UTC(y, m - 1 - months, 1));
+    const last = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate();
+    const dd = Math.min(d, last);
+    const mm = shifted.getUTCMonth() + 1;
+    return (
+      shifted.getUTCFullYear() + '-' + (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd
+    );
   }
 
   function filterMatchingObservations(observations, testSpec) {
@@ -1010,11 +1062,20 @@
       });
     } else if (check.kind === 'observation-bundle') {
       (ctx.bundleResults || []).forEach((r) => {
-        facts.push({
-          label: (r.aliases || [])[0] || 'care process',
-          value: r.inWindow ? (r.obs ? r.obs.value || 'recorded' : 'recorded') : 'not in window',
-          date: r.obs ? r.obs.date : null,
-        });
+        if (r.name) {
+          facts.push({
+            label: r.name,
+            value: r.inWindow ? 'met' : 'missing',
+            date: r.inWindow && r.obs ? r.obs.date : null,
+            detail: r.inWindow ? (r.obs && r.obs.name) || 'recorded' : r.detail || 'not recorded',
+          });
+        } else {
+          facts.push({
+            label: (r.aliases || [])[0] || 'care process',
+            value: r.inWindow ? (r.obs ? r.obs.value || 'recorded' : 'recorded') : 'not in window',
+            date: r.obs ? r.obs.date : null,
+          });
+        }
       });
     } else if (check.kind === 'observation-trend') {
       const s = ctx.trendSeries;
@@ -2627,7 +2688,7 @@
     // never adds green "MET" noise. comparator 'above' = high values are dangerous
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       if (!obs || !obs.date) {
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
@@ -2714,7 +2775,7 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2776,7 +2837,7 @@
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2826,38 +2887,119 @@
         if (!_diagInWindow) status = 'overdue';
       }
     } else if (check.kind === 'observation-bundle') {
-      // observation-bundle: checks that EACH observation group (alias array, or
-      // { match, exclude }) has a matching result within the QOF window. Used by
-      // DM037 to verify all 8 care processes were recorded this QOF year.
+      // observation-bundle: each group (an alias array, or { name, match,
+      // exclude, snomed }) needs a result in the QOF window. DM037 uses this
+      // for 8 care processes. AST015 names its groups. sameDayAs and
+      // withinMonthsBefore tie a group to an anchor (written plan on the
+      // review day; exacerbation count from 1 calendar month before that
+      // review through the review date).
       const bundleGroups = check.observations || [];
       const _useFloorB = rule.useQofYearFloor !== false;
       const _withinDaysB = check.withinDays || 365;
       const _qofStartB = qofYearStart(now);
       const _rollingCutoffB = new Date(now);
       _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
+      const inAchievementWindow = (obs) => {
+        if (!obs || !obs.date) return false;
+        const obsDate = new Date(obs.date);
+        if (isNaN(obsDate.getTime())) return false;
+        return _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
+      };
       const bundleResults = bundleGroups.map((group) => {
         const spec = observationBundleGroup(group);
         const aliases = spec.match;
-        const obs = findLatestObservation(data.observations, { match: aliases, exclude: spec.exclude });
-        if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
-        const obsDate = new Date(obs.date);
-        const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
-        return { aliases, obs, inWindow };
+        const constrained = !!(spec.sameDayAs || spec.withinMonthsBefore != null);
+        if (!constrained) {
+          const obs = findLatestObservation(data.observations, {
+            match: aliases,
+            exclude: spec.exclude,
+            snomed: spec.snomed,
+          });
+          if (!obs || !obs.date) return { name: spec.name, aliases, obs: null, inWindow: false, detail: null };
+          return { name: spec.name, aliases, obs, inWindow: inAchievementWindow(obs), detail: null };
+        }
+        const matches = filterMatchingObservations(data.observations, {
+          match: aliases,
+          exclude: spec.exclude,
+          snomed: spec.snomed,
+        }).filter((o) => isoDay(o.date));
+        return {
+          name: spec.name,
+          aliases,
+          obs: null,
+          inWindow: false,
+          detail: null,
+          _matches: matches,
+          _spec: spec,
+        };
+      });
+      const anchorsInWindow = (name) => {
+        const anchor = bundleResults.find((r) => r.name === name);
+        if (!anchor) return [];
+        if (anchor._matches) return anchor._matches.filter(inAchievementWindow);
+        return anchor.inWindow && anchor.obs ? [anchor.obs] : [];
+      };
+      bundleResults.forEach((r) => {
+        if (!r._spec) return;
+        const spec = r._spec;
+        const anchors = anchorsInWindow(spec.sameDayAs || spec.anchor);
+        const newest = (list) => list.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+        if (spec.sameDayAs) {
+          const anchorDays = new Set(anchors.map((a) => isoDay(a.date)));
+          const hits = r._matches.filter((o) => anchorDays.has(isoDay(o.date)));
+          if (hits.length) {
+            r.obs = newest(hits);
+            r.inWindow = true;
+          } else if (r._matches.length) {
+            r.obs = newest(r._matches);
+            r.detail = `recorded ${isoDay(r.obs.date)}, not on the same day as ${spec.sameDayAs}`;
+          } else {
+            r.detail = 'not recorded';
+          }
+        } else if (spec.withinMonthsBefore != null) {
+          const hits = r._matches.filter((o) => {
+            const od = isoDay(o.date);
+            return anchors.some((a) => {
+              const ad = isoDay(a.date);
+              const from = calendarMonthsBefore(ad, spec.withinMonthsBefore);
+              return od && ad && from && od >= from && od <= ad;
+            });
+          });
+          if (hits.length) {
+            r.obs = newest(hits);
+            r.inWindow = true;
+          } else if (r._matches.length) {
+            r.obs = newest(r._matches);
+            r.detail = `recorded ${isoDay(r.obs.date)}, not between 1 month before ${spec.anchor || 'the anchor'} and that date`;
+          } else {
+            r.detail = 'not recorded';
+          }
+        }
+        delete r._matches;
+        delete r._spec;
       });
       const metCount = bundleResults.filter((r) => r.inWindow).length;
       const totalCount = bundleResults.length;
+      const named = bundleResults.some((r) => r.name);
       if (check.requireAll) {
-        if (metCount === totalCount) {
-          status = 'achieved';
-        } else if (metCount === 0) {
-          status = 'no_data';
-        } else {
-          status = 'not_met';
-        }
+        if (metCount === totalCount && totalCount > 0) status = 'achieved';
+        else if (metCount === 0) status = 'no_data';
+        else status = 'not_met';
       } else {
         status = metCount > 0 ? 'achieved' : 'no_data';
       }
-      valueText = `${metCount}/${totalCount} care processes`;
+      // Long-standing register member, none of the components in the window:
+      // overdue. Same opt-in as observation-recent. A partial set stays
+      // not_met so the missing names stay on the chip.
+      if (status === 'no_data' && rule.treatNeverRecordedAsOverdue && evidenceCtx.registerEligibilityDate) {
+        const _diagDate = new Date(evidenceCtx.registerEligibilityDate);
+        const _diagInWindow = _useFloorB ? _diagDate >= _qofStartB : _diagDate >= _rollingCutoffB;
+        if (!_diagInWindow) status = 'overdue';
+      }
+      const missingNames = bundleResults.filter((r) => r.name && !r.inWindow).map((r) => r.name);
+      valueText = named
+        ? `${metCount}/${totalCount} components${missingNames.length ? ` (missing: ${missingNames.join(', ')})` : ''}`
+        : `${metCount}/${totalCount} care processes`;
       // Most recent observation date across all matched groups
       const latestBundleDate =
         bundleResults
@@ -3040,8 +3182,10 @@
       traceEntry.allOfResults = evidenceCtx.allOfResults ? evidenceCtx.allOfResults.slice(0, 15) : null;
       traceEntry.bundleResults = evidenceCtx.bundleResults
         ? evidenceCtx.bundleResults.slice(0, 15).map((r) => ({
+            name: r.name || null,
             aliases: r.aliases || [],
             inWindow: r.inWindow,
+            detail: r.detail || null,
             obs: r.obs ? { name: r.obs.name, date: r.obs.date, value: r.obs.value } : null,
           }))
         : null;

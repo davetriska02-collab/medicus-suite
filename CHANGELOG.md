@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.5] — 2026-09-28
+
+### Coded journal notes count for SMOK002 and AST015
+
+Consultation notes that carry a clinical code are now read as observations, with the concept id when the payload has one. Uncoded free text is still ignored. A note marked incorrect is ignored.
+
+SMOK002 matches the NHS SMOK_COD smoking-habit refset (71 concept ids, OpenCodelists 20241205) plus status rubrics. Cigarette consumption (230056004) counts, because it is in that refset. Smoking cessation education (225323000) and a cessation referral (871661000000106) do not. The newest matching date wins, so a 2022 dashboard row no longer hides last week's status.
+
+AST015 is four components: an asthma review, a control assessment, an exacerbation count (from one calendar month before the review through that day), and a written plan on the same day as the review. The detail panel names which are met and which are missing. Inhaler technique is in the published wording and is not a fifth group in this build (H-086, unsigned, for CSO review).
+
+The echo abbreviation on HF008 is a whole word, so a note containing "cigarette" or "written" does not clear it.
+
 ## [v3.267.4] — 2026-09-27
 
 ### Availability wall stays on one screen

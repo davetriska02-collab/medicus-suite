@@ -386,6 +386,77 @@ console.log('\n--- mergeJournalObsIntoHistory ---');
   );
 }
 
+console.log('\n--- parseJournalObservations: coded notes are evidence; free text is not ---');
+{
+  const day = {
+    title: 'Mon 21 Sep 2026',
+    items: [
+      {
+        type: 'encounter',
+        data: {
+          consultationTopics: [
+            {
+              headings: [
+                {
+                  entries: [
+                    {
+                      entryType: 'note',
+                      clinicalCodeDescription: 'Smoker',
+                      conceptId: '77176002',
+                      note: 'Discussed cutting down. This sentence must not be the observation name.',
+                      observationDate: '21 Sep 2026',
+                    },
+                    {
+                      entryType: 'note',
+                      note: 'Patient smokes 20 a day and had an asthma review today.',
+                      type: 'Comment',
+                    },
+                    {
+                      entryType: 'note',
+                      clinicalCodeDescription: 'Asthma monitoring check done',
+                      noteSNOMEDctCode: { conceptId: '270442000', description: 'Asthma monitoring check done' },
+                      isMarkedIncorrect: true,
+                    },
+                    {
+                      entryType: 'observation',
+                      type: 'Asthma control test score',
+                      value: '7',
+                      conceptId: '443117005',
+                      observationDate: '21 Sep 2026',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+      {
+        type: 'note',
+        data: {
+          entryType: 'note',
+          clinicalCodeDescription: 'Moderate cigarette smoker (10-19 cigs/day)',
+          conceptId: '160604004',
+          observationDate: '21 Sep 2026',
+        },
+      },
+    ],
+  };
+  const out = JO.parseJournalObservations({ patientJournalRecords: [day] }, { now: NOW });
+  const names = out.map((o) => o.name);
+  const smoker = out.find((o) => o.name === 'Smoker');
+  check(
+    !!smoker && smoker.code === '77176002' && smoker.date === '2026-09-21',
+    'coded note Smoker is indexed with concept id and date'
+  );
+  check(smoker && smoker.value.indexOf('Discussed') === -1, 'free-text note body is not stored as the coded value');
+  check(!names.some((n) => /smokes 20 a day/i.test(n)), 'uncoded free-text note is ignored');
+  check(!names.includes('Asthma monitoring check done'), 'a coded note marked incorrect is not ingested');
+  check(names.includes('Moderate cigarette smoker (10-19 cigs/day)'), 'flat coded note is ingested');
+  const act = out.find((o) => o.name === 'Asthma control test score');
+  check(act && act.code === '443117005' && act.value === '7', 'observation concept id is stored');
+}
+
 console.log('\n--- wiring invariants (sentinel.js + manifest) ---');
 {
   const sentinel = fs.readFileSync(path.join(__dirname, 'content-scripts', 'sentinel.js'), 'utf8');

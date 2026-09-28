@@ -1039,13 +1039,16 @@ check(
   )[0].status === 'overdue',
   'AST015: a stale (out-of-window) review still shows overdue as before (unaffected by the fix)'
 );
-check(
-  ast015Eval(
+{
+  const reviewOnly = ast015Eval(
     [{ label: 'Asthma', codedDate: '2018-01-01', hasOnsetDate: true }],
     [{ name: 'Asthma review', value: 'done', date: '2026-05-01' }]
-  )[0].status === 'achieved',
-  'AST015: an in-window review still shows achieved as before (unaffected by the fix)'
-);
+  )[0];
+  check(
+    reviewOnly && reviewOnly.status === 'not_met' && /Written plan/.test(reviewOnly.valueText || ''),
+    `AST015: an in-window review alone is not met and names the missing plan (got ${reviewOnly && reviewOnly.status} ${reviewOnly && reviewOnly.valueText})`
+  );
+}
 check(
   ast015Eval([{ label: 'Asthma', codedDate: null }]).length === 1 &&
     ast015Eval([{ label: 'Asthma', codedDate: null }])[0].status === 'no_data',

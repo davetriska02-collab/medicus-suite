@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.4
-**Generated:** 2026-09-27
+**Version:** v3.267.5
+**Generated:** 2026-09-28
 
 ## What it is
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.5 (28 Sep)** — Coded consultation notes (a SNOMED term filed as a note) count towards smoking status and the asthma review. SMOK002 uses the smoking-habit code cluster and ignores cessation education and referral. AST015 shows which of the four components are met and which are missing. H-086 is proposed, unsigned, for CSO review.
 - **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 accepted 2026-09-27.
 - **v3.267.3 (27 Sep)** — Availability wall layout matches the triage-room mock: navy title bar with a live clock, icon tiles, a three-line legend, and seven day cards with the routine total on the right. Registrar lists stay in that total. H-085 accepted 2026-09-27.
 - **v3.267.2 (27 Sep)** — Availability wall: confirmed mapping before any tile is painted, whole-token clinic match, split poll with quiet hours, per-day freshness and a 10-minute "Not current" cap, site label, and a steady red number. H-085 accepted 2026-09-27.
