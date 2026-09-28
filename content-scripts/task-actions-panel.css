@@ -1108,3 +1108,167 @@
     transform: none;
   }
 }
+
+/* Lab Filing (Companion fold-in stage 1, 2026-09-27) — header/reasons/"Matched to your request" moved here from
+   content-scripts/triage-lens/lab-file-button.js's own .chlf-* styling; content only, this section is not
+   collapsible (no chevron), so its header gets no click affordance unlike every other section. */
+#ms-tap-widget .ms-tap-lf .ms-tap-section-header {
+  cursor: default;
+}
+
+#ms-tap-widget .ms-tap-lf .ms-tap-section-header:hover,
+#ms-tap-widget .ms-tap-lf .ms-tap-section-header:active {
+  background: none;
+}
+
+#ms-tap-widget .ms-tap-lf-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+#ms-tap-widget .ms-tap-lf-title.ms-tap-lf-blocked {
+  color: var(--amber-ink);
+}
+
+#ms-tap-widget .ms-tap-lf-title.ms-tap-lf-ready {
+  color: var(--green);
+}
+
+#ms-tap-widget .ms-tap-lf-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+#ms-tap-widget .ms-tap-lf-reasons {
+  padding: 8px 10px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-line);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--amber);
+}
+
+#ms-tap-widget .ms-tap-lf-reasons summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: revert;
+}
+
+#ms-tap-widget .ms-tap-lf-reasons-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+
+/* Inline confirm affordance inside "OUTSTANDING INVESTIGATIONS" rows (renderInvestigationRow) — replaces the
+   stage-1 standalone "Matched to your request" box; deliberately a text-button, not a bordered pill, so it reads
+   as part of the existing row rather than a second, competing UI element. */
+#ms-tap-widget .ms-tap-lf-inv-confirm {
+  color: var(--green);
+}
+
+/* Companion fold-in stage 2 (2026-09-27) — whitelist/unapproved-groups boxes, File/message buttons, suppress
+   link and the inline toast, ported from lab-file-button.js's own .chlf-* styling (now deleted) onto the
+   ms-tap- token system. */
+#ms-tap-widget .ms-tap-lf-wl {
+  padding: 8px 10px;
+  background: var(--bg-mid);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#ms-tap-widget .ms-tap-lf-wl-intro {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+
+#ms-tap-widget .ms-tap-lf-wl-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+#ms-tap-widget .ms-tap-lf-wl-row input {
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
+#ms-tap-widget .ms-tap-lf-wl-row strong {
+  color: var(--text-1);
+}
+
+#ms-tap-widget .ms-tap-lf-wl-note {
+  font-size: 10.5px;
+  color: var(--text-5);
+  margin-top: 4px;
+}
+
+#ms-tap-widget .ms-tap-lf-wl-save {
+  width: 100%;
+}
+
+#ms-tap-widget .ms-tap-lf-open-setup {
+  flex-shrink: 0;
+}
+
+#ms-tap-widget .ms-tap-lf-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+#ms-tap-widget .ms-tap-lf-file-btn {
+  appearance: none;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--green);
+  color: #fff;
+  font: 600 13px/1.2 var(--sans);
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: center;
+}
+
+#ms-tap-widget .ms-tap-lf-file-btn:hover {
+  filter: brightness(0.93);
+}
+
+#ms-tap-widget .ms-tap-lf-file-secondary {
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  color: var(--green);
+}
+
+#ms-tap-widget .ms-tap-lf-suppress {
+  align-self: flex-end;
+  color: var(--text-4);
+}
+
+#ms-tap-widget .ms-tap-lf-toast {
+  padding: 8px 10px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: #fff;
+}
+
+#ms-tap-widget .ms-tap-lf-toast-ok {
+  background: var(--green);
+}
+
+#ms-tap-widget .ms-tap-lf-toast-warn {
+  background: var(--amber);
+}
+
+#ms-tap-widget .ms-tap-lf-toast-err {
+  background: var(--red);
+}

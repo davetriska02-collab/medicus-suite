@@ -110,7 +110,45 @@
   }
 
   // ── Name similarity (a HINT for the person, never a decision) ───────────────────────────────────────────────────
-  const STOP = new Set(['and', 'the', 'of', 'level', 'test', 'serum', 'plasma', 'blood', 'total', 'with', 'without']);
+  // Imaging modality words (x, ray, radiography, radiograph) belong here too — an imaging result's name is almost
+  // entirely modality + body part ("X-ray of wrist", "Radiography of chest"), so without stripping the modality the
+  // shared "x"/"ray" tokens alone push two otherwise-unrelated body parts over the similarity threshold: EVERY X-ray
+  // ended up suggested as similar to every other one (Nick, 2026-09-25, live-caught). Stripping them leaves the
+  // BODY PART as what actually has to match, which is the real question this hint exists to answer.
+  // "culture"/"ratio" are the same class of problem, one step further round (Nick, 2026-09-26): a microbiology
+  // result's name is almost entirely SPECIMEN + "culture" ("Urine culture", "Throat culture", "Blood culture" — all
+  // genuinely different tests), and "Cholesterol/HDL ratio" vs "Urine albumin:creatinine ratio" share nothing BUT
+  // "ratio". Both plural AND singular are listed — tokens() filters against STOP BEFORE it strips a trailing "s", so
+  // "cultures"/"ratios" would slip through unfiltered if only the singular were listed (unlike every OTHER stop word
+  // here, which happens to only ever appear singular in this catalogue).
+  // "cell"/"count" are the same problem again, and the one that actually bit us (Nick, 2026-09-26): "White cell
+  // count" (blood, FBC), "Red cell count" (blood), "Pus cells" and "Epithelial cell count" (urine) share only the
+  // generic SPECIMEN-TYPE word "cell"/"count" — never the thing that actually distinguishes them.
+  const STOP = new Set([
+    'and',
+    'the',
+    'of',
+    'level',
+    'test',
+    'serum',
+    'plasma',
+    'blood',
+    'total',
+    'with',
+    'without',
+    'x',
+    'ray',
+    'radiography',
+    'radiograph',
+    'culture',
+    'cultures',
+    'ratio',
+    'ratios',
+    'cell',
+    'cells',
+    'count',
+    'counts',
+  ]);
   function tokens(s) {
     const LC = need();
     return new Set(
@@ -695,7 +733,7 @@
       const memberIds = new Set(asArr(inv.members).map((m) => m.result));
       const wanted = [];
       for (const r of p.results) {
-        const byCode = r.code ? index.byCode.get(r.code) : null;
+        const byCode = r.code ? LC.resolveByCode(index, r.code, labRef) : null;
         let resultId = byCode ? byCode.resultId : r.resultId || null;
         // A result the resolver only matched by a word INSIDE its name ("Urine culture" contains the alias "culture") is a
         // different result, not this one: attaching its code and wording would merge unrelated tests' results (a urine
@@ -703,11 +741,18 @@
         if (!byCode && resultId) {
           const d = resById.get(resultId);
           const mine = tokens(r.name);
+          // An empty token set is not a name. "Blood culture" and "X-ray" both tokenise to nothing once culture /
+          // blood / x / ray are stop-words, and two empty sets used to compare equal — which kept a name-only match
+          // and then attached this row's SNOMED code to the other analyte (H-087). Size 0 never matches. The same
+          // normalised name still does ("Culture" is the Culture result), even when every word is a stop-word.
           const own =
             d &&
             [d.label, ...asArr(d.aliases).map((a) => a.text)].some((t) => {
+              if (LC.norm(t) && LC.norm(t) === LC.norm(r.name)) return true;
               const theirs = tokens(t);
-              return theirs.size === mine.size && [...mine].every((x) => theirs.has(x));
+              return (
+                mine.size > 0 && theirs.size > 0 && theirs.size === mine.size && [...mine].every((x) => theirs.has(x))
+              );
             });
           if (!own) resultId = null;
         }

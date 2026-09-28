@@ -25,10 +25,22 @@ const REVIEWER = 'this computer';
 
 // ── Lab Filing setup (Phase E) — practice ranges per result x lab x code; guards per result x lab; comments per lab x report
 //    group; assisted filing is switched on and approved for a TEST at a LAB (Medicus files a whole report group, never one result) ──
-let filingLabId = null;
-function currentFilingLab() {
+// Keyed by investigation id — NOT one shared value (Nick, 2026-09-26, live-caught: opening Cervical Screening right
+// after editing a test at RJ700 silently kept showing RJ700 here, a lab with nothing to do with Cervical
+// Screening, even though Cervical Screening London's own headings were sitting right above). A per-test choice
+// still needs remembering even when it's NOT yet "relevant" below — setting up a heading at a lab for the first
+// time is exactly this screen's job, so a deliberate pick must never be overridden by the default logic.
+const filingLabByTest = new Map();
+function currentFilingLab(invId) {
   const labs = S.merged.labs.filter((l) => labVisible(l.id));
-  if (labs.some((l) => l.id === filingLabId)) return filingLabId;
+  const picked = invId ? filingLabByTest.get(invId) : null;
+  if (labs.some((l) => l.id === picked)) return picked;
+  // No explicit pick yet for this test — default to a lab that's actually relevant to it (has a report-group
+  // heading identifying it) rather than whichever lab happened to be picked last for a different test.
+  const relevant = invId
+    ? labs.filter((l) => (l.groupHeadings || []).some((g) => (g.identifies || []).includes(invId)))
+    : [];
+  if (relevant.length) return relevant[0].id;
   const ctx = (S.overlay.context && S.overlay.context.labs) || [];
   const pick = labs.find((l) => ctx.includes(l.id)) || labs[0];
   return pick ? pick.id : null;
@@ -79,7 +91,6 @@ const hasLabMatch = (inv) => S.merged.labs.some((lab) => (lab.groupHeadings || [
 // "Matched to a Medicus request": at least one scan-CONFIRMED exact wording is on file — synonyms (unconfirmed
 // legacy text guesses) do not count, same distinction the card itself makes ("known as" vs "requested as").
 const hasRequestMatch = (inv) => (inv.requestAliases || []).length > 0;
-const LOCAL_KEYS = ['triagelens.config', 'config'];
 
 let root = null;
 const S = {
@@ -151,7 +162,30 @@ async function load() {
     S.error = (e && e.message) || String(e);
   }
   S.loaded = true;
+  applyReviewDeepLink();
   render();
+}
+
+// Deep-link from the Lab Filing card on the live Medicus page (content-scripts/triage-lens/lab-file-button.js's
+// "Set up on Investigations page" button, Nick, 2026-09-26): options.html?review=<investigation id>#sect-
+// investigations opens straight onto that test's own Review screen, scrolled to its assisted-filing bar — same
+// screen "Review next" already opens. Silently does nothing for an id that no longer exists (deleted/renamed since
+// the button was rendered) rather than erroring on a stale link.
+function applyReviewDeepLink() {
+  if (typeof location === 'undefined' || !S.merged) return;
+  let invId;
+  try {
+    invId = new URLSearchParams(location.search).get('review');
+  } catch (e) {
+    return;
+  }
+  if (!invId) return;
+  const inv = S.merged.investigations.find((i) => i.id === invId);
+  if (!inv) return;
+  S.editing = inv.id;
+  S.editState = editStateFor(inv);
+  S.open.add(inv.id);
+  S.scrollToAutofiling = true;
 }
 
 async function save(nextOverlay, message) {
@@ -178,12 +212,6 @@ async function dismissSimilarPairAction(idA, idB) {
   }
 }
 const rawResultPairId = (name) => 'name:' + LC.norm(name);
-
-async function readOirTests() {
-  const r = await chrome.storage.local.get(LOCAL_KEYS);
-  const cfg = r['triagelens.config'] || r.config || {};
-  return Array.isArray(cfg.oirTests) ? cfg.oirTests : [];
-}
 
 // ── derived view ─────────────────────────────────────────────────────────────────────────────────────
 function describe(inv) {
@@ -248,12 +276,13 @@ function renderBanner() {
   return h(
     'div',
     { class: 'lf-notice' },
-    h('div', { class: 'lf-notice-title', text: 'Not yet used by the suite' }),
+    h('div', { class: 'lf-notice-title', text: 'Catalogue engines are off until the practice switches them on' }),
     h('p', {
       text:
-        'Outstanding Requests and Lab Filing still use their own rules. This catalogue is being built alongside them: ' +
-        'importing, reviewing and approving entries here records your decisions for when those features start reading it. ' +
-        'Nothing you do on this page changes how requests are ticked off or how results are filed today.',
+        'Outstanding Requests and Lab Filing can each opt into this catalogue. Both ship off. When catalogue filing is on, ' +
+        'it reads the approvals on this page — an approved range, guard, report group or comment list is what filing uses, ' +
+        'and it has done so since v3.264.35. While the engines stay on their shipped default, this page does not change how ' +
+        'requests are ticked off or how results are filed.',
     }),
     h('p', {
       text: 'Entries that arrive by import, backup or the shared practice profile are inactive until someone approves them on this computer.',
@@ -783,7 +812,13 @@ const resultById = (id) => S.merged.results.find((r) => r.id === id) || null;
 // Everything is editable, built-in or not: the form starts from the effective definition and a save stores the COMPLETE
 // result as a practice version (an "override" for a built-in). It stays inactive until approved, and the shipped version
 // keeps applying until then.
-function editStateFor(inv, review) {
+// review is always computed from the test's OWN current state (never a caller's guess) — one entry point ("Review"),
+// not "Edit" now and "Review" again later just to reach the same Approve button (Nick, 2026-09-25: editing then
+// having to close and reopen on the identical screen with a different button to approve was "unwieldy"). Drives the
+// "Review before approving" banner and the changes list starting open — NOT whether "Save and approve" is offered
+// (that button is always offered now: a test can have nothing of its OWN pending yet still have a pending assisted-
+// filing approval, and this is the one screen that settles either — see persist()'s own comment, Nick, 2026-09-26).
+function editStateFor(inv) {
   if (!inv) {
     return {
       id: null,
@@ -818,7 +853,7 @@ function editStateFor(inv, review) {
     note: inv.note || '',
     newResults: [],
     error: '',
-    review: !!review,
+    review: describe(inv).needsReview,
     changes: [],
     // Pending result merges, drag-dropped in the results table but not yet applied: {fromId, fromLabel, intoId, intoLabel}.
     // Reviewable and undoable while the card stays open; only actually merged (OV.mergeResult) when the test is saved
@@ -1176,8 +1211,20 @@ function renderEditor(st, done) {
   wrap.appendChild(flowGrid(pReq, pLab, pNever, pRes));
 
   // requested as
-  const reqText = input({ placeholder: 'e.g. Anti-Xa level', 'aria-label': 'Request wording' });
-  const reqSys = sel(SYSTEM_OPTIONS, 'any');
+  // Suggest a starting point instead of an empty box: with no confirmed wording yet and exactly one legacy synonym
+  // on file, that synonym is very likely the real Medicus wording — put it straight in the box rather than leaving
+  // it sitting collapsed under "Edit synonyms" for someone to notice and retype by hand (Nick, 2026-09-26: "why do
+  // we hide the actual name of the test behind the pulldown?"). Still requires the explicit Add click below —
+  // never silently confirmed as a requestAlias. Left blank when there is more than one synonym (picking one would
+  // be a guess) or a wording is already confirmed.
+  const suggestedReq = !st.reqs.length && st.synonyms.length === 1 ? st.synonyms[0] : '';
+  // Same for the ordering system: only preselect when the practice has told us (in "Your practice" above) it uses
+  // exactly one. Two or more configured, or none, and "any system" stays the honest default — never a guess.
+  const knownSystems = (S.overlay.context.orderingSystems || []).filter((s) =>
+    SYSTEM_OPTIONS.some(([v]) => v === s)
+  );
+  const reqText = input({ placeholder: 'e.g. Anti-Xa level', 'aria-label': 'Request wording', value: suggestedReq });
+  const reqSys = sel(SYSTEM_OPTIONS, knownSystems.length === 1 ? knownSystems[0] : 'any');
   const addReq = () => {
     const t = reqText.value.trim();
     if (!t) return;
@@ -1310,8 +1357,15 @@ function renderEditor(st, done) {
   const rows = h('div', { class: 'inv-restable' });
   // Unit sits at the END of the matching columns, right beside the practice range it defines.
   const COLS = { name: 1, code: 2, role: 3, words: 4, unit: 5, range: 6, guards: 7 };
-  const fLab = currentFilingLab();
+  const fLab = currentFilingLab(st.id);
   const fLabName = fLab ? labWords(fLab) : '';
+  // Guards are set per RESULT, not per code, so a result whose codes are all scoped to one lab (unambiguous) uses
+  // that lab regardless of the test's picker — same reasoning as filingCells below. Mixed/unscoped codes keep
+  // today's picker-lab behaviour (unchanged — no result actually mixes lab scopes yet).
+  const resultLab = (r) => {
+    const scopes = r && r.codes && r.codes.length ? [...new Set(r.codes.map((c) => c.lab || null))] : [];
+    return scopes.length === 1 && scopes[0] ? scopes[0] : fLab;
+  };
   const cell = (cls, col, row, span, ...kids) => {
     const c = h('div', { class: 'inv-rt-c ' + cls }, ...kids);
     c.style.gridColumn = String(col);
@@ -1347,13 +1401,19 @@ function renderEditor(st, done) {
   };
   const rangeText = (cand) =>
     (cand.low != null ? cand.low : '') + '–' + (cand.high != null ? cand.high : '') + (cand.unit ? ' ' + cand.unit : '');
+  // A code with its own `.lab` scope (Kingston's urine white-cell code vs RJ700's blood one, same SNOMED concept)
+  // always uses ITS lab for the range lookup, never the test's picker lab — otherwise a scoped code silently
+  // inherits another lab's candidate range for the same code (Nick, 2026-09-26: Kingston's urine WBC showing
+  // RJ700's blood "4-11" range; Medicus's own report confirms the urine entries carry no range at all).
   const filingCells = (row, r, c) => {
     const f = (cls, col, ...kids) => cell('inv-rt-f ' + cls, col, row, 1, ...kids);
-    if (!fLab) {
+    const eLab = (c && c.lab) || fLab;
+    const eLabName = eLab ? labWords(eLab) : '';
+    if (!eLab) {
       return [f('inv-rt-frange', COLS.range, h('span', { class: 'lf-muted', text: 'no lab defined' }))];
     }
-    const e = r && c ? filingEntry(r.id, fLab, c.conceptId) : null;
-    const cand = r && c ? S.rangeCandidates.get(fLab + '|' + c.conceptId) : null;
+    const e = r && c ? filingEntry(r.id, eLab, c.conceptId) : null;
+    const cand = r && c ? S.rangeCandidates.get(eLab + '|' + c.conceptId) : null;
     const prefill = !e && cand && (cand.low != null || cand.high != null);
     const num = (v, label) =>
       h('input', {
@@ -1367,12 +1427,12 @@ function renderEditor(st, done) {
           : prefill
             ? "Suggested from the lab's own reference range on a recent report — not yet saved"
             : '',
-        'aria-label': label + ' (' + c.conceptId + ', ' + fLabName + ')',
+        'aria-label': label + ' (' + c.conceptId + ', ' + eLabName + ')',
         value: v === null || v === undefined ? '' : String(v),
       });
     const lo = num(e ? e.low : prefill ? cand.low : null, 'Minimum');
     const hi = num(e ? e.high : prefill ? cand.high : null, 'Maximum');
-    const submit = () => applyFiling({ result: r.id, lab: fLab, code: c.conceptId, low: lo.value, high: hi.value });
+    const submit = () => applyFiling({ result: r.id, lab: eLab, code: c.conceptId, low: lo.value, high: hi.value });
     lo.addEventListener('change', submit);
     hi.addEventListener('change', submit);
     const kids = [lo, h('span', { text: '–' }), hi];
@@ -1443,13 +1503,22 @@ function renderEditor(st, done) {
     const n = Math.max(1, codeList.length);
     const start = cursor;
     cursor += n + 1; // + a full-width line for the inline result editor
+    // A test with only ONE member is trivially "enough on its own" — there is no other core result it could ever
+    // need alongside (Nick, 2026-09-26: had to tick this by hand for a single-result panel). Reflects known fact,
+    // not a default guess: only forced true while it's genuinely the sole member, and only for role 'core' — a
+    // second member added later stops forcing it, leaving whatever the person set.
+    if (st.members.length === 1 && m.role === 'core') m.anchor = true;
     const role = sel(ROLE_OPTIONS, m.role);
     role.addEventListener('change', () => {
       m.role = role.value;
       if (m.role !== 'core') m.anchor = false;
       redraw();
     });
-    const anchor = h('input', { type: 'checkbox', checked: !!m.anchor, disabled: m.role !== 'core' });
+    const anchor = h('input', {
+      type: 'checkbox',
+      checked: !!m.anchor,
+      disabled: m.role !== 'core' || st.members.length === 1,
+    });
     anchor.addEventListener('change', () => (m.anchor = anchor.checked));
     const usedBy = r ? S.merged.investigations.filter((x) => x.members.some((y) => y.result === r.id)).length : 0;
     const parts = r ? resultEditorParts(r) : null;
@@ -1556,8 +1625,9 @@ function renderEditor(st, done) {
       });
     }
     rows.appendChild(nameCell);
-    if (r && fLab) {
-      const ge = filingGuardEntry(r.id, fLab);
+    const rLab = resultLab(r);
+    if (r && rLab) {
+      const ge = filingGuardEntry(r.id, rLab);
       const sum = guardsSummary(ge);
       const gcell = cell(
         'inv-rt-f inv-rt-fguards inv-rt-click',
@@ -1569,12 +1639,12 @@ function renderEditor(st, done) {
       );
       gcell.setAttribute('role', 'button');
       gcell.tabIndex = 0;
-      gcell.title = 'Click to set the safety guards for ' + r.label + ' at ' + fLabName;
+      gcell.title = 'Click to set the safety guards for ' + r.label + ' at ' + labWords(rLab);
       const toggleGuards = () => {
         const gh = guardsHolders.get(r.id);
         if (!gh) return;
         if (gh.firstChild) gh.textContent = '';
-        else gh.appendChild(renderGuardsEditor(r, fLab, () => (gh.textContent = '')));
+        else gh.appendChild(renderGuardsEditor(r, rLab, () => (gh.textContent = '')));
       };
       gcell.addEventListener('click', toggleGuards);
       gcell.addEventListener('keydown', (e) => {
@@ -1690,7 +1760,7 @@ function renderEditor(st, done) {
       labsHere.map((l) => h('option', { value: l.id, selected: l.id === fLab }, labLabel(l)))
     );
     pick.addEventListener('change', () => {
-      filingLabId = pick.value;
+      filingLabByTest.set(st.id, pick.value);
       redraw();
     });
     return h(
@@ -1799,7 +1869,6 @@ function renderEditor(st, done) {
         groups: 'report group',
         ranges: 'practice range',
         guards: 'safety guard',
-        screen: 'Medicus wording',
       };
       const counts = {};
       state.pending.forEach((x) => (counts[x.kind] = (counts[x.kind] || 0) + 1));
@@ -1832,7 +1901,7 @@ function renderEditor(st, done) {
           text:
             "Clicking 'Approve' means I am approving assisted filing for this test group from " +
             fLabName +
-            ': its report group(s), the practice ranges and safety guards shown below, its lab-comment settings, and the Medicus wording. Changing any of them withdraws the approval. Filing does not read this yet.',
+            ' only: its report group(s), the practice ranges and safety guards shown below, and its lab-comment settings. Changing any of them withdraws the approval. Catalogue filing has read this lab\u2019s approved setup since v3.264.35 (the filing engine stays off until the practice switches it on). The Medicus wording and the never-file list are practice-wide and have their own Approve buttons.',
         })
       );
     }
@@ -1842,8 +1911,9 @@ function renderEditor(st, done) {
   };
 
   // "Never offer to file when the comment says…" — ONE practice-wide list (not per lab x group: Nick, 2026-09-23 —
-  // these phrases are expected to be the same whichever heading variant or lab sent the report). Shown once, here,
-  // for the same reason the Medicus wording above is: it is part of every test's assisted-filing approval.
+  // these phrases are expected to be the same whichever heading variant or lab sent the report). It is NOT part of
+  // a lab's assisted-filing approval (H-087): approving the lab on screen must not stamp this list, and approving
+  // this list must not stamp any lab's ranges, guards or overrideLabFlag. Its own Approve button does that.
   const filingSuppressLine = () => {
     const cur = filingSuppressEntry();
     const items = cur ? [...cur.items] : [];
@@ -1880,6 +1950,26 @@ function renderEditor(st, done) {
     );
     det.appendChild(chipsEl(items, (i) => apply(items.filter((_, j) => j !== i)), (x) => x));
     det.appendChild(h('div', { class: 'inv-edit-line' }, blockIn, btn('Add', addBlock, 'lf-btn-sm')));
+    if (cur && !isApproved(cur)) {
+      det.appendChild(
+        h(
+          'div',
+          { class: 'inv-af-pending' },
+          h('span', {
+            text: 'This list is practice-wide. Save and approve on a test does not approve it. ',
+          }),
+          btn(
+            'Approve',
+            () =>
+              save(
+                OV.approveFiling(S.overlay, 'suppress', OV.filingSuppressKey(), REVIEWER),
+                'Approved the never-file list.'
+              ),
+            'lf-btn-primary lf-btn-sm'
+          )
+        )
+      );
+    }
     return det;
   };
 
@@ -1927,6 +2017,26 @@ function renderEditor(st, done) {
         fileBtn
       )
     );
+    if (cur && !isApproved(cur)) {
+      det.appendChild(
+        h(
+          'div',
+          { class: 'inv-af-pending' },
+          h('span', {
+            text: 'A changed wording is practice-wide. Save and approve on a test does not approve it. Catalogue filing reads it once approved (since v3.264.35). ',
+          }),
+          btn(
+            'Approve',
+            () =>
+              save(
+                OV.approveFiling(S.overlay, 'screen', OV.filingScreenKey(), REVIEWER),
+                'Approved the Medicus filing-screen wording.'
+              ),
+            'lf-btn-primary lf-btn-sm'
+          )
+        )
+      );
+    }
     return det;
   };
 
@@ -2046,7 +2156,7 @@ function renderEditor(st, done) {
       'div',
       { class: 'inv-filing-note' },
       'A practice range or safety guard applies to the result wherever it appears (ALP in LFTs and in Bone profile is one result) and to this lab only. ' +
-        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of assisted filing, in the bar above. Filing does not read this yet.'
+        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of assisted filing for this lab, in the bar above. An approved range is what catalogue filing reads at this lab (since v3.264.35; the filing engine stays off until the practice switches it on).'
     );
   const listId = 'invResList' + Math.random().toString(36).slice(2, 7);
   const dl = h(
@@ -2199,10 +2309,27 @@ function renderEditor(st, done) {
       let next = saved.overlay;
       let msg = `Saved "${st.label}" — awaiting review.`;
       if (approve) {
+        // A test's own review (wordings/results/codes) and its assisted-filing approval are deliberately SEPARATE
+        // tracks — approving one never approves the other. Save and approve settles both for what is ON THIS
+        // SCREEN: the test itself, and assisted filing for the lab chosen in the dropdown (fLab) only.
+        // It does not walk every lab. Practice-wide Medicus wording and the never-file list are not in that
+        // lab's pending set and are not stamped here (H-087) — each has its own Approve button.
+        const approvedParts = [];
         if (next.investigations.some((i) => i.id === saved.id)) {
           next = OV.approveInvestigation(S.builtin, next, saved.id, REVIEWER).overlay;
-          msg = `Approved "${st.label}".`;
-        } else msg = `"${st.label}" is the shipped test — nothing to approve.`;
+          approvedParts.push('wordings, results and codes');
+        }
+        if (fLab) {
+          const mergedNow = OV.mergeCatalogue(S.builtin, next, { includeUnreviewed: true }).catalogue;
+          const pending = OV.filingStateForTest(mergedNow, next, saved.id, fLab).pending;
+          if (pending.length) {
+            next = OV.approveFilingForTest(S.builtin, next, saved.id, fLab, REVIEWER);
+            approvedParts.push('assisted filing at ' + labWords(fLab));
+          }
+        }
+        msg = approvedParts.length
+          ? `Approved "${st.label}" — ${approvedParts.join(', ')}.`
+          : `"${st.label}" — nothing needed approving.`;
       }
       await save(next, msg);
       done(true);
@@ -2213,13 +2340,13 @@ function renderEditor(st, done) {
   };
   if (st.id && !st.isBuiltin) wrap.appendChild(mergeBlock(st, done));
   const foot = h('div', { class: 'inv-edit-foot' });
-  // On the review screen the statement sits with the buttons: pressing Approve IS the confirmation.
+  // 'Save and approve' saves whatever is on screen, then approves this test's wordings/results/codes and assisted
+  // filing for the dropdown lab only. Other labs, and the practice-wide wording and never-file list, stay pending
+  // until their own approval (H-087). Always offered (Nick, 2026-09-26).
   foot.appendChild(
     h('span', {
       class: 'inv-foot-note',
-      text: st.review
-        ? "Clicking 'Approve' means I am approving this test's wordings, results, and codes. This saves changes above and makes this test active for the features that use this catalogue."
-        : 'Saving sends this test back to “awaiting review”; nothing here acts until you approve it. A change to a built-in test replaces the shipped version only once approved.',
+      text: 'Save keeps this as a draft; nothing here acts until it is approved. Save and approve covers this test\u2019s wordings, results and codes, and assisted filing for the lab chosen in the dropdown only — not other labs, and not the practice-wide Medicus wording or the never-file list, which have their own Approve buttons. A change to a built-in test replaces the shipped version only once approved.',
     })
   );
   const buttons = h('span', { class: 'inv-foot-btns' });
@@ -2247,8 +2374,8 @@ function renderEditor(st, done) {
     );
   }
   buttons.appendChild(btn('Cancel', () => done(false)));
-  buttons.appendChild(btn('Save', () => persist(false), st.review ? '' : 'lf-btn-primary'));
-  if (st.review) buttons.appendChild(btn('Approve', () => persist(true), 'lf-btn-primary'));
+  buttons.appendChild(btn('Save', () => persist(false)));
+  buttons.appendChild(btn('Save and approve', () => persist(true), 'lf-btn-primary'));
   foot.appendChild(buttons);
   if (st.error) foot.appendChild(h('span', { class: 'inv-error', role: 'alert', text: st.error }));
   wrap.appendChild(foot);
@@ -2501,7 +2628,7 @@ function renderResultEditor(r, done) {
       h('span', {
         class: 'inv-foot-note',
         text: st.review
-          ? "Clicking 'Approve result' means I am approving this result's codes and other names. This saves changes above and makes this result active for the features that use this catalogue."
+          ? "Clicking 'Save and approve result' means I am approving this result's codes and other names. It saves the changes above and makes this result active for the features that use this catalogue."
           : `Used by ${plural(usedBy.length, 'test')}${
               usedBy.length
                 ? ': ' +
@@ -2517,7 +2644,7 @@ function renderResultEditor(r, done) {
     const buttons = h('span', { class: 'inv-foot-btns' });
     buttons.appendChild(btn('Cancel', () => done(false), 'lf-btn-sm'));
     buttons.appendChild(btn('Save result', () => persist(false), st.review ? 'lf-btn-sm' : 'lf-btn-primary lf-btn-sm'));
-    if (st.review) buttons.appendChild(btn('Approve result', () => persist(true), 'lf-btn-primary lf-btn-sm'));
+    if (st.review) buttons.appendChild(btn('Save and approve result', () => persist(true), 'lf-btn-primary lf-btn-sm'));
     foot.appendChild(buttons);
     if (st.error) foot.appendChild(h('span', { class: 'inv-error', role: 'alert', text: st.error }));
     w.appendChild(foot);
@@ -2551,22 +2678,6 @@ function renderInvestigation(d) {
   const reqText = (requests.length ? requests : inv.synonyms || []).join(' · ');
 
   const actions = h('span', { class: 'inv-actions' });
-  // Approval is only possible from the review screen, so the person has the whole test in front of them.
-  if (d.needsReview && d.ov) {
-    actions.appendChild(
-      btn(
-        'Review',
-        () => {
-          S.editing = inv.id;
-          S.editState = editStateFor(inv, true);
-          S.open.add(inv.id);
-          render();
-        },
-        'lf-btn-primary lf-btn-sm',
-        'Open the whole test to check it, then approve.'
-      )
-    );
-  }
   if (d.ov && d.inBuiltin) {
     actions.appendChild(
       btn(
@@ -2622,18 +2733,23 @@ function renderInvestigation(d) {
       )
     );
   }
+  // ONE entry point — opening it always shows both "Save" and, when there is something awaiting review, "Save and
+  // approve" together, so approving never needs a second visit to the identical screen (Nick, 2026-09-25).
   actions.appendChild(
     btn(
-      'Edit',
+      'Review',
       () => {
         S.editing = inv.id;
         S.editState = editStateFor(inv);
+        S.open.add(inv.id);
         render();
       },
-      'lf-btn-sm',
-      d.inBuiltin
-        ? 'Change this built-in test for your practice (the shipped version can be restored)'
-        : 'Edit this test'
+      d.needsReview ? 'lf-btn-primary lf-btn-sm' : 'lf-btn-sm',
+      d.needsReview
+        ? 'Open the whole test to check it, then save and approve.'
+        : d.inBuiltin
+          ? 'Change this built-in test for your practice (the shipped version can be restored)'
+          : 'Edit this test'
     )
   );
 
@@ -2663,7 +2779,7 @@ function renderInvestigation(d) {
           title: 'Open the assisted filing setup for this test',
           onclick: () => {
             S.editing = inv.id;
-            S.editState = editStateFor(inv, !f.approved);
+            S.editState = editStateFor(inv);
             S.open.add(inv.id);
             S.scrollToAutofiling = true;
             render();
@@ -2862,7 +2978,7 @@ function renderBrowse() {
               S.query = '';
               S.toggles.review = true;
               S.editing = d.inv.id;
-              S.editState = editStateFor(d.inv, true);
+              S.editState = editStateFor(d.inv);
               S.open.add(d.inv.id);
               render();
             },
@@ -3051,18 +3167,24 @@ function renderLabs() {
 }
 
 // ── Match requests to lab reports (one place to read, scan and match) ──────────────────────────────────────────
-// LEFT  = how it is REQUESTED in Medicus. Populated by reading the practice's Outstanding Requests tests (the import), plus
-//         request wordings seen on cards that the catalogue does not know.
+// LEFT  = how it is REQUESTED in Medicus: the catalogue's own investigations (gaps first), plus request wordings
+//         seen on lab reports that the catalogue does not recognise.
 // RIGHT = how it COMES BACK from the lab. Populated by reading the pending investigation-results queue (read-only): the lab's
 //         report groups, with their results and SNOMED codes. Groups the scan can link are already matched; the rest can be
 //         dragged onto a request (or chosen from a dropdown).
-// One button runs both, in that order, so both sides have something to work with. Nothing is ever added except what is
-// ticked, and everything added arrives awaiting review. Only test names / headings / codes / units are kept from reports.
+// Nothing is ever added except what is ticked, and everything added arrives awaiting review. Only test names /
+// headings / codes / units are kept from reports.
+// (2026-09-26, Nick: this used to ALSO auto-import the practice's old, pre-catalogue Outstanding Investigation
+// Requests test dictionary (`triagelens.config.oirTests`) on every run — silently re-adding whatever was in that
+// dictionary, including stale manual test entries, back into the catalogue every time this button was pressed.
+// Removed: the catalogue now gets its confirmed investigations from reading real request/report/result data
+// directly (this scan, and the practice's own confirmed-wording extracts), so re-seeding from that old free-text
+// dictionary is redundant. `IMP.importOirTests` itself is untouched — it is still a general-purpose pure helper,
+// independently tested — this only removes the automatic call from here.)
 const SCAN_DEFAULT_LIMIT = 100;
 S.scan = {
-  lab: null, // lab id the imported request names come from ('' = not lab-specific); null = not chosen yet
   limit: SCAN_DEFAULT_LIMIT,
-  phase: 'idle', // idle | importing | reading | ready | error
+  phase: 'idle', // idle | reading | ready | error
   progress: null,
   stop: false,
   error: '',
@@ -3070,7 +3192,6 @@ S.scan = {
   filterLeft: '',
   filterRight: '',
   lastApply: null, // { done, failed } from the last "Add the ticked matches"
-  importNotes: null,
   read: null,
   analysis: null,
   items: [], // [{ u, choice, checked }] one per lab group the scan wants a decision on
@@ -3085,7 +3206,7 @@ function updateScanProgress() {
 
 async function runMatch() {
   const sc = S.scan;
-  sc.phase = 'importing';
+  sc.phase = 'reading';
   sc.ran = true;
   sc.error = '';
   sc.stop = false;
@@ -3096,28 +3217,7 @@ async function runMatch() {
   sc.reqChecked = new Set();
   render();
   try {
-    // 1) the requested side: the practice's own Outstanding Requests tests
-    const tests = await readOirTests();
-    if (tests.length) {
-      const imp = IMP.importOirTests(tests, S.builtin, { labId: sc.lab || undefined });
-      const merged = IMP.mergeIntoOverlay(S.overlay, imp.overlay);
-      sc.importNotes = {
-        read: tests.length,
-        added: merged.added,
-        skipped: merged.skipped,
-        dismissed: merged.dismissedSkipped || 0,
-        review: imp.review,
-      };
-      if (merged.added) {
-        await labcatalogueSaveOverlay(merged.overlay);
-        await load();
-      }
-    } else {
-      sc.importNotes = { read: 0, added: 0, skipped: 0, review: [] };
-    }
-    // 2) the lab side: the results queue
-    sc.phase = 'reading';
-    render();
+    // the lab side: the results queue
     if (!window.PracticeCode || !window.LabAllocateCore)
       throw new Error('The reading helpers did not load. Reload this page.');
     const resolved = await window.PracticeCode.resolve();
@@ -3142,6 +3242,25 @@ async function runMatch() {
     );
     const targets = SC.findGaps(S.merged, S.overlay.context).map((g) => g.id);
     sc.analysis = SC.analyse(S.merged, r.observations, { targets });
+    // Capture, don't guess (Nick, 2026-09-26): each group here is an AGGREGATE across every report read this scan
+    // that shares its (lab, normalised heading) key — "reports" below is how many contributed. If a candidate's
+    // result list contains something that looks wrong for the test you're about to confirm it against, this is
+    // where to check whether it came from more than one report before dragging it. Only heading/lab/result
+    // name+code+counts — no patient data, same discipline SC.analyse() itself already keeps.
+    console.log(
+      '[Investigations scan] %d group(s) this pass:',
+      sc.analysis.proposals.length + sc.analysis.unmatched.length
+    );
+    [...sc.analysis.proposals, ...sc.analysis.unmatched].forEach((g) => {
+      console.log(
+        `  "${g.heading}" — lab ${(g.lab && (g.lab.id || g.lab.name)) || '?'} — ${g.reports} report(s) contributed — ` +
+          (g.target ? `candidate: ${g.target}` : g.candidates ? `candidates: ${g.candidates.join(', ')}` : 'unmatched')
+      );
+      // console.table auto-expands — no clicking through collapsed [{…}] entries to see this.
+      console.table(
+        g.results.map((r) => ({ name: r.name, code: r.code || '', resultId: r.resultId || '', seenInReports: r.count }))
+      );
+    });
     sc.items = [...sc.analysis.proposals, ...sc.analysis.unmatched].map((u) => {
       // one generic group several tests share (an ultrasound): the person picks which tests it answers; never ticked for them
       if (u.multi) return { u, choice: 'tests', checked: false, tests: new Set(u.candidates) };
@@ -3295,7 +3414,7 @@ function fillRight(list) {
       h('div', {
         class: 'lf-muted',
         text:
-          sc.phase === 'reading' || sc.phase === 'importing'
+          sc.phase === 'reading'
             ? 'Reading…'
             : 'Lab report groups appear here once the results queue has been read.',
       })
@@ -3523,12 +3642,18 @@ function groupItem(it, unknownRequests, dupIndex) {
   const seen = new Set();
   const opts = (list, mk) => list.filter((x) => (seen.has(x.k) ? false : (seen.add(x.k), true))).map(mk);
   const suggested = (u.candidates || []).map((id) => ({ k: 'test:' + id, id }));
+  // The "add to a test" / "unrecognised request" lists are the MANUAL override — a person reading the actual report
+  // deciding "this heading from this lab is the same test as that one", exactly the Kingston urine-culture case that
+  // exposed this (Nick, 2026-09-26: "this is a user-decision... why are we blocking/hiding the match?"). Kind was
+  // filtering them by the group's own single guessed kind (`u.kind`, e.g. 'urine' from the specimen) even though the
+  // person's target test may genuinely be a different-but-compatible kind (Urine MC&S is 'microbiology' — the same
+  // kind-compatibility gate on the AUTOMATIC matching path was tried and reverted earlier this session for being too
+  // strict; it has no place gating an explicit human choice at all). The "Suggested" optgroup above already surfaces
+  // the auto-detected likely matches — these two lists are the full catalogue, unfiltered, on purpose.
   const reqOpts = opts(
     [
       ...(u.maybe || []).map((l) => ({ k: 'req:' + LC.norm(l), label: l, star: true })),
-      ...unknownRequests
-        .filter((r) => !r.kind || r.kind === u.kind || u.kind === 'other')
-        .map((r) => ({ k: 'req:' + LC.norm(r.label), label: r.label })),
+      ...unknownRequests.map((r) => ({ k: 'req:' + LC.norm(r.label), label: r.label })),
     ],
     (r) =>
       h('option', { value: 'req:' + r.label, selected: it.choice === 'req:' + r.label }, (r.star ? '★ ' : '') + r.label)
@@ -3539,7 +3664,6 @@ function groupItem(it, unknownRequests, dupIndex) {
   );
   const testOpts = opts(
     S.merged.investigations
-      .filter((i) => i.kind === u.kind || i.kind === 'other')
       .sort((x, y) => x.label.localeCompare(y.label))
       .map((i) => ({ k: 'test:' + i.id, id: i.id })),
     (t) => h('option', { value: 'test:' + t.id, selected: it.choice === 'test:' + t.id }, nameOf(t.id))
@@ -3732,66 +3856,10 @@ function groupItem(it, unknownRequests, dupIndex) {
   return row;
 }
 
-function importNotesEl(n) {
-  const groups = {};
-  for (const x of n.review) (groups[x.type] = groups[x.type] || []).push(x);
-  const labels = {
-    merged: 'Merged duplicates',
-    repaired: 'Repaired',
-    extends: 'Extend built-in tests',
-    review: 'Please check',
-    overlap: 'Look-alikes kept separate',
-    'not-merged': 'Look-alikes kept separate',
-    skipped: 'Skipped',
-    unchanged: 'Nothing to add',
-    disabled: 'Disabled built-ins',
-  };
-  const restore = n.dismissed
-    ? h(
-        'div',
-        { class: 'inv-scan-meta' },
-        `${plural(n.dismissed, 'test')} you deleted earlier ${n.dismissed === 1 ? 'was' : 'were'} not added back. `,
-        btn(
-          'Bring them back',
-          () => save(OV.restoreDismissed(S.overlay), 'Deleted tests will be added back the next time you read.'),
-          'lf-btn-sm'
-        )
-      )
-    : null;
-  const details = h(
-    'details',
-    { class: 'inv-details' },
-    h(
-      'summary',
-      {},
-      n.read
-        ? `Your Outstanding Requests tests: ${plural(n.read, 'test')} read — ${n.added ? plural(n.added, 'entry', 'entries') + ' added, awaiting review' : 'nothing new to add'}`
-        : 'No Outstanding Requests tests to read'
-    ),
-    Object.keys(groups).map((k) =>
-      h(
-        'details',
-        { class: 'inv-details', open: k === 'review' || k === 'merged' },
-        h('summary', {}, `${labels[k] || k} (${groups[k].length})`),
-        h(
-          'ul',
-          {},
-          groups[k].map((x) => h('li', { text: x.message }))
-        )
-      )
-    )
-  );
-  return h('div', {}, details, restore);
-}
-
 function renderMatch() {
   const sc = S.scan;
-  if (sc.lab === null) {
-    const c = S.overlay.context.labs;
-    sc.lab = c.length ? c[0] : S.merged.labs.length === 1 ? S.merged.labs[0].id : '';
-  }
   const gaps = SC.findGaps(S.merged, S.overlay.context);
-  const busy = sc.phase === 'importing' || sc.phase === 'reading';
+  const busy = sc.phase === 'reading';
   const outer = h('div', { class: 'lf-card inv-card inv-match' });
   // Optional after the first run: open by default until the practice has added its own tests, then collapsed (less
   // scrolling to reach the results below); a person's own click always wins over this default for the rest of the visit.
@@ -3804,20 +3872,10 @@ function renderMatch() {
     h('p', {
       class: 'lf-help',
       text:
-        'One button reads your Outstanding Requests tests (how tests are requested in Medicus) and then the reports waiting in Investigation Results (how the lab sends them back, read-only). ' +
+        'Reads the reports waiting in Investigation Results (how the lab sends them back, read-only) and matches them against your catalogue and against outstanding requests. ' +
         'Only test names, headings, codes and units are kept — no values, patient or staff details. Nothing is added unless you tick it, and everything added arrives awaiting review.',
     })
   );
-  const labSel = h(
-    'select',
-    { class: 'lf-input inv-sel-sm', 'aria-label': 'Lab your test names come from' },
-    h('option', { value: '' }, 'test names: not lab-specific'),
-    S.merged.labs.map((l) => h('option', { value: l.id, selected: sc.lab === l.id }, 'test names from ' + labLabel(l)))
-  );
-  labSel.addEventListener('change', () => (sc.lab = labSel.value));
-  // Every control in this row gets a visible label before it — an unlabelled select sitting straight after the
-  // "Reports to read" box read as one run-on control, not two separate ones (2026-09-22, Nick).
-  const labSelLabelled = h('label', { class: 'lf-check inv-scan-reports' }, 'Lab ', labSel);
   const lim = h('input', {
     class: 'lf-input inv-limit',
     type: 'number',
@@ -3830,7 +3888,7 @@ function renderMatch() {
     'change',
     () => (sc.limit = Math.max(10, Math.min(300, parseInt(lim.value, 10) || SCAN_DEFAULT_LIMIT)))
   );
-  const go = btn(sc.ran ? 'Read again' : 'Read my tests and the results queue', runMatch, 'lf-btn-primary');
+  const go = btn(sc.ran ? 'Read again' : 'Read the results queue', runMatch, 'lf-btn-primary');
   go.disabled = busy;
   card.appendChild(
     h(
@@ -3847,11 +3905,10 @@ function renderMatch() {
           )
         : null,
       h('label', { class: 'lf-check inv-scan-reports' }, 'Reports to read ', lim),
-      labSelLabelled,
       h('span', {
         class: 'lf-muted',
         id: 'invScanProgress',
-        text: sc.phase === 'importing' ? 'Reading your tests…' : sc.phase === 'reading' ? 'Reading reports…' : '',
+        text: sc.phase === 'reading' ? 'Reading reports…' : '',
       })
     )
   );
@@ -3869,7 +3926,6 @@ function renderMatch() {
       })
     );
   if (sc.phase === 'error') card.appendChild(h('div', { class: 'inv-error', role: 'alert', text: sc.error }));
-  if (sc.importNotes) card.appendChild(importNotesEl(sc.importNotes));
   if (sc.read) {
     card.appendChild(
       h('div', {

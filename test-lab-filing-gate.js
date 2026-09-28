@@ -252,8 +252,22 @@ console.log('\n--- wiring: lab-file-button.js runs the mandatory shadow log (E1)
     'a shadow entry is built and written to its own ring buffer, capped like the existing audit log'
   );
   check(
-    /changes\['labcatalogue\.practice'\]\) resetFilingCatalogue\(\)/.test(src),
+    /if \(area !== 'local' \|\| !changes\['labcatalogue\.practice'\]\) return;\s*\n\s*resetFilingCatalogue\(\);/.test(
+      src
+    ),
     'the cached acting catalogue is invalidated on the same storage change Phase D already listens for'
+  );
+  check(
+    /resetFilingCatalogue\(\); \/\/ approvals\/edits change the acting catalogue[\s\S]*?scheduleEval\(\);\s*\n\s*\}\);/.test(
+      src
+    ),
+    "invalidating the cache alone used to do nothing until something else happened to re-run the gate — approving on the Investigations page (a separate tab) fires this exact storage change but the blocked card sat there stale until an unrelated Medicus SPA re-render happened to poll again, sometimes never (Nick, 2026-09-26: \"re-approved, and the same thing appears — it's still blocked\"). scheduleEval() is now called explicitly, same as every other cache-affecting storage key already does"
+  );
+  check(
+    /function scheduleEval\(\) \{\s*\n\s*if \(document\.hidden\) return;/.test(src) &&
+      /scheduleEval\(\) returns immediately while document\.hidden/.test(src) &&
+      /visibilitychange handler depends on/.test(src),
+    'scheduleEval() is a no-op while the tab is hidden; the storage listener still resets the catalogue cache, which is what the visibilitychange handler depends on'
   );
   check(
     /meds are deliberately NOT fetched here/.test(src),
@@ -285,7 +299,7 @@ console.log(
     'the combine runs from BOTH the poll-time gate (evaluateGate, what is offered) and the click-time re-verification (onAction, what actually proceeds) — they must never disagree about what is blocked, and each passes catalogueOnly from the real legacy profile'
   );
   check(
-    /if \(!filingEngineWanted\(\) \|\| !rs \|\| !rs\.report\) {\s*\n\s*return { blockers: legacyBlockers, engine: 'legacy', catalogueUnresolvedComments: \[\] };/.test(
+    /if \(!filingEngineWanted\(\) \|\| !rs \|\| !rs\.report\) {\s*\n\s*return {\s*\n\s*blockers: legacyBlockers,\s*\n\s*engine: 'legacy',\s*\n\s*catalogueUnresolvedComments: \[\],\s*\n\s*catalogueUnapprovedGroups: \[\],\s*\n\s*};/.test(
       src
     ),
     'when the catalogue engine is not opted in, the legacy blockers pass through UNCHANGED'
@@ -355,7 +369,7 @@ console.log('\n--- wiring: the catalogue engine can operate with ZERO legacy pro
     /function catalogueDisplayProfile\(screenText, limits\)/.test(src) &&
       /paramsOverrideLabFlags: lim\.paramsOverrideLabFlags === true/.test(src) &&
       /profile \|\|\s*\n?\s*catalogueDisplayProfile\(/.test(src) &&
-      /showButton\(displayProfile\);/.test(src) &&
+      /showButton\(displayProfile, requestMatchInfo\);/.test(src) &&
       /LFC\.practiceConfirmLimits\(rs\.report, catalogueForScreen\)/.test(src),
     'catalogue-only builds a display profile whose confirm-dialog parameters are the practice ranges (and the lab-flag override flag), not an empty profile that would reprint the lab range'
   );
@@ -428,13 +442,11 @@ console.log(
     'the overlay module is loaded so the catalogue whitelist write can call OV.setFilingGroup directly'
   );
   check(
-    /catalogueUnresolvedComments:\s*\n?\s*catResult && catResult\.ok && Array\.isArray\(catResult\.unresolvedComments\) \? catResult\.unresolvedComments : \[\]/.test(
-      src
-    ),
-    "the catalogue engine's structured unresolvedComments are carried out of combineWithCatalogueIfWanted, not discarded"
+    /catalogueUnresolvedComments: LFC\.commentsForWhitelist\(rs\.report, catalogue\),/.test(src),
+    "the catalogue engine's structured comment data is carried out of combineWithCatalogueIfWanted, not discarded (now sourced from commentsForWhitelist rather than evaluateFilingCatalogue's own narrower unresolvedComments — see the dedicated 2026-09-26 block below)"
   );
   check(
-    /showBlockedHint\(\s*combined\.blockers,\s*profile,\s*commentedResults,\s*currentMatchedProfiles,\s*combined\.catalogueUnresolvedComments\s*\)/.test(
+    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\)/.test(
       src
     ),
     'they reach the blocked card, alongside the existing legacy-profile comment list — two separate sources, not conflated'
@@ -501,9 +513,7 @@ console.log(
   const engineSrc = fs.readFileSync(path.join(__dirname, 'engine', 'lab-filing-catalogue.js'), 'utf8');
   check(
     /function applyCatalogueOverrides\(report, catalogue\)/.test(engineSrc) &&
-      /const api = { evaluateFilingCatalogue, buildActingIndex, applyCatalogueOverrides, practiceConfirmLimits };/.test(
-        engineSrc
-      ),
+      /practiceConfirmLimits,\s*\n\s*commentsForWhitelist,/.test(engineSrc),
     "engine/lab-filing-catalogue.js exports a pure applyCatalogueOverrides mirroring shared/lab-filing-utils.js's applyParamOverrides — same safety bounds (never touches urgent, unit-safe, comparator-censored never clears, only within-bounds values clear)"
   );
   const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
@@ -513,6 +523,226 @@ console.log(
         btnSrc
       ),
     'effectiveScore()\'s no-legacy-profile branch applies the catalogue override and RE-SCORES severity on the adjusted report — mirroring exactly what the legacy paramsOverrideLabFlags branch below it already does for a legacy profile, so a catalogue-approved override guard can actually clear the baseline "not every result is within normal limits" block, not just this engine\'s own "lab-flagged-abnormal" reason'
+  );
+}
+
+console.log(
+  '\n--- blocked card: the full reasons list can be expanded, not just the truncated "(+N more)" line (2026-09-25, Nick) ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  // Companion fold-in stage 2 (2026-09-27, Nick): this file has NO visible DOM of its own left at all — every
+  // piece (header/reasons/request-match from stage 1; whitelist boxes, unapproved-groups box, File/message
+  // buttons, suppress link, toast from stage 2) now renders inside content-scripts/task-actions-panel.js's own Lab
+  // Filing section, reading published data rather than a second computation. buildUI() still creates and updates
+  // the same elements (harmless, detached) but never attaches `host`/its old style block to `document` at all.
+  check(
+    !/document\.body\.appendChild\(host\)/.test(btnSrc) && !/document\.head\.appendChild\(style\)/.test(btnSrc),
+    'buildUI() never attaches the card (or its old style block) to the document at all — there is nothing left worth showing here'
+  );
+  check(
+    !/const CSS = \[/.test(btnSrc) && !/\.chlf-card\{position:fixed/.test(btnSrc),
+    'the old .chlf-card CSS constant is deleted outright — its equivalent styling now lives in task-actions-panel.css'
+  );
+  check(
+    /function publishLabFileState\(state\)/.test(btnSrc) &&
+      /window\.__chLabFileState = state;/.test(btnSrc),
+    'the same severity/blockers/matching data this card computes is published to a plain window global for Companion to render, never recomputed a second time'
+  );
+  check(
+    /publishLabFileState\(null\);/.test(btnSrc) &&
+      /publishLabFileState\(\{\s*\n\s*mode: 'ready'/.test(btnSrc) &&
+      /publishLabFileState\(\{\s*\n\s*mode: 'blocked'/.test(btnSrc),
+    'every terminal state (hidden, ready, blocked) publishes — Companion never shows stale content from a state this card has already moved on from'
+  );
+  check(
+    /window\.__chConfirmRequestMatch = confirmRequestMatch;/.test(btnSrc),
+    "confirmRequestMatch is exposed for Companion's own \"Matched to your request\" rendering to call the SAME write path, never a re-implementation of it"
+  );
+  check(
+    /reasons\.forEach\(\(r\) => reasonsList\.appendChild\(el\('li', null, r\)\)\);/.test(btnSrc),
+    'every reason (not just the first two) is listed when expanded, in full — the same text subEl already truncates'
+  );
+  check(
+    /const sig = JSON\.stringify\(reasons\);\s*\n\s*if \(sig !== reasonsSignature\)/.test(btnSrc),
+    'rebuilding the list is gated on the reasons actually having changed — evaluateGate() re-renders the card on every observed page change (often more than once a second), and an unconditional rebuild would reset reasonsEl.open back to false before the clinician could finish reading it (the same idempotent-rebuild doctrine whitelistSignature already uses)'
+  );
+  const resets = (btnSrc.match(/(?<!let )reasonsSignature = null;/g) || []).length;
+  check(
+    resets === 2,
+    'the signature is reset in both hideButton() and showButton() (2 sites) — a stale signature must never suppress the first render of a genuinely NEW blocked state'
+  );
+}
+
+console.log(
+  '\n--- comment whitelisting now works even with no approved filing setup at all (2026-09-26, Nick) ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /catalogueUnresolvedComments: LFC\.commentsForWhitelist\(rs\.report, catalogue\),/.test(btnSrc),
+    "combineWithCatalogueIfWanted sources the whitelist checkbox data from commentsForWhitelist (every commented result whose heading is KNOWN to the lab), not evaluateFilingCatalogue's own unresolvedComments (which never even checks a result belonging to a group that isn't approved+enabled yet)"
+  );
+}
+
+console.log(
+  '\n--- "Set up on Investigations page" button, for a heading with no approved filing setup at all (2026-09-26, Nick) ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /function openInvestigationSetup\(invId\)/.test(btnSrc) &&
+      /chrome\.runtime\.sendMessage\(\{ action: 'ms-open-options', section: 'investigations', review: invId \}\);/.test(
+        btnSrc
+      ),
+    "opens the Investigations page, deep-linked to the one test that needs setting up, via the service worker's ms-open-options relay (chrome.tabs.create from the privileged background context) — never a content script's own window.open() to a chrome-extension:// URL, which Edge blocks outright (ERR_BLOCKED_BY_CLIENT) since options/options.html is not in web_accessible_resources (Nick, 2026-09-26, live-caught)"
+  );
+  const swSrc = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
+  check(
+    /const review = String\(\(msg && msg\.review\) \|\| ''\);/.test(swSrc) &&
+      /const query = \/\^\[a-z0-9-\]\+\$\/\.test\(review\) \? `\?review=\$\{review\}` : '';/.test(swSrc) &&
+      /chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\('options\/options\.html'\) \+ query \+ suffix \}\);/.test(
+        swSrc
+      ),
+    "the service worker's ms-open-options handler validates `review` against the same slug shape every investigation id already has (shared/lab-catalogue-overlay.js's freshId/slugify) before it ever reaches a URL — a content script must never steer this at anything but a plain id"
+  );
+  check(
+    /case 'ms-open-options': \{/.test(swSrc) &&
+      (swSrc.match(/case 'ms-open-options': \{/g) || []).length === 1,
+    'reuses the EXISTING ms-open-options relay (already used by reception-quick-actions.js\'s ⚙ button) rather than adding a second, duplicate open-options message type'
+  );
+  check(
+    /catalogueUnapprovedGroups:\s*\n\s*catResult && catResult\.ok && Array\.isArray\(catResult\.unapprovedGroups\) \? catResult\.unapprovedGroups : \[\],/.test(
+      btnSrc
+    ),
+    'combineWithCatalogueIfWanted carries engine/lab-filing-catalogue.js\'s own unapprovedGroups through unchanged — the "is this unambiguous" judgement stays in the pure engine, never re-decided in the DOM layer'
+  );
+  check(
+    /function renderUnapprovedGroupsBox\(groups, catalogue\)/.test(btnSrc) &&
+      /if \(!g \|\| !g\.investigationId \|\| seen\.has\(g\.investigationId\)\) continue;/.test(btnSrc),
+    'the button box dedupes by investigation — several headings (or the same heading across polls) pointing at the same test only ever offer ONE button for it'
+  );
+  check(
+    /const inv = invs\.find\(\(i\) => i\.id === g\.investigationId\);\s*\n\s*if \(!inv\) continue; \/\/ never offer a test the catalogue can no longer find/.test(
+      btnSrc
+    ),
+    'a suggested investigation id the current catalogue can no longer find (deleted since the engine resolved it) is silently dropped, never a broken link'
+  );
+  check(
+    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\);/.test(
+      btnSrc
+    ),
+    'evaluateGate() threads the resolved catalogue through too, so the button can show the test\'s real label, not just its id'
+  );
+  // 4 total: the `let` declaration, the render function's own empty-rows early return, plus hideButton() and
+  // showButton() — the same "reset it everywhere the box could go stale" doctrine as catalogueWhitelistSignature.
+  const resets = (btnSrc.match(/(?<!let )unapprovedGroupsSignature = null;/g) || []).length;
+  check(
+    resets === 3,
+    'the button box\'s signature is reset everywhere it can go stale: its own render function, hideButton(), and showButton()'
+  );
+}
+
+console.log(
+  '\n--- "Matched to your request" (2026-09-26, Nick): teach the catalogue a confirmed wording from the report itself ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /const rawData = \(raw && raw\.data\) \|\| \{\};/.test(btnSrc) &&
+      /outstandingInvestigationRequestOptions/.test(btnSrc) &&
+      /outstandingLabels = options\.map/.test(btnSrc) &&
+      /const entry = \{ report, severity, blockers, outstandingLabels, ts: now, taskUuid: ctx\.taskUuid \};/.test(
+        btnSrc
+      ),
+    'loadReportSeverity() reads the outstanding-request labels straight off the raw overview payload, alongside (never instead of) the existing normalised report — normaliseInvestigationReport() itself is untouched'
+  );
+  check(
+    /function investigationForHeadings\(catalogue, headings\)/.test(btnSrc) &&
+      /if \(headingIds\.size !== 1\) return null;/.test(btnSrc) &&
+      /return ids\.size === 1 \? \[\.\.\.ids\]\[0\] : null;/.test(btnSrc),
+    'the report\'s own heading(s) must unambiguously agree on exactly one investigation before anything is offered — never a guess, same "size === 1" discipline as unapprovedGroups'
+  );
+  check(
+    /function computeRequestMatchInfo\(rs, catalogue\)/.test(btnSrc) &&
+      /if \(!LC\.resolveRequest\(index, text\)\.length\) candidates\.push\(text\);/.test(btnSrc) &&
+      /return \{ investigationId: invId, investigationLabel: inv\.label, candidates \};/.test(btnSrc),
+    'only outstanding-request labels that do not resolve to ANY investigation yet are offered as candidates — one already recognised elsewhere needs no help'
+  );
+  check(
+    /async function confirmRequestMatch\(invId, text, btnEl\)/.test(btnSrc) &&
+      /const overlay = OV\.addRequestAlias\(eff\.builtin, eff\.overlay, invId, text, system, today\);/.test(btnSrc) &&
+      /await window\.labcatalogueSaveOverlay\(overlay\);/.test(btnSrc) &&
+      /scheduleEval\(\);/.test(btnSrc),
+    'confirming writes straight into the catalogue overlay via the same pure addRequestAlias helper the Investigations page\'s own "Match requests to lab reports" board already uses — no new overlay-writing logic invented'
+  );
+  check(
+    !/tickRows/.test(btnSrc) && !/readOutstandingRows/.test(btnSrc) && !/OIR_CARD_SEL/.test(btnSrc),
+    'this never touches Medicus\'s own outstanding-request checkbox — that write (and its own hazard review, H-036) stays entirely inside content.js\'s separate OIR auto-tick feature'
+  );
+  check(
+    /const orderingSystems = \(eff\.overlay\.context && eff\.overlay\.context\.orderingSystems\) \|\| \[\];/.test(
+      btnSrc
+    ) && /const system = orderingSystems\.length === 1 \? orderingSystems\[0\] : 'any';/.test(btnSrc),
+    'the ordering system is only preselected when the practice has told us it uses exactly one — same preselect discipline as the Investigations page\'s own "Requested as" box'
+  );
+  check(
+    /renderRequestMatchBox\(requestMatchInfo\);/.test(btnSrc) &&
+      (btnSrc.match(/renderRequestMatchBox\(/g) || []).length >= 3,
+    'the section is rendered from both showButton() (ready state) and showBlockedHint() (blocked state) — request recognition is orthogonal to whether the report can currently file'
+  );
+  check(
+    /if \(requestMatchBox\) \{\s*\n\s*requestMatchBox\.classList\.add\('chlf-hidden'\);\s*\n\s*requestMatchBox\.innerHTML = '';\s*\n\s*requestMatchSignature = null;\s*\n\s*\}/.test(
+      btnSrc
+    ),
+    'hideButton() resets the section too, so a stale row never lingers once the card itself is hidden'
+  );
+  // Superseded by the Companion fold-in (2026-09-27): the card no longer has its own position at all (stage 1
+  // removed the header it used to be judged by; stage 2 deletes the .chlf-card CSS outright), and the toast no
+  // longer measures anything — it publishes instead. See the "no visible DOM of its own" tests above.
+  check(
+    /let toastSeq = 0;/.test(btnSrc) && /window\.__chLabFileToast = \{ msg, kind: kind \|\| 'ok', id: \+\+toastSeq \};/.test(btnSrc),
+    'the toast publishes { msg, kind, id } to a SEPARATE global from window.__chLabFileState (which can legitimately be null) rather than building its own DOM — Companion owns the display and auto-clear timer now'
+  );
+  check(
+    (btnSrc.match(/document\.dispatchEvent\(new CustomEvent\('ch-lab-file-state'\)\);/g) || []).length >= 2,
+    'the toast reuses the SAME event publishLabFileState already dispatches — no second event type for Companion to listen for'
+  );
+}
+
+console.log(
+  '\n--- write functions exposed for Companion to call — never a second implementation (2026-09-27, Nick) ---'
+);
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  const exposed = [
+    ['window.__chConfirmRequestMatch = confirmRequestMatch;', 'confirmRequestMatch'],
+    ['window.__chSuppressCurrentPatient = suppressCurrentPatient;', 'suppressCurrentPatient'],
+    ['window.__chOpenInvestigationSetup = openInvestigationSetup;', 'openInvestigationSetup'],
+    ['window.__chWhitelistCatalogueComments = whitelistSelectedCatalogueComments;', 'whitelistSelectedCatalogueComments'],
+    ['window.__chWhitelistComments = whitelistSelectedComments;', 'whitelistSelectedComments'],
+    ['window.__chLabFileAction = onAction;', 'onAction (File/message buttons)'],
+  ];
+  for (const [line, label] of exposed) {
+    check(btnSrc.includes(line), `${label} is exposed on window for Companion to call directly`);
+  }
+}
+
+console.log('\n--- compute*Rows helpers: the SAME dedup/matching logic, callable independently of rendering ---');
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /function computeWhitelistRows\(commentedResults, matchedProfiles\)/.test(btnSrc) &&
+      /LF\.profilesOwningResult\(profiles, c\.result\)/.test(btnSrc),
+    'computeWhitelistRows reuses LF.profilesOwningResult — the same matching renderWhitelistBox always did'
+  );
+  check(/function computeCatalogueWhitelistRows\(comments\)/.test(btnSrc), 'computeCatalogueWhitelistRows exists');
+  check(/function computeUnapprovedGroupsRows\(groups, catalogue\)/.test(btnSrc), 'computeUnapprovedGroupsRows exists');
+  check(
+    /whitelistRows: computeWhitelistRows\(commentedResults, matchedProfiles\),/.test(btnSrc) &&
+      /catalogueWhitelistRows: computeCatalogueWhitelistRows\(catalogueUnresolvedComments\),/.test(btnSrc) &&
+      /unapprovedGroupsRows: computeUnapprovedGroupsRows\(catalogueUnapprovedGroups, catalogue\),/.test(btnSrc),
+    'showBlockedHint publishes the already-computed rows alongside the reasons text — Companion never re-implements the dedup/matching itself'
   );
 }
 
