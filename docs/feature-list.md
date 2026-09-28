@@ -139,7 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.268.1 (28 Sep)** — Lab Filing: Save and approve covers only the lab on screen. The practice-wide Medicus wording and the never-file list have their own Approve buttons. A scan does not mark a lab reviewed. A name made only of stop-words (Blood culture, X-ray) does not take another result’s code. H-087 proposed, not signed.
+- **v3.268.1 (28 Sep)** — Lab Filing: Save and approve covers only the lab on screen. The practice-wide Medicus wording and the never-file list have their own Approve buttons. A scan does not mark a lab reviewed. A name made only of stop-words (Blood culture, X-ray) does not take another result’s code. H-087 accepted 2026-09-28.
 - **v3.268.0 (27 Sep)** — Companion folds the Lab Filing card in. Catalogue follow-ups: ungrouped results can be matched, a blocked comment can be whitelisted, and a heading offers a setup link only when every row is the same one test. Catalogue filing stays off until the practice switches it on.
 - **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 accepted 2026-09-27.
 - **v3.267.3 (27 Sep)** — Availability wall layout matches the triage-room mock: navy title bar with a live clock, icon tiles, a three-line legend, and seven day cards with the routine total on the right. Registrar lists stay in that total. H-085 accepted 2026-09-27.

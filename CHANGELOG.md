@@ -12,7 +12,7 @@ All notable changes to Medicus Suite are documented here.
 - **A scan apply writes unreviewed lab entries.** A heading enters the acting catalogue only after `approveInvestigation`, and only when that function’s foreign-heading gate allows it. This reverses the unreleased note below that marked a scan-touched lab `reviewed: true` at once. A filing group approved on its own does not pull an unreviewed heading in. A heading that maps a wording onto a different test still cannot ride in.
 - **A blocked heading offers a setup link only when every row resolves by code to the same one investigation.** An uncoded row, an unknown code, or a code shared by two tests offers no link. Filing stays blocked either way.
 - **The filing card still resets its catalogue cache before `scheduleEval()`.** `scheduleEval()` does nothing while the tab is hidden. The visibility handler depends on that cache reset.
-- **H-087 is Proposed.** Not signed. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+- **H-087 is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6.** Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
 
 ## [v3.268.0] — 2026-09-27
 
