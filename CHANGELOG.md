@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.7] — 2026-09-28
+
+### SMOK002 uses the smoking-habit refset and ignores advice, drugs and exceptions
+
+SMOK002 achievement is the 71-code SMOK_COD refset (OpenCodelists tag 20260630). Current, ex and never clusters are subsets of that list. Text look-fors now include the preferred terms a short phrase used to miss, including Smoking reduced, Date ceased smoking and Cigarette pack-years.
+
+These do not clear the indicator: Declined to give smoking status (1098881000000103), Tobacco use screening declined (11351000175103), smoking-cessation advice, referral and pharmacotherapy, and Nicotine dependence. The phrase "smoking status" is no longer a look-for. A dashboard row named Smoking status is still read from its value, so Ex-smoker in that value still counts. Passive smoker stays excluded.
+
+A personalised care adjustment for smoking — patient unsuitable (716391000000109) or informed dissent (717771000000108) — hides the chip. It does not count as the status being recorded. A real in-year smoking code still counts beside either exception.
+
+Not in this build: a never-smoker code recorded after the 25th birthday carries forward, and an ex-smoker code carries forward for three years. The journal feed is about 400 days, so a three-year-old ex-smoker code is not in the feed. Both stay follow-ups.
+
 ## [v3.267.6] — 2026-09-28
 
 ### Exception rubrics do not clear a QOF indicator
