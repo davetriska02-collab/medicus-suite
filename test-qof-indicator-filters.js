@@ -565,9 +565,16 @@ check(
 check(
   ast014Eval(
     [{ label: 'Asthma', codedDate: '2026-01-01' }],
-    [{ name: 'Spirometry', value: 'obstructive', date: '2026-05-01' }]
+    [{ name: 'Spirometry', value: 'obstructive', date: '2026-02-01' }]
   )[0].status === 'achieved',
-  'AST014: new-diagnosis asthma patient WITH a recent objective test shows achieved'
+  'AST014: objective test within 93 days of the new diagnosis shows achieved'
+);
+check(
+  ast014Eval(
+    [{ label: 'Asthma', codedDate: '2026-01-01' }],
+    [{ name: 'Spirometry', value: 'obstructive', date: '2026-05-01' }]
+  )[0].status === 'overdue',
+  'AST014: objective test more than 93 days after diagnosis is overdue'
 );
 // The other side of the fix: a patient diagnosed RECENTLY (still inside the
 // current QOF year / window) with no test YET must stay no_data — there's a

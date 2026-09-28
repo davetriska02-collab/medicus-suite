@@ -323,7 +323,13 @@
       var key = String(obs.name).toLowerCase();
       var group = byName[key];
       if (!group) {
-        group = { name: obs.name, code: null, group: null, unit: null, history: [] };
+        group = {
+          name: obs.name,
+          code: obs.code != null && String(obs.code).trim() !== '' ? String(obs.code) : null,
+          group: null,
+          unit: null,
+          history: [],
+        };
         byName[key] = group;
         if (key === 'blood pressure') out.unshift(group);
         else out.push(group);

@@ -237,13 +237,13 @@ console.log('\n--- HF008 echo abbreviation does not match cigarette or written -
 {
   const hfReg = qof.rules.find((r) => r.type === 'qof-register' && r.registerCode === 'HF');
   const hf008 = qof.rules.find((r) => r.id === 'qof-hf008');
-  const evalHf = (observations) =>
+  const evalHf = (observations, codedDate) =>
     engine.evaluateQofIndicatorRule(
       hf008,
       {
         medications: [],
         observations,
-        problems: [{ label: 'Heart failure', codedDate: '2018-01-01', hasOnsetDate: true }],
+        problems: [{ label: 'Heart failure', codedDate: codedDate || '2026-06-01', hasOnsetDate: true }],
         patientContext: {},
         _registerLookup: { HF: hfReg },
       },
@@ -258,8 +258,13 @@ console.log('\n--- HF008 echo abbreviation does not match cigarette or written -
     falseGreen[0] && falseGreen[0].status !== 'achieved',
     `written/cigarette notes do not clear HF008 (got ${falseGreen[0] && falseGreen[0].status})`
   );
-  const real = evalHf([{ name: 'TTE', date: REVIEW, value: 'normal' }]);
-  check(real[0] && real[0].status === 'achieved', 'a TTE token still clears HF008');
+  const real = evalHf([{ name: 'TTE', date: REVIEW, value: 'normal' }], '2026-06-01');
+  check(real[0] && real[0].status === 'achieved', 'a TTE within 183 days of diagnosis clears HF008');
+  const yearsLater = evalHf([{ name: 'TTE', date: REVIEW, value: 'normal' }], '2018-01-01');
+  check(
+    yearsLater[0] && yearsLater[0].status !== 'achieved',
+    `a TTE years after diagnosis does not clear HF008 (got ${yearsLater[0] && yearsLater[0].status})`
+  );
 }
 
 console.log('\n--- exception rubrics do not achieve ---');

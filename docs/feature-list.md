@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.3
+**Version:** v3.268.4
 **Generated:** 2026-09-28
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.4 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. DM036 is age 79 and under. H-089 accepted 2026-09-28.
 - **v3.268.3 (28 Sep)** — Coded consultation notes count towards smoking status and the asthma review. SMOK002 uses the 71-code smoking-habit list and ignores cessation advice, drugs and declined or unsuitable exceptions. The asthma review needs a review code, an exacerbation count in the month before that review, and a written plan the same day. Control assessment and inhaler technique are advisory. Draft notes and exception rubrics do not clear an indicator. H-088 accepted 2026-09-28.
 - **v3.268.2 (28 Sep)** — Availability wall setup: drag each slot type, session and diary onto one tile, with a count preview and undo. Existing mappings load unchanged. H-085 setup-canvas addendum accepted 2026-09-28.
 - **v3.268.1 (28 Sep)** — Lab Filing: Save and approve covers only the lab on screen. The practice-wide Medicus wording and the never-file list have their own Approve buttons. A scan does not mark a lab reviewed. A name made only of stop-words (Blood culture, X-ray) does not take another result’s code. H-087 accepted 2026-09-28.

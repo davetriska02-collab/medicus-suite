@@ -46,6 +46,9 @@ const NHS_ADD_ALLOWLIST = new Set([
   // These files carry terminology IDs only — no patient identifiers.
   'rules/document-types.json',
   'rules/lab-code-info.json',
+  // QOF cluster concept ids (OpenCodelists / NHSD refsets). Some 10-digit
+  // SNOMED ids pass Modulus-11. The file is terminology only.
+  'rules/qof-rules.json',
   'test-problem-description-cleanup.js',
   'test-snomed-retirement.js',
 ]);
