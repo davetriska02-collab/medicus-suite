@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.8] — 2026-09-28
+
+### QOF rules file is a terminology allowlist
+
+`rules/qof-rules.json` is allowlisted for the NHS-number guard. Cluster concept ids are 10-digit SNOMED identifiers, and some of them pass the NHS checksum. The file has no patient identifiers.
+
 ## [v3.267.7] — 2026-09-28
 
 ### QOF 2026/27 red-team indicator gaps

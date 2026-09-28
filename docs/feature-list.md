@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.7
+**Version:** v3.267.8
 **Generated:** 2026-09-28
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.8 (28 Sep)** — The QOF rules file is allowlisted for the NHS-number guard, because cluster concept ids can pass that checksum. No patient identifiers.
 - **v3.267.7 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. H-087 is proposed, unsigned, for CSO review.
 - **v3.267.6 (28 Sep)** — A coded note that says declined, not recorded, not appropriate, unsuitable, refused, dissent, or not indicated does not clear the indicator. Draft notes are ignored. A note is dated from recordDate. H-086 remains proposed and unsigned.
 - **v3.267.5 (28 Sep)** — Coded consultation notes (a SNOMED term filed as a note) count towards smoking status and the asthma review. SMOK002 uses the smoking-habit code cluster and ignores cessation education and referral. AST015 shows which of the four components are met and which are missing. H-086 is proposed, unsigned, for CSO review.
