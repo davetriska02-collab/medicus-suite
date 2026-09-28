@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.10] — 2026-09-28
+
+### DM036 age is 79 and under
+
+The CSO set DM036 to age 79 and under on 2026-09-28, from PRN02356 section 3.8 p.36 and NICE IND249 (2025/26). The p.17 summary table says 70. The CSO judged that a typo. Age 79 is in the indicator. Age 80 is not.
+
 ## [v3.267.9] — 2026-09-28
 
 ### Stacked on the SMOK002 status fix
@@ -26,7 +32,7 @@ Registers match a SNOMED concept id before the label. Stroke and TIA, PAD, CHD, 
 
 CHOL004 is LDL at or under 2.0, otherwise non-HDL at or under 2.6, and LDL wins on the same date. CHOL003 counts ezetimibe and the other named alternatives only with a statin declined, not-tolerated, or contraindicated code. AF008 needs a CHA2DS2-VASc of 2 or more, counts the DOAC brand names, and counts warfarin only after a DOAC decline or contraindication. An issue older than 183 days does not count. HF009 no longer treats metoprolol, canagliflozin, or ertugliflozin as a pillar. A DCCT % HbA1c, or a blank unit with a value under 20, does not clear an IFCC target. MH007, MH002, and DEM004 match the alcohol, care-plan, and review concept ids from the reports. AST014 is 93 days either side of diagnosis. HF008 is 183 days either side. DM014 is 279 days after a diagnosis coded in this QOF year. OB004 is 90 days after the BMI. BP002 (blood pressure in the last 5 years, age 45 and over) is on. Cervical screening and the vaccination indicators are present and off.
 
-DM036 stays age 70. The published 79 is unverified. MH011's 24-month arm is not wired. H-087 is proposed, unsigned, for CSO review.
+DM036 was left at age 70 in this build; v3.267.10 sets it to 79 and under. MH011's 24-month arm is not wired. H-087 is proposed, unsigned, for CSO review.
 
 ## [v3.267.7] — 2026-09-28
 

@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.9
+**Version:** v3.267.10
 **Generated:** 2026-09-28
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.10 (28 Sep)** — DM036 is age 79 and under. PRN02356 section 3.8 and NICE IND249 say 79. The p.17 summary says 70; the CSO judged that a typo on 28 Sep 2026. H-087 stays proposed and unsigned.
 - **v3.267.9 (28 Sep)** — The QOF gap work sits on the SMOK002 status fix. Advice, drugs and exception rubrics still do not clear smoking status. Decline codes still do not count as achieved. H-086 and H-087 stay proposed and unsigned.
 - **v3.267.8 (28 Sep)** — The QOF rules file is allowlisted for the NHS-number guard, because cluster concept ids can pass that checksum. No patient identifiers.
 - **v3.267.7 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. H-087 is proposed, unsigned, for CSO review.

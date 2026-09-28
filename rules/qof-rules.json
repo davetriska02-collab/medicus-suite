@@ -3393,10 +3393,10 @@
       "type": "qof-indicator",
       "enabled": true,
       "indicatorCode": "DM036",
-      "indicatorName": "BP <=140/90 in DM <=70 (no frailty)",
+      "indicatorName": "BP <=140/90 in DM <=79 (no frailty)",
       "requiresRegister": "DM",
       "ageRange": {
-        "max": 70
+        "max": 79
       },
       "excludeIfProblem": [
         "moderate frailty",
@@ -3429,7 +3429,7 @@
       },
       "points": 27,
       "source": "QOF 26/27 DM036",
-      "notes": "Age threshold tightened for 26/27: was <80, now ≤70. Frailty exclusion retained. 2026-09-28: age max stays 70. The July guidance summary table says 70 and the chapter / NICE IND249 say 79. v51 was not read (UNVERIFIED). Not changed.",
+      "notes": "Age 79 and under (PRN02356 section 3.8 p.36, NICE IND249, 2025/26). The p.17 summary table says 70; the CSO judged that a typo on 2026-09-28. Frailty exclusion retained.",
       "excludeIfConceptIds": [
         "1129381000000102",
         "925831000000107",

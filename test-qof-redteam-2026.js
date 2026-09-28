@@ -475,7 +475,7 @@ console.log('\n--- DM014 / DM020 / DM036 / OB004 / AST014 ---');
   const dm036 = rule('qof-dm036');
   const ob004 = rule('qof-ob004');
   const ast014 = rule('qof-ast012');
-  check(dm036.ageRange && dm036.ageRange.max === 70, 'DM036 age max stays 70 while 79 is unverified');
+  check(dm036.ageRange && dm036.ageRange.max === 79, 'DM036 age max is 79');
 
   const dmProblems = (date) => [{ label: 'Type 2 diabetes mellitus', codedDate: date }];
   const edu = (date, name) => [{ name: name || 'DESMOND', date, value: 'attended' }];
@@ -539,7 +539,8 @@ console.log('\n--- DM014 / DM020 / DM036 / OB004 / AST014 ---');
       patientContext: { ageYears: age },
     });
   check(d36([{ name: 'Blood pressure', value: '130/80', date: IN_YEAR }], 68)[0].status === 'achieved', 'DM036 age 68 with 130/80 achieves');
-  check(d36([{ name: 'Blood pressure', value: '130/80', date: IN_YEAR }], 75).length === 0, 'DM036 age 75 is outside the age max of 70');
+  check(d36([{ name: 'Blood pressure', value: '130/80', date: IN_YEAR }], 79)[0].status === 'achieved', 'DM036 age 79 with 130/80 achieves');
+  check(d36([{ name: 'Blood pressure', value: '130/80', date: IN_YEAR }], 80).length === 0, 'DM036 age 80 is outside the age max of 79');
   check(
     d36([{ name: 'Blood pressure declined', value: '120/70', date: IN_YEAR }], 68)[0].status !== 'achieved',
     'DM036 a declined blood pressure does not achieve'
