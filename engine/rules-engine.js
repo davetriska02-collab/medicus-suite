@@ -322,13 +322,17 @@
   // latest "pulse" and the pulse row shows in date. Word-boundary keeps a
   // real "HR" / "resting hr" token. The same rule applies to "tte": substring
   // matching hits cigarette and written, so a coded asthma-plan note would
-  // clear HF008. Longer terms stay substrings so "lft" still matches "LFTs"
-  // and "u&e" still matches "U&Es (...)".
+  // clear HF008. "bp", "bmi", "acr" and "ldl" are the same class: "acr" sits
+  // inside acrocyanosis, and a three-letter analyte must not complete a care
+  // process off an unrelated word. Longer terms stay substrings so "lft"
+  // still matches "LFTs" and "u&e" still matches "U&Es (...)".
   function observationTermHits(text, term) {
     const hay = String(text || '').toLowerCase();
     const t = String(term || '').toLowerCase();
     if (!t) return false;
-    if (t === 'hr' || t === 'tte') return new RegExp('\\b' + t + '\\b').test(hay);
+    if (t === 'hr' || t === 'tte' || t === 'bp' || t === 'bmi' || t === 'acr' || t === 'ldl') {
+      return new RegExp('\\b' + t + '\\b').test(hay);
+    }
     return hay.includes(t);
   }
 

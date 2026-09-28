@@ -425,6 +425,11 @@
           "fasting plasma glucose",
           "fasting glucose"
         ],
+        "snomed": [
+          "999791000000106",
+          "1049301000000100",
+          "1049321000000109"
+        ],
         "withinDays": 365
       },
       "thresholds": {
@@ -614,7 +619,13 @@
         "kind": "observation-threshold",
         "observation": [
           "hba1c",
-          "haemoglobin a1c"
+          "haemoglobin a1c",
+          "glycated haemoglobin"
+        ],
+        "snomed": [
+          "999791000000106",
+          "1049301000000100",
+          "1049321000000109"
         ],
         "operator": "<=",
         "threshold": 64,
@@ -640,7 +651,13 @@
         "kind": "observation-threshold",
         "observation": [
           "hba1c",
-          "haemoglobin a1c"
+          "haemoglobin a1c",
+          "glycated haemoglobin"
+        ],
+        "snomed": [
+          "999791000000106",
+          "1049301000000100",
+          "1049321000000109"
         ],
         "operator": "<=",
         "threshold": 75,
@@ -1071,9 +1088,13 @@
         "observation": [
           "ldl",
           "ldl cholesterol",
+          "low density lipoprotein",
           "non-hdl",
-          "non hdl"
+          "non hdl",
+          "non-high density lipoprotein",
+          "non high density lipoprotein"
         ],
+        "snomed": ["372361000119104"],
         "operator": "<=",
         "threshold": 2.6,
         "unit": "mmol/L",
@@ -1099,9 +1120,13 @@
         "observation": [
           "ldl",
           "ldl cholesterol",
+          "low density lipoprotein",
           "non-hdl",
-          "non hdl"
+          "non hdl",
+          "non-high density lipoprotein",
+          "non high density lipoprotein"
         ],
+        "snomed": ["372361000119104"],
         "operator": "<=",
         "threshold": 2.6,
         "unit": "mmol/L",
@@ -1127,9 +1152,13 @@
         "observation": [
           "ldl",
           "ldl cholesterol",
+          "low density lipoprotein",
           "non-hdl",
-          "non hdl"
+          "non hdl",
+          "non-high density lipoprotein",
+          "non high density lipoprotein"
         ],
+        "snomed": ["372361000119104"],
         "operator": "<=",
         "threshold": 2.6,
         "unit": "mmol/L",
@@ -1244,6 +1273,18 @@
           "dafne",
           "x-pert"
         ],
+        "snomed": [
+          "415270003",
+          "306701000000102",
+          "306741000000104",
+          "306771000000105",
+          "754461000000105",
+          "1108731000000100",
+          "1108741000000109",
+          "1258872006",
+          "1258873001",
+          "414230000"
+        ],
         "withinDays": 365
       },
       "thresholds": {
@@ -1269,7 +1310,13 @@
         "kind": "observation-threshold",
         "observation": [
           "hba1c",
-          "haemoglobin a1c"
+          "haemoglobin a1c",
+          "glycated haemoglobin"
+        ],
+        "snomed": [
+          "999791000000106",
+          "1049301000000100",
+          "1049321000000109"
         ],
         "operator": "<=",
         "threshold": 58,
@@ -1299,7 +1346,13 @@
         "kind": "observation-threshold",
         "observation": [
           "hba1c",
-          "haemoglobin a1c"
+          "haemoglobin a1c",
+          "glycated haemoglobin"
+        ],
+        "snomed": [
+          "999791000000106",
+          "1049301000000100",
+          "1049321000000109"
         ],
         "operator": "<=",
         "threshold": 75,
@@ -1444,42 +1497,185 @@
       "check": {
         "kind": "observation-bundle",
         "observations": [
-          [
-            "bmi",
-            "body mass index"
-          ],
-          [
-            "blood pressure",
-            "bp"
-          ],
-          [
-            "hba1c",
-            "haemoglobin a1c"
-          ],
-          [
-            "cholesterol",
-            "lipid profile"
-          ],
-          [
-            "smoking status",
-            "tobacco use"
-          ],
-          [
-            "foot examination",
-            "diabetic foot"
-          ],
-          [
-            "acr",
-            "albumin creatinine ratio",
-            "albumin:creatinine"
-          ],
           {
+            "name": "BMI",
+            "match": [
+              "bmi",
+              "body mass index"
+            ],
+            "snomed": [
+              "60621009"
+            ]
+          },
+          {
+            "name": "BP",
+            "match": [
+              "blood pressure",
+              "bp"
+            ]
+          },
+          {
+            "name": "HbA1c",
+            "match": [
+              "hba1c",
+              "haemoglobin a1c",
+              "glycated haemoglobin"
+            ],
+            "snomed": [
+              "999791000000106",
+              "1049301000000100",
+              "1049321000000109"
+            ]
+          },
+          {
+            "name": "Cholesterol",
+            "match": [
+              "cholesterol",
+              "lipid profile"
+            ]
+          },
+          {
+            "name": "Smoking",
+            "match": [
+              "ex-smoker",
+              "never smoked",
+              "current smoker",
+              "smoker",
+              "non-smoker",
+              "never smoked tobacco",
+              "cigarette smoker",
+              "tobacco smoker",
+              "smoking tobacco",
+              "smokes tobacco",
+              "stopped smoking",
+              "smoking status",
+              "cigarette consumption",
+              "cigar consumption",
+              "pipe tobacco consumption",
+              "tobacco smoking consumption"
+            ],
+            "snomed": [
+              "1092031000000108",
+              "1092041000000104",
+              "1092071000000105",
+              "1092091000000109",
+              "1092111000000104",
+              "1092131000000107",
+              "134406006",
+              "160603005",
+              "160604004",
+              "160605003",
+              "160606002",
+              "160612007",
+              "160613002",
+              "160616005",
+              "160617001",
+              "160619003",
+              "160620009",
+              "160621008",
+              "160625004",
+              "203191000000107",
+              "221000119102",
+              "225934006",
+              "228486009",
+              "230056004",
+              "230057008",
+              "230058003",
+              "230059006",
+              "230060001",
+              "230062009",
+              "230063004",
+              "230064005",
+              "230065006",
+              "266918002",
+              "266919005",
+              "266920004",
+              "266921000",
+              "266922007",
+              "266923002",
+              "266924008",
+              "266925009",
+              "266927001",
+              "266928006",
+              "266929003",
+              "281018007",
+              "308438006",
+              "360890004",
+              "360900008",
+              "394871007",
+              "394872000",
+              "394873005",
+              "401159003",
+              "401201003",
+              "405746006",
+              "413173009",
+              "428041000124106",
+              "446172000",
+              "449868002",
+              "48031000119106",
+              "492191000000103",
+              "53896009",
+              "56578002",
+              "56771006",
+              "59978006",
+              "65568007",
+              "735112005",
+              "735128000",
+              "77176002",
+              "782516008",
+              "82302008",
+              "836001000000109",
+              "8517006"
+            ]
+          },
+          {
+            "name": "Foot exam",
+            "match": [
+              "foot examination",
+              "diabetic foot",
+              "monofilament foot",
+              "ipswich touch test"
+            ],
+            "snomed": [
+              "134388005",
+              "1433601000000104",
+              "1443851000000100"
+            ]
+          },
+          {
+            "name": "ACR",
+            "match": [
+              "acr",
+              "albumin creatinine ratio",
+              "albumin:creatinine"
+            ]
+          },
+          {
+            "name": "eGFR",
             "match": [
               "egfr",
               "estimated glomerular filtration rate",
+              "glomerular filtration rate",
               "creatinine"
             ],
-            "exclude": ["urine", "urinary"]
+            "exclude": [
+              "urine",
+              "urinary"
+            ],
+            "snomed": [
+              "80274001",
+              "1011481000000105",
+              "1011491000000107",
+              "1020291000000106",
+              "1107411000000104",
+              "857971000000104",
+              "857981000000102",
+              "963601000000106",
+              "963611000000108",
+              "963621000000102",
+              "963631000000100",
+              "996231000000108"
+            ]
           }
         ],
         "withinDays": 365,
@@ -1491,7 +1687,7 @@
       },
       "points": 10,
       "source": "QOF 26/27 DM037",
-      "notes": "NEW 26/27 indicator. Requires all 8 care processes in preceding 12 months: BMI, BP, HbA1c, cholesterol, smoking status, foot exam, ACR, eGFR/creatinine. Chip shows 'X/8 care processes' and is not_met until all 8 are recorded this QOF year. Smoking status is also surfaced separately via the qof-smok-dm chip. QOF year floor applies. The eGFR/creatinine slot excludes urine/urinary names so a urine creatinine or urine ACR cannot also complete the blood renal process (serum creatinine and eGFR still count)."
+      "notes": "NEW 26/27 indicator. Requires all 8 care processes in preceding 12 months: BMI, BP, HbA1c, cholesterol, smoking status, foot exam, ACR, eGFR/creatinine. Chip shows 'X/8 care processes' and is not_met until all 8 are recorded this QOF year. Smoking status is also surfaced separately via the qof-smok-dm chip. QOF year floor applies. The eGFR/creatinine slot excludes urine/urinary names so a urine creatinine or urine ACR cannot also complete the blood renal process (serum creatinine and eGFR still count). 2026-09-28: groups are named. Smoking uses the same SMOK_COD list as SMOK002, so a Smoker note completes that slot and tobacco use on its own does not. HbA1c carries IFCCHBAM_COD. eGFR carries EGFR_COD, including Glomerular filtration rate (80274001). Foot exam adds monofilament foot sensation (134388005) and the Ipswich Touch Test (1433601000000104, 1443851000000100). The rest of FOOTEXAM_COD (leg pulses) is not included. BMI is the measurement 60621009, not the Obese finding codes in BMI_COD."
     },
     {
       "id": "qof-mh011-lipid",
@@ -1613,6 +1809,72 @@
           "non-drinker",
           "non drinker"
         ],
+        "snomed": [
+          "105542008",
+          "1082631000000102",
+          "1082641000000106",
+          "10939881000119105",
+          "160573003",
+          "160575005",
+          "160576006",
+          "160577002",
+          "160578007",
+          "160579004",
+          "160582009",
+          "160583004",
+          "160584005",
+          "160585006",
+          "160587003",
+          "160588008",
+          "160589000",
+          "160590009",
+          "160591008",
+          "160592001",
+          "160593006",
+          "198421000000108",
+          "198431000000105",
+          "219006",
+          "228274009",
+          "228276006",
+          "228277002",
+          "228278007",
+          "228279004",
+          "228281002",
+          "228315001",
+          "228316000",
+          "228317009",
+          "228326007",
+          "230085005",
+          "230086006",
+          "230088007",
+          "266917007",
+          "28127009",
+          "286857004",
+          "300939009",
+          "43783005",
+          "442547005",
+          "447087000",
+          "748381000000102",
+          "777631000000108",
+          "777651000000101",
+          "777671000000105",
+          "783261004",
+          "82581004",
+          "86933000",
+          "896792007",
+          "896807001",
+          "896808006",
+          "896809003",
+          "896812000",
+          "897148007",
+          "926322008",
+          "443280005",
+          "450760003",
+          "774089008",
+          "774090004",
+          "763256006",
+          "763302001"
+        ],
         "withinDays": 365
       },
       "thresholds": {
@@ -1644,6 +1906,11 @@
           "fasting glucose",
           "plasma glucose"
         ],
+        "snomed": [
+          "999791000000106",
+          "1049301000000100",
+          "1049321000000109"
+        ],
         "withinDays": 365
       },
       "thresholds": {
@@ -1666,7 +1933,25 @@
         "observation": [
           "heart failure review",
           "hf review",
-          "heart failure annual review"
+          "heart failure annual review",
+          "heart failure 6 month review",
+          "congestive heart failure monitoring",
+          "heart failure monitoring",
+          "heart failure self-management plan review",
+          "heart failure initial assessment",
+          "discussion about heart failure care plan",
+          "education about deteriorating heart failure"
+        ],
+        "snomed": [
+          "390885007",
+          "202231000000106",
+          "247361000000100",
+          "134378009",
+          "810971000000105",
+          "813991000000101",
+          "851071000000108",
+          "871681000000102",
+          "872361000000105"
         ],
         "withinDays": 365
       },
@@ -1902,7 +2187,23 @@
           "feno",
           "fractional exhaled nitric oxide",
           "peak flow variability",
-          "bronchodilator reversibility"
+          "bronchodilator reversibility",
+          "reversibility test",
+          "airways obstruction reversible",
+          "post bronchodilator spirometry"
+        ],
+        "snomed": [
+          "170627008",
+          "314979004",
+          "314981002",
+          "391118006",
+          "391119003",
+          "391121008",
+          "391122001",
+          "702540003",
+          "767906009",
+          "774951000000101",
+          "882591000000103"
         ],
         "withinDays": 365
       },
@@ -1919,17 +2220,53 @@
       "type": "qof-indicator",
       "enabled": true,
       "indicatorCode": "COPD010",
-      "indicatorName": "COPD review in preceding 12 months with MRC dyspnoea",
+      "indicatorName": "COPD review, exacerbation count and MRC dyspnoea in preceding 12 months",
       "requiresRegister": "COPD",
       "check": {
-        "kind": "observation-recent",
-        "observation": [
-          "copd review",
-          "copd annual review",
-          "mrc dyspnoea",
-          "medical research council dyspnoea"
-        ],
-        "withinDays": 365
+        "kind": "observation-bundle",
+        "requireAll": true,
+        "withinDays": 365,
+        "observations": [
+          {
+            "name": "COPD review",
+            "match": [
+              "copd review",
+              "copd annual review",
+              "chronic obstructive pulmonary disease annual review",
+              "chronic obstructive pulmonary disease 3 monthly review",
+              "chronic obstructive pulmonary disease 6 monthly review"
+            ],
+            "snomed": [
+              "394703002",
+              "760601000000107",
+              "760621000000103"
+            ]
+          },
+          {
+            "name": "Exacerbation count",
+            "match": [
+              "number of chronic obstructive pulmonary disease exacerbations in past year",
+              "copd exacerbations in past year"
+            ],
+            "snomed": [
+              "723245007"
+            ]
+          },
+          {
+            "name": "MRC dyspnoea",
+            "match": [
+              "mrc dyspnoea",
+              "medical research council dyspnoea"
+            ],
+            "snomed": [
+              "391120009",
+              "391123006",
+              "391124000",
+              "391125004",
+              "391126003"
+            ]
+          }
+        ]
       },
       "thresholds": {
         "lower": 50,
@@ -1937,7 +2274,7 @@
       },
       "points": 9,
       "source": "QOF 26/27 COPD010",
-      "notes": "Includes record of number of exacerbations and MRC dyspnoea scale. Encounter-coded; relies on Sentinel's journal endpoint fetch."
+      "notes": "Three required groups in the QOF year, not any one of them: a COPD review (COPDRVW_COD), the number of exacerbations (COPDEXACB_COD 723245007), and an MRC dyspnoea grade (MRC_COD). OpenCodelists nhsd-primary-care-domain-refsets 20260630. A review on its own, or an MRC grade on its own, does not clear the indicator. The preferred term Chronic obstructive pulmonary disease annual review does not contain the abbreviation COPD."
     },
     {
       "id": "trend-egfr-falling",
@@ -2217,7 +2554,13 @@
           "dementia care plan review",
           "dementia annual review",
           "memory clinic review",
-          "dementia health check"
+          "dementia health check",
+          "dementia advance care plan",
+          "dementia care plan agreed"
+        ],
+        "snomed": [
+          "956841000000106",
+          "1095121000000102"
         ],
         "withinDays": 365
       },

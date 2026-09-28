@@ -731,7 +731,11 @@ check(
     copd010,
     {
       medications: [],
-      observations: [{ name: 'COPD review', value: 'done', date: '2026-05-01' }],
+      observations: [
+        { name: 'Chronic obstructive pulmonary disease annual review', value: 'done', date: '2026-05-01', code: '394703002' },
+        { name: 'Number of chronic obstructive pulmonary disease exacerbations in past year', value: '1', date: '2026-05-01', code: '723245007' },
+        { name: 'Medical Research Council Dyspnoea scale grade 2', value: '2', date: '2026-05-01', code: '391123006' },
+      ],
       problems: [],
       patientContext: {},
       _registerLookup: { COPD: copdReg },

@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.6] — 2026-09-28
+
+### QOF look-fors follow the published code clusters
+
+COPD010 now needs all three of a COPD review, the number of exacerbations, and an MRC dyspnoea grade. A review on its own, or an MRC grade on its own, stays unmet, and the chip names the missing part. The official term "Chronic obstructive pulmonary disease annual review" counts.
+
+CHOL004 matches "low density lipoprotein" and "non-high density lipoprotein", not only the abbreviations. DM037's smoking slot uses the same smoking-habit codes as SMOK002, so a Smoker note completes it. Heart failure 6-month review, airways-obstruction reversibility, a light-drinker code, dementia advance care plan, diabetes structured-education referral, and the IFCC HbA1c codes count by concept id. `bp`, `bmi`, `acr` and `ldl` match as whole words, so acrocyanosis does not complete an ACR.
+
+The audit is in `docs/qof-2026-27-cluster-audit.md`. H-087 is proposed, unsigned, for CSO review. Medication indicators still match drug names. Cancer, depression, learning disability, osteoporosis, rheumatoid arthritis, palliative care, cervical screening and the QOF vaccination indicators are not new rules in this change.
+
 ## [v3.267.5] — 2026-09-28
 
 ### Coded journal notes count for SMOK002 and AST015

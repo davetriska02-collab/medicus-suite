@@ -226,8 +226,8 @@ const ALL_8 = [
   assert(chips.length === 1, 'DM037: chip produced with 8 in-window observations');
   assert(chips[0].status === 'achieved', 'DM037: 8/8 → achieved');
   assert(
-    chips[0].valueText === '8/8 care processes',
-    `DM037: valueText '8/8 care processes' (got: ${chips[0]?.valueText})`
+    chips[0].valueText === '8/8 components',
+    `DM037: valueText '8/8 components' (got: ${chips[0]?.valueText})`
   );
 }
 
@@ -238,8 +238,8 @@ const ALL_8 = [
   assert(chips.length === 1, 'DM037: chip produced with 7 observations');
   assert(chips[0].status === 'not_met', 'DM037: 7/8 → not_met');
   assert(
-    chips[0].valueText === '7/8 care processes',
-    `DM037: valueText '7/8 care processes' (got: ${chips[0]?.valueText})`
+    chips[0].valueText === '7/8 components (missing: eGFR)',
+    `DM037: valueText '7/8 components (missing: eGFR)' (got: ${chips[0]?.valueText})`
   );
 }
 
@@ -260,7 +260,7 @@ const ALL_8 = [
   );
   assert(urineCr[0] && urineCr[0].status === 'not_met', 'DM037: urine creatinine does not complete the renal slot');
   assert(
-    urineCr[0] && urineCr[0].valueText === '7/8 care processes',
+    urineCr[0] && urineCr[0].valueText === '7/8 components (missing: eGFR)',
     `DM037: urine creatinine stays 7/8 (got: ${urineCr[0] && urineCr[0].valueText})`
   );
   const urineAcr = engine.evaluateQofIndicatorRule(
@@ -269,7 +269,7 @@ const ALL_8 = [
     NOW
   );
   assert(
-    urineAcr[0] && urineAcr[0].valueText === '7/8 care processes',
+    urineAcr[0] && urineAcr[0].valueText === '7/8 components (missing: eGFR)',
     `DM037: urine ACR does not also complete eGFR (got: ${urineAcr[0] && urineAcr[0].valueText})`
   );
   const serumCr = engine.evaluateQofIndicatorRule(
@@ -279,7 +279,7 @@ const ALL_8 = [
   );
   assert(serumCr[0] && serumCr[0].status === 'achieved', 'DM037: serum creatinine still completes the renal slot');
   assert(
-    serumCr[0] && serumCr[0].valueText === '8/8 care processes',
+    serumCr[0] && serumCr[0].valueText === '8/8 components',
     `DM037: serum creatinine → 8/8 (got: ${serumCr[0] && serumCr[0].valueText})`
   );
 }
@@ -292,8 +292,8 @@ const ALL_8 = [
   assert(chips.length === 1, 'DM037: chip with 7 in-window + 1 old');
   assert(chips[0].status === 'not_met', 'DM037: old observation outside QOF year does not count → not_met');
   assert(
-    chips[0].valueText === '7/8 care processes',
-    `DM037: valueText '7/8 care processes' when one obs pre-QOF-year (got: ${chips[0]?.valueText})`
+    chips[0].valueText === '7/8 components (missing: eGFR)',
+    `DM037: valueText '7/8 components (missing: eGFR)' when one obs pre-QOF-year (got: ${chips[0]?.valueText})`
   );
 }
 
