@@ -1,3 +1,4 @@
+/* global process, console */
 // Renders the availability setup canvas with fictional names and saves PNGs.
 // Not part of the extension. No patient data.
 import { spawnSync } from 'node:child_process';
