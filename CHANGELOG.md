@@ -2,6 +2,32 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.3] — 2026-09-28
+
+### Coded journal notes for SMOK002 and AST015 (H-088)
+
+Consultation notes that carry a clinical code are read as observations, with the concept id when the payload has one. Uncoded free text is still ignored. A note marked incorrect is ignored. A draft note is not read. A note's date is its recordDate, then the observation date, then the day-group title. The migration field `created` is not used.
+
+A coded note such as "Asthma review declined", "Smoking status not recorded" or "CHA2DS2-VASc score not appropriate" contains the achievement phrase. Those rubrics no longer count. The phrases are declined, not recorded, not appropriate, unsuitable, refused, dissent, and not indicated. A concept id does not override that.
+
+SMOK002 achievement is the 71-code SMOK_COD refset (OpenCodelists tag 20260630). Current, ex and never clusters are subsets of that list. Text look-fors now include the preferred terms a short phrase used to miss, including Smoking reduced, Date ceased smoking and Cigarette pack-years. Cigarette consumption (230056004) counts, because it is in that refset. Smoking cessation education (225323000) and a cessation referral (871661000000106) do not. The newest matching date wins, so a 2022 dashboard row no longer hides last week's status.
+
+These do not clear the indicator: Declined to give smoking status (1098881000000103), Tobacco use screening declined (11351000175103), smoking-cessation advice, referral and pharmacotherapy, and Nicotine dependence. The phrase "smoking status" is no longer a look-for. A dashboard row named Smoking status is still read from its value, so Ex-smoker in that value still counts. Passive smoker stays excluded.
+
+A personalised care adjustment for smoking — patient unsuitable (716391000000109) or informed dissent (717771000000108) — hides the chip. It does not count as the status being recorded. A real in-year smoking code still counts beside either exception.
+
+The asthma review is met only when all three are present: a review code from the 11-code REV_COD list, an exacerbation count dated from one month before that review through the review day, and a written plan on the same day as the review. A review on its own stays not met. Asthma control assessment and inhaler technique are shown on the detail panel as advisory. Neither blocks a green chip. An earlier draft of this change described four components; the shipped rule is the three facts above.
+
+A personalised care adjustment hides the chip when the review is not already met: patient unsuitable (717291000000103), asthma monitoring declined (763221007), informed dissent (716491000000100), or two asthma invitations at least 7 days apart. A completed review still counts beside any of those. Children under 5 are excluded. The asthma register now also excludes the preferred term "Asthma resolved".
+
+The echo abbreviation on HF008 is a whole word, so a note containing "cigarette" or "written" does not clear it.
+
+The journal parser still keeps about 400 days. SMOK002 and AST015 use the QOF year, from 1 April, which sits inside that window. The wording "preceding 12 months" therefore behaves as "since 1 April", the same as QOF payment. Sweep and the Triage Lens monitoring chip do not run this journal read. Only the live patient evaluation does. That is a follow-up.
+
+Not in this build: a never-smoker code recorded after the 25th birthday carries forward, and an ex-smoker code carries forward for three years. The journal feed is about 400 days, so a three-year-old ex-smoker code is not in the feed. Both stay follow-ups.
+
+H-088 is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6. Hazard-log document version 3.80. Drafted on the pull request as H-086; that number stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.2] — 2026-09-28
 
 ### Drag appointment types onto availability tiles

@@ -115,7 +115,11 @@ check(
 );
 check(
   smokStatus([{ name: 'Smoking status', value: 'Ex-smoker', date: '2026-09-21', source: 'journal' }]) === 'achieved',
-  'a "Smoking status" observation also satisfies (name-based matching unchanged)'
+  'a dashboard "Smoking status" row is read from its value (Ex-smoker)'
+);
+check(
+  smokStatus([{ name: 'Smoking status', value: '', date: '2026-09-21', source: 'journal' }]) === 'no_data',
+  'a bare "Smoking status" wrapper with no value does not achieve'
 );
 
 console.log('\n--- SMOK002: widened, status-first term list (2026-09-21 live report, v3.264.4) ---');
@@ -132,13 +136,60 @@ allSmok002.forEach((r) => {
     firstFour.includes('ex-smoker') && firstFour.includes('never smoked') && firstFour.includes('current smoker'),
     `${r.id}: status terms lead the list (first four: ${firstFour.join(', ')})`
   );
+  check(!terms.includes('smoking status'), `${r.id}: "smoking status" is not a look-for`);
+  check(terms.includes('cigarette consumption'), `${r.id}: Cigarette consumption rubric is kept (in SMOK_COD)`);
+  check(terms.includes('date ceased smoking'), `${r.id}: Date ceased smoking rubric is a look-for`);
+  check(terms.includes('cigarette pack-years'), `${r.id}: Cigarette pack-years rubric is a look-for`);
+  check(terms.includes('smoking reduced'), `${r.id}: Smoking reduced rubric is a look-for`);
   check(
-    ['smoking status', 'tobacco use', 'smoking cessation', 'nicotine dependence'].every((t) => terms.includes(t)),
-    `${r.id}: process terms are kept`
+    !terms.includes('smoking cessation') && !terms.includes('nicotine dependence') && !terms.includes('tobacco use'),
+    `${r.id}: cessation / dependence / bare tobacco-use substrings are not look-fors`
   );
+  const snomed = r.check.snomed || [];
+  check(snomed.length === 71, `${r.id}: SMOK_COD is 71 concept ids (got ${snomed.length})`);
+  [
+    '77176002',
+    '8517006',
+    '266919005',
+    '65568007',
+    '230056004',
+    '266918002',
+    '230057008',
+    '230058003',
+    '836001000000109',
+    '160617001',
+    '160625004',
+    '134406006',
+    '449868002',
+    '401201003',
+  ].forEach((code) => {
+    check(snomed.includes(code), `${r.id}: SMOK_COD includes ${code}`);
+  });
   check(
-    (r.check.observationExclude || []).includes('passive'),
-    `${r.id}: "passive" exclude guards the bare "smoker" term (Passive smoker ≠ patient status)`
+    !snomed.includes('225323000') && !snomed.includes('871661000000106') && !snomed.includes('1098881000000103'),
+    `${r.id}: cessation, referral and declined-status codes are not achievement ids`
+  );
+  const denied = r.check.snomedExclude || [];
+  [
+    '1098881000000103',
+    '11351000175103',
+    '225323000',
+    '871661000000106',
+    '313396002',
+    '56294008',
+    '716391000000109',
+    '717771000000108',
+  ].forEach((code) => {
+    check(denied.includes(code) && !snomed.includes(code), `${r.id}: ${code} is excluded, not an achievement id`);
+  });
+  const textEx = r.check.observationExclude || [];
+  ['passive', 'smoking status', 'tobacco use', 'smoking cessation', 'nicotine dependence'].forEach((phrase) => {
+    check(textEx.includes(phrase), `${r.id}: text exclude "${phrase}" is present`);
+  });
+  const pca = ((r.pca || {}).observationsInYear || []).flatMap((s) => s.snomed || []);
+  check(
+    pca.includes('716391000000109') && pca.includes('717771000000108'),
+    `${r.id}: PCA codes suppress rather than achieve`
   );
 });
 
@@ -181,6 +232,81 @@ console.log('\n--- SMOK002: evidence panel does not lie by omission ---');
   check(detail.includes('never smoked'), 'evidence "we looked for" includes never smoked');
   check(detail.includes('…'), 'evidence shows an ellipsis when the term list is truncated');
 }
+
+console.log('\n--- SMOK002: false-achievement codes and phrases do not clear the indicator ---');
+const falseCases = [
+  { name: 'Declined to give smoking status', code: '1098881000000103', label: 'declined smoking status' },
+  { name: 'Tobacco use screening declined', code: '11351000175103', label: 'tobacco use screening declined' },
+  { name: 'Smoking cessation advice', code: '200221000000105', label: 'smoking cessation advice' },
+  { name: 'Referral to smoking cessation service', code: '871661000000106', label: 'cessation referral' },
+  { name: 'Nicotine replacement therapy', code: '313396002', label: 'pharmacotherapy' },
+  { name: 'Nicotine dependence', code: '56294008', label: 'nicotine dependence' },
+];
+falseCases.forEach((row) => {
+  const coded = smokStatus([{ name: row.name, value: '', code: row.code, date: '2026-09-21' }]);
+  const textOnly = smokStatus([{ name: row.name, value: '', date: '2026-09-21' }]);
+  check(coded !== 'achieved', `${row.label} concept id does not achieve (got ${coded})`);
+  check(textOnly !== 'achieved', `${row.label} wording does not achieve (got ${textOnly})`);
+});
+
+console.log('\n--- SMOK002: text-only SMOK_COD rubrics that a short look-for used to miss ---');
+[
+  'Smoking reduced',
+  'Date ceased smoking',
+  'Cigarette pack-years',
+  'Smokes tobacco daily',
+  'Waterpipe tobacco consumption',
+  'Stopped smoking',
+].forEach((name) => {
+  check(
+    smokStatus([{ name: name, value: '', date: '2026-09-21' }]) === 'achieved',
+    `"${name}" with no concept id still clears SMOK002`
+  );
+});
+
+console.log('\n--- SMOK002: PCA unsuitable and informed dissent suppress the chip ---');
+function smokChips(observations) {
+  return engine.evaluateQofIndicatorRule(
+    smok002,
+    {
+      medications: [],
+      observations,
+      problems: [{ label: chdReg.problemMatch[0] }],
+      patientContext: {},
+      _registerLookup: { CHD: chdReg },
+    },
+    NOW
+  );
+}
+const pcaRows = [
+  {
+    name: 'Excepted from smoking quality indicators - patient unsuitable',
+    code: '716391000000109',
+    label: 'patient unsuitable',
+  },
+  {
+    name: 'Excepted from smoking quality indicators - informed dissent',
+    code: '717771000000108',
+    label: 'informed dissent',
+  },
+];
+pcaRows.forEach((row) => {
+  const only = smokChips([{ name: row.name, value: '', code: row.code, date: '2026-09-21' }]);
+  check(only.length === 0, `${row.label} suppresses the chip (got ${only.length} chips)`);
+  const besideOld = smokChips([
+    { name: row.name, value: '', code: row.code, date: '2026-09-21' },
+    { name: 'Cigarette consumption', value: '20 /day', code: '230056004', date: '2022-11-14' },
+  ]);
+  check(besideOld.length === 0, `${row.label} suppresses an otherwise overdue chip`);
+  const besideCurrent = smokChips([
+    { name: row.name, value: '', code: row.code, date: '2026-09-21' },
+    { name: 'Smoker', value: '', code: '77176002', date: '2026-09-21' },
+  ]);
+  check(
+    besideCurrent[0] && besideCurrent[0].status === 'achieved',
+    `a real in-year smoker code still achieves beside ${row.label}`
+  );
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;

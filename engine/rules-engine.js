@@ -320,34 +320,165 @@
   // pulse tests. Substring matching also hits prothrombin, thrombin, throat,
   // chronic, threshold — a recent INR ("Prothrombin time") then becomes the
   // latest "pulse" and the pulse row shows in date. Word-boundary keeps a
-  // real "HR" / "resting hr" token. Longer terms stay substrings so "lft"
-  // still matches "LFTs" and "u&e" still matches "U&Es (...)".
+  // real "HR" / "resting hr" token. The same rule applies to "tte": substring
+  // matching hits cigarette and written, so a coded asthma-plan note would
+  // clear HF008. Longer terms stay substrings so "lft" still matches "LFTs"
+  // and "u&e" still matches "U&Es (...)".
   function observationTermHits(text, term) {
     const hay = String(text || '').toLowerCase();
     const t = String(term || '').toLowerCase();
     if (!t) return false;
-    if (t === 'hr') return /\bhr\b/.test(hay);
+    if (t === 'hr' || t === 'tte') return new RegExp('\\b' + t + '\\b').test(hay);
     return hay.includes(t);
+  }
+
+  // Exception / negation rubrics. Once coded notes are ingested, a substring
+  // achievement match also hits the exception code: "Asthma review declined",
+  // "Smoking status not recorded", "CHA2DS2-VASc score not appropriate".
+  // Those are not achievement. Checked on the displayed rubric before the
+  // SNOMED bypass, so a concept id does not rescue an exception phrase.
+  const OBSERVATION_EXCEPTION_RES = [
+    /\bdeclined\b/,
+    /\bnot recorded\b/,
+    /\bnot appropriate\b/,
+    /\bunsuitable\b/,
+    /\brefused\b/,
+    /\bdissent\b/,
+    /\bnot indicated\b/,
+  ];
+
+  function observationTextIsException(text) {
+    const hay = String(text || '').toLowerCase();
+    return OBSERVATION_EXCEPTION_RES.some((rx) => rx.test(hay));
+  }
+
+  // A lookup whose own terms are exception phrases (OB005 PCA: "pathway
+  // declined") is searching for the exception, so those rows must stay.
+  function specLooksForExceptions(testSpec) {
+    // includeExceptions: a lookup that is searching FOR the exception
+    // (SMOK002 PCA unsuitable / informed dissent). Those rows must stay.
+    if (testSpec && testSpec.includeExceptions) return true;
+    const terms = testSpec && Array.isArray(testSpec.match) ? testSpec.match : [];
+    return terms.some((t) => observationTextIsException(t));
+  }
+
+  // The investigation dashboard files the status in the value of a row whose
+  // name is exactly "Smoking status" ("Smoking status" / "Ex-smoker"). Search
+  // the name and the value, so a rule that looks for "smoking status" (DM037)
+  // and a rule that looks for "ex-smoker" (SMOK002) both see it. A longer
+  // rubric that only contains the words ("Declined to give smoking status")
+  // is not the wrapper and is searched on its name.
+  function observationIsStatusWrapper(obs) {
+    return String((obs && obs.name) || '').trim().toLowerCase() === 'smoking status';
+  }
+
+  function observationSearchText(obs) {
+    const name = String((obs && obs.name) || '');
+    const value = String((obs && obs.value) || '');
+    if (observationIsStatusWrapper(obs) && value.trim()) return name + ' ' + value;
+    return name;
   }
 
   // observation-bundle groups are either an alias array (every shipped group
   // except DM037's renal slot) or { match, exclude } when a bare analyte must
   // not be satisfied by another specimen. Callers still see `aliases`.
   function observationBundleGroup(group) {
-    if (Array.isArray(group)) return { match: group, exclude: undefined };
-    if (group && Array.isArray(group.match)) return { match: group.match, exclude: group.exclude };
-    return { match: [], exclude: undefined };
+    if (Array.isArray(group)) {
+      return {
+        name: null,
+        match: group,
+        exact: undefined,
+        exclude: undefined,
+        snomed: undefined,
+        advisory: false,
+        sameDayAs: null,
+        anchor: null,
+        withinMonthsBefore: null,
+      };
+    }
+    if (group && Array.isArray(group.match)) {
+      return {
+        name: group.name || null,
+        match: group.match,
+        exact: group.exact,
+        exclude: group.exclude,
+        snomed: group.snomed,
+        advisory: !!group.advisory,
+        sameDayAs: group.sameDayAs || null,
+        anchor: group.anchor || null,
+        withinMonthsBefore: group.withinMonthsBefore == null ? null : group.withinMonthsBefore,
+      };
+    }
+    return {
+      name: null,
+      match: [],
+      exact: undefined,
+      exclude: undefined,
+      snomed: undefined,
+      advisory: false,
+      sameDayAs: null,
+      anchor: null,
+      withinMonthsBefore: null,
+    };
+  }
+
+  function observationCheckSpec(check) {
+    return {
+      match: check.observation,
+      exclude: check.observationExclude,
+      snomed: check.snomed,
+      snomedExclude: check.snomedExclude,
+    };
+  }
+
+  // One calendar month before an ISO day, clamping the day (31 Mar → 28/29 Feb).
+  // Used by AST015's exacerbation window: from 1 month before the review
+  // through the review date (QOF business rules, same as AST007).
+  function calendarMonthsBefore(iso, months) {
+    const day = isoDay(iso);
+    if (!day || !months) return null;
+    const y = parseInt(day.slice(0, 4), 10);
+    const m = parseInt(day.slice(5, 7), 10);
+    const d = parseInt(day.slice(8, 10), 10);
+    const shifted = new Date(Date.UTC(y, m - 1 - months, 1));
+    const last = new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0)).getUTCDate();
+    const dd = Math.min(d, last);
+    const mm = shifted.getUTCMonth() + 1;
+    return (
+      shifted.getUTCFullYear() + '-' + (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd
+    );
   }
 
   function filterMatchingObservations(observations, testSpec) {
     if (!Array.isArray(observations)) return [];
     const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
+    const excludeCodes = Array.isArray(testSpec.snomedExclude) ? testSpec.snomedExclude.map((c) => String(c)) : null;
+    const keepExceptions = specLooksForExceptions(testSpec);
     return observations.filter((obs) => {
+      if (!obs) return false;
+      // A denied concept id never achieves, even when the display name
+      // contains an achievement phrase or the code was also listed in snomed.
+      if (excludeCodes && obs.code && excludeCodes.includes(String(obs.code))) return false;
+      const text = observationSearchText(obs);
+      if (!keepExceptions && observationTextIsException(text)) return false;
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
-      if (obs.name && Array.isArray(testSpec.match)) {
-        const obsLower = String(obs.name).toLowerCase();
-        if (!testSpec.match.some((m) => observationTermHits(obsLower, m))) return false;
-        if (excludeTerms && excludeTerms.some((e) => obsLower.includes(e))) return false;
+      if (text && (Array.isArray(testSpec.match) || Array.isArray(testSpec.exact))) {
+        const obsLower = text.toLowerCase();
+        const substrHit =
+          Array.isArray(testSpec.match) && testSpec.match.some((m) => observationTermHits(obsLower, m));
+        // exact: the whole rubric, so "asthma monitoring" does not also match
+        // "Asthma monitoring call first letter".
+        const exactHit =
+          Array.isArray(testSpec.exact) &&
+          testSpec.exact.some((m) => obsLower.trim() === String(m || '').toLowerCase().trim());
+        if (!substrHit && !exactHit) return false;
+        // The wrapper's own name is "Smoking status". That phrase is a SMOK002
+        // exclude so it cannot hit "Declined to give smoking status". Do not
+        // apply that one exclude to the wrapper row; the value still has to
+        // match a real status term.
+        const termsToApply =
+          excludeTerms && observationIsStatusWrapper(obs) ? excludeTerms.filter((e) => e !== 'smoking status') : excludeTerms;
+        if (termsToApply && termsToApply.some((e) => obsLower.includes(e))) return false;
         return true;
       }
       return false;
@@ -386,6 +517,7 @@
       if (!group) return;
       const nameLower = String(group.name || '').toLowerCase();
       const groupLower = String(group.group || '').toLowerCase();
+      if (!specLooksForExceptions(testSpec) && (observationTextIsException(nameLower) || observationTextIsException(groupLower))) return;
       const matches = testSpec.match.some(
         (m) => observationTermHits(nameLower, m) || observationTermHits(groupLower, m)
       );
@@ -1010,11 +1142,29 @@
       });
     } else if (check.kind === 'observation-bundle') {
       (ctx.bundleResults || []).forEach((r) => {
-        facts.push({
-          label: (r.aliases || [])[0] || 'care process',
-          value: r.inWindow ? (r.obs ? r.obs.value || 'recorded' : 'recorded') : 'not in window',
-          date: r.obs ? r.obs.date : null,
-        });
+        if (r.advisory && r.name) {
+          facts.push({
+            label: r.name,
+            value: 'advisory',
+            date: r.inWindow && r.obs ? r.obs.date : null,
+            detail: r.inWindow
+              ? `${(r.obs && r.obs.name) || 'recorded'} — does not block achievement`
+              : 'not recorded — does not block achievement',
+          });
+        } else if (r.name) {
+          facts.push({
+            label: r.name,
+            value: r.inWindow ? 'met' : 'missing',
+            date: r.inWindow && r.obs ? r.obs.date : null,
+            detail: r.inWindow ? (r.obs && r.obs.name) || 'recorded' : r.detail || 'not recorded',
+          });
+        } else {
+          facts.push({
+            label: (r.aliases || [])[0] || 'care process',
+            value: r.inWindow ? (r.obs ? r.obs.value || 'recorded' : 'recorded') : 'not in window',
+            date: r.obs ? r.obs.date : null,
+          });
+        }
       });
     } else if (check.kind === 'observation-trend') {
       const s = ctx.trendSeries;
@@ -1755,8 +1905,13 @@
   function collectNamedEvents(data, spec) {
     const match = spec.match || [];
     const snomed = spec.snomed || [];
-    const fromObs = filterMatchingObservations(data.observations || [], { match, snomed });
-    const fromHist = filterMatchingObservationHistoryPoints(data.observationHistory || [], { match, snomed });
+    const includeExceptions = !!spec.includeExceptions;
+    const fromObs = filterMatchingObservations(data.observations || [], { match, snomed, includeExceptions });
+    const fromHist = filterMatchingObservationHistoryPoints(data.observationHistory || [], {
+      match,
+      snomed,
+      includeExceptions,
+    });
     const fromProblems = [];
     const allProblems = [...(data.problems || []), ...(data.pastProblems || [])];
     allProblems.forEach((p) => {
@@ -2627,7 +2782,7 @@
     // never adds green "MET" noise. comparator 'above' = high values are dangerous
     // (e.g. potassium); 'below' = low values are dangerous.
     if (check.kind === 'observation-alert') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       if (!obs || !obs.date) {
         if (traceEntry) traceEntry.skipReason = 'no-observation';
         return [];
@@ -2714,7 +2869,7 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2776,7 +2931,7 @@
       if (foundMed) evidenceCtx.matchedMed = foundMed.name;
       status = foundMed ? 'achieved' : 'not_met';
     } else if (check.kind === 'observation-recent') {
-      const obs = findLatestObservation(data.observations, { match: check.observation, exclude: check.observationExclude });
+      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
       // would produce 'overdue' (conservative but misleading — treat as no data).
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2826,38 +2981,127 @@
         if (!_diagInWindow) status = 'overdue';
       }
     } else if (check.kind === 'observation-bundle') {
-      // observation-bundle: checks that EACH observation group (alias array, or
-      // { match, exclude }) has a matching result within the QOF window. Used by
-      // DM037 to verify all 8 care processes were recorded this QOF year.
+      // observation-bundle: each group (an alias array, or { name, match,
+      // exclude, snomed }) needs a result in the QOF window. DM037 uses this
+      // for 8 care processes. AST015 names its groups. sameDayAs and
+      // withinMonthsBefore tie a group to an anchor (written plan on the
+      // review day; exacerbation count from 1 calendar month before that
+      // review through the review date).
       const bundleGroups = check.observations || [];
       const _useFloorB = rule.useQofYearFloor !== false;
       const _withinDaysB = check.withinDays || 365;
       const _qofStartB = qofYearStart(now);
       const _rollingCutoffB = new Date(now);
       _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
+      const inAchievementWindow = (obs) => {
+        if (!obs || !obs.date) return false;
+        const obsDate = new Date(obs.date);
+        if (isNaN(obsDate.getTime())) return false;
+        return _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
+      };
       const bundleResults = bundleGroups.map((group) => {
         const spec = observationBundleGroup(group);
         const aliases = spec.match;
-        const obs = findLatestObservation(data.observations, { match: aliases, exclude: spec.exclude });
-        if (!obs || !obs.date) return { aliases, obs: null, inWindow: false };
-        const obsDate = new Date(obs.date);
-        const inWindow = _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
-        return { aliases, obs, inWindow };
-      });
-      const metCount = bundleResults.filter((r) => r.inWindow).length;
-      const totalCount = bundleResults.length;
-      if (check.requireAll) {
-        if (metCount === totalCount) {
-          status = 'achieved';
-        } else if (metCount === 0) {
-          status = 'no_data';
-        } else {
-          status = 'not_met';
+        const constrained = !!(spec.sameDayAs || spec.withinMonthsBefore != null);
+        if (!constrained) {
+          const obs = findLatestObservation(data.observations, {
+            match: aliases,
+            exact: spec.exact,
+            exclude: spec.exclude,
+            snomed: spec.snomed,
+          });
+          if (!obs || !obs.date) {
+            return { name: spec.name, aliases, obs: null, inWindow: false, detail: null, advisory: spec.advisory };
+          }
+          return { name: spec.name, aliases, obs, inWindow: inAchievementWindow(obs), detail: null, advisory: spec.advisory };
         }
+        const matches = filterMatchingObservations(data.observations, {
+          match: aliases,
+          exact: spec.exact,
+          exclude: spec.exclude,
+          snomed: spec.snomed,
+        }).filter((o) => isoDay(o.date));
+        return {
+          name: spec.name,
+          aliases,
+          obs: null,
+          inWindow: false,
+          detail: null,
+          advisory: spec.advisory,
+          _matches: matches,
+          _spec: spec,
+        };
+      });
+      const anchorsInWindow = (name) => {
+        const anchor = bundleResults.find((r) => r.name === name);
+        if (!anchor) return [];
+        if (anchor._matches) return anchor._matches.filter(inAchievementWindow);
+        return anchor.inWindow && anchor.obs ? [anchor.obs] : [];
+      };
+      bundleResults.forEach((r) => {
+        if (!r._spec) return;
+        const spec = r._spec;
+        const anchors = anchorsInWindow(spec.sameDayAs || spec.anchor);
+        const newest = (list) => list.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0] || null;
+        if (spec.sameDayAs) {
+          const anchorDays = new Set(anchors.map((a) => isoDay(a.date)));
+          const hits = r._matches.filter((o) => anchorDays.has(isoDay(o.date)));
+          if (hits.length) {
+            r.obs = newest(hits);
+            r.inWindow = true;
+          } else if (r._matches.length) {
+            r.obs = newest(r._matches);
+            r.detail = `recorded ${isoDay(r.obs.date)}, not on the same day as ${spec.sameDayAs}`;
+          } else {
+            r.detail = 'not recorded';
+          }
+        } else if (spec.withinMonthsBefore != null) {
+          const hits = r._matches.filter((o) => {
+            const od = isoDay(o.date);
+            return anchors.some((a) => {
+              const ad = isoDay(a.date);
+              const from = calendarMonthsBefore(ad, spec.withinMonthsBefore);
+              return od && ad && from && od >= from && od <= ad;
+            });
+          });
+          if (hits.length) {
+            r.obs = newest(hits);
+            r.inWindow = true;
+          } else if (r._matches.length) {
+            r.obs = newest(r._matches);
+            r.detail = `recorded ${isoDay(r.obs.date)}, not between 1 month before ${spec.anchor || 'the anchor'} and that date`;
+          } else {
+            r.detail = 'not recorded';
+          }
+        }
+        delete r._matches;
+        delete r._spec;
+      });
+      // advisory groups (AST015 control assessment and inhaler technique) are
+      // shown on the panel and do not count toward achievement.
+      const requiredResults = bundleResults.filter((r) => !r.advisory);
+      const metCount = requiredResults.filter((r) => r.inWindow).length;
+      const totalCount = requiredResults.length;
+      const named = requiredResults.some((r) => r.name);
+      if (check.requireAll) {
+        if (metCount === totalCount && totalCount > 0) status = 'achieved';
+        else if (metCount === 0) status = 'no_data';
+        else status = 'not_met';
       } else {
         status = metCount > 0 ? 'achieved' : 'no_data';
       }
-      valueText = `${metCount}/${totalCount} care processes`;
+      // Long-standing register member, none of the components in the window:
+      // overdue. Same opt-in as observation-recent. A partial set stays
+      // not_met so the missing names stay on the chip.
+      if (status === 'no_data' && rule.treatNeverRecordedAsOverdue && evidenceCtx.registerEligibilityDate) {
+        const _diagDate = new Date(evidenceCtx.registerEligibilityDate);
+        const _diagInWindow = _useFloorB ? _diagDate >= _qofStartB : _diagDate >= _rollingCutoffB;
+        if (!_diagInWindow) status = 'overdue';
+      }
+      const missingNames = requiredResults.filter((r) => r.name && !r.inWindow).map((r) => r.name);
+      valueText = named
+        ? `${metCount}/${totalCount} components${missingNames.length ? ` (missing: ${missingNames.join(', ')})` : ''}`
+        : `${metCount}/${totalCount} care processes`;
       // Most recent observation date across all matched groups
       const latestBundleDate =
         bundleResults
@@ -2919,6 +3163,7 @@
       const matchTerms = check.observation || [];
       const candidates = (data.observationHistory || []).filter((entry) => {
         const name = normStr(entry.name);
+        if (observationTextIsException(name)) return false;
         return matchTerms.some((m) => observationTermHits(name, m));
       });
       const historyEntry =
@@ -3040,8 +3285,10 @@
       traceEntry.allOfResults = evidenceCtx.allOfResults ? evidenceCtx.allOfResults.slice(0, 15) : null;
       traceEntry.bundleResults = evidenceCtx.bundleResults
         ? evidenceCtx.bundleResults.slice(0, 15).map((r) => ({
+            name: r.name || null,
             aliases: r.aliases || [],
             inWindow: r.inWindow,
+            detail: r.detail || null,
             obs: r.obs ? { name: r.obs.name, date: r.obs.date, value: r.obs.value } : null,
           }))
         : null;
