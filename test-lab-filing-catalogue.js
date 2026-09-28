@@ -39,25 +39,32 @@ function baseOverlay() {
 const acting = (overlay) => OV.mergeCatalogue(builtin, overlay, {}).catalogue;
 
 // A result row in the shape engine/normalisers.js normaliseInvestigationReport() produces.
-const result = (over) => ({
-  name: 'ALP',
-  value: 77,
-  rawValue: '77',
-  comparator: null,
-  unit: 'u/L',
-  code: ALP.code,
-  low: 20,
-  high: 140, // the LAB's own range — deliberately different from the practice's 30-130, so tests can tell which won
-  isAbove: false,
-  isBelow: false,
-  urgent: false,
-  interpretation: null,
-  date: '2026-09-20',
-  history: [],
-  text: '',
-  specimen: 'LFTs',
-  ...over,
-});
+// groupHeading defaults to whatever `specimen` ends up being — true for every NAMED group in the real normaliser —
+// unless a test passes groupHeading explicitly, which is how a test simulates an UNGROUPED result (specimen: null,
+// groupHeading: the result's own name) — see engine/lab-filing-catalogue.js, which reads groupHeading, not specimen.
+const result = (over) => {
+  const merged = {
+    name: 'ALP',
+    value: 77,
+    rawValue: '77',
+    comparator: null,
+    unit: 'u/L',
+    code: ALP.code,
+    low: 20,
+    high: 140, // the LAB's own range — deliberately different from the practice's 30-130, so tests can tell which won
+    isAbove: false,
+    isBelow: false,
+    urgent: false,
+    interpretation: null,
+    date: '2026-09-20',
+    history: [],
+    text: '',
+    specimen: 'LFTs',
+    ...over,
+  };
+  if (!over || !('groupHeading' in over)) merged.groupHeading = merged.specimen;
+  return merged;
+};
 const report = (results, over) => ({ lab: { ...ORG }, results, ...over });
 
 console.log('--- golden: recognised, in range, approved group -> clean ---');
@@ -76,8 +83,8 @@ console.log('\n--- golden shape ---');
 {
   const res = FC.evaluateFilingCatalogue(report([result()]), acting(baseOverlay()));
   check(
-    Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds,unresolvedComments',
-    'success shape is exactly { ok, blockers, reasonKinds, meta, unresolvedComments }'
+    Object.keys(res).sort().join(',') === 'blockers,meta,ok,reasonKinds,unapprovedGroups,unresolvedComments',
+    'success shape is exactly { ok, blockers, reasonKinds, meta, unresolvedComments, unapprovedGroups }'
   );
   check(
     Array.isArray(res.unresolvedComments) && res.unresolvedComments.length === 0,
@@ -120,6 +127,103 @@ console.log('\n--- report-group heading gate (H-074 generalised) ---');
   check(
     noHeading.ok && noHeading.blockers.some((b) => /no report-group heading/.test(b)),
     'a result with no heading at all cannot be matched to any group'
+  );
+}
+
+console.log(
+  '\n--- ungrouped result (specimen: null) is still recognised via its OWN groupHeading (2026-09-26, Nick, live-caught) ---'
+);
+{
+  // A result that arrives from Medicus as a lone ungroupedResults entry gets specimen: null from normalisers.js
+  // (untouched — every OTHER consumer, e.g. result-combo's specimen-scope gate, treats null as "unknown, fail
+  // open") but groupHeading: its own description. This engine must group by groupHeading, not specimen, or an
+  // ungrouped result (AST, live-caught) can never be matched to an approved assisted-filing group no matter what a
+  // person registers for it — even though Medicus's own UI renders it under exactly that heading text. Using the
+  // already-registered 'LFTs' heading here (an ungrouped result can't name a heading the lab hasn't registered) —
+  // the point under test is the grouping mechanism, not this particular heading.
+  const ungrouped = result({ specimen: null, groupHeading: 'LFTs' });
+  const res = FC.evaluateFilingCatalogue(report([ungrouped]), acting(baseOverlay()));
+  check(
+    res.ok && res.meta.recognisedCount === 1 && res.meta.unrecognisedCount === 0,
+    'an ungrouped result (specimen: null) with its own groupHeading is recognised through an approved group for that heading'
+  );
+  const notApproved = FC.evaluateFilingCatalogue(
+    report([result({ specimen: null, groupHeading: 'LFTs' })]),
+    acting(OV.emptyOverlay()) // nothing approved at all
+  );
+  check(
+    notApproved.ok && notApproved.blockers.some((b) => /LFTs.*no approved assisted-filing setup/.test(b)),
+    'without an approved group it blocks BY NAME, not the generic no-heading-at-all message — the heading was found via groupHeading, just not approved yet'
+  );
+}
+
+console.log(
+  '\n--- unapprovedGroups: which test to offer opening, for a heading with no approved filing setup (2026-09-26, Nick) ---'
+);
+{
+  const TSH = { name: 'TSH', value: 2.5, rawValue: '2.5', comparator: null, unit: 'mIU/L', code: '1022791000000101' };
+  const tshResult = (over) => {
+    const merged = { ...result(over), ...TSH, specimen: 'TSH', low: null, high: null, ...over };
+    if (!over || !('groupHeading' in over)) merged.groupHeading = merged.specimen;
+    return merged;
+  };
+  const noSetup = FC.evaluateFilingCatalogue(report([tshResult()]), acting(OV.emptyOverlay()));
+  check(
+    noSetup.ok &&
+      noSetup.unapprovedGroups.length === 1 &&
+      noSetup.unapprovedGroups[0].heading === 'TSH' &&
+      noSetup.unapprovedGroups[0].labId === LAB &&
+      noSetup.unapprovedGroups[0].investigationId === 'tft',
+    'a heading whose only result resolves BY CODE to exactly one investigation offers that test to open, even though nothing is approved for it yet'
+  );
+  const noResult = FC.evaluateFilingCatalogue(report([result({ specimen: 'TSH', code: null })]), acting(OV.emptyOverlay()));
+  check(
+    noResult.ok && noResult.unapprovedGroups.length === 0,
+    'a result that does not resolve by code at all offers nothing to open — never a guess'
+  );
+  const twoTests = FC.evaluateFilingCatalogue(
+    report([tshResult(), result({ specimen: 'TSH' })]), // TSH + ALP under the same (wrong) heading
+    acting(OV.emptyOverlay())
+  );
+  check(
+    twoTests.ok && twoTests.unapprovedGroups.length === 0,
+    'a group whose results resolve to MORE THAN ONE investigation offers nothing to open — ambiguous, not a decision for the suite to make'
+  );
+  const noHeadingAtAll = FC.evaluateFilingCatalogue(report([tshResult({ specimen: null })]), acting(OV.emptyOverlay()));
+  check(
+    noHeadingAtAll.ok && noHeadingAtAll.unapprovedGroups.length === 0,
+    'a result with no heading at all has nothing to open either'
+  );
+  const mixed = FC.evaluateFilingCatalogue(
+    report([tshResult(), result({ specimen: 'TSH', code: null, name: 'Free text row' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    mixed.ok && mixed.unapprovedGroups.length === 0,
+    'a coded row plus an uncoded row under the same heading offers no deep link — the uncoded row is not skipped'
+  );
+  const unknownCode = FC.evaluateFilingCatalogue(
+    report([tshResult({ code: 'not-a-real-code' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    unknownCode.ok && unknownCode.unapprovedGroups.length === 0,
+    'an unknown code offers no deep link'
+  );
+  const sharedAnalyte = FC.evaluateFilingCatalogue(
+    report([result({ specimen: 'Shared panel', groupHeading: 'Shared panel' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    sharedAnalyte.ok && sharedAnalyte.unapprovedGroups.length === 0,
+    'a code that belongs to more than one test offers no deep link'
+  );
+  let tshApproved = OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'TSH', enabled: true }, TODAY);
+  tshApproved = OV.approveFiling(tshApproved, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'TSH' }), 'Dr Test', TODAY);
+  const configured = FC.evaluateFilingCatalogue(report([tshResult()]), acting(tshApproved));
+  check(
+    configured.ok && configured.unapprovedGroups.length === 0,
+    'a heading that already has an approved group is not offered — nothing left to set up'
   );
 }
 
@@ -385,6 +489,68 @@ console.log('\n--- comments, reused from the legacy whole-comment matcher ---');
   check(
     suppressedOnAnotherHeading.ok && suppressedOnAnotherHeading.blockers.some((b) => /telephone result/.test(b)),
     'the practice-wide phrase blocks regardless of which heading is on the report, even one with no filing setup'
+  );
+}
+
+console.log(
+  '\n--- commentsForWhitelist: offers a checkbox even when the group has no approved filing setup at all (2026-09-26, Nick) ---'
+);
+{
+  const RESIDUE = 'Please repeat in 3 months, new finding';
+  const commented = report([result({ text: RESIDUE })]); // LFTs is a KNOWN heading at this lab, but nothing is set up for it
+  const none = FC.commentsForWhitelist(commented, acting(OV.emptyOverlay()));
+  check(
+    none.length === 1 &&
+      none[0].name === 'ALP' &&
+      none[0].residue === RESIDUE &&
+      none[0].labId === LAB &&
+      none[0].heading === 'LFTs',
+    'a commented result under a KNOWN heading is offered for whitelisting even though the group is not approved (or does not exist) yet — evaluateFilingCatalogue\'s own per-heading loop never even reaches the comment check for an unapproved group'
+  );
+  const approvedButUnresolved = FC.commentsForWhitelist(commented, acting(baseOverlay()));
+  check(
+    approvedButUnresolved.length === 1 && approvedButUnresolved[0].residue === RESIDUE,
+    'the same holds once the group IS approved but the comment still is not whitelisted (the case evaluateFilingCatalogue itself already covered)'
+  );
+  const unknownHeading = FC.commentsForWhitelist(
+    report([result({ text: RESIDUE, specimen: 'Nonsense heading nobody sends' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    unknownHeading.length === 0,
+    'a heading the lab has never been recorded as sending at all offers nothing — there is no group entry to attach the whitelist to yet (that case gets the "open this test" button instead, not a checkbox)'
+  );
+  const benign = FC.commentsForWhitelist(
+    report([result({ text: 'Normal, no action required' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(benign.length === 0, 'a benign comment is not offered — nothing to whitelist');
+  const noComment = FC.commentsForWhitelist(report([result()]), acting(OV.emptyOverlay()));
+  check(noComment.length === 0, 'a result with no comment at all is not offered');
+  check(FC.commentsForWhitelist(null, acting(OV.emptyOverlay())).length === 0, 'no report at all -> empty, never a throw');
+  check(FC.commentsForWhitelist(commented, null).length === 0, 'no catalogue at all -> empty, never a throw');
+
+  // THE BUG (Nick, 2026-09-26, live-caught the same day as the feature shipped): this used to check "unresolved"
+  // with profile:null unconditionally, which ALWAYS returns not-allowed regardless of what is actually saved —
+  // so an ALREADY-whitelisted-and-approved comment still offered its checkbox every single time, forever. "I've
+  // just clicked again to whitelist that eGFR comment again, reapproved, and the same thing appears."
+  let whitelisted = OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'LFTs', allowComments: [RESIDUE] }, TODAY);
+  whitelisted = OV.approveFiling(whitelisted, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'LFTs' }), 'Dr Test', TODAY);
+  const resolved = FC.commentsForWhitelist(commented, acting(whitelisted));
+  check(
+    resolved.length === 0,
+    'once a comment is genuinely whitelisted (and approved), it is no longer offered — the checkbox must actually reflect group.allowComments, not just "is there any comment at all"'
+  );
+  // A SECOND commented result under the same heading, still genuinely unresolved, is unaffected by the first one
+  // being whitelisted — resolution is per residue, not "the whole heading is done once anything is whitelisted".
+  const OTHER_RESIDUE = 'A second, different, genuinely unresolved comment about this LFT result entirely';
+  const stillOne = FC.commentsForWhitelist(
+    report([result({ text: RESIDUE }), result({ text: OTHER_RESIDUE })]),
+    acting(whitelisted)
+  );
+  check(
+    stillOne.length === 1 && stillOne[0].residue !== RESIDUE,
+    'a genuinely different, still-unresolved comment under the same heading is still offered — whitelisting one comment does not silently clear every other'
   );
 }
 

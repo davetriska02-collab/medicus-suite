@@ -93,6 +93,15 @@
     if (!Array.isArray(cat.investigations)) err('investigations must be an array');
     if (cat.labs !== undefined && !Array.isArray(cat.labs)) err('labs must be an array');
     const retired = new Set(asArr(cat.retired).filter(isStr));
+    // Precomputed early (labs aren't otherwise validated until after results below) so a code's optional lab-scope
+    // can be checked against a real lab, same intent as aliases already have — aliases don't actually check this
+    // today (a.lab is only checked for being a non-empty string), a pre-existing gap not fixed here.
+    const knownLabIds = new Set(
+      labs
+        .filter((l) => isObj(l))
+        .map((l) => l.id)
+        .filter(isStr)
+    );
 
     const resultIds = new Set();
     const invIds = new Set();
@@ -121,12 +130,23 @@
         if (c.refsets !== undefined && !(Array.isArray(c.refsets) && c.refsets.every(isNonEmptyStr))) {
           err(`${cw}: refsets must be an array of cluster ids`);
         }
+        // Optional lab-scope (2026-09-26, Nick, live-caught: RJ700 and Kingston Hospital NHS Trust genuinely use the
+        // SAME SNOMED concept for two different analytes — blood WBC vs a urine white-cell count) — same shape/intent
+        // as aliases[].lab. A lab-scoped code and an unscoped code CAN share a conceptId across two different
+        // results (the override only applies at that one lab); two claims for the SAME scope (both unscoped, or both
+        // scoped to the same lab) cannot, same as before scoping existed.
+        if (c.lab !== undefined && !isNonEmptyStr(c.lab)) err(`${cw}: lab must be a non-empty string when present`);
+        else if (isStr(c.lab) && !knownLabIds.has(c.lab)) err(`${cw}: lab "${c.lab}" is not a known lab`);
         if (isStr(c.conceptId)) {
-          if (codeOwner.has(c.conceptId) && codeOwner.get(c.conceptId) !== r.id) {
-            err(`${cw}: concept ${c.conceptId} is already claimed by result "${codeOwner.get(c.conceptId)}"`);
-          } else if (codeOwner.get(c.conceptId) === r.id) {
-            err(`${cw}: concept ${c.conceptId} listed twice on this result`);
-          } else codeOwner.set(c.conceptId, r.id);
+          const scope = isStr(c.lab) ? c.lab : '';
+          const codeKey = c.conceptId + '|' + scope;
+          if (codeOwner.has(codeKey) && codeOwner.get(codeKey) !== r.id) {
+            err(
+              `${cw}: concept ${c.conceptId}${scope ? ` (lab "${scope}")` : ''} is already claimed by result "${codeOwner.get(codeKey)}"`
+            );
+          } else if (codeOwner.get(codeKey) === r.id) {
+            err(`${cw}: concept ${c.conceptId}${scope ? ` (lab "${scope}")` : ''} listed twice on this result`);
+          } else codeOwner.set(codeKey, r.id);
         }
       });
       if (primaries > 1) err(`${where}: at most one primary code`);
@@ -200,11 +220,23 @@
         if (m.anchor !== undefined && typeof m.anchor !== 'boolean') err(`${mw}: anchor must be a boolean`);
         if (m.anchor === true && m.role !== 'core') err(`${mw}: only a core member can be an anchor`);
       });
-      if (KINDS_NEEDING_RESULTS.includes(v.kind) && members.length === 0) {
-        err(`${where}: a ${v.kind} investigation needs at least one member`);
-      }
+      // No "must have at least one member" error here (removed 2026-09-26, Nick): that requirement, for exactly the
+      // kinds a real report might not yet be modelled for, was what forced a fictional, self-named, code-less
+      // placeholder result to be invented whenever an investigation was created from REQUEST-side data alone (a
+      // confirmed wording only names the test, never its report structure) — see the urine-mcs incident, where the
+      // invented placeholder later collided with a genuinely different result (FBC's own "White cell count") during
+      // matching. An investigation with zero members is a legitimate, visible state (findGaps' own "no results yet"
+      // flag already tracks it) exactly like imaging/procedure kinds already are — never fabricate one to satisfy
+      // this check. A non-empty member list must still name a real, known result (checked above).
+      // "Core" is a WARNING only, not a hard error (downgraded 2026-09-27, Nick): core/optional is a concept that
+      // belongs to a specific lab's groupHeading — which of a group's results actually identify it there — not to
+      // the investigation's member list globally. Making it a hard error here meant an investigation with only
+      // 'optional' members (the normal state while a practice is still just matching group headings to requests,
+      // before any lab-specific detail exists) failed validation and took the WHOLE catalogue down with it
+      // (buildIndex throws on any error) — not just that one investigation. A warning still surfaces the gap
+      // without blocking the request<->group matching this is needed for.
       if (members.length > 0 && !members.some((m) => m && m.role === 'core')) {
-        err(`${where}: needs at least one core member (it is what identifies the test)`);
+        warn(`${where}: has no core member yet (nothing identifies the test from its results alone)`);
       }
       if (v.note !== undefined && !isStr(v.note)) err(`${where}: note must be a string`);
     });
@@ -258,14 +290,20 @@
       throw new Error('Invalid lab catalogue: ' + v.errors.slice(0, 5).join('; ') + (v.errors.length > 5 ? ' …' : ''));
     }
     const results = new Map();
+    // conceptId -> [{ resultId, code }] — an ARRAY, not a single entry: a code can be scoped to a specific lab
+    // (code.lab), so the same conceptId may legitimately belong to more than one result (see resolveByCode, which
+    // is the only intended way to read this — a plain .get(code) result is not "the" answer, just every candidate).
     const byCode = new Map();
     const resultAliases = new Map(); // resultId -> [{ norm, len, lab }]
     const resultExcludes = new Map(); // resultId -> [norm]
     for (const r of asArr(cat.results)) {
       if (!isObj(r) || !isStr(r.id)) continue;
       results.set(r.id, r);
-      for (const c of asArr(r.codes))
-        if (isObj(c) && isStr(c.conceptId)) byCode.set(c.conceptId, { resultId: r.id, code: c });
+      for (const c of asArr(r.codes)) {
+        if (!isObj(c) || !isStr(c.conceptId)) continue;
+        if (!byCode.has(c.conceptId)) byCode.set(c.conceptId, []);
+        byCode.get(c.conceptId).push({ resultId: r.id, code: c });
+      }
       const list = [];
       const push = (text, lab) => {
         const n = norm(text);
@@ -386,17 +424,31 @@
         refHigh: refLimit(rr.upperReferenceLimit),
       };
     };
+    const namedGroups = asArr(rep.investigationGroups).map((g) => ({
+      heading: isStr(g && g.description) ? g.description : '',
+      specimenType: isObj(g && g.specimen) && isStr(g.specimen.type) ? g.specimen.type : null,
+      results: asArr(g && g.results).map(adaptResult),
+    }));
+    // An ungrouped result becomes its OWN one-result group, heading = its own description (Nick, 2026-09-27,
+    // live-caught via console capture: Medicus sends AST as a lone ungroupedResults entry, no investigationGroups
+    // wrapper at all, but renders it in its own UI as its own titled block using exactly that text). Folding it into
+    // `groups` here — rather than the separate `ungrouped` field below, which nothing downstream ever reads — makes
+    // it look, to every consumer (the scan board, the outstanding-request matcher), exactly like any other
+    // one-result named group: same heading-matching, same manual "match this to a request" path, no special-casing
+    // needed anywhere else. `ungrouped` stays in the return shape (always empty from this adapter now) only because
+    // LC.resolveReport has its own separate, narrower ungrouped-handling that other callers may still use directly.
+    const ungroupedAsGroups = asArr(rep.ungroupedResults).map((r) => ({
+      heading: isStr(r && r.description) && r.description.trim() ? r.description.trim() : '',
+      specimenType: null,
+      results: [adaptResult(r)],
+    }));
     return {
       lab: {
         organisation: isStr(perf.organisationName) ? perf.organisationName : null,
         department: isStr(perf.departmentName) ? perf.departmentName : null,
       },
-      groups: asArr(rep.investigationGroups).map((g) => ({
-        heading: isStr(g && g.description) ? g.description : '',
-        specimenType: isObj(g && g.specimen) && isStr(g.specimen.type) ? g.specimen.type : null,
-        results: asArr(g && g.results).map(adaptResult),
-      })),
-      ungrouped: asArr(rep.ungroupedResults).map(adaptResult),
+      groups: namedGroups.concat(ungroupedAsGroups),
+      ungrouped: [],
     };
   }
 
@@ -481,6 +533,21 @@
   }
 
   // ── Result resolution ─────────────────────────────────────────────────────────
+  // The only intended way to read index.byCode (2026-09-26) — a code can now be lab-scoped (see buildIndex), so a
+  // conceptId may have more than one candidate. Deterministic, not fuzzy: unlike bestAlias there is no "ambiguous"
+  // tier here — a code is either resolved or it isn't. An entry scoped to labId always wins when present (an
+  // explicit, curated override); otherwise the first unscoped entry (the default) applies; if only some OTHER lab's
+  // scoped entry exists, the code does not resolve HERE at all — falls through to name/alias resolution, same as an
+  // unrecognised code already does.
+  function resolveByCode(index, code, labId) {
+    const entries = code ? index.byCode.get(code) : null;
+    if (!entries || !entries.length) return null;
+    if (labId) {
+      const scoped = entries.find((e) => e.code.lab === labId);
+      if (scoped) return scoped;
+    }
+    return entries.find((e) => !e.code.lab) || null;
+  }
   function bestAlias(index, lab, normName, resultIds) {
     let best = null; // { resultId, len, alias }
     const ties = new Set();
@@ -504,8 +571,9 @@
 
   function resolveResult(index, lab, r, scopeResults, scopeKnown) {
     const out = { resultId: null, confidence: 'unresolved', matchedAlias: null };
-    if (r.code && index.byCode.has(r.code)) {
-      out.resultId = index.byCode.get(r.code).resultId;
+    const byCode = resolveByCode(index, r.code, lab ? lab.def.id : null);
+    if (byCode) {
+      out.resultId = byCode.resultId;
       out.confidence = 'coded';
       return out;
     }
@@ -765,6 +833,7 @@
     classifyLabMessage,
     resolveReport,
     resolveRequest,
+    resolveByCode,
     parseRequestName,
   };
   if (typeof module !== 'undefined' && module.exports) {

@@ -333,7 +333,8 @@ console.log('\n--- Microbiology text-result (resultText) ---');
 
 // ── specimen field: named investigationGroup → header attached to each result ──
 // This guards the Step 1 normaliser feature: each result from a named group carries
-// the group's human-readable header as `specimen`; ungrouped / untitled → null.
+// the group's human-readable header as `specimen`; an untitled GROUP → null (no single result's name could stand
+// in for a multi-result group's heading); an UNGROUPED result falls back to its own description instead.
 console.log('\n--- specimen field: named group → header on each result ---');
 {
   // A single group with groupName "THROAT SWAB" and two culture results.
@@ -413,7 +414,9 @@ console.log('\n--- specimen field: untitled group → null ---');
   assert(out.results[0].specimen === null, 'all-empty/whitespace title keys → specimen null');
 }
 
-// Ungrouped results → specimen: null
+// Ungrouped results → specimen: null. This is deliberately UNCHANGED — many consumers (result-combo's specimen-scope
+// gate, result-rules, result-severity, outstanding-match…) treat null here as "unknown specimen type, never block",
+// and a result's own NAME is not a specimen-type keyword. See groupHeading below for the actual fix.
 console.log('\n--- specimen field: ungrouped results → null ---');
 {
   const out = normaliseInvestigationReport(makePayload([], [wbcResult]));
@@ -433,6 +436,34 @@ console.log('\n--- specimen field: named group + ungrouped in same report ---');
   });
   assert(byName['WBC'].specimen === 'HAEMATOLOGY', 'WBC from named group has specimen header');
   assert(byName['RDW'].specimen === null, 'RDW from ungrouped has specimen null');
+}
+
+// groupHeading (Phase E, lab-filing-catalogue.js) — a DIFFERENT field from specimen, added 2026-09-26 (Nick,
+// live-caught via console capture): Medicus sends AST as a lone ungroupedResults entry, description "AST", and
+// renders it as its own titled block — but `specimen: null` meant it could never be matched to an approved
+// assisted-filing group no matter what a person registered for it. groupHeading falls back to the result's own
+// description for an ungrouped result, without touching `specimen`'s existing fail-open-to-null semantics.
+console.log('\n--- groupHeading: same as specimen for a named group, falls back to own description when ungrouped ---');
+{
+  const out = normaliseInvestigationReport(makePayload([{ groupName: 'HAEMATOLOGY', results: [{ ...wbcResult }] }], []));
+  assert(out.results[0].groupHeading === 'HAEMATOLOGY', 'named group: groupHeading matches specimen');
+}
+{
+  const out = normaliseInvestigationReport(makePayload([], [{ ...wbcResult }]));
+  assert(out.results[0].groupHeading === 'WBC', "ungrouped: groupHeading falls back to the result's own description");
+  assert(out.results[0].specimen === null, 'ungrouped: specimen itself is untouched, still null');
+}
+{
+  // No description at all (or blank) on the ungrouped result → still fail-open to null, never a guess
+  const r = { ...wbcResult, description: '  ' };
+  const out = normaliseInvestigationReport(makePayload([], [r]));
+  assert(out.results[0].groupHeading === null, 'an ungrouped result with no usable description still gets groupHeading null');
+}
+{
+  // An untitled GROUP still gets groupHeading: null too — a multi-result group has no single result whose own name
+  // could stand in for the group's heading, so there is no safe fallback there either.
+  const out = normaliseInvestigationReport(makePayload([{ results: [{ ...wbcResult }] }], []));
+  assert(out.results[0].groupHeading === null, 'untitled group: groupHeading null, same as specimen');
 }
 
 // ── Additive (Phase E): report.lab and result.code — never read by the legacy engine ──────────

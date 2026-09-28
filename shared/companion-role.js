@@ -266,6 +266,11 @@
       book: (role === 'clinic' || role === 'reception' || role === 'nursing') && hasPatient,
       task: (role === 'clinic' || role === 'triage') && kind === 'task',
       record: (role === 'clinic' && (kind === 'task' || kind === 'record')) || (role === 'reception' && kind === 'task'),
+      // Lab Filing (Companion fold-in stage 1, 2026-09-27, Nick): the standalone card it moved from was NEVER
+      // role-gated — it showed to whoever opened a matching URL. Deliberately NOT reusing `record` above, which
+      // excludes Nursing and Triage entirely (a real regression risk found while planning this fold-in) — any role
+      // reviewing an investigation-result task can be the one filing it.
+      labFile: hasPatient,
     };
   }
 

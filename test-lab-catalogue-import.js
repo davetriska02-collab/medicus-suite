@@ -62,7 +62,11 @@ console.log('\n── new practice tests ──');
       ['EBV capsid IgG level', 'EBV nuclear IgG level'],
       false
     ),
-    T('esr', 'ESR', ['Erythrocyte sedimentation rate'], ['ESR'], ['ESR'], true),
+    // Deliberately fictional (was 'esr' until ESR became a real shipped built-in on 2026-09-26, from the practice's
+    // own unreconciled-requests listing — at that point this started exercising the EXTENDS-a-built-in path instead
+    // of the fresh-practice-only path it exists to test, silently losing this coverage). No real test name here so
+    // this can never be shadowed by a future shipped addition again.
+    T('zzz-fictional-test', 'Zzz Fictional Test', ['Zzz Fictional Test Request'], ['Zzz Fictional Test'], ['Zzz Fictional Test'], true),
     T(
       'rast_mix_foods',
       'RAST mix foods',
@@ -78,9 +82,9 @@ console.log('\n── new practice tests ──');
     ebv.members.length === 2 && ebv.members.every((m) => m.role === 'core' && !m.anchor),
     'singleAnalyte:false -> plain core members (two distinct results needed)'
   );
-  const esr = inv(r, 'practice-esr');
+  const fictional = inv(r, 'practice-zzz-fictional-test');
   check(
-    esr.members.length === 1 && esr.members[0].role === 'core' && esr.members[0].anchor === true,
+    fictional.members.length === 1 && fictional.members[0].role === 'core' && fictional.members[0].anchor === true,
     'singleAnalyte:true -> core + anchor'
   );
   check(
@@ -93,7 +97,7 @@ console.log('\n── new practice tests ──');
       .every((e) => e.provenance.reviewed === false && e.provenance.source === 'imported'),
     'every imported entry is unreviewed / source imported (inert)'
   );
-  const newRes = r.overlay.results.find((x) => x.label === 'ESR');
+  const newRes = r.overlay.results.find((x) => x.label === 'Zzz Fictional Test');
   check(
     newRes && newRes.aliases[0].lab === LAB && newRes.codes.length === 0,
     'new result is alias-only, tagged with the chosen lab'
@@ -115,7 +119,11 @@ console.log('\n── new practice tests ──');
 console.log('\n── extending a built-in ──');
 {
   const r = run([
-    T('crp', 'CRP', ['C-Reactive Protein Blood'], ['CRP'], ['CRP'], true),
+    // "C-Reactive Protein Blood" became a known CRP synonym on 2026-09-26 (from the practice's own unreconciled-
+    // requests listing) — using it here would now genuinely add nothing, so the extension entry gets dropped
+    // instead of kept for review (correct behaviour, but not what THIS test is checking). A wording still unknown
+    // to CRP keeps this test exercising "extends and gains something new".
+    T('crp', 'CRP', ['C Reactive Protein Test'], ['CRP'], ['CRP'], true),
     T('bone', 'Bone', ['Bone profile blood'], ['Bone profile'], ['Calcium', 'Phosphate', 'Osteocalcin'], false),
   ]);
   const crp = inv(r, 'crp');
@@ -176,12 +184,16 @@ console.log('\n── exact-wording extension (specimen words ignored) — and n
 console.log('\n── merging duplicates ──');
 {
   const r = run([
-    T('iron', 'Iron', ['Iron Binding Studies'], [], ['Iron Studies', 'TIBC'], false),
+    // "Iron Binding Studies" became a shipped built-in's own request wording on 2026-09-26 (from the practice's
+    // own unreconciled-requests listing) — using it here would pull this fixture into extending THAT built-in
+    // instead of exercising the merge-two-legacy-keys-into-one-practice-investigation path this test is about.
+    // A wording the shipped entry does not use keeps that path exercised.
+    T('iron', 'Iron', ['Iron Studies Panel'], [], ['Iron Studies', 'TIBC'], false),
     T(
       'iron_binding',
       'Iron binding',
-      ['Iron binding studies'],
-      ['Iron binding studies'],
+      ['Iron studies panel'],
+      ['Iron studies panel'],
       ['TIBC', 'Transferrin saturation'],
       false
     ),
@@ -255,11 +267,11 @@ console.log('\n── skips / disabled / empties ──');
 
 console.log('\n── merging into an existing overlay (local wins, idempotent) ──');
 {
-  const first = run([T('esr', 'ESR', ['Erythrocyte sedimentation rate'], ['ESR'], ['ESR'], true)]);
-  const local = OV.markReviewed(first.overlay, 'investigations', 'practice-esr', 'Nick', '2026-09-19');
+  const first = run([T('zzz-fictional-test', 'Zzz Fictional Test', ['Zzz Fictional Test Request'], ['Zzz Fictional Test'], ['Zzz Fictional Test'], true)]);
+  const local = OV.markReviewed(first.overlay, 'investigations', 'practice-zzz-fictional-test', 'Nick', '2026-09-19');
   const again = IMP.mergeIntoOverlay(local, first.overlay);
   check(again.added === 0 && again.skipped >= 1, 're-running the import adds nothing');
-  const kept = again.overlay.investigations.find((i) => i.id === 'practice-esr');
+  const kept = again.overlay.investigations.find((i) => i.id === 'practice-zzz-fictional-test');
   check(kept.provenance.reviewed === true, 'a locally approved entry is not reset by a re-import');
   const second = run([T('lead', 'Lead', ['Lead blood'], ['Lead'], ['Lead'], true)]);
   const both = IMP.mergeIntoOverlay(local, second.overlay);
@@ -271,7 +283,7 @@ console.log('\n── merging into an existing overlay (local wins, idempotent) 
 
 console.log('\n── mergeIntoOverlay forces the imported side inert (no smuggled approvals) ──');
 {
-  const first = run([T('esr', 'ESR', ['Erythrocyte sedimentation rate'], ['ESR'], ['ESR'], true)]);
+  const first = run([T('zzz-fictional-test', 'Zzz Fictional Test', ['Zzz Fictional Test Request'], ['Zzz Fictional Test'], ['Zzz Fictional Test'], true)]);
   const crafted = JSON.parse(JSON.stringify(first.overlay));
   for (const e of crafted.investigations.concat(crafted.results)) {
     e.provenance = { ...e.provenance, reviewed: true, reviewedBy: 'Attacker', reviewedAt: '2026-09-20' };
@@ -308,7 +320,7 @@ console.log('\n── extension that only adds a lab wording still carries an ap
 
 console.log('\n── determinism, no mutation ──');
 {
-  const tests = [T('esr', 'ESR', ['Erythrocyte sedimentation rate'], ['ESR'], ['ESR'], true)];
+  const tests = [T('zzz-fictional-test', 'Zzz Fictional Test', ['Zzz Fictional Test Request'], ['Zzz Fictional Test'], ['Zzz Fictional Test'], true)];
   const copy = JSON.stringify(tests);
   const a = JSON.stringify(run(tests));
   const b = JSON.stringify(run(tests));
