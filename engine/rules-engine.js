@@ -355,8 +355,28 @@
   // A lookup whose own terms are exception phrases (OB005 PCA: "pathway
   // declined") is searching for the exception, so those rows must stay.
   function specLooksForExceptions(testSpec) {
+    // includeExceptions: a lookup that is searching FOR the exception
+    // (SMOK002 PCA unsuitable / informed dissent). Those rows must stay.
+    if (testSpec && testSpec.includeExceptions) return true;
     const terms = testSpec && Array.isArray(testSpec.match) ? testSpec.match : [];
     return terms.some((t) => observationTextIsException(t));
+  }
+
+  // The investigation dashboard files the status in the value of a row whose
+  // name is exactly "Smoking status" ("Smoking status" / "Ex-smoker"). Search
+  // the name and the value, so a rule that looks for "smoking status" (DM037)
+  // and a rule that looks for "ex-smoker" (SMOK002) both see it. A longer
+  // rubric that only contains the words ("Declined to give smoking status")
+  // is not the wrapper and is searched on its name.
+  function observationIsStatusWrapper(obs) {
+    return String((obs && obs.name) || '').trim().toLowerCase() === 'smoking status';
+  }
+
+  function observationSearchText(obs) {
+    const name = String((obs && obs.name) || '');
+    const value = String((obs && obs.value) || '');
+    if (observationIsStatusWrapper(obs) && value.trim()) return name + ' ' + value;
+    return name;
   }
 
   // observation-bundle groups are either an alias array (every shipped group
@@ -401,6 +421,7 @@
       match: check.observation,
       exclude: check.observationExclude,
       snomed: check.snomed,
+      snomedExclude: check.snomedExclude,
       declineSnomed: check.declineSnomed,
       allowDecline: check.allowDecline === true,
     };
@@ -423,7 +444,7 @@
       Array.isArray(testSpec.match) &&
       testSpec.match.some((m) => /\b(declined|refused|dissent|unsuitable)\b/.test(String(m).toLowerCase()));
     if (lookingForDecline) return false;
-    const name = String(obs.name || '').toLowerCase();
+    const name = observationSearchText(obs).toLowerCase();
     return /\b(declined|refused|dissent|unsuitable)\b/.test(name);
   }
 
@@ -545,15 +566,27 @@
   function filterMatchingObservations(observations, testSpec) {
     if (!Array.isArray(observations)) return [];
     const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
+    const excludeCodes = Array.isArray(testSpec.snomedExclude) ? testSpec.snomedExclude.map((c) => String(c)) : null;
     const keepExceptions = specLooksForExceptions(testSpec);
     return observations.filter((obs) => {
-      if (!keepExceptions && observationTextIsException(obs && obs.name)) return false;
+      if (!obs) return false;
+      // A denied concept id never achieves, even when the display name
+      // contains an achievement phrase or the code was also listed in snomed.
+      if (excludeCodes && obs.code && excludeCodes.includes(String(obs.code))) return false;
+      const text = observationSearchText(obs);
+      if (!keepExceptions && observationTextIsException(text)) return false;
       if (observationIsDecline(obs, testSpec)) return false;
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
-      if (obs.name && Array.isArray(testSpec.match)) {
-        const obsLower = String(obs.name).toLowerCase();
+      if (text && Array.isArray(testSpec.match)) {
+        const obsLower = text.toLowerCase();
         if (!testSpec.match.some((m) => observationTermHits(obsLower, m))) return false;
-        if (excludeTerms && excludeTerms.some((e) => obsLower.includes(e))) return false;
+        // The wrapper's own name is "Smoking status". That phrase is a SMOK002
+        // exclude so it cannot hit "Declined to give smoking status". Do not
+        // apply that one exclude to the wrapper row; the value still has to
+        // match a real status term.
+        const termsToApply =
+          excludeTerms && observationIsStatusWrapper(obs) ? excludeTerms.filter((e) => e !== 'smoking status') : excludeTerms;
+        if (termsToApply && termsToApply.some((e) => obsLower.includes(e))) return false;
         return true;
       }
       return false;
@@ -2107,8 +2140,13 @@
   function collectNamedEvents(data, spec) {
     const match = spec.match || [];
     const snomed = spec.snomed || [];
-    const fromObs = filterMatchingObservations(data.observations || [], { match, snomed });
-    const fromHist = filterMatchingObservationHistoryPoints(data.observationHistory || [], { match, snomed });
+    const includeExceptions = !!spec.includeExceptions;
+    const fromObs = filterMatchingObservations(data.observations || [], { match, snomed, includeExceptions });
+    const fromHist = filterMatchingObservationHistoryPoints(data.observationHistory || [], {
+      match,
+      snomed,
+      includeExceptions,
+    });
     const fromProblems = [];
     const allProblems = [...(data.problems || []), ...(data.pastProblems || [])];
     allProblems.forEach((p) => {

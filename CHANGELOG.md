@@ -2,6 +2,12 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.9] — 2026-09-28
+
+### Stacked on the SMOK002 status fix
+
+This branch now includes the base-branch SMOK002 rebuild. Achievement stays the 71-code smoking-habit refset. Declined status, advice, drugs and exceptions do not clear it. The QOF gap filters stay beside that: a denied concept id never achieves, and a decline rubric never counts as the numerator. SMOK002 itself was not rebuilt again here.
+
 ## [v3.267.8] — 2026-09-28
 
 ### QOF rules file is a terminology allowlist
@@ -21,6 +27,18 @@ Registers match a SNOMED concept id before the label. Stroke and TIA, PAD, CHD, 
 CHOL004 is LDL at or under 2.0, otherwise non-HDL at or under 2.6, and LDL wins on the same date. CHOL003 counts ezetimibe and the other named alternatives only with a statin declined, not-tolerated, or contraindicated code. AF008 needs a CHA2DS2-VASc of 2 or more, counts the DOAC brand names, and counts warfarin only after a DOAC decline or contraindication. An issue older than 183 days does not count. HF009 no longer treats metoprolol, canagliflozin, or ertugliflozin as a pillar. A DCCT % HbA1c, or a blank unit with a value under 20, does not clear an IFCC target. MH007, MH002, and DEM004 match the alcohol, care-plan, and review concept ids from the reports. AST014 is 93 days either side of diagnosis. HF008 is 183 days either side. DM014 is 279 days after a diagnosis coded in this QOF year. OB004 is 90 days after the BMI. BP002 (blood pressure in the last 5 years, age 45 and over) is on. Cervical screening and the vaccination indicators are present and off.
 
 DM036 stays age 70. The published 79 is unverified. MH011's 24-month arm is not wired. H-087 is proposed, unsigned, for CSO review.
+
+## [v3.267.7] — 2026-09-28
+
+### SMOK002 uses the smoking-habit refset and ignores advice, drugs and exceptions
+
+SMOK002 achievement is the 71-code SMOK_COD refset (OpenCodelists tag 20260630). Current, ex and never clusters are subsets of that list. Text look-fors now include the preferred terms a short phrase used to miss, including Smoking reduced, Date ceased smoking and Cigarette pack-years.
+
+These do not clear the indicator: Declined to give smoking status (1098881000000103), Tobacco use screening declined (11351000175103), smoking-cessation advice, referral and pharmacotherapy, and Nicotine dependence. The phrase "smoking status" is no longer a look-for. A dashboard row named Smoking status is still read from its value, so Ex-smoker in that value still counts. Passive smoker stays excluded.
+
+A personalised care adjustment for smoking — patient unsuitable (716391000000109) or informed dissent (717771000000108) — hides the chip. It does not count as the status being recorded. A real in-year smoking code still counts beside either exception.
+
+Not in this build: a never-smoker code recorded after the 25th birthday carries forward, and an ex-smoker code carries forward for three years. The journal feed is about 400 days, so a three-year-old ex-smoker code is not in the feed. Both stay follow-ups.
 
 ## [v3.267.6] — 2026-09-28
 
