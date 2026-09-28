@@ -326,6 +326,26 @@
   //
   // Aggregates exist because drug-monitoring rules look for PANEL names like "U&E" or "LFT",
   // not individual analyte names. Without aggregates, "Ramipril U&E overdue?" can't be evaluated.
+  // Copy a SNOMED concept id when the dashboard row carries one.
+  // Rows with no code field stay null — do not invent an id.
+  function dashboardConceptId(row) {
+    if (!row || typeof row !== 'object') return null;
+    const nested = [
+      row.conceptId,
+      row.snomedConceptId,
+      row.snomedCode,
+      row.investigationTypeCode && row.investigationTypeCode.conceptId,
+      row.investigationResultCode && row.investigationResultCode.conceptId,
+      row.resultCode && row.resultCode.conceptId,
+      row.code && typeof row.code === 'object' ? row.code.conceptId : null,
+    ];
+    for (let i = 0; i < nested.length; i++) {
+      const c = nested[i];
+      if (c != null && String(c).trim() !== '') return String(c).trim();
+    }
+    return null;
+  }
+
   function normaliseObservations(dashboard) {
     if (!dashboard || !Array.isArray(dashboard.rowData)) return [];
     const out = [];
@@ -342,7 +362,7 @@
       const valueWithUnit = row.unit ? `${cell.result} ${row.unit}` : String(cell.result);
       out.push({
         name: row.investigationType,
-        code: null,
+        code: dashboardConceptId(row),
         date: dateIso,
         value: valueWithUnit,
         rawValue: cell.result,
@@ -363,11 +383,25 @@
     // Medicus API emits these as separate investigationType rows; parseBp() in the rules
     // engine requires "NNN/NN" slash format, so we pair same-date rows here.
     {
-      const SYS_RE = /systolic\s+blood\s+pressure/i;
-      const DIA_RE = /diastolic\s+blood\s+pressure/i;
-      // Collect all dated values for systolic and diastolic rows
-      const sysMap = {}; // dateIso -> { result, unit }
+      const SYS_RE = /systolic\s+(?:arterial\s+pressure|blood\s+pressure)/i;
+      const DIA_RE = /diastolic\s+(?:arterial\s+pressure|blood\s+pressure)/i;
+      // Collect all dated values for systolic and diastolic rows.
+      // Average beats a same-day minimum or maximum (an ABPM dump must not
+      // keep the minimum just because that row was listed first).
+      const sysMap = {}; // dateIso -> { result, unit, name, rank, modality }
       const diaMap = {};
+      const bpRank = (name) => {
+        const n = String(name || '').toLowerCase();
+        if (/minimum|maximum|\bnight\b/.test(n)) return 2;
+        if (/average|mean/.test(n)) return 0;
+        return 1;
+      };
+      const bpModalityName = (name) => {
+        const n = String(name || '').toLowerCase();
+        if (/\bambulatory\b|\babpm\b/.test(n)) return 'ambulatory';
+        if (/\bhome\b|\bhbpm\b|self[- ]measured/.test(n)) return 'home';
+        return 'clinic';
+      };
       dashboard.rowData.forEach((row) => {
         if (!row.investigationType) return;
         const dataKeys = Object.keys(row).filter((k) => /^data\d{8}$/.test(k));
@@ -379,7 +413,14 @@
           const cell = row[key];
           if (!cell || cell.result == null || cell.result === '') return;
           const d = keyToIsoDate(key);
-          if (!target[d]) target[d] = { result: String(cell.result), unit: row.unit || '' };
+          const next = {
+            result: String(cell.result),
+            unit: row.unit || '',
+            name: row.investigationType,
+            rank: bpRank(row.investigationType),
+            modality: bpModalityName(row.investigationType),
+          };
+          if (!target[d] || next.rank < target[d].rank) target[d] = next;
         });
       });
       // Emit one synthetic "Blood pressure" obs per same-date pair (exact match first),
@@ -398,9 +439,22 @@
         const dia = diaMap[diaDate].result;
         const unit = sysMap[sysDate].unit || diaMap[diaDate].unit || 'mmHg';
         const combined = `${sys}/${dia}`;
+        const modalities = [sysMap[sysDate].modality, diaMap[diaDate].modality];
+        const modality = modalities.includes('ambulatory')
+          ? 'ambulatory'
+          : modalities.includes('home')
+            ? 'home'
+            : 'clinic';
+        const name =
+          modality === 'ambulatory'
+            ? 'Ambulatory blood pressure'
+            : modality === 'home'
+              ? 'Home blood pressure'
+              : 'Blood pressure';
         out.push({
-          name: 'Blood pressure',
+          name,
           code: null,
+          bpModality: modality,
           date: sysDate,
           value: unit ? `${combined} ${unit}` : combined,
           rawValue: combined,
@@ -498,7 +552,7 @@
       historyEntries.sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : 0));
       out.push({
         name: row.investigationType,
-        code: null,
+        code: dashboardConceptId(row),
         group: row.investigationGroup || null,
         unit: row.unit || null,
         history: historyEntries,
@@ -509,8 +563,8 @@
     // format. We build per-date maps then emit a combined entry prepended to out so that any
     // consumer doing a substring/find match hits "Blood pressure" before "Systolic blood pressure".
     {
-      const SYS_RE = /systolic\s+blood\s+pressure/i;
-      const DIA_RE = /diastolic\s+blood\s+pressure/i;
+      const SYS_RE = /systolic\s+(?:arterial\s+pressure|blood\s+pressure)/i;
+      const DIA_RE = /diastolic\s+(?:arterial\s+pressure|blood\s+pressure)/i;
       const sysMap = {};
       const diaMap = {};
       dashboard.rowData.forEach((row) => {

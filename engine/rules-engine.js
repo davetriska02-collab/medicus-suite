@@ -397,7 +397,131 @@
   }
 
   function observationCheckSpec(check) {
-    return { match: check.observation, exclude: check.observationExclude, snomed: check.snomed };
+    return {
+      match: check.observation,
+      exclude: check.observationExclude,
+      snomed: check.snomed,
+      declineSnomed: check.declineSnomed,
+      allowDecline: check.allowDecline === true,
+    };
+  }
+
+  // A declined, refused, dissent, or unsuitable code is a personalised-care
+  // adjustment, never the numerator. Achievement is a different observation.
+  function observationIsDecline(obs, testSpec) {
+    if (!obs || (testSpec && testSpec.allowDecline)) return false;
+    const code = obs.code != null ? String(obs.code) : '';
+    const declineIds = testSpec && Array.isArray(testSpec.declineSnomed) ? testSpec.declineSnomed.map(String) : null;
+    if (code && declineIds && declineIds.includes(code)) return true;
+    // A lookup that asks for this concept, or whose own terms are the dissent
+    // rubric, must still see it. PCA and "statin declined" gates are that
+    // lookup. An achievement list does not ask for the decline code.
+    const asked = testSpec && Array.isArray(testSpec.snomed) ? testSpec.snomed.map(String) : [];
+    if (code && asked.includes(code)) return false;
+    const lookingForDecline =
+      testSpec &&
+      Array.isArray(testSpec.match) &&
+      testSpec.match.some((m) => /\b(declined|refused|dissent|unsuitable)\b/.test(String(m).toLowerCase()));
+    if (lookingForDecline) return false;
+    const name = String(obs.name || '').toLowerCase();
+    return /\b(declined|refused|dissent|unsuitable)\b/.test(name);
+  }
+
+  function addDaysIso(iso, days) {
+    const day = isoDay(iso);
+    if (!day || !Number.isFinite(days)) return null;
+    const ms = Date.parse(day + 'T00:00:00Z') + Math.round(days) * 86400000;
+    if (!Number.isFinite(ms)) return null;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+
+  // QOF-year floor stays the default for a 365-day "preceding 12 months"
+  // indicator (payment year, 1 April). An explicit window, useQofYearFloor
+  // false, or a withinDays value other than that 365-day placeholder is the
+  // window the rule asked for — the floor must not discard it.
+  function indicatorWindowMode(rule, check) {
+    const w = check && check.window;
+    if (w === 'rolling' || w === 'qof-year' || w === 'around-anchor' || w === 'after-anchor') return w;
+    if (rule && rule.useQofYearFloor === false) return 'rolling';
+    if (check && typeof check.withinDays === 'number' && Number.isFinite(check.withinDays) && check.withinDays !== 365) {
+      return 'rolling';
+    }
+    return 'qof-year';
+  }
+
+  function observationDateInWindow(rule, check, dateVal, now, anchorIso) {
+    const day = isoDay(dateVal);
+    if (!day) return false;
+    const mode = indicatorWindowMode(rule, check);
+    if (mode === 'rolling') {
+      const withinDays = (check && check.withinDays) || 365;
+      const cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - withinDays);
+      const obsDate = new Date(day + 'T12:00:00Z');
+      return !isNaN(obsDate.getTime()) && obsDate >= cutoff;
+    }
+    if (mode === 'around-anchor' || mode === 'after-anchor') {
+      const anchor = isoDay(anchorIso);
+      if (!anchor) return false;
+      const before = mode === 'after-anchor' ? 0 : check && check.daysBefore != null ? check.daysBefore : 0;
+      const after =
+        mode === 'after-anchor'
+          ? (check && check.withinDays) || 0
+          : check && check.daysAfter != null
+            ? check.daysAfter
+            : 0;
+      const from = addDaysIso(anchor, -before);
+      const to = addDaysIso(anchor, after);
+      return !!(from && to && day >= from && day <= to);
+    }
+    const obsDate = new Date(day + 'T12:00:00Z');
+    return !isNaN(obsDate.getTime()) && obsDate >= qofYearStart(now);
+  }
+
+  // "Never recorded" is overdue only once the window that could still contain
+  // the code has closed. Around a diagnosis date, that is daysAfter past the
+  // anchor, not the QOF year.
+  function indicatorWindowClosed(rule, check, anchorIso, now) {
+    const mode = indicatorWindowMode(rule, check);
+    if (mode === 'around-anchor' || mode === 'after-anchor') {
+      const anchor = isoDay(anchorIso);
+      if (!anchor) return false;
+      const after =
+        mode === 'after-anchor'
+          ? (check && check.withinDays) || 0
+          : check && check.daysAfter != null
+            ? check.daysAfter
+            : 0;
+      const to = addDaysIso(anchor, after);
+      const today = isoDay(now);
+      return !!(to && today && today > to);
+    }
+    return !observationDateInWindow(rule, check, anchorIso, now, anchorIso);
+  }
+
+  function inferBpModality(name, explicit) {
+    if (explicit === 'home' || explicit === 'ambulatory' || explicit === 'clinic') return explicit;
+    const n = String(name || '').toLowerCase();
+    if (/\bambulatory\b|\babpm\b/.test(n)) return 'ambulatory';
+    if (/\bhome\b|\bhbpm\b|self[- ]measured/.test(n)) return 'home';
+    return 'clinic';
+  }
+
+  function bpTargetsForObservation(check, obs) {
+    const modality = inferBpModality(obs && obs.name, obs && obs.bpModality);
+    const homeLike = modality === 'home' || modality === 'ambulatory';
+    if (homeLike && check.homeThresholdSystolic != null && check.homeThresholdDiastolic != null) {
+      return {
+        systolic: check.homeThresholdSystolic,
+        diastolic: check.homeThresholdDiastolic,
+        modality,
+      };
+    }
+    return {
+      systolic: check.thresholdSystolic,
+      diastolic: check.thresholdDiastolic,
+      modality,
+    };
   }
 
   // One calendar month before an ISO day, clamping the day (31 Mar → 28/29 Feb).
@@ -424,6 +548,7 @@
     const keepExceptions = specLooksForExceptions(testSpec);
     return observations.filter((obs) => {
       if (!keepExceptions && observationTextIsException(obs && obs.name)) return false;
+      if (observationIsDecline(obs, testSpec)) return false;
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
@@ -502,6 +627,73 @@
       return matchPriority(a) - matchPriority(b);
     });
     return matches[0];
+  }
+
+  // Target indicators: a same-day slash pair beats a bare systolic row.
+  // A later day that does not parse does not fall through to an older pair.
+  function selectThresholdObservation(observations, check) {
+    const spec = observationCheckSpec(check);
+    const matches = filterMatchingObservations(observations, spec).filter(
+      (o) => o && o.date && !isNaN(new Date(o.date).getTime())
+    );
+    if (!matches.length) return null;
+    matches.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const wantsBp = check.thresholdSystolic != null && check.thresholdDiastolic != null;
+    if (!wantsBp) return matches[0];
+    const latestDay = isoDay(matches[0].date);
+    const sameDay = matches.filter((o) => isoDay(o.date) === latestDay);
+    const parsed = sameDay.filter((o) => parseBp(o.value));
+    if (!parsed.length) return sameDay[0];
+    parsed.sort((a, b) => {
+      const score = (o) => (/blood pressure$/i.test(String(o.name || '')) ? 0 : 1);
+      return score(a) - score(b);
+    });
+    return parsed[0];
+  }
+
+  // CHOL004: on the latest date, the first listed analyte (LDL) wins.
+  function selectAnalyteObservation(observations, check) {
+    const groups = check.analyteThresholds || [];
+    const dated = [];
+    groups.forEach((group, index) => {
+      filterMatchingObservations(observations, {
+        match: group.match,
+        snomed: group.snomed,
+        exclude: group.exclude,
+        declineSnomed: check.declineSnomed,
+      }).forEach((obs) => {
+        if (!obs || !obs.date || isNaN(new Date(obs.date).getTime())) return;
+        dated.push({ obs, index, threshold: group.threshold, id: group.id || null });
+      });
+    });
+    if (!dated.length) return null;
+    dated.sort((a, b) => {
+      const byDate = String(b.obs.date).localeCompare(String(a.obs.date));
+      if (byDate !== 0) return byDate;
+      return a.index - b.index;
+    });
+    const latestDay = isoDay(dated[0].obs.date);
+    const same = dated.filter((d) => isoDay(d.obs.date) === latestDay);
+    same.sort((a, b) => a.index - b.index);
+    return same[0];
+  }
+
+  function hba1cUnitBlock(check, obs, value) {
+    if (unitsConflict(check.unit, obs && obs.unit)) return 'unit-mismatch';
+    const code = obs && obs.code != null ? String(obs.code) : '';
+    if (code && Array.isArray(check.dcctSnomed) && check.dcctSnomed.map(String).includes(code)) return 'dcct-percent';
+    if (/%/.test(String((obs && obs.value) || '')) && canonUnit(check.unit) === 'mmol/mol') return 'dcct-percent';
+    const unitBlank = !obs || obs.unit == null || String(obs.unit).trim() === '';
+    if (
+      unitBlank &&
+      check.rejectAmbiguousBelow != null &&
+      value != null &&
+      value < check.rejectAmbiguousBelow &&
+      canonUnit(check.unit) === 'mmol/mol'
+    ) {
+      return 'blank-unit';
+    }
+    return null;
   }
 
   // === BP VALUE PARSING ===
@@ -778,17 +970,79 @@
   // fallback path AND its authoritative path (to detect a register/problem-
   // code mismatch — see patientOnRegister below). Returns the first matching,
   // non-excluded problem, or null.
+  function problemConceptId(p) {
+    if (!p) return null;
+    const raw = p.conceptId != null ? p.conceptId : p.problemCode && p.problemCode.conceptId;
+    if (raw == null || raw === '') return null;
+    return String(raw);
+  }
+
+  // Exclude strings stay substrings ("non-diabetic" must catch
+  // "pre-diabetic retinopathy") except "organic psychosis": that string is
+  // inside "non-organic psychosis", and non-organic psychosis is on the MH
+  // register.
+  function registerLabelExcluded(label, excluded) {
+    const l = String(label || '').toLowerCase();
+    return (excluded || []).some((e) => {
+      const term = String(e || '').toLowerCase();
+      if (!term || !l.includes(term)) return false;
+      if (term === 'organic psychosis') {
+        const stripped = l.replace(/non-organic psychosis/g, '').replace(/non organic psychosis/g, '');
+        return stripped.includes(term);
+      }
+      return true;
+    });
+  }
+
+  function problemTextMatchesRegister(p, registerRule) {
+    const label = String((p && p.label) || '').toLowerCase();
+    if (registerLabelExcluded(label, registerRule.problemExclude)) return false;
+    return (registerRule.problemMatch || []).some((m) => registerTermInLabel(label, m));
+  }
+
+  function problemCodeMatchesRegister(p, registerRule) {
+    const cid = problemConceptId(p);
+    if (!cid) return false;
+    const excludeIds = registerRule.problemExcludeConceptIds || [];
+    if (excludeIds.map(String).includes(cid)) return false;
+    const includeIds = registerRule.problemConceptIds || [];
+    return includeIds.map(String).includes(cid);
+  }
+
+  // A later resolved / remission code takes the patient off the text register.
+  // An undated resolved code does not outrank a dated diagnosis (order unknown).
+  function registerSuperseded(problems, registerRule) {
+    const excludeIds = new Set((registerRule.problemExcludeConceptIds || []).map(String));
+    const includeIds = new Set((registerRule.problemConceptIds || []).map(String));
+    let latestInclude = null;
+    let latestExclude = null;
+    (problems || []).forEach((p) => {
+      const cid = problemConceptId(p);
+      const day = isoDay(p && p.codedDate);
+      const label = String((p && p.label) || '').toLowerCase();
+      const codeExclude = !!(cid && excludeIds.has(cid));
+      const textExclude = registerLabelExcluded(label, registerRule.problemExclude);
+      const codeInclude = !!(cid && includeIds.has(cid) && !codeExclude);
+      const textInclude = !textExclude && !codeExclude && problemTextMatchesRegister(p, registerRule);
+      if ((codeExclude || textExclude) && day) {
+        if (!latestExclude || day > latestExclude) latestExclude = day;
+      } else if ((codeInclude || textInclude) && day) {
+        if (!latestInclude || day > latestInclude) latestInclude = day;
+      }
+    });
+    return !!(latestExclude && (!latestInclude || latestExclude >= latestInclude));
+  }
+
   function findMatchingProblem(problems, registerRule) {
-    if (!Array.isArray(problems) || !registerRule.problemMatch) return null;
-    const excluded = registerRule.problemExclude || [];
+    if (!Array.isArray(problems) || !registerRule) return null;
+    if (!registerRule.problemMatch && !(registerRule.problemConceptIds || []).length) return null;
+    if (registerSuperseded(problems, registerRule)) return null;
     for (const p of problems) {
-      const label = String(p.label || '').toLowerCase();
-      // Exclusions — kept as broad substring matching (intentionally inclusive;
-      // an exclude term like "non-diabetic"/"pre-diabetic" must catch compound
-      // labels such as "pre-diabetic retinopathy").
-      if (excluded.some((e) => label.includes(String(e).toLowerCase()))) continue;
-      // Matches — word-boundary aware (see registerTermInLabel).
-      if (registerRule.problemMatch.some((m) => registerTermInLabel(label, m))) return p;
+      if (problemCodeMatchesRegister(p, registerRule)) return p;
+    }
+    if (!registerRule.problemMatch) return null;
+    for (const p of problems) {
+      if (problemTextMatchesRegister(p, registerRule)) return p;
     }
     return null;
   }
@@ -844,14 +1098,13 @@
   // Returns { date: Date|null, dateIsOnset: true|false|null }. dateIsOnset is
   // null only when date is also null (nothing usable found at all).
   function earliestRegisterCodedDate(problems, registerRule) {
-    if (!Array.isArray(problems) || !registerRule.problemMatch) return { date: null, dateIsOnset: null };
-    const excluded = registerRule.problemExclude || [];
+    if (!Array.isArray(problems) || !registerRule) return { date: null, dateIsOnset: null };
+    if (!registerRule.problemMatch && !(registerRule.problemConceptIds || []).length) return { date: null, dateIsOnset: null };
+    if (registerSuperseded(problems, registerRule)) return { date: null, dateIsOnset: null };
     let earliestConfirmed = null;
     let earliestAny = null;
     problems.forEach((p) => {
-      const label = String(p.label || '').toLowerCase();
-      if (excluded.some((e) => label.includes(String(e).toLowerCase()))) return;
-      if (!registerRule.problemMatch.some((m) => registerTermInLabel(label, m))) return;
+      if (!problemCodeMatchesRegister(p, registerRule) && !problemTextMatchesRegister(p, registerRule)) return;
       const d = p.codedDate ? new Date(p.codedDate) : null;
       if (!d || isNaN(d.getTime())) return;
       if (!earliestAny || d.getTime() < earliestAny.getTime()) earliestAny = d;
@@ -1064,8 +1317,16 @@
           value: `${check.operator} ${check.threshold}${check.unit ? ' ' + check.unit : ''}`,
         });
       }
-      const useFloor = rule.useQofYearFloor !== false;
-      facts.push({ label: 'Window', value: useFloor ? 'QOF year floor (1 Apr)' : `last ${check.withinDays || 365}d` });
+      const mode = indicatorWindowMode(rule, check);
+      const windowLabel =
+        mode === 'rolling'
+          ? `last ${check.withinDays || 365} days`
+          : mode === 'around-anchor'
+            ? `${check.daysBefore || 0}d before to ${check.daysAfter || 0}d after anchor`
+            : mode === 'after-anchor'
+              ? `${check.withinDays || 0} days after anchor`
+              : 'QOF year floor (1 Apr)';
+      facts.push({ label: 'Window', value: windowLabel });
     } else if (check.kind === 'pathway-bundle') {
       const pb = ctx.pathwayBundle;
       (pb && pb.groups ? pb.groups : check.groups || []).forEach((g) => {
@@ -2636,6 +2897,18 @@
         // THIS one, not whichever problem patientOnRegister happened to hit.
         evidenceCtx.registerDateIsOnset = dateIsOnset;
         evidenceCtx.registerEligibilityDate = earliest.toISOString().slice(0, 10);
+        if (rule.requiresRegisterCodedInQofYear && earliest < qofYearStart(now)) {
+          if (traceEntry) traceEntry.skipReason = 'register-coded-before-qof-year';
+          return [];
+        }
+      } else if (rule.requiresRegisterCodedInQofYear) {
+        const { date: earliest, dateIsOnset } = earliestRegisterCodedDate(data.problems, registerRule);
+        if (!earliest || earliest < qofYearStart(now)) {
+          if (traceEntry) traceEntry.skipReason = 'register-coded-before-qof-year';
+          return [];
+        }
+        evidenceCtx.registerDateIsOnset = dateIsOnset;
+        evidenceCtx.registerEligibilityDate = earliest.toISOString().slice(0, 10);
       } else if (rule.treatNeverRecordedAsOverdue) {
         // treatNeverRecordedAsOverdue (e.g. AST015, 2026-08-28): a plain
         // register-membership-gated periodic-review indicator with NO
@@ -2652,6 +2925,24 @@
         if (sinceDate) {
           evidenceCtx.registerDateIsOnset = sinceIsOnset;
           evidenceCtx.registerEligibilityDate = sinceDate.toISOString().slice(0, 10);
+        }
+      }
+      // around-anchor / after-anchor (HF008, and any after-anchor that is not
+      // keyed off a separate observation) needs the register coded date even
+      // when the indicator is not a "new diagnosis this year" gate.
+      if (
+        !evidenceCtx.registerEligibilityDate &&
+        rule.check &&
+        (rule.check.window === 'around-anchor' || rule.check.window === 'after-anchor') &&
+        !rule.check.anchorFrom
+      ) {
+        const { date: anchorDate, dateIsOnset: anchorOnset } = earliestRegisterCodedDate(
+          data.problems,
+          registerRule
+        );
+        if (anchorDate) {
+          evidenceCtx.registerDateIsOnset = anchorOnset;
+          evidenceCtx.registerEligibilityDate = anchorDate.toISOString().slice(0, 10);
         }
       }
     }
@@ -2700,6 +2991,15 @@
       const hit = probs.some((p) => rule.excludeIfProblem.some((e) => problemLabelMatchesTerm(p.label, e)));
       if (hit) {
         if (traceEntry) traceEntry.skipReason = 'excluded-by-problem';
+        return [];
+      }
+    }
+    // Frailty and other exclusions that are concept ids (CFS 6/7/8) rather
+    // than the rubric the text list was written for.
+    if (Array.isArray(rule.excludeIfConceptIds) && rule.excludeIfConceptIds.length) {
+      const hit = probs.some((p) => itemCodeHits(p, rule.excludeIfConceptIds));
+      if (hit) {
+        if (traceEntry) traceEntry.skipReason = 'excluded-by-concept';
         return [];
       }
     }
@@ -2805,7 +3105,12 @@
     }
 
     if (check.kind === 'observation-threshold') {
-      const obs = findLatestObservation(data.observations, observationCheckSpec(check));
+      const analyteHit = Array.isArray(check.analyteThresholds) ? selectAnalyteObservation(data.observations, check) : null;
+      const obs = analyteHit
+        ? analyteHit.obs
+        : check.thresholdSystolic != null && check.thresholdDiastolic != null
+          ? selectThresholdObservation(data.observations, check)
+          : findLatestObservation(data.observations, observationCheckSpec(check));
       // Reject unparseable dates: NaN < _qofStart is false so an invalid date
       // would bypass the window check and surface a spurious 'achieved'/'not_met'.
       if (obs && obs.date && !isNaN(new Date(obs.date).getTime())) {
@@ -2816,24 +3121,33 @@
         };
         days = daysBetween(obs.date, now);
         dateText = obs.date;
-        // Boundary check: by default bundled QOF indicators apply the 1 Apr – 31 Mar
-        // QOF year floor. Custom indicators can opt out by setting
-        // useQofYearFloor: false on the rule, in which case the rolling
-        // check.withinDays window is used instead.
-        const _obsDate = new Date(obs.date);
-        const _qofStart = qofYearStart(now);
-        const _useFloor = rule.useQofYearFloor !== false;
-        const _withinDays = check.withinDays || 365;
-        const _rollingCutoff = new Date(now);
-        _rollingCutoff.setDate(_rollingCutoff.getDate() - _withinDays);
-        const _outOfWindow = _useFloor ? _obsDate < _qofStart : _obsDate < _rollingCutoff;
+        const _outOfWindow = !observationDateInWindow(rule, check, obs.date, now, evidenceCtx.registerEligibilityDate);
         if (_outOfWindow) {
           status = 'overdue';
+        } else if (analyteHit && analyteHit.threshold != null && check.operator) {
+          const v = parseNumeric(obs.value);
+          const blocked = hba1cUnitBlock(check, obs, v);
+          if (blocked || v == null) {
+            status = 'no_data';
+            valueText = blocked === 'dcct-percent' ? 'DCCT % — not IFCC mmol/mol' : blocked === 'blank-unit' ? 'unit not recorded' : null;
+          } else {
+            valueText = check.unit ? `${v} ${check.unit}` : String(v);
+            const op = check.operator;
+            if (op === '<=' && v <= analyteHit.threshold) status = 'achieved';
+            else if (op === '<' && v < analyteHit.threshold) status = 'achieved';
+            else if (op === '>=' && v >= analyteHit.threshold) status = 'achieved';
+            else if (op === '>' && v > analyteHit.threshold) status = 'achieved';
+            else status = 'not_met';
+          }
         } else if (check.thresholdSystolic && check.thresholdDiastolic) {
           const bp = parseBp(obs.value);
           if (bp) {
+            const targets = bpTargetsForObservation(check, obs);
             valueText = `${bp.systolic}/${bp.diastolic}`;
-            if (bp.systolic <= check.thresholdSystolic && bp.diastolic <= check.thresholdDiastolic) {
+            if (targets.modality === 'home' || targets.modality === 'ambulatory') {
+              valueText += ` ${targets.modality}`;
+            }
+            if (bp.systolic <= targets.systolic && bp.diastolic <= targets.diastolic) {
               status = 'achieved';
             } else {
               status = 'not_met';
@@ -2844,8 +3158,15 @@
         } else if (check.threshold != null && check.operator) {
           // Unit safety: a conflicting unit makes the value incomparable — treat
           // as no_data rather than asserting a spurious achieved/not_met.
-          const v = unitsConflict(check.unit, obs.unit) ? null : parseNumeric(obs.value);
-          if (v != null) {
+          // A DCCT % HbA1c, or a blank unit with a percent-range number, must
+          // not clear an IFCC mmol/mol target.
+          const v = parseNumeric(obs.value);
+          const blocked = hba1cUnitBlock(check, obs, v);
+          if (blocked || v == null) {
+            status = 'no_data';
+            if (blocked === 'dcct-percent') valueText = 'DCCT % — not IFCC mmol/mol';
+            else if (blocked === 'blank-unit') valueText = 'unit not recorded';
+          } else {
             valueText = check.unit ? `${v} ${check.unit}` : String(v);
             const op = check.operator;
             if (op === '<=' && v <= check.threshold) status = 'achieved';
@@ -2859,13 +3180,52 @@
     } else if (check.kind === 'medication-present') {
       const matchTerms = check.medicationMatch || [];
       const excludeTerms = check.medicationExclude || [];
-      const foundMed = (data.medications || []).find((m) => {
+      const issuedWithin = check.issuedWithinDays;
+      const medFresh = (m) => {
+        if (issuedWithin == null) return true;
+        const last = m.lastIssueDate || m.issueDate || null;
+        if (!last) return true;
+        const age = daysBetween(last, now);
+        if (age == null) return true;
+        return age <= issuedWithin;
+      };
+      const medHits = (m, terms) => {
         const norm = normaliseDrugString(m.name);
         if (excludeTerms.some((t) => norm.includes(normaliseDrugString(t)))) return false;
-        return matchTerms.some((t) => norm.includes(normaliseDrugString(t)));
-      });
-      if (foundMed) evidenceCtx.matchedMed = foundMed.name;
-      status = foundMed ? 'achieved' : 'not_met';
+        return (terms || []).some((t) => norm.includes(normaliseDrugString(t)));
+      };
+      const foundMed = (data.medications || []).find((m) => medFresh(m) && medHits(m, matchTerms));
+      let altMed = null;
+      if (!foundMed && check.alternativeMedication && Array.isArray(check.alternativeMedication.match)) {
+        const gate = check.alternativeMedication.requiresCode || {};
+        const gateHit = hasEventEver(data, { match: gate.match || [], snomed: gate.snomed || [] });
+        if (gateHit) {
+          altMed = (data.medications || []).find((m) => medFresh(m) && medHits(m, check.alternativeMedication.match));
+        }
+      }
+      const chosen = foundMed || altMed;
+      if (chosen) evidenceCtx.matchedMed = chosen.name;
+      // Score gate (AF008): below the threshold the patient is not in the
+      // denominator. A missing score does not count as achieved.
+      if (check.requiresScore && check.requiresScore.min != null) {
+        const scoreObs = findLatestObservation(data.observations, {
+          match: check.requiresScore.observation,
+          snomed: check.requiresScore.snomed,
+        });
+        const score = scoreObs ? parseNumeric(scoreObs.value) : null;
+        if (score == null) {
+          status = 'not_met';
+          valueText = 'CHA2DS2-VASc not recorded';
+        } else if (score < check.requiresScore.min) {
+          if (traceEntry) traceEntry.skipReason = 'score-below-gate';
+          return [];
+        } else {
+          status = chosen ? 'achieved' : 'not_met';
+          if (chosen) valueText = chosen.name;
+        }
+      } else {
+        status = chosen ? 'achieved' : 'not_met';
+      }
     } else if (check.kind === 'observation-recent') {
       const obs = findLatestObservation(data.observations, observationCheckSpec(check));
       // Reject unparseable dates: NaN >= _qofStart is false so an invalid date
@@ -2883,17 +3243,53 @@
         // this already; observation-recent was the gap that left in-date
         // chips (HRT review, smoking status, etc.) value-less.
         if (obs.value != null) valueText = String(obs.value).trim();
-        // Boundary check — supports useQofYearFloor opt-out (see threshold case above)
-        const _obsDate2 = new Date(obs.date);
-        const _qofStart2 = qofYearStart(now);
-        const _useFloor2 = rule.useQofYearFloor !== false;
-        const _withinDays2 = check.withinDays || 365;
-        const _rollingCutoff2 = new Date(now);
-        _rollingCutoff2.setDate(_rollingCutoff2.getDate() - _withinDays2);
-        const _inWindow = _useFloor2 ? _obsDate2 >= _qofStart2 : _obsDate2 >= _rollingCutoff2;
-        if (_inWindow) status = 'achieved';
-        else status = 'overdue';
-      } else if ((rule.requiresRegisterCodedFrom || rule.treatNeverRecordedAsOverdue) && evidenceCtx.registerEligibilityDate) {
+        let anchorIso = evidenceCtx.registerEligibilityDate;
+        if (check.anchorFrom) {
+          const anchorObs = findLatestObservation(data.observations, {
+            match: check.anchorFrom.observation,
+            snomed: check.anchorFrom.snomed,
+          });
+          anchorIso = anchorObs && anchorObs.date;
+          if (!anchorIso) {
+            status = 'not_met';
+            valueText = valueText || 'no anchor date';
+          }
+        }
+        if (status !== 'not_met' || !check.anchorFrom) {
+          const _inWindow = observationDateInWindow(rule, check, obs.date, now, anchorIso);
+          if (_inWindow) status = 'achieved';
+          else {
+            // A later echo outside the diagnosis window must not hide an
+            // earlier one that did fall inside it. Rolling and QOF-year
+            // indicators still require the latest reading to be in window.
+            const mode = indicatorWindowMode(rule, check);
+            const earlier =
+              mode === 'around-anchor' || mode === 'after-anchor'
+                ? filterMatchingObservations(data.observations, observationCheckSpec(check)).find(
+                    (o) => o && o.date && observationDateInWindow(rule, check, o.date, now, anchorIso)
+                  )
+                : null;
+            if (earlier) {
+              status = 'achieved';
+              evidenceCtx.matchedObs = {
+                name: earlier.name || (check.observation || [])[0] || '',
+                value: earlier.value,
+                date: earlier.date,
+              };
+              days = daysBetween(earlier.date, now);
+              dateText = earlier.date;
+              if (earlier.value != null) valueText = String(earlier.value).trim();
+            } else status = 'overdue';
+          }
+        }
+      } else if (
+        evidenceCtx.registerEligibilityDate &&
+        (rule.requiresRegisterCodedFrom ||
+          rule.treatNeverRecordedAsOverdue ||
+          rule.requiresRegisterCodedInQofYear ||
+          check.window === 'around-anchor' ||
+          (check.window === 'after-anchor' && !check.anchorFrom))
+      ) {
         // No matching observation has EVER been recorded. For a plain
         // periodic-review indicator with NEITHER flag set, that's genuinely
         // ambiguous — stays no_data, since a recent registration might
@@ -2907,14 +3303,7 @@
         // yet be missing from the record — "never recorded" is unambiguous
         // here, not merely unknown. Same window math as the in-window branch
         // above.
-        const _diagDate = new Date(evidenceCtx.registerEligibilityDate);
-        const _qofStartND = qofYearStart(now);
-        const _useFloorND = rule.useQofYearFloor !== false;
-        const _withinDaysND = check.withinDays || 365;
-        const _rollingCutoffND = new Date(now);
-        _rollingCutoffND.setDate(_rollingCutoffND.getDate() - _withinDaysND);
-        const _diagInWindow = _useFloorND ? _diagDate >= _qofStartND : _diagDate >= _rollingCutoffND;
-        if (!_diagInWindow) status = 'overdue';
+        if (indicatorWindowClosed(rule, check, evidenceCtx.registerEligibilityDate, now)) status = 'overdue';
       }
     } else if (check.kind === 'observation-bundle') {
       // observation-bundle: each group (an alias array, or { name, match,
@@ -2924,17 +3313,7 @@
       // review day; exacerbation count from 1 calendar month before that
       // review through the review date).
       const bundleGroups = check.observations || [];
-      const _useFloorB = rule.useQofYearFloor !== false;
-      const _withinDaysB = check.withinDays || 365;
-      const _qofStartB = qofYearStart(now);
-      const _rollingCutoffB = new Date(now);
-      _rollingCutoffB.setDate(_rollingCutoffB.getDate() - _withinDaysB);
-      const inAchievementWindow = (obs) => {
-        if (!obs || !obs.date) return false;
-        const obsDate = new Date(obs.date);
-        if (isNaN(obsDate.getTime())) return false;
-        return _useFloorB ? obsDate >= _qofStartB : obsDate >= _rollingCutoffB;
-      };
+      const inAchievementWindow = (obs) => observationDateInWindow(rule, check, obs && obs.date, now, evidenceCtx.registerEligibilityDate);
       const bundleResults = bundleGroups.map((group) => {
         const spec = observationBundleGroup(group);
         const aliases = spec.match;
@@ -3022,9 +3401,7 @@
       // overdue. Same opt-in as observation-recent. A partial set stays
       // not_met so the missing names stay on the chip.
       if (status === 'no_data' && rule.treatNeverRecordedAsOverdue && evidenceCtx.registerEligibilityDate) {
-        const _diagDate = new Date(evidenceCtx.registerEligibilityDate);
-        const _diagInWindow = _useFloorB ? _diagDate >= _qofStartB : _diagDate >= _rollingCutoffB;
-        if (!_diagInWindow) status = 'overdue';
+        if (indicatorWindowClosed(rule, check, evidenceCtx.registerEligibilityDate, now)) status = 'overdue';
       }
       const missingNames = bundleResults.filter((r) => r.name && !r.inWindow).map((r) => r.name);
       valueText = named

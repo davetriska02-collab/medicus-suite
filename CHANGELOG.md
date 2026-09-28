@@ -2,6 +2,20 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.7] — 2026-09-28
+
+### QOF 2026/27 red-team indicator gaps
+
+Stacked on the coded-notes work (SMOK002 and AST015 are unchanged). The rules engine honours an indicator window when one is set. A 365-day check still uses the QOF year (1 April). A different `withinDays`, or an explicit rolling, around-diagnosis, or after-anchor window, is no longer thrown away.
+
+Blood-pressure rows that arrive as separate systolic and diastolic readings are paired, including arterial-pressure names. A same-day average beats a minimum. Home and ambulatory readings use 135/85 under 80 and 145/85 from 80. A declined, refused, dissent, or unsuitable code never counts as achieved. Informed dissent, unsuitable, and two invitations suppress the chip unless the indicator is already achieved. A Clinical Frailty Scale 6, 7, or 8 code excludes the frailty-gated targets.
+
+Registers match a SNOMED concept id before the label. Stroke and TIA, PAD, CHD, heart failure (including left ventricular failure 85232009), diabetes (including MODY), asthma, and severe mental illness use the cluster ids from the red-team extracts. Family history, suspected, and "no history of" stay off. "History of stroke" stays on. A later resolved or remission code takes the patient off; an undated one does not. "Organic psychosis" no longer excludes "non-organic psychosis".
+
+CHOL004 is LDL at or under 2.0, otherwise non-HDL at or under 2.6, and LDL wins on the same date. CHOL003 counts ezetimibe and the other named alternatives only with a statin declined, not-tolerated, or contraindicated code. AF008 needs a CHA2DS2-VASc of 2 or more, counts the DOAC brand names, and counts warfarin only after a DOAC decline or contraindication. An issue older than 183 days does not count. HF009 no longer treats metoprolol, canagliflozin, or ertugliflozin as a pillar. A DCCT % HbA1c, or a blank unit with a value under 20, does not clear an IFCC target. MH007, MH002, and DEM004 match the alcohol, care-plan, and review concept ids from the reports. AST014 is 93 days either side of diagnosis. HF008 is 183 days either side. DM014 is 279 days after a diagnosis coded in this QOF year. OB004 is 90 days after the BMI. BP002 (blood pressure in the last 5 years, age 45 and over) is on. Cervical screening and the vaccination indicators are present and off.
+
+DM036 stays age 70. The published 79 is unverified. MH011's 24-month arm is not wired. H-087 is proposed, unsigned, for CSO review.
+
 ## [v3.267.6] — 2026-09-28
 
 ### Exception rubrics do not clear a QOF indicator

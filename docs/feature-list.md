@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.6
+**Version:** v3.267.7
 **Generated:** 2026-09-28
 
 ## What it is
@@ -13,7 +13,7 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 - 4 full-tab tools reached from the All-tabs menu or the command palette (Duplicate Problem Checker, Rota Manager, Contacts Management, Availability wall)
 - in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, repeat-authorisation pills, workload tracker)
 - 8 rule types in the clinical alert engine
-- 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules (16 register + 66 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
+- 39 built-in drug-monitoring rules (38 enabled), 89 QOF rules (16 register + 73 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
 
 ## Side-panel modules
 
@@ -125,7 +125,7 @@ The Monitoring tab and Sweep both run patient data through the same rules engine
 - **Vaccine** — eligibility and due/given/declined status against seasonal or one-off schedules
 - **Composite** — combines the results of several other rules into one higher-level flag
 
-The shipped alert library carries 39 starter alerts a practice can enable (36 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules, 7 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
+The shipped alert library carries 39 starter alerts a practice can enable (36 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 39 built-in drug-monitoring rules (38 enabled), 89 QOF rules, 7 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
 
 ## Settings & customisation
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.7 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. H-087 is proposed, unsigned, for CSO review.
 - **v3.267.6 (28 Sep)** — A coded note that says declined, not recorded, not appropriate, unsuitable, refused, dissent, or not indicated does not clear the indicator. Draft notes are ignored. A note is dated from recordDate. H-086 remains proposed and unsigned.
 - **v3.267.5 (28 Sep)** — Coded consultation notes (a SNOMED term filed as a note) count towards smoking status and the asthma review. SMOK002 uses the smoking-habit code cluster and ignores cessation education and referral. AST015 shows which of the four components are met and which are missing. H-086 is proposed, unsigned, for CSO review.
 - **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 accepted 2026-09-27.
