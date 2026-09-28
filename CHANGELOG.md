@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.8] — 2026-09-28
+
+### AST015 needs three coded facts, not four
+
+The asthma review indicator now follows the reporting rules. It is met only when all three are present: a review code from the 11-code REV_COD list, an exacerbation count dated from one month before that review through the review day, and a written plan on the same day as the review. A review on its own stays not met.
+
+Asthma control assessment and inhaler technique are shown on the detail panel as advisory. Neither blocks a green chip. Control assessment left the extraction in v50, and inhaler technique has no code cluster.
+
+A personalised care adjustment hides the chip when the review is not already met: patient unsuitable (717291000000103), asthma monitoring declined (763221007), informed dissent (716491000000100), or two asthma invitations at least 7 days apart. A completed review still counts beside any of those. Children under 5 are excluded. The asthma register now also excludes the preferred term "Asthma resolved".
+
 ## [v3.267.7] — 2026-09-28
 
 ### SMOK002 uses the smoking-habit refset and ignores advice, drugs and exceptions

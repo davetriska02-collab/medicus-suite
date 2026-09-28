@@ -186,6 +186,7 @@
       ],
       "problemExclude": [
         "resolved asthma",
+        "asthma resolved",
         "no asthma",
         "family history",
         "suspected asthma",
@@ -1801,8 +1802,9 @@
       "type": "qof-indicator",
       "enabled": true,
       "indicatorCode": "AST015",
-      "indicatorName": "Asthma review with 4 components in preceding 12 months",
+      "indicatorName": "Asthma review with written plan and exacerbation count (preceding 12 months)",
       "requiresRegister": "ASTHMA",
+      "ageRange": { "min": 5 },
       "treatNeverRecordedAsOverdue": true,
       "check": {
         "kind": "observation-bundle",
@@ -1824,8 +1826,12 @@
               "asthma review using royal college of physicians three questions",
               "asthma review"
             ],
+            "exact": [
+              "asthma monitoring"
+            ],
             "snomed": [
               "270442000",
+              "275908000",
               "390872009",
               "390877003",
               "390878008",
@@ -1839,6 +1845,7 @@
           },
           {
             "name": "Asthma control",
+            "advisory": true,
             "match": [
               "asthma control test",
               "asthma control questionnaire",
@@ -1848,6 +1855,13 @@
               "443117005",
               "763077003",
               "905301000000103"
+            ]
+          },
+          {
+            "name": "Inhaler technique",
+            "advisory": true,
+            "match": [
+              "inhaler technique"
             ]
           },
           {
@@ -1878,13 +1892,69 @@
           }
         ]
       },
+      "pca": {
+        "observationsInYear": [
+          {
+            "id": "ASTPCAPU_COD",
+            "includeExceptions": true,
+            "match": ["excepted from asthma quality indicators - patient unsuitable"],
+            "snomed": ["717291000000103"]
+          },
+          {
+            "id": "ASTMONDEC_COD",
+            "includeExceptions": true,
+            "match": ["asthma monitoring declined"],
+            "snomed": ["763221007"]
+          },
+          {
+            "id": "ASTPCADEC_COD",
+            "includeExceptions": true,
+            "match": ["excepted from asthma quality indicators - informed dissent"],
+            "snomed": ["716491000000100"]
+          }
+        ],
+        "invitedTwice": {
+          "minCount": 2,
+          "minDaysApart": 7,
+          "match": [
+              "quality and outcomes framework quality indicator-related care invitation",
+              "quality and outcomes framework asthma quality indicator-related care invitation",
+              "asthma monitoring call first letter",
+              "asthma monitoring call second letter",
+              "asthma monitoring call third letter",
+              "asthma monitoring call verbal invite",
+              "asthma monitoring call telephone invite",
+              "quality and outcomes framework asthma quality indicator-related care invitation using preferred method of communication",
+              "asthma monitoring invitation short message service text message",
+              "asthma monitoring invitation email",
+              "asthma monitoring short message service text message first invitation",
+              "asthma monitoring short message service text message second invitation",
+              "asthma monitoring short message service text message third invitation"
+          ],
+          "snomed": [
+              "1109921000000106",
+              "1110841000000103",
+              "185731000",
+              "185732007",
+              "185734008",
+              "185735009",
+              "185736005",
+              "92161000000104",
+              "928451000000107",
+              "928511000000107",
+              "959401000000101",
+              "959421000000105",
+              "959441000000103"
+          ]
+        }
+      },
       "thresholds": {
         "lower": 45,
         "upper": 70
       },
       "points": 20,
       "source": "QOF 26/27 AST015 (PRN02356 July 2026 update, changelog table: \"AST015 Changed indicator ID due to asthma register change\", thresholds/points unchanged from prior AST007)",
-      "notes": "2026-08-28 (The Keeper): renumbered AST007 -> AST015 per the July 2026 PRN02356 amendment (fetched and confirmed in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf, pp.42-43 and changelog table p.1). Pure ID rename — wording, 20pts and 45-70% thresholds are byte-for-byte unchanged; the internal rule id (qof-ast007) is kept so overrides/dismissals keyed on it are not disturbed, only indicatorCode changed. Was HELD since 2026-08-17 pending this confirmation (see the-keeper-report-2026-08-18.md / docs/keeper/KEEPER-GAP-ANALYSIS-2026-08-22.md) — now applied. Threshold tightened for 26/27 from 50-75 to 45-70 (unchanged by this rename). 2026-09-28: modelled as four required component groups. (1) Asthma review cluster — 270442000 Asthma monitoring check done, 394700004 Asthma annual review, plus 390872009, 390877003, 390878008, 394701000, 394720003, 401182001, 401183006 and 754061000000100 (OpenSAFELY QOF business-rules asthma-review cluster). (2) Asthma control assessment, ASTCONTASS_COD: 443117005 Asthma control test score, 763077003 Asthma Control Questionnaire score, 905301000000103 Childhood Asthma Control Test score. (3) Exacerbation count, ASTEXACB_COD 366874008 Number of asthma exacerbations in past year, from one calendar month before an in-year review through that review date. (4) Written plan, WRITPASTP_COD: 527171000000103 Patient has a written asthma personal action plan, 811921000000103 Asthma self-management plan agreed, 810901000000102 Asthma self-management plan review, on the same day as an in-year review. Any one code meets its group. The detail panel names which components are met and which are missing. Inhaler technique is in the published indicator wording and is not a fifth required group in this build — for CSO review (H-086). A review code on its own does not clear the indicator. 2026-08-28: added treatNeverRecordedAsOverdue — a long-standing asthma-register patient with NO review EVER recorded now shows overdue (red), not neutral no_data, matching the AST014 fix (a genuine miss should never render as ambiguous absence of data). Only applies once the register-coded date itself is outside the current window; a recently-registered patient with no review yet still correctly shows no_data."
+      "notes": "2026-08-28 (The Keeper): renumbered AST007 -> AST015 per the July 2026 PRN02356 amendment (fetched and confirmed in full — https://www.england.nhs.uk/wp-content/uploads/2026/03/prn02356-quality-outcomes-framework-guidance-2026-27-july-update.pdf, pp.42-43 and changelog table p.1). Pure ID rename — wording, 20pts and 45-70% thresholds are byte-for-byte unchanged; the internal rule id (qof-ast007) is kept so overrides/dismissals keyed on it are not disturbed, only indicatorCode changed. Was HELD since 2026-08-17 pending this confirmation (see the-keeper-report-2026-08-18.md / docs/keeper/KEEPER-GAP-ANALYSIS-2026-08-22.md) — now applied. Threshold tightened for 26/27 from 50-75 to 45-70 (unchanged by this rename). 2026-09-28: three required coded facts, per the PRN02356 reporting paragraph and PCIT v51. (1) A review code from REV_COD (11 codes: 270442000 Asthma monitoring check done, 275908000 Asthma monitoring, 390872009 Change in asthma management plan, 390877003 Step up change in asthma management plan, 390878008 Step down change in asthma management plan, 394700004 Asthma annual review, 394701000 Asthma follow-up, 394720003 Asthma medication review, 401182001 Asthma monitoring by nurse, 401183006 Asthma monitoring by doctor, 754061000000100 Asthma review using Royal College of Physicians three questions). The words asthma monitoring are an exact rubric only, so an asthma monitoring invitation is not a review. (2) An exacerbation count from ASTEXACB_COD 366874008, dated from one calendar month before an in-year review through that review. (3) A written plan from WRITPASTP_COD (527171000000103, 810901000000102, 811921000000103) on the same day as that review. A review on its own does not clear the indicator. Asthma control assessment (ASTCONTASS_COD) was removed from the extraction from v50, and inhaler technique has no coded cluster. Both are shown on the panel as advisory and do not block achievement. PCA codes 717291000000103 (patient unsuitable), 763221007 (asthma monitoring declined) and 716491000000100 (informed dissent) suppress the chip, as do two ASTINVITE_COD invitations at least 7 days apart in the QOF year. A met numerator overrides the PCA. Children under 5 are excluded (ageRange min 5). The asthma register exclude list includes asthma resolved (162660004) as well as resolved asthma. 2026-08-28: added treatNeverRecordedAsOverdue — a long-standing asthma-register patient with NO review EVER recorded now shows overdue (red), not neutral no_data, matching the AST014 fix (a genuine miss should never render as ambiguous absence of data). Only applies once the register-coded date itself is outside the current window; a recently-registered patient with no review yet still correctly shows no_data."
     },
     {
       "id": "qof-ast012",

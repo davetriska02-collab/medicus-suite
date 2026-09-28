@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.7
+**Version:** v3.267.8
 **Generated:** 2026-09-28
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.267.8 (28 Sep)** — The asthma review is met only with a review code, an exacerbation count in the month before that review, and a written plan on the same day. Control assessment and inhaler technique are advisory. An unsuitable, declined or dissent exception, or two invitations a week apart, hides the chip. Children under 5 and "Asthma resolved" are excluded. H-086 remains proposed and unsigned.
 - **v3.267.7 (28 Sep)** — SMOK002 matches the 71-code smoking-habit list. Declined status, tobacco-use screening declined, cessation advice, referral, pharmacotherapy and nicotine dependence do not clear it. An unsuitable or informed-dissent exception hides the chip. A never-smoker-after-25 rule and a three-year ex-smoker carry-forward are follow-ups. H-086 remains proposed and unsigned.
 - **v3.267.6 (28 Sep)** — A coded note that says declined, not recorded, not appropriate, unsuitable, refused, dissent, or not indicated does not clear the indicator. Draft notes are ignored. A note is dated from recordDate. H-086 remains proposed and unsigned.
 - **v3.267.5 (28 Sep)** — Coded consultation notes (a SNOMED term filed as a note) count towards smoking status and the asthma review. SMOK002 uses the smoking-habit code cluster and ignores cessation education and referral. AST015 shows which of the four components are met and which are missing. H-086 is proposed, unsigned, for CSO review.

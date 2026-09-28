@@ -132,10 +132,19 @@ console.log('\n--- last week coded review clears both indicators; 2022 does not 
     `AST015 date is the review day (got ${astChips[0] && astChips[0].dateText})`
   );
   const facts = (astChips[0] && astChips[0].evidence && astChips[0].evidence.facts) || [];
-  ['Asthma review', 'Asthma control', 'Exacerbation count', 'Written plan'].forEach((label) => {
+  ['Asthma review', 'Exacerbation count', 'Written plan'].forEach((label) => {
     const fact = facts.find((f) => f.label === label);
     check(fact && fact.value === 'met', `${label} is met on the detail panel (got ${fact && fact.value})`);
   });
+  const control = facts.find((f) => f.label === 'Asthma control');
+  check(
+    control && control.value === 'advisory',
+    `Asthma control is advisory and does not gate achievement (got ${control && control.value})`
+  );
+  check(
+    astChips[0] && astChips[0].valueText === '3/3 components',
+    `chip counts the three required facts (got ${astChips[0] && astChips[0].valueText})`
+  );
 }
 
 console.log('\n--- cessation education and referral do not clear SMOK002 ---');
@@ -217,10 +226,10 @@ console.log('\n--- concept id matches when the display name is not the rubric --
   const chips = evalRule(ast015, parsed);
   const facts = (chips[0] && chips[0].evidence && chips[0].evidence.facts) || [];
   const control = facts.find((f) => f.label === 'Asthma control');
-  check(chips[0] && chips[0].status === 'achieved', 'concept ids satisfy the four groups');
+  check(chips[0] && chips[0].status === 'achieved', 'review, exacerbation and plan concept ids achieve AST015');
   check(
-    control && control.value === 'met' && control.detail === 'ACT',
-    'control group matched the concept id, not the rubric'
+    control && control.value === 'advisory' && /ACT/.test(control.detail || ''),
+    `control stays advisory when its concept id matches (got ${control && control.value} ${control && control.detail})`
   );
 }
 
@@ -272,7 +281,7 @@ console.log('\n--- exception rubrics do not achieve ---');
       { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' },
     ]);
     check(
-      chips[0] && chips[0].status === 'not_met' && /Asthma review/.test(chips[0].valueText || ''),
+      chips[0] && chips[0].status !== 'achieved' && /Asthma review/.test(chips[0].valueText || ''),
       `${name} does not clear the review (got ${chips[0] && chips[0].status} ${chips[0] && chips[0].valueText})`
     );
   });
@@ -300,6 +309,113 @@ console.log('\n--- exception rubrics do not achieve ---');
     { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' },
   ]);
   check(alongside[0] && alongside[0].status === 'achieved', 'a real review still counts beside a declined rubric');
+}
+
+console.log('\n--- AST015 is three coded facts; a review alone does not achieve ---');
+{
+  const review = { name: 'Asthma annual review', date: REVIEW, value: '', code: '394700004' };
+  const plan = { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' };
+  const count = { name: 'Number of asthma exacerbations in past year', date: REVIEW, value: '1', code: '366874008' };
+  const sameDay = evalRule(ast015, [review, plan, count]);
+  check(sameDay[0] && sameDay[0].status === 'achieved', 'review, same-day plan and in-window exacerbation achieve without a control score');
+  const otherDay = evalRule(ast015, [review, Object.assign({}, plan, { date: '2026-09-20' }), count]);
+  check(
+    otherDay[0] && otherDay[0].status === 'not_met' && /Written plan/.test(otherDay[0].valueText || ''),
+    `a plan on a different day fails (got ${otherDay[0] && otherDay[0].status} ${otherDay[0] && otherDay[0].valueText})`
+  );
+  const outside = evalRule(ast015, [review, plan, Object.assign({}, count, { date: '2026-07-01' })]);
+  check(
+    outside[0] && outside[0].status === 'not_met' && /Exacerbation count/.test(outside[0].valueText || ''),
+    `an exacerbation outside the month fails (got ${outside[0] && outside[0].status} ${outside[0] && outside[0].valueText})`
+  );
+  const alone = evalRule(ast015, [review]);
+  check(
+    alone[0] && alone[0].status === 'not_met' && /Written plan/.test(alone[0].valueText || ''),
+    `a review alone does not turn the chip green (got ${alone[0] && alone[0].status} ${alone[0] && alone[0].valueText})`
+  );
+  const invite = evalRule(ast015, [
+    { name: 'Asthma monitoring call first letter', date: REVIEW, value: '', code: '185731000' },
+  ]);
+  check(invite[0] && invite[0].status !== 'achieved', 'an asthma monitoring invitation is not a review');
+  const monitoring = evalRule(ast015, [
+    { name: 'Asthma monitoring', date: REVIEW, value: '', code: '275908000' },
+    plan,
+    count,
+  ]);
+  check(monitoring[0] && monitoring[0].status === 'achieved', 'Asthma monitoring (275908000) is a REV_COD review');
+}
+
+console.log('\n--- AST015 PCA suppresses the chip; achievement overrides it ---');
+{
+  const review = { name: 'Asthma annual review', date: REVIEW, value: '', code: '394700004' };
+  const plan = { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' };
+  const count = { name: 'Number of asthma exacerbations in past year', date: REVIEW, value: '1', code: '366874008' };
+  const complete = [review, plan, count];
+  const pcas = [
+    { name: 'Excepted from asthma quality indicators - patient unsuitable', code: '717291000000103', label: 'patient unsuitable' },
+    { name: 'Asthma monitoring declined', code: '763221007', label: 'monitoring declined' },
+    { name: 'Excepted from asthma quality indicators - informed dissent', code: '716491000000100', label: 'informed dissent' },
+  ];
+  pcas.forEach((row) => {
+    const only = evalRule(ast015, [{ name: row.name, date: REVIEW, value: '', code: row.code }]);
+    check(only.length === 0, `${row.label} suppresses the chip (got ${only.length})`);
+    const met = evalRule(ast015, complete.concat([{ name: row.name, date: REVIEW, value: '', code: row.code }]));
+    check(met[0] && met[0].status === 'achieved', `a met review still achieves beside ${row.label}`);
+  });
+  const oneInvite = evalRule(ast015, [
+    { name: 'Asthma monitoring call first letter', date: '2026-09-01', value: '', code: '185731000' },
+  ]);
+  check(oneInvite.length === 1, 'one invitation does not suppress the chip');
+  const closeInvites = evalRule(ast015, [
+    { name: 'Asthma monitoring call first letter', date: '2026-09-01', value: '', code: '185731000' },
+    { name: 'Asthma monitoring call second letter', date: '2026-09-05', value: '', code: '185732007' },
+  ]);
+  check(closeInvites.length === 1, 'two invitations fewer than 7 days apart do not suppress the chip');
+  const twoInvites = evalRule(ast015, [
+    { name: 'Asthma monitoring call first letter', date: '2026-09-01', value: '', code: '185731000' },
+    { name: 'Asthma monitoring call second letter', date: '2026-09-14', value: '', code: '185732007' },
+  ]);
+  check(twoInvites.length === 0, 'two invitations at least 7 days apart suppress the chip');
+  const invitesAndReview = evalRule(
+    ast015,
+    complete.concat([
+      { name: 'Asthma monitoring call first letter', date: '2026-09-01', value: '', code: '185731000' },
+      { name: 'Asthma monitoring call second letter', date: '2026-09-14', value: '', code: '185732007' },
+    ])
+  );
+  check(invitesAndReview[0] && invitesAndReview[0].status === 'achieved', 'a met review overrides the invitation PCA');
+}
+
+console.log('\n--- asthma resolved and age under 5 are outside AST015 ---');
+{
+  const resolved = engine.evaluateQofIndicatorRule(
+    ast015,
+    {
+      medications: [],
+      observations: [],
+      problems: [{ label: 'Asthma resolved', codedDate: '2018-01-01', hasOnsetDate: true }],
+      patientContext: { ageYears: 40 },
+      _registerLookup: { ASTHMA: astReg },
+    },
+    NOW
+  );
+  check(resolved.length === 0, 'Asthma resolved does not put the patient on the register');
+  const child = engine.evaluateQofIndicatorRule(
+    ast015,
+    {
+      medications: [],
+      observations: [
+        { name: 'Asthma annual review', date: REVIEW, value: '', code: '394700004' },
+        { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' },
+        { name: 'Number of asthma exacerbations in past year', date: REVIEW, value: '1', code: '366874008' },
+      ],
+      problems: asthmaProblem,
+      patientContext: { ageYears: 4 },
+      _registerLookup: { ASTHMA: astReg },
+    },
+    NOW
+  );
+  check(child.length === 0, 'a child under 5 is excluded from AST015');
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
