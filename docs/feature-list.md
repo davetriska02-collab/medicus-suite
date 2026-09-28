@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.1
+**Version:** v3.268.2
 **Generated:** 2026-09-28
 
 ## What it is
@@ -108,7 +108,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
-- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 accepted (ALARP) 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481).
+- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Set up tiles lists the slot types, sessions and diaries from the book; drag each name onto one tile (or use Move), preview the counts, then Save. Typed pattern rules remain. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 accepted (ALARP) 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481). Setup canvas addendum accepted 2026-09-28 (Dr D. Triska, CSO, GMC 6159481).
 - **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.2 (28 Sep)** — Availability wall setup: drag each slot type, session and diary onto one tile, with a count preview and undo. Existing mappings load unchanged. H-085 setup-canvas addendum accepted 2026-09-28.
 - **v3.268.1 (28 Sep)** — Lab Filing: Save and approve covers only the lab on screen. The practice-wide Medicus wording and the never-file list have their own Approve buttons. A scan does not mark a lab reviewed. A name made only of stop-words (Blood culture, X-ray) does not take another result’s code. H-087 accepted 2026-09-28.
 - **v3.268.0 (27 Sep)** — Companion folds the Lab Filing card in. Catalogue follow-ups: ungrouped results can be matched, a blocked comment can be whitelisted, and a heading offers a setup link only when every row is the same one test. Catalogue filing stays off until the practice switches it on.
 - **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 accepted 2026-09-27.

@@ -26,6 +26,8 @@ export const LONDON = 'Europe/London';
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const REMOTE_WORD = /^(telephone|phone|remote|video)$/;
+/** Exact names stored on a tile. Raised from 16 so a dragged name is not dropped on save. */
+export const MATCH_LIST_MAX = 48;
 
 function pad(n) {
   return String(n).padStart(2, '0');
@@ -246,6 +248,21 @@ function needleHits(hay, needle) {
 
 function haystackHits(hay, needles) {
   return (needles || []).some((n) => n && needleHits(hay, n));
+}
+
+/** Whole-token match used by tile rules. Exported for the setup canvas. */
+export function textHitsNeedle(hay, needle) {
+  return needleHits(hay, needle);
+}
+
+/** A dragged name has to be long enough to store. "gp" is not. "hca" is. */
+export function isMappableName(name) {
+  return needleOk(foldText(name));
+}
+
+/** True when this name would let telephone or video slots onto a tile. */
+export function nameAllowsRemote(name) {
+  return tokensOf(name).some((t) => REMOTE_WORD.test(t));
 }
 
 function textOf(node) {
@@ -521,9 +538,9 @@ function listOf(raw, max) {
 function ruleFrom(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
   return {
-    types: listOf(src.types, 16),
-    sessions: listOf(src.sessions, 16),
-    roles: listOf(src.roles, 16),
+    types: listOf(src.types, MATCH_LIST_MAX),
+    sessions: listOf(src.sessions, MATCH_LIST_MAX),
+    roles: listOf(src.roles, MATCH_LIST_MAX),
   };
 }
 
@@ -746,7 +763,11 @@ function isRemote(slot) {
 
 function tileAllowsRemote(t) {
   const needles = [...(t.match.types || []), ...(t.match.sessions || []), ...(t.match.roles || [])];
-  return needles.some((n) => tokensOf(n).some((t) => REMOTE_WORD.test(t)));
+  return needles.some((n) => tokensOf(n).some((tok) => REMOTE_WORD.test(tok)));
+}
+
+export function tileAllowsRemoteSlots(tile) {
+  return !!(tile && tile.match) && tileAllowsRemote(tile);
 }
 
 /** First match in match-priority order. A hidden tile still consumes the slot. */

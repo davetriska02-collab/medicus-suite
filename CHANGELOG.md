@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.2] — 2026-09-28
+
+### Drag appointment types onto availability tiles
+
+Set up tiles is a canvas. Slot types, sessions and diaries from the appointment book are listed once, with a search and a count of upcoming free slots. Drag a name onto a tile, or choose the tile under Move. Each name belongs on one tile. Dragging it back, or Remove, takes it off. A name already saved on two tiles stays there until it is moved, and the canvas says only the earlier tile is counted.
+
+Pattern rules are still there for a word that should match many names. Opening the canvas does not rewrite a saved mapping. The counts you would get are shown before Save. Undo puts the last change back. Nothing is written until Save.
+
+H-085 setup-canvas addendum is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6. Hazard-log document version 3.79. The wall is still read-only. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.1] — 2026-09-28
 
 ### Lab Filing: an approval stays on the lab that is on screen (H-087)
