@@ -752,7 +752,7 @@ console.log('\n── resolveByCode: lab-scoped codes (2026-09-26, Nick, live-ca
     LC.resolveByCode(index, '1018251000000107', null).resultId === 'alt',
     'no lab known at all falls back to the unscoped default'
   );
-  check(LC.resolveByCode(index, '0000000000', 'labx') === null, 'an unknown code resolves to null');
+  check(LC.resolveByCode(index, '0000000001', 'labx') === null, 'an unknown code resolves to null');
   const onlyScoped = LC.buildIndex({
     ...baseCatalogue(),
     results: [

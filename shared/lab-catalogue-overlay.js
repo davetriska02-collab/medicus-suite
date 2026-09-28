@@ -806,14 +806,16 @@
     // this lab — one decision for the whole test, kept in sync across group entries by setFilingOverrideForTest below.
     out.overrideLabFlag =
       out.headings.length > 0 && out.groups.every((g) => g.entry && g.entry.overrideLabFlag === true);
+    // Practice-wide Medicus wording (screen) and the "never offer to file" list (suppress) are NOT part of this
+    // lab's pending set. They used to be pushed in here, so one unreviewed suppress made pending.length > 0 for
+    // every lab, and approving any lab stamped every other lab's ranges, guards and overrideLabFlag as well
+    // (H-087). They are approved only by their own approveFiling('screen'|'suppress') call.
     const need = [];
     for (const g of out.groups) if (g.entry) need.push(['groups', filingGroupKey(g.entry), g.entry, g.heading]);
     for (const r of overlay.filing.ranges)
       if (r.lab === labId && ids.has(r.result)) need.push(['ranges', filingKey(r), r, r.code]);
     for (const g of overlay.filing.guards)
       if (g.lab === labId && ids.has(g.result)) need.push(['guards', filingGuardKey(g), g, g.result]);
-    for (const sc of overlay.filing.screen) need.push(['screen', filingScreenKey(sc), sc, 'screen']);
-    for (const sp of overlay.filing.suppress) need.push(['suppress', filingSuppressKey(sp), sp, 'suppress']);
     out.pending = need
       .filter(([, , e]) => !(e.provenance && e.provenance.reviewed === true))
       .map(([kind, key, , label]) => ({ kind, key, label }));
@@ -874,8 +876,10 @@
     return o;
   }
 
-  // Approve everything assisted filing for a test at a lab rests on that is still awaiting approval — the report groups, the ranges and
-  // guards of its results at that lab, and the Medicus wording if changed. Called from the test's own review screen only.
+  // Approve assisted filing for ONE test at ONE lab: the report groups, and the ranges and guards of its results
+  // at that lab. Does not approve any other lab, and does not approve the practice-wide Medicus wording or the
+  // suppress list (those are approveFiling('screen'|'suppress') from their own buttons). Called for the lab whose
+  // ranges and override are actually on screen.
   function approveFilingForTest(builtin, overlay, invId, labId, by, when) {
     const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
     const st = filingStateForTest(merged, overlay, invId, labId);
@@ -1376,9 +1380,9 @@
       createdAt: (old && old.createdAt) || day,
       importedFrom: (old && old.importedFrom) || 'results-scan',
     });
-    // Labs only: applying a scan match is already a deliberate on-this-machine decision (the heading came from a
-    // real report), unlike a cold import (H-073 keeps that path reviewed:false) — nothing left to separately approve.
-    const labProv = (old) => ({ ...prov(old), reviewed: true });
+    // Labs stay unreviewed too (H-087). Marking the whole lab reviewed:true here used to put every heading on that
+    // lab into the acting catalogue, including one that maps a wording onto a different test — the foreign-heading
+    // gate in approveInvestigation never ran. A scan apply writes the proposal; approval is a separate step.
     const added = { labs: 0, results: 0, codes: 0, aliases: 0, members: 0, headings: 0 };
     const touched = [];
 
@@ -1398,7 +1402,7 @@
           name: String(lf.newLab.name || org).trim(),
           identifiers,
           groupHeadings: [],
-          provenance: labProv(null),
+          provenance: prov(null),
         });
         labIdFor.set(lf.ref, id);
         added.labs++;
@@ -1569,7 +1573,7 @@
       if (e) return e;
       const b = asArr(builtin && builtin.labs).find((l) => l.id === id);
       if (!b) fail(`unknown lab "${id}"`);
-      e = { id, name: b.name, identifiers: { ...b.identifiers }, groupHeadings: [], provenance: labProv(null) };
+      e = { id, name: b.name, identifiers: { ...b.identifiers }, groupHeadings: [], provenance: prov(null) };
       if (b.orderingSystem) e.orderingSystem = b.orderingSystem;
       if (b.structured !== undefined) e.structured = b.structured;
       o.labs.push(e);
@@ -1595,7 +1599,7 @@
         else e.groupHeadings.push({ text, identifies: want, mayContain: [] });
         added.headings++;
       }
-      e.provenance = labProv(e.provenance);
+      e.provenance = prov(e.provenance);
       touched.push(id);
     }
 

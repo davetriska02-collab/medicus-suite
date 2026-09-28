@@ -893,6 +893,9 @@
         // scheduleEval() raced this event and ran first, reading the catalogue before the cache was reset) never
         // at all (Nick, 2026-09-26: "re-approved, and the same thing appears — it's still blocked"). Explicit,
         // same as every other cache-affecting storage key already gets.
+        // scheduleEval() returns immediately while document.hidden, so this call is a no-op when the filing
+        // tab is in the background. The cache reset above is what the visibilitychange handler depends on:
+        // when the tab is shown again it calls scheduleEval(), which must read a fresh catalogue.
         scheduleEval();
       });
     }

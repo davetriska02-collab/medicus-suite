@@ -28,7 +28,13 @@ check(
   'no HTML-string injection (imported text is rendered as text only)'
 );
 check(!/\beval\(|new Function\(/.test(src), 'no eval');
-check(/Not yet used by the suite/.test(src), 'the page says, on the page, that nothing reads the catalogue yet');
+check(
+  /Catalogue engines are off until the practice switches them on/.test(src) &&
+    /it has done so since v3\.264\.35/.test(src) &&
+    !/Not yet used by the suite/.test(src) &&
+    !/Filing does not read this yet/.test(src),
+  'the page says catalogue filing has read approved setup since v3.264.35, and that the engines stay off until the practice switches them on'
+);
 check(
   /What does this do\?/.test(src) && /function renderIntro\(\)/.test(src) && /h\('details', \{ class: 'inv-intro'/.test(src),
   'the "What does this do?" explainer is a collapsible disclosure, not a boxed notice'
@@ -54,24 +60,27 @@ check(/inv-scan-reports/.test(src), 'the "Reports to read" control has its own n
 }
 check(!/Approve all/i.test(src), 'there is no bulk approve — each test is approved from its own review screen');
 check(
-  /Save and approve additionally approves whatever is currently awaiting review for this test — its wordings\/results\/codes and\/or its assisted-filing setup/.test(
+  /Save and approve covers this test\\u2019s wordings, results and codes, and assisted filing for the lab chosen in the dropdown only/.test(
     src
   ),
-  'the review screen states exactly what Save and approve means, next to the button'
+  'the review screen states that Save and approve covers this test and the dropdown lab only'
 );
 check(!/I have checked/.test(src) && !/approveBtn\.disabled/.test(src), 'no fiddly tick-box on the review screen');
 const approveButtons = src.match(/btn\(\s*'(Save and approve( result)?|Approve)',/g) || [];
-check(approveButtons.length === 3, 'exactly three approve actions exist: the test\'s own, the result\'s own, and the assisted-filing bar\'s');
+check(
+  approveButtons.length === 5,
+  'five approve actions: the test\'s own, the result\'s own, the lab on screen, and the practice-wide wording and never-file list'
+);
 check(
   /buttons\.appendChild\(btn\('Save and approve', \(\) => persist\(true\), 'lf-btn-primary'\)\);/.test(src) &&
     !/if \(st\.review\) buttons\.appendChild\(btn\('Save and approve',/.test(src),
   'the TEST\'s own "Save and approve" is always offered, never conditional on st.review — a test can have nothing of its own pending yet still have a pending assisted-filing approval, and this is the one screen that settles either (Nick, 2026-09-26: "the option is \'save\', not \'save and approve\', so again I have to open it a second time")'
 );
 check(
-  /const mergedNow = OV\.mergeCatalogue\(S\.builtin, next, \{ includeUnreviewed: true \}\)\.catalogue;\s*\n\s*for \(const lab of S\.merged\.labs\) {\s*\n\s*const pending = OV\.filingStateForTest\(mergedNow, next, saved\.id, lab\.id\)\.pending;\s*\n\s*if \(!pending\.length\) continue;\s*\n\s*next = OV\.approveFilingForTest\(S\.builtin, next, saved\.id, lab\.id, REVIEWER\);/.test(
+  /if \(fLab\) \{\s*\n\s*const mergedNow = OV\.mergeCatalogue\(S\.builtin, next, \{ includeUnreviewed: true \}\)\.catalogue;\s*\n\s*const pending = OV\.filingStateForTest\(mergedNow, next, saved\.id, fLab\)\.pending;\s*\n\s*if \(pending\.length\) \{\s*\n\s*next = OV\.approveFilingForTest\(S\.builtin, next, saved\.id, fLab, REVIEWER\);/.test(
     src
-  ),
-  'clicking Save and approve also approves assisted filing for every lab that genuinely has something pending for this test — never a lab with nothing pending, never blindly for every lab regardless'
+  ) && !/for \(const lab of S\.merged\.labs\) \{\s*\n\s*const pending = OV\.filingStateForTest/.test(src),
+  'Save and approve stamps assisted filing only for the lab on screen (fLab), never by walking every lab'
 );
 check(
   !/btn\(\s*'Edit',/.test(src) && !/if \(d\.needsReview && d\.ov\)/.test(src),
@@ -79,9 +88,11 @@ check(
 );
 check(
   /OV\.approveFilingForTest\(S\.builtin, S\.overlay, st\.id, fLab, REVIEWER\)/.test(src) &&
-    !/OV\.approveFiling\(/.test(src) &&
-    !/OV\.approveFilingRange\(/.test(src),
-  'assisted filing is approved once, for the test at a lab, through the pure helper — there is no per-result, per-range or per-group approve button'
+    /OV\.approveFiling\(S\.overlay, 'screen', OV\.filingScreenKey\(\), REVIEWER\)/.test(src) &&
+    /OV\.approveFiling\(S\.overlay, 'suppress', OV\.filingSuppressKey\(\), REVIEWER\)/.test(src) &&
+    !/OV\.approveFilingRange\(/.test(src) &&
+    !/OV\.approveFiling\(S\.overlay, '(ranges|guards|groups)'/.test(src),
+  'the lab on screen is approved through approveFilingForTest; wording and the never-file list have their own approveFiling buttons; there is no per-range approve'
 );
 check(
   !/inv-rt-fenable|inv-rt-fapproval|'Enable assisted filing'|'Filing approval'/.test(src),

@@ -1213,30 +1213,33 @@ console.log('\n── dangling links (deleted tests must not poison a lab) ─�
   );
 }
 
-console.log('\n── applyFills marks labs (only) reviewed at once — scan-apply is a deliberate on-machine decision ──');
+console.log('\n── applyFills leaves labs unreviewed — a scan cannot bypass the foreign-heading gate (H-087) ──');
 {
   const LAB = 'rj700-general-pathology';
-  let o = OV.emptyOverlay();
+  const o = OV.emptyOverlay();
+  const actingOf = (ov) => OV.mergeCatalogue(builtin, ov, {}).catalogue;
+  const headingLive = (ov, text) =>
+    actingOf(ov).labs.some((l) => l.id === LAB && l.groupHeadings.some((g) => g.text === text));
 
-  // a brand-new lab, from scratch
   const withNewLab = OV.applyFills(builtin, o, {
     labs: [{ ref: 'new-lab', newLab: { org: 'ZZZ', name: 'Zebra Path' }, headings: [] }],
     results: [],
     members: [],
   }).overlay;
   const newLab = withNewLab.labs.find((l) => l.identifiers && l.identifiers.performerOrg === 'ZZZ');
-  check(newLab && newLab.provenance.reviewed === true, 'a brand-new lab from a fill is reviewed:true at once');
+  check(newLab && newLab.provenance.reviewed === false, 'a brand-new lab from a fill stays unreviewed');
 
-  // the first heading ever added to a builtin lab not yet in the overlay (ensureLab's own copy)
   const firstHeading = OV.applyFills(builtin, o, {
     labs: [{ ref: LAB, headings: [{ text: 'FIRST PANEL', identifies: ['crp'] }] }],
     results: [],
     members: [],
   }).overlay;
   let labEntry = firstHeading.labs.find((l) => l.id === LAB);
-  check(labEntry && labEntry.provenance.reviewed === true, 'the first heading on an existing builtin lab is reviewed:true at once');
+  check(
+    labEntry && labEntry.provenance.reviewed === false && !headingLive(firstHeading, 'FIRST PANEL'),
+    'the first heading on a builtin lab is unreviewed and is not in the acting catalogue'
+  );
 
-  // a second fill, touching the lab overlay entry again, must not knock it back to unreviewed
   const secondHeading = OV.applyFills(builtin, firstHeading, {
     labs: [{ ref: LAB, headings: [{ text: 'SECOND PANEL', identifies: ['crp'] }] }],
     results: [],
@@ -1244,24 +1247,23 @@ console.log('\n── applyFills marks labs (only) reviewed at once — scan-app
   }).overlay;
   labEntry = secondHeading.labs.find((l) => l.id === LAB);
   check(
-    labEntry.provenance.reviewed === true && labEntry.groupHeadings.some((g) => g.text === 'SECOND PANEL'),
-    'a further heading fill on an already-touched lab keeps it reviewed:true'
+    labEntry.provenance.reviewed === false && labEntry.groupHeadings.some((g) => g.text === 'SECOND PANEL'),
+    'a further heading fill keeps the lab unreviewed'
   );
 
-  // the investigation/member side of the SAME fills still needs separate review — this fix is lab-only
   const withMember = OV.applyFills(builtin, o, {
     labs: [{ ref: LAB, headings: [{ text: 'ZOOM PANEL', identifies: ['crp'] }] }],
     results: [],
     members: [{ investigation: 'crp', result: 'urate', role: 'optional' }],
   }).overlay;
   check(
-    withMember.labs.find((l) => l.id === LAB).provenance.reviewed === true &&
+    withMember.labs.find((l) => l.id === LAB).provenance.reviewed === false &&
       withMember.investigations.find((i) => i.id === 'crp').provenance.reviewed === false,
-    'the same fill still leaves the touched investigation awaiting review — only the lab side changed'
+    'the same fill leaves both the lab and the investigation awaiting review'
   );
 
-  // the real B12-shaped bug: a lab touched purely by a scan, plus a filing.groups entry independently approved via
-  // setFilingForTest/approveFilingForTest, must both survive the ACTING (approved-only) merge
+  // A new heading enters the acting catalogue only after approveInvestigation, and only if that gate allows it.
+  // Approving the filing group alone is not enough: the heading lives on the lab, and the lab is still unreviewed.
   let bug = OV.applyFills(builtin, o, {
     labs: [{ ref: LAB, headings: [{ text: 'B12-STYLE PANEL', identifies: ['crp'] }] }],
     results: [],
@@ -1269,15 +1271,49 @@ console.log('\n── applyFills marks labs (only) reviewed at once — scan-app
   }).overlay;
   bug = OV.setFilingForTest(builtin, bug, 'crp', LAB, true);
   bug = OV.approveFilingForTest(builtin, bug, 'crp', LAB, 'test', '2026-09-27');
-  const acting = OV.mergeCatalogue(builtin, bug).catalogue;
+  check(!headingLive(bug, 'B12-STYLE PANEL'), 'approving the filing group does not put the scan heading into the acting catalogue');
+  const cascaded = OV.approveInvestigation(builtin, bug, 'crp', 'test', '2026-09-28');
   check(
-    acting.labs.some((l) => l.id === LAB && l.groupHeadings.some((g) => g.text === 'B12-STYLE PANEL')),
-    'the scan-touched lab and its heading are present in the acting (approved-only) catalogue'
+    cascaded.approvedLabs.length === 1 && headingLive(cascaded.overlay, 'B12-STYLE PANEL'),
+    'approveInvestigation admits the heading when it identifies only this test'
   );
+  const afterCascade = actingOf(cascaded.overlay);
   check(
-    Array.isArray(acting.filing && acting.filing.groups) &&
-      acting.filing.groups.some((g) => g.lab === LAB && LC.norm(g.heading) === LC.norm('B12-STYLE PANEL') && g.enabled),
-    "the independently-approved filing.groups entry is no longer vetoed by the lab's own (now moot) review flag"
+    Array.isArray(afterCascade.filing && afterCascade.filing.groups) &&
+      afterCascade.filing.groups.some(
+        (g) => g.lab === LAB && LC.norm(g.heading) === LC.norm('B12-STYLE PANEL') && g.enabled
+      ),
+    'once the lab is approved, the filing group for that heading acts'
+  );
+
+  // A lab that already carries an unreviewed foreign heading must not become reviewed because a scan added another.
+  let poisoned = OV.sanitiseOverlay({
+    labs: [
+      {
+        id: 'evil-lab',
+        name: 'Evil Lab',
+        identifiers: { performerOrg: 'EVIL1' },
+        groupHeadings: [{ text: 'Urea and electrolytes', identifies: ['lipids'], mayContain: [] }],
+        provenance: { source: 'imported', reviewed: false },
+      },
+    ],
+  });
+  poisoned = OV.applyFills(builtin, poisoned, {
+    labs: [{ ref: 'evil-lab', headings: [{ text: 'CRP panel', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  check(
+    poisoned.labs[0].provenance.reviewed === false &&
+      poisoned.labs[0].groupHeadings.some((g) => g.text === 'Urea and electrolytes'),
+    'a later scan apply does not mark reviewed a lab that already has an unreviewed foreign heading'
+  );
+  const refused = OV.approveInvestigation(builtin, poisoned, 'crp', 'test', '2026-09-28');
+  check(
+    refused.approvedLabs.length === 0 &&
+      refused.overlay.labs[0].provenance.reviewed === false &&
+      !OV.mergeCatalogue(builtin, refused.overlay, {}).catalogue.labs.some((l) => l.id === 'evil-lab'),
+    'approveInvestigation still refuses the lab, so the U&E → lipids heading never enters the acting catalogue'
   );
 }
 

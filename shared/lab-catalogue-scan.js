@@ -741,11 +741,18 @@
         if (!byCode && resultId) {
           const d = resById.get(resultId);
           const mine = tokens(r.name);
+          // An empty token set is not a name. "Blood culture" and "X-ray" both tokenise to nothing once culture /
+          // blood / x / ray are stop-words, and two empty sets used to compare equal — which kept a name-only match
+          // and then attached this row's SNOMED code to the other analyte (H-087). Size 0 never matches. The same
+          // normalised name still does ("Culture" is the Culture result), even when every word is a stop-word.
           const own =
             d &&
             [d.label, ...asArr(d.aliases).map((a) => a.text)].some((t) => {
+              if (LC.norm(t) && LC.norm(t) === LC.norm(r.name)) return true;
               const theirs = tokens(t);
-              return theirs.size === mine.size && [...mine].every((x) => theirs.has(x));
+              return (
+                mine.size > 0 && theirs.size > 0 && theirs.size === mine.size && [...mine].every((x) => theirs.has(x))
+              );
             });
           if (!own) resultId = null;
         }

@@ -344,6 +344,38 @@ console.log(
   );
 }
 
+console.log('\n── an empty token set is not a name: Blood culture must not take X-ray’s code (H-087) ──');
+{
+  const saved = OV.saveResult(seed, OV.emptyOverlay(), {
+    label: 'X-ray',
+    valueKind: 'text',
+    codes: [],
+    aliases: [{ text: 'X-ray' }],
+  });
+  const cat = OV.mergeCatalogue(seed, saved.overlay, { includeUnreviewed: true }).catalogue;
+  const xray = cat.results.find((r) => r.label === 'X-ray');
+  const { fills } = SC.fillsFromProposals(cat, [
+    {
+      key: 'blood-culture',
+      target: 'lft',
+      heading: 'Blood culture',
+      headingKnown: true,
+      lab: { id: LAB, isNew: false },
+      results: [{ name: 'Blood culture', code: 'blood-culture-code', resultId: xray.id, numeric: false }],
+    },
+  ]);
+  const attached = (fills.results || []).find((r) => r.id === xray.id);
+  check(
+    !attached || !(attached.codes || []).some((c) => c.conceptId === 'blood-culture-code'),
+    'Blood culture does not attach its code to the X-ray result — both names tokenise to nothing'
+  );
+  const created = (fills.results || []).find((r) => r.label === 'Blood culture');
+  check(
+    created && (created.codes || []).some((c) => c.conceptId === 'blood-culture-code'),
+    'the code stays on a new result instead'
+  );
+}
+
 console.log('\n── gaps ──');
 {
   const stripped = withoutReportForms(seed, ['urine-acr', 'crp']);
@@ -390,8 +422,14 @@ console.log('\n── learn a heading + results + codes from a report (sole test
   check(
     applied.overlay.investigations.every((i) => i.provenance.reviewed === false) &&
       applied.overlay.results.every((r) => r.provenance.reviewed === false) &&
-      applied.overlay.labs.every((l) => l.provenance.reviewed === true),
-    'the test and its results are awaiting review; the lab heading (learned from a real report) is not (2026-09-27)'
+      applied.overlay.labs.every((l) => l.provenance.reviewed === false),
+    'the test, its results and the lab heading are all awaiting review — a scan does not approve the lab (H-087)'
+  );
+  check(
+    !OV.mergeCatalogue(base, applied.overlay, {})
+      .catalogue.labs.find((l) => l.id === LAB)
+      .groupHeadings.some((g) => g.text === 'Urine ACR'),
+    'the new heading is not in the acting catalogue until the test is approved'
   );
   check(
     applied.overlay.investigations.concat(applied.overlay.results, applied.overlay.labs).every((e) => !e.override),
@@ -452,8 +490,8 @@ console.log('\n── reviewing what a scan added (the editor save path must not
   );
   const ap = OV.approveInvestigation(base, saved.overlay, 'urine-acr', 'test');
   check(
-    ap.approvedLabs.length === 0 && ap.approvedResults.length === 3,
-    'the lab heading was already reviewed from the scan itself (2026-09-27) — approving the test only approves the three coded results'
+    ap.approvedLabs.length === 1 && ap.approvedResults.length === 3,
+    'approving the test also approves the lab, because the only new heading identifies only this test'
   );
   const live = OV.mergeCatalogue(base, ap.overlay, {});
   check(
@@ -1212,9 +1250,9 @@ console.log('\n── an unknown lab is proposed as a new (unreviewed) lab ─�
   check(
     lab.identifiers.performerOrg === 'ZZ999' &&
       lab.identifiers.department === 'Cytology' &&
-      lab.provenance.reviewed === true &&
+      lab.provenance.reviewed === false &&
       lab.groupHeadings[0].text === 'Iron studies here',
-    'the lab and its heading are created already reviewed — learned from a real report (2026-09-27)'
+    'the new lab and its heading are created unreviewed — approval is a separate step (H-087)'
   );
   const known = applied.overlay.results.find((r) => r.id === 'ferritin');
   check(

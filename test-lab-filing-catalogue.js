@@ -194,6 +194,30 @@ console.log(
     noHeadingAtAll.ok && noHeadingAtAll.unapprovedGroups.length === 0,
     'a result with no heading at all has nothing to open either'
   );
+  const mixed = FC.evaluateFilingCatalogue(
+    report([tshResult(), result({ specimen: 'TSH', code: null, name: 'Free text row' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    mixed.ok && mixed.unapprovedGroups.length === 0,
+    'a coded row plus an uncoded row under the same heading offers no deep link — the uncoded row is not skipped'
+  );
+  const unknownCode = FC.evaluateFilingCatalogue(
+    report([tshResult({ code: 'not-a-real-code' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    unknownCode.ok && unknownCode.unapprovedGroups.length === 0,
+    'an unknown code offers no deep link'
+  );
+  const sharedAnalyte = FC.evaluateFilingCatalogue(
+    report([result({ specimen: 'Shared panel', groupHeading: 'Shared panel' })]),
+    acting(OV.emptyOverlay())
+  );
+  check(
+    sharedAnalyte.ok && sharedAnalyte.unapprovedGroups.length === 0,
+    'a code that belongs to more than one test offers no deep link'
+  );
   let tshApproved = OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'TSH', enabled: true }, TODAY);
   tshApproved = OV.approveFiling(tshApproved, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'TSH' }), 'Dr Test', TODAY);
   const configured = FC.evaluateFilingCatalogue(report([tshResult()]), acting(tshApproved));

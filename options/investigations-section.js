@@ -276,12 +276,13 @@ function renderBanner() {
   return h(
     'div',
     { class: 'lf-notice' },
-    h('div', { class: 'lf-notice-title', text: 'Not yet used by the suite' }),
+    h('div', { class: 'lf-notice-title', text: 'Catalogue engines are off until the practice switches them on' }),
     h('p', {
       text:
-        'Outstanding Requests and Lab Filing still use their own rules. This catalogue is being built alongside them: ' +
-        'importing, reviewing and approving entries here records your decisions for when those features start reading it. ' +
-        'Nothing you do on this page changes how requests are ticked off or how results are filed today.',
+        'Outstanding Requests and Lab Filing can each opt into this catalogue. Both ship off. When catalogue filing is on, ' +
+        'it reads the approvals on this page — an approved range, guard, report group or comment list is what filing uses, ' +
+        'and it has done so since v3.264.35. While the engines stay on their shipped default, this page does not change how ' +
+        'requests are ticked off or how results are filed.',
     }),
     h('p', {
       text: 'Entries that arrive by import, backup or the shared practice profile are inactive until someone approves them on this computer.',
@@ -1868,7 +1869,6 @@ function renderEditor(st, done) {
         groups: 'report group',
         ranges: 'practice range',
         guards: 'safety guard',
-        screen: 'Medicus wording',
       };
       const counts = {};
       state.pending.forEach((x) => (counts[x.kind] = (counts[x.kind] || 0) + 1));
@@ -1901,7 +1901,7 @@ function renderEditor(st, done) {
           text:
             "Clicking 'Approve' means I am approving assisted filing for this test group from " +
             fLabName +
-            ': its report group(s), the practice ranges and safety guards shown below, its lab-comment settings, and the Medicus wording. Changing any of them withdraws the approval. Filing does not read this yet.',
+            ' only: its report group(s), the practice ranges and safety guards shown below, and its lab-comment settings. Changing any of them withdraws the approval. Catalogue filing has read this lab\u2019s approved setup since v3.264.35 (the filing engine stays off until the practice switches it on). The Medicus wording and the never-file list are practice-wide and have their own Approve buttons.',
         })
       );
     }
@@ -1911,8 +1911,9 @@ function renderEditor(st, done) {
   };
 
   // "Never offer to file when the comment says…" — ONE practice-wide list (not per lab x group: Nick, 2026-09-23 —
-  // these phrases are expected to be the same whichever heading variant or lab sent the report). Shown once, here,
-  // for the same reason the Medicus wording above is: it is part of every test's assisted-filing approval.
+  // these phrases are expected to be the same whichever heading variant or lab sent the report). It is NOT part of
+  // a lab's assisted-filing approval (H-087): approving the lab on screen must not stamp this list, and approving
+  // this list must not stamp any lab's ranges, guards or overrideLabFlag. Its own Approve button does that.
   const filingSuppressLine = () => {
     const cur = filingSuppressEntry();
     const items = cur ? [...cur.items] : [];
@@ -1949,6 +1950,26 @@ function renderEditor(st, done) {
     );
     det.appendChild(chipsEl(items, (i) => apply(items.filter((_, j) => j !== i)), (x) => x));
     det.appendChild(h('div', { class: 'inv-edit-line' }, blockIn, btn('Add', addBlock, 'lf-btn-sm')));
+    if (cur && !isApproved(cur)) {
+      det.appendChild(
+        h(
+          'div',
+          { class: 'inv-af-pending' },
+          h('span', {
+            text: 'This list is practice-wide. Save and approve on a test does not approve it. ',
+          }),
+          btn(
+            'Approve',
+            () =>
+              save(
+                OV.approveFiling(S.overlay, 'suppress', OV.filingSuppressKey(), REVIEWER),
+                'Approved the never-file list.'
+              ),
+            'lf-btn-primary lf-btn-sm'
+          )
+        )
+      );
+    }
     return det;
   };
 
@@ -1996,6 +2017,26 @@ function renderEditor(st, done) {
         fileBtn
       )
     );
+    if (cur && !isApproved(cur)) {
+      det.appendChild(
+        h(
+          'div',
+          { class: 'inv-af-pending' },
+          h('span', {
+            text: 'A changed wording is practice-wide. Save and approve on a test does not approve it. Catalogue filing reads it once approved (since v3.264.35). ',
+          }),
+          btn(
+            'Approve',
+            () =>
+              save(
+                OV.approveFiling(S.overlay, 'screen', OV.filingScreenKey(), REVIEWER),
+                'Approved the Medicus filing-screen wording.'
+              ),
+            'lf-btn-primary lf-btn-sm'
+          )
+        )
+      );
+    }
     return det;
   };
 
@@ -2115,7 +2156,7 @@ function renderEditor(st, done) {
       'div',
       { class: 'inv-filing-note' },
       'A practice range or safety guard applies to the result wherever it appears (ALP in LFTs and in Bone profile is one result) and to this lab only. ' +
-        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of assisted filing, in the bar above. Filing does not read this yet.'
+        'The lab\u2019s own reference range is used unless you set one here. They are approved together with the rest of assisted filing for this lab, in the bar above. An approved range is what catalogue filing reads at this lab (since v3.264.35; the filing engine stays off until the practice switches it on).'
     );
   const listId = 'invResList' + Math.random().toString(36).slice(2, 7);
   const dl = h(
@@ -2269,23 +2310,22 @@ function renderEditor(st, done) {
       let msg = `Saved "${st.label}" — awaiting review.`;
       if (approve) {
         // A test's own review (wordings/results/codes) and its assisted-filing approval are deliberately SEPARATE
-        // tracks — approving one never approves the other. But both are visible, and either or both may need
-        // approving, on this SAME screen — so one "Save and approve" click settles whatever is actually pending
-        // here, rather than sending the person back to reopen the identical screen a second time for the other
-        // track (Nick, 2026-09-26: "the option is 'save', not 'save and approve', so again I have to open it a
-        // second time"). Each approve call below still only fires when ITS OWN track genuinely has something
-        // pending — this changes how many clicks it takes, not what "approved" means for either track.
+        // tracks — approving one never approves the other. Save and approve settles both for what is ON THIS
+        // SCREEN: the test itself, and assisted filing for the lab chosen in the dropdown (fLab) only.
+        // It does not walk every lab. Practice-wide Medicus wording and the never-file list are not in that
+        // lab's pending set and are not stamped here (H-087) — each has its own Approve button.
         const approvedParts = [];
         if (next.investigations.some((i) => i.id === saved.id)) {
           next = OV.approveInvestigation(S.builtin, next, saved.id, REVIEWER).overlay;
           approvedParts.push('wordings, results and codes');
         }
-        const mergedNow = OV.mergeCatalogue(S.builtin, next, { includeUnreviewed: true }).catalogue;
-        for (const lab of S.merged.labs) {
-          const pending = OV.filingStateForTest(mergedNow, next, saved.id, lab.id).pending;
-          if (!pending.length) continue;
-          next = OV.approveFilingForTest(S.builtin, next, saved.id, lab.id, REVIEWER);
-          approvedParts.push('assisted filing at ' + labWords(lab.id));
+        if (fLab) {
+          const mergedNow = OV.mergeCatalogue(S.builtin, next, { includeUnreviewed: true }).catalogue;
+          const pending = OV.filingStateForTest(mergedNow, next, saved.id, fLab).pending;
+          if (pending.length) {
+            next = OV.approveFilingForTest(S.builtin, next, saved.id, fLab, REVIEWER);
+            approvedParts.push('assisted filing at ' + labWords(fLab));
+          }
         }
         msg = approvedParts.length
           ? `Approved "${st.label}" — ${approvedParts.join(', ')}.`
@@ -2300,15 +2340,13 @@ function renderEditor(st, done) {
   };
   if (st.id && !st.isBuiltin) wrap.appendChild(mergeBlock(st, done));
   const foot = h('div', { class: 'inv-edit-foot' });
-  // 'Save and approve' saves whatever is on screen, then approves anything about this test that is currently
-  // awaiting review — its own wordings/results/codes, its assisted-filing setup, or both — in one action. Always
-  // offered, not just when this specific screen's OWN fields show pending changes: filing can go back to "awaiting
-  // approval" from edits made elsewhere (e.g. the lab-comments box above), and this is the one screen that settles
-  // it (Nick, 2026-09-26 — see the persist() comment for why "approving one never approves the other" still holds).
+  // 'Save and approve' saves whatever is on screen, then approves this test's wordings/results/codes and assisted
+  // filing for the dropdown lab only. Other labs, and the practice-wide wording and never-file list, stay pending
+  // until their own approval (H-087). Always offered (Nick, 2026-09-26).
   foot.appendChild(
     h('span', {
       class: 'inv-foot-note',
-      text: 'Save keeps this as a draft; nothing here acts until it is approved. Save and approve additionally approves whatever is currently awaiting review for this test — its wordings/results/codes and/or its assisted-filing setup — and makes it active for the features that use this catalogue (matching inbound results to outstanding requests, and assisted filing if enabled above). A change to a built-in test replaces the shipped version only once approved.',
+      text: 'Save keeps this as a draft; nothing here acts until it is approved. Save and approve covers this test\u2019s wordings, results and codes, and assisted filing for the lab chosen in the dropdown only — not other labs, and not the practice-wide Medicus wording or the never-file list, which have their own Approve buttons. A change to a built-in test replaces the shipped version only once approved.',
     })
   );
   const buttons = h('span', { class: 'inv-foot-btns' });

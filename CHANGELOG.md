@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.1] — 2026-09-28
+
+### Lab Filing: an approval stays on the lab that is on screen (H-087)
+
+- **Save and approve, and the per-lab Approve button, stamp only the lab chosen in the dropdown.** Practice-wide Medicus wording and the never-file list have their own Approve buttons. They are no longer part of every lab’s pending set, so approving one lab cannot approve another lab’s ranges, guards, or `overrideLabFlag`.
+- **The page no longer says filing does not read this.** Catalogue filing has read an approved range, guard, report group and comment list since v3.264.35. The filing engine still ships off until the practice switches it on.
+- **An empty token set is not a name.** “Blood culture” and “X-ray” both lose every word to the stop-list, and those empty sets used to compare equal, so one row’s SNOMED code could be stored on the other result. Empty sets never match. The same normalised name still does (“Culture” stays the Culture result).
+- **A scan apply writes unreviewed lab entries.** A heading enters the acting catalogue only after `approveInvestigation`, and only when that function’s foreign-heading gate allows it. This reverses the unreleased note below that marked a scan-touched lab `reviewed: true` at once. A filing group approved on its own does not pull an unreviewed heading in. A heading that maps a wording onto a different test still cannot ride in.
+- **A blocked heading offers a setup link only when every row resolves by code to the same one investigation.** An uncoded row, an unknown code, or a code shared by two tests offers no link. Filing stays blocked either way.
+- **The filing card still resets its catalogue cache before `scheduleEval()`.** `scheduleEval()` does nothing while the tab is hidden. The visibility handler depends on that cache reset.
+- **H-087 is Proposed.** Not signed. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.0] — 2026-09-27
 
 ### Companion: Lab Filing folded in (stage 1)
@@ -30,22 +42,14 @@ All notable changes to Medicus Suite are documented here.
 - **A test with no core member is now a warning, not a hard validation error.** Core/optional is a
   concept that belongs at the lab-groupHeading level, not the investigation level; a test genuinely
   awaiting its core result no longer blocks the whole catalogue build.
-- **Scan-imported lab headings no longer block their own already-approved filing setup.** Applying a
-  "Match requests to lab reports" scan match is a deliberate, on-this-machine decision (the heading
-  was learned from a real report the practice actually received) — `applyFills` now marks the lab
-  entries it creates/touches `reviewed: true` immediately, instead of leaving them awaiting a review
-  step nothing ever drove them towards. Previously, an unreviewed lab could silently exclude an
-  unrelated, independently-approved test's filing setup from the acting catalogue entirely (caught
-  live: Vitamin B12 at General Pathology RJ700 showed "blocked" in Companion despite being approved
-  on the Options page). Backup-restore / practice-profile-sync imports are unaffected and still
-  arrive `reviewed: false` (H-073, "approvals never travel") — this only touches the scan-apply path.
-  A lab already sitting unreviewed from before this fix needs a one-off manual "Approve lab" click
-  on the Investigations page; new scan-applies self-heal from now on.
+- **A scan-imported heading stays unreviewed until the test is approved.** An earlier draft of this
+  section marked the lab `reviewed: true` as soon as the scan was applied, so the heading (and any
+  other heading already on that lab) entered the acting catalogue without `approveInvestigation`’s
+  foreign-heading check. That does not ship. See v3.268.1. Backup-restore and practice-profile sync
+  still arrive `reviewed: false` (H-073).
 - Investigations page: request wordings and synonyms brought up to date (requestAliases/synonyms
   data fix), and Free T3 / Free T4 split out as their own separately-requested tests rather than
   bundled members of Thyroid function.
-
-## [v3.266.0] — 2026-09-26
 
 ### Lab Filing on the Lab Result Catalogue — live-caught follow-ups to the E2 cutover
 
@@ -55,19 +59,20 @@ All notable changes to Medicus Suite are documented here.
   baseline "carries a comment the suite cannot score" blocker with nowhere on the card to act on it. It's now
   computed separately, keyed off each heading's own `allowComments` (never a hardcoded "nothing is ever allowed"),
   and a comment already whitelisted-and-approved stops being re-offered every single poll.
-- **A blocked card for a group-not-approved heading that resolves, by code only, to exactly one known test now
-  offers "Set up on Investigations page"** — a deep link (via the service worker, since a content script's own
-  `window.open()` to a `chrome-extension://` URL is blocked outright on Edge) straight onto that test's own Review
-  screen, scrolled to its assisted-filing bar.
+- **A blocked card for a group-not-approved heading offers "Set up on Investigations page"** only when every
+  row resolves by code to the same one investigation (an uncoded row, an unknown code, or a shared code offers
+  no link — see v3.268.1). The link goes via the service worker, since a content script's own `window.open()` to
+  a `chrome-extension://` URL is blocked outright on Edge, onto that test's Review screen, scrolled to its
+  assisted-filing bar.
 - **The full blocked-reasons list is now available inline** (a collapsed `<details>` under the truncated summary
   line) instead of only via a hover tooltip, which was easy to miss and unusable on a touch device.
 - **A storage-driven cache reset on the Lab Filing card now also re-runs the gate.** Approving a comment or an
   assisted-filing setup on the Investigations page (a separate tab) fired the cache-invalidating storage event, but
   nothing then re-evaluated the card — it could sit showing the pre-approval blocked state indefinitely.
 - **Investigations page: "Review" and "Edit" collapsed into one entry point**, and "Approve" became "Save and
-  approve", which now settles whatever is actually pending for a test — its own wordings/results/codes, its
-  assisted-filing setup, or both — in one click. Previously, approving required reopening the identical screen a
-  second time to reach the other track's own Approve button.
+  approve", which settles this test's wordings/results/codes and assisted filing for the lab on screen (other
+  labs, and the practice-wide wording and never-file list, stay on their own Approve — see v3.268.1). Previously,
+  approving required reopening the identical screen a second time.
 - **A result's `interpretation` field auto-restating "Above/below reference range"** (Medicus generates this
   whenever the numeric flag is set) no longer triggers a false "carries a comment" blocker or whitelist offer — it
   restates a flag the gate already reads directly, not clinician-written comment content.

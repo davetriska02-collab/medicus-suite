@@ -442,20 +442,36 @@
               : 'a result with no report-group heading cannot be matched to an approved assisted-filing group',
             kind: headingLabel ? 'group-not-approved' : 'no-heading',
           });
-          // Which test to offer opening, if any — by CODE only (never alias), and only when every coded result in
-          // the group agrees on exactly one investigation. Ambiguous or unrecognised results offer nothing: there
-          // must be a genuine result to open, not a guess.
-          if (headingLabel) {
+          // Which test to offer opening, if any — by CODE only (never alias), and only when EVERY row in the
+          // heading resolves to that same one investigation. A row with no code, an unknown code, or a code that
+          // belongs to more than one test means there is no single setup to open. Skipping those rows and offering
+          // whatever remains used to deep-link a TSH-plus-uncoded heading at Thyroid function (H-087).
+          if (headingLabel && results.length) {
             const invIds = new Set();
+            let everyRowResolves = true;
             for (const r of results) {
-              if (!isStr(r.code) || !r.code) continue;
-              const hit = LC.resolveByCode(index, r.code, labId);
-              if (!hit) continue;
-              for (const inv of asArr(catalogue.investigations)) {
-                if (asArr(inv.members).some((m) => m.result === hit.resultId)) invIds.add(inv.id);
+              if (!isStr(r.code) || !r.code) {
+                everyRowResolves = false;
+                break;
               }
+              const hit = LC.resolveByCode(index, r.code, labId);
+              if (!hit) {
+                everyRowResolves = false;
+                break;
+              }
+              const rowIds = [];
+              for (const inv of asArr(catalogue.investigations)) {
+                if (asArr(inv.members).some((m) => m.result === hit.resultId)) rowIds.push(inv.id);
+              }
+              if (rowIds.length !== 1) {
+                everyRowResolves = false;
+                break;
+              }
+              invIds.add(rowIds[0]);
             }
-            if (invIds.size === 1) unapprovedGroups.push({ heading: headingLabel, labId, investigationId: [...invIds][0] });
+            if (everyRowResolves && invIds.size === 1) {
+              unapprovedGroups.push({ heading: headingLabel, labId, investigationId: [...invIds][0] });
+            }
           }
           continue; // the whole group is blocked — no point evaluating individual results under it
         }

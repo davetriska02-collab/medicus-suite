@@ -264,6 +264,12 @@ console.log('\n--- wiring: lab-file-button.js runs the mandatory shadow log (E1)
     "invalidating the cache alone used to do nothing until something else happened to re-run the gate — approving on the Investigations page (a separate tab) fires this exact storage change but the blocked card sat there stale until an unrelated Medicus SPA re-render happened to poll again, sometimes never (Nick, 2026-09-26: \"re-approved, and the same thing appears — it's still blocked\"). scheduleEval() is now called explicitly, same as every other cache-affecting storage key already does"
   );
   check(
+    /function scheduleEval\(\) \{\s*\n\s*if \(document\.hidden\) return;/.test(src) &&
+      /scheduleEval\(\) returns immediately while document\.hidden/.test(src) &&
+      /visibilitychange handler depends on/.test(src),
+    'scheduleEval() is a no-op while the tab is hidden; the storage listener still resets the catalogue cache, which is what the visibilitychange handler depends on'
+  );
+  check(
     /meds are deliberately NOT fetched here/.test(src),
     'the shadow log itself still does not fetch meds (documented scope limit) — only the real E2 combine below does'
   );
