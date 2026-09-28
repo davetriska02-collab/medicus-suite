@@ -40,6 +40,15 @@ import {
   weekDates,
   weekView,
 } from '../shared/availability-board-core.js';
+import {
+  placeItem,
+  popUndo,
+  pushUndo,
+  reasonText,
+  removeFromPot,
+  setupView,
+} from '../shared/availability-setup-core.js';
+import { renderSetup } from './setup-canvas.js';
 
 const LOCK_NAME = 'medicus-suite-availability-wall';
 const main = document.getElementById('avMain');
@@ -75,7 +84,12 @@ let failures = 0;
 let authHold = false;
 let lastWeekAt = null;
 let pinnedCode = '';
-let selectedTile = 0;
+let draft = null;
+let undoStack = [];
+let setupQuery = '';
+let setupKind = 'all';
+let openDetails = [];
+let draggingId = '';
 let lastBanner = '';
 let lastMessage = '';
 let holdTimer = null;
@@ -263,7 +277,7 @@ function render() {
     if (views.unconfirmed) {
       const n = views.unmapped;
       capacityLine = n
-        ? `${n} free slot${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} not on a tile yet. Press and hold Set up tiles, then save a mapping. Nothing is shown as None left from a guess.`
+        ? `${n} free slot${n === 1 ? '' : 's'} ${n === 1 ? 'is' : 'are'} not on a tile yet. Press and hold Set up tiles, drag each name onto one tile, then save. Nothing is shown as None left from a guess.`
         : 'Set up tiles before this wall shows a clinic. Guesses are not shown as None left.';
       paintMessage(capacityLine);
     } else {
@@ -498,6 +512,14 @@ async function refresh() {
       clinicians: [...observedSets.clinicians].sort(),
       sites: [...observedSets.sites].sort(),
     };
+    if (draft) {
+      const active = document.activeElement;
+      const typing =
+        active &&
+        editorBody.contains(active) &&
+        (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT');
+      if (!typing) paintEditor();
+    }
     render();
   } catch (err) {
     if (contextDead(err)) showReload();
@@ -581,94 +603,78 @@ function onVisibility() {
   refresh();
 }
 
-function chipList(title, names, field) {
-  if (!names.length) return '';
-  const chips = names
-    .map((n) => {
-      const tileName = (config.tiles[selectedTile] && config.tiles[selectedTile].label) || 'tile';
-      return `<button type="button" data-add-field="${esc(field)}" data-add-value="${esc(n)}" aria-label="Add ${esc(n)} to ${esc(tileName)}">${esc(n)}</button>`;
-    })
-    .join('');
-  return `<div><strong>${esc(title)}</strong><div class="av-observed">${chips}</div></div>`;
+function editorSlots() {
+  const nowMs = Date.now();
+  const today = isoFromDate(nowMs);
+  if (!snapshot.ready) return [];
+  return horizonSlots(snapshot.days, today, new Date(nowMs), false);
 }
 
-function renderEditor() {
-  const tiles = config.tiles
-    .slice()
-    .sort((a, b) => a.matchOrder - b.matchOrder)
-    .map((t, i) => {
-      const m = t.match || { types: [], sessions: [], roles: [] };
-      const x = t.exclude || { types: [], sessions: [], roles: [] };
-      return `<fieldset class="av-tile-edit" data-index="${i}">
-        <legend>${esc(t.label || 'Tile')}</legend>
-        <div class="av-row">
-          <label><input type="radio" name="avSel" ${i === selectedTile ? 'checked' : ''} data-sel="${i}" /> Selected tile ${esc(t.label || 'Tile')}</label>
-          <label>Name <input type="text" data-k="label" value="${esc(t.label)}" /></label>
-          <label>Subtitle <input type="text" data-k="subtitle" value="${esc(t.subtitle || '')}" /></label>
-          <label><input type="checkbox" data-k="hidden" ${t.hidden ? 'checked' : ''} /> Hide</label>
-          <label><input type="checkbox" data-k="showOnToday" ${t.showOnToday ? 'checked' : ''} /> Today</label>
-          <label><input type="checkbox" data-k="immediate" ${t.immediate !== false ? 'checked' : ''} /> For immediate booking</label>
-          <label>Week
-            <select data-k="weekLane">
-              <option value="" ${!t.weekLane ? 'selected' : ''}>Not in the 7-day view</option>
-              <option value="routine" ${t.weekLane === 'routine' ? 'selected' : ''}>Routine GP</option>
-              <option value="extended" ${t.weekLane === 'extended' ? 'selected' : ''}>Extended access</option>
-            </select>
-          </label>
-          <button type="button" data-move="-1">Match sooner</button>
-          <button type="button" data-move="1">Match later</button>
-        </div>
-        <div class="av-row"><label>Slot types <input type="text" data-k="match.types" value="${esc(m.types.join(', '))}" /></label></div>
-        <div class="av-row"><label>Session or diary names <input type="text" data-k="match.sessions" value="${esc(m.sessions.join(', '))}" /></label></div>
-        <div class="av-row"><label>Clinician roles <input type="text" data-k="match.roles" value="${esc(m.roles.join(', '))}" /></label></div>
-        <div class="av-row"><label>Exclude types <input type="text" data-k="exclude.types" value="${esc(x.types.join(', '))}" /></label></div>
-        <div class="av-row"><label>Exclude sessions <input type="text" data-k="exclude.sessions" value="${esc(x.sessions.join(', '))}" /></label></div>
-        <div class="av-row"><label>Exclude roles <input type="text" data-k="exclude.roles" value="${esc(x.roles.join(', '))}" /></label></div>
-      </fieldset>`;
-    })
-    .join('');
-  editorBody.innerHTML = `
-    <div class="av-row"><label>Refresh every
-      <input type="number" id="avPoll" min="2" max="30" step="1" value="${esc(config.pollMinutes)}" /> minutes (2–30). Today uses this. Later days are every 30 minutes, and nothing runs from 19:00 to 07:00.
-    </label></div>
-    <p>Names seen on the last reading. Choose a tile, then add a name to it.</p>
-    ${chipList('Slot types', observed.slotTypes, 'match.types')}
-    ${chipList('Sessions', observed.sessions, 'match.sessions')}
-    ${chipList('Diaries', observed.clinicians, 'match.roles')}
-    ${tiles}`;
+function catalogItem(id) {
+  if (!draft || !id) return null;
+  const view = setupView(draft, observed, editorSlots(), { query: '', kind: 'all' });
+  const chip = view.palette.concat(view.pots.flatMap((pot) => pot.chips)).find((row) => row.id === id);
+  if (chip) return { kind: chip.kind, name: chip.name };
+  const colon = id.indexOf(':');
+  if (colon < 1) return null;
+  return { kind: id.slice(0, colon), name: id.slice(colon + 1) };
 }
 
-function readEditor() {
+function setEditorStatus(text) {
+  if (editorStatus) editorStatus.textContent = text || '';
+}
+
+function readPollInto(next) {
   const pollEl = document.getElementById('avPoll');
-  const sections = [...editorBody.querySelectorAll('.av-tile-edit')];
-  const ordered = config.tiles.slice().sort((a, b) => a.matchOrder - b.matchOrder);
-  const tiles = sections.map((section, i) => {
-    const val = (k) => section.querySelector(`[data-k="${k}"]`);
-    const split = (k) =>
-      String(val(k).value || '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-    const base = ordered[i] || blankTile();
-    return {
-      id: base.id,
-      label: val('label').value,
-      subtitle: val('subtitle').value,
-      hidden: val('hidden').checked,
-      showOnToday: val('showOnToday').checked,
-      immediate: val('immediate').checked,
-      weekLane: val('weekLane').value || null,
-      displayOrder: base.displayOrder,
-      matchOrder: i,
-      match: { types: split('match.types'), sessions: split('match.sessions'), roles: split('match.roles') },
-      exclude: { types: split('exclude.types'), sessions: split('exclude.sessions'), roles: split('exclude.roles') },
-    };
-  });
-  config = normaliseConfig({
-    pollMinutes: pollEl ? pollEl.value : config.pollMinutes,
-    confirmed: config.confirmed,
-    tiles,
-  });
+  if (!pollEl || !next) return next;
+  return normaliseConfig({ ...next, pollMinutes: pollEl.value });
+}
+
+function paintEditor() {
+  if (!draft) return;
+  draft = readPollInto(draft);
+  const active = document.activeElement;
+  const focusId = active && editorBody.contains(active) ? active.id : '';
+  const selStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+  const view = setupView(draft, observed, editorSlots(), { query: setupQuery, kind: setupKind });
+  editorBody.innerHTML = renderSetup({ ...view, draggingId, dragOver: '', openDetails });
+  const undoBtn = document.getElementById('avUndo');
+  if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+  if (focusId) {
+    const el = document.getElementById(focusId);
+    if (el) {
+      el.focus();
+      if (selStart != null && el.setSelectionRange) {
+        try {
+          el.setSelectionRange(selStart, selStart);
+        } catch {
+          /* number inputs */
+        }
+      }
+    }
+  }
+}
+
+function applyDraft(next, status) {
+  const before = JSON.stringify(draft);
+  const normalised = normaliseConfig(next);
+  if (JSON.stringify(normalised) === before) {
+    if (status) setEditorStatus(status);
+    return;
+  }
+  undoStack = pushUndo(undoStack, draft);
+  draft = normalised;
+  paintEditor();
+  setEditorStatus(status || '');
+}
+
+function applyPlace(result, okText) {
+  if (!result.ok) {
+    setEditorStatus(reasonText(result.reason));
+    return;
+  }
+  const note = result.notice ? ` ${result.notice}` : '';
+  applyDraft(result.config, `${okText}${note}`.trim());
 }
 
 function inertBehind(on) {
@@ -685,20 +691,38 @@ function focusables() {
   );
 }
 
+function draftDirty() {
+  if (!draft) return false;
+  return JSON.stringify(normaliseConfig(readPollInto(draft))) !== JSON.stringify(normaliseConfig(config));
+}
+
 function openEditor() {
   opener = setupBtn;
-  renderEditor();
+  draft = normaliseConfig(JSON.parse(JSON.stringify(config)));
+  undoStack = [];
+  setupQuery = '';
+  setupKind = 'all';
+  openDetails = [];
+  draggingId = '';
+  paintEditor();
   editor.hidden = false;
   inertBehind(true);
-  const first = editor.querySelector('input, button, select');
-  if (first) first.focus();
+  const search = document.getElementById('avSetupSearch');
+  if (search) search.focus();
+  else {
+    const first = editor.querySelector('input, button, select');
+    if (first) first.focus();
+  }
 }
 
 function closeEditor() {
+  if (draftDirty() && !window.confirm('Close without saving the tile mapping?')) return;
   editor.hidden = true;
   editorBody.innerHTML = '';
+  draft = null;
+  undoStack = [];
+  draggingId = '';
   if (editorStatus) editorStatus.textContent = '';
-  observed = { slotTypes: [], sessions: [], clinicians: [], sites: [] };
   inertBehind(false);
   if (opener && typeof opener.focus === 'function') opener.focus();
 }
@@ -733,31 +757,53 @@ setupBtn.addEventListener('keydown', (event) => {
 });
 
 document.getElementById('avCloseEditor').addEventListener('click', closeEditor);
+document.getElementById('avUndo').addEventListener('click', () => {
+  if (!draft) return;
+  const popped = popUndo(undoStack);
+  undoStack = popped.stack;
+  if (!popped.config) return;
+  draft = popped.config;
+  paintEditor();
+  setEditorStatus('Undone. Not saved until you press Save.');
+});
 document.getElementById('avAddTile').addEventListener('click', () => {
-  readEditor();
+  if (!draft) return;
   const tile = blankTile();
-  tile.matchOrder = config.tiles.length;
-  config.tiles.push(tile);
-  config = normaliseConfig(config);
-  selectedTile = config.tiles.length - 1;
-  renderEditor();
+  tile.matchOrder = draft.tiles.length;
+  tile.displayOrder = draft.tiles.length + 1;
+  const next = normaliseConfig(readPollInto(draft));
+  next.tiles.push(tile);
+  applyDraft(normaliseConfig(next), 'Added a tile. Not saved until you press Save.');
 });
 document.getElementById('avResetTiles').addEventListener('click', () => {
+  if (!draft) return;
   if (!window.confirm('Replace the current mapping with the suggested names? Nothing is saved until you press Save.'))
     return;
-  config = normaliseConfig({ pollMinutes: config.pollMinutes, confirmed: false, tiles: defaultTiles() });
-  renderEditor();
+  const poll = readPollInto(draft).pollMinutes;
+  applyDraft(
+    normaliseConfig({ pollMinutes: poll, confirmed: false, tiles: defaultTiles() }),
+    'Suggested names are on the canvas. Not saved until you press Save.'
+  );
 });
 document.getElementById('avSaveTiles').addEventListener('click', async () => {
-  readEditor();
-  config = normaliseConfig({ ...config, confirmed: true });
+  if (!draft) return;
+  const next = normaliseConfig({ ...readPollInto(draft), confirmed: true });
   try {
-    await window.availabilityImport({ config });
+    await window.availabilityImport({ config: next });
   } catch (err) {
     if (contextDead(err)) showReload();
+    setEditorStatus('The mapping was not saved. Try Save again.');
     return;
   }
-  closeEditor();
+  config = next;
+  undoStack = [];
+  editor.hidden = true;
+  editorBody.innerHTML = '';
+  draft = null;
+  draggingId = '';
+  if (editorStatus) editorStatus.textContent = '';
+  inertBehind(false);
+  if (opener && typeof opener.focus === 'function') opener.focus();
   arm();
   render();
 });
@@ -783,37 +829,167 @@ editor.addEventListener('keydown', (event) => {
   }
 });
 
-editorBody.addEventListener('click', (event) => {
-  const move = event.target.closest('[data-move]');
-  if (move) {
-    readEditor();
-    const index = Number(move.closest('.av-tile-edit').dataset.index);
-    const next = index + Number(move.dataset.move);
-    if (next >= 0 && next < config.tiles.length) {
-      const ordered = config.tiles.slice().sort((a, b) => a.matchOrder - b.matchOrder);
-      const [row] = ordered.splice(index, 1);
-      ordered.splice(next, 0, row);
-      ordered.forEach((t, i) => {
-        t.matchOrder = i;
-      });
-      config = normaliseConfig({ ...config, tiles: ordered });
-      selectedTile = next;
-      renderEditor();
-    }
+editorBody.addEventListener('input', (event) => {
+  if (event.target.id !== 'avSetupSearch') return;
+  setupQuery = event.target.value;
+  paintEditor();
+});
+
+editorBody.addEventListener('toggle', (event) => {
+  const details = event.target.closest('[data-details]');
+  if (!details) return;
+  const key = details.dataset.details;
+  if (details.open) {
+    if (!openDetails.includes(key)) openDetails = openDetails.concat(key);
+  } else {
+    openDetails = openDetails.filter((item) => item !== key);
+  }
+});
+
+editorBody.addEventListener('change', (event) => {
+  if (!draft) return;
+  const map = event.target.closest('[data-map-item]');
+  if (map) {
+    const item = catalogItem(map.dataset.mapItem);
+    if (!item) return;
+    const tileId = map.value || null;
+    const tile = tileId && draft.tiles.find((row) => row.id === tileId);
+    const result = placeItem(readPollInto(draft), item, tileId);
+    const name = item.name;
+    const where = tile ? tile.label : 'Not on a tile';
+    applyPlace(result, result.ok ? `${name} is on ${where}. Not saved until you press Save.` : '');
     return;
   }
-  const sel = event.target.closest('[data-sel]');
-  if (sel) selectedTile = Number(sel.dataset.sel);
-  const add = event.target.closest('[data-add-value]');
-  if (!add) return;
-  const section = editorBody.querySelector(`.av-tile-edit[data-index="${selectedTile}"]`);
-  const input = section && section.querySelector(`[data-k="${add.dataset.addField}"]`);
-  if (!input) return;
-  const cur = input.value.trim();
-  input.value = cur ? `${cur}, ${add.dataset.addValue}` : add.dataset.addValue;
-  const tileName = (config.tiles[selectedTile] && config.tiles[selectedTile].label) || 'tile';
-  if (editorStatus) editorStatus.textContent = `Added ${add.dataset.addValue} to ${tileName}`;
-  input.focus();
+  const rule = event.target.closest('[data-rule]');
+  if (rule) {
+    const pot = rule.closest('[data-drop]');
+    if (!pot || pot.dataset.drop === 'palette') return;
+    const [bucket, kind] = rule.dataset.rule.split('.');
+    const values = String(rule.value || '')
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const next = normaliseConfig(readPollInto(draft));
+    next.tiles = next.tiles.map((tile) => {
+      if (tile.id !== pot.dataset.drop) return tile;
+      return { ...tile, [bucket]: { ...tile[bucket], [kind]: values } };
+    });
+    applyDraft(next, 'Pattern rule updated. Not saved until you press Save.');
+    return;
+  }
+  const label = event.target.closest('[data-tile-label]');
+  if (label) {
+    const next = normaliseConfig(readPollInto(draft));
+    next.tiles = next.tiles.map((tile) =>
+      tile.id === label.dataset.tileLabel ? { ...tile, label: label.value } : tile
+    );
+    applyDraft(next, 'Tile name updated. Not saved until you press Save.');
+    return;
+  }
+  const field = event.target.closest('[data-tile-field]');
+  if (field) {
+    const next = normaliseConfig(readPollInto(draft));
+    const value = field.dataset.tileField === 'weekLane' ? field.value || null : field.value;
+    next.tiles = next.tiles.map((tile) =>
+      tile.id === field.dataset.tile ? { ...tile, [field.dataset.tileField]: value } : tile
+    );
+    applyDraft(next, 'Tile settings updated. Not saved until you press Save.');
+    return;
+  }
+  const flag = event.target.closest('[data-tile-flag]');
+  if (flag) {
+    const next = normaliseConfig(readPollInto(draft));
+    next.tiles = next.tiles.map((tile) =>
+      tile.id === flag.dataset.tile ? { ...tile, [flag.dataset.tileFlag]: flag.checked } : tile
+    );
+    applyDraft(next, 'Tile settings updated. Not saved until you press Save.');
+    return;
+  }
+  if (event.target.id === 'avPoll') {
+    applyDraft(readPollInto(draft), 'Refresh interval updated. Not saved until you press Save.');
+  }
+});
+
+editorBody.addEventListener('dragstart', (event) => {
+  const handle = event.target.closest('[data-drag-item]');
+  if (!handle || !event.dataTransfer) return;
+  draggingId = handle.dataset.dragItem;
+  event.dataTransfer.setData('text/plain', draggingId);
+  event.dataTransfer.effectAllowed = 'move';
+  handle.classList.add('is-dragging');
+});
+
+editorBody.addEventListener('dragend', () => {
+  draggingId = '';
+  editorBody.querySelectorAll('.is-over, .is-dragging').forEach((el) => {
+    el.classList.remove('is-over', 'is-dragging');
+  });
+});
+
+editorBody.addEventListener('dragover', (event) => {
+  const zone = event.target.closest('[data-drop]');
+  if (!zone || !draggingId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  editorBody.querySelectorAll('[data-drop].is-over').forEach((el) => el.classList.remove('is-over'));
+  zone.classList.add('is-over');
+});
+
+editorBody.addEventListener('drop', (event) => {
+  const zone = event.target.closest('[data-drop]');
+  if (!zone || !draft) return;
+  event.preventDefault();
+  const id = (event.dataTransfer && event.dataTransfer.getData('text/plain')) || draggingId;
+  draggingId = '';
+  const item = catalogItem(id);
+  if (!item) return;
+  const dest = zone.dataset.drop === 'palette' ? null : zone.dataset.drop;
+  const tile = dest && draft.tiles.find((row) => row.id === dest);
+  const result = placeItem(readPollInto(draft), item, dest);
+  const where = tile ? tile.label : 'Not on a tile';
+  applyPlace(result, result.ok ? `${item.name} is on ${where}. Not saved until you press Save.` : '');
+});
+
+editorBody.addEventListener('click', (event) => {
+  if (!draft) return;
+  const kindBtn = event.target.closest('[data-kind]');
+  if (kindBtn) {
+    setupKind = kindBtn.dataset.kind || 'all';
+    paintEditor();
+    return;
+  }
+  const move = event.target.closest('[data-move]');
+  if (move) {
+    const tileId = move.dataset.tile;
+    const next = normaliseConfig(JSON.parse(JSON.stringify(readPollInto(draft))));
+    const ordered = next.tiles.slice().sort((a, b) => a.matchOrder - b.matchOrder);
+    const index = ordered.findIndex((tile) => tile.id === tileId);
+    const nextIndex = index + Number(move.dataset.move);
+    if (index < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
+    const [row] = ordered.splice(index, 1);
+    ordered.splice(nextIndex, 0, row);
+    ordered.forEach((tile, i) => {
+      tile.matchOrder = i;
+    });
+    next.tiles = ordered;
+    applyDraft(next, 'Match order updated. Not saved until you press Save.');
+    return;
+  }
+  const pin = event.target.closest('[data-pin-item]');
+  if (pin) {
+    const item = catalogItem(pin.dataset.pinItem);
+    if (!item) return;
+    const result = placeItem(readPollInto(draft), item, pin.dataset.pinPot);
+    const tile = draft.tiles.find((row) => row.id === pin.dataset.pinPot);
+    applyPlace(result, result.ok ? `${item.name} is pinned to ${tile ? tile.label : 'that tile'}. Not saved until you press Save.` : '');
+    return;
+  }
+  const remove = event.target.closest('[data-remove-item]');
+  if (!remove) return;
+  const item = catalogItem(remove.dataset.removeItem);
+  if (!item) return;
+  const result = removeFromPot(readPollInto(draft), item, remove.dataset.removePot);
+  applyPlace(result, result.ok ? `${item.name} removed. Not saved until you press Save.` : '');
 });
 
 document.getElementById('avStopFlash').addEventListener('click', () => {

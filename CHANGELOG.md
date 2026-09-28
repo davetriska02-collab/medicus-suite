@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.0] — 2026-09-28
+
+### Drag appointment types onto availability tiles
+
+Set up tiles is a canvas. Slot types, sessions and diaries from the appointment book are listed once, with a search and a count of upcoming free slots. Drag a name onto a tile, or choose the tile under Move. Each name belongs on one tile. Dragging it back, or Remove, takes it off. A name already saved on two tiles stays there until it is moved, and the canvas says only the earlier tile is counted.
+
+Pattern rules are still there for a word that should match many names. Opening the canvas does not rewrite a saved mapping. The counts you would get are shown before Save. Undo puts the last change back. Nothing is written until Save.
+
+H-085 addendum drafted pending CSO review (hazard-log v3.77). Not signed. The wall is still read-only.
+
 ## [v3.267.4] — 2026-09-27
 
 ### Availability wall stays on one screen

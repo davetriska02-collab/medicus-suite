@@ -57,6 +57,7 @@ export default [
       'shared/uk-calendar.js',
       'shared/uk-bank-holidays-data.js',
       'shared/availability-board-core.js',
+      'shared/availability-setup-core.js',
     ],
     languageOptions: { sourceType: 'module' },
   },
