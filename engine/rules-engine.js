@@ -332,6 +332,33 @@
     return hay.includes(t);
   }
 
+  // Exception / negation rubrics. Once coded notes are ingested, a substring
+  // achievement match also hits the exception code: "Asthma review declined",
+  // "Smoking status not recorded", "CHA2DS2-VASc score not appropriate".
+  // Those are not achievement. Checked on the displayed rubric before the
+  // SNOMED bypass, so a concept id does not rescue an exception phrase.
+  const OBSERVATION_EXCEPTION_RES = [
+    /\bdeclined\b/,
+    /\bnot recorded\b/,
+    /\bnot appropriate\b/,
+    /\bunsuitable\b/,
+    /\brefused\b/,
+    /\bdissent\b/,
+    /\bnot indicated\b/,
+  ];
+
+  function observationTextIsException(text) {
+    const hay = String(text || '').toLowerCase();
+    return OBSERVATION_EXCEPTION_RES.some((rx) => rx.test(hay));
+  }
+
+  // A lookup whose own terms are exception phrases (OB005 PCA: "pathway
+  // declined") is searching for the exception, so those rows must stay.
+  function specLooksForExceptions(testSpec) {
+    const terms = testSpec && Array.isArray(testSpec.match) ? testSpec.match : [];
+    return terms.some((t) => observationTextIsException(t));
+  }
+
   // observation-bundle groups are either an alias array (every shipped group
   // except DM037's renal slot) or { match, exclude } when a bare analyte must
   // not be satisfied by another specimen. Callers still see `aliases`.
@@ -394,7 +421,9 @@
   function filterMatchingObservations(observations, testSpec) {
     if (!Array.isArray(observations)) return [];
     const excludeTerms = Array.isArray(testSpec.exclude) ? testSpec.exclude.map((e) => String(e).toLowerCase()) : null;
+    const keepExceptions = specLooksForExceptions(testSpec);
     return observations.filter((obs) => {
+      if (!keepExceptions && observationTextIsException(obs && obs.name)) return false;
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
       if (obs.name && Array.isArray(testSpec.match)) {
         const obsLower = String(obs.name).toLowerCase();
@@ -438,6 +467,7 @@
       if (!group) return;
       const nameLower = String(group.name || '').toLowerCase();
       const groupLower = String(group.group || '').toLowerCase();
+      if (!specLooksForExceptions(testSpec) && (observationTextIsException(nameLower) || observationTextIsException(groupLower))) return;
       const matches = testSpec.match.some(
         (m) => observationTermHits(nameLower, m) || observationTermHits(groupLower, m)
       );
@@ -3061,6 +3091,7 @@
       const matchTerms = check.observation || [];
       const candidates = (data.observationHistory || []).filter((entry) => {
         const name = normStr(entry.name);
+        if (observationTextIsException(name)) return false;
         return matchTerms.some((m) => observationTermHits(name, m));
       });
       const historyEntry =

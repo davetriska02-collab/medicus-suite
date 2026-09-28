@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.267.6] — 2026-09-28
+
+### Exception rubrics do not clear a QOF indicator
+
+A coded note such as "Asthma review declined", "Smoking status not recorded" or "CHA2DS2-VASc score not appropriate" contains the achievement phrase. Those rubrics no longer count. The phrases are declined, not recorded, not appropriate, unsuitable, refused, dissent, and not indicated. A concept id does not override that.
+
+A draft note is not read. A note's date is its recordDate. The migration field `created` is not used.
+
+The journal parser still keeps about 400 days. SMOK002 and AST015 use the QOF year, from 1 April, which sits inside that window. The wording "preceding 12 months" therefore behaves as "since 1 April", the same as QOF payment. Sweep and the Triage Lens monitoring chip do not run this journal read. Only the live patient evaluation does. That is a follow-up.
+
 ## [v3.267.5] — 2026-09-28
 
 ### Coded journal notes count for SMOK002 and AST015

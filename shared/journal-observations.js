@@ -25,7 +25,9 @@
 //      such as "Smoker" and "Asthma monitoring check done" as notes, so
 //      SMOK002 and AST015 stayed overdue against an older dashboard row.
 //      Those coded notes are ingested. Uncoded free text is not. A concept
-//      id is stored when the payload has one.
+//      id is stored when the payload has one. A draft or incorrect note is
+//      not. The note's clinical date is recordDate, not the migration
+//      timestamp `created`.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.JournalObservations.<fn>(...)
@@ -178,19 +180,50 @@
       result.push(row);
     }
 
+    // ISO day (YYYY-MM-DD) or ISO datetime. Built as a local calendar day so
+    // British Summer Time does not shift it back a day. `created` is a
+    // migration timestamp and is never passed here.
+    function parseIsoDay(str) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(str || '').trim());
+      if (!m) return null;
+      var d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function parseClinicalDate(str) {
+      return parseIsoDay(str) || parseDisplayDate(str);
+    }
+
+    // recordDate is the clinical date of a coded note. observationDate is the
+    // display form used on observations. The day-group title is only a
+    // fallback. created, createdDateTime and createdInOriginalSystemDateTime
+    // are system or migration timestamps and are not read.
+    function noteClinicalDate(entry, fallbackDate) {
+      return parseClinicalDate(entry.recordDate) || parseClinicalDate(entry.observationDate) || fallbackDate;
+    }
+
+    function flaggedIncorrectOrDraft(node) {
+      if (!node) return false;
+      return (
+        node.isMarkedIncorrect === true ||
+        node.isMarkedAsIncorrect === true ||
+        node.isDraft === true
+      );
+    }
+
     // A coded note is clinical evidence. Medicus files SNOMED terms under
     // entryType "note" with the preferred term in clinicalCodeDescription.
     // Uncoded free text (entry.note only) is not a code and stays out.
-    // A note marked incorrect is not evidence.
-    function pushCodedNote(entry, fallbackDate) {
+    // A note marked incorrect, or still a draft, is not evidence.
+    function pushCodedNote(entry, fallbackDate, item) {
       if (!entry || entry.entryType !== 'note') return;
-      if (entry.isMarkedIncorrect === true || entry.isMarkedAsIncorrect === true) return;
+      if (flaggedIncorrectOrDraft(entry) || flaggedIncorrectOrDraft(item)) return;
       var desc = entry.clinicalCodeDescription == null ? '' : String(entry.clinicalCodeDescription).trim();
       if (!desc) return;
       pushEntry(
         desc,
         typeof entry.value === 'string' ? entry.value : '',
-        parseDisplayDate(entry.observationDate) || parseDisplayDate(entry.recordDate) || fallbackDate,
+        noteClinicalDate(entry, fallbackDate),
         conceptIdOf(entry)
       );
     }
@@ -220,7 +253,7 @@
           if (item.type === 'note') {
             var nd = item.data || {};
             if (!nd.entryType) nd = Object.assign({ entryType: 'note' }, nd);
-            pushCodedNote(nd, parseDisplayDate(nd.observationDate) || groupDate);
+            pushCodedNote(nd, groupDate, item);
             continue;
           }
           // Nested consultation-coded entries (the original path).
@@ -233,7 +266,7 @@
               for (var e = 0; e < entries.length; e++) {
                 var entry = entries[e] || {};
                 if (entry.entryType === 'note') {
-                  pushCodedNote(entry, groupDate);
+                  pushCodedNote(entry, groupDate, item);
                   continue;
                 }
                 // Skip entries missing a type name, or that aren't observations

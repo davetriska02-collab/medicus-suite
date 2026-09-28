@@ -253,5 +253,54 @@ console.log('\n--- HF008 echo abbreviation does not match cigarette or written -
   check(real[0] && real[0].status === 'achieved', 'a TTE token still clears HF008');
 }
 
+console.log('\n--- exception rubrics do not achieve ---');
+{
+  const exceptions = [
+    'Asthma review declined',
+    'Smoking status not recorded',
+    'CHA2DS2-VASc score not appropriate',
+    'Asthma review unsuitable',
+    'Asthma review refused',
+    'Informed dissent to asthma review',
+    'Asthma review not indicated',
+  ];
+  exceptions.forEach((name) => {
+    const chips = evalRule(ast015, [
+      { name: name, date: REVIEW, value: '', code: '394700004' },
+      { name: 'Asthma control test score', date: REVIEW, value: '7', code: '443117005' },
+      { name: 'Number of asthma exacerbations in past year', date: REVIEW, value: '1', code: '366874008' },
+      { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' },
+    ]);
+    check(
+      chips[0] && chips[0].status === 'not_met' && /Asthma review/.test(chips[0].valueText || ''),
+      `${name} does not clear the review (got ${chips[0] && chips[0].status} ${chips[0] && chips[0].valueText})`
+    );
+  });
+  const smokOnly = evalRule(smok, [{ name: 'Smoking status not recorded', date: REVIEW, value: '', code: '77176002' }]);
+  check(smokOnly[0] && smokOnly[0].status !== 'achieved', 'Smoking status not recorded does not clear SMOK002');
+  const afReg = qof.rules.find((r) => r.type === 'qof-register' && r.registerCode === 'AF');
+  const af006 = qof.rules.find((r) => r.id === 'qof-af006');
+  const afChips = engine.evaluateQofIndicatorRule(
+    af006,
+    {
+      medications: [],
+      observations: [{ name: 'CHA2DS2-VASc score not appropriate', date: REVIEW, value: '', code: '763008007' }],
+      problems: [{ label: 'Atrial fibrillation', codedDate: '2018-01-01', hasOnsetDate: true }],
+      patientContext: {},
+      _registerLookup: { AF: afReg },
+    },
+    NOW
+  );
+  check(afChips[0] && afChips[0].status !== 'achieved', 'CHA2DS2-VASc score not appropriate does not clear AF006');
+  const alongside = evalRule(ast015, [
+    { name: 'Asthma review declined', date: REVIEW, value: '', code: '394700004' },
+    { name: 'Asthma monitoring check done', date: REVIEW, value: '', code: '270442000' },
+    { name: 'Asthma control test score', date: REVIEW, value: '7', code: '443117005' },
+    { name: 'Number of asthma exacerbations in past year', date: REVIEW, value: '1', code: '366874008' },
+    { name: 'Patient has a written asthma personal action plan', date: REVIEW, value: '', code: '527171000000103' },
+  ]);
+  check(alongside[0] && alongside[0].status === 'achieved', 'a real review still counts beside a declined rubric');
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exitCode = 1;
