@@ -354,6 +354,28 @@
     };
   }
 
+  // Lab Filing (Companion fold-in stage 1, 2026-09-27, Nick) — content-scripts/triage-lens/lab-file-button.js
+  // computes severity/blockers/matching and publishes the result to window.__chLabFileState; this widget only
+  // ever RENDERS that data, never recomputes it. `sig`/`data` are refreshed by syncLabFileState() (signature-
+  // gated, so an unchanged publish never forces a rebuild); `reasonsOpen` is genuine interaction state, lifted
+  // into `s` (not just the DOM) so it survives a rebuild triggered by any OTHER section's action.
+  function blankLabFileState() {
+    return {
+      sig: 'none',
+      data: null,
+      reasonsOpen: false,
+      // Companion fold-in stage 2: checked-row keys for the two whitelist checklists, lifted into state the same
+      // way reasonsOpen is — a Set survives a rebuild triggered by any other section's action.
+      wlChecked: new Set(),
+      catWlChecked: new Set(),
+      // Toast (stage 2): window.__chLabFileToast's `id` we've already displayed, and the currently-visible message
+      // (separate fields — a new id triggers (re)showing it, and Companion owns its own ~5.2s auto-clear timer,
+      // matching the old .chlf-toast's dismiss timing, rather than lab-file-button.js managing any DOM for it).
+      toastSeenId: null,
+      toastVisible: null,
+    };
+  }
+
   function blankState() {
     return {
       taskUuid: null,
@@ -366,6 +388,7 @@
       desk: blankDeskState(),
       slots: blankSlotsState(),
       pulse: blankPulseState(),
+      lf: blankLabFileState(),
     };
   }
 
@@ -1053,9 +1076,14 @@
     // task) instead of its usual pre-Book spot — Nick asked for it
     // appended at the bottom rather than in the normal position.
     const recordLast = showRecord && isGeneralTaskType;
+    // Lab Filing (Companion fold-in stage 1): shown first, above everything else — same "what the clinician is
+    // there to act on" reasoning already established for recordFirst on this exact page type. Not role-gated the
+    // same way `record` is (see shows.labFile / shared/companion-role.js) — any role can be filing this report.
+    const showLabFile = shows.labFile && isInvestigationResultTask() && !!s.lf.data;
     return (
       outerHeaderHtml() +
       '<div class="ms-tap-body">' +
+      (showLabFile ? labFileSectionHtml() : '') +
       (recordFirst ? recordSectionHtml() : '') +
       (shows.due ? dueSectionHtml() : '') +
       (shows.desk ? deskSectionHtml() : '') +
@@ -1069,6 +1097,240 @@
       '</div>' +
       '<div class="ms-tap-resize" id="ms-tap-resize" role="separator" aria-orientation="horizontal" aria-label="Resize Companion"></div>'
     );
+  }
+
+  // ── Lab Filing (Companion fold-in stage 1, 2026-09-27, Nick) ────────────────
+  // Renders content-scripts/triage-lens/lab-file-button.js's own published state (window.__chLabFileState via
+  // syncLabFileState/s.lf.data) — never recomputes severity/blockers/matching. The remaining pieces (comment-
+  // whitelist boxes, unapproved-groups box, the File/message buttons, "Never auto-file this patient", the toast)
+  // stay on that file's own smaller standalone card for now (stage 2).
+  function labFileSectionHtml() {
+    const lf = s.lf;
+    const data = lf.data;
+    if (!data) return '';
+    const isBlocked = data.mode === 'blocked';
+    const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+    let reasonsHtml = '';
+    if (isBlocked && reasons.length > 2) {
+      reasonsHtml =
+        '<details class="ms-tap-lf-reasons"' +
+        (lf.reasonsOpen ? ' open' : '') +
+        '>' +
+        '<summary id="ms-tap-lf-reasons-toggle">Show all ' +
+        reasons.length +
+        ' reasons</summary>' +
+        '<ul class="ms-tap-lf-reasons-list">' +
+        reasons.map((r) => '<li>' + esc(r) + '</li>').join('') +
+        '</ul>' +
+        '</details>';
+    }
+    // "Matched to your request" no longer renders as its own box here (2026-09-27, Nick: "rather than duplicating
+    // that list elsewhere on the companion bar") — the SAME candidates instead mark matching items inline inside
+    // the existing "OUTSTANDING INVESTIGATIONS" list (see renderInvestigationRow / labFileRequestMatchFor below).
+    const toastHtml = lf.toastVisible
+      ? '<div class="ms-tap-lf-toast ms-tap-lf-toast-' + esc(lf.toastVisible.kind || 'ok') + '">' +
+        esc(lf.toastVisible.msg) +
+        '</div>'
+      : '';
+    // Whitelist boxes and the unapproved-groups box only ever show in the BLOCKED state (same as the old card);
+    // the File/message buttons only ever show in the READY state (fileAction is only ever published then).
+    const wlHtml = isBlocked ? labFileWhitelistHtml() : '';
+    const catWlHtml = isBlocked ? labFileCatalogueWhitelistHtml() : '';
+    const unapprovedHtml = isBlocked ? labFileUnapprovedGroupsHtml() : '';
+    const fileActionHtml = !isBlocked && data.fileAction ? labFileActionHtml(data.fileAction) : '';
+    return (
+      '<div class="ms-tap-section ms-tap-lf">' +
+      '<div class="ms-tap-section-header"><span>Lab filing</span></div>' +
+      '<div class="ms-tap-section-body">' +
+      toastHtml +
+      '<div class="ms-tap-lf-title ' +
+      (isBlocked ? 'ms-tap-lf-blocked' : 'ms-tap-lf-ready') +
+      '">' +
+      esc(data.title || '') +
+      '</div>' +
+      '<div class="ms-tap-lf-sub">' +
+      esc(data.sub || '') +
+      '</div>' +
+      reasonsHtml +
+      wlHtml +
+      catWlHtml +
+      unapprovedHtml +
+      fileActionHtml +
+      '<button type="button" class="ms-tap-text-btn ms-tap-lf-suppress" id="ms-tap-lf-suppress">Never auto-file this patient</button>' +
+      '</div>' +
+      '</div>'
+    );
+  }
+
+  // One checkbox per row, checked state from s.lf.wlChecked, a "Save…" button shown only once ≥1 is checked — same
+  // logic renderWhitelistBox always had, just rendered from the published rows instead of live DOM refs.
+  function labFileWhitelistHtml() {
+    const rows = (s.lf.data && s.lf.data.whitelistRows) || [];
+    if (!rows.length) return '';
+    const anyChecked = rows.some((r) => s.lf.wlChecked.has(r.key));
+    return (
+      '<div class="ms-tap-lf-wl">' +
+      '<div class="ms-tap-lf-wl-intro">Recognise a comment below? Whitelist it for every future report on the profile(s) it belongs to — this machine only, until you publish a practice profile.</div>' +
+      rows
+        .map(
+          (r) =>
+            '<label class="ms-tap-lf-wl-row"><input type="checkbox" data-lf-wl-key="' +
+            esc(r.key) +
+            '"' +
+            (s.lf.wlChecked.has(r.key) ? ' checked' : '') +
+            ' /><span><strong>' +
+            esc(r.name) +
+            ':</strong> “' +
+            esc(r.residue) +
+            '”' +
+            (r.targetNames && r.targetNames.length ? ' → ' + esc(r.targetNames.join(', ')) : '') +
+            '</span></label>'
+        )
+        .join('') +
+      (anyChecked
+        ? '<button type="button" class="ms-tap-due-retry ms-tap-lf-wl-save" id="ms-tap-lf-wl-save">Save &amp; switch OFF for review</button>'
+        : '') +
+      '<div class="ms-tap-lf-wl-note">Saves to the profile(s) it belongs to and switches each one OFF — review and re-enable in Options → Lab Filing before it can file anything again.</div>' +
+      '</div>'
+    );
+  }
+
+  function labFileCatalogueWhitelistHtml() {
+    const rows = (s.lf.data && s.lf.data.catalogueWhitelistRows) || [];
+    if (!rows.length) return '';
+    const anyChecked = rows.some((r) => s.lf.catWlChecked.has(r.key));
+    return (
+      '<div class="ms-tap-lf-wl">' +
+      '<div class="ms-tap-lf-wl-intro">Recognise a comment below? Whitelist it for this lab’s report group on the Investigations page.</div>' +
+      rows
+        .map(
+          (r) =>
+            '<label class="ms-tap-lf-wl-row"><input type="checkbox" data-lf-catwl-key="' +
+            esc(r.key) +
+            '"' +
+            (s.lf.catWlChecked.has(r.key) ? ' checked' : '') +
+            ' /><span><strong>' +
+            esc(r.name) +
+            ':</strong> “' +
+            esc(r.residue) +
+            '” → ' +
+            esc(r.heading) +
+            '</span></label>'
+        )
+        .join('') +
+      (anyChecked
+        ? '<button type="button" class="ms-tap-due-retry ms-tap-lf-wl-save" id="ms-tap-lf-catwl-save">Save &amp; send back for review</button>'
+        : '') +
+      '<div class="ms-tap-lf-wl-note">Saves to the report group it belongs to and sends it back to awaiting review — re-approve on the Investigations page before it can file anything again.</div>' +
+      '</div>'
+    );
+  }
+
+  function labFileUnapprovedGroupsHtml() {
+    const rows = (s.lf.data && s.lf.data.unapprovedGroupsRows) || [];
+    if (!rows.length) return '';
+    return (
+      '<div class="ms-tap-lf-wl">' +
+      '<div class="ms-tap-lf-wl-intro">' +
+      (rows.length === 1
+        ? 'This test has no assisted-filing setup at this lab yet.'
+        : 'These tests have no assisted-filing setup at this lab yet.') +
+      '</div>' +
+      rows
+        .map(
+          (r) =>
+            '<div class="ms-tap-lf-wl-row"><span>' +
+            esc(r.label) +
+            ' (“' +
+            esc(r.heading) +
+            '”)</span> <button type="button" class="ms-tap-text-btn ms-tap-lf-open-setup" data-lf-open-setup="' +
+            esc(r.investigationId) +
+            '">Set up on Investigations page</button></div>'
+        )
+        .join('') +
+      '</div>'
+    );
+  }
+
+  function labFileActionHtml(fa) {
+    return (
+      '<div class="ms-tap-lf-actions">' +
+      '<button type="button" class="ms-tap-lf-file-btn" id="ms-tap-lf-file">' +
+      esc(fa.buttonText || 'Review & file all normal') +
+      '</button>' +
+      (fa.messagingEnabled
+        ? '<button type="button" class="ms-tap-lf-file-btn ms-tap-lf-file-secondary" id="ms-tap-lf-file-msg" title="' +
+          esc(fa.msgButtonTitle || '') +
+          '">' +
+          esc(fa.msgButtonText || '+ message patient') +
+          '</button>'
+        : '') +
+      '</div>'
+    );
+  }
+
+  // Looks up whether an outstanding-investigation item (from the record section's own fetch) is one of the
+  // CURRENT report's unresolved request-match candidates — same underlying Medicus label, reached via two
+  // different fetches (see the plan's note on why they need normalising to compare). Returns the matched
+  // candidate's exact text (to pass back to confirmRequestMatch, which writes the alias verbatim) or null.
+  function labFileRequestMatchFor(itemText) {
+    const rm = s.lf.data && s.lf.data.requestMatchInfo;
+    if (!rm || !Array.isArray(rm.candidates) || !rm.candidates.length) return null;
+    const LC = window.LabCatalogue;
+    const norm = LC && typeof LC.norm === 'function' ? LC.norm : (t) => String(t || '').trim().toLowerCase();
+    const target = norm(itemText);
+    if (!target) return null;
+    const hit = rm.candidates.find((c) => norm(c) === target);
+    return hit ? { investigationId: rm.investigationId, investigationLabel: rm.investigationLabel, text: hit } : null;
+  }
+
+  // Signature over the DATA only (never the rendered HTML) — deliberately excludes reasonsOpen, which is
+  // interaction state, not published data, and must not itself trigger a rebuild.
+  function labFileSignature(state) {
+    if (!state) return 'none';
+    return JSON.stringify({
+      mode: state.mode,
+      title: state.title,
+      sub: state.sub,
+      reasons: state.reasons || null,
+      rm: state.requestMatchInfo || null,
+      wl: state.whitelistRows || null,
+      catWl: state.catalogueWhitelistRows || null,
+      ug: state.unapprovedGroupsRows || null,
+      fa: state.fileAction || null,
+    });
+  }
+
+  // Called on the 'ch-lab-file-state' event AND once per runInject() poll (belt and braces — an event dispatched
+  // before this listener attached must not leave the section stuck showing stale/no data). Signature-gated: only
+  // calls rerender() when the published data actually changed, so lab-file-button.js's own ~400ms poll cadence
+  // does not force a full Companion rebuild — and therefore does not risk visibly flickering — on every tick where
+  // nothing has changed.
+  function syncLabFileState() {
+    let dirty = false;
+    const state = window.__chLabFileState || null;
+    const sig = labFileSignature(state);
+    if (sig !== s.lf.sig) {
+      s.lf.sig = sig;
+      s.lf.data = state;
+      dirty = true;
+    }
+    // Toast (stage 2) — a SEPARATE global from window.__chLabFileState (which can legitimately be null, e.g.
+    // hidden/no profile fits), keyed by a monotonic id so two identical consecutive messages still show. Companion
+    // owns its own auto-clear timer — lab-file-button.js's job ends at publishing the message.
+    const toast = window.__chLabFileToast || null;
+    if (toast && toast.id !== s.lf.toastSeenId) {
+      s.lf.toastSeenId = toast.id;
+      s.lf.toastVisible = toast;
+      dirty = true;
+      setTimeout(() => {
+        if (s.lf.toastVisible === toast) {
+          s.lf.toastVisible = null;
+          rerender();
+        }
+      }, 5200);
+    }
+    if (dirty) rerender();
   }
 
   // ── What's due (miniaturised Sentinel brief) ────────────────────────────────
@@ -1631,11 +1893,33 @@
   // WHO" is the only useful context, same idea as a booking link's "Sent
   // DATE". Item names are Medicus's own free-text description strings, not
   // a coded value — see outstandingInvestigationRequests()'s header comment.
+  // Each item is checked against the CURRENT investigation-review report's own unresolved request-match candidates
+  // (labFileRequestMatchFor) — a match gets an inline confirm affordance right after it, in place of the
+  // standalone "Matched to your request" box stage 1 shipped (2026-09-27: "rather than duplicating that list
+  // elsewhere on the companion bar"). Nothing is struck through until actually confirmed — this is a candidate,
+  // not yet a recorded wording; once confirmed, the next poll's fresh requestMatchInfo drops it as a candidate and
+  // the affordance disappears on its own, same self-correcting behaviour the old box had.
   function renderInvestigationRow(inv) {
-    const itemsText = inv.items.length ? inv.items.join(', ') : 'Investigation';
+    const items = inv.items.length ? inv.items : ['Investigation'];
     const by = inv.requestedBy ? ' by ' + esc(inv.requestedBy) : '';
     const weekday = weekdayAbbr(inv.requestedDate);
     const dateText = (weekday ? weekday + ' ' : '') + (inv.requestedDate || '');
+    const itemsHtml = items
+      .map((item) => {
+        const match = inv.items.length ? labFileRequestMatchFor(item) : null;
+        if (!match) return esc(item);
+        return (
+          esc(item) +
+          ' <button type="button" class="ms-tap-text-btn ms-tap-lf-inv-confirm" data-lf-confirm-inv="' +
+          esc(match.investigationId) +
+          '" data-lf-confirm-text="' +
+          esc(match.text) +
+          '">✓ Confirm — this report is ' +
+          esc(match.investigationLabel) +
+          '</button>'
+        );
+      })
+      .join(', ');
     return (
       '<li class="ms-tap-rec-row">' +
       '<div class="ms-tap-rec-row-top">' +
@@ -1645,7 +1929,7 @@
       '</span>' +
       '</div>' +
       '<div class="ms-tap-rec-row-detail">' +
-      esc(itemsText) +
+      itemsHtml +
       '</div>' +
       '</li>'
     );
@@ -2890,6 +3174,89 @@
       });
     }
 
+    // Lab Filing (Companion fold-in stage 1) — the <details> itself already handles native open/close on a click,
+    // but the toggle event lifts that into s.lf.reasonsOpen so the state is genuinely remembered across a rebuild
+    // triggered by ANY other section's action, not just this one's own poll.
+    const lfReasonsToggle = el.querySelector('#ms-tap-lf-reasons-toggle');
+    if (lfReasonsToggle) {
+      lfReasonsToggle.parentElement?.addEventListener('toggle', () => {
+        s.lf.reasonsOpen = !!lfReasonsToggle.parentElement.open;
+      });
+    }
+    // Inline confirm affordance inside "OUTSTANDING INVESTIGATIONS" rows (see renderInvestigationRow /
+    // labFileRequestMatchFor) — replaces the stage-1 standalone "Matched to your request" box.
+    el.querySelectorAll('.ms-tap-lf-inv-confirm').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const invId = btn.getAttribute('data-lf-confirm-inv');
+        const text = btn.getAttribute('data-lf-confirm-text');
+        if (!invId || text == null || typeof window.__chConfirmRequestMatch !== 'function') return;
+        window.__chConfirmRequestMatch(invId, text, btn);
+      });
+    });
+
+    // Lab Filing (Companion fold-in stage 2) — whitelist checkboxes: checked state is lifted into
+    // s.lf.wlChecked/catWlChecked (same principle as reasonsOpen), so a rebuild triggered by ANY other section's
+    // action still reproduces every tick, not just this section's own poll. A rerender per click is simplest and
+    // safest here (Companion's rebuild is cheap and this interaction is infrequent) rather than a second, manual
+    // DOM-sync path for the Save button's visibility.
+    el.querySelectorAll('[data-lf-wl-key]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const key = cb.getAttribute('data-lf-wl-key');
+        if (cb.checked) s.lf.wlChecked.add(key);
+        else s.lf.wlChecked.delete(key);
+        rerender();
+      });
+    });
+    el.querySelectorAll('[data-lf-catwl-key]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const key = cb.getAttribute('data-lf-catwl-key');
+        if (cb.checked) s.lf.catWlChecked.add(key);
+        else s.lf.catWlChecked.delete(key);
+        rerender();
+      });
+    });
+    el.querySelector('#ms-tap-lf-wl-save')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const rows = (s.lf.data && s.lf.data.whitelistRows) || [];
+      const checks = rows
+        .filter((r) => s.lf.wlChecked.has(r.key))
+        .map((r) => ({
+          checkbox: { checked: true },
+          residue: r.residue,
+          targetProfiles: r.targetProfileIds.map((id) => ({ id })),
+        }));
+      if (checks.length && typeof window.__chWhitelistComments === 'function') {
+        window.__chWhitelistComments(checks, btn);
+        s.lf.wlChecked.clear();
+      }
+    });
+    el.querySelector('#ms-tap-lf-catwl-save')?.addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const rows = (s.lf.data && s.lf.data.catalogueWhitelistRows) || [];
+      const checks = rows
+        .filter((r) => s.lf.catWlChecked.has(r.key))
+        .map((r) => ({ checkbox: { checked: true }, residue: r.residue, labId: r.labId, heading: r.heading }));
+      if (checks.length && typeof window.__chWhitelistCatalogueComments === 'function') {
+        window.__chWhitelistCatalogueComments(checks, btn);
+        s.lf.catWlChecked.clear();
+      }
+    });
+    el.querySelectorAll('.ms-tap-lf-open-setup').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const invId = btn.getAttribute('data-lf-open-setup');
+        if (invId && typeof window.__chOpenInvestigationSetup === 'function') window.__chOpenInvestigationSetup(invId);
+      });
+    });
+    el.querySelector('#ms-tap-lf-file')?.addEventListener('click', () => {
+      if (typeof window.__chLabFileAction === 'function') window.__chLabFileAction('fileNoAction');
+    });
+    el.querySelector('#ms-tap-lf-file-msg')?.addEventListener('click', () => {
+      if (typeof window.__chLabFileAction === 'function') window.__chLabFileAction('fileAndMessage');
+    });
+    el.querySelector('#ms-tap-lf-suppress')?.addEventListener('click', () => {
+      if (typeof window.__chSuppressCurrentPatient === 'function') window.__chSuppressCurrentPatient();
+    });
+
     const dueRetry = el.querySelector('#ms-tap-due-retry');
     if (dueRetry) {
       dueRetry.addEventListener('click', (e) => {
@@ -3276,6 +3643,7 @@
     ) {
       loadPatientRecord(ctx);
     }
+    if (isInvestigationResultTask()) syncLabFileState();
     maybeLoadGlances();
     const existing = document.getElementById(WIDGET_ID);
     if (existing && existing.isConnected) return;
@@ -3303,6 +3671,11 @@
     }
     scheduleInject();
   });
+
+  // Lab Filing (Companion fold-in stage 1) — lab-file-button.js dispatches this on every evaluateGate() completion
+  // (roughly every 400ms while its own poll is active), whether or not the data actually changed; syncLabFileState
+  // itself is signature-gated, so this listener firing often is not the same as this widget rebuilding often.
+  document.addEventListener('ch-lab-file-state', syncLabFileState);
 
   window.addEventListener('resize', () => {
     const w = document.getElementById(WIDGET_ID);

@@ -416,12 +416,17 @@ console.log('\n── settings-page operations (C2) ──');
       analytes: ['CRP lab wording'],
       singleAnalyte: true,
     },
+    // Deliberately a fictional test, not a real one — this exercises the "fresh practice-only import" path (no
+    // matching built-in at all), as a contrast to CRP's "extends a built-in" path above. It used to be 'esr', but
+    // ESR became a real shipped built-in on 2026-09-26 (from the practice's own unreconciled-requests listing), so
+    // it started exercising the EXTENDS path instead and stopped creating an orphanable new result — moved to a
+    // name no builtin will ever shadow.
     {
-      key: 'esr',
-      label: 'ESR',
-      req: ['Erythrocyte sedimentation rate'],
-      rep: ['ESR'],
-      analytes: ['ESR'],
+      key: 'zzz-fictional-test',
+      label: 'Zzz Fictional Test',
+      req: ['Zzz Fictional Test Request'],
+      rep: ['Zzz Fictional Test'],
+      analytes: ['Zzz Fictional Test'],
       singleAnalyte: true,
     },
   ];
@@ -439,8 +444,8 @@ console.log('\n── settings-page operations (C2) ──');
     'setContext rejects an over-long value'
   );
 
-  const ap = OV.approveInvestigation(builtin, imp.overlay, 'practice-esr', 'Nick', '2026-09-19');
-  const esrInv = ap.overlay.investigations.find((i) => i.id === 'practice-esr');
+  const ap = OV.approveInvestigation(builtin, imp.overlay, 'practice-zzz-fictional-test', 'Nick', '2026-09-19');
+  const esrInv = ap.overlay.investigations.find((i) => i.id === 'practice-zzz-fictional-test');
   check(
     esrInv.provenance.reviewed === true && esrInv.provenance.reviewedBy === 'Nick',
     'approve marks the investigation reviewed'
@@ -448,7 +453,7 @@ console.log('\n── settings-page operations (C2) ──');
   check(ap.approvedResults.length === 1, 'its dependent new result is approved with it');
   const mm = OV.mergeCatalogue(builtin, ap.overlay, {});
   check(
-    mm.catalogue.investigations.some((i) => i.id === 'practice-esr') && mm.problems.length === 0,
+    mm.catalogue.investigations.some((i) => i.id === 'practice-zzz-fictional-test') && mm.problems.length === 0,
     'approved investigation now appears in the ACTING catalogue'
   );
   check(
@@ -471,18 +476,18 @@ console.log('\n── settings-page operations (C2) ──');
     'approving an unknown id throws'
   );
 
-  const rm = OV.removeInvestigation(builtin, imp.overlay, 'practice-esr');
+  const rm = OV.removeInvestigation(builtin, imp.overlay, 'practice-zzz-fictional-test');
   check(
-    !rm.overlay.investigations.some((i) => i.id === 'practice-esr') && rm.removedResults.length === 1,
+    !rm.overlay.investigations.some((i) => i.id === 'practice-zzz-fictional-test') && rm.removedResults.length === 1,
     'remove drops the investigation and its orphaned unreviewed result'
   );
   check(
     rm.overlay.investigations.some((i) => i.id === 'crp'),
     'other entries are untouched'
   );
-  const keep = OV.removeInvestigation(builtin, ap.overlay, 'practice-esr');
+  const keep = OV.removeInvestigation(builtin, ap.overlay, 'practice-zzz-fictional-test');
   check(
-    keep.removedResults.length === 0 && keep.overlay.results.some((r) => r.label === 'ESR'),
+    keep.removedResults.length === 0 && keep.overlay.results.some((r) => r.label === 'Zzz Fictional Test'),
     'an already-approved result is never removed with the investigation'
   );
   check(
@@ -621,19 +626,22 @@ console.log('\n── hand authoring (C3) ──');
     'a lab-specific heading is stored in a complete lab definition (shipped headings kept)'
   );
   check(OV.ownLabHeadings(inv1.overlay, e1.id)[0].text === 'Anticoagulant profile', 'ownLabHeadings reads it back');
-  check(
-    throwsWith(
-      () =>
-        OV.saveInvestigation(builtin, E, {
-          label: 'No core',
-          kind: 'blood',
-          requestAliases: [{ text: 'x', system: 'any' }],
-          members: [{ result: 'sodium', role: 'optional' }],
-        }),
-      /core member/
-    ),
-    'a blood test with no core result is refused'
-  );
+  {
+    // Downgraded to a warning 2026-09-27 (Nick): core/optional is a lab-groupHeading concept, not an
+    // investigation-member one — refusing to save here blocked the request<->group matching phase before any
+    // lab-specific detail exists yet, and did so by failing the WHOLE catalogue (buildIndex throws on any error).
+    const noCore = OV.saveInvestigation(builtin, E, {
+      label: 'No core',
+      kind: 'blood',
+      requestAliases: [{ text: 'x', system: 'any' }],
+      members: [{ result: 'sodium', role: 'optional' }],
+    });
+    const acting = OV.mergeCatalogue(builtin, noCore.overlay, { includeUnreviewed: true }).catalogue;
+    check(
+      !!noCore.overlay && LC.validateCatalogue(acting).errors.length === 0,
+      'a blood test with no core result is ACCEPTED (a warning, not a hard error) — it no longer takes the whole catalogue down to save'
+    );
+  }
   check(
     throwsWith(
       () =>
@@ -798,21 +806,22 @@ console.log('\n── hand authoring (C3) ──');
     labHeadings: [],
   });
   check(acrFix.overlay.investigations[0].kind === 'faeces', 'the sample of a built-in can be changed');
-  check(
-    throwsWith(
-      () =>
-        OV.saveInvestigation(builtin, E, {
-          id: 'bone-profile',
-          label: 'x',
-          kind: 'blood',
-          requestAliases: [],
-          members: [{ result: bone.members[0].result, role: 'optional' }],
-          labHeadings: [],
-        }),
-      /core member/
-    ),
-    'removing every core result is still refused'
-  );
+  {
+    // Downgraded to a warning 2026-09-27 (Nick) — see the matching note above.
+    const noCore2 = OV.saveInvestigation(builtin, E, {
+      id: 'bone-profile',
+      label: 'x',
+      kind: 'blood',
+      requestAliases: [],
+      members: [{ result: bone.members[0].result, role: 'optional' }],
+      labHeadings: [],
+    });
+    const acting2 = OV.mergeCatalogue(builtin, noCore2.overlay, { includeUnreviewed: true }).catalogue;
+    check(
+      !!noCore2.overlay && LC.validateCatalogue(acting2).errors.length === 0,
+      'removing every core result is ACCEPTED (a warning, not a hard error)'
+    );
+  }
   check(
     builtin.investigations.find((i) => i.id === 'urine-acr').kind === 'urine' &&
       builtin.investigations.find((i) => i.id === 'calprotectin').kind === 'faeces',
@@ -1204,6 +1213,110 @@ console.log('\n── dangling links (deleted tests must not poison a lab) ─�
   );
 }
 
+console.log('\n── applyFills leaves labs unreviewed — a scan cannot bypass the foreign-heading gate (H-087) ──');
+{
+  const LAB = 'rj700-general-pathology';
+  const o = OV.emptyOverlay();
+  const actingOf = (ov) => OV.mergeCatalogue(builtin, ov, {}).catalogue;
+  const headingLive = (ov, text) =>
+    actingOf(ov).labs.some((l) => l.id === LAB && l.groupHeadings.some((g) => g.text === text));
+
+  const withNewLab = OV.applyFills(builtin, o, {
+    labs: [{ ref: 'new-lab', newLab: { org: 'ZZZ', name: 'Zebra Path' }, headings: [] }],
+    results: [],
+    members: [],
+  }).overlay;
+  const newLab = withNewLab.labs.find((l) => l.identifiers && l.identifiers.performerOrg === 'ZZZ');
+  check(newLab && newLab.provenance.reviewed === false, 'a brand-new lab from a fill stays unreviewed');
+
+  const firstHeading = OV.applyFills(builtin, o, {
+    labs: [{ ref: LAB, headings: [{ text: 'FIRST PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  let labEntry = firstHeading.labs.find((l) => l.id === LAB);
+  check(
+    labEntry && labEntry.provenance.reviewed === false && !headingLive(firstHeading, 'FIRST PANEL'),
+    'the first heading on a builtin lab is unreviewed and is not in the acting catalogue'
+  );
+
+  const secondHeading = OV.applyFills(builtin, firstHeading, {
+    labs: [{ ref: LAB, headings: [{ text: 'SECOND PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  labEntry = secondHeading.labs.find((l) => l.id === LAB);
+  check(
+    labEntry.provenance.reviewed === false && labEntry.groupHeadings.some((g) => g.text === 'SECOND PANEL'),
+    'a further heading fill keeps the lab unreviewed'
+  );
+
+  const withMember = OV.applyFills(builtin, o, {
+    labs: [{ ref: LAB, headings: [{ text: 'ZOOM PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [{ investigation: 'crp', result: 'urate', role: 'optional' }],
+  }).overlay;
+  check(
+    withMember.labs.find((l) => l.id === LAB).provenance.reviewed === false &&
+      withMember.investigations.find((i) => i.id === 'crp').provenance.reviewed === false,
+    'the same fill leaves both the lab and the investigation awaiting review'
+  );
+
+  // A new heading enters the acting catalogue only after approveInvestigation, and only if that gate allows it.
+  // Approving the filing group alone is not enough: the heading lives on the lab, and the lab is still unreviewed.
+  let bug = OV.applyFills(builtin, o, {
+    labs: [{ ref: LAB, headings: [{ text: 'B12-STYLE PANEL', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  bug = OV.setFilingForTest(builtin, bug, 'crp', LAB, true);
+  bug = OV.approveFilingForTest(builtin, bug, 'crp', LAB, 'test', '2026-09-27');
+  check(!headingLive(bug, 'B12-STYLE PANEL'), 'approving the filing group does not put the scan heading into the acting catalogue');
+  const cascaded = OV.approveInvestigation(builtin, bug, 'crp', 'test', '2026-09-28');
+  check(
+    cascaded.approvedLabs.length === 1 && headingLive(cascaded.overlay, 'B12-STYLE PANEL'),
+    'approveInvestigation admits the heading when it identifies only this test'
+  );
+  const afterCascade = actingOf(cascaded.overlay);
+  check(
+    Array.isArray(afterCascade.filing && afterCascade.filing.groups) &&
+      afterCascade.filing.groups.some(
+        (g) => g.lab === LAB && LC.norm(g.heading) === LC.norm('B12-STYLE PANEL') && g.enabled
+      ),
+    'once the lab is approved, the filing group for that heading acts'
+  );
+
+  // A lab that already carries an unreviewed foreign heading must not become reviewed because a scan added another.
+  let poisoned = OV.sanitiseOverlay({
+    labs: [
+      {
+        id: 'evil-lab',
+        name: 'Evil Lab',
+        identifiers: { performerOrg: 'EVIL1' },
+        groupHeadings: [{ text: 'Urea and electrolytes', identifies: ['lipids'], mayContain: [] }],
+        provenance: { source: 'imported', reviewed: false },
+      },
+    ],
+  });
+  poisoned = OV.applyFills(builtin, poisoned, {
+    labs: [{ ref: 'evil-lab', headings: [{ text: 'CRP panel', identifies: ['crp'] }] }],
+    results: [],
+    members: [],
+  }).overlay;
+  check(
+    poisoned.labs[0].provenance.reviewed === false &&
+      poisoned.labs[0].groupHeadings.some((g) => g.text === 'Urea and electrolytes'),
+    'a later scan apply does not mark reviewed a lab that already has an unreviewed foreign heading'
+  );
+  const refused = OV.approveInvestigation(builtin, poisoned, 'crp', 'test', '2026-09-28');
+  check(
+    refused.approvedLabs.length === 0 &&
+      refused.overlay.labs[0].provenance.reviewed === false &&
+      !OV.mergeCatalogue(builtin, refused.overlay, {}).catalogue.labs.some((l) => l.id === 'evil-lab'),
+    'approveInvestigation still refuses the lab, so the U&E → lipids heading never enters the acting catalogue'
+  );
+}
+
 console.log('\n── approval cascade cannot activate foreign heading mappings (red-team 2026-09-20) ──');
 {
   // A crafted import adds a plausible new test plus a NEW lab whose second heading maps a "Urea and electrolytes"-style
@@ -1394,11 +1507,13 @@ console.log('\n── a note on one of a lab’s report headings (2026-09-24) �
 
 console.log('\n── adding one more request wording Medicus uses, on top of a shorter alias (2026-09-24) ──');
 {
-  const added = OV.addRequestAlias(builtin, OV.emptyOverlay(), 'ue', 'Urea and Electrolytes WITH potassium', 'any');
+  // Deliberately NOT "...WITH/WITHOUT Potassium" — those became known synonyms of 'ue' on 2026-09-26 (from the
+  // practice's own unreconciled-requests listing), so a wording tiling exercise needs a genuinely still-unknown one.
+  const added = OV.addRequestAlias(builtin, OV.emptyOverlay(), 'ue', 'Urea and Electrolytes WITH Bicarbonate', 'any');
   const merged = OV.mergeCatalogue(builtin, added, { includeUnreviewed: true }).catalogue;
   const ue = merged.investigations.find((i) => i.id === 'ue');
   check(
-    ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITH potassium') &&
+    ue.requestAliases.some((a) => a.text === 'Urea and Electrolytes WITH Bicarbonate') &&
       ue.synonyms.some((s) => s === 'electrolyte'), // the existing (legacy) synonym survives untouched
     'the new exact wording is added alongside the existing synonyms, not instead of them'
   );
@@ -1406,10 +1521,10 @@ console.log('\n── adding one more request wording Medicus uses, on top of a 
     added.investigations[0].provenance.reviewed === false,
     'the change arrives unapproved, like any other edit to a built-in test'
   );
-  const again = OV.addRequestAlias(builtin, added, 'ue', 'urea and electrolytes with potassium', 'any');
+  const again = OV.addRequestAlias(builtin, added, 'ue', 'urea and electrolytes with bicarbonate', 'any');
   check(
     OV.mergeCatalogue(builtin, again, { includeUnreviewed: true }).catalogue.investigations.find((i) => i.id === 'ue')
-      .requestAliases.filter((a) => /with potassium/i.test(a.text)).length === 1,
+      .requestAliases.filter((a) => /with bicarbonate/i.test(a.text)).length === 1,
     'adding the same wording again (case/spacing aside) is a no-op, not a duplicate'
   );
   check(

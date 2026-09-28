@@ -575,19 +575,27 @@ console.log('\n--- assisted filing for a TEST at a LAB: one switch, one approval
     state(off).enabled === false && !(acting(off).catalogue.filing && acting(off).catalogue.filing.groups),
     'switching it off turns the groups off: nothing about them acts any more'
   );
-  // the Medicus wording joins the set once changed
+  // practice-wide wording and the never-file list are NOT part of a lab's approval (H-087)
   const withScreen = OV.setFilingScreen(ap, { normalOptionText: 'Normal', fileButtonText: '' });
   check(
-    state(withScreen).pending.some((p) => p.kind === 'screen') &&
-      OV.approveFilingForTest(builtin, withScreen, LFT, LAB, 'x').filing.screen[0].provenance.reviewed === true,
-    'a changed Medicus wording is part of the approval'
+    !state(withScreen).pending.some((p) => p.kind === 'screen') &&
+      OV.approveFilingForTest(builtin, withScreen, LFT, LAB, 'x').filing.screen[0].provenance.reviewed === false,
+    'a changed Medicus wording stays unapproved when the lab is approved'
   );
-  // the practice-wide "never offer to file" list joins the set once changed too (same shape as screen)
+  check(
+    OV.approveFiling(withScreen, 'screen', OV.filingScreenKey(), 'x').filing.screen[0].provenance.reviewed === true,
+    'the wording is approved by its own approveFiling(\'screen\') call'
+  );
   const withSuppress = OV.setFilingSuppress(ap, { items: ['telephone result'] });
   check(
-    state(withSuppress).pending.some((p) => p.kind === 'suppress') &&
-      OV.approveFilingForTest(builtin, withSuppress, LFT, LAB, 'x').filing.suppress[0].provenance.reviewed === true,
-    'a changed suppress-phrase list is part of every test’s approval, the same way the Medicus wording is'
+    !state(withSuppress).pending.some((p) => p.kind === 'suppress') &&
+      OV.approveFilingForTest(builtin, withSuppress, LFT, LAB, 'x').filing.suppress[0].provenance.reviewed === false,
+    'a changed suppress-phrase list stays unapproved when the lab is approved'
+  );
+  check(
+    OV.approveFiling(withSuppress, 'suppress', OV.filingSuppressKey(), 'x').filing.suppress[0].provenance.reviewed ===
+      true,
+    'the never-file list is approved by its own approveFiling(\'suppress\') call'
   );
   // shared results: approving via another test also approves the shared range (it is one range)
   const bone = OV.filingStateForTest(merged(ap), ap, 'bone-profile', LAB);
@@ -655,7 +663,15 @@ console.log('\n--- inert on the way in, no approvals on the way out ---');
   o = OV.setFilingGroup(builtin, o, { lab: LAB, heading: 'LFTs', enabled: true, allowComments: [NOTE] });
   o = OV.setFilingScreen(o, { fileButtonText: 'File it' });
   o = OV.approveFilingForTest(builtin, o, 'lft', LAB, 'Dr Test');
-  check(all(o).length === 4 && all(o).every((e) => e.provenance.reviewed === true), 'all four kinds can be approved');
+  check(
+    o.filing.ranges[0].provenance.reviewed === true &&
+      o.filing.guards[0].provenance.reviewed === true &&
+      o.filing.groups[0].provenance.reviewed === true &&
+      o.filing.screen[0].provenance.reviewed === false,
+    'approving the lab approves its ranges, guards and groups, and leaves the practice-wide wording unapproved'
+  );
+  o = OV.approveFiling(o, 'screen', OV.filingScreenKey(), 'Dr Test');
+  check(all(o).length === 4 && all(o).every((e) => e.provenance.reviewed === true), 'the wording is approved on its own');
   check(
     all(OV.forceInert(o)).every((e) => e.provenance.reviewed === false && !('reviewedBy' in e.provenance)),
     'a restore / sync arrives with every filing approval removed'
@@ -681,6 +697,87 @@ console.log('\n--- inert on the way in, no approvals on the way out ---');
   check(
     legacyLabs.filing.screen.length === 0 && !('labs' in legacyLabs.filing),
     'the short-lived per-lab wording is ignored, not fatal'
+  );
+}
+
+console.log(
+  '\n--- Save and approve is one lab: lab B, including overrideLabFlag, stays unapproved (H-087) ---'
+);
+{
+  const LAB_B = 'other-pathology';
+  const LFT = 'lft';
+  let o = OV.sanitiseOverlay({
+    labs: [
+      {
+        id: LAB_B,
+        name: 'Other Pathology',
+        identifiers: { performerOrg: 'OTHR1' },
+        groupHeadings: [{ text: 'LFT panel', identifies: [LFT], mayContain: [] }],
+        provenance: { source: 'practice', reviewed: false },
+      },
+    ],
+  });
+  o = OV.setFilingForTest(builtin, o, LFT, LAB, true);
+  o = OV.setFilingOverrideForTest(builtin, o, LFT, LAB, true);
+  o = OV.setFilingRange(builtin, o, { ...ALP, low: 30, high: 130 });
+  o = OV.setFilingGuards(builtin, o, { result: 'alp', lab: LAB, trendMaxDeltaPct: 20 });
+  o = OV.setFilingForTest(builtin, o, LFT, LAB_B, true);
+  o = OV.setFilingOverrideForTest(builtin, o, LFT, LAB_B, true);
+  o = OV.setFilingRange(builtin, o, { result: 'alp', lab: LAB_B, code: ALP.code, low: 30, high: 130 });
+  o = OV.setFilingGuards(builtin, o, { result: 'alp', lab: LAB_B, trendMaxDeltaPct: 20 });
+  o = OV.setFilingSuppress(o, { items: ['telephone result'] });
+  o = OV.setFilingScreen(o, { normalOptionText: 'All normal' });
+  const ap = OV.approveFilingForTest(builtin, o, LFT, LAB, 'Dr A', '2026-09-28');
+  const groups = (lab) => ap.filing.groups.filter((g) => g.lab === lab);
+  check(
+    groups(LAB).length > 0 && groups(LAB).every((g) => g.provenance.reviewed === true && g.overrideLabFlag === true),
+    'the dropdown lab’s groups are approved, including overrideLabFlag'
+  );
+  check(
+    groups(LAB_B).length === 1 &&
+      groups(LAB_B)[0].provenance.reviewed === false &&
+      groups(LAB_B)[0].overrideLabFlag === true,
+    'the other lab’s group, including its overrideLabFlag, stays unapproved'
+  );
+  check(
+    ap.filing.ranges.find((r) => r.lab === LAB).provenance.reviewed === true &&
+      ap.filing.ranges.find((r) => r.lab === LAB_B).provenance.reviewed === false &&
+      ap.filing.guards.find((g) => g.lab === LAB).provenance.reviewed === true &&
+      ap.filing.guards.find((g) => g.lab === LAB_B).provenance.reviewed === false,
+    'ranges and guards are approved only at the lab that was approved'
+  );
+  check(
+    ap.filing.suppress[0].provenance.reviewed === false && ap.filing.screen[0].provenance.reviewed === false,
+    'the practice-wide never-file list and Medicus wording stay unapproved'
+  );
+  const stB = OV.filingStateForTest(inc(ap).catalogue, ap, LFT, LAB_B);
+  check(
+    stB.pending.some((p) => p.kind === 'groups') &&
+      stB.pending.every((p) => p.kind !== 'screen' && p.kind !== 'suppress') &&
+      stB.overrideLabFlag === true &&
+      stB.approved === false,
+    'lab B is still pending, and that pending set does not include screen or suppress'
+  );
+  const stA = OV.filingStateForTest(inc(ap).catalogue, ap, LFT, LAB);
+  check(stA.pending.length === 0 && stA.approved === true, 'the approved lab has nothing left pending');
+  const act = acting(ap).catalogue;
+  check(
+    act.filing.groups.some((g) => g.lab === LAB && g.overrideLabFlag === true) &&
+      !act.filing.groups.some((g) => g.lab === LAB_B),
+    'only the approved lab’s override acts'
+  );
+  const both = OV.approveFiling(
+    OV.approveFiling(ap, 'screen', OV.filingScreenKey(), 'Dr A', '2026-09-28'),
+    'suppress',
+    OV.filingSuppressKey(),
+    'Dr A',
+    '2026-09-28'
+  );
+  check(
+    both.filing.screen[0].provenance.reviewed === true &&
+      both.filing.suppress[0].provenance.reviewed === true &&
+      both.filing.groups.find((g) => g.lab === LAB_B).provenance.reviewed === false,
+    'approving the wording and the never-file list does not approve the other lab'
   );
 }
 

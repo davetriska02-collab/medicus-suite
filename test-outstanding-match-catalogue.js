@@ -421,6 +421,34 @@ console.log('\n--- wiring: manifest, defaults, options, content script ---');
   check(/sample problem/i.test(cs), 'the auto-tick toast warns about a sample problem');
 }
 
+console.log(
+  '\n--- an UNGROUPED result whose own description matches a registered heading auto-ticks the same way a grouped one does (2026-09-27, Nick) ---'
+);
+{
+  // Phase-1 fix (shared/lab-catalogue-core.js, fromInvestigationReportPayload): an ungrouped result now becomes its
+  // own one-result NAMED group, heading = its own description, instead of being discarded into a separate
+  // `ungrouped` field. This is the intended, foreseeable knock-on effect for THIS matcher: heading-based recognition
+  // has always been the highest-trust signal in resolveReport (no reference to core/role/count at all, for a
+  // normal named group) — this just extends that same, pre-existing trust rule to ungrouped results too.
+  const fx = {
+    performer: { organisationName: 'RJ700', departmentName: 'General Pathology' },
+    investigationGroups: [],
+    ungroupedResults: [
+      { description: 'Serum magnesium level', resultType: 'unit-value-result', resultValue: '0.8', resultUnit: 'mmol/L' },
+    ],
+  };
+  const report = LC.fromInvestigationReportPayload({ investigationReport: fx });
+  const res = E.matchOutstandingCatalogue(reqs(['Magnesium Blood']), report, { index, sampleDate: SAMPLE });
+  check(
+    res.ok &&
+      res.verdicts[0].confidence === 'confident' &&
+      res.verdicts[0].autoTick === true &&
+      res.verdicts[0].via === 'heading' &&
+      res.verdicts[0].investigationId === 'magnesium',
+    'an ungrouped result (no investigationGroups wrapper at all) whose own description is RJ700’s registered "Serum magnesium level" heading auto-ticks via that heading, exactly as a named group would'
+  );
+}
+
 console.log('\n--- source guards ---');
 {
   const src = fs.readFileSync(path.join(__dirname, 'engine', 'outstanding-match-catalogue.js'), 'utf8');

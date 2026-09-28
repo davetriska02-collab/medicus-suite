@@ -57,14 +57,16 @@
       <div class="av-editor-card" id="avEditorCard" role="dialog" aria-modal="true" aria-labelledby="avEditorTitle">
         <h2 id="avEditorTitle">Tile mapping</h2>
         <p class="av-editor-lead" id="avEditorLead">
-          Match whole words from the slot type, the session, or the diary name. Save once the lists look right. Until
-          then the wall does not guess.
+          Drag a slot type, a session, or a diary onto one tile. Or choose the tile under Move. Each name belongs
+          on one tile. Pattern rules stay available for names that are not in the list. The wall does not change
+          until you press Save.
         </p>
         <div id="avEditorBody"></div>
         <p class="av-editor-status" id="avEditorStatus" role="status" aria-live="polite"></p>
         <div class="av-editor-actions">
           <button type="button" class="av-btn" id="avAddTile">Add tile</button>
           <button type="button" class="av-btn" id="avResetTiles">Suggested names</button>
+          <button type="button" class="av-btn" id="avUndo" disabled>Undo</button>
           <button type="button" class="av-btn av-btn-primary" id="avSaveTiles">Save</button>
           <button type="button" class="av-btn" id="avCloseEditor">Close</button>
         </div>
