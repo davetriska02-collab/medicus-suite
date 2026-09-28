@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.267.10
+**Version:** v3.268.4
 **Generated:** 2026-09-28
 
 ## What it is
@@ -13,7 +13,7 @@ Medicus Suite is a Chrome extension that sits alongside the Medicus electronic p
 - 4 full-tab tools reached from the All-tabs menu or the command palette (Duplicate Problem Checker, Rota Manager, Contacts Management, Availability wall)
 - in-page feature groups layered onto live Medicus screens (queue chips, inline booking/task/document widgets, problem and allergy tidying tools, repeat-authorisation pills, workload tracker)
 - 8 rule types in the clinical alert engine
-- 39 built-in drug-monitoring rules (38 enabled), 89 QOF rules (16 register + 73 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
+- 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules (16 register + 66 indicator), 7 vaccine rules, 44 investigation-result threshold rules, and 39 starter alerts in the practice alert library (36 prescribing safety, 3 clinical review)
 
 ## Side-panel modules
 
@@ -108,7 +108,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
 **Full-tab tools:**
-- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 accepted (ALARP) 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481).
+- **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Set up tiles lists the slot types, sessions and diaries from the book; drag each name onto one tile (or use Move), preview the counts, then Save. Typed pattern rules remain. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 accepted (ALARP) 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481). Setup canvas addendum accepted 2026-09-28 (Dr D. Triska, CSO, GMC 6159481).
 - **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 
@@ -125,7 +125,7 @@ The Monitoring tab and Sweep both run patient data through the same rules engine
 - **Vaccine** — eligibility and due/given/declined status against seasonal or one-off schedules
 - **Composite** — combines the results of several other rules into one higher-level flag
 
-The shipped alert library carries 39 starter alerts a practice can enable (36 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 39 built-in drug-monitoring rules (38 enabled), 89 QOF rules, 7 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
+The shipped alert library carries 39 starter alerts a practice can enable (36 prescribing-safety, largely drawn from the PINCER indicator set, plus 3 clinical-review alerts), alongside 39 built-in drug-monitoring rules (38 enabled), 82 QOF rules, 7 vaccine rules, and 44 investigation-result threshold rules. Practices can also author their own rules of any type, which arrive disabled until a clinician reviews and switches them on.
 
 ## Settings & customisation
 
@@ -139,13 +139,11 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.267.10 (28 Sep)** — DM036 is age 79 and under. PRN02356 section 3.8 and NICE IND249 say 79. The p.17 summary says 70; the CSO judged that a typo on 28 Sep 2026. H-087 stays proposed and unsigned.
-- **v3.267.9 (28 Sep)** — The QOF gap work sits on the SMOK002 status fix. Advice, drugs and exception rubrics still do not clear smoking status. Decline codes still do not count as achieved. H-086 and H-087 stay proposed and unsigned.
-- **v3.267.8 (28 Sep)** — The QOF rules file is allowlisted for the NHS-number guard, because cluster concept ids can pass that checksum. No patient identifiers.
-- **v3.267.7 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. H-087 is proposed, unsigned, for CSO review.
-- **v3.267.7 (28 Sep)** — SMOK002 matches the 71-code smoking-habit list. Declined status, tobacco-use screening declined, cessation advice, referral, pharmacotherapy and nicotine dependence do not clear it. An unsuitable or informed-dissent exception hides the chip. A never-smoker-after-25 rule and a three-year ex-smoker carry-forward are follow-ups. H-086 remains proposed and unsigned.
-- **v3.267.6 (28 Sep)** — A coded note that says declined, not recorded, not appropriate, unsuitable, refused, dissent, or not indicated does not clear the indicator. Draft notes are ignored. A note is dated from recordDate. H-086 remains proposed and unsigned.
-- **v3.267.5 (28 Sep)** — Coded consultation notes (a SNOMED term filed as a note) count towards smoking status and the asthma review. SMOK002 uses the smoking-habit code cluster and ignores cessation education and referral. AST015 shows which of the four components are met and which are missing. H-086 is proposed, unsigned, for CSO review.
+- **v3.268.4 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. DM036 is age 79 and under. H-089 accepted 2026-09-28.
+- **v3.268.3 (28 Sep)** — Coded consultation notes count towards smoking status and the asthma review. SMOK002 uses the 71-code smoking-habit list and ignores cessation advice, drugs and declined or unsuitable exceptions. The asthma review needs a review code, an exacerbation count in the month before that review, and a written plan the same day. Control assessment and inhaler technique are advisory. Draft notes and exception rubrics do not clear an indicator. H-088 accepted 2026-09-28.
+- **v3.268.2 (28 Sep)** — Availability wall setup: drag each slot type, session and diary onto one tile, with a count preview and undo. Existing mappings load unchanged. H-085 setup-canvas addendum accepted 2026-09-28.
+- **v3.268.1 (28 Sep)** — Lab Filing: Save and approve covers only the lab on screen. The practice-wide Medicus wording and the never-file list have their own Approve buttons. A scan does not mark a lab reviewed. A name made only of stop-words (Blood culture, X-ray) does not take another result’s code. H-087 accepted 2026-09-28.
+- **v3.268.0 (27 Sep)** — Companion folds the Lab Filing card in. Catalogue follow-ups: ungrouped results can be matched, a blocked comment can be whitelisted, and a heading offers a setup link only when every row is the same one test. Catalogue filing stays off until the practice switches it on.
 - **v3.267.4 (27 Sep)** — Availability wall: the week columns stay inside their cards, the legend sits below them, and the time or date on a tile stays on one line at 1920×1080 and 1366×768. H-085 accepted 2026-09-27.
 - **v3.267.3 (27 Sep)** — Availability wall layout matches the triage-room mock: navy title bar with a live clock, icon tiles, a three-line legend, and seven day cards with the routine total on the right. Registrar lists stay in that total. H-085 accepted 2026-09-27.
 - **v3.267.2 (27 Sep)** — Availability wall: confirmed mapping before any tile is painted, whole-token clinic match, split poll with quiet hours, per-day freshness and a 10-minute "Not current" cap, site label, and a steady red number. H-085 accepted 2026-09-27.

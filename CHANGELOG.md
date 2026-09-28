@@ -2,29 +2,11 @@
 
 All notable changes to Medicus Suite are documented here.
 
-## [v3.267.10] — 2026-09-28
+## [v3.268.4] — 2026-09-28
 
-### DM036 age is 79 and under
+### QOF 2026/27 indicator gaps, including DM036 age 79 (H-089)
 
-The CSO set DM036 to age 79 and under on 2026-09-28, from PRN02356 section 3.8 p.36 and NICE IND249 (2025/26). The p.17 summary table says 70. The CSO judged that a typo. Age 79 is in the indicator. Age 80 is not.
-
-## [v3.267.9] — 2026-09-28
-
-### Stacked on the SMOK002 status fix
-
-This branch now includes the base-branch SMOK002 rebuild. Achievement stays the 71-code smoking-habit refset. Declined status, advice, drugs and exceptions do not clear it. The QOF gap filters stay beside that: a denied concept id never achieves, and a decline rubric never counts as the numerator. SMOK002 itself was not rebuilt again here.
-
-## [v3.267.8] — 2026-09-28
-
-### QOF rules file is a terminology allowlist
-
-`rules/qof-rules.json` is allowlisted for the NHS-number guard. Cluster concept ids are 10-digit SNOMED identifiers, and some of them pass the NHS checksum. The file has no patient identifiers.
-
-## [v3.267.7] — 2026-09-28
-
-### QOF 2026/27 red-team indicator gaps
-
-Stacked on the coded-notes work (SMOK002 and AST015 are unchanged). The rules engine honours an indicator window when one is set. A 365-day check still uses the QOF year (1 April). A different `withinDays`, or an explicit rolling, around-diagnosis, or after-anchor window, is no longer thrown away.
+The rules engine honours an indicator window when one is set. A 365-day check still uses the QOF year (1 April). A different `withinDays`, or an explicit rolling, around-diagnosis, or after-anchor window, is no longer thrown away.
 
 Blood-pressure rows that arrive as separate systolic and diastolic readings are paired, including arterial-pressure names. A same-day average beats a minimum. Home and ambulatory readings use 135/85 under 80 and 145/85 from 80. A declined, refused, dissent, or unsuitable code never counts as achieved. Informed dissent, unsuitable, and two invitations suppress the chip unless the indicator is already achieved. A Clinical Frailty Scale 6, 7, or 8 code excludes the frailty-gated targets.
 
@@ -32,41 +14,127 @@ Registers match a SNOMED concept id before the label. Stroke and TIA, PAD, CHD, 
 
 CHOL004 is LDL at or under 2.0, otherwise non-HDL at or under 2.6, and LDL wins on the same date. CHOL003 counts ezetimibe and the other named alternatives only with a statin declined, not-tolerated, or contraindicated code. AF008 needs a CHA2DS2-VASc of 2 or more, counts the DOAC brand names, and counts warfarin only after a DOAC decline or contraindication. An issue older than 183 days does not count. HF009 no longer treats metoprolol, canagliflozin, or ertugliflozin as a pillar. A DCCT % HbA1c, or a blank unit with a value under 20, does not clear an IFCC target. MH007, MH002, and DEM004 match the alcohol, care-plan, and review concept ids from the reports. AST014 is 93 days either side of diagnosis. HF008 is 183 days either side. DM014 is 279 days after a diagnosis coded in this QOF year. OB004 is 90 days after the BMI. BP002 (blood pressure in the last 5 years, age 45 and over) is on. Cervical screening and the vaccination indicators are present and off.
 
-DM036 was left at age 70 in this build; v3.267.10 sets it to 79 and under. MH011's 24-month arm is not wired. H-087 is proposed, unsigned, for CSO review.
+DM036 is age 79 and under. The CSO set that on 2026-09-28, from PRN02356 section 3.8 p.36 and NICE IND249 (2025/26). The p.17 summary table says 70. The CSO judged that a typo. Age 79 is in the indicator. Age 80 is not. MH011's 24-month arm is not wired.
 
-## [v3.267.7] — 2026-09-28
+`rules/qof-rules.json` is allowlisted for the NHS-number guard. Cluster concept ids are 10-digit SNOMED identifiers, and some of them pass the NHS checksum. The file has no patient identifiers.
 
-### SMOK002 uses the smoking-habit refset and ignores advice, drugs and exceptions
+H-089 is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6. Hazard-log document version 3.81. Drafted on the pull request as H-087; that number is the Lab Filing hazard. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
 
-SMOK002 achievement is the 71-code SMOK_COD refset (OpenCodelists tag 20260630). Current, ex and never clusters are subsets of that list. Text look-fors now include the preferred terms a short phrase used to miss, including Smoking reduced, Date ceased smoking and Cigarette pack-years.
+## [v3.268.3] — 2026-09-28
+
+### Coded journal notes for SMOK002 and AST015 (H-088)
+
+Consultation notes that carry a clinical code are read as observations, with the concept id when the payload has one. Uncoded free text is still ignored. A note marked incorrect is ignored. A draft note is not read. A note's date is its recordDate, then the observation date, then the day-group title. The migration field `created` is not used.
+
+A coded note such as "Asthma review declined", "Smoking status not recorded" or "CHA2DS2-VASc score not appropriate" contains the achievement phrase. Those rubrics no longer count. The phrases are declined, not recorded, not appropriate, unsuitable, refused, dissent, and not indicated. A concept id does not override that.
+
+SMOK002 achievement is the 71-code SMOK_COD refset (OpenCodelists tag 20260630). Current, ex and never clusters are subsets of that list. Text look-fors now include the preferred terms a short phrase used to miss, including Smoking reduced, Date ceased smoking and Cigarette pack-years. Cigarette consumption (230056004) counts, because it is in that refset. Smoking cessation education (225323000) and a cessation referral (871661000000106) do not. The newest matching date wins, so a 2022 dashboard row no longer hides last week's status.
 
 These do not clear the indicator: Declined to give smoking status (1098881000000103), Tobacco use screening declined (11351000175103), smoking-cessation advice, referral and pharmacotherapy, and Nicotine dependence. The phrase "smoking status" is no longer a look-for. A dashboard row named Smoking status is still read from its value, so Ex-smoker in that value still counts. Passive smoker stays excluded.
 
 A personalised care adjustment for smoking — patient unsuitable (716391000000109) or informed dissent (717771000000108) — hides the chip. It does not count as the status being recorded. A real in-year smoking code still counts beside either exception.
 
-Not in this build: a never-smoker code recorded after the 25th birthday carries forward, and an ex-smoker code carries forward for three years. The journal feed is about 400 days, so a three-year-old ex-smoker code is not in the feed. Both stay follow-ups.
+The asthma review is met only when all three are present: a review code from the 11-code REV_COD list, an exacerbation count dated from one month before that review through the review day, and a written plan on the same day as the review. A review on its own stays not met. Asthma control assessment and inhaler technique are shown on the detail panel as advisory. Neither blocks a green chip. An earlier draft of this change described four components; the shipped rule is the three facts above.
 
-## [v3.267.6] — 2026-09-28
+A personalised care adjustment hides the chip when the review is not already met: patient unsuitable (717291000000103), asthma monitoring declined (763221007), informed dissent (716491000000100), or two asthma invitations at least 7 days apart. A completed review still counts beside any of those. Children under 5 are excluded. The asthma register now also excludes the preferred term "Asthma resolved".
 
-### Exception rubrics do not clear a QOF indicator
-
-A coded note such as "Asthma review declined", "Smoking status not recorded" or "CHA2DS2-VASc score not appropriate" contains the achievement phrase. Those rubrics no longer count. The phrases are declined, not recorded, not appropriate, unsuitable, refused, dissent, and not indicated. A concept id does not override that.
-
-A draft note is not read. A note's date is its recordDate. The migration field `created` is not used.
+The echo abbreviation on HF008 is a whole word, so a note containing "cigarette" or "written" does not clear it.
 
 The journal parser still keeps about 400 days. SMOK002 and AST015 use the QOF year, from 1 April, which sits inside that window. The wording "preceding 12 months" therefore behaves as "since 1 April", the same as QOF payment. Sweep and the Triage Lens monitoring chip do not run this journal read. Only the live patient evaluation does. That is a follow-up.
 
-## [v3.267.5] — 2026-09-28
+Not in this build: a never-smoker code recorded after the 25th birthday carries forward, and an ex-smoker code carries forward for three years. The journal feed is about 400 days, so a three-year-old ex-smoker code is not in the feed. Both stay follow-ups.
 
-### Coded journal notes count for SMOK002 and AST015
+H-088 is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6. Hazard-log document version 3.80. Drafted on the pull request as H-086; that number stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
 
-Consultation notes that carry a clinical code are now read as observations, with the concept id when the payload has one. Uncoded free text is still ignored. A note marked incorrect is ignored.
+## [v3.268.2] — 2026-09-28
 
-SMOK002 matches the NHS SMOK_COD smoking-habit refset (71 concept ids, OpenCodelists 20241205) plus status rubrics. Cigarette consumption (230056004) counts, because it is in that refset. Smoking cessation education (225323000) and a cessation referral (871661000000106) do not. The newest matching date wins, so a 2022 dashboard row no longer hides last week's status.
+### Drag appointment types onto availability tiles
 
-AST015 is four components: an asthma review, a control assessment, an exacerbation count (from one calendar month before the review through that day), and a written plan on the same day as the review. The detail panel names which are met and which are missing. Inhaler technique is in the published wording and is not a fifth group in this build (H-086, unsigned, for CSO review).
+Set up tiles is a canvas. Slot types, sessions and diaries from the appointment book are listed once, with a search and a count of upcoming free slots. Drag a name onto a tile, or choose the tile under Move. Each name belongs on one tile. Dragging it back, or Remove, takes it off. A name already saved on two tiles stays there until it is moved, and the canvas says only the earlier tile is counted.
 
-The echo abbreviation on HF008 is a whole word, so a note containing "cigarette" or "written" does not clear it.
+Pattern rules are still there for a word that should match many names. Opening the canvas does not rewrite a saved mapping. The counts you would get are shown before Save. Undo puts the last change back. Nothing is written until Save.
+
+H-085 setup-canvas addendum is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6. Hazard-log document version 3.79. The wall is still read-only. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
+## [v3.268.1] — 2026-09-28
+
+### Lab Filing: an approval stays on the lab that is on screen (H-087)
+
+- **Save and approve, and the per-lab Approve button, stamp only the lab chosen in the dropdown.** Practice-wide Medicus wording and the never-file list have their own Approve buttons. They are no longer part of every lab’s pending set, so approving one lab cannot approve another lab’s ranges, guards, or `overrideLabFlag`.
+- **The page no longer says filing does not read this.** Catalogue filing has read an approved range, guard, report group and comment list since v3.264.35. The filing engine still ships off until the practice switches it on.
+- **An empty token set is not a name.** “Blood culture” and “X-ray” both lose every word to the stop-list, and those empty sets used to compare equal, so one row’s SNOMED code could be stored on the other result. Empty sets never match. The same normalised name still does (“Culture” stays the Culture result).
+- **A scan apply writes unreviewed lab entries.** A heading enters the acting catalogue only after `approveInvestigation`, and only when that function’s foreign-heading gate allows it. This reverses the unreleased note below that marked a scan-touched lab `reviewed: true` at once. A filing group approved on its own does not pull an unreviewed heading in. A heading that maps a wording onto a different test still cannot ride in.
+- **A blocked heading offers a setup link only when every row resolves by code to the same one investigation.** An uncoded row, an unknown code, or a code shared by two tests offers no link. Filing stays blocked either way.
+- **The filing card still resets its catalogue cache before `scheduleEval()`.** `scheduleEval()` does nothing while the tab is hidden. The visibility handler depends on that cache reset.
+- **H-087 is accepted (ALARP) — CSO signed off 2026-09-28 (Dr D. Triska, CSO, GMC 6159481, approved on merge go) at residual 6.** Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
+## [v3.268.0] — 2026-09-27
+
+### Companion: Lab Filing folded in (stage 1)
+
+- The standalone "Lab Filing" card is being folded into the general-purpose Companion widget for a
+  consistent, moveable/minimisable UI. Stage 1: the header, subtitle, blocked-reasons list and
+  outstanding-request-match affordance now render inside Companion instead of their own floating
+  card — `lab-file-button.js` keeps 100% of the computation/write logic and simply publishes state
+  for Companion to render; the outstanding-request candidates mark items directly in the existing
+  "OUTSTANDING INVESTIGATIONS" list rather than duplicating it in a second box. Stage 2 (comment
+  whitelist boxes, File buttons, the toast) is still to come.
+
+### Lab Result Catalogue fixes
+
+- **An ungrouped result (e.g. AST arriving alone, with no `investigationGroups` wrapper at all) is
+  no longer invisible to the "Match requests to lab reports" scan.** `fromInvestigationReportPayload`
+  discarded ungrouped results into a field nothing read; a new `groupHeading` field (kept deliberately
+  separate from the existing `specimen` field, which many consumers already treat as "unknown
+  specimen type, never block") carries the result's own name for an ungrouped result, so it now
+  surfaces as its own group and can be matched/filed like any named one.
+- **The manual "add to a test" dropdown no longer hides matches by guessed kind.** A person picking
+  an explicit match for an unlinked report group was silently filtered to only same-kind
+  investigations (e.g. a genuinely-compatible "Urine MC&S" microbiology match was hidden under a
+  "urine" guess) — kind now only ranks/labels candidates, never gates them, matching the rule that
+  code/heading matches must never be text- or kind-gated.
+- **A test with no core member is now a warning, not a hard validation error.** Core/optional is a
+  concept that belongs at the lab-groupHeading level, not the investigation level; a test genuinely
+  awaiting its core result no longer blocks the whole catalogue build.
+- **A scan-imported heading stays unreviewed until the test is approved.** An earlier draft of this
+  section marked the lab `reviewed: true` as soon as the scan was applied, so the heading (and any
+  other heading already on that lab) entered the acting catalogue without `approveInvestigation`’s
+  foreign-heading check. That does not ship. See v3.268.1. Backup-restore and practice-profile sync
+  still arrive `reviewed: false` (H-073).
+- Investigations page: request wordings and synonyms brought up to date (requestAliases/synonyms
+  data fix), and Free T3 / Free T4 split out as their own separately-requested tests rather than
+  bundled members of Thyroid function.
+
+### Lab Filing on the Lab Result Catalogue — live-caught follow-ups to the E2 cutover
+
+- **A blocked comment now offers a whitelist checkbox even when its test has no assisted-filing setup at all.**
+  The comment-whitelist offer used to run through the same per-heading loop that decides whether to file, which
+  skips a group entirely once it isn't approved+enabled — so a result whose test had never been set up got the
+  baseline "carries a comment the suite cannot score" blocker with nowhere on the card to act on it. It's now
+  computed separately, keyed off each heading's own `allowComments` (never a hardcoded "nothing is ever allowed"),
+  and a comment already whitelisted-and-approved stops being re-offered every single poll.
+- **A blocked card for a group-not-approved heading offers "Set up on Investigations page"** only when every
+  row resolves by code to the same one investigation (an uncoded row, an unknown code, or a shared code offers
+  no link — see v3.268.1). The link goes via the service worker, since a content script's own `window.open()` to
+  a `chrome-extension://` URL is blocked outright on Edge, onto that test's Review screen, scrolled to its
+  assisted-filing bar.
+- **The full blocked-reasons list is now available inline** (a collapsed `<details>` under the truncated summary
+  line) instead of only via a hover tooltip, which was easy to miss and unusable on a touch device.
+- **A storage-driven cache reset on the Lab Filing card now also re-runs the gate.** Approving a comment or an
+  assisted-filing setup on the Investigations page (a separate tab) fired the cache-invalidating storage event, but
+  nothing then re-evaluated the card — it could sit showing the pre-approval blocked state indefinitely.
+- **Investigations page: "Review" and "Edit" collapsed into one entry point**, and "Approve" became "Save and
+  approve", which settles this test's wordings/results/codes and assisted filing for the lab on screen (other
+  labs, and the practice-wide wording and never-file list, stay on their own Approve — see v3.268.1). Previously,
+  approving required reopening the identical screen a second time.
+- **A result's `interpretation` field auto-restating "Above/below reference range"** (Medicus generates this
+  whenever the numeric flag is set) no longer triggers a false "carries a comment" blocker or whitelist offer — it
+  restates a flag the gate already reads directly, not clinician-written comment content.
+- **Imaging and microbiology name-similarity false positives fixed**: modality words ("x", "ray", "radiography")
+  and "culture"/"ratio" (plural and singular) are now stripped before comparing result names, so e.g. every X-ray
+  stopped being suggested as similar to every other X-ray, and "Cholesterol/HDL ratio" to "Urine
+  albumin:creatinine ratio".
+- Catalogue coverage additions in `rules/lab-catalogue.json`.
 
 ## [v3.267.4] — 2026-09-27
 

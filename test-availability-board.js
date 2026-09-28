@@ -880,8 +880,10 @@ function session(service, entries, extra) {
     'author display does not keep the setup overlay up while it is hidden'
   );
   check(
-    /\.av-editor-card\s*\{[^}]*max-height:\s*100%/.test(css) && /#avEditorBody\s*\{[^}]*overflow:\s*auto/.test(css),
-    'the setup card fits the viewport and the tile list scrolls inside it'
+    /\.av-editor-card\s*\{[^}]*max-height:\s*100%/.test(css) &&
+      /#avEditorBody\s*\{[^}]*overflow:\s*hidden/.test(css) &&
+      /\.av-palette,\s*\.av-pots\s*\{[^}]*overflow:\s*auto/.test(css),
+    'the setup card fits the viewport and the canvas scrolls inside it'
   );
   check(wall.includes('KEYS.availabilityWall'), 'the page reads the pack');
   check(

@@ -169,6 +169,14 @@ console.log('\n--- roleShows ---');
   check(!clinicPractice.due && !clinicPractice.book, 'clinic practice page: no due/book without a patient pin');
   const recPractice = role.roleShows('reception', 'practice');
   check(recPractice.desk && recPractice.slots && !recPractice.due, 'reception practice: desk + slots only');
+
+  // labFile (Companion fold-in stage 1, 2026-09-27): unlike `record`, this must NOT exclude Nursing or Triage —
+  // the standalone Lab Filing card it moved from was never role-gated, and any role reviewing an investigation-
+  // result task can be the one filing it.
+  check(nurseRec.labFile, "nursing record: Lab Filing shows (deliberately NOT gated the same way as `record`)");
+  check(triageTask.labFile, 'triage task: Lab Filing shows (same reasoning)');
+  check(clinicTask.labFile && recTask.labFile, 'clinic and reception also see Lab Filing on a task page');
+  check(!clinicPractice.labFile, 'no patient pinned (practice page) -> Lab Filing does not show either');
 }
 
 console.log('\n--- deskFromPayloads is honest ---');

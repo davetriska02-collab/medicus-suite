@@ -387,8 +387,10 @@
       return {
         name: null,
         match: group,
+        exact: undefined,
         exclude: undefined,
         snomed: undefined,
+        advisory: false,
         sameDayAs: null,
         anchor: null,
         withinMonthsBefore: null,
@@ -398,8 +400,10 @@
       return {
         name: group.name || null,
         match: group.match,
+        exact: group.exact,
         exclude: group.exclude,
         snomed: group.snomed,
+        advisory: !!group.advisory,
         sameDayAs: group.sameDayAs || null,
         anchor: group.anchor || null,
         withinMonthsBefore: group.withinMonthsBefore == null ? null : group.withinMonthsBefore,
@@ -408,8 +412,10 @@
     return {
       name: null,
       match: [],
+      exact: undefined,
       exclude: undefined,
       snomed: undefined,
+      advisory: false,
       sameDayAs: null,
       anchor: null,
       withinMonthsBefore: null,
@@ -577,9 +583,16 @@
       if (!keepExceptions && observationTextIsException(text)) return false;
       if (observationIsDecline(obs, testSpec)) return false;
       if (testSpec.snomed && obs.code && testSpec.snomed.includes(String(obs.code))) return true;
-      if (text && Array.isArray(testSpec.match)) {
+      if (text && (Array.isArray(testSpec.match) || Array.isArray(testSpec.exact))) {
         const obsLower = text.toLowerCase();
-        if (!testSpec.match.some((m) => observationTermHits(obsLower, m))) return false;
+        const substrHit =
+          Array.isArray(testSpec.match) && testSpec.match.some((m) => observationTermHits(obsLower, m));
+        // exact: the whole rubric, so "asthma monitoring" does not also match
+        // "Asthma monitoring call first letter".
+        const exactHit =
+          Array.isArray(testSpec.exact) &&
+          testSpec.exact.some((m) => obsLower.trim() === String(m || '').toLowerCase().trim());
+        if (!substrHit && !exactHit) return false;
         // The wrapper's own name is "Smoking status". That phrase is a SMOK002
         // exclude so it cannot hit "Declined to give smoking status". Do not
         // apply that one exclude to the wrapper row; the value still has to
@@ -1386,7 +1399,16 @@
       });
     } else if (check.kind === 'observation-bundle') {
       (ctx.bundleResults || []).forEach((r) => {
-        if (r.name) {
+        if (r.advisory && r.name) {
+          facts.push({
+            label: r.name,
+            value: 'advisory',
+            date: r.inWindow && r.obs ? r.obs.date : null,
+            detail: r.inWindow
+              ? `${(r.obs && r.obs.name) || 'recorded'} — does not block achievement`
+              : 'not recorded — does not block achievement',
+          });
+        } else if (r.name) {
           facts.push({
             label: r.name,
             value: r.inWindow ? 'met' : 'missing',
@@ -3359,14 +3381,18 @@
         if (!constrained) {
           const obs = findLatestObservation(data.observations, {
             match: aliases,
+            exact: spec.exact,
             exclude: spec.exclude,
             snomed: spec.snomed,
           });
-          if (!obs || !obs.date) return { name: spec.name, aliases, obs: null, inWindow: false, detail: null };
-          return { name: spec.name, aliases, obs, inWindow: inAchievementWindow(obs), detail: null };
+          if (!obs || !obs.date) {
+            return { name: spec.name, aliases, obs: null, inWindow: false, detail: null, advisory: spec.advisory };
+          }
+          return { name: spec.name, aliases, obs, inWindow: inAchievementWindow(obs), detail: null, advisory: spec.advisory };
         }
         const matches = filterMatchingObservations(data.observations, {
           match: aliases,
+          exact: spec.exact,
           exclude: spec.exclude,
           snomed: spec.snomed,
         }).filter((o) => isoDay(o.date));
@@ -3376,6 +3402,7 @@
           obs: null,
           inWindow: false,
           detail: null,
+          advisory: spec.advisory,
           _matches: matches,
           _spec: spec,
         };
@@ -3425,9 +3452,12 @@
         delete r._matches;
         delete r._spec;
       });
-      const metCount = bundleResults.filter((r) => r.inWindow).length;
-      const totalCount = bundleResults.length;
-      const named = bundleResults.some((r) => r.name);
+      // advisory groups (AST015 control assessment and inhaler technique) are
+      // shown on the panel and do not count toward achievement.
+      const requiredResults = bundleResults.filter((r) => !r.advisory);
+      const metCount = requiredResults.filter((r) => r.inWindow).length;
+      const totalCount = requiredResults.length;
+      const named = requiredResults.some((r) => r.name);
       if (check.requireAll) {
         if (metCount === totalCount && totalCount > 0) status = 'achieved';
         else if (metCount === 0) status = 'no_data';
@@ -3441,7 +3471,7 @@
       if (status === 'no_data' && rule.treatNeverRecordedAsOverdue && evidenceCtx.registerEligibilityDate) {
         if (indicatorWindowClosed(rule, check, evidenceCtx.registerEligibilityDate, now)) status = 'overdue';
       }
-      const missingNames = bundleResults.filter((r) => r.name && !r.inWindow).map((r) => r.name);
+      const missingNames = requiredResults.filter((r) => r.name && !r.inWindow).map((r) => r.name);
       valueText = named
         ? `${metCount}/${totalCount} components${missingNames.length ? ` (missing: ${missingNames.join(', ')})` : ''}`
         : `${metCount}/${totalCount} care processes`;

@@ -136,6 +136,7 @@ function baseCatalogue() {
           { text: 'TSH', identifies: ['tft'] },
         ],
       },
+      { id: 'laby', name: 'Lab Y', identifiers: { performerOrg: 'LABY' } },
     ],
   };
 }
@@ -189,7 +190,56 @@ console.log('\n--- validateCatalogue ---');
   );
   check(
     /already claimed by result "alt"/.test(mut((c) => c.results.push(res('alt2', 'ALT two', '1018251000000107')))),
-    'a concept claimed by two results is rejected'
+    'a concept claimed by two results is rejected (both unscoped — unaffected by lab-scoped codes below)'
+  );
+  // Lab-scoped codes (2026-09-26, Nick, live-caught): two different labs genuinely using the SAME SNOMED concept
+  // for two different analytes (RJ700's blood WBC vs a hospital lab's urine white-cell count).
+  check(
+    mut((c) =>
+      c.results.push({
+        id: 'alt2',
+        label: 'ALT two',
+        valueKind: 'numeric',
+        codes: [{ conceptId: '1018251000000107', role: 'primary', lab: 'laby' }],
+        aliases: [{ text: 'alt two' }],
+      })
+    ) === '',
+    'an unscoped code (result "alt") and a lab-scoped code for a DIFFERENT result are allowed to share a conceptId — the override only applies at that one lab'
+  );
+  check(
+    /already claimed by result "alt2".*lab "laby"|lab "laby".*already claimed by result "alt2"/.test(
+      mut((c) => {
+        c.results.push({
+          id: 'alt2',
+          label: 'ALT two',
+          valueKind: 'numeric',
+          codes: [{ conceptId: '1018251000000107', role: 'primary', lab: 'laby' }],
+          aliases: [{ text: 'alt two' }],
+        });
+        c.results.push({
+          id: 'alt3',
+          label: 'ALT three',
+          valueKind: 'numeric',
+          codes: [{ conceptId: '1018251000000107', role: 'primary', lab: 'laby' }],
+          aliases: [{ text: 'alt three' }],
+        });
+      })
+    ),
+    'two results both scoped to the SAME lab for the same conceptId is still rejected'
+  );
+  check(
+    /lab "not-a-real-lab" is not a known lab/.test(
+      mut((c) =>
+        c.results.push({
+          id: 'alt2',
+          label: 'ALT two',
+          valueKind: 'numeric',
+          codes: [{ conceptId: '999999998', role: 'primary', lab: 'not-a-real-lab' }],
+          aliases: [{ text: 'alt two' }],
+        })
+      )
+    ),
+    "a code's lab must name a lab that actually exists"
   );
   check(
     /conceptId must be digits/.test(mut((c) => (c.results[0].codes[0].conceptId = 'abc'))),
@@ -212,15 +262,23 @@ console.log('\n--- validateCatalogue ---');
     'anchor on a non-core member is rejected'
   );
   check(
-    /needs at least one member/.test(mut((c) => (c.investigations[3].members = []))),
-    'a blood investigation with no members is rejected'
+    mut((c) => (c.investigations[3].members = [])) === '',
+    'a blood investigation with no members is ACCEPTED (2026-09-26, Nick) — a genuine "no results yet" gap ' +
+      '(findGaps already flags it, same as imaging/procedure), not something that should force a fabricated ' +
+      'placeholder result just to pass validation (the urine-mcs incident)'
   );
-  check(
-    /needs at least one core member/.test(
-      mut((c) => (c.investigations[0].members = [{ result: 'alp', role: 'shared' }]))
-    ),
-    'an investigation with no core member is rejected'
-  );
+  {
+    // Downgraded to a warning 2026-09-27 (Nick): core/optional belongs to a lab's groupHeading, not the
+    // investigation's member list — a hard error here failed the WHOLE catalogue (buildIndex throws on any
+    // error), not just this investigation, blocking request<->group matching before any lab-specific detail exists.
+    const noCoreCat = baseCatalogue();
+    noCoreCat.investigations[0].members = [{ result: 'alp', role: 'shared' }];
+    const noCore = LC.validateCatalogue(noCoreCat);
+    check(
+      noCore.errors.length === 0 && noCore.warnings.some((x) => /has no core member yet/.test(x)),
+      'an investigation with no core member is a WARNING, not an error — it does not fail the catalogue to load'
+    );
+  }
   check(
     /mayContain entries must be/.test(mut((c) => (c.labs[0].groupHeadings[0].mayContain = ['lft']))),
     'un-prefixed mayContain is rejected (inv:/res: required)'
@@ -634,7 +692,7 @@ console.log('\n--- fromInvestigationReportPayload ---');
   const a = LC.fromInvestigationReportPayload(payload);
   check(a.lab.organisation === 'RJ700' && a.lab.department === 'General Pathology', 'performer org/department carried');
   check(
-    a.groups.length === 1 && a.groups[0].heading === 'Bone profile' && a.groups[0].specimenType === 'Blood',
+    a.groups.length === 2 && a.groups[0].heading === 'Bone profile' && a.groups[0].specimenType === 'Blood',
     'group heading and specimen TYPE carried'
   );
   check(
@@ -645,7 +703,13 @@ console.log('\n--- fromInvestigationReportPayload ---');
     a.groups[0].results[1].hasNumericValue === false && a.groups[0].results[1].resultType === 'text-result',
     'a text result is not a numeric value'
   );
-  check(a.ungrouped[0].hasNumericValue === false, 'an empty resultValue is not a value');
+  check(
+    a.ungrouped.length === 0 &&
+      a.groups[1].heading === 'Magnesium' &&
+      a.groups[1].specimenType === null &&
+      a.groups[1].results[0].hasNumericValue === false,
+    'an ungrouped result becomes its own one-result group, heading = its own description; an empty resultValue is not a value; the legacy `ungrouped` field is always empty from this adapter now'
+  );
   check(
     a.groups[0].results[0].refLow === 30 && a.groups[0].results[0].refHigh === 130,
     "the lab's own reference range is read as numbers (a constant of the analyte, not this patient's value)"
@@ -661,8 +725,62 @@ console.log('\n--- fromInvestigationReportPayload ---');
   );
   check(LC.fromInvestigationReportPayload(null).groups.length === 0, 'null payload -> empty report, no throw');
   check(
-    LC.fromInvestigationReportPayload({ investigationReport: payload.data.investigationReport }).groups.length === 1,
+    LC.fromInvestigationReportPayload({ investigationReport: payload.data.investigationReport }).groups.length === 2,
     'accepts { investigationReport } as well as { data: { … } }'
+  );
+}
+
+console.log('\n── resolveByCode: lab-scoped codes (2026-09-26, Nick, live-caught) ──');
+{
+  const cat = baseCatalogue();
+  cat.results.push({
+    id: 'urine-white-cells',
+    label: 'White cells (urine)',
+    valueKind: 'text',
+    codes: [{ conceptId: '1018251000000107', role: 'primary', lab: 'laby' }], // reuses ALT's own conceptId, scoped
+  });
+  const index = LC.buildIndex(cat);
+  check(
+    LC.resolveByCode(index, '1018251000000107', 'labx').resultId === 'alt',
+    'a lab NOT carrying the scoped override still gets the unscoped default result'
+  );
+  check(
+    LC.resolveByCode(index, '1018251000000107', 'laby').resultId === 'urine-white-cells',
+    'the lab the code IS scoped to gets its own override — deterministic, never a guess'
+  );
+  check(
+    LC.resolveByCode(index, '1018251000000107', null).resultId === 'alt',
+    'no lab known at all falls back to the unscoped default'
+  );
+  check(LC.resolveByCode(index, '0000000001', 'labx') === null, 'an unknown code resolves to null');
+  const onlyScoped = LC.buildIndex({
+    ...baseCatalogue(),
+    results: [
+      ...baseCatalogue().results,
+      {
+        id: 'scoped-only',
+        label: 'Scoped only',
+        valueKind: 'text',
+        codes: [{ conceptId: '888888887', role: 'primary', lab: 'laby' }],
+      },
+    ],
+  });
+  check(
+    LC.resolveByCode(onlyScoped, '888888887', 'labx') === null,
+    'a code that ONLY exists scoped to a different lab, with no unscoped default anywhere, resolves to null at any other lab — never guesses which result it might mean'
+  );
+  // The full pipeline, not just the unit: a Kingston-style report reusing RJ700's own WBC concept for a urine
+  // result must attribute to the urine test, never silently merge into the unrelated blood one.
+  const idx2 = LC.buildIndex(baseCatalogue());
+  const report = {
+    lab: { organisation: 'LABY' },
+    groups: [{ heading: 'Unregistered heading', results: [rr({ name: 'ALT', code: '1018251000000107' })] }],
+    ungrouped: [],
+  };
+  const resolved = LC.resolveReport(idx2, report);
+  check(
+    resolved.resolvedResultIds.includes('alt'),
+    'end-to-end: with no lab-scoped override registered, the shared code still resolves normally through the full report pipeline'
   );
 }
 
