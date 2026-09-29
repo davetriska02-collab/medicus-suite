@@ -99,8 +99,8 @@ check('a quoted path after an allowlisted file is still scanned', () => {
 
 check('an unparsed path does not inherit an allowlist exemption', () => {
   const diff = [
-    'diff --git a/rules/document-types.json b/rules/document-types.json',
-    '+++ b/rules/document-types.json',
+    'diff --git a/rules/qof-rules.json b/rules/qof-rules.json',
+    '+++ b/rules/qof-rules.json',
     '@@ -1 +1 @@',
     '+1111111111',
     'diff --git a/next b/next',

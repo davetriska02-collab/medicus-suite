@@ -4780,8 +4780,8 @@
   }
 
   // ── Scan + re-injection ───────────────────────────────────────────────────────
-  // Same discipline as the other inline widgets (document-file-inline.js,
-  // task-inline.js): re-check on every mutation tick since Vue re-renders
+  // Same discipline as the other inline widgets (document-codes-to-problems.js,
+  // task-actions-panel.js): re-check on every mutation tick since Vue re-renders
   // strip foreign nodes, throttled, own-mutation-filtered.
 
   var _lastPatientId = null;

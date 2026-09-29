@@ -140,9 +140,8 @@
   }
 
   // data.data.patient.id / data.data.patientId / data.patient.id /
-  // data.patientId — same four-way fallback chain as
-  // document-file-inline.js's patientIdFromOverview / task-inline.js's
-  // resolvePatientId, since different task types nest this differently.
+  // data.patientId — four-way fallback, since different task types nest
+  // the patient id differently.
   function patientIdFromOverview(data) {
     return (
       (data && data.data && data.data.patient && data.data.patient.id) ||
@@ -336,8 +335,9 @@
   }
 
   // Layout helpers (pure) — default dock is top-right so it does not sit on
-  // the document-file chip ("Save as document") or Medicus File document.
-  // Nudge is used when those controls are on-screen and still overlap.
+  // Medicus's own File / Save as document control. Nudge is used when that
+  // control is on-screen and still overlaps. The suite's own Save as document
+  // chip was removed in v3.268.7.
   function isFileDocumentButtonLabel(text) {
     var t = String(text == null ? '' : text)
       .replace(/\s+/g, ' ')
@@ -615,9 +615,6 @@
       if (r.width < 4 || r.height < 4) return;
       out.push({ left: r.left, top: r.top, width: r.width, height: r.height });
     }
-    // The suite's own "Save as document" chip/form — this is the control
-    // Nick's panel was covering (document-file-inline.js).
-    document.querySelectorAll('.ms-df-chip, .ms-df-chip-wrap, #ms-df-widget, #ms-df-widget .ms-df-btn').forEach(addEl);
     var nodes = document.querySelectorAll('button, [role="button"], a.q-btn, .q-btn');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];

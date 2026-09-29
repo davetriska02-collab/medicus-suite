@@ -2,6 +2,30 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.7] — 2026-09-29
+
+### Save attachment as document removed
+
+Medicus now files a patient-submitted photo or other attachment onto the record itself, so the suite's "Save as document" chip is gone.
+
+Removed:
+
+- `content-scripts/document-file-inline.js` and `content-scripts/document-file-inline.css` (the chip, the form, and the `POST /clinical/document/create` write)
+- `rules/document-types.json` (the bundled SNOMED document-type picklist, used only by that widget)
+- `test-document-file-inline.js`
+- The manifest content-script, stylesheet, and web-accessible-resource entries for those files
+- `window.__msTriageAttachments` and `window.__msTaskCreatedDate`, which only that widget read. The attachment-count chip (`detail.attachments`) still counts files on the request.
+
+Kept:
+
+- `scripts/document-create-capture.js` (other discovery notes reuse the capture tool)
+- The attachment scan in `content-scripts/triage-lens/content.js` (the count chip)
+- The codes-to-problems panel's nudge off a Medicus button labelled File or Save as document. The suite's own `.ms-df-chip` selectors are gone.
+
+There was no Options toggle, practice-pack flag, or shipped `chrome.storage` key. Saved-this-visit state lived in the content-script closure only. Startup still removes `documentFile.enabled` and `documentFile.config` if a workstation has them, so a leftover cannot be read as a live setting.
+
+H-063 (the "possibly already saved" hint) is retired with the feature. The CSO signed off that retirement on 2026-09-29 (Dr D. Triska, CSO, GMC 6159481). Hazard-log document version 3.87. Clinical safety notice document version 3.100 (W6 retired; the number is not reused). H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.6] — 2026-09-29
 
 ### Lifetime one-off vaccines read the whole immunisation history (H-091)

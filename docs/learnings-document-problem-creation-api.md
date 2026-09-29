@@ -21,7 +21,7 @@ only edits an existing one via `edit-problem`/`{problemId}`.
 ### 1. Document-filing task overview — `GET /tasks/data/document/overview/{taskUuid}`
 
 Same shape as every other `/tasks/data/{typeSlug}/overview/{taskUuid}` call
-already used by `task-inline.js`/`document-file-inline.js`/
+already used by the task-overview readers (`task-inline.js`; `document-file-inline.js` until it was removed in v3.268.7)/
 `booking-inline.js` — called bare, no query string needed (the
 `?viewContext=...&statuses[]=...` seen in the capture is the page's own
 list-context breadcrumb, confirmed non-required by the established
