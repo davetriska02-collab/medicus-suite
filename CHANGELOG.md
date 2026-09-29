@@ -12,11 +12,11 @@ The journal parser keeps about 400 days. On 29 Sep 2026 the RSV dose (25 Sep 202
 
 The RSV given stems did not match "Administration of RSV (respiratory syncytial virus) vaccine". The parenthetical sits between "RSV" and "vaccine", and between "respiratory syncytial virus" and "vaccine". The stem "administration of rsv" matches that concept. "Pneumococcal vaccination given" already matched; the window was the only reason that chip stayed due.
 
-A pneumococcal dose given before 65 counts for the routine 65+ one-off. The 2002 dose was given at age 56. Green Book chapter 25 is one dose for most adults, and a PPV23 dose already on the record still counts. No shipped rule requires the dose to have been given at or after 65. Five-year revaccination for asplenia, splenic dysfunction and CKD stays unencoded. This policy is pending CSO review.
+A pneumococcal dose given before 65 counts for the routine 65+ one-off. The 2002 dose was given at age 56. Green Book chapter 25 is one dose for most adults, and a PPV23 dose already on the record still counts. No shipped rule requires the dose to have been given at or after 65. Five-year revaccination for asplenia, splenic dysfunction and CKD stays unencoded. The CSO accepted this policy on 2026-09-29.
 
 Invitation, offer, text-message-sent and situation concepts still do not count as a dose. A coded note older than 400 days is still ignored. A recent coded smoking note still counts.
 
-H-091 is proposed. CSO sign-off is blank. Hazard-log document version 3.84. Clinical safety notice document version 3.97. H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+H-091 is accepted (ALARP) — CSO signed off 2026-09-29 (Dr D. Triska, CSO, GMC 6159481) at residual 6. Hazard-log document version 3.85. Clinical safety notice document version 3.98. H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
 
 ## [v3.268.5] — 2026-09-29
 

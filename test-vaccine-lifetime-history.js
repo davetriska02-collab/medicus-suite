@@ -16,7 +16,7 @@
 //      already contains "pneumococcal vaccination", so the matcher was not
 //      why that chip stayed due.
 //
-// Policy (pending CSO review, H-091): a single pneumococcal dose at any age
+// Policy (CSO signed 2026-09-29, H-091): a single pneumococcal dose at any age
 // satisfies the routine 65+ one-off. This dose was given at age 56, before
 // the 65th birthday. Green Book chapter 25 is one dose for most adults.
 // No shipped rule requires the dose to have been given at or after 65.
