@@ -1231,16 +1231,15 @@
     // attachment as a plain <button> labelled with the filename and NO href at
     // all — the real download id/URL only exists in that task's overview API
     // response, not the DOM (docs/learnings-triage-attachment-to-document.md
-    // §8). Record these with href:'' so a consumer (document-file-inline.js)
-    // knows a real download identifier still needs resolving via that API
-    // call, rather than silently dropping a genuine attachment.
+    // §8). Record these with href:'' so the attachment-count chip still sees
+    // a real file rather than silently dropping it. The save-as-document
+    // widget that used to resolve the download was removed in v3.268.7.
     const unresolved = [...document.querySelectorAll('button')]
       .filter(b => ATTACHMENT_EXT_RE.test((b.textContent || '').trim()))
       .map(b => ({ href: '', filename: (b.textContent || '').trim() }));
     // Dedupe by filename — the same attachment can legitimately appear twice
     // in the DOM/API response (communicationThread's patientRequest vs
-    // operativeChannel duplication, already confirmed at the API layer —
-    // see findAttachmentsInOverview in document-file-inline.js).
+    // operativeChannel duplication, already confirmed at the API layer).
     const seen = new Set();
     return linked.concat(unresolved).filter(a => {
       if (seen.has(a.filename)) return false;
@@ -1748,33 +1747,10 @@
     const rel = r['Relationship to patient'];
     if (rel && !/self/i.test(rel)) pushOut('detail.proxy', { relationship: rel });
 
-    // Attachments — window.__msTriageAttachments is a read-only accessor for other
-    // content scripts (e.g. a future "save as document" widget) so they don't need
-    // their own divergent DOM-scraping of the Initial Request card. Set on every
-    // detail render (not just when count>0) so it never strands a stale array from
-    // a previously viewed task.
-    if (typeof window !== 'undefined') window.__msTriageAttachments = ir.attachments || [];
+    // Attachments — the count chip only. The save-as-document widget that read
+    // window.__msTriageAttachments / window.__msTaskCreatedDate was removed in
+    // v3.268.7; those globals are no longer written.
     if (ir.attachmentCount > 0) pushOut('detail.attachments', { count: ir.attachmentCount });
-
-    // Task-created date — window.__msTaskCreatedDate is a read-only ISO-date
-    // accessor for document-file-inline.js, so "save attachment as document"
-    // can default the document date to when the triage request actually
-    // arrived (this task's own Created date) rather than today. Reuses the
-    // same Created-field parse already done for the "days open" chip above —
-    // no new extraction. null (not stale) when this task has no Created field.
-    if (typeof window !== 'undefined') {
-      window.__msTaskCreatedDate = null;
-      const createdMatch = t.Created && t.Created.match(/(\d{1,2})\s+([A-Z][a-z]{2})\s+(\d{4})/);
-      const createdDate = createdMatch && parseDate(createdMatch[0]);
-      if (createdDate) {
-        window.__msTaskCreatedDate =
-          createdDate.getFullYear() +
-          '-' +
-          String(createdDate.getMonth() + 1).padStart(2, '0') +
-          '-' +
-          String(createdDate.getDate()).padStart(2, '0');
-      }
-    }
 
     // Snippet of request body for context (truncated, configurable via prefs)
     if (ir.text && PREF('showRequestSnippet', true)) {

@@ -1048,6 +1048,21 @@ async function runMigration() {
     await chrome.storage.local.set(toSet);
     console.log('[Suite] Storage migration applied:', Object.keys(toSet));
   }
+  await clearRetiredDocumentFileStorage();
+}
+
+// Save-attachment-as-document (removed v3.268.7) never shipped an Options
+// toggle, a practice-pack flag, or a chrome.storage key. Saved-this-visit
+// state lived in the content-script closure only. These names are removed
+// if a workstation has them, so a leftover cannot be read as a live setting.
+const RETIRED_DOCUMENT_FILE_KEYS = ['documentFile.enabled', 'documentFile.config'];
+
+async function clearRetiredDocumentFileStorage() {
+  try {
+    await chrome.storage.local.remove(RETIRED_DOCUMENT_FILE_KEYS);
+  } catch (e) {
+    console.error('[Suite] retired document-file key cleanup failed:', e.message);
+  }
 }
 
 // ── Request Monitor: alarm-driven polling + notifications (v1.3) ──────────────

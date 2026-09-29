@@ -170,7 +170,6 @@ const FILE_TO_WIDS = {
   'shared/companion-write-core.js': ['W2', 'W5'],
   'shared/tidy-write-core.js': ['W9', 'W19'],
   'shared/oir-write-core.js': ['W22'],
-  'content-scripts/document-file-inline.js': ['W6'],
   'content-scripts/triage-lens/lab-file-button.js': ['W7'],
   'content-scripts/triage-lens/routine-rx-button.js': ['W8'],
   'content-scripts/problem-description-cleanup.js': ['W9', 'W19'],
@@ -193,6 +192,11 @@ const FILE_TO_WIDS = {
 };
 
 const LAST_WID = 25;
+
+// W6 filed a triage attachment via POST /clinical/document/create. The widget
+// was removed in v3.268.7 (Medicus files the attachment natively). The CSN
+// row stays so the number is not reused; it must say the path is retired.
+const RETIRED_WIDS = new Set(['W6']);
 
 // W7/W8/W22 are DOM macros (may have no method:POST). W12 panel files and the
 // W1 slots shim may only re-export booking-core. W21 companions instantiate
@@ -339,6 +343,10 @@ check(
   'CSN W11 names the investigation-report hide endpoint (clinical/investigation/mark-incorrect-and-hidden)'
 );
 
+const w6Row = (csn.match(/\| W6 \|[^\n]+/) || [''])[0];
+check(/[Rr]etired/.test(w6Row), 'CSN W6 row records that attachment-to-document filing is retired');
+check(!/document-file-inline\.js/.test(w6Row), 'CSN W6 row no longer points at the removed content script');
+
 // ── 6. Every mapped product file still exists ────────────────────────────────
 
 console.log('\n--- mapped product files exist ---');
@@ -366,6 +374,10 @@ check(true, 'W3 is a consequence of W1/W2 — no separate POST file required');
 for (let n = 1; n <= LAST_WID; n++) {
   if (n === 3) continue;
   const id = 'W' + n;
+  if (RETIRED_WIDS.has(id)) {
+    check(!widsWithFiles.has(id), `${id} is retired and has no mapped product file`);
+    continue;
+  }
   check(widsWithFiles.has(id), `${id} has ≥1 mapped product file in this inventory`);
 }
 

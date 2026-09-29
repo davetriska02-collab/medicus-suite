@@ -600,8 +600,8 @@
   // Loads rules/non-problem-root-codes.json ONCE per page load — a local
   // extension resource, not a Medicus call. Falls back to an empty root list
   // (never throws) if the resource is somehow unavailable — the badge scan
-  // then simply flags nothing rather than erroring ("fail open to inert, not
-  // to a crash", same as document-file-inline.js's ensureDocumentTypesLoaded).
+  // then simply flags nothing rather than erroring (fail open to inert, not
+  // to a crash).
   var _rootsPromise = null;
   function ensureNonProblemRootsLoaded() {
     if (_rootsPromise) return _rootsPromise;

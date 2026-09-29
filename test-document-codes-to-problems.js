@@ -91,7 +91,7 @@ console.log('--- sanitizeOnsetDate: only a genuine full ISO date is ever sent as
   );
 }
 
-console.log('--- patientIdFromOverview: same 4-way fallback as document-file-inline.js ---');
+console.log('--- patientIdFromOverview: 4-way fallback across task overview shapes ---');
 {
   check(
     patientIdFromOverview({ data: { patient: { id: 'p1' } } }) === 'p1',
@@ -458,7 +458,8 @@ console.log('\n--- wiring: draggable header, not a bottom-right cover ---');
   check(/top:\s*72px/.test(css), 'CSS default is top-right (72px)');
   check(/bottom:\s*auto/.test(css), 'CSS default is bottom: auto, not pinned to the page foot');
   check(!/bottom:\s*20px/.test(css), 'CSS no longer uses bottom: 20px (that covered File document)');
-  check(/\.ms-df-chip/.test(js), 'nudge treats the Save as document chip as an obstacle');
+  check(/isFileDocumentButtonLabel\(text\)/.test(js), 'nudge treats a File / Save as document label as an obstacle');
+  check(!/\.ms-df-chip/.test(js), 'the removed suite Save as document chip is not an obstacle selector');
   check(
     /window\.removeEventListener\('blur', endDrag\);[\s\S]{0,700}?setTimeout\(function \(\) \{\s*_skipToggle = false;\s*\}, 0\);/.test(
       js

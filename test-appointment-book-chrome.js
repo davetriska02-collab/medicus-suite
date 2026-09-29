@@ -28,7 +28,6 @@ for (const [f, id] of Object.entries(files)) {
     'content-scripts/allergy-cleanup.js': 'allergy-cleanup',
     'content-scripts/problem-nesting.js': 'problem-nesting',
     'content-scripts/document-codes-to-problems.js': 'document-codes',
-    'content-scripts/document-file-inline.js': 'document-file-inline',
     'content-scripts/problem-description-cleanup.js': 'problem-description-cleanup',
     'content-scripts/patient-alerts-banner.js': 'patient-alerts-banner',
     'content-scripts/risk-flag-cleanup.js': 'risk-flag-cleanup',

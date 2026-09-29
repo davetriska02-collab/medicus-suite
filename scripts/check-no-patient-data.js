@@ -44,7 +44,6 @@ const NHS_ADD_ALLOWLIST = new Set([
   // SNOMED descriptionId/conceptId values are 10-digit terminology
   // identifiers, and some coincidentally pass the NHS Modulus-11 check.
   // These files carry terminology IDs only — no patient identifiers.
-  'rules/document-types.json',
   'rules/lab-code-info.json',
   // QOF cluster concept ids (OpenCodelists / NHSD refsets). Some 10-digit
   // SNOMED ids pass Modulus-11. The file is terminology only.

@@ -1,5 +1,9 @@
 # Learnings: create-document API (`clinical/document/create`)
 
+> **Removed v3.268.7.** The suite no longer files a triage attachment as a document. Medicus provides that upload. This note is the capture record for the retired widget. `scripts/document-create-capture.js` stays, because other discovery notes reuse that capture tool.
+
+
+
 Phase 0 discovery for the "save a triage-task attachment as a document"
 feature. No endpoint anywhere in this repo had ever CREATED a new Medicus
 document before this session — only edit-existing
