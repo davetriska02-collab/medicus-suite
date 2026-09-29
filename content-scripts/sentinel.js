@@ -279,7 +279,9 @@
   // function owns only the fetch + failure semantics.
   //
   // Returns an array of { name, value, date (ISO YYYY-MM-DD), source: 'journal' } objects,
-  // filtered to the last 400 days and de-duplicated against existingObs by name+date.
+  // de-duplicated against existingObs by name+date. Observations and coded notes
+  // are limited to the last 400 days. Immunisation entries are kept however old
+  // they are; each vaccine rule applies its own window after that.
   async function fetchJournalObservations(patientId, existingObs) {
     const apiOrigin = getMedicusApiOrigin();
     if (!apiOrigin || !patientId) return [];
