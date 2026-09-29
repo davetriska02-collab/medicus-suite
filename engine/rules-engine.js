@@ -4219,6 +4219,12 @@
     // One-off (lifetime) vaccines use schedule:"once" and omit season.
     // They look back to 1900-01-01 (effectively all time) and are never
     // suppressed out-of-campaign — a lifetime vaccine is always actionable.
+    // A dose counts at whatever age it was given. The routine pneumococcal
+    // rule does not require the dose to fall on or after the 65th birthday:
+    // Green Book chapter 25 is one dose for most adults, and a PPV23 dose
+    // already on the record still counts. No shipped one-off rule sets a
+    // "dose given at or after age N" gate. Asplenia, splenic dysfunction
+    // and CKD revaccination every 5 years is still not encoded.
     const isOneOff = rule.schedule === 'once';
 
     let startIso, seasonLabel;

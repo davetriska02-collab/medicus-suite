@@ -33,6 +33,11 @@
 //      that was sent)" into that body, and that sentence is not a dose.
 //   4. Immunisation entries (entryType "immunisation") are ingested from
 //      the coded description only, the same way. The note body is not.
+//      They are NOT cut by the 400-day window. A one-off vaccine (RSV,
+//      pneumococcal, shingles) is given once and the coded dose may be
+//      years or decades old. Flu and COVID still use their seasonal
+//      windows in the rules engine, so an old immunisation does not
+//      satisfy this season. Observations and coded notes stay on the window.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.JournalObservations.<fn>(...)
@@ -105,9 +110,11 @@
   //   existingObs — observations already extracted (investigation dashboard);
   //                 used to de-dupe by lowercased name + ISO date.
   //   now         — Date or ISO string for the recency window (default: today).
-  //   windowDays  — how far back to ingest (default 400 — the "13 months"
-  //                 window shared/smoking-status.js's honest-absence wording
-  //                 is derived from; keep in sync).
+  //   windowDays  — how far back to ingest observations and coded notes
+  //                 (default 400 — the "13 months" window
+  //                 shared/smoking-status.js's honest-absence wording is
+  //                 derived from; keep in sync). Immunisation entries ignore
+  //                 this and are kept for the whole payload.
   //
   // Walks BOTH confirmed shapes that carry coded observations:
   //   - nested:  encounter items → consultationTopics → headings → entries
@@ -170,7 +177,12 @@
     }
 
     function pushEntry(name, value, entryDate, code, entryKind) {
-      if (!name || !entryDate || entryDate < cutoff) return;
+      if (!name || !entryDate) return;
+      // Lifetime immunisation history. One-off vaccines are not "recent
+      // observations". Seasonal rules still ignore a dose outside their
+      // own season. Coded notes and ordinary observations keep the window
+      // (SMOK002 / AST015, the deferred 400-day follow-up).
+      if (entryKind !== 'immunisation' && entryDate < cutoff) return;
       var isoDate = localIsoDate(entryDate);
       var nameKey = String(name).toLowerCase() + '|' + isoDate;
       if (existingKeys[nameKey]) return; // already in the investigation dashboard
