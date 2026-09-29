@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.5] — 2026-09-29
+
+### A vaccination invitation is not a dose given (H-090)
+
+From v3.268.3, coded journal notes are read as observations. The COVID given stem `sars-cov-2 vaccin` is inside the SNOMED situation concept "SARS-CoV-2 vaccination invitation short message service text message sent (situation)". A Nexus recall SMS ("Vaccination VAC_COVID — recorded via Nexus by Nexus (filed automatically with the invitation that was sent)") turned the COVID tile green for a patient who had not been vaccinated. The influenza invitation concept does not contain a flu given stem, so the flu tile stayed due. The same prefix matches invitation concepts for flu ("Flu vaccination invitation…", "Seasonal influenza vaccination invitation…"), pneumococcal, shingles and RSV.
+
+An invitation, offer, text-message-sent, situation or "sent" concept, and the sentence "filed automatically with the invitation", do not count as a vaccine given. Free-text `VAC_*` markers in a note body are not a dose, and the note body is not copied into the observation name or value. Declined, refused, contraindicated, not given and not indicated stay declined. An Immunisation entry, or an administration concept such as "COVID-19 vaccination" or "Administration of SARS-CoV-2 vaccine", still counts. SMOK002 and AST015 still read coded notes.
+
+VI001–VI004 stay disabled, with empty observation lists. If a vaccine stem is added later, the same invitation text still does not achieve them.
+
+H-090 is accepted (ALARP) — CSO signed off 2026-09-29 (Dr D. Triska, CSO, GMC 6159481) at residual 6. Hazard-log document version 3.83. Clinical safety notice document version 3.96. H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.4] — 2026-09-28
 
 ### QOF 2026/27 indicator gaps, including DM036 age 79 (H-089)
