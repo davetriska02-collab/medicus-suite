@@ -12,7 +12,7 @@ An invitation, offer, text-message-sent, situation or "sent" concept, and the se
 
 VI001–VI004 stay disabled, with empty observation lists. If a vaccine stem is added later, the same invitation text still does not achieve them.
 
-H-090 is Proposed. CSO sign-off is blank. Hazard-log document version 3.82. H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+H-090 is accepted (ALARP) — CSO signed off 2026-09-29 (Dr D. Triska, CSO, GMC 6159481) at residual 6. Hazard-log document version 3.83. Clinical safety notice document version 3.96. H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
 
 ## [v3.268.4] — 2026-09-28
 
