@@ -122,6 +122,7 @@ const PRACTICE_PACK_TOGGLES = [
   { key: 'suite.ui.taskPresence', ids: ['pfTaskPresence'], grandfather: true },
   { key: 'suite.ui.workloadTracker', ids: ['pfWorkloadTracker'], grandfather: true },
   { key: 'suite.ui.availabilityWall', ids: ['pfAvailabilityWall'], grandfather: true },
+  { key: 'suite.ui.gp2gpOutboundSearch', ids: ['pfGp2gpOutboundSearch'], grandfather: false },
 ];
 function packToggleEls(spec) {
   return spec.ids.map((id) => document.getElementById(id)).filter(Boolean);

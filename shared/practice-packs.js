@@ -28,6 +28,8 @@
     taskPresence: 'suite.ui.taskPresence',
     workloadTracker: 'suite.ui.workloadTracker',
     availabilityWall: 'suite.ui.availabilityWall',
+    // Opt-in. A search that hides rows stays off until the practice switches it on.
+    gp2gpOutboundSearch: 'suite.ui.gp2gpOutboundSearch',
   };
 
   const GRANDFATHER_KEYS = [
@@ -55,6 +57,7 @@
     'ui.taskPresence': 'taskPresence',
     'ui.workloadTracker': 'workloadTracker',
     'ui.availabilityWall': 'availabilityWall',
+    'ui.gp2gpOutboundSearch': 'gp2gpOutboundSearch',
   };
 
   const _raw = Object.create(null);

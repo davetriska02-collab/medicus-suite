@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Medicus Suite",
-  "version": "3.268.7",
+  "version": "3.268.8",
   "description": "Clinical intelligence for Medicus: safety monitoring, triage red-flags, QOF tracking, dashboards, confirmed record tidy-up tools.",
   "permissions": ["storage", "scripting", "sidePanel", "tabs", "alarms", "notifications", "windows", "idle"],
   "host_permissions": [
@@ -149,7 +149,9 @@
         "shared/template-organiser-client.js",
         "content-scripts/template-organiser/template-organiser-canvas.js",
         "shared/workload-tracker-core.js",
-        "content-scripts/workload-tracker.js"
+        "content-scripts/workload-tracker.js",
+        "shared/gp2gp-outbound-search-core.js",
+        "content-scripts/gp2gp-outbound-search.js"
       ],
       "css": [
         "content-scripts/task-actions-panel.css",
@@ -166,7 +168,8 @@
         "content-scripts/task-presence.css",
         "content-scripts/task-bulk-action.css",
         "content-scripts/template-organiser/template-organiser-canvas.css",
-        "content-scripts/workload-tracker.css"
+        "content-scripts/workload-tracker.css",
+        "content-scripts/gp2gp-outbound-search.css"
       ],
       "run_at": "document_idle"
     },

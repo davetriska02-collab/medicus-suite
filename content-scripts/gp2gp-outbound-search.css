@@ -1,0 +1,62 @@
+/* Provisional GP2GP outbound search. Injected on the Medicus page. */
+.ms-gp2gp-search {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid #c5cdd6;
+  border-radius: 8px;
+  background: #f4f7fb;
+  color: #1c2834;
+  font:
+    13px/1.4 system-ui,
+    sans-serif;
+  flex: 0 0 100%;
+  grid-column: 1 / -1;
+}
+
+.ms-gp2gp-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.ms-gp2gp-search input[type='search'] {
+  flex: 1 1 160px;
+  min-width: 140px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid #8ea0b3;
+  border-radius: 6px;
+  background: #fff;
+  color: #1c2834;
+  font: inherit;
+}
+
+.ms-gp2gp-search button {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid #8ea0b3;
+  border-radius: 6px;
+  background: #fff;
+  color: #1c2834;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ms-gp2gp-search-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.ms-gp2gp-search-note {
+  margin: 6px 0 0;
+  color: #6b3f00;
+  font-size: 12px;
+}
+
+.ms-gp2gp-row-hidden {
+  display: none !important;
+}

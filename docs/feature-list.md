@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.7
+**Version:** v3.268.8
 **Generated:** 2026-09-29
 
 ## What it is
@@ -104,6 +104,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
 - **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. One GET of the dashboard payload. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
+- **GP2GP outbound search** — a search box above the GP2GP transfers outbound list, off unless switched on under Practice features. Filters the loaded rows by name or NHS number and shows how many are on screen. A patient on another page is not "not found". Selectors are provisional until the live page is captured. No write to Medicus. H-092 is drafted; CSO sign-off blank.
 - **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
@@ -131,7 +132,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 - **Practice Profile** — shared-folder managed deployment so rules, thresholds and pathways can be published once and picked up across every machine in the practice
 - **Choose your tabs** — show/hide/reorder which side-panel tabs appear
-- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags, workload tracker, availability wall)
+- **Practice features** — a practice board of optional chrome packs (allocate canvases, contacts canvas, Routine-Rx button, quick-actions widget, signing soft flags, workload tracker, availability wall, GP2GP outbound search)
 - **Investigations (Lab Result Catalogue)** — a single, coded, per-practice catalogue of investigations, results and labs with its own settings page (practice context, browse/search, per-test edit and gated per-test review; entries arriving by backup, shared profile or import stay inert until approved on that machine). Outstanding Requests can opt into it (matching engine setting, default off). Lab Filing can opt into it (filing engine setting, default off, union-only with the legacy gate — can only add a blocker, never remove one) and works even with zero legacy Lab Filing profiles configured, driven entirely by the catalogue's own practice ranges, safety guards and lab-comment whitelists. H-080 and H-081 accepted 2026-09-24; shipped defaults stay legacy, so this is not a practice-wide enablement. If the catalogue cannot be checked, filing is blocked.
 - **Backup / restore** — a suite-wide export/import covering every module's settings in one file
 - **Display preferences** — theme, density, and a colour-blind mode
@@ -139,6 +140,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.8 (29 Sep)** — GP2GP outbound search: an off-by-default box on the outbound transfer list. Name or NHS number, loaded rows only, with a count. Selectors are provisional. H-092 drafted; CSO sign-off blank.
 - **v3.268.6 (29 Sep)** — RSV, pneumococcal and shingles read the whole immunisation history, not the last 400 days. "Administration of RSV (respiratory syncytial virus) vaccine" counts as RSV given. A pneumococcal dose given before 65 counts for the routine one-off. Flu and COVID stay on their seasons. Invitations still do not count. H-091 accepted (ALARP) — CSO signed off 2026-09-29.
 - **v3.268.5 (29 Sep)** — A vaccination invitation, offer or text-message-sent note no longer turns the COVID, flu, pneumococcal, shingles or RSV tile green. A real immunisation still counts. Smoking status and the asthma review still read coded notes. H-090 accepted 2026-09-29.
 - **v3.268.4 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. DM036 is age 79 and under. H-089 accepted 2026-09-28.
