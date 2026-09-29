@@ -27,7 +27,12 @@
 //      Those coded notes are ingested. Uncoded free text is not. A concept
 //      id is stored when the payload has one. A draft or incorrect note is
 //      not. The note's clinical date is recordDate, not the migration
-//      timestamp `created`.
+//      timestamp `created`. The free-text `note` body is never the
+//      observation name or value: a Nexus recall writes "Vaccination
+//      VAC_COVID — recorded … (filed automatically with the invitation
+//      that was sent)" into that body, and that sentence is not a dose.
+//   4. Immunisation entries (entryType "immunisation") are ingested from
+//      the coded description only, the same way. The note body is not.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.JournalObservations.<fn>(...)
@@ -164,7 +169,7 @@
       return null;
     }
 
-    function pushEntry(name, value, entryDate, code) {
+    function pushEntry(name, value, entryDate, code, entryKind) {
       if (!name || !entryDate || entryDate < cutoff) return;
       var isoDate = localIsoDate(entryDate);
       var nameKey = String(name).toLowerCase() + '|' + isoDate;
@@ -177,7 +182,18 @@
         source: 'journal',
       };
       if (code) row.code = String(code);
+      if (entryKind) row.entryKind = entryKind;
       result.push(row);
+    }
+
+    // The free-text note body is not a coded value. If the payload copies
+    // that body into `value`, drop it. A short coded value that is not the
+    // body is kept.
+    function codedValue(entry) {
+      var raw = typeof entry.value === 'string' ? entry.value : '';
+      var body = typeof entry.note === 'string' ? entry.note : '';
+      if (body && raw.trim() === body.trim()) return '';
+      return raw;
     }
 
     // ISO day (YYYY-MM-DD) or ISO datetime. Built as a local calendar day so
@@ -220,12 +236,22 @@
       if (flaggedIncorrectOrDraft(entry) || flaggedIncorrectOrDraft(item)) return;
       var desc = entry.clinicalCodeDescription == null ? '' : String(entry.clinicalCodeDescription).trim();
       if (!desc) return;
-      pushEntry(
-        desc,
-        typeof entry.value === 'string' ? entry.value : '',
-        noteClinicalDate(entry, fallbackDate),
-        conceptIdOf(entry)
-      );
+      pushEntry(desc, codedValue(entry), noteClinicalDate(entry, fallbackDate), conceptIdOf(entry), 'note');
+    }
+
+    // An Immunisation journal entry is administration evidence when its
+    // coded description is an administration concept. The free-text note
+    // body is not read: VAC_* markers and "filed automatically with the
+    // invitation" live there and are not a dose.
+    function pushImmunisation(entry, fallbackDate, item) {
+      if (!entry) return;
+      var kind = String(entry.entryType || (item && item.type) || '').toLowerCase();
+      if (kind !== 'immunisation' && kind !== 'immunization') return;
+      if (flaggedIncorrectOrDraft(entry) || flaggedIncorrectOrDraft(item)) return;
+      var desc = entry.clinicalCodeDescription || entry.type || entry.title || '';
+      desc = String(desc).trim();
+      if (!desc) return;
+      pushEntry(desc, codedValue(entry), noteClinicalDate(entry, fallbackDate), conceptIdOf(entry), 'immunisation');
     }
 
     try {
@@ -256,6 +282,12 @@
             pushCodedNote(nd, groupDate, item);
             continue;
           }
+          if (item.type === 'immunisation' || item.type === 'immunization') {
+            var imd = item.data || {};
+            if (!imd.entryType) imd = Object.assign({ entryType: 'immunisation' }, imd);
+            pushImmunisation(imd, groupDate, item);
+            continue;
+          }
           // Nested consultation-coded entries (the original path).
           if (item.type !== 'encounter') continue;
           var topics = (item.data && item.data.consultationTopics) || [];
@@ -267,6 +299,10 @@
                 var entry = entries[e] || {};
                 if (entry.entryType === 'note') {
                   pushCodedNote(entry, groupDate, item);
+                  continue;
+                }
+                if (entry.entryType === 'immunisation' || entry.entryType === 'immunization') {
+                  pushImmunisation(entry, groupDate, item);
                   continue;
                 }
                 // Skip entries missing a type name, or that aren't observations

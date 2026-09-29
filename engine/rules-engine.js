@@ -2874,6 +2874,17 @@
 
   // QOF indicator rule evaluator
   function evaluateQofIndicatorRule(rule, data, now) {
+    // VI001–VI004 are dose counts. An invitation, offer, recall SMS or
+    // situation concept must not clear them, even if a future edit adds a
+    // vaccine stem to the (currently empty) observation list. The shipped
+    // rules stay disabled; this is the same gate as the vaccine chips.
+    if (/^VI\d/i.test(String(rule.indicatorCode || ''))) {
+      data = Object.assign({}, data, {
+        observations: (data.observations || []).filter(
+          (obs) => obs && !vaccineTextIsNonAdministration(observationSearchText(obs))
+        ),
+      });
+    }
     const traceEntry = _traceBase(data, rule);
     // evidenceCtx accumulates the matched data the evaluator consults so the
     // evidence panel can show "we looked here, we found X" without re-running
@@ -3960,12 +3971,56 @@
     return terms.some((t) => s.includes(t.toLowerCase()));
   }
 
+  // A coded invitation, offer, recall SMS, or SNOMED situation/"sent" concept
+  // is not a dose. "sent" is a whole word so "consent" is not rejected.
+  // Checked before given AND before declined: an invitation is not a refusal.
+  function vaccineTextIsNonAdministration(text) {
+    const s = String(text || '');
+    if (!s.trim()) return false;
+    return (
+      /\binvitations?\b/i.test(s) ||
+      /\boffered\b/i.test(s) ||
+      /\boffers?\b/i.test(s) ||
+      /\bshort message service\b/i.test(s) ||
+      /\btext messages? sent\b/i.test(s) ||
+      /\(situation\)/i.test(s) ||
+      /\bsituation\b/i.test(s) ||
+      /\bsent\b/i.test(s) ||
+      /filed automatically with the invitation/i.test(s)
+    );
+  }
+
+  // VAC_FLU / VAC_COVID / VAC_RSV are free-text markers Nexus writes into the
+  // note body when it files the invitation. They are not administration.
+  function vaccineTextForGivenMatch(text) {
+    return String(text || '').replace(/\bvac_[a-z0-9]+\b/gi, ' ');
+  }
+
+  function vaccineTextIsNegativeOutcome(text) {
+    return /\b(?:declined|refused|contraindicated|not given|not indicated)\b/i.test(String(text || ''));
+  }
+
+  // Returns { type: 'given'|'declined', date, source } or null to skip.
+  // Declined is checked before given (H-044): "Flu vaccine declined" contains
+  // the stem "flu vaccin". A negative phrase that also contains a given stem
+  // is declined even when that exact phrase is missing from the declined list.
+  function classifyVaccineText(text, date, source, givenTerms, declinedTerms) {
+    if (!text || !String(text).trim()) return null;
+    if (vaccineTextIsNonAdministration(text)) return null;
+    const givenHay = vaccineTextForGivenMatch(text);
+    const negative = vaccineTextIsNegativeOutcome(text);
+    if (matchesAnyTerm(text, declinedTerms) || (negative && matchesAnyTerm(givenHay, givenTerms))) {
+      return { type: 'declined', date: date || '', source };
+    }
+    if (!negative && matchesAnyTerm(givenHay, givenTerms)) {
+      return { type: 'given', date: date || '', source };
+    }
+    return null;
+  }
+
   function vaccineEventInWindow(rule, data, seasonStartIso) {
     const givenTerms = rule.statusTerms?.given || [];
     const declinedTerms = rule.statusTerms?.declined || [];
-    // IMPORTANT: check declined BEFORE given for each record so that a code
-    // like "Flu vaccine declined" (which contains the stem "flu vaccin") is
-    // never misclassified as given. This is a clinical-safety requirement.
     // UNDATED records fail CLOSED against a real season window (audit C2,
     // 2026-07-18): a dateless historic "given" code used to satisfy EVERY
     // season forever — a false green for an eligible unvaccinated patient.
@@ -3974,31 +4029,30 @@
     // anyway, and rejecting it would spam false DUE recalls instead.
     const windowIsSeasonal = seasonStartIso > '1900-01-01';
     const outOfWindow = (d) => (d ? d < seasonStartIso : windowIsSeasonal);
+    // Coded name only. The note body (VAC_* markers, "filed automatically
+    // with the invitation") is not administration evidence and is not read.
     // Search problems
     for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
       if (outOfWindow(d)) continue;
-      if (matchesAnyTerm(p.label, declinedTerms)) return { type: 'declined', date: d, source: 'problem' };
-      if (matchesAnyTerm(p.label, givenTerms)) return { type: 'given', date: d, source: 'problem' };
+      const hit = classifyVaccineText(p.label, d, 'problem', givenTerms, declinedTerms);
+      if (hit) return hit;
     }
-    // Search observations (name and value)
+    // Search observations (coded name, not the free-text note body)
     for (const o of data.observations || []) {
       const d = o.date || '';
       if (outOfWindow(d)) continue;
-      if (matchesAnyTerm(o.name, declinedTerms)) return { type: 'declined', date: d, source: 'observation' };
-      if (matchesAnyTerm(o.name, givenTerms)) return { type: 'given', date: d, source: 'observation' };
+      const source = o.entryKind === 'immunisation' ? 'immunisation' : 'observation';
+      const hit = classifyVaccineText(o.name, d, source, givenTerms, declinedTerms);
+      if (hit) return hit;
     }
-    // Search observationHistory (journal entries in history)
+    // Search observationHistory (journal entries folded into history)
     for (const h of data.observationHistory || []) {
-      if (matchesAnyTerm(h.name, declinedTerms)) {
-        const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
-        if (latest) return { type: 'declined', date: latest.date, source: 'history' };
-      }
-      if (matchesAnyTerm(h.name, givenTerms)) {
-        const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
-        if (latest) return { type: 'given', date: latest.date, source: 'history' };
-      }
+      const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
+      if (!latest) continue;
+      const hit = classifyVaccineText(h.name, latest.date, 'history', givenTerms, declinedTerms);
+      if (hit) return hit;
     }
     return null;
   }
