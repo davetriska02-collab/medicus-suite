@@ -34,6 +34,8 @@ const SUITE_KEYS = [
   'suite.ui.workloadTracker',
   // Availability wall. Default on — missing key stays on at runtime.
   'suite.ui.availabilityWall',
+  // GP2GP outbound search. Default OFF — missing key stays off (H-092).
+  'suite.ui.gp2gpOutboundSearch',
 ];
 
 // Tab/module ids are short lowercase slugs (e.g. "slots", "sentinel").
@@ -83,6 +85,8 @@ async function suiteExport() {
     taskPresence: r['suite.ui.taskPresence'] ?? null,
     workloadTracker: r['suite.ui.workloadTracker'] ?? null,
     availabilityWall: r['suite.ui.availabilityWall'] ?? null,
+    // Default OFF. Only an explicit true enables the outbound search.
+    gp2gpOutboundSearch: r['suite.ui.gp2gpOutboundSearch'] ?? null,
   };
 }
 
@@ -190,6 +194,7 @@ async function suiteImport(data) {
     ['taskPresence', 'suite.ui.taskPresence'],
     ['workloadTracker', 'suite.ui.workloadTracker'],
     ['availabilityWall', 'suite.ui.availabilityWall'],
+    ['gp2gpOutboundSearch', 'suite.ui.gp2gpOutboundSearch'],
   ];
   for (const [alias, storageKey] of packAliases) {
     if (data[alias] == null) continue;

@@ -611,6 +611,9 @@ function previewEnvelope(envelope) {
     if (mods.suite.availabilityWall === true || mods.suite['ui.availabilityWall'] === true) {
       lines.push('Availability wall ON');
     }
+    if (mods.suite.gp2gpOutboundSearch === true || mods.suite['ui.gp2gpOutboundSearch'] === true) {
+      lines.push('GP2GP outbound search ON');
+    }
   }
 
   if (mods.availability) {

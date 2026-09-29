@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.8] — 2026-09-29
+
+### GP2GP outbound search (provisional, H-092)
+
+The Medicus GP2GP transfers outbound list has no native search. This patch adds an optional search bar the practice turns on under Options → Practice features (`suite.ui.gp2gpOutboundSearch`). It is off unless switched on.
+
+The bar filters rows already in the page by patient name (case-insensitive) and by NHS number (spaces ignored). It shows "x of y shown", a Clear button, and a standing line that a hidden row is not the same as no outbound transfer. If the list looks paginated or virtualised, the bar says only loaded rows are filtered. It re-applies when the list mutates and comes off when you leave the page. It does not write to Medicus.
+
+The live page DOM is not captured yet. Selectors are one provisional map in `shared/gp2gp-outbound-search-core.js`. Paste `tools/discovery/gp2gp-outbound-discovery.js` into the console on the outbound page to confirm them. The bar is marked provisional.
+
+H-092 is Proposed. CSO sign-off blank. Suggested residual 6. Hazard-log document version 3.88. Clinical safety notice document version 3.101. H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.7] — 2026-09-29
 
 ### Save attachment as document removed
