@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.7
-**Generated:** 2026-09-29
+**Version:** v3.268.8
+**Generated:** 2026-09-30
 
 ## What it is
 
@@ -139,6 +139,8 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.8 (30 Sep)** — A patient coded with SNOMED 185903001 (Needs influenza immunization / immunisation) is shown as flu-eligible, labelled "Practice-flagged: needs influenza immunisation". A situation tag does not hide that flag and does not count as the vaccine given. An active problem is kept. A journal note older than 400 days is not. H-093 drafted; CSO sign-off blank.
+- **v3.268.7 (29 Sep)** — The suite no longer files a patient-submitted attachment as a document. Medicus files that attachment itself. H-063 retired; CSO signed off 2026-09-29.
 - **v3.268.6 (29 Sep)** — RSV, pneumococcal and shingles read the whole immunisation history, not the last 400 days. "Administration of RSV (respiratory syncytial virus) vaccine" counts as RSV given. A pneumococcal dose given before 65 counts for the routine one-off. Flu and COVID stay on their seasons. Invitations still do not count. H-091 accepted (ALARP) — CSO signed off 2026-09-29.
 - **v3.268.5 (29 Sep)** — A vaccination invitation, offer or text-message-sent note no longer turns the COVID, flu, pneumococcal, shingles or RSV tile green. A real immunisation still counts. Smoking status and the asthma review still read coded notes. H-090 accepted 2026-09-29.
 - **v3.268.4 (28 Sep)** — QOF 2026/27 indicator gaps from the red-team review. Windows, home blood pressure, frailty codes, and decline codes follow the business rules more closely. Stroke, PAD, heart failure, diabetes, and severe mental illness registers use the published concept clusters. BP002 is on. Cervical screening and vaccination indicators are in the file and switched off. DM036 is age 79 and under. H-089 accepted 2026-09-28.
