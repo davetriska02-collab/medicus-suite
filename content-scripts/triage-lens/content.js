@@ -4156,6 +4156,39 @@
   // Maximum rows processed from a single event (cap to prevent fan-out DoS)
   const _BRIDGE_MAX_ROWS = 500;
 
+  // Pure rate-limit check. The listener increments _bridgeEventCount first;
+  // the 11th event in a window is refused. Exported for tests.
+  const bridgeEventAllowed = (count) => count <= _BRIDGE_MAX_EVENTS_PER_WINDOW;
+
+  // Pure shape check for an untrusted ch-task-list-data detail. Returns null
+  // when the payload is the wrong shape or the slug is illegal. Caps to
+  // _BRIDGE_MAX_ROWS before per-row checks. Does not touch the DOM or the
+  // caches — the listener applies the result. Exported for tests.
+  function validateTaskListDetail(detail) {
+    const { rows, taskTypeSlug } = detail || {};
+    if (!Array.isArray(rows) || typeof taskTypeSlug !== 'string') return null;
+    if (!_BRIDGE_SLUG_RE.test(taskTypeSlug)) return null;
+    const cappedRows = rows.length > _BRIDGE_MAX_ROWS ? rows.slice(0, _BRIDGE_MAX_ROWS) : rows;
+    const accepted = [];
+    for (const row of cappedRows) {
+      if (!row || typeof row !== 'object') continue;
+      const { rowIndex, taskUuid } = row;
+      if (typeof rowIndex !== 'number' || !Number.isFinite(rowIndex) || rowIndex < 0 || (rowIndex | 0) !== rowIndex) continue;
+      if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
+      const rawOverview = row.overviewURL;
+      const rawPriority = row.priorityDisplay;
+      const rawUnmatched = row.unmatched;
+      const overviewURL = (typeof rawOverview === 'string' && _OVERVIEW_URL_RE.test(rawOverview))
+        ? rawOverview : '';
+      const rowSlugMatch = overviewURL.match(/^\/tasks\/data\/([A-Za-z0-9_-]+)\//);
+      const rowTaskTypeSlug = (rowSlugMatch && rowSlugMatch[1]) || taskTypeSlug;
+      const priorityDisplay = String(rawPriority != null ? rawPriority : '').slice(0, 40);
+      const unmatched = !!rawUnmatched;
+      accepted.push({ rowIndex, taskUuid, overviewURL, priorityDisplay, unmatched, rowTaskTypeSlug });
+    }
+    return { taskTypeSlug, accepted };
+  }
+
   // Debounce timer for scheduleQueueMonitoring to coalesce rapid event bursts.
   let _bridgeMonDebounceTimer = null;
   const _BRIDGE_DEBOUNCE_MS = 150;
@@ -4178,16 +4211,16 @@
         _bridgeWindowTimer = null;
       }, _BRIDGE_WINDOW_MS);
     }
-    if (_bridgeEventCount > _BRIDGE_MAX_EVENTS_PER_WINDOW) {
+    if (!bridgeEventAllowed(_bridgeEventCount)) {
       log('ch-task-list-data: rate limit exceeded, ignoring event');
       return;
     }
 
     // --- Type/shape validation (bridged data is UNTRUSTED) ---
-    const { rows, taskTypeSlug } = e.detail || {};
-    if (!Array.isArray(rows) || typeof taskTypeSlug !== 'string') return;
-    if (!_BRIDGE_SLUG_RE.test(taskTypeSlug)) return;
+    const parsed = validateTaskListDetail(e.detail);
+    if (!parsed) return;
     if (pageType() !== 'queue') return;
+    const { taskTypeSlug, accepted } = parsed;
 
     // Remember which queue we're on so B2's pending cross-link can gate itself to
     // REQUEST queues (never the results queue, where the row's own result chip shows).
@@ -4199,24 +4232,11 @@
     // whose fetch lands before the observer notices the new header classes
     // would have its freshly-correct maps dropped by the canary a tick later.
     _queueSortSig = undefined;
-    // Cap rows processed and validate each entry's shape before acting on it
-    const cappedRows = rows.length > _BRIDGE_MAX_ROWS ? rows.slice(0, _BRIDGE_MAX_ROWS) : rows;
-    for (const row of cappedRows) {
-      if (!row || typeof row !== 'object') continue;
-      const { rowIndex, taskUuid } = row;
-      // rowIndex must be a non-negative integer
-      if (typeof rowIndex !== 'number' || !Number.isFinite(rowIndex) || rowIndex < 0 || (rowIndex | 0) !== rowIndex) continue;
-      // taskUuid must be a plausible UUID string
-      if (typeof taskUuid !== 'string' || !_BRIDGE_UUID_RE.test(taskUuid)) continue;
+    // Cap and per-row shape checks live in validateTaskListDetail.
+    for (const row of accepted) {
+      const { rowIndex, taskUuid, overviewURL, priorityDisplay, unmatched, rowTaskTypeSlug } = row;
       _queueRowUuids.set(rowIndex, taskUuid);
       _durableRowMap.set(rowIndex, taskUuid);
-
-      // Validate and cache result-triage fields (UNTRUSTED — strict rules)
-      const rawOverview = row.overviewURL;
-      const rawPriority = row.priorityDisplay;
-      const rawUnmatched = row.unmatched;
-      const overviewURL = (typeof rawOverview === 'string' && _OVERVIEW_URL_RE.test(rawOverview))
-        ? rawOverview : '';
 
       // The slug for THIS ROW's own /overview/ endpoint. A queue's rows are
       // not all the queue's type — a medical_patient_request_task queue serves
@@ -4224,11 +4244,7 @@
       // slug 404s (live-confirmed 2026-08-04: every monitoring resolve on the
       // requests queue died silently). The row's validated overviewURL names
       // its true type; the queue slug is only the fallback when a row has none.
-      const rowSlugMatch = overviewURL.match(/^\/tasks\/data\/([A-Za-z0-9_-]+)\//);
-      const rowTaskTypeSlug = (rowSlugMatch && rowSlugMatch[1]) || taskTypeSlug;
       if (!_queueMonCache.has(taskUuid)) _queueMonCache.set(taskUuid, { taskTypeSlug: rowTaskTypeSlug, createdAt: Date.now() });
-      const priorityDisplay = String(rawPriority != null ? rawPriority : '').slice(0, 40);
-      const unmatched = !!rawUnmatched;
       // Only store/update entry if we don't have a fresh sev already
       const existing = _queueResultCache.get(taskUuid);
       if (!existing) {
@@ -8152,6 +8168,19 @@
     return true; // unknown page type — bail quickly
   };
 
+  // Node tests require() this file. Chrome content scripts have no CommonJS
+  // `module`, so the export branch does not run in the extension and the
+  // bootstrap below is what ships.
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+      escapeHtml,
+      renderChipHtml,
+      validateTaskListDetail,
+      bridgeEventAllowed,
+      BRIDGE_MAX_ROWS: _BRIDGE_MAX_ROWS,
+      BRIDGE_MAX_EVENTS_PER_WINDOW: _BRIDGE_MAX_EVENTS_PER_WINDOW,
+    };
+  } else {
   // Load config first, then start. Config drives rule matching.
   loadConfig().then(() => {
     // Items 4.1/4.2 — kick off the (session-once) reception-pathways fetch
@@ -8198,5 +8227,6 @@
 
   // Expose for manual re-trigger (demo / testing / SPA edge cases)
   window.__clinHudRun = () => run(true);
+  }
 
 })();

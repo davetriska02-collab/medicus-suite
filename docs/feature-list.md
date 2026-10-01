@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.9
+**Version:** v3.268.10
 **Generated:** 2026-10-01
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.10 (1 Oct)** — Record ignores a snapshot-updated message that did not come from this extension. Triage Lens escaping and the queue task-list bridge checks are loaded by the test suite.
 - **v3.268.9 (1 Oct)** — Duplicate Problem Checker no longer stores the NHS number in the saved scan. An older saved scan is cleaned on the next open. The local removal note expires after 30 days and is capped at 500 entries. H-094 accepted (ALARP) — CSO signed off 2026-10-01.
 - **v3.268.8 (30 Sep)** — A patient coded with SNOMED 185903001 (Needs influenza immunization / immunisation) is shown as flu-eligible, labelled "Practice-flagged: needs influenza immunisation". A situation tag does not hide that flag and does not count as the vaccine given. An active problem is kept. A journal note older than 400 days is not. H-093 accepted (ALARP) — CSO signed off 2026-10-01.
 - **v3.268.7 (29 Sep)** — The suite no longer files a patient-submitted attachment as a document. Medicus files that attachment itself. H-063 retired; CSO signed off 2026-09-29.
