@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.8
-**Generated:** 2026-09-30
+**Version:** v3.268.9
+**Generated:** 2026-10-01
 
 ## What it is
 
@@ -109,7 +109,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 
 **Full-tab tools:**
 - **Availability wall** — a triage-room TV of unbooked slots only. Tiles appear after the practice saves a mapping. Set up tiles lists the slot types, sessions and diaries from the book; drag each name onto one tile (or use Move), preview the counts, then Save. Typed pattern rules remain. Today shows the next unused slot and how many remain (green over 60 minutes, amber 30–60, red under 30, with a text cue on every band and a three-line legend; the red number stays red and only the edge pulses). A later day shows the date. Seven day cards count routine GP slots, including registrar lists, with extended access, bank holidays, and no-clinic days in the subtitle. Today is read on the practice interval inside 07:00–19:00 UK time (default 5 minutes, 2-minute floor). The other six days are every 30 minutes. A failed read keeps the previous numbers, and a reading older than about 10 minutes is marked not current. No patient names, and no write to Medicus. On unless switched off under Practice features. H-085 accepted (ALARP) 2026-09-27 (Dr D. Triska, Clinical Safety Officer, GMC 6159481). Setup canvas addendum accepted 2026-09-28 (Dr D. Triska, CSO, GMC 6159481).
-- **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents.
+- **Duplicate Problem Checker** — finds likely duplicate problems, notes, documents and investigation reports and offers a guided compare/merge/remove workflow, with content-hash verification for documents. A saved scan (7 days) keeps name, date of birth and UUID, not the NHS number. The local note of a removal expires after 30 days and is capped at 500 entries. H-094 accepted (ALARP) — CSO signed off 2026-10-01.
 - **Contacts Management** — a drag-and-drop family-tree canvas for a patient's next-of-kin and other contacts, opened from Medicus's own contacts page.
 
 ## Alert engine
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.9 (1 Oct)** — Duplicate Problem Checker no longer stores the NHS number in the saved scan. An older saved scan is cleaned on the next open. The local removal note expires after 30 days and is capped at 500 entries. H-094 accepted (ALARP) — CSO signed off 2026-10-01.
 - **v3.268.8 (30 Sep)** — A patient coded with SNOMED 185903001 (Needs influenza immunization / immunisation) is shown as flu-eligible, labelled "Practice-flagged: needs influenza immunisation". A situation tag does not hide that flag and does not count as the vaccine given. An active problem is kept. A journal note older than 400 days is not. H-093 accepted (ALARP) — CSO signed off 2026-10-01.
 - **v3.268.7 (29 Sep)** — The suite no longer files a patient-submitted attachment as a document. Medicus files that attachment itself. H-063 retired; CSO signed off 2026-09-29.
 - **v3.268.6 (29 Sep)** — RSV, pneumococcal and shingles read the whole immunisation history, not the last 400 days. "Administration of RSV (respiratory syncytial virus) vaccine" counts as RSV given. A pneumococcal dose given before 65 counts for the routine one-off. Flu and COVID stay on their seasons. Invitations still do not count. H-091 accepted (ALARP) — CSO signed off 2026-09-29.

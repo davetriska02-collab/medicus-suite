@@ -2,6 +2,18 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.9] — 2026-10-01
+
+### Duplicate checker stores less, and the removal note expires (H-094)
+
+`suite.dupChecker.state` no longer keeps the NHS number. The live scan still shows it in the tooltip and the CSV until the page is closed. A saved scan keeps the name, date of birth, UUID, duplicate findings, and the UUIDs already checked, for the existing 7 days. Opening a saved scan from an older version strips the NHS number and writes the cleaned copy back.
+
+`suite.dupChecker.removalLog` was an append-only list of every deletion (patient UUID and name, entry id, code, date, reason, time) with no expiry. It is now pruned on startup and again whenever a removal is recorded. An entry older than 30 days is dropped. An entry with no time is dropped. After that, only the newest 500 entries are kept.
+
+30 days is long enough to answer what this tool removed during a month of tidy-up, and short enough that names do not sit for the life of the browser profile. Medicus remains the clinical record. 500 entries is one removed copy each, enough for a large clean-up session plus ordinary use, and it stops the list filling the storage the rest of the suite shares. Both keys stay out of suite backups.
+
+H-094 is Accepted (ALARP) at residual 6 (3×2). Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-01. Hazard-log document version 3.91 (drafted on the pull request as 3.88, which is H-093's draft, signed at 3.89; renumbered draft 3.90). Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved. DPIA §2.3 is signed at document version 1.4.
+
 ## [v3.268.8] — 2026-09-30
 
 ### Flu eligibility includes the practice flag "Needs influenza immunisation" (H-093)

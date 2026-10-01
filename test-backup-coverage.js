@@ -314,23 +314,21 @@ const ALLOWLIST = new Set([
   'suite.apiDiscoveryLastRun',
 
   // Practice-wide flagged-patient scan results from duplicate-checker.js —
-  // NAMES, NHS NUMBERS AND DATES OF BIRTH for every patient the GP2GP
-  // duplicate scan flags, persisted so re-scans can skip already-checked
-  // patients. This is the largest identifiable-PHI surface in the suite
-  // (practice-wide, not per-patient) and is DELIBERATELY excluded from suite
-  // backups — a portable JSON export must never carry a practice-wide PHI
-  // list. If you're tempted to wire this into an io file per the usual
-  // convention, don't — that would ship real patient data in every backup
-  // file. (duplicate-checker.js lives at the repo root, outside the APP_DIRS
+  // name, date of birth and UUID for every patient the GP2GP duplicate scan
+  // flags, plus the UUIDs already checked, persisted so re-scans can skip
+  // them. The NHS number is not stored (stripped on save and on load of an
+  // older copy). Still identifiable, practice-wide, and DELIBERATELY excluded
+  // from suite backups — a portable JSON export must never carry that list.
+  // If you're tempted to wire this into an io file per the usual convention,
+  // don't. (duplicate-checker.js lives at the repo root, outside the APP_DIRS
   // this audit scans, so this entry is defence-in-depth documentation, not
-  // something the scanner currently detects on its own.)
+  // something the scanner currently detects on its own.) 7-day TTL.
   'suite.dupChecker.state',
 
-  // Local audit trail of every EXACT-tier duplicate entry duplicate-checker.js
-  // has removed from a patient's record (patient uuid/name, entry kind/id,
-  // reason, timestamp) — the only record of these writes, since there is no
-  // confirmed "undo" endpoint yet. Same PHI reasoning as suite.dupChecker.state
-  // directly above: deliberately excluded from suite backups, never wire this
+  // Local note of every duplicate entry duplicate-checker.js has removed
+  // (patient uuid/name, entry kind/id, reason, timestamp). Medicus is the
+  // clinical record; this note expires after 30 days and is capped at 500
+  // entries. Same backup exclusion as suite.dupChecker.state: never wire this
   // into an io file.
   'suite.dupChecker.removalLog',
 
