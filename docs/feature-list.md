@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.11
+**Version:** v3.268.12
 **Generated:** 2026-10-01
 
 ## What it is
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.12 (1 Oct)** — The old release zip is no longer kept in the repository. The extension the practice runs is unchanged.
 - **v3.268.11 (1 Oct)** — Developer lint tooling only. ESLint stays on 9.39.5. Nothing in the extension the practice runs has changed.
 - **v3.268.10 (1 Oct)** — Record ignores a snapshot-updated message that did not come from this extension. Triage Lens escaping and the queue task-list bridge checks are loaded by the test suite.
 - **v3.268.9 (1 Oct)** — Duplicate Problem Checker no longer stores the NHS number in the saved scan. An older saved scan is cleaned on the next open. The local removal note expires after 30 days and is capped at 500 entries. H-094 accepted (ALARP) — CSO signed off 2026-10-01.
