@@ -35,9 +35,10 @@
 // blocker instead of filing on the generic baseline. `blockers` are human-readable and MAY embed
 // this patient's value (e.g. "77 u/L is above your maximum of 130") — fine for the confirm dialog, NOT fine for a
 // log. `reasonKinds` is the value-free twin (engine/lab-filing-gate.js's shadow log uses this one; see its own
-// header for why). `unresolvedComments` ({name, residue, labId, heading}[]) is structured data for a "whitelist
-// this comment" UI (content-scripts/triage-lens/lab-file-button.js) — same "fine for the UI, never for a log" rule
-// as `blockers`; the shadow log must never read this field.
+// header for why). `unresolvedComments` ({name, residue, labId, heading, pending, investigationId}[]) is structured
+// data for a "whitelist this comment" UI (content-scripts/triage-lens/lab-file-button.js) — same "fine for the UI,
+// never for a log" rule as `blockers`; the shadow log must never read this field. `pending: true` means this exact
+// residue is already saved on the group, awaiting re-approval — the UI should offer to go approve it, not resubmit.
 //
 // Run tests: node test-lab-filing-catalogue.js
 
@@ -114,7 +115,13 @@
   // forever — "I've just clicked again to whitelist that eGFR comment again, reapproved, and the same thing
   // appears." Fixed to check each heading's OWN group.allowComments (empty when the group doesn't exist yet, which
   // correctly reproduces the original "offer it even with no filing setup" behaviour for a genuinely new comment).
-  function commentsForWhitelist(report, catalogue) {
+  // `pendingCatalogue` (optional) is the SAME merge as `catalogue` but with includeUnreviewed:true — same argument
+  // evaluateFilingCatalogue already takes it for, here used only to tell "never submitted" (offer the checkbox) apart
+  // from "already saved onto this group's allowComments, awaiting re-approval" (a group is sent back to review the
+  // moment a NEW comment is added to it, so the acting catalogue's own group.allowComments below cannot see it yet).
+  // Nick, 2026-09-27, live-caught: whitelisted B12 and folate's comments together, approved folate, and the identical
+  // B12 checkbox kept re-offering with no sign the earlier save had done anything.
+  function commentsForWhitelist(report, catalogue, pendingCatalogue) {
     if (!report || !Array.isArray(report.results)) return [];
     if (!catalogue || typeof catalogue !== 'object') return [];
     const index = buildActingIndex(catalogue);
@@ -142,17 +149,26 @@
       if (!headingDef) continue; // heading not known to the lab at all — nothing to attach a whitelist to yet
       const group = findGroup(catalogue, labId, headingText);
       const pseudo = { allowComments: (group && group.allowComments) || [] };
+      const pendingGroup = pendingCatalogue ? findGroup(pendingCatalogue, labId, headingText) : null;
+      const pendingPhrases =
+        pendingGroup && Array.isArray(pendingGroup.allowComments)
+          ? pendingGroup.allowComments.map((p) => LC.norm(p))
+          : [];
+      const investigationId = asArr(headingDef.identifies)[0] || null;
       LFU.unresolvedCommentedResults({ results }, pseudo).forEach((u) => {
-        out.push({ name: u.name, residue: u.residue, labId, heading: headingDef.text });
+        const pending = !!pendingGroup && pendingGroup.reviewed !== true && pendingPhrases.includes(LC.norm(u.residue));
+        out.push({ name: u.name, residue: u.residue, labId, heading: headingDef.text, pending, investigationId });
       });
     }
     return out;
   }
 
-  // Mirrors shared/lab-filing-utils.js's applyParamOverrides EXACTLY — same safety bounds (never touches an urgent
-  // flag; only clears isAbove/isBelow when a range says the value is genuinely within bounds; units must positively
-  // match; a comparator-censored value never has its flag cleared) — but keyed by SNOMED code + identified lab
-  // (this file's own recognition contract, H-074) instead of profile parameter name-matching.
+  // Mirrors shared/lab-filing-utils.js's applyParamOverrides EXACTLY — same safety bounds (only clears isAbove/
+  // isBelow when a range says the value is genuinely within bounds; units must positively match; a comparator-
+  // censored value never has its flag cleared) — but keyed by SNOMED code + identified lab (this file's own
+  // recognition contract, H-074) instead of profile parameter name-matching. Neither function treats r.urgent as a
+  // discriminator (removed 2026-09-30, Nick — see applyCatalogueOverrides' own comment: Medicus sets it on
+  // virtually every abnormal result indiscriminately, and never on microbiology, so it carried no real signal).
   //
   // WHY THIS EXISTS (Nick, 2026-09-25, live-caught): the override (H-081 control d) only ever affected THIS file's
   // own resultBlockers()/`lab-flagged-abnormal` reason. The suite's SEPARATE baseline severity gate
@@ -175,25 +191,35 @@
     const lab = LC.identifyLab(index, labInfo);
     if (!lab) return report;
     const labId = lab.def.id;
+    // Medicus's own "requiresUrgentReview"/r.urgent flag is NOT used as a clinical discriminator anywhere in this
+    // feature (removed 2026-09-30, Nick: "Medicus flags everything with an abnormal result as requiresUrgentReview.
+    // It is not a marker of severity... it never flags on any microbiology results — so a crashingly abnormal urine
+    // culture would not carry the flag." — confirmed useless in practice, never verified against real behaviour
+    // before being added). r.urgent is stripped unconditionally, before anything else runs, so it plays no part in
+    // whether a lab flag gets overridden here, AND so the severity computation this report is about to be passed
+    // through (SEV.evaluateReportSeverity, which treats r.urgent as its own top severity tier) never sees it either.
     const results = report.results.map((r) => {
       if (!r || typeof r !== 'object') return r;
-      if (r.urgent) return r; // never override an urgent flag
-      if (!(r.isAbove || r.isBelow)) return r; // nothing flagged to clear
-      if (!isStr(r.code) || !r.code) return r;
-      const hit = LC.resolveByCode(index, r.code, labId);
-      if (!hit) return r;
-      const group = isStr(r.groupHeading) && r.groupHeading ? findGroup(catalogue, labId, r.groupHeading) : null;
-      if (!group || group.overrideLabFlag !== true) return r;
-      const range = findRange(catalogue, hit.resultId, labId, r.code);
-      if (!range) return r; // nothing to judge "within bounds" against — keep the lab's flag
-      const val = Number(r.value);
-      if (!Number.isFinite(val)) return r; // can't judge -> keep the lab flag
-      if (!LFU.unitsSafeToApply(range.unit, r.unit)) return r;
-      if (isStr(r.comparator) && r.comparator.trim()) return r; // comparator-censored — never clears a flag
+      const stripped = r.urgent ? { ...r, urgent: false } : r;
+      if (!(stripped.isAbove || stripped.isBelow)) return stripped; // nothing flagged to clear
+      if (!isStr(stripped.code) || !stripped.code) return stripped;
+      const hit = LC.resolveByCode(index, stripped.code, labId);
+      if (!hit) return stripped;
+      const group =
+        isStr(stripped.groupHeading) && stripped.groupHeading
+          ? findGroup(catalogue, labId, stripped.groupHeading)
+          : null;
+      if (!group || group.overrideLabFlag !== true) return stripped;
+      const range = findRange(catalogue, hit.resultId, labId, stripped.code);
+      if (!range) return stripped; // nothing to judge "within bounds" against — keep the lab's flag
+      const val = Number(stripped.value);
+      if (!Number.isFinite(val)) return stripped; // can't judge -> keep the lab flag
+      if (!LFU.unitsSafeToApply(range.unit, stripped.unit)) return stripped;
+      if (isStr(stripped.comparator) && stripped.comparator.trim()) return stripped; // comparator-censored — never clears a flag
       const withinLow = range.low == null || val >= range.low;
       const withinHigh = range.high == null || val <= range.high;
-      if (withinLow && withinHigh) return { ...r, isAbove: false, isBelow: false, _labFlagOverridden: true };
-      return r;
+      if (withinLow && withinHigh) return { ...stripped, isAbove: false, isBelow: false, _labFlagOverridden: true };
+      return stripped;
     });
     return { ...report, results };
   }
@@ -338,8 +364,9 @@
           unit: range.unit || '',
         });
         // The warning is for the path that actually set the lab flag aside: group switch on, value inside the
-        // practice range, lab flagged, not urgent, not comparator-censored (same bounds as applyCatalogueOverrides).
-        if (group.overrideLabFlag === true && (r.isAbove || r.isBelow) && !r.urgent) {
+        // practice range, lab flagged, not comparator-censored (same bounds as applyCatalogueOverrides — r.urgent
+        // is not a discriminator here either, 2026-09-30, Nick, see applyCatalogueOverrides' own comment).
+        if (group.overrideLabFlag === true && (r.isAbove || r.isBelow)) {
           const val = Number(r.value);
           const comp = isStr(r.comparator) ? r.comparator.trim() : '';
           const within =

@@ -1198,30 +1198,52 @@
   function labFileCatalogueWhitelistHtml() {
     const rows = (s.lf.data && s.lf.data.catalogueWhitelistRows) || [];
     if (!rows.length) return '';
-    const anyChecked = rows.some((r) => s.lf.catWlChecked.has(r.key));
+    // Already saved onto the group, just awaiting re-approval — offering the same checkbox again invites a
+    // duplicate submission when what's actually needed is going to approve the one already there (2026-09-27).
+    const pendingRows = rows.filter((r) => r.pending);
+    const newRows = rows.filter((r) => !r.pending);
+    const anyChecked = newRows.some((r) => s.lf.catWlChecked.has(r.key));
     return (
       '<div class="ms-tap-lf-wl">' +
-      '<div class="ms-tap-lf-wl-intro">Recognise a comment below? Whitelist it for this lab’s report group on the Investigations page.</div>' +
-      rows
+      pendingRows
         .map(
           (r) =>
-            '<label class="ms-tap-lf-wl-row"><input type="checkbox" data-lf-catwl-key="' +
-            esc(r.key) +
-            '"' +
-            (s.lf.catWlChecked.has(r.key) ? ' checked' : '') +
-            ' /><span><strong>' +
+            '<div class="ms-tap-lf-wl-row"><span><strong>' +
             esc(r.name) +
             ':</strong> “' +
             esc(r.residue) +
-            '” → ' +
-            esc(r.heading) +
-            '</span></label>'
+            '” already whitelisted, awaiting approval</span>' +
+            (r.investigationId
+              ? ' <button type="button" class="ms-tap-text-btn ms-tap-lf-open-setup" data-lf-open-setup="' +
+                esc(r.investigationId) +
+                '">Go approve it</button>'
+              : '') +
+            '</div>'
         )
         .join('') +
-      (anyChecked
-        ? '<button type="button" class="ms-tap-due-retry ms-tap-lf-wl-save" id="ms-tap-lf-catwl-save">Save &amp; send back for review</button>'
+      (newRows.length
+        ? '<div class="ms-tap-lf-wl-intro">Recognise a comment below? Whitelist it for this lab’s report group on the Investigations page.</div>' +
+          newRows
+            .map(
+              (r) =>
+                '<label class="ms-tap-lf-wl-row"><input type="checkbox" data-lf-catwl-key="' +
+                esc(r.key) +
+                '"' +
+                (s.lf.catWlChecked.has(r.key) ? ' checked' : '') +
+                ' /><span><strong>' +
+                esc(r.name) +
+                ':</strong> “' +
+                esc(r.residue) +
+                '” → ' +
+                esc(r.heading) +
+                '</span></label>'
+            )
+            .join('') +
+          (anyChecked
+            ? '<button type="button" class="ms-tap-due-retry ms-tap-lf-wl-save" id="ms-tap-lf-catwl-save">Save &amp; send back for review</button>'
+            : '') +
+          '<div class="ms-tap-lf-wl-note">Saves to the report group it belongs to and sends it back to awaiting review — re-approve on the Investigations page before it can file anything again.</div>'
         : '') +
-      '<div class="ms-tap-lf-wl-note">Saves to the report group it belongs to and sends it back to awaiting review — re-approve on the Investigations page before it can file anything again.</div>' +
       '</div>'
     );
   }

@@ -632,6 +632,24 @@
     const thresholdFor = (inv, presentCore) =>
       inv.singleResult || [...inv.anchorIds].some((a) => presentCore.has(a)) ? 1 : 2;
 
+    // A HEADING's claim to identify an investigation (`identifies`) is already strong evidence on its own — a lab
+    // explicitly labelling a report as e.g. "LFTs" is not nothing, which is why ONE core result under a known
+    // heading is enough to clear it today (thresholdFor's own stricter 2-result bar is for the SIGNATURE path,
+    // which has no heading to lean on at all). What a heading claim must not do is stand ENTIRELY UNCORROBORATED:
+    // 2026-09-30, Nick — H-087 narrowed. A report mislabelled under an already-known heading (e.g. genuine U&E
+    // results filed under a "Lipids" heading — a lab administrative error, nothing adversarial required) used to
+    // mark a genuinely outstanding Lipids request as confidently resulted with zero lipid values ever reported. So
+    // the bar is deliberately low — ANY of the investigation's own defined results (core OR optional; core/optional
+    // is a warning not a hard error, so a test can genuinely be mid-setup with only optional analytes recorded so
+    // far) — just enough to rule out ZERO genuine overlap, not full independent proof. An investigation with NO
+    // members recorded whatsoever (imaging/procedure kinds; a genuine gap) has nothing to check against and keeps
+    // today's heading-alone trust.
+    const minHeadingEvidence = (inv, presentIds) => {
+      if (!inv.memberIds.size) return { checked: false, have: 0, need: 0 };
+      const present = new Set([...presentIds].filter((id) => inv.memberIds.has(id)));
+      return { checked: true, have: present.size, need: 1 };
+    };
+
     // Infer candidates for a group whose heading matched nothing, from the distinctive (core) results it holds.
     for (const p of prepared) {
       if (p.hm.matched) continue;
@@ -693,9 +711,15 @@
     };
     for (const p of prepared) {
       for (const id of p.hm.identifies) {
+        const inv = index.investigations.get(id);
         const rids = p.resolved.filter((r) => r.resultId).map((r) => r.resultId);
         const onlyMsgs = p.resolved.length > 0 && p.resolved.every((r) => r.labMessage);
-        upgrade(id, 'confident', 'heading', rids, onlyMsgs, prepared.indexOf(p));
+        let conf = 'confident';
+        if (inv) {
+          const ev = minHeadingEvidence(inv, new Set(rids));
+          if (ev.checked && ev.have < ev.need) conf = 'tentative';
+        }
+        upgrade(id, conf, 'heading', rids, onlyMsgs, prepared.indexOf(p));
       }
     }
     const allResolved = [...prepared.flatMap((p) => p.resolved), ...ungroupedPrepared.resolved];

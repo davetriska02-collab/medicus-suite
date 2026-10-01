@@ -499,6 +499,27 @@ console.log('\n── settings-page operations (C2) ──');
   check(dis.disabled.investigations.join() === 'hiv', 'disable a built-in');
   check(OV.setInvestigationDisabled(dis, 'hiv', false).disabled.investigations.length === 0, 're-enable it');
   check(JSON.stringify(imp.overlay) === JSON.stringify(doImport().overlay), 'operations do not mutate their input');
+
+  // Live regression (2026-09-30, Nick: "disable deletes it, not found on searching" — U&E and Bone profile both
+  // vanished from the Options page, including its own search, the moment "Disable" was clicked, with no way back
+  // through the UI). The ACTING catalogue (no opts) must still drop a disabled built-in — that part was correct
+  // and is unchanged. But the MANAGEMENT view (includeUnreviewed:true, the only mode the Options page ever uses)
+  // must keep it, or the "disabled" badge + "Re-enable" button this same options page renders can never reach a
+  // row to attach to, because the row itself no longer exists in the merged catalogue the list is built from.
+  check(
+    !OV.mergeCatalogue(builtin, dis, {}).catalogue.investigations.some((i) => i.id === 'hiv'),
+    'a disabled built-in is still correctly excluded from the ACTING catalogue (real matching/filing stops recognising it)'
+  );
+  check(
+    !OV.mergeCatalogue(builtin, dis, { includeUnreviewed: true }).catalogue.investigations.some((i) => i.id === 'hiv'),
+    'includeUnreviewed alone does NOT bring a disabled test back — the bug this regression guards needs its own flag'
+  );
+  check(
+    OV.mergeCatalogue(builtin, dis, { includeUnreviewed: true, includeDisabled: true }).catalogue.investigations.some(
+      (i) => i.id === 'hiv'
+    ),
+    'includeDisabled:true (what the Options page now passes) keeps a disabled built-in visible/editable in the management view'
+  );
 }
 
 console.log('\n── hand authoring (C3) ──');
@@ -587,8 +608,49 @@ console.log('\n── hand authoring (C3) ──');
   });
   check(
     r2c.overlay.results[0].label === 'Serum sodium' && r2c.overlay.results[0].codes.length === 0,
-    'a built-in result can be renamed and can lose codes (practice decision, reviewed)'
+    'a built-in result can be renamed and can lose codes (practice decision, reviewed) — UNCHANGED: r2c has no ' +
+      'filing range set up at all, so the new orphaned-range guard below must not fire here'
   );
+
+  // Removing a code that an approved filing range depends on must fail loudly, not silently orphan the range
+  // (2026-09-30, Nick, live-caught: eGFR's RJ700 range vanished unseen this way).
+  {
+    const withRange = OV.setFilingRange(builtin, E, {
+      result: 'sodium',
+      lab: LAB,
+      code: sodium.codes[0].conceptId,
+      low: 133,
+      high: 146,
+    });
+    check(
+      throwsWith(
+        () => OV.saveResult(builtin, withRange, { ...sodiumSpec(), codes: [] }),
+        /would silently break the practice range/
+      ),
+      'removing the one code a filing range depends on is blocked, not silently accepted'
+    );
+    const otherCode = { conceptId: '999888777003', role: 'alternate' };
+    const kept = OV.saveResult(builtin, withRange, {
+      ...sodiumSpec(),
+      codes: [...sodium.codes, otherCode],
+    });
+    check(
+      kept.overlay.results[0].codes.some((c) => c.conceptId === otherCode.conceptId),
+      'adding a code alongside the one a range depends on still succeeds normally'
+    );
+    const rangeOnOtherResult = OV.setFilingRange(builtin, E, {
+      result: 'potassium',
+      lab: LAB,
+      code: builtin.results.find((r) => r.id === 'potassium').codes[0].conceptId,
+      low: 3.5,
+      high: 5.3,
+    });
+    const savedSodium = OV.saveResult(builtin, rangeOnOtherResult, { ...sodiumSpec(), codes: [] });
+    check(
+      savedSodium.overlay.results[0].codes.length === 0,
+      "a range on a DIFFERENT result's code does not block removing sodium's own code"
+    );
+  }
 
   // new investigation with members + lab heading
   const s1 = OV.saveResult(builtin, r1.overlay, {
@@ -1027,6 +1089,11 @@ console.log('\n── merging one result into another (2026-09-23) ──');
     "the from-result's code moves across as an alternate"
   );
   check(
+    t.codes.some((c) => c.conceptId === '1000731000000107' && c.role === 'primary'),
+    "the target's OWN built-in code survives the merge, still primary (2026-09-30, Nick, live-caught: it used to be " +
+      "silently discarded — the target's override carrier started with codes:[] instead of seeding from the built-in)"
+  );
+  check(
     t.aliases.some((a) => a.text === 'Creat level' && a.lab === LAB),
     "the from-result's lab wording moves across"
   );
@@ -1057,6 +1124,38 @@ console.log('\n── merging one result into another (2026-09-23) ──');
   check(
     throwsWith(() => OV.mergeResult(builtin, o, from, 'nope'), /not found/),
     'unknown target'
+  );
+}
+console.log('\n── merging a new result into a built-in target that already has its own filing range (2026-09-30) ──');
+{
+  // Real-world shape (Nick, live-caught): a practice-authored result (e.g. a lab's own alternate-method code,
+  // scan-learned as a separate result rather than recognised as the same analyte) gets merged into an existing
+  // built-in whose OWN code already has an approved practice filing range set on it. That range must survive.
+  const LAB = 'rj700-general-pathology';
+  let o = OV.emptyOverlay();
+  o = OV.setFilingRange(builtin, o, { result: 'egfr', lab: LAB, code: '1020291000000106', low: 60, high: 120 });
+  const savedFrom = OV.saveResult(builtin, o, {
+    label: 'eGFR result (EPI)',
+    valueKind: 'numeric',
+    codes: [{ conceptId: '999888777002', role: 'primary' }],
+    aliases: [{ text: 'eGFR result (EPI)', lab: 'kingston-general-pathology' }],
+  });
+  o = savedFrom.overlay;
+  const from = savedFrom.id;
+  const r = OV.mergeResult(builtin, o, from, 'egfr', '2026-09-30');
+  const t = r.overlay.results.find((x) => x.id === 'egfr');
+  check(
+    t.codes.some((c) => c.conceptId === '1020291000000106' && c.role === 'primary') &&
+      t.codes.some((c) => c.conceptId === '999888777002' && c.role === 'alternate'),
+    "eGFR's own built-in code AND the newly-merged code both survive"
+  );
+  const range = r.overlay.filing.ranges.find((x) => x.result === 'egfr' && x.lab === LAB);
+  check(range && range.low === 60 && range.high === 120, 'the pre-existing filing range on the target survives the merge untouched');
+  const acting = OV.mergeCatalogue(builtin, OV.markReviewed(r.overlay, 'results', 'egfr', 'x'), {}).catalogue;
+  const actingRes = acting.results.find((x) => x.id === 'egfr');
+  check(
+    actingRes && actingRes.codes.some((c) => c.conceptId === '1020291000000106'),
+    "once approved, the acting catalogue still carries eGFR's own code — the range is not silently excluded"
   );
 }
 console.log('\n── dismissing a similarity pairing ("it\'s not X") (2026-09-24) ──');

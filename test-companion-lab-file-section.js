@@ -173,6 +173,31 @@ console.log('\n--- stage 2: checkbox state (wlChecked/catWlChecked) is lifted in
 }
 
 console.log(
+  '\n--- catalogue whitelist: a comment already saved, awaiting approval, is never re-offered as a fresh checkbox (2026-09-28, Nick live-caught) ---'
+);
+{
+  check(
+    /const pendingRows = rows\.filter\(\(r\) => r\.pending\);\s*\n\s*const newRows = rows\.filter\(\(r\) => !r\.pending\);/.test(
+      panel
+    ),
+    'labFileCatalogueWhitelistHtml() splits rows into pending (already saved, awaiting re-approval) and new (never submitted) before rendering either'
+  );
+  check(
+    /already whitelisted, awaiting approval/.test(panel),
+    'a pending row is rendered as a plain notice, not a checkbox — resubmitting it would just create noise, not progress'
+  );
+  check(
+    /Go approve it/.test(panel) &&
+      /ms-tap-lf-open-setup" data-lf-open-setup="' \+\s*\n\s*esc\(r\.investigationId\)/.test(panel),
+    'a pending row\'s "Go approve it" button reuses the SAME class/data-attribute (ms-tap-lf-open-setup / data-lf-open-setup) the unapproved-groups box already uses — the existing delegated click handler picks it up for free, no new wiring'
+  );
+  check(
+    /const anyChecked = newRows\.some\(\(r\) => s\.lf\.catWlChecked\.has\(r\.key\)\);/.test(panel),
+    "the Save button's visibility is derived from newRows only — a pending row (which never gets a checkbox) can never spuriously enable it"
+  );
+}
+
+console.log(
   '\n--- stage 2: Save-button clicks call the exposed write functions with a correctly-shaped `checks` array ---'
 );
 {

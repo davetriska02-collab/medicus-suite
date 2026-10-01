@@ -442,8 +442,8 @@ console.log(
     'the overlay module is loaded so the catalogue whitelist write can call OV.setFilingGroup directly'
   );
   check(
-    /catalogueUnresolvedComments: LFC\.commentsForWhitelist\(rs\.report, catalogue\),/.test(src),
-    "the catalogue engine's structured comment data is carried out of combineWithCatalogueIfWanted, not discarded (now sourced from commentsForWhitelist rather than evaluateFilingCatalogue's own narrower unresolvedComments — see the dedicated 2026-09-26 block below)"
+    /catalogueUnresolvedComments: LFC\.commentsForWhitelist\(rs\.report, catalogue, pendingCatalogue\),/.test(src),
+    "the catalogue engine's structured comment data is carried out of combineWithCatalogueIfWanted, not discarded (now sourced from commentsForWhitelist rather than evaluateFilingCatalogue's own narrower unresolvedComments — see the dedicated 2026-09-26 block below), with pendingCatalogue passed through so it can tell 'already saved, awaiting approval' apart from 'never submitted' (2026-09-27)"
   );
   check(
     /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\)/.test(
@@ -580,7 +580,7 @@ console.log(
 {
   const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
   check(
-    /catalogueUnresolvedComments: LFC\.commentsForWhitelist\(rs\.report, catalogue\),/.test(btnSrc),
+    /catalogueUnresolvedComments: LFC\.commentsForWhitelist\(rs\.report, catalogue, pendingCatalogue\),/.test(btnSrc),
     "combineWithCatalogueIfWanted sources the whitelist checkbox data from commentsForWhitelist (every commented result whose heading is KNOWN to the lab), not evaluateFilingCatalogue's own unresolvedComments (which never even checks a result belonging to a group that isn't approved+enabled yet)"
   );
 }
@@ -743,6 +743,32 @@ console.log('\n--- compute*Rows helpers: the SAME dedup/matching logic, callable
       /catalogueWhitelistRows: computeCatalogueWhitelistRows\(catalogueUnresolvedComments\),/.test(btnSrc) &&
       /unapprovedGroupsRows: computeUnapprovedGroupsRows\(catalogueUnapprovedGroups, catalogue\),/.test(btnSrc),
     'showBlockedHint publishes the already-computed rows alongside the reasons text — Companion never re-implements the dedup/matching itself'
+  );
+}
+
+console.log(
+  '\n--- evaluateGate() clears the published state immediately on a task change (2026-09-30, Nick, live-caught) ---'
+);
+{
+  const src = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  check(
+    /let _lastEvalPath = null;\s*\n\s*async function evaluateGate\(\) \{\s*\n\s*if \(!host\) return;/.test(src),
+    '_lastEvalPath is tracked at module scope, right alongside evaluateGate() itself'
+  );
+  check(
+    /if \(location\.pathname !== _lastEvalPath\) \{\s*\n\s*_lastEvalPath = location\.pathname;\s*\n\s*hideButton\(\);\s*\n\s*\}/.test(
+      src
+    ),
+    'a changed pathname (a new task — the taskUuid lives inside FILING_URL_RE\'s own URL shape) clears the published state via hideButton() BEFORE the async loadReportSeverity()/ensureFilingCatalogue() fetch for the new task starts — otherwise Companion kept showing the PREVIOUS task\'s blocked/approved message for the length of that fetch ("if I do an action on one result, when I open the next the last output is there briefly as a hangover")'
+  );
+  // The check must run before the kill-switch/URL/engine early-returns below it — those already call hideButton()
+  // themselves for their own reasons, so ordering only matters for making sure a genuine task change is never
+  // missed by one of them returning first.
+  const idx = src.indexOf('async function evaluateGate()');
+  const body = src.slice(idx, src.indexOf('killSwitch === true', idx));
+  check(
+    /_lastEvalPath = location\.pathname;/.test(body),
+    'the task-change check runs before the kill-switch check, not after — every early-return path still gets the clear'
   );
 }
 

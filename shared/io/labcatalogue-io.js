@@ -196,11 +196,17 @@
   }
 
   // ── Loader for consumers / the settings page ────────────────────────────────────
-  // opts.includeUnreviewed:true is for the settings page ONLY; every acting consumer uses the default (reviewed only).
+  // opts.includeUnreviewed:true and opts.includeDisabled:true are for the settings page ONLY; every acting
+  // consumer uses the defaults (reviewed only, disabled excluded) — a disabled test must stop being recognised
+  // for real matching/filing, but still needs to remain visible/editable (list, search, "Re-enable") in the
+  // management UI itself, or disabling it makes it vanish with no way back through the UI (2026-09-30, Nick).
   async function labcatalogueLoadEffective(opts) {
     const OV = need();
     const [overlay, builtin] = await Promise.all([readOverlay(), loadBuiltin(opts)]);
-    const m = OV.mergeCatalogue(builtin, overlay, { includeUnreviewed: !!(opts && opts.includeUnreviewed) });
+    const m = OV.mergeCatalogue(builtin, overlay, {
+      includeUnreviewed: !!(opts && opts.includeUnreviewed),
+      includeDisabled: !!(opts && opts.includeDisabled),
+    });
     return {
       catalogue: m.catalogue,
       builtin,

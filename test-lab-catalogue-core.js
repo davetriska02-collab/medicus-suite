@@ -422,6 +422,70 @@ console.log('\n--- group <-> request many-to-many, partial groups, shared result
     oos.results[0].outOfScope === true && oos.results[0].attributedTo.length === 0,
     "a result outside its heading's candidate set is flagged outOfScope (filing would block)"
   );
+  // 2026-09-30, Nick — H-087 narrowed: this is the SAME report, but checking coverage (outstanding-request
+  // clearing) rather than attribution/filing. Before the fix, coverage trusted the "TSH" heading's own `identifies`
+  // outright — a genuinely outstanding TFT request would have been marked confidently resulted by a report that
+  // never contained a TSH value at all (ALT, an LFT result, is all that is here). tft is single-result/anchored
+  // (tsh), so it needs only 1 of its own results present — ALT is not one of them.
+  check(
+    oos.coverage.tft && oos.coverage.tft.confidence === 'tentative' && oos.coverage.tft.via === 'heading',
+    'a heading whose ONLY reported result belongs to a different test entirely no longer confidently clears it — demoted to tentative, not silently auto-cleared'
+  );
+}
+
+console.log(
+  '\n--- heading coverage requires SOME genuine overlap, not the heading claim alone (2026-09-30, Nick, H-087 narrowed) ---'
+);
+{
+  // An investigation with members but NO core member (a genuine, valid state since 2026-09-27 — core/optional is a
+  // warning, not a hard error) still needs some of ITS OWN results present, not just the heading text.
+  const optOnlyCat = baseCatalogue();
+  optOnlyCat.investigations.push({
+    id: 'micro-panel',
+    label: 'Micro panel',
+    kind: 'blood',
+    requestAliases: [{ text: 'micro panel', system: 'any' }],
+    members: [
+      { result: 'calcium', role: 'optional' },
+      { result: 'phosphate', role: 'optional' },
+    ],
+  });
+  optOnlyCat.labs[0].groupHeadings.push({ text: 'Micro panel', identifies: ['micro-panel'] });
+  const idx2 = LC.buildIndex(optOnlyCat);
+  const zeroOverlap = LC.resolveReport(idx2, report('LABX', [['Micro panel', [{ name: 'ALT' }]]]));
+  check(
+    zeroOverlap.coverage['micro-panel'] &&
+      zeroOverlap.coverage['micro-panel'].confidence === 'tentative' &&
+      zeroOverlap.coverage['micro-panel'].via === 'heading',
+    "a heading over a report with ZERO of the investigation's own members present (core or optional) is demoted — the mislabelled-heading case this fix exists for"
+  );
+  const oneOverlap = LC.resolveReport(idx2, report('LABX', [['Micro panel', [{ name: 'Calcium' }, { name: 'ALT' }]]]));
+  check(
+    oneOverlap.coverage['micro-panel'] &&
+      oneOverlap.coverage['micro-panel'].confidence === 'confident' &&
+      oneOverlap.coverage['micro-panel'].via === 'heading',
+    "ONE of the investigation's own optional members present is enough — same low bar as a core-having test, never asked to prove more than the heading already implies"
+  );
+  const noMembersCat = baseCatalogue();
+  noMembersCat.investigations.push({
+    id: 'genuine-gap',
+    label: 'Genuine gap',
+    kind: 'other',
+    requestAliases: [{ text: 'genuine gap', system: 'any' }],
+    members: [],
+  });
+  noMembersCat.labs[0].groupHeadings.push({ text: 'Genuine gap', identifies: ['genuine-gap'] });
+  const idx3 = LC.buildIndex(noMembersCat);
+  const noEvidence = LC.resolveReport(
+    idx3,
+    report('LABX', [['Genuine gap', [{ name: 'Whatever', type: 'text-result', text: 'x' }]]])
+  );
+  check(
+    noEvidence.coverage['genuine-gap'] &&
+      noEvidence.coverage['genuine-gap'].confidence === 'confident' &&
+      noEvidence.coverage['genuine-gap'].via === 'heading',
+    'an investigation with NO members recorded at all (imaging/procedure kinds; a genuine gap) has nothing to check evidence against and keeps heading-alone trust — no regression for these'
+  );
 }
 
 // ── 6. microbiology: the heading is the only discriminator ──────────────────────

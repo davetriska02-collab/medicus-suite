@@ -143,7 +143,14 @@ function flash(msg) {
   setTimeout(() => {
     if (S.toast === msg) {
       S.toast = '';
-      render();
+      // A full render() here used to rebuild the whole page (root.textContent = '' + every section, every card)
+      // on a plain 4-second timer with no relation to what the person was doing — if it landed mid-click inside an
+      // open review card, the resulting reflow could steal the click onto whatever card ended up under the cursor
+      // (Nick, 2026-09-27, live-caught: "clicking within one open review card closes it and moves me to another,
+      // seemingly at random"). The toast is the only thing that needs to disappear — remove just its own node.
+      const el = root && root.querySelector('.lf-toast');
+      if (el) el.remove();
+      else render(); // toast markup not found (e.g. root was rebuilt for an unrelated reason) — fall back safely
     }
   }, 4000);
 }
@@ -151,7 +158,7 @@ function flash(msg) {
 // ── data ─────────────────────────────────────────────────────────────────────────────────────────────
 async function load() {
   try {
-    const eff = await labcatalogueLoadEffective({ includeUnreviewed: true });
+    const eff = await labcatalogueLoadEffective({ includeUnreviewed: true, includeDisabled: true });
     S.overlay = eff.overlay;
     S.builtin = eff.builtin;
     S.merged = eff.catalogue;
@@ -171,15 +178,31 @@ async function load() {
 // investigations opens straight onto that test's own Review screen, scrolled to its assisted-filing bar — same
 // screen "Review next" already opens. Silently does nothing for an id that no longer exists (deleted/renamed since
 // the button was rendered) rather than erroring on a stale link.
+//
+// load() calls this on EVERY load, not just the first — and load() itself runs after every single save() on this
+// page, for ANY test. Without clearing the URL once consumed, the ?review=<id> param just sits there forever: save
+// something on a DIFFERENT test later in the same visit, and this forcibly reopens the ORIGINAL deep-linked test
+// again, stomping on S.editing mid-edit (Nick, 2026-09-28, live-caught: "I was working in the PSA one having just
+// approved the U&E one [which I'd arrived at via this deep link] ... the U&E one has reopened"). A one-time action
+// must consume the URL that triggered it — history.replaceState leaves the hash alone but drops the query string,
+// so a later save(), or a plain page refresh, never re-applies the same stale deep link again.
 function applyReviewDeepLink() {
   if (typeof location === 'undefined' || !S.merged) return;
-  let invId;
+  let params;
   try {
-    invId = new URLSearchParams(location.search).get('review');
+    params = new URLSearchParams(location.search);
   } catch (e) {
     return;
   }
+  const invId = params.get('review');
   if (!invId) return;
+  params.delete('review');
+  const qs = params.toString();
+  try {
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  } catch (e) {
+    /* history API unavailable — the deep link still applies once below, just may re-fire on a later save() */
+  }
   const inv = S.merged.investigations.find((i) => i.id === invId);
   if (!inv) return;
   S.editing = inv.id;
@@ -2320,7 +2343,8 @@ function renderEditor(st, done) {
           approvedParts.push('wordings, results and codes');
         }
         if (fLab) {
-          const mergedNow = OV.mergeCatalogue(S.builtin, next, { includeUnreviewed: true }).catalogue;
+          const mergedNow = OV.mergeCatalogue(S.builtin, next, { includeUnreviewed: true, includeDisabled: true })
+            .catalogue;
           const pending = OV.filingStateForTest(mergedNow, next, saved.id, fLab).pending;
           if (pending.length) {
             next = OV.approveFilingForTest(S.builtin, next, saved.id, fLab, REVIEWER);
@@ -3241,7 +3265,10 @@ async function runMatch() {
       SC.referenceRangeCandidates(S.merged, r.observations).map((c) => [c.lab + '|' + c.code, c])
     );
     const targets = SC.findGaps(S.merged, S.overlay.context).map((g) => g.id);
-    sc.analysis = SC.analyse(S.merged, r.observations, { targets });
+    // crossLabGaps: targets here is always findGaps()'s catalogue-wide coverage-gap list, never a deliberate
+    // narrowing — so it's safe (and needed) to also surface a genuine report from a lab that doesn't have the
+    // heading yet, even for a test that's fully set up at a DIFFERENT lab (2026-09-30, Nick, live-caught).
+    sc.analysis = SC.analyse(S.merged, r.observations, { targets, crossLabGaps: true });
     // Capture, don't guess (Nick, 2026-09-26): each group here is an AGGREGATE across every report read this scan
     // that shares its (lab, normalised heading) key — "reports" below is how many contributed. If a candidate's
     // result list contains something that looks wrong for the test you're about to confirm it against, this is
@@ -3486,7 +3513,7 @@ async function applyTicked() {
   let overlay = S.overlay;
   const done = [];
   const failed = [];
-  const effective = () => OV.mergeCatalogue(S.builtin, overlay, { includeUnreviewed: true }).catalogue;
+  const effective = () => OV.mergeCatalogue(S.builtin, overlay, { includeUnreviewed: true, includeDisabled: true }).catalogue;
   const describeAdded = (x) =>
     [
       x.tests ? plural(x.tests, 'new test') : '',
@@ -3915,7 +3942,7 @@ function renderMatch() {
   card.appendChild(
     h('div', {
       class: 'lf-muted inv-match-status',
-      text: `${plural(gaps.length, 'test')} still lack${gaps.length === 1 ? 's' : ''} a lab heading or result codes.`,
+      text: `${plural(gaps.length, 'test')} still lack${gaps.length === 1 ? 's' : ''} a lab heading or result codes at any lab you use.`,
     })
   );
   if (S.problems.length)

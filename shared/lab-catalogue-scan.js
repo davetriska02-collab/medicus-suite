@@ -290,10 +290,20 @@
   // ── Analysis ───────────────────────────────────────────────────────────────────────────────────────────────────
   // catalogue: the EFFECTIVE catalogue including unreviewed entries (what the person sees on the page)
   // observations: from observationFromOverview
-  // opts.targets: investigation ids the person selected
+  // opts.targets: investigation ids the person selected.
+  // opts.crossLabGaps: OPT-IN — also surfaces a content-matched group whose owner investigation lacks a heading at
+  // THIS report's own lab, even when that investigation isn't in `targets`. Off by default so a caller that hand-
+  // picks an exact, deliberate `targets` list (e.g. "only crp-twin, not crp, even though both match this result")
+  // keeps getting exactly that — `targets` alone can't tell "deliberately narrowed" apart from "excluded only
+  // because findGaps() doesn't know this specific lab yet," so the caller must say which it means. The real
+  // production caller (options/investigations-section.js's runMatch(), whose `targets` is always findGaps()'s
+  // output — a coverage-gap list, never a deliberate narrowing) passes true (2026-09-30, Nick, live-caught: a
+  // Kingston Hospital U&E report gave no way to enable assisted filing there, because U&E already has a heading at
+  // RJ700 and so was never a findGaps() gap).
   function analyse(catalogue, observations, opts) {
     const LC = need();
     const targets = new Set(asArr(opts && opts.targets));
+    const crossLabGaps = !!(opts && opts.crossLabGaps);
     const index = LC.buildIndex(catalogue);
     const invById = new Map(asArr(catalogue.investigations).map((i) => [i.id, i]));
     const resById = new Map(asArr(catalogue.results).map((r) => [r.id, r]));
@@ -412,11 +422,17 @@
         const why = explained ? [] : whyUnexplained(index, invById, lab, obs, g, compat);
         if (explained) stats.explained++;
         else stats.unexplained++;
-        // explained groups matter only when they belong to a selected test (missing codes / results on a known heading)
+        // Hoisted from its old position at agg-creation time a few lines below (reused there, never computed
+        // twice): a pure function of (lab, g.heading). Only needed for the crossLabGaps widening just below, but
+        // cheap enough to always compute rather than branch on crossLabGaps twice.
+        const headingIdsHere = labHeadingIds(lab, g.heading);
+        // explained groups matter when they belong to a selected test, OR — opt-in only, see crossLabGaps above —
+        // when THIS report's own, resolved lab (which may be null for an unrecognised lab; headingIdsHere is then
+        // always []) doesn't yet have any heading recording this investigation.
         let owner = null;
         let ownerCands = [];
         if (explained) {
-          const sel = owners.filter((id) => targets.has(id));
+          const sel = owners.filter((id) => targets.has(id) || (crossLabGaps && !headingIdsHere.includes(id)));
           if (!sel.length) return;
           // a generic imaging heading the lab records against several result-less tests on purpose (identifies) is finished:
           // there is nothing to choose between, and no results of their own to complete
@@ -434,7 +450,7 @@
             lab: labInfo,
             heading: g.heading,
             specimen: g.specimenType,
-            headingIds: labHeadingIds(lab, g.heading),
+            headingIds: headingIdsHere,
             why,
             explained,
             owner,

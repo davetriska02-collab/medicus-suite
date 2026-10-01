@@ -689,12 +689,21 @@
       return null;
     }
     if (!report || !Array.isArray(report.results) || report.results.length === 0) return null;
+    // Medicus's own "requiresUrgentReview"/r.urgent flag is not a clinical discriminator anywhere in this feature
+    // (removed 2026-09-30, Nick: it fires on virtually every abnormal result indiscriminately, and never on
+    // microbiology, so it carried no real signal either way). Stripped here, at the earliest point severity is
+    // computed for filing purposes, so every branch downstream (effectiveScore's catalogue path, its legacy-profile
+    // path with or without paramsOverrideLabFlags) is consistently blind to it — this deliberately diverges from
+    // the queue chips' own severity when r.urgent was the only thing that would have escalated it; the chips are a
+    // separate feature, not touched here.
+    const urgentFree = { ...report, results: report.results.map((r) => (r && r.urgent ? { ...r, urgent: false } : r)) };
     // resultRules escalate-only — passing the user's rules makes this gate match
     // the queue chips exactly (a culture needing review will NOT be level:'none').
-    const severity = SEV.evaluateReportSeverity(report, { priorityDisplay: '', resultRules, problems: [] });
+    const severity = SEV.evaluateReportSeverity(urgentFree, { priorityDisplay: '', resultRules, problems: [] });
     // Beyond numeric severity, fail CLOSED on anything the gate cannot judge
     // (free-text/cultures, unmatched reports, missing result rules).
-    const blockers = LF ? LF.fileabilityBlockers(report, severity, resultRules) : ['utilities not loaded'];
+    const blockers = LF ? LF.fileabilityBlockers(urgentFree, severity, resultRules) : ['utilities not loaded'];
+    report = urgentFree;
     const entry = { report, severity, blockers, outstandingLabels, ts: now, taskUuid: ctx.taskUuid };
     sevCache.set(ctx.taskUuid, entry);
     return entry;
@@ -1140,8 +1149,9 @@
         // comment check for a group that isn't approved+enabled yet — Nick, 2026-09-26: a result whose test had no
         // approved filing setup at all got the baseline "carries a comment" blocker with no checkbox anywhere to
         // act on it). commentsForWhitelist only needs the heading to be one the lab is KNOWN to send — never read
-        // by anything that decides whether to FILE, only by what offers to whitelist a comment.
-        catalogueUnresolvedComments: LFC.commentsForWhitelist(rs.report, catalogue),
+        // by anything that decides whether to FILE, only by what offers to whitelist a comment. pendingCatalogue lets
+        // it tell "already saved, awaiting re-approval" apart from "never submitted" (see its own header comment).
+        catalogueUnresolvedComments: LFC.commentsForWhitelist(rs.report, catalogue, pendingCatalogue),
         // Structured data for the "open this test's setup" button (see renderReasonActions) — one entry per
         // group-not-approved heading whose results resolve, by code only, to exactly one investigation.
         catalogueUnapprovedGroups:
@@ -1673,7 +1683,15 @@
       const key = c.labId + '|' + norm(c.heading) + '|' + norm(c.residue);
       if (seen.has(key)) continue;
       seen.add(key);
-      rows.push({ key, name: c.name, residue: c.residue, labId: c.labId, heading: c.heading });
+      rows.push({
+        key,
+        name: c.name,
+        residue: c.residue,
+        labId: c.labId,
+        heading: c.heading,
+        pending: !!c.pending,
+        investigationId: c.investigationId || null,
+      });
     }
     return rows;
   }
@@ -1701,42 +1719,64 @@
       return;
     }
     // Same idempotent-rebuild reason as renderWhitelistBox — never wipe a checked box or Save button mid-click.
-    const signature = JSON.stringify(rows.map((c) => [c.labId, c.heading, c.residue, c.name]));
+    const signature = JSON.stringify(rows.map((c) => [c.labId, c.heading, c.residue, c.name, !!c.pending]));
     if (signature === catalogueWhitelistSignature) return;
     catalogueWhitelistSignature = signature;
     catalogueWhitelistBox.innerHTML = '';
     catalogueWhitelistBox.classList.remove('chlf-hidden');
-    catalogueWhitelistBox.appendChild(
-      el(
-        'div',
-        'chlf-wl-intro',
-        'Recognise a comment below? Whitelist it for this lab’s report group on the Investigations page.'
-      )
-    );
-    const checks = [];
-    rows.forEach((c) => {
-      const row = el('label', 'chlf-wl-row');
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      row.appendChild(cb);
+    // Already saved onto the group, just awaiting re-approval — offering the same checkbox again invites a duplicate
+    // submission when what's actually needed is going to approve the one already there (Nick, 2026-09-27).
+    const pendingRows = rows.filter((c) => c.pending);
+    const newRows = rows.filter((c) => !c.pending);
+    pendingRows.forEach((c) => {
+      const row = el('div', 'chlf-wl-row chlf-open-row');
       const text = el('span', 'chlf-wl-text');
       text.appendChild(el('strong', null, c.name + ': '));
-      text.appendChild(document.createTextNode('“' + c.residue + '”'));
-      text.appendChild(el('span', 'chlf-wl-target', ' → ' + c.heading));
+      text.appendChild(document.createTextNode('“' + c.residue + '” already whitelisted, awaiting approval'));
       row.appendChild(text);
+      if (c.investigationId) {
+        const openBtn = el('button', 'chlf-wl-open', 'Go approve it');
+        openBtn.type = 'button';
+        openBtn.onclick = () => openInvestigationSetup(c.investigationId);
+        row.appendChild(openBtn);
+      }
       catalogueWhitelistBox.appendChild(row);
-      checks.push({ checkbox: cb, residue: c.residue, labId: c.labId, heading: c.heading });
     });
+    const checks = [];
+    if (newRows.length) {
+      catalogueWhitelistBox.appendChild(
+        el(
+          'div',
+          'chlf-wl-intro',
+          'Recognise a comment below? Whitelist it for this lab’s report group on the Investigations page.'
+        )
+      );
+      newRows.forEach((c) => {
+        const row = el('label', 'chlf-wl-row');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        row.appendChild(cb);
+        const text = el('span', 'chlf-wl-text');
+        text.appendChild(el('strong', null, c.name + ': '));
+        text.appendChild(document.createTextNode('“' + c.residue + '”'));
+        text.appendChild(el('span', 'chlf-wl-target', ' → ' + c.heading));
+        row.appendChild(text);
+        catalogueWhitelistBox.appendChild(row);
+        checks.push({ checkbox: cb, residue: c.residue, labId: c.labId, heading: c.heading });
+      });
+    }
     const saveBtn = el('button', 'chlf-wl-save chlf-hidden', 'Save & send back for review');
     saveBtn.type = 'button';
     saveBtn.onclick = () => whitelistSelectedCatalogueComments(checks, saveBtn);
-    catalogueWhitelistBox.appendChild(saveBtn);
-    const note = el(
-      'div',
-      'chlf-wl-note',
-      'Saves to the report group it belongs to and sends it back to awaiting review — re-approve on the Investigations page before it can file anything again.'
-    );
-    catalogueWhitelistBox.appendChild(note);
+    if (newRows.length) catalogueWhitelistBox.appendChild(saveBtn);
+    if (newRows.length) {
+      const note = el(
+        'div',
+        'chlf-wl-note',
+        'Saves to the report group it belongs to and sends it back to awaiting review — re-approve on the Investigations page before it can file anything again.'
+      );
+      catalogueWhitelistBox.appendChild(note);
+    }
     const syncButtonVisibility = () => {
       saveBtn.classList.toggle('chlf-hidden', !checks.some((c) => c.checkbox.checked));
     };
@@ -2258,8 +2298,23 @@
     }, 400);
   }
 
+  // The taskUuid lives inside the URL itself (FILING_URL_RE's own /overview/{taskUuid}), so the raw pathname is
+  // enough to tell two tasks apart.
+  let _lastEvalPath = null;
   async function evaluateGate() {
     if (!host) return;
+    // Companion (2026-09-30, Nick, live-caught: "if I do an action on one result, when I open the next the last
+    // output is there briefly as a hangover before it's re-written"). loadReportSeverity()/ensureFilingCatalogue()
+    // below take a real round trip, and nothing published the PREVIOUS task's state was ever told it had gone
+    // stale — so Companion (and this card, on the rare screen it's still attached) kept showing the last task's
+    // blocked/approved message for the length of that fetch. Clearing immediately, before the async work for the
+    // NEW task starts, is what publishLabFileState's own contract already asks for ("null means nothing to show...
+    // Companion must clear its section on null, not keep stale content") — this just makes evaluateGate() actually
+    // honour it on a task change, not only on a genuine hide condition.
+    if (location.pathname !== _lastEvalPath) {
+      _lastEvalPath = location.pathname;
+      hideButton();
+    }
     // Practice kill switch — one config flag disables every offer instantly,
     // without touching individual profiles. The escape hatch a practice can pull.
     if (config && config.killSwitch === true) {
