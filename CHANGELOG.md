@@ -25,7 +25,7 @@ Kept:
 
 There was no Options toggle, practice-pack flag, backup scope, or shipped `chrome.storage` key. Panel state lived in the content-script closure only. Startup still removes `riskFlagCleanup.enabled` and `riskFlagCleanup.config` if a workstation has them, so a leftover cannot be read as a live setting.
 
-H-065 (a wrong or excess safeguarding note cleared from the banner) is retired with the feature. Superseded by native Medicus Record clean up. CSO sign-off blank. Hazard-log document version 3.93. Clinical safety notice document version 3.104 (W24 retired; the number is not reused). H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+H-065 (a wrong or excess safeguarding note cleared from the banner) is retired with the feature. Superseded by native Medicus Record clean up. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-01. Hazard-log document version 3.94. Clinical safety notice document version 3.105 (W24 retired; the number is not reused). H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
 
 ## [v3.268.13] — 2026-10-01
 

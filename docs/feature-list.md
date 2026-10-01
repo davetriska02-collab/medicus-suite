@@ -139,7 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
-- **v3.268.14 (1 Oct)** — The suite no longer clears Flag on patient banner. Medicus Record clean up (Patient record > Actions > Record clean up) does that. H-065 retired; CSO sign-off blank.
+- **v3.268.14 (1 Oct)** — The suite no longer clears Flag on patient banner. Medicus Record clean up (Patient record > Actions > Record clean up) does that. H-065 retired; signed 2026-10-01 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.13 (1 Oct)** — Lab Filing no longer drops a built-in result's codes when a practice result is merged into it. Medicus's urgent flag is no longer a reason to refuse auto-file. A high or low flag, a value outside the report's own range or the practice range, a clinical rule, and a free-text result still block. H-087 control (c) is kept; the Approve-lab fallback is accepted. CSO signed off 2026-10-01.
 - **v3.268.12 (1 Oct)** — The old release zip is no longer kept in the repository. The extension the practice runs is unchanged.
 - **v3.268.11 (1 Oct)** — Developer lint tooling only. ESLint stays on 9.39.5. Nothing in the extension the practice runs has changed.
