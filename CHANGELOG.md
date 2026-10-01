@@ -2,6 +2,31 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.14] — 2026-10-01
+
+### Banner-flag cleanup removed
+
+Medicus now clears patient-banner flags itself (Patient record > Actions > Record clean up), so the suite's "Clean up alerts" pill is gone.
+
+Removed:
+
+- `content-scripts/risk-flag-cleanup.js` and `content-scripts/risk-flag-cleanup.css` (the pill, the panel, and the `POST /clinical/note/change-note` write that cleared only `flagOnPatientBanner`)
+- `shared/risk-flag-cleanup-core.js` (the payload builder for that write)
+- `tools/risk-flag-review/` (the standalone console script the pill was ported from; it did the same write)
+- `test-risk-flag-cleanup.js`
+- The manifest content-script and stylesheet entries for those files
+
+Kept:
+
+- Clean up code (`content-scripts/problem-description-cleanup.js`, W9/W19) and allergy cleanup (W13)
+- Duplicate Checker note merge (W11), which still POSTs `/clinical/note/change-note` for a different purpose
+- Patient Alerts (practice-recorded flags, H-042). That is not banner-flag cleanup
+- The Routine Rx ghost-pill colours. The comment that named the removed pill's selector is updated; the colours stay
+
+There was no Options toggle, practice-pack flag, backup scope, or shipped `chrome.storage` key. Panel state lived in the content-script closure only. Startup still removes `riskFlagCleanup.enabled` and `riskFlagCleanup.config` if a workstation has them, so a leftover cannot be read as a live setting.
+
+H-065 (a wrong or excess safeguarding note cleared from the banner) is retired with the feature. Superseded by native Medicus Record clean up. CSO sign-off blank. Hazard-log document version 3.93. Clinical safety notice document version 3.104 (W24 retired; the number is not reused). H-086 stays reserved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.13] — 2026-10-01
 
 ### Lab Filing: catalogue-merge keeps codes, and urgent is not a filing severity signal (H-087)

@@ -6,10 +6,10 @@
 
    Button copy is set in JS.
 
-   Quiet ghost pill matching #ms-rfc-pill / #ms-lac-launch — not a filled teal
+   Quiet ghost pill matching #ms-lac-launch — not a filled teal
    badge. .chrx-btn / .chrx-caret must not rely on overlay ancestry for the
-   focus ring: colour, border and :focus-visible use literal hex (same as
-   #ms-rfc-pill). Tokens below serve the menu (a child of .chrx-host) and the
+   focus ring: colour, border and :focus-visible use literal hex.
+   Tokens below serve the menu (a child of .chrx-host) and the
    body-appended toast. */
 
 .chrx-host,

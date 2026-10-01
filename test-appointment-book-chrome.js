@@ -30,7 +30,6 @@ for (const [f, id] of Object.entries(files)) {
     'content-scripts/document-codes-to-problems.js': 'document-codes',
     'content-scripts/problem-description-cleanup.js': 'problem-description-cleanup',
     'content-scripts/patient-alerts-banner.js': 'patient-alerts-banner',
-    'content-scripts/risk-flag-cleanup.js': 'risk-flag-cleanup',
     'content-scripts/repeat-prescribing-pills.js': 'repeat-prescribing-pills',
     'content-scripts/rx-overdue-scan.js': 'rx-overdue-scan',
   };

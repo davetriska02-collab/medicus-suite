@@ -1049,6 +1049,7 @@ async function runMigration() {
     console.log('[Suite] Storage migration applied:', Object.keys(toSet));
   }
   await clearRetiredDocumentFileStorage();
+  await clearRetiredRiskFlagCleanupStorage();
 }
 
 // Save-attachment-as-document (removed v3.268.7) never shipped an Options
@@ -1062,6 +1063,20 @@ async function clearRetiredDocumentFileStorage() {
     await chrome.storage.local.remove(RETIRED_DOCUMENT_FILE_KEYS);
   } catch (e) {
     console.error('[Suite] retired document-file key cleanup failed:', e.message);
+  }
+}
+
+// Banner-flag cleanup ("Clean up alerts", removed v3.268.14) never shipped
+// an Options toggle, a practice-pack flag, or a chrome.storage key. Panel
+// state lived in the content-script closure only. These names are removed
+// if a workstation has them, so a leftover cannot be read as a live setting.
+const RETIRED_RISK_FLAG_CLEANUP_KEYS = ['riskFlagCleanup.enabled', 'riskFlagCleanup.config'];
+
+async function clearRetiredRiskFlagCleanupStorage() {
+  try {
+    await chrome.storage.local.remove(RETIRED_RISK_FLAG_CLEANUP_KEYS);
+  } catch (e) {
+    console.error('[Suite] retired risk-flag-cleanup key cleanup failed:', e.message);
   }
 }
 
