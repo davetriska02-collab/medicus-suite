@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.11] — 2026-10-01
+
+### ESLint 9.39.5 (dev tooling)
+
+`eslint` and `@eslint/js` move from 9.24.0 to 9.39.5. They stay on 9.x. ESLint 10 is not adopted. The lockfile is updated. `npm audit` reports no high or critical advisories. The highs this clears (`brace-expansion`, `js-yaml`) are dev-only; `node_modules` does not ship in the extension. `npx eslint .` passes with no rule changes.
+
+No hazard-log entry. This does not change a clinical display, a write to Medicus, or any data the extension stores. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.10] — 2026-10-01
 
 ### Triage Lens safety checks are loaded by tests; Record checks the sender
