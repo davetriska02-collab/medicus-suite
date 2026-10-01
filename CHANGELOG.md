@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.8] — 2026-09-30
+
+### Flu eligibility includes the practice flag "Needs influenza immunisation" (H-093)
+
+Witley codes SNOMED CT 185903001 (description ID 285863018, "Needs influenza immunization") to mark a patient flu-eligible. That concept was not on the flu rule, so a working-age adult with no other cohort was not shown as due.
+
+The flu rule now matches concept 185903001 and description 285863018, and the term text "needs influenza immunization" and "needs influenza immunisation". A `(situation)` or `(finding)` tag on that term does not remove eligibility. The H-090 filter that rejects invitation, offer and situation text still applies only to dose counting: this code does not turn the tile green. An invitation note on its own still does not make someone eligible.
+
+An active problem is not date-capped. A journal note or observation counts only within 400 days, the same window as other coded notes. It is not kept for life the way an immunisation entry is. 400 days reaches back before the previous 1 September, so a flag filed for last season is still seen when this season opens. An older journal code is not current eligibility. An undated journal note does not count. Sweep does not read the journal, so a flag that exists only as a coded note is seen on the open record and not on Sweep unless it is also an active problem.
+
+The chip reason is "Practice-flagged: needs influenza immunisation" when that flag is why the patient qualifies. Age 65+ and the other cohorts still report their own reason when they match first.
+
+H-093 is Accepted (ALARP) at residual 6 (3×2). Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-01. Hazard-log document version 3.89 (drafted as 3.88). Clinical safety notice document version 3.102 (drafted as 3.101). H-086 stays reserved. H-092 is the GP2GP outbound search draft and is not reused. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
+Open draft #474 also edits the flu carer clause in `rules/vaccine-rules.json` and `matchVaccineEligibility` in `engine/rules-engine.js`. This change adds a separate eligibility clause and an opt-in observation read. It does not change the carer match list. Merge will need both edits.
+
 ## [v3.268.7] — 2026-09-29
 
 ### Save attachment as document removed

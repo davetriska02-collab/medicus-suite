@@ -820,6 +820,288 @@ console.log('\n--- flu carer eligibility ---');
   }
 }
 
+// ── Flu practice flag: SNOMED 185903001 Needs influenza immunization ────────
+// Witley codes this finding to make a patient flu-eligible. It is a
+// situation/finding concept (descriptionId 285863018). H-090 rejects
+// "(situation)" as a dose; that filter must not hide this eligibility code.
+// Active problems are not date-capped. A journal note counts only within
+// 400 days (same window as other coded notes; not the lifetime immunisation
+// read). Synthetic fixtures only — no patient identifiers.
+console.log('\n--- flu practice flag: needs influenza immunisation (185903001) ---');
+{
+  const FLAG = 'Practice-flagged: needs influenza immunisation';
+  const IN_CAMPAIGN = '2026-10-15';
+  const flagClause = (fluRule.eligibility.anyOf || []).find((c) => c.label === FLAG);
+  const JO = require(path.join(__dirname, 'shared', 'journal-observations.js'));
+
+  function daysBefore(iso, days) {
+    const ms = Date.parse(iso + 'T00:00:00Z') - days * 86400000;
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+  const cutoff = daysBefore(IN_CAMPAIGN, 400);
+  const justInside = cutoff;
+  const justOutside = daysBefore(IN_CAMPAIGN, 401);
+
+  assert(!!flagClause, 'vax-flu has a practice-flag eligibility clause');
+  assert(
+    Array.isArray(flagClause?.match) &&
+      flagClause.match.includes('needs influenza immunization') &&
+      flagClause.match.includes('needs influenza immunisation'),
+    'practice flag matches US and UK spellings of the preferred term'
+  );
+  assert(
+    Array.isArray(flagClause?.snomed) &&
+      flagClause.snomed.includes('185903001') &&
+      flagClause.snomed.includes('285863018'),
+    'practice flag lists concept 185903001 and description 285863018'
+  );
+  assert(flagClause?.includeObservations === true, 'practice flag also reads journal observations');
+  assert(flagClause?.observationWithinDays === 400, 'journal practice flag is capped at 400 days');
+  assert(
+    /185903001/.test(fluRule.notes) && /400 days/.test(fluRule.notes),
+    'vax-flu notes record the concept and the 400-day journal choice'
+  );
+
+  const adult = () => baseData(40);
+
+  function due(data) {
+    return engine.evaluateVaccineRule(fluRule, data, IN_CAMPAIGN);
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Needs influenza immunization', status: 'active' }],
+    });
+    assert(chips.length === 1, 'flu flag: US spelling on an active problem → chip');
+    assert(chips[0]?.status === 'vax_due', `flu flag: US spelling → vax_due (got: ${chips[0]?.status})`);
+    assert(chips[0]?.eligibilityReason === FLAG, `flu flag: eligibilityReason (got: ${chips[0]?.eligibilityReason})`);
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Needs influenza immunisation (finding)', status: 'active' }],
+    });
+    assert(chips.length === 1 && chips[0]?.eligibilityReason === FLAG, 'flu flag: UK spelling with (finding) → chip');
+    assert(chips[0]?.status === 'vax_due', 'flu flag: UK spelling is eligibility, not a dose given');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Needs influenza immunization (situation)', status: 'active' }],
+    });
+    assert(
+      chips.length === 1 && chips[0]?.status === 'vax_due' && chips[0]?.eligibilityReason === FLAG,
+      'flu flag: (situation) tag does not suppress eligibility and is not a dose'
+    );
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Social history', conceptId: '185903001', status: 'active' }],
+    });
+    assert(chips.length === 1 && chips[0]?.eligibilityReason === FLAG, 'flu flag: conceptId 185903001 alone → chip');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Social history', descriptionId: '285863018', status: 'active' }],
+    });
+    assert(chips.length === 1 && chips[0]?.eligibilityReason === FLAG, 'flu flag: descriptionId 285863018 alone → chip');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Social history', problemCode: { descriptionId: '285863018' }, status: 'active' }],
+    });
+    assert(chips.length === 1, 'flu flag: descriptionId on problemCode.descriptionId → chip');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Needs influenza immunization', conceptId: '185903001', status: 'active', codedDate: '2018-09-01' }],
+    });
+    assert(chips.length === 1 && chips[0]?.status === 'vax_due', 'flu flag: active problem from 2018 still counts (no journal cap)');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Needs influenza immunization', conceptId: '185903001', status: 'inactive' }],
+    });
+    assert(chips.length === 0, 'flu flag: inactive problem is skipped');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      observations: [{ name: 'Needs influenza immunization (situation)', code: '185903001', date: '2026-09-20', entryKind: 'note' }],
+    });
+    assert(
+      chips.length === 1 && chips[0]?.status === 'vax_due' && chips[0]?.eligibilityReason === FLAG,
+      'flu flag: recent journal note with (situation) → vax_due'
+    );
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      observations: [{ name: 'Coded entry', code: '185903001', date: justInside, entryKind: 'note' }],
+    });
+    assert(chips.length === 1, `flu flag: journal note on the 400-day cutoff (${justInside}) → chip`);
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      observations: [{ name: 'Needs influenza immunization', code: '185903001', date: justOutside, entryKind: 'note' }],
+    });
+    assert(chips.length === 0, `flu flag: journal note one day outside 400 days (${justOutside}) → no chip`);
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      observations: [{ name: 'Needs influenza immunisation', code: '185903001', entryKind: 'note' }],
+    });
+    assert(chips.length === 0, 'flu flag: undated journal note does not confer eligibility');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      observationHistory: [
+        {
+          name: 'Needs influenza immunisation (situation)',
+          code: '285863018',
+          history: [{ date: '2026-09-01' }],
+        },
+      ],
+    });
+    assert(chips.length === 1 && chips[0]?.eligibilityReason === FLAG, 'flu flag: recent observationHistory point → chip');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Needs influenza immunization', status: 'active' }],
+      observations: [{ name: 'Seasonal influenza vaccination', date: '2026-10-02', entryKind: 'immunisation' }],
+    });
+    assert(chips.length === 1 && chips[0]?.status === 'vax_given', 'flu flag: a real immunisation this season is still given');
+    assert(chips[0]?.eligibilityReason === FLAG, 'flu flag: given chip still names the practice flag when that is the cohort');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      observations: [
+        {
+          name: 'Seasonal influenza vaccination invitation short message service text message sent (situation)',
+          date: '2026-09-20',
+          entryKind: 'note',
+        },
+      ],
+    });
+    assert(chips.length === 0, 'flu flag: an invitation (situation) note does not make a non-cohort adult eligible');
+  }
+
+  {
+    const chips = due({
+      ...adult(),
+      problems: [{ label: 'Does not need influenza immunization', status: 'active' }],
+    });
+    assert(chips.length === 0, 'flu flag: "does not need" is not the practice flag');
+  }
+
+  {
+    const chips = due({
+      ...baseData(70),
+      problems: [{ label: 'Needs influenza immunization', conceptId: '185903001', status: 'active' }],
+    });
+    assert(chips[0]?.eligibilityReason === 'Age 65+', 'flu flag: age 65+ still reports Age 65+ (flag is the fallback cohort)');
+  }
+
+  {
+    const recent = JO.parseJournalObservations(
+      {
+        patientJournalRecords: [
+          {
+            title: 'Tue 20 Sep 2026',
+            items: [
+              {
+                type: 'encounter',
+                data: {
+                  consultationTopics: [
+                    {
+                      headings: [
+                        {
+                          entries: [
+                            {
+                              entryType: 'note',
+                              clinicalCodeDescription: 'Needs influenza immunization (situation)',
+                              conceptId: '185903001',
+                              note: 'Practice flag only. No patient identifier.',
+                              recordDate: '2026-09-20',
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { now: IN_CAMPAIGN }
+    );
+    const row = recent.find((o) => o.code === '185903001');
+    assert(!!row && row.entryKind === 'note', 'flu flag: parser keeps a recent 185903001 coded note');
+    assert(
+      row && row.name === 'Needs influenza immunization (situation)',
+      'flu flag: parser keeps the (situation) tag on the note name'
+    );
+    const chips = due({ ...adult(), observations: recent });
+    assert(
+      chips.length === 1 && chips[0]?.status === 'vax_due' && chips[0]?.eligibilityReason === FLAG,
+      'flu flag: parsed recent journal note → vax_due'
+    );
+
+    const stale = JO.parseJournalObservations(
+      {
+        patientJournalRecords: [
+          {
+            title: 'Wed 01 Jan 2020',
+            items: [
+              {
+                type: 'note',
+                data: {
+                  entryType: 'note',
+                  clinicalCodeDescription: 'Needs influenza immunization (situation)',
+                  conceptId: '185903001',
+                  recordDate: '2020-01-01',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { now: IN_CAMPAIGN }
+    );
+    assert(
+      stale.length === 0,
+      'flu flag: a 2020 journal note is dropped by the 400-day window (not kept for life)'
+    );
+  }
+}
+
 // ── COVID autumn 2026/27 early open (1 Sep, not 1 Oct) ──────────────────────
 // Opening startMonth/startDay to 1 Sep means 14 Sep 2026 evaluates the 2026/27
 // window (2026-09-01 → 2027-03-31), not the expired 2025/26 window. Eligibility

@@ -4057,7 +4057,51 @@
     return null;
   }
 
-  function matchVaccineEligibility(rule, data) {
+  // Days before an ISO date, as YYYY-MM-DD. Invalid input returns null.
+  function isoDaysBefore(iso, days) {
+    const day = String(iso || '').slice(0, 10);
+    const ms = Date.parse(day + 'T00:00:00Z');
+    if (!Number.isFinite(ms)) return null;
+    return new Date(ms - Math.round(days) * 86400000).toISOString().slice(0, 10);
+  }
+
+  // A coded journal note or observation confers eligibility only when it is
+  // recent. The journal parser already drops notes older than 400 days; this
+  // is the same cap, so a stale row cannot slip through another path.
+  // Undated rows fail closed. Active problems are not passed here.
+  function vaccineObservationInRecentWindow(date, nowIso, withinDays) {
+    const day = String(date || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+    const cutoff = isoDaysBefore(nowIso, withinDays);
+    if (!cutoff) return false;
+    return day >= cutoff;
+  }
+
+  // Opt-in for a problem clause (vax-flu practice flag). H-090's
+  // invitation/situation filter is dose counting only and is not applied
+  // here: "Needs influenza immunization (situation)" is eligibility, not a dose.
+  function vaccineObservationClauseLabel(clause, data, nowIso) {
+    if (!clause.includeObservations) return null;
+    const terms = clause.match || [];
+    const withinDays = Number.isFinite(clause.observationWithinDays) ? clause.observationWithinDays : 400;
+    const hits = (item, label) => {
+      const textHit = terms.length > 0 && matchesAnyTerm(label, terms);
+      return textHit || itemCodeHits(item, clause.snomed);
+    };
+    for (const o of data.observations || []) {
+      if (!hits(o, o.name)) continue;
+      if (!vaccineObservationInRecentWindow(o.date, nowIso, withinDays)) continue;
+      return o.name || clause.label;
+    }
+    for (const h of data.observationHistory || []) {
+      if (!hits(h, h.name)) continue;
+      const recent = (h.history || []).some((pt) => vaccineObservationInRecentWindow(pt && pt.date, nowIso, withinDays));
+      if (recent) return h.name || clause.label;
+    }
+    return null;
+  }
+
+  function matchVaccineEligibility(rule, data, nowIso) {
     const ctx = data.patientContext || {};
     const age = Number.isFinite(ctx.ageYears) ? ctx.ageYears : Number.isFinite(ctx.age) ? ctx.age : null;
     const sex = (ctx.sex || ctx.gender || '').toLowerCase();
@@ -4096,6 +4140,11 @@
           return textHit || itemCodeHits(p, clause.snomed);
         });
         if (hit) return { ...clause, matchedEvidence: `${clause.label}: ${hit.label}` };
+        // Journal notes land in observations, not the problem list. Only a
+        // clause that sets includeObservations reads them, and only inside
+        // its own day cap. Other problem clauses stay problem-list only.
+        const obsLabel = vaccineObservationClauseLabel(clause, data, nowIso);
+        if (obsLabel) return { ...clause, matchedEvidence: `${clause.label}: ${obsLabel}` };
       }
 
       if (k === 'register') {
@@ -4210,7 +4259,7 @@
   function evaluateVaccineRule(rule, data, nowIso) {
     if (rule.enabled === false) return [];
     const traceEntry = _traceBase(data, rule);
-    const matchedClause = matchVaccineEligibility(rule, data);
+    const matchedClause = matchVaccineEligibility(rule, data, nowIso);
     if (!matchedClause) {
       if (traceEntry) traceEntry.skipReason = 'not-eligible';
       return [];
