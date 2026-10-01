@@ -1,11 +1,11 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.13
+**Version:** v3.268.14
 **Generated:** 2026-10-01
 
 ## What it is
 
-Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 20 tabs, a handful of full-tab tools, and a set of small additions layered onto Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks and reminds, never diagnoses, never recommends treatment, and runs no AI-based interpretation of patient data. A short, explicitly listed set of actions can write back to Medicus (booking, task creation, problem-list tidying and a few others), and each one requires the user to review and confirm before anything happens. Filing a patient-submitted photo or attachment onto the record is Medicus's own control; the suite no longer does that.
+Medicus Suite is a Chrome extension that sits alongside the Medicus electronic patient record. It adds a side panel with 20 tabs, a handful of full-tab tools, and a set of small additions layered onto Medicus's own screens (queue chips, monitoring context, inline booking, and similar). Everything it shows is drawn from data already in Medicus — it displays, checks and reminds, never diagnoses, never recommends treatment, and runs no AI-based interpretation of patient data. A short, explicitly listed set of actions can write back to Medicus (booking, task creation, problem-list tidying and a few others), and each one requires the user to review and confirm before anything happens. Filing a patient-submitted photo or attachment onto the record is Medicus's own control; the suite no longer does that. Clearing a banner flag is Medicus's own Record clean up; the suite no longer does that.
 
 ## At a glance
 
@@ -99,7 +99,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Clean up code** — flags outdated or retired SNOMED problem-list codes, suggests a cleaner code or description, and can sync it into a matching consultation-note entry, with one-click undo
 - **Organise problems** — a drag-and-drop canvas for ending, re-grading, nesting and linking problems, with suggested links; several tiles can be staged and confirmed together
 - **Allergy cleanup** — a canvas for removing low-relevance allergy entries, merging duplicates, clearing stale dual-coding, and converting pre-defined allergies to a coded substance
-- **Clean up alerts** — pill on the patient banner; batch-clears Flag on patient banner only (W24)
+- **Clean up alerts** — removed in v3.268.14. Medicus Record clean up (Patient record > Actions > Record clean up) clears banner flags. The suite pill is gone. Superseded by native Medicus Record clean up.
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.14 (1 Oct)** — The suite no longer clears Flag on patient banner. Medicus Record clean up (Patient record > Actions > Record clean up) does that. H-065 retired; signed 2026-10-01 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.13 (1 Oct)** — Lab Filing no longer drops a built-in result's codes when a practice result is merged into it. Medicus's urgent flag is no longer a reason to refuse auto-file. A high or low flag, a value outside the report's own range or the practice range, a clinical rule, and a free-text result still block. H-087 control (c) is kept; the Approve-lab fallback is accepted. CSO signed off 2026-10-01.
 - **v3.268.12 (1 Oct)** — The old release zip is no longer kept in the repository. The extension the practice runs is unchanged.
 - **v3.268.11 (1 Oct)** — Developer lint tooling only. ESLint stays on 9.39.5. Nothing in the extension the practice runs has changed.

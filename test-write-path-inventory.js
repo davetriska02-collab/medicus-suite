@@ -188,7 +188,6 @@ const FILE_TO_WIDS = {
   'content-scripts/eps-cancellation-bulk-discard.js': ['W21'],
   'content-scripts/triage-lens/content.js': ['W22'],
   'shared/lab-allocate-core.js': ['W23'],
-  'content-scripts/risk-flag-cleanup.js': ['W24'],
 };
 
 const LAST_WID = 25;
@@ -196,7 +195,10 @@ const LAST_WID = 25;
 // W6 filed a triage attachment via POST /clinical/document/create. The widget
 // was removed in v3.268.7 (Medicus files the attachment natively). The CSN
 // row stays so the number is not reused; it must say the path is retired.
-const RETIRED_WIDS = new Set(['W6']);
+// W24 cleared Flag on patient banner via POST /clinical/note/change-note.
+// The pill was removed in v3.268.14 (Medicus Record clean up does that).
+// The row stays so the number is not reused. W19 and W11 still use change-note.
+const RETIRED_WIDS = new Set(['W6', 'W24']);
 
 // W7/W8/W22 are DOM macros (may have no method:POST). W12 panel files and the
 // W1 slots shim may only re-export booking-core. W21 companions instantiate
@@ -346,6 +348,11 @@ check(
 const w6Row = (csn.match(/\| W6 \|[^\n]+/) || [''])[0];
 check(/[Rr]etired/.test(w6Row), 'CSN W6 row records that attachment-to-document filing is retired');
 check(!/document-file-inline\.js/.test(w6Row), 'CSN W6 row no longer points at the removed content script');
+
+const w24Row = (csn.match(/\| W24 \|[^\n]+/) || [''])[0];
+check(/[Rr]etired/.test(w24Row), 'CSN W24 row records that banner-flag cleanup is retired');
+check(/superseded by native Medicus Record clean up/.test(w24Row), 'CSN W24 row names the native Medicus replacement');
+check(!/risk-flag-cleanup\.js/.test(w24Row), 'CSN W24 row no longer points at the removed content script');
 
 // ── 6. Every mapped product file still exists ────────────────────────────────
 

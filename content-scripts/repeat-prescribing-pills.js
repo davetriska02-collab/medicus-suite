@@ -114,8 +114,7 @@
 // assumption (product-name-based sibling exclusion) worth checking first
 // if the flag ever looks wrong.
 //
-// PILL PLACEMENT IS BEST-EFFORT, like risk-flag-cleanup.js's badge-row
-// heuristic before it. Three different anchor strategies:
+// PILL PLACEMENT IS BEST-EFFORT. Three different anchor strategies:
 //   - Medication tab: exact text match against `description` (the "match by
 //     visible text" discipline as the queue macros — CLAUDE.md) — each drug
 //     name IS its own isolated label there.
