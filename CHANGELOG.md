@@ -2,6 +2,16 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.10] — 2026-10-01
+
+### Triage Lens safety checks are loaded by tests; Record checks the sender
+
+`content-scripts/triage-lens/content.js` exports `escapeHtml`, `renderChipHtml`, `validateTaskListDetail` and `bridgeEventAllowed` only when CommonJS `module` exists. Chrome content scripts do not have `module`, so the extension still bootstraps as before. `test-chip-bridge-safety.js` require()s the file and calls those functions: HTML escaping, the task-list shape check, the 500-row cap, and the 10-event rate limit. The queue listener calls the same functions.
+
+The Record tab's `sentinel:snapshot-updated` listener now ignores a message whose `sender.id` is not `chrome.runtime.id`, the same check the other panel listeners already make. A snapshot from this extension still reloads the tab.
+
+No hazard-log entry. The listener still reloads Record for a real snapshot from this extension, and it does not change which patient is shown or any chip text. The Triage Lens change moves the existing bridge checks into named functions the listener still calls. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.9] — 2026-10-01
 
 ### Duplicate checker stores less, and the removal note expires (H-094)

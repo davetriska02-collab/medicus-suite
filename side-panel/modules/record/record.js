@@ -95,7 +95,10 @@ export async function init(el) {
   wireStaticControls();
 
   // Re-render when Sentinel publishes a fresh snapshot (patient changed in page)
-  _onRuntimeMsg = (msg) => {
+  _onRuntimeMsg = (msg, sender) => {
+    // Same intra-extension check as the other panel listeners. A page or
+    // another extension must not be able to force a Record reload.
+    if (!sender || sender.id !== chrome.runtime.id) return;
     if (msg?.type === 'sentinel:snapshot-updated') load();
   };
   chrome.runtime.onMessage.addListener(_onRuntimeMsg);
