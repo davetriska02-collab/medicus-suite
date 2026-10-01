@@ -2,7 +2,7 @@
 
 **Document reference:** MS-DPO-DPIA-001
 **Product version:** 3.211.0 (§2 employee-data / rota section and the associated §5 rows added at this version; §2 Reception module and its §5 rows at 3.199.1; the remainder was written at 3.84.2)
-**Document version:** 1.3 (SIGNED 2026-09-20 — Dr D. Triska, CSO / manufacturer DPO contact, GMC 6159481, in session; practice-side controls per §6 remain with each deploying practice as controller)
+**Document version:** 1.4 (DRAFT 2026-10-01 — §2.3 duplicate-checker local store. CSO / DPO sign-off blank. The signed text remains 1.3, signed 2026-09-20 by Dr D. Triska, CSO / manufacturer DPO contact, GMC 6159481, in session; practice-side controls per §6 remain with each deploying practice as controller)
 **Date:** 2026-06-14; Reception module section added 2026-07-28; rota / employee-data section added 2026-08-02 (v1.2); Transactional API proxy section added 2026-09-20 (v1.3 — optional UK-proxy read path); v1.3 signed 2026-09-20 (the document's first signature — versions 1.0–1.2 were never signed, and no earlier signature is invented)
 **Data controller:** The deploying GP practice (each practice is controller for
 its own patient data). Graysbrook Ltd is the software manufacturer.
@@ -245,6 +245,33 @@ assessed as a clinical-safety hazard (H-043 and the hazard entry required before
 that phase ships) rather than a data-protection one. This DPIA is to be revisited
 when it ships.
 
+### 2.3 Duplicate checker local store — draft 2026-10-01 (sign-off blank)
+
+The Duplicate Problem Checker (full-tab tool) keeps two browser-local keys in
+`chrome.storage.local` so a clinician can resume a practice-wide duplicate
+scan and can see what this tool itself removed. Neither key is in the suite
+backup. Neither is sent off the workstation. Medicus remains the system of
+record for the clinical deletion.
+
+**`suite.dupChecker.state`.** Purpose: restore the last scan and skip patients
+already checked (incremental scan). Contents after v3.268.9: practice code,
+scan time, flagged patients' name, date of birth and UUID, the duplicate
+findings, and the UUIDs of patients already checked. The NHS number is not
+stored. It is shown only during the live scan (tooltip and CSV) and is
+stripped from any older saved copy the next time that copy is loaded. Retention:
+7 days from `scanDate`, then the key is deleted on load.
+
+**`suite.dupChecker.removalLog`.** Purpose: a local note of deletions this tool
+has made (there is no undo call). Contents: patient UUID, patient name, entry
+kind and id, code, date, reason, and `removedAt`. The NHS number is not
+written. Retention: 30 days from `removedAt`, then a cap of 500 entries
+(oldest dropped). An entry with no `removedAt` is dropped. Pruned on startup
+and on every new entry. 30 days covers a month of review of what the tool
+changed; the cap bounds storage. The clinical fact of the deletion lives in
+Medicus.
+
+CSO / DPO sign-off for this paragraph is blank.
+
 ## 3. Consultation
 
 [RECORD any consultation — e.g. practice IG lead / Caldicott Guardian / DPO sign-off
@@ -285,6 +312,7 @@ at deploying practices. Note real-world use at Witley & Milford Surgery.]
 | Risk | Likelihood / impact | Mitigation | Residual |
 |---|---|---|---|
 | Patient data at rest in `chrome.storage.local` (plaintext) read by local malware | Low / Med | Identifiers in memory only; persisted data minimised to initials + TTL; same exposure as the browser profile itself | Low |
+| **Duplicate checker:** `suite.dupChecker.state` and `suite.dupChecker.removalLog` hold names (and, for the scan, dates of birth and UUIDs) on the workstation | Low / Med | NHS number not stored in the scan state (stripped on upgrade); scan TTL 7 days; removal note 30 days and 500 entries; both keys excluded from backups; local only (§2.3, draft, sign-off blank) | Low |
 | Wrong-patient display (IG + safety) | Low / Med | UUID-keyed cache + SPA-navigation invalidation; source-verification duty (H-001) | Low |
 | Malicious backup import degrading/altering data handling | Low / Med | Import hardening, type validation, preview warnings, size cap (F1/F7/NF1) | Low |
 | Patient data leaving the browser (default `session` mode) | — | None by design in the default configuration | N/A |
@@ -332,6 +360,7 @@ Approved for the stated processing, subject to those practice-side controls.
 
 | Doc version | Date | Author | Status | Change |
 |---|---|---|---|---|
+| 1.4 | 2026-10-01 | Cursor | DRAFT — sign-off blank | §2.3 Duplicate checker local store: names `suite.dupChecker.state` and `suite.dupChecker.removalLog`, their contents, retention (7 days; 30 days and 500 entries) and purpose. NHS number dropped from the scan state. **No sign-off given. No signature invented.** Product v3.268.9. |
 | 1.0 | 2026-06-14 | DT | DRAFT — pending sign-off | Initial DPIA at product v3.84.2. |
 | 1.2 | 2026-08-02 | Claude (drafted for DPO review) | DRAFT — pending sign-off | Rota / employee-data section (Article 9 staff health data; optional shared-drive replication). **No sign-off given.** |
 | 1.3 | 2026-09-20 | DT | SIGNED 2026-09-20 | **First signature on this document** (versions 1.0–1.2 were never signed). Signed: Dr D. Triska (CSO / manufacturer DPO contact, GMC 6159481), in session, 2026-09-20, alongside H-077 and CSN §6 items 1/8/9 — see `docs/CSO-SIGNOFF-PACK-H063-H076.md` and `docs/cso-review-ledger.json` (product v3.264.1). Approval is for the stated processing, subject to the practice-side controls named in §6 (each deploying practice remains controller; the txn-proxy path additionally needs a practice-side processing record / DPA with Graysbrook before it is enabled). Closes INTENDED-PURPOSE open action (ii). |

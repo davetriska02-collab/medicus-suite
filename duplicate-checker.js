@@ -74,15 +74,24 @@ function stateIsFresh(state, nowMs) {
   return (typeof nowMs === 'number' ? nowMs : Date.now()) - t < STATE_TTL_MS;
 }
 
+function dupStateApi() {
+  const api = typeof window !== 'undefined' ? window.DupCheckerState : null;
+  if (
+    !api ||
+    typeof api.prepareStateForSave !== 'function' ||
+    typeof api.migrateLoadedState !== 'function' ||
+    typeof api.pruneRemovalLog !== 'function'
+  ) {
+    throw new Error('duplicate-checker retention helpers missing');
+  }
+  return api;
+}
+
 function saveState(practiceCode, flagged, checkedUuids) {
-  chrome.storage.local.set({
-    [STATE_KEY]: {
-      practiceCode,
-      scanDate: new Date().toISOString(),
-      flagged,
-      checkedUuids: [...checkedUuids],
-    },
-  });
+  // Copies flagged rows and omits the NHS number. The in-memory scan keeps it
+  // for this session's tooltip and CSV; a later restore does not.
+  const payload = dupStateApi().prepareStateForSave(practiceCode, flagged, checkedUuids, new Date().toISOString());
+  chrome.storage.local.set({ [STATE_KEY]: payload });
 }
 
 function loadState() {
@@ -94,7 +103,9 @@ function loadState() {
         chrome.storage.local.remove(STATE_KEY, () => resolve(null));
         return;
       }
-      resolve(state);
+      const migrated = dupStateApi().migrateLoadedState(state);
+      if (!migrated.changed) return resolve(state);
+      chrome.storage.local.set({ [STATE_KEY]: migrated.state }, () => resolve(migrated.state));
     });
   });
 }
@@ -219,16 +230,33 @@ async function apiPost(url, body) {
 // Every successful removal is recorded locally — patient data, so deliberately
 // excluded from suite backups (see test-backup-coverage.js ALLOWLIST, same
 // reasoning as STATE_KEY above). There is no confirmed "undo" endpoint yet
-// (open question, see project notes), so this log is the only record of what
-// this tool has changed on a live patient's record.
+// (open question, see project notes), so this log is a local note of what
+// this tool has changed. Medicus remains the clinical record. The note expires
+// (30 days) and is capped (500 entries); both are applied on append and on load.
 const REMOVAL_LOG_KEY = 'suite.dupChecker.removalLog';
 
 function logRemoval(entry) {
   return new Promise((resolve) => {
     chrome.storage.local.get(REMOVAL_LOG_KEY, (r) => {
-      const log = r[REMOVAL_LOG_KEY] || [];
+      const log = Array.isArray(r[REMOVAL_LOG_KEY]) ? r[REMOVAL_LOG_KEY].slice() : [];
       log.push({ ...entry, removedAt: new Date().toISOString() });
-      chrome.storage.local.set({ [REMOVAL_LOG_KEY]: log }, resolve);
+      const pruned = dupStateApi().pruneRemovalLog(log);
+      chrome.storage.local.set({ [REMOVAL_LOG_KEY]: pruned.entries }, resolve);
+    });
+  });
+}
+
+// Existing installs can hold an unbounded log. Shrink it on open, even when
+// nobody deletes anything this session.
+function pruneStoredRemovalLog() {
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) return resolve();
+    chrome.storage.local.get(REMOVAL_LOG_KEY, (r) => {
+      const log = r[REMOVAL_LOG_KEY];
+      if (!Array.isArray(log)) return resolve();
+      const pruned = dupStateApi().pruneRemovalLog(log);
+      if (!pruned.changed) return resolve();
+      chrome.storage.local.set({ [REMOVAL_LOG_KEY]: pruned.entries }, resolve);
     });
   });
 }
@@ -559,7 +587,8 @@ function renderResults(rows) {
           dateMatchMeta = `<span class="rail-item-meta mono" style="color:${colour}">${r.dateMatchPairs}/${r.totalPairs}</span>`;
         }
       }
-      const tooltip = `${r.name} · NHS ${r.nhs} · DOB ${r.dob}\n${r.duplicated.map((d) => `${d.label} x${d.count}`).join('\n')}`;
+      const idBits = [r.name, r.nhs ? `NHS ${r.nhs}` : '', r.dob ? `DOB ${r.dob}` : ''].filter(Boolean).join(' · ');
+      const tooltip = `${idBits}\n${r.duplicated.map((d) => `${d.label} x${d.count}`).join('\n')}`;
       return `
     <div class="rail-item" data-idx="${i}" data-uuid="${esc(r.uuid || '')}" title="${esc(tooltip)}">
       <div class="rail-item-top">
@@ -3363,7 +3392,9 @@ async function restoreResults() {
       hour: '2-digit',
       minute: '2-digit',
     });
-    setStatus(`Restored ${_csvData.length} flagged patient(s) from scan on ${dateStr}.`);
+    setStatus(
+      `Restored ${_csvData.length} flagged patient(s) from scan on ${dateStr}. NHS numbers are not kept in the saved scan.`
+    );
   } else {
     setStatus('Saved results restored — no flagged patients from previous scan.');
   }
@@ -3628,3 +3659,4 @@ Promise.all([detectPracticeCode(), getDiscoveredBaseUrl()]).then(([code, url]) =
 tryDetectCurrentPatient(false);
 
 initSavedState();
+pruneStoredRemovalLog();
