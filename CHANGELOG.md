@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.13] — 2026-10-01
+
+### Lab Filing: catalogue-merge keeps codes, and urgent is not a filing severity signal (H-087)
+
+`mergeResult` (`shared/lab-catalogue-overlay.js`) seeded a newly-created overlay entry with empty `codes`/`aliases` when the merge target had no override of its own yet, so merging a new result into an existing built-in silently discarded the built-in's own codes — and, with them, any filing range keyed to them. Live-caught on an eGFR merge (Kingston's EPI code merged into the existing MDRD-coded `egfr`). The target now seeds from the built-in's own codes and aliases before the merged-in result's codes are added on top. `saveResult` now blocks, rather than silently allowing, removing a code that a practice filing range still depends on. Management merges include disabled built-ins so Options can re-enable them. Acting and filing merges stay disable-filtered.
+
+Medicus's own `requiresUrgentReview` flag (`r.urgent`) is no longer a filing severity signal (`applyCatalogueOverrides`, `applyParamOverrides`, `loadReportSeverity`). It is stripped before filing severity is scored. Queue chips are unchanged. A lab-flagged high or low, a value outside the report's own reference range, a value outside the practice range, a red or amber clinical rule, a text review, a combo rule, and a free-text result still block auto-file. The accepted case is a numeric result inside its own range, with no lab flag and no clinical rule, that Medicus marked urgent: that flag alone no longer blocks. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-01.
+
+The Companion blocker message now names the specific result, and, where the block is rule-driven, the specific practice-authored clinical rule, instead of a generic "not every result is within normal limits".
+
+The comment allow-list no longer refuses a phrase for being short. A phrase that is empty, over the character cap, or made only of generic words is still refused.
+
+**Known issue, not fixed in this release:** `urine-white-cells`'s SNOMED code is scoped to Kingston General Pathology with no specimen-type awareness, so a genuine blood FBC report from Kingston (which reuses the same shared white-cell concept) can pick up a stray "White cells (urine)" member. Workaround: remove the stray member from FBC when it recurs. Needs a specimen-aware catalogue-schema change; tracked separately, not addressed here.
+
+**H-087 update (hazard-log v3.92, clinical safety notice v3.103):** control (c), the whole-lab heading check in `approveInvestigation`, is kept. The Approve-lab fallback is accepted and is not narrowed. `r.urgent` is accepted as not a filing severity signal, with the gates above still blocking abnormal and critical results. Residual stays 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-01. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.12] — 2026-10-01
 
 ### Stale release zip is no longer tracked

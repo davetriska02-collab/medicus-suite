@@ -423,11 +423,14 @@ const adj = LF.applyParamOverrides(egfrFlagged(), egfrProfileOn);
 check(adj.results[0].isBelow === false, 'override ON clears the lab below-flag for an in-your-range analyte');
 check(adj.results[0]._labFlagOverridden === true, 'overridden result is marked for the confirm dialog');
 check(egfrFlagged().results[0].isBelow === true, 'original report is not mutated by applyParamOverrides');
-// urgent is sacrosanct
+// r.urgent is not a clinical discriminator (removed 2026-09-30, Nick: Medicus sets it on virtually every abnormal
+// result indiscriminately, and never on microbiology, so it carried no real signal). It no longer blocks the
+// override, and is itself stripped so downstream severity scoring never sees it either.
 const urgentRep = { results: [{ name: 'egfr', value: 89, low: 90, isBelow: true, urgent: true }] };
+const urgentAdj = LF.applyParamOverrides(urgentRep, egfrProfileOn);
 check(
-  LF.applyParamOverrides(urgentRep, egfrProfileOn).results[0].isBelow === true,
-  'override NEVER clears an urgent result'
+  urgentAdj.results[0].isBelow === false && urgentAdj.results[0].urgent === false,
+  'the override clears an urgent result too, and clears the urgent flag itself'
 );
 // value outside the clinician range keeps the flag
 const egfrLow = { results: [{ name: 'egfr', value: 40, low: 90, isBelow: true }] };
@@ -472,6 +475,107 @@ const ovrMsg = LF.buildFilingConfirmMessage(ueReport, {
 check(
   /lab flagged low — accepted by your set range/.test(ovrMsg),
   'confirm dialog flags the lab-overridden analyte loudly'
+);
+
+// Filing strips r.urgent before scoring (loadReportSeverity). Abnormal and critical results must still block.
+// The only accepted non-block is urgent alone: in the report's own range, no lab flag, no clinical rule
+// (CSO, Dr D. Triska, 2026-10-01).
+console.log('\n--- urgent strip still blocks abnormal and critical results ---');
+function stripFilingUrgent(report) {
+  return {
+    ...report,
+    results: report.results.map((r) => (r && r.urgent ? { ...r, urgent: false } : r)),
+  };
+}
+function scoredAfterUrgentStrip(report, rules) {
+  const stripped = stripFilingUrgent(report);
+  const severity = SEV.evaluateReportSeverity(stripped, { priorityDisplay: '', resultRules: rules, problems: [] });
+  return { stripped, severity, blockers: LF.fileabilityBlockers(stripped, severity, rules) };
+}
+const dummyRule = [
+  { id: 'dummy', enabled: true, analyte: { match: ['xyzzy-no-such-analyte'] }, comparator: 'above', amber: 999 },
+];
+const potassiumRule = [
+  {
+    id: 'k-critical',
+    enabled: true,
+    label: 'Critical potassium',
+    comparator: 'above',
+    amber: 5.5,
+    red: 6.0,
+    analyte: { match: ['potassium'] },
+  },
+];
+const kHigh = {
+  unmatched: false,
+  results: [{ name: 'Potassium', value: 6.5, low: 3.5, high: 5.3, unit: 'mmol/L', isAbove: true, urgent: true }],
+};
+const kHighScored = scoredAfterUrgentStrip(kHigh, dummyRule);
+check(kHighScored.stripped.results[0].urgent === false, 'filing strip clears urgent before severity is scored');
+check(
+  kHighScored.severity.level !== 'none' && kHighScored.blockers.length > 0,
+  'a lab-flagged high potassium still blocks auto-file after urgent is stripped'
+);
+const kOutside = {
+  unmatched: false,
+  results: [
+    {
+      name: 'Potassium',
+      value: 6.5,
+      low: 3.5,
+      high: 5.3,
+      unit: 'mmol/L',
+      isAbove: false,
+      isBelow: false,
+      urgent: true,
+    },
+  ],
+};
+const kOutsideScored = scoredAfterUrgentStrip(kOutside, dummyRule);
+check(
+  kOutsideScored.severity.level !== 'none' && kOutsideScored.blockers.length > 0,
+  'a potassium above the report’s own high still blocks when the lab flag is absent and urgent is stripped'
+);
+const kCritical = {
+  unmatched: false,
+  results: [
+    { name: 'Potassium', value: 6.5, low: 3.5, high: 10, unit: 'mmol/L', isAbove: false, isBelow: false, urgent: true },
+  ],
+};
+const kCriticalScored = scoredAfterUrgentStrip(kCritical, potassiumRule);
+check(
+  kCriticalScored.severity.level === 'red' &&
+    kCriticalScored.blockers.some((r) => /Potassium/.test(r) && /Critical potassium/.test(r)),
+  'a red potassium threshold still blocks, and names the rule, when the lab range is wide and urgent is stripped'
+);
+const kLow = {
+  unmatched: false,
+  results: [{ name: 'Potassium', value: 2.4, low: 3.5, high: 5.3, unit: 'mmol/L', isBelow: true, urgent: true }],
+};
+const kLowScored = scoredAfterUrgentStrip(kLow, dummyRule);
+check(
+  kLowScored.severity.level !== 'none' && kLowScored.blockers.length > 0,
+  'a lab-flagged low potassium still blocks auto-file after urgent is stripped'
+);
+const culture = {
+  unmatched: false,
+  results: [{ name: 'Urine culture', value: NaN, text: 'Heavy growth of E. coli', urgent: true }],
+};
+const cultureScored = scoredAfterUrgentStrip(culture, dummyRule);
+check(
+  cultureScored.blockers.some((r) => /free-text/.test(r) && /Urine culture/.test(r)),
+  'a free-text culture still blocks auto-file after urgent is stripped'
+);
+const urgentOnly = {
+  unmatched: false,
+  results: [
+    { name: 'Sodium', value: 140, low: 133, high: 146, unit: 'mmol/L', isAbove: false, isBelow: false, urgent: true },
+  ],
+};
+const urgentOnlyScored = scoredAfterUrgentStrip(urgentOnly, dummyRule);
+check(
+  urgentOnlyScored.severity.level === 'none' && !urgentOnlyScored.blockers.some((r) => /normal limits/.test(r)),
+  'accepted widening: urgent alone, inside the report range with no lab flag and no rule, does not block'
 );
 
 // ── unrecognisedAnalyteBlockers (real-world regression, 2026-09-17) ───────────
@@ -535,7 +639,42 @@ check(
 );
 check(
   LF.fileabilityBlockers(okReport, { level: 'amber' }, someRules).some((r) => /within normal/.test(r)),
-  'amber severity blocks'
+  'amber severity with no top/comboTop detail falls back to the generic message'
+);
+// Name the specific result/rule responsible, when available (2026-10-01, Nick, live-caught: a patient's own LDL
+// was blocked by a practice-authored "Risk group: LDL high" rule, with nothing on screen distinguishing it from
+// the lab's own out-of-range flag — reading severity.top/comboTop, already computed by evaluateReportSeverity for
+// exactly this, fixes that).
+check(
+  LF.fileabilityBlockers(
+    okReport,
+    {
+      level: 'amber',
+      top: { name: 'Calculated LDL cholesterol lev', value: 2.7, unit: 'mmol/L', ruleLabel: 'Risk group: LDL high' },
+    },
+    someRules
+  ).some(
+    (r) =>
+      r ===
+      'Calculated LDL cholesterol lev (2.7 mmol/L) is not within normal limits — flagged by the clinical rule "Risk group: LDL high"'
+  ),
+  'a rule-driven block names the result, its value, and the specific rule'
+);
+check(
+  LF.fileabilityBlockers(
+    okReport,
+    { level: 'amber', top: { name: 'eGFR (MDRD)', value: 83, unit: 'ml/min/1.73 m²', ruleLabel: null } },
+    someRules
+  ).some((r) => r === 'eGFR (MDRD) (83 ml/min/1.73 m²) is not within normal limits'),
+  "a lab-flag-driven block (no rule) names the result but doesn't claim a rule caused it"
+);
+check(
+  LF.fileabilityBlockers(
+    okReport,
+    { level: 'amber', comboTop: { label: 'Suspected AKI pattern', level: 'amber' } },
+    someRules
+  ).some((r) => r === 'a clinical rule flagged this report: Suspected AKI pattern'),
+  'a combo-rule-driven block names the combo rule'
 );
 check(
   LF.fileabilityBlockers({ unmatched: true, results: okReport.results }, { level: 'none' }, someRules).some((r) =>
@@ -666,6 +805,35 @@ check(
   'an entry saved BEFORE this fix (still carrying the doubled text) still excuses it — bidirectional match, no need to re-save anything already whitelisted'
 );
 
+// Real-world regression (Nick's own Vitamin D result, 2026-09-30): unlike the eGFR case above, this
+// comment's own prose contains the result's unit, "nmol/L", early on — same as a genuine restated
+// label would. Stripping the unit's first occurrence BEFORE the doubling was collapsed removed it from
+// copy one only, leaving the two halves byte-different and permanently uncollapsible — the doubled,
+// asymmetric mess that got saved verbatim as the whitelisted comment. The fix doesn't change what a
+// SINGLE copy strips (that's pre-existing, deliberate behaviour, unrelated to doubling) — it makes the
+// DOUBLED copy resolve to exactly the same residue as the single copy, instead of a mangled duplicate.
+const vitDCommentText =
+  'The National Osteoporosis Society Guidelines suggest a target level of at least 50 nmol/L. ' +
+  'Serum 25 OHD <25 nmol/L is deficient, 25-50 nmol/L is insufficient in some people.';
+const singleVitDResidue = LF.numericCommentResidue({
+  name: 'Vitamin D (25-OH)',
+  value: 79,
+  unit: 'nmol/L',
+  rawValue: '79',
+  text: '79 ' + vitDCommentText,
+});
+const doubledVitDResidue = LF.numericCommentResidue({
+  name: 'Vitamin D (25-OH)',
+  value: 79,
+  unit: 'nmol/L',
+  rawValue: '79',
+  text: '79 ' + vitDCommentText + ' ' + vitDCommentText,
+});
+check(
+  doubledVitDResidue === singleVitDResidue && !doubledVitDResidue.includes(vitDCommentText.slice(0, 20).repeat(2)),
+  "a doubled comment whose own prose repeats the result's unit (no restated value/unit prefix in front of it) resolves to the SAME residue as a single copy — not a mangled, asymmetric duplicate"
+);
+
 // ── unresolvedCommentedResults (drives the blocked-card "whitelist this
 // comment" checkbox — must expose the EXACT residue text so a saved
 // allowComments entry is guaranteed to match on the next report) ─────────────
@@ -745,10 +913,7 @@ const belowInterpretationResult = {
   isBelow: true,
   text: '45 Below reference range',
 };
-check(
-  LF.numericCommentResidue(belowInterpretationResult) === '',
-  'the same holds for "Below reference range"'
-);
+check(LF.numericCommentResidue(belowInterpretationResult) === '', 'the same holds for "Below reference range"');
 // A GENUINE free-text interpretation (microbiology) must still be treated as real commentary — only the exact
 // known auto-generated range labels are stripped, nothing else.
 const microGrowthResult = {
@@ -1189,6 +1354,12 @@ console.log('\n--- allowComments: whole-comment matching, size floor, no truncat
   check(why('consistent with category G1 - Normal eGFR') === '', 'a real 7-word lab comment can be whitelisted');
   check(why(egfrNote) === '', 'the real 600-character note can be whitelisted');
   check(why('x '.repeat(1001)) !== '', 'over 2000 characters is refused — never truncated');
+  // 2026-09-28, Nick, live-caught: a minimum word/character count used to stand in for "not generic" and rejected
+  // real, specific, short lab comments — "See new reference range" (4 words, 24 characters) — as often as it caught
+  // anything actually generic. Genericness (below) is the real guard; shortness alone is not a reason to refuse.
+  check(why('See new reference range') === '', 'a genuine short (4-word) lab comment can now be whitelisted');
+  check(why('AKI risk') === '', 'even a 2-word comment is accepted once it is not made only of generic words');
+  check(why('is a of') !== '', 'a short phrase made only of generic words is still refused');
   const errsFor = (allow) =>
     LF.validateProfile({
       name: 'p',
@@ -1198,7 +1369,7 @@ console.log('\n--- allowComments: whole-comment matching, size floor, no truncat
       allowComments: allow,
     });
   check(
-    errsFor(['normal']).some((e) => /allowComments\[0\]/.test(e) && /too short/.test(e)),
+    errsFor(['normal']).some((e) => /allowComments\[0\]/.test(e) && /generic/.test(e)),
     'saving a profile with "normal" whitelisted is refused, with the reason'
   );
   check(errsFor([egfrNote]).length === 0, 'saving a profile with the real note whitelisted is accepted');

@@ -363,9 +363,9 @@ console.log('\n--- lab groups: comments and the assisted filing switch, per lab 
   check(
     throwsWith(
       () => OV.setFilingGroup(builtin, OV.emptyOverlay(), { ...spec, allowComments: ['normal'] }),
-      /too short/
+      /generic/
     ),
-    'a whitelisted comment that is too short / generic is refused (the same rule as Lab Filing)'
+    'a whitelisted comment that is generic (a single common word) is refused (the same rule as Lab Filing)'
   );
   check(
     throwsWith(

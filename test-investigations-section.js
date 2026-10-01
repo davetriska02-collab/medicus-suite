@@ -77,7 +77,7 @@ check(
   'the TEST\'s own "Save and approve" is always offered, never conditional on st.review — a test can have nothing of its own pending yet still have a pending assisted-filing approval, and this is the one screen that settles either (Nick, 2026-09-26: "the option is \'save\', not \'save and approve\', so again I have to open it a second time")'
 );
 check(
-  /if \(fLab\) \{\s*\n\s*const mergedNow = OV\.mergeCatalogue\(S\.builtin, next, \{ includeUnreviewed: true \}\)\.catalogue;\s*\n\s*const pending = OV\.filingStateForTest\(mergedNow, next, saved\.id, fLab\)\.pending;\s*\n\s*if \(pending\.length\) \{\s*\n\s*next = OV\.approveFilingForTest\(S\.builtin, next, saved\.id, fLab, REVIEWER\);/.test(
+  /if \(fLab\) \{\s*\n\s*const mergedNow = OV\.mergeCatalogue\(S\.builtin, next, \{ includeUnreviewed: true, includeDisabled: true \}\)\s*\n\s*\.catalogue;\s*\n\s*const pending = OV\.filingStateForTest\(mergedNow, next, saved\.id, fLab\)\.pending;\s*\n\s*if \(pending\.length\) \{\s*\n\s*next = OV\.approveFilingForTest\(S\.builtin, next, saved\.id, fLab, REVIEWER\);/.test(
     src
   ) && !/for \(const lab of S\.merged\.labs\) \{\s*\n\s*const pending = OV\.filingStateForTest/.test(src),
   'Save and approve stamps assisted filing only for the lab on screen (fLab), never by walking every lab'
@@ -567,8 +567,15 @@ console.log(
 );
 check(
   /function applyReviewDeepLink\(\)/.test(src) &&
-    /new URLSearchParams\(location\.search\)\.get\('review'\)/.test(src),
+    /params = new URLSearchParams\(location\.search\)/.test(src) &&
+    /const invId = params\.get\('review'\);/.test(src),
   'options.html?review=<id> is read via the standard URLSearchParams API, not a hand-rolled parser'
+);
+check(
+  /params\.delete\('review'\);\s*\n\s*const qs = params\.toString\(\);\s*\n\s*try \{\s*\n\s*history\.replaceState\(null, '', location\.pathname \+ \(qs \? '\?' \+ qs : ''\) \+ location\.hash\);/.test(
+    src
+  ),
+  'the ?review= param is stripped from the URL (via history.replaceState, other query params and the hash preserved) once consumed — 2026-09-28, Nick, live-caught: load() runs applyReviewDeepLink() on every save() anywhere on the page, so a stale ?review= left in the address bar kept forcibly reopening the original deep-linked test and stomping on whatever else was being edited'
 );
 check(
   /S\.loaded = true;\s*\n\s*applyReviewDeepLink\(\);\s*\n\s*render\(\);/.test(src),
@@ -698,6 +705,21 @@ check(
   ),
   'every test is offered in the manual dropdown, sorted by name — the "Suggested" optgroup above it still surfaces the auto-detected likely matches first'
 );
+
+console.log(
+  '\n── flash()\'s toast-clear timer no longer rebuilds the whole page (2026-09-28, Nick, live-caught) ──'
+);
+{
+  const flashFn = src.slice(src.indexOf('function flash('), src.indexOf('\n}\n', src.indexOf('function flash(')));
+  check(
+    /setTimeout\(\(\) => \{[\s\S]*?if \(S\.toast === msg\) \{[\s\S]*?S\.toast = '';/.test(flashFn),
+    "the toast-clear timeout still only fires for the toast it scheduled, not a newer one that's replaced it"
+  );
+  check(
+    /root && root\.querySelector\('\.lf-toast'\)/.test(flashFn) && /el\.remove\(\)/.test(flashFn),
+    'clearing the toast removes just its own DOM node — a plain 4-second timer no longer calls the full-page render(), which used to fire completely independent of what the person was doing and could steal a click mid-interaction inside an open review card ("clicking within one open review card closes it and moves me to another, seemingly at random")'
+  );
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

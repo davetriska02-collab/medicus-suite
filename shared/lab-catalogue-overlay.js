@@ -622,7 +622,7 @@
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
     if (!isObj(spec)) fail('a filing range must be an object');
-    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const res = asArr(cat.results).find((r) => r.id === spec.result);
     if (!res) fail('unknown result "' + spec.result + '"');
     if (!asArr(cat.labs).some((l) => l.id === spec.lab)) fail('unknown lab "' + spec.lab + '"');
@@ -655,7 +655,7 @@
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
     if (!isObj(spec)) fail('guards must be an object');
-    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     if (!asArr(cat.results).some((r) => r.id === spec.result)) fail('unknown result "' + spec.result + '"');
     if (!asArr(cat.labs).some((l) => l.id === spec.lab)) fail('unknown lab "' + spec.lab + '"');
     const key = filingGuardKey(spec);
@@ -678,7 +678,7 @@
     const day = today || new Date().toISOString().slice(0, 10);
     const o = safeClone(overlay);
     if (!isObj(spec)) fail('a lab group must be an object');
-    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const cat = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const lab = asArr(cat.labs).find((l) => l.id === spec.lab);
     if (!lab) fail('unknown lab "' + spec.lab + '"');
     const LC = core();
@@ -827,7 +827,7 @@
   // Switch assisted filing on / off for a test at a lab: every report group that identifies it. Turning it on creates the group entry
   // (unapproved) if there is none; a group left with nothing set is removed.
   function setFilingForTest(builtin, overlay, invId, labId, enabled, today) {
-    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const st = filingStateForTest(merged, overlay, invId, labId);
     if (!st.headings.length) fail('this lab has no report group heading recorded for this test yet');
     let o = safeClone(overlay);
@@ -854,7 +854,7 @@
   // didn't find it having written this system, no chance of a mere user doing so" — a per-analyte toggle buried in each
   // result's own Safety guards column was both unfindable and meant re-ticking it once per result of a multi-result test).
   function setFilingOverrideForTest(builtin, overlay, invId, labId, overrideLabFlag, today) {
-    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const st = filingStateForTest(merged, overlay, invId, labId);
     if (!st.headings.length) fail('this lab has no report group heading recorded for this test yet');
     let o = safeClone(overlay);
@@ -881,7 +881,7 @@
   // suppress list (those are approveFiling('screen'|'suppress') from their own buttons). Called for the lab whose
   // ranges and override are actually on screen.
   function approveFilingForTest(builtin, overlay, invId, labId, by, when) {
-    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const st = filingStateForTest(merged, overlay, invId, labId);
     let o = safeClone(overlay);
     for (const p of st.pending) o = approveFiling(o, p.kind, p.key, by, when);
@@ -1005,7 +1005,7 @@
   // the page can say why instead of silently storing an entry the catalogue then ignores.
   function assertUsable(builtin, overlay, ids) {
     const LC = core();
-    const m = mergeCatalogue(builtin, overlay, { includeUnreviewed: true });
+    const m = mergeCatalogue(builtin, overlay, { includeUnreviewed: true, includeDisabled: true });
     const bad = m.problems.filter((p) => ids.includes(p.id) && !/\(ignored\)$/.test(p.reason));
     // the validator's path prefix ("results[63] (id).codes[1]: ") means nothing to a person: keep just the reason
     const plain = (t) =>
@@ -1098,6 +1098,24 @@
     if (spec.excludeAliases && spec.excludeAliases.length) entry.excludeAliases = spec.excludeAliases.map(text);
     if (spec.note) entry.note = text(spec.note);
     if (b) entry.override = true;
+    // A filing range is keyed to one of this result's own codes — if the codes on screen no longer include it, the
+    // range would silently stop working (excluded from the acting catalogue with no warning) rather than failing
+    // loudly here, where it can still be fixed before saving (2026-09-30, Nick, live-caught: eGFR's RJ700 range
+    // vanished unseen this way). assertUsable() below can't catch this on its own — a filing-range problem's id is
+    // 'ranges:result|lab|code', never a bare result id, so it never matches ids.includes(p.id).
+    const orphanedRanges = asArr(o.filing && o.filing.ranges).filter(
+      (r) => r.result === id && !entry.codes.some((c) => c.conceptId === r.code)
+    );
+    if (orphanedRanges.length) {
+      const labName = (labId) => {
+        const lab =
+          asArr(o.labs).find((l) => l.id === labId) || asArr(builtin && builtin.labs).find((l) => l.id === labId);
+        return (lab && lab.name) || labId;
+      };
+      fail(
+        `Removing code ${orphanedRanges.map((r) => r.code).join(', ')} would silently break the practice range already set at ${[...new Set(orphanedRanges.map((r) => labName(r.lab)))].join(', ')} — clear that range first, or keep the code.`
+      );
+    }
     if (b && resultContent(entry) === resultContent(b)) {
       if (idx >= 0) o.results.splice(idx, 1); // back to the shipped definition
       return { overlay: sanitiseOverlay(o), id, reverted: true };
@@ -1191,7 +1209,7 @@
       if (!wanted.has(lh.lab)) wanted.set(lh.lab, []);
       wanted.get(lh.lab).push(text(lh.text));
     }
-    const mergedLabs = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue.labs;
+    const mergedLabs = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue.labs;
     for (const labId of wanted.keys()) if (!mergedLabs.some((l) => l.id === labId)) fail(`unknown lab "${labId}"`);
     for (const lab of mergedLabs) {
       const texts = wanted.get(lab.id) || [];
@@ -1247,7 +1265,7 @@
   // so nothing else about the investigation is touched; a duplicate (by text, case/spacing aside) is a no-op.
   function addRequestAlias(builtin, overlay, invId, text, system, today) {
     const LC = core();
-    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, overlay, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const inv = asArr(merged.investigations).find((i) => i.id === invId);
     if (!inv) fail('unknown investigation "' + invId + '"');
     const clean = String(text == null ? '' : text).trim();
@@ -1314,7 +1332,7 @@
   // Plain-language list of what differs from the SHIPPED definition (for the review screen).
   function describeChanges(builtin, overlay, invId) {
     const LC = core();
-    const m = mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+    const m = mergeCatalogue(builtin, overlay, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const b = asArr(builtin && builtin.investigations).find((i) => i.id === invId);
     const n = m.investigations.find((i) => i.id === invId);
     if (!b || !n) return [];
@@ -1639,7 +1657,7 @@
     if (asArr(builtin && builtin.investigations).some((i) => i.id === fromId))
       fail('a built-in test cannot be merged away — disable it instead');
     const o = safeClone(overlay);
-    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const F = merged.investigations.find((i) => i.id === fromId);
     const T = merged.investigations.find((i) => i.id === intoId);
     if (!F) fail(`investigations "${fromId}" not found`);
@@ -1733,7 +1751,7 @@
     if (asArr(builtin && builtin.results).some((r) => r.id === fromId))
       fail('a built-in result cannot be merged away — disable it instead');
     const o = safeClone(overlay);
-    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const F = merged.results.find((r) => r.id === fromId);
     const T = merged.results.find((r) => r.id === intoId);
     if (!F) fail(`result "${fromId}" not found`);
@@ -1742,12 +1760,17 @@
     if (!e) {
       const b = asArr(builtin && builtin.results).find((r) => r.id === intoId);
       if (!b) fail(`result "${intoId}" not found`);
+      // Seeded from the built-in's OWN codes/aliases, not empty (2026-09-30, Nick, live-caught): override:true means
+      // this entry REPLACES the built-in at merge time, not merges additively with it — starting empty silently
+      // discarded the target's own codes the moment this carrier was created, which in turn orphaned anything keyed
+      // to one of those codes elsewhere (a filing range). The loops just below already skip a conceptId/alias
+      // that's already present, so seeding here still lets the merged-away result's own codes/aliases join in.
       e = {
         id: b.id,
         label: b.label,
         valueKind: b.valueKind,
-        codes: [],
-        aliases: [],
+        codes: asArr(b.codes).map((c) => ({ ...c })),
+        aliases: asArr(b.aliases).map((a) => ({ ...a })),
         override: true,
         provenance: authoredProvenance(null, day),
       };
@@ -1823,7 +1846,7 @@
     if (asArr(builtin && builtin.labs).some((l) => l.id === fromId))
       fail('a built-in lab cannot be merged away — disable it instead');
     const o = safeClone(overlay);
-    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const F = merged.labs.find((l) => l.id === fromId);
     const T = merged.labs.find((l) => l.id === intoId);
     if (!F) fail(`lab "${fromId}" not found`);
@@ -1994,7 +2017,7 @@
   function setHeadingNote(builtin, overlay, labId, headingText, note) {
     const o = safeClone(overlay);
     const LC = core();
-    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true }).catalogue;
+    const merged = mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
     const lab = asArr(merged.labs).find((l) => l.id === labId);
     if (!lab) fail('unknown lab "' + labId + '"');
     const nh = LC.norm(headingText);
@@ -2071,6 +2094,14 @@
     if (!LC) throw new Error('LabCatalogue core is not available in this context.');
     const norm = LC.norm;
     const includeUnreviewed = !!(opts && opts.includeUnreviewed);
+    // A disabled built-in is, by design, still meant to be visible and editable in the management UI (a "disabled"
+    // badge + "Re-enable" button) — only the ACTING catalogue used for real matching/filing should actually drop it.
+    // Before this flag existed, applyDisables() below removed a disabled investigation/result from EVERY merge,
+    // including every includeUnreviewed:true management call — so the Options page's own list (built from a merge
+    // like that) lost the row entirely the moment "Disable" was clicked, with no way back through the UI. Confirmed
+    // live, 2026-09-30, Nick: U&E and Bone profile both vanished from the catalogue (not found by search either)
+    // right after clicking Disable.
+    const includeDisabled = !!(opts && opts.includeDisabled);
     const problems = [];
     const excluded = [];
     const overlay = overlayIn ? sanitiseOverlay(overlayIn) : emptyOverlay();
@@ -2338,7 +2369,7 @@
     let cat = JSON.parse(JSON.stringify(base));
     const problemMark = problems.length;
     for (const it of entries) applyOne(cat, it);
-    applyDisables(cat);
+    if (!includeDisabled) applyDisables(cat);
     applyLabNames(cat);
     let v = LC.validateCatalogue(cat);
     if (v.errors.length === 0) return { catalogue: attachFiling(cat), problems, excluded, warnings: v.warnings };
@@ -2360,17 +2391,19 @@
         });
     }
     const beforeDisable = JSON.parse(JSON.stringify(cat));
-    applyDisables(cat);
-    v = LC.validateCatalogue(cat);
-    if (v.errors.length) {
-      problems.push({
-        kind: 'overlay',
-        id: null,
-        reason: 'disables would make the catalogue invalid — ignored: ' + v.errors[0],
-        fatal: false,
-      });
-      cat = beforeDisable;
+    if (!includeDisabled) {
+      applyDisables(cat);
       v = LC.validateCatalogue(cat);
+      if (v.errors.length) {
+        problems.push({
+          kind: 'overlay',
+          id: null,
+          reason: 'disables would make the catalogue invalid — ignored: ' + v.errors[0],
+          fatal: false,
+        });
+        cat = beforeDisable;
+        v = LC.validateCatalogue(cat);
+      }
     }
     applyLabNames(cat);
     return { catalogue: attachFiling(cat), problems, excluded, warnings: v.warnings };

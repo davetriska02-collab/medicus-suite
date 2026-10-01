@@ -68,8 +68,10 @@
   // ── Whitelisted lab comments: what may be whitelisted at all ─────────────────────────────────────────────────────
   // A lab comment is boilerplate the LAB attaches to a report group (several sentences). Whitelisting a word or a short
   // generic phrase ("normal") must be impossible: it would excuse anything that mentions it.
-  const LF_ALLOW_MIN_WORDS = 6;
-  const LF_ALLOW_MIN_CHARS = 30;
+  // A minimum word/character count (6 words / 30 characters) used to stand in for "not generic" — removed 2026-09-28,
+  // Nick, live-caught: it rejected real, specific, genuinely short lab comments ("See new reference range", 4 words) as
+  // often as it caught anything actually generic. The word-by-word genericness check below is what was always meant to
+  // do this job; length was never a reliable proxy for it.
   const LF_ALLOW_GENERIC_TOKENS = new Set(
     (
       'normal no action further required needed result results satisfactory stable acceptable nad within limits limit range ok ' +
@@ -88,9 +90,7 @@
       .replace(/\s+/g, ' ')
       .trim();
     const words = norm ? norm.split(' ') : [];
-    if (words.length < LF_ALLOW_MIN_WORDS || norm.length < LF_ALLOW_MIN_CHARS)
-      return `is too short to whitelist — a lab comment is several words long (at least ${LF_ALLOW_MIN_WORDS} words and ${LF_ALLOW_MIN_CHARS} characters)`;
-    if (words.every((w) => LF_ALLOW_GENERIC_TOKENS.has(w))) return 'is made only of generic words';
+    if (!words.length || words.every((w) => LF_ALLOW_GENERIC_TOKENS.has(w))) return 'is made only of generic words';
     return '';
   }
 
@@ -851,7 +851,6 @@
   // range that flags it (e.g. eGFR's over-sensitive 90–120) is superseded FOR THE
   // ALL-NORMAL DETERMINATION. Safety bounds, all hard:
   //   • opt-in only — does nothing unless profile.paramsOverrideLabFlags === true;
-  //   • an `urgent` (requires-urgent-review) flag is NEVER cleared;
   //   • only analytes with a matching parameter are touched; everything else is left
   //     exactly as the lab reported it;
   //   • a value OUTSIDE the clinician's range keeps its lab flag (and is also caught by
@@ -865,32 +864,37 @@
     if (!profile || profile.paramsOverrideLabFlags !== true) return report;
     const params = Array.isArray(profile.parameters) ? profile.parameters : [];
     if (!params.length) return report;
+    // Medicus's own "requiresUrgentReview"/r.urgent flag is not a clinical discriminator anywhere in this feature
+    // (removed 2026-09-30, Nick: it fires on virtually every abnormal result indiscriminately, and never on
+    // microbiology, so a crashingly abnormal culture would never carry it — no real signal either way). Stripped
+    // unconditionally, before anything else runs, so it plays no part in whether a lab flag gets overridden here,
+    // and so the severity computation this report is about to be passed through never sees it either.
     const results = report.results.map((r) => {
       if (!r || typeof r !== 'object') return r;
-      if (r.urgent) return r; // never override an urgent flag
-      if (!(r.isAbove || r.isBelow)) return r; // nothing flagged to clear
-      const rName = isStr(r.name) ? r.name : '';
+      const stripped = r.urgent ? { ...r, urgent: false } : r;
+      if (!(stripped.isAbove || stripped.isBelow)) return stripped; // nothing flagged to clear
+      const rName = isStr(stripped.name) ? stripped.name : '';
       // 2026-08-23 review fix: an unresolved tie between two parameters must
       // never clear a lab flag — the code cannot tell which range applies.
-      if (findParamAmbiguity(rName, params)) return r;
+      if (findParamAmbiguity(rName, params)) return stripped;
       const param = findParamFor(rName, params);
-      if (!param) return r;
-      const val = Number(r.value);
-      if (!Number.isFinite(val)) return r; // can't judge → keep the lab flag
+      if (!param) return stripped;
+      const val = Number(stripped.value);
+      if (!Number.isFinite(val)) return stripped; // can't judge → keep the lab flag
       // Units must POSITIVELY match before a clinician range clears a flag the
       // lab itself raised (audit R1/F7). 2026-08-23 review fix: the old test
       // only caught 'mismatch', and unitsCompat returns 'unknown' when either
       // side is empty — so a ug/L range cleared a lab-flagged value of unknown
       // unit. Clearing a lab flag is the most dangerous thing this function
       // does; anything short of a confirmed match keeps the lab's own flag.
-      if (!unitsSafeToApply(param.unit, r.unit)) return r;
+      if (!unitsSafeToApply(param.unit, stripped.unit)) return stripped;
       // A comparator-censored value must never clear a lab flag (audit R1/F6) —
       // the true value is only bounded by, not equal to, the parse.
-      if (isStr(r.comparator) && r.comparator.trim()) return r;
+      if (isStr(stripped.comparator) && stripped.comparator.trim()) return stripped;
       const withinLow = param.low == null || val >= param.low;
       const withinHigh = param.high == null || val <= param.high;
-      if (withinLow && withinHigh) return { ...r, isAbove: false, isBelow: false, _labFlagOverridden: true };
-      return r;
+      if (withinLow && withinHigh) return { ...stripped, isAbove: false, isBelow: false, _labFlagOverridden: true };
+      return stripped;
     });
     return { ...report, results };
   }
@@ -1068,7 +1072,20 @@
   const LF_REFERENCE_RANGE_LABELS = new Set(['above reference range', 'below reference range']);
   function numericCommentResidue(r) {
     if (!isStr(r.text)) return '';
-    let residue = r.text;
+    // Try collapsing an exact whole-string doubling before stripping anything, AND again after EVERY
+    // token strip below — 2026-09-30, Nick, live-caught (Vitamin D). A doubled comment is only ever a
+    // clean, symmetric "X X" once whatever non-repeated prefix Medicus put in front of it (a restated
+    // value/unit/name label) has been removed — for Vitamin D that prefix was just the bare value
+    // ("79 "), for a typical numeric result it's "<name> <value> <unit> " (see the eGFR regression test
+    // this guards). Collapsing only ONCE, before any stripping, misses every doubling that has such a
+    // prefix. Collapsing only ONCE, after ALL stripping, is worse: stripping a token's FIRST occurrence
+    // only (see below) can itself introduce asymmetry — the result's own unit, "nmol/L", appeared early
+    // in the Vitamin D comment's own prose, not just as a restated label, so stripping its first
+    // occurrence removed it from copy one but left copy two untouched, and once the two halves are no
+    // longer byte-identical, _collapseRepeatedWhole can never recognise the doubling again. Retrying the
+    // collapse after each individual strip catches the doubling at whichever point it first becomes a
+    // clean symmetric pair, before any later strip has a chance to knock it back out of symmetry.
+    let residue = _collapseRepeatedWhole(r.text.replace(/\s+/g, ' ').trim());
     const strip = [];
     if (isStr(r.rawValue) && r.rawValue.trim()) strip.push(r.rawValue.trim());
     if (Number.isFinite(r.value)) strip.push(String(r.value));
@@ -1085,9 +1102,13 @@
     // data..." on a Creatinine result), silently mangling the residue that
     // both the benign-phrase check and a profile's allowComments match against.
     for (const token of strip) {
-      residue = residue.replace(new RegExp(escapeRe(token), 'i'), ' ');
+      residue = residue
+        .replace(new RegExp(escapeRe(token), 'i'), ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      residue = _collapseRepeatedWhole(residue);
     }
-    return _collapseRepeatedWhole(residue.replace(/\s+/g, ' ').trim());
+    return residue.replace(/\s+/g, ' ').trim();
   }
 
   // Medicus's own report data has been observed (live, 2026-09-17) to carry a
@@ -1271,7 +1292,27 @@
       reasons.push('no results could be read from this report');
       return reasons;
     }
-    if (!severity || severity.level !== 'none') reasons.push('not every result is within normal limits');
+    // Name the specific result/rule responsible, when available, instead of a blanket "not every result is within
+    // normal limits" — severity.top (name/value/unit/ruleLabel) and severity.comboTop (label) are already computed
+    // by evaluateReportSeverity for exactly this purpose (2026-10-01, Nick, live-caught: a patient's own LDL, 2.7,
+    // was blocked by a practice-authored "Risk group: LDL high" rule — nothing on screen said so, it just read as
+    // "not every result is within normal limits", indistinguishable from the lab's own out-of-range flag).
+    if (!severity || severity.level !== 'none') {
+      if (severity && severity.comboTop && isStr(severity.comboTop.label) && severity.comboTop.label.trim()) {
+        reasons.push(`a clinical rule flagged this report: ${severity.comboTop.label.trim()}`);
+      } else if (severity && severity.top && isStr(severity.top.name) && severity.top.name.trim()) {
+        const unitText = isStr(severity.top.unit) && severity.top.unit.trim() ? ' ' + severity.top.unit.trim() : '';
+        const ruleText =
+          isStr(severity.top.ruleLabel) && severity.top.ruleLabel.trim()
+            ? ` — flagged by the clinical rule "${severity.top.ruleLabel.trim()}"`
+            : '';
+        reasons.push(
+          `${severity.top.name.trim()} (${severity.top.value}${unitText}) is not within normal limits${ruleText}`
+        );
+      } else {
+        reasons.push('not every result is within normal limits');
+      }
+    }
     // An evaluator crash must never read as "confirmed normal" (audit R1e —
     // evaluateReportSeverity's catch marks its fallback with evalError).
     if (severity && severity.evalError) {
@@ -1416,7 +1457,7 @@
 - "analytes" — array of the analyte names as they appear on THIS lab's reports (e.g. ["haemoglobin","sodium","potassium","creatinine"]). Read these off the screenshots.
 - "parameters" — array of clinician-set normal ranges, one per analyte, checked IN ADDITION to the lab's own flags. Each: { "analyte": "<name>", "low": <number or null>, "high": <number or null>, "unit": "<unit>" }. Read the reference range from the screenshot where shown. CRUCIAL for analytes the lab shows with NO reference range (e.g. HbA1c): set the practice's own normal limit, e.g. { "analyte": "hba1c", "high": 47, "unit": "mmol/mol" }. Use low and/or high (omit/null the bound that doesn't apply). A result outside its set range blocks one-click filing.
 - "requireRangeForAll" — boolean. If true, the button is suppressed unless EVERY numeric result has either a lab reference range or a parameter here — so an un-ranged analyte (like HbA1c) can never be filed until a parameter is set. Default TRUE (fail closed); set false only if you deliberately accept filing analytes nothing has range-checked.
-- "paramsOverrideLabFlags" — boolean. If true, a result within a parameter range you set here counts as normal EVEN IF the lab flagged it out-of-range — for analytes where the lab's reference range is over-sensitive (e.g. eGFR flagged low at 89 against a 90–120 lab range, when your floor is 60). Only ever applies to analytes you give a parameter, never overrides an urgent flag, and is shown loudly in the confirm dialog. Default false. Set true only when you have deliberately set the clinically-correct range for that analyte.
+- "paramsOverrideLabFlags" — boolean. If true, a result within a parameter range you set here counts as normal EVEN IF the lab flagged it out-of-range — for analytes where the lab's reference range is over-sensitive (e.g. eGFR flagged low at 89 against a 90–120 lab range, when your floor is 60). Only ever applies to analytes you give a parameter, and is shown loudly in the confirm dialog. Default false. Set true only when you have deliberately set the clinically-correct range for that analyte.
 - "trend" — { "maxDeltaPct": <number> }. If set, blocks filing when any result has moved more than this percentage vs the patient's previous value (catches a creeping creatinine / falling eGFR even when still "in range"). Omit to disable.
 - "excludeIfMeds" — array of drug-name substrings; if the patient is on any (e.g. ["methotrexate","lithium","amiodarone"]), filing is not offered (monitored drugs need a human). Omit if not applicable.
 - "suppressIfText" — array of phrases (e.g. ["telephone result","call patient"]); if the report text contains any, filing is not offered (a contact was promised). Omit if not applicable.
@@ -1508,8 +1549,6 @@ After this line, the clinician pastes screenshots of the filing screen (and may 
     unresolvedCommentedResults,
     profilesOwningResult,
     allowCommentProblem,
-    LF_ALLOW_MIN_WORDS,
-    LF_ALLOW_MIN_CHARS,
     // 2026-08-22 audit R1b — exported so the unidirectional-match invariant is
     // pinned directly, not only through the blocker functions.
     LF_SCHEMA,

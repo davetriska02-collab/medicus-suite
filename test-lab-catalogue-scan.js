@@ -1799,6 +1799,87 @@ console.log('\n── reading the queue (injected client) ──');
     );
   }
 
+  console.log(
+    '\n── a content-matched report from a lab with no heading, for an investigation already "done" at a DIFFERENT lab (2026-09-30, Nick, live-caught) ──'
+  );
+  {
+    // U&E already has "U&Es"/"Renal function tests" headings at RJ700 (the practice's normal community lab) in the
+    // shipped catalogue, so findGaps() considers it fully done and 'ue' is NOT a target — confirmed as a
+    // precondition, not assumed.
+    const cat = clone(seed);
+    const targets = SC.findGaps(cat, {}).map((g) => g.id);
+    check(!targets.includes('ue'), 'precondition: U&E is catalogue-wide "done" (it already has a heading at RJ700)');
+
+    // Kingston Hospital NHS Trust is a real shipped lab (rules/lab-catalogue.json) whose only report-group heading
+    // is "Urine culture" — it has NO heading mapped for U&E at all. A genuine U&E report from Kingston, under a
+    // heading text this catalogue does not recognise, resolved purely by SNOMED code (not by heading alias — two
+    // core results, since a single one alone does not clear the content-match threshold for a multi-member test).
+    const report = {
+      lab: { organisation: 'Kingston Hospital NHS Trust', department: 'General Pathology' },
+      groups: [
+        {
+          heading: 'Chemistry Profile 1',
+          specimenType: 'Blood',
+          results: [
+            { name: 'Urea', code: '1000951000000103', codeText: 'Urea', unit: 'mmol/L', numeric: true, degraded: false },
+            {
+              name: 'Creatinine',
+              code: '1000731000000107',
+              codeText: 'Creatinine',
+              unit: 'umol/L',
+              numeric: true,
+              degraded: false,
+            },
+          ],
+        },
+      ],
+      ungrouped: [],
+      requests: [],
+    };
+    const without = SC.analyse(cat, [report], { targets });
+    check(
+      !without.proposals.some((p) => p.target === 'ue'),
+      'crossLabGaps is opt-in — without it, this report stays silently dropped, exactly as before this fix (a caller with a deliberately hand-picked targets list must not be affected)'
+    );
+    const an = SC.analyse(cat, [report], { targets, crossLabGaps: true });
+    const prop = an.proposals.find((p) => p.target === 'ue');
+    check(
+      !!prop && prop.heading === 'Chemistry Profile 1',
+      'with crossLabGaps:true (what the real "Match requests to lab reports" caller now passes), a proposal appears for U&E at Kingston even though "ue" is not in targets'
+    );
+    check(!!prop && prop.headingKnown === false, 'and the heading is correctly reported as not yet known AT THIS lab');
+  }
+
+  console.log(
+    '\n── the suppression that must still hold: same lab, heading already known, stays quiet even though the investigation is not in targets ──'
+  );
+  {
+    const cat = clone(seed);
+    const targets = SC.findGaps(cat, {}).map((g) => g.id);
+    check(!targets.includes('ue'), 'precondition: U&E is catalogue-wide "done"');
+
+    // RJ700 already has the exact "U&Es" heading identifying 'ue' — this is the lab the setup lives at.
+    const report = {
+      lab: { organisation: 'RJ700', department: 'General Pathology' },
+      groups: [
+        {
+          heading: 'U&Es',
+          specimenType: 'Blood',
+          results: [
+            { name: 'Urea', code: '1000951000000103', codeText: 'Urea', unit: 'mmol/L', numeric: true, degraded: false },
+          ],
+        },
+      ],
+      ungrouped: [],
+      requests: [],
+    };
+    const an = SC.analyse(cat, [report], { targets, crossLabGaps: true });
+    check(
+      an.proposals.length === 0,
+      'no proposal from the lab that already has the heading, even with crossLabGaps:true and "ue" excluded from targets — the widening only opens for a lab that genuinely lacks the heading, not every lab an excluded investigation touches'
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })();

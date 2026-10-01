@@ -264,6 +264,23 @@ console.log('\n--- practice range vs the lab’s own range ---');
     clean.ok && clean.blockers.length === 0,
     'within the practice range -> clean, regardless of the wider lab range'
   );
+  // r.urgent is stripped as a filing signal. The practice range and a lab flag still block.
+  const urgentAbove = FC.evaluateFilingCatalogue(
+    report([result({ value: 200, rawValue: '200', urgent: true, isAbove: true })]),
+    acting(baseOverlay())
+  );
+  check(
+    urgentAbove.ok && urgentAbove.reasonKinds.includes('above-practice-range'),
+    'a value above the practice maximum still blocks when Medicus also set urgent'
+  );
+  const urgentFlaggedInRange = FC.evaluateFilingCatalogue(
+    report([result({ value: 77, urgent: true, isBelow: true })]),
+    acting(baseOverlay())
+  );
+  check(
+    urgentFlaggedInRange.ok && urgentFlaggedInRange.reasonKinds.includes('lab-flagged-abnormal'),
+    'a lab-flagged in-range result still blocks without the lab-flag override, even if urgent is set'
+  );
 }
 
 console.log('\n--- reasonKinds: the value-free twin of blockers, for a log (never a value) ---');
@@ -554,6 +571,46 @@ console.log(
   );
 }
 
+console.log(
+  '\n--- commentsForWhitelist: "already saved, awaiting approval" is not the same as "never submitted" (2026-09-27, Nick) ---'
+);
+{
+  const pending = (overlay) => OV.mergeCatalogue(builtin, overlay, { includeUnreviewed: true }).catalogue;
+  const RESIDUE = 'Please repeat in 3 months, new finding';
+  const commented = report([result({ text: RESIDUE })]);
+  // Saved onto the group's allowComments, but never approved — exactly what whitelisting a comment produces: the
+  // whole group is sent back to review the moment a new comment is added to it.
+  const justSaved = OV.setFilingGroup(builtin, OV.emptyOverlay(), { lab: LAB, heading: 'LFTs', allowComments: [RESIDUE] }, TODAY);
+  check(
+    FC.commentsForWhitelist(commented, acting(justSaved)).every((r) => !r.pending),
+    'without a pendingCatalogue argument, nothing is ever marked pending (old callers keep the old behaviour exactly)'
+  );
+  const withPending = FC.commentsForWhitelist(commented, acting(justSaved), pending(justSaved));
+  check(
+    withPending.length === 1 && withPending[0].pending === true && withPending[0].investigationId === 'lft',
+    'WITH pendingCatalogue supplied, an unapproved comment already saved onto the group is flagged pending, carrying the investigation id to link to — this is the B12/folate case: whitelisting one comment must not make an unrelated pending one look like it was never submitted'
+  );
+  // Once approved, it is fully resolved — pending must not linger true for something no longer pending.
+  const approved = OV.approveFiling(justSaved, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'LFTs' }), 'Dr Test', TODAY);
+  check(
+    FC.commentsForWhitelist(commented, acting(approved), pending(approved)).length === 0,
+    'once approved, the comment is resolved outright (not offered at all, pending or otherwise)'
+  );
+  // A DIFFERENT, genuinely never-submitted comment under the same heading must not be swept up as "pending" just
+  // because something else on that group happens to be.
+  const OTHER_RESIDUE = 'A second, different, genuinely never-submitted comment about this LFT result entirely';
+  const mixed = FC.commentsForWhitelist(
+    report([result({ text: RESIDUE }), result({ text: OTHER_RESIDUE })]),
+    acting(justSaved),
+    pending(justSaved)
+  );
+  const other = mixed.find((r) => r.residue === OTHER_RESIDUE);
+  check(
+    mixed.length === 2 && other && other.pending === false,
+    'a genuinely new, never-submitted comment under the same heading is never mistaken for the pending one — pending is per residue text, not per heading'
+  );
+}
+
 console.log('\n--- fail-closed / never throws ---');
 {
   check(
@@ -695,10 +752,13 @@ console.log(
     'the input report/result are never mutated — a new copy is returned'
   );
 
+  // r.urgent is not a clinical discriminator here (removed 2026-09-30, Nick: Medicus sets it on virtually every
+  // abnormal result indiscriminately, and never on microbiology, so it carried no real signal). It no longer blocks
+  // the override, and is itself stripped so downstream severity scoring never sees it either.
   const urgent = FC.applyCatalogueOverrides(report([result({ isBelow: true, value: 77, urgent: true })]), acting(o));
   check(
-    urgent.results[0].isBelow === true,
-    'an urgent flag is NEVER cleared, even with the group override and a matching range — same bound as legacy'
+    urgent.results[0].isBelow === false && urgent.results[0].urgent === false,
+    'an urgent flag no longer blocks the override, and is itself cleared, when the group override and a matching range apply'
   );
 
   const outOfRange = FC.applyCatalogueOverrides(
