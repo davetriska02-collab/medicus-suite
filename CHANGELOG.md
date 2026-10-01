@@ -2,6 +2,14 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.12] — 2026-10-01
+
+### Stale release zip is no longer tracked
+
+`medicus-suite-v3.264.34-scheme-a.zip` (~8.8 MB) is removed from the index with `git rm --cached`. History is not rewritten. `.gitignore` already ignored `*.zip`; the unused exception for `medicus-suite-baseline.zip` is gone, so no zip is re-included. `test-no-tracked-zips.js` fails if any `.zip` is tracked.
+
+No hazard-log entry. This is a repository artefact. It does not change the extension that runs in the practice, a clinical display, or a write to Medicus. Product-version pin stays 3.264.1. `last_cso_review_version` does not move.
+
 ## [v3.268.11] — 2026-10-01
 
 ### ESLint 9.39.5 (dev tooling)

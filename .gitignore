@@ -7,9 +7,9 @@
 *.swp
 *~
 
-# Build artefacts (the GitHub Actions workflow creates these)
+# Build artefacts (the GitHub Actions workflow creates these).
+# No exception: a tracked zip fails test-no-tracked-zips.js.
 *.zip
-!medicus-suite-baseline.zip
 
 # Local dev scratch (both forms: the directory AND a symlink to one — the
 # trailing-slash pattern alone lets a symlinked node_modules get committed)
