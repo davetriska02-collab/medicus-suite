@@ -16,7 +16,7 @@ COVID eligibility is unchanged: age 75+, care home residents, and the immunosupp
 
 Not changed in this release: Sweep still does not read the journal; a not-given status in a field this release does not read is still taken from the name; asplenia 5-year pneumococcal revaccination, pregnancy pertussis and pregnancy RSV stay unencoded; VI001–VI004 stay disabled.
 
-H-096 is Proposed. CSO sign-off is blank. Hazard-log document version 3.97. Clinical safety notice not moved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved. H-095 stays accepted and is not rewritten.
+H-096 is Accepted (ALARP) at residual 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-02. Hazard-log document version 3.98. Clinical safety notice document version 3.107. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved. H-095 stays accepted and is not rewritten.
 
 ## [v3.268.15] — 2026-10-02
 
