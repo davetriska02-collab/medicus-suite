@@ -649,7 +649,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const review = String((msg && msg.review) || '');
       const suffix = /^[a-z-]+$/.test(section) ? `#sect-${section}` : '';
       const query = /^[a-z0-9-]+$/.test(review) ? `?review=${review}` : '';
-      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') + query + suffix });
+      // `lab` (Companion's approve link, Nick, 2026-10-02): scrolls the Labs list to one lab's own approve card. Same
+      // slug validation - a lab id is the same shape (shared/lab-catalogue-overlay.js freshId/slugify).
+      const lab = String((msg && msg.lab) || '');
+      const labQuery = /^[a-z0-9-]+$/.test(lab) ? `${query ? '&' : '?'}lab=${lab}` : '';
+      chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') + query + labQuery + suffix });
       break;
     }
 

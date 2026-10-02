@@ -572,7 +572,7 @@ check(
   'options.html?review=<id> is read via the standard URLSearchParams API, not a hand-rolled parser'
 );
 check(
-  /params\.delete\('review'\);\s*\n\s*const qs = params\.toString\(\);\s*\n\s*try \{\s*\n\s*history\.replaceState\(null, '', location\.pathname \+ \(qs \? '\?' \+ qs : ''\) \+ location\.hash\);/.test(
+  /params\.delete\('review'\);\s*\n\s*params\.delete\('lab'\);\s*\n\s*const qs = params\.toString\(\);\s*\n\s*try \{\s*\n\s*history\.replaceState\(null, '', location\.pathname \+ \(qs \? '\?' \+ qs : ''\) \+ location\.hash\);/.test(
     src
   ),
   'the ?review= param is stripped from the URL (via history.replaceState, other query params and the hash preserved) once consumed — 2026-09-28, Nick, live-caught: load() runs applyReviewDeepLink() on every save() anywhere on the page, so a stale ?review= left in the address bar kept forcibly reopening the original deep-linked test and stomping on whatever else was being edited'
@@ -595,7 +595,7 @@ check(
   /chrome\.runtime\.sendMessage\(\{ action: 'ms-open-options', section: 'investigations', review: invId \}\);/.test(
     read('content-scripts/triage-lens/lab-file-button.js')
   ) &&
-    /chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\('options\/options\.html'\) \+ query \+ suffix \}\);/.test(
+    /chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\('options\/options\.html'\) \+ query \+ labQuery \+ suffix \}\);/.test(
       read('service-worker.js')
     ),
   'the button that opens this link (lab-file-button.js) reuses the SAME query param name via the service worker\'s ms-open-options relay (a content script\'s own window.open() to a chrome-extension:// URL is blocked outright on Edge — ERR_BLOCKED_BY_CLIENT — since options/options.html is not in web_accessible_resources) and the existing #sect-investigations hash-router — no new deep-link mechanism duplicated on the other side'

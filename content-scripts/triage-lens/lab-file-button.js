@@ -658,6 +658,162 @@
     });
   }
 
+  // TEMPORARY diagnostic (2026-10-02, Nick) — accumulates structured entries in memory instead of
+  // printing them (a console dump needs stripping out by hand before it's usable) and exposes a
+  // one-shot export to a downloaded JSON file: call __chExportLabDiag() from the PAGE console once
+  // you've opened every investigation you want captured. __chClearLabDiag() empties the buffer first
+  // if you want to start a fresh capture. See project-lab-filing-phantom-comment-digit-bug /
+  // project-fbc-kingston-specimen-scoping (memory). REMOVE once the bug hunt is done — must not ship.
+  //
+  // 2026-10-02 (empty export, Nick): the ch-debug flag used to be read ONCE at page load, and the buffer lived only in
+  // this page's memory — so setting the flag after load, reloading after a capture, or exporting from another frame's
+  // context all gave []. Now the flag is read live on every capture, and captures are also kept in
+  // chrome.storage.local (last 60), so a reload or a different frame cannot lose them.
+  const DIAG_KEY = '__chLabDiagLog';
+  const DIAG_MAX = 60;
+  const diagEnabled = () => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem('ch-debug') === '1';
+    } catch (e) {
+      return false;
+    }
+  };
+  const diagStore = () => (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local ? chrome.storage.local : null);
+  const _labDiagLog = [];
+  let _diagWrite = Promise.resolve();
+  function pushLabDiag(entry) {
+    const full = { ts: new Date().toISOString(), ...entry };
+    _labDiagLog.push(full);
+    const store = diagStore();
+    if (!store) return;
+    _diagWrite = _diagWrite
+      .then(
+        () =>
+          new Promise((resolve) => {
+            store.get(DIAG_KEY, (got) => {
+              const list = Array.isArray(got && got[DIAG_KEY]) ? got[DIAG_KEY] : [];
+              list.push(full);
+              store.set({ [DIAG_KEY]: list.slice(-DIAG_MAX) }, () => resolve());
+            });
+          })
+      )
+      .catch(() => {});
+  }
+  function readStoredDiag() {
+    const store = diagStore();
+    if (!store) return Promise.resolve(_labDiagLog.slice());
+    return _diagWrite.then(
+      () => new Promise((resolve) => store.get(DIAG_KEY, (got) => resolve(Array.isArray(got && got[DIAG_KEY]) ? got[DIAG_KEY] : _labDiagLog.slice())))
+    );
+  }
+  async function exportLabDiag() {
+    try {
+      const all = await readStoredDiag();
+      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lab-diag-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      console.log(`[LabFiling] exported ${all.length} diagnostic entries to Downloads`);
+    } catch (e) {
+      console.error('[LabFiling] export failed', e);
+    }
+  }
+  window.__chExportLabDiag = exportLabDiag;
+  window.__chClearLabDiag = () => {
+    _labDiagLog.length = 0;
+    const store = diagStore();
+    if (store) store.remove(DIAG_KEY);
+    console.log('[LabFiling] diagnostic buffer cleared');
+  };
+  if (diagEnabled()) console.log('[LabFiling] diagnostic capture is ON in this frame — open a report, then call __chExportLabDiag()');
+
+  // Fires once per investigation report fetch (not per DOM mutation, since loadReportSeverity only
+  // re-fetches on cache-miss/force). Captures the RAW per-result fields exactly as Medicus's own API
+  // returns them, SEPARATELY (resultValue / resultText / interpretation / performerComments /
+  // resultPerformerComments / filingComments each its own field) alongside the NORMALISED result (the
+  // collapsed `text` string and numericCommentResidue's output) so a stray residue can be traced to
+  // the exact source field and the exact strip step, instead of guessed at.
+  function logInvestigationRawDiagnostics(ctx, raw, report) {
+    if (!diagEnabled()) return;
+    try {
+      const data = (raw && raw.data) || {};
+      const ir = data.investigationReport || {};
+      const perf = ir.performer && typeof ir.performer === 'object' ? ir.performer : {};
+      const groups = Array.isArray(ir.investigationGroups) ? ir.investigationGroups : [];
+      const ungrouped = Array.isArray(ir.ungroupedResults) ? ir.ungroupedResults : [];
+      const rowsFor = (list, heading) =>
+        (Array.isArray(list) ? list : []).map((r) => ({
+          groupHeading: heading,
+          name: r && r.description,
+          resultValue: r && r.resultValue,
+          resultText: r && r.resultText,
+          resultUnit: r && r.resultUnit,
+          resultComparator: r && r.resultComparator,
+          isAboveReferenceRange: r && r.isAboveReferenceRange,
+          isBelowReferenceRange: r && r.isBelowReferenceRange,
+          requiresUrgentReview: r && r.requiresUrgentReview,
+          interpretation: r && r.interpretation,
+          performerComments: r && r.performerComments,
+          resultPerformerComments: r && r.resultPerformerComments,
+          filingComments: r && r.filingComments,
+          resultCode: r && r.resultCode,
+        }));
+      const rawRows = groups
+        .flatMap((g) =>
+          rowsFor(g.results, g.groupName || g.name || g.title || g.heading || g.description || null)
+        )
+        .concat(rowsFor(ungrouped, null));
+      const normalisedRows = (report.results || []).map((r) => ({
+        name: r.name,
+        groupHeading: r.groupHeading,
+        rawValue: r.rawValue,
+        value: r.value,
+        unit: r.unit,
+        text: r.text,
+        residue: LF ? LF.numericCommentResidue(r) || null : null,
+        isAbove: r.isAbove,
+        isBelow: r.isBelow,
+      }));
+      // Group-level shape, INCLUDING groups with no results (2026-10-02, Nick: a heading group with no results, just
+      // free text, is not pulled — nothing normalises such a group, so the row dump above never shows it).
+      const groupSummaries = groups.map((g) => ({
+        keys: Object.keys(g || {}),
+        description: g && g.description,
+        groupName: g && g.groupName,
+        name: g && g.name,
+        title: g && g.title,
+        heading: g && g.heading,
+        resultCount: g && Array.isArray(g.results) ? g.results.length : null,
+        resultTypes: g && g.resultTypes,
+        textResults: g && g.textResults,
+        groupPerformerComments: g && g.groupPerformerComments,
+        performerComments: g && g.performerComments,
+        filingComments: g && g.filingComments,
+        specimen: g && g.specimen,
+      }));
+      pushLabDiag({
+        kind: 'raw',
+        taskUuid: ctx && ctx.taskUuid,
+        lab: { organisation: perf.organisationName, department: perf.departmentName },
+        reportKeys: Object.keys(ir),
+        reportDescription: ir.description,
+        reportPerformerComments: ir.performerComments,
+        ungroupedCount: ungrouped.length,
+        groupSummaries,
+        rawRows,
+        normalisedRows,
+      });
+      console.log(`[LabFiling] captured raw diagnostic for taskUuid ${ctx && ctx.taskUuid} (${rawRows.length} results, ${groups.length} groups) — call __chExportLabDiag() when done`);
+    } catch (e) {
+      /* noop */
+    }
+  }
+
   // Fetch + normalise + score the open task's report. Cached per taskUuid (TTL)
   // for the cheap gate poll; pass force=true to BYPASS the cache and re-fetch live
   // — used at click time so an irreversible file always acts on fresh data, never a
@@ -672,8 +828,9 @@
     const overviewURL = `/tasks/data/${ctx.taskTypeSlug}/overview/${ctx.taskUuid}`;
     let report = null;
     let outstandingLabels = [];
+    let raw = null;
     try {
-      const raw = await API.fetchInvestigationReport(ctx.apiBase, overviewURL);
+      raw = await API.fetchInvestigationReport(ctx.apiBase, overviewURL);
       report = NORM.normaliseInvestigationReport(raw);
       // Additive, for the "matched to your request" section only — normaliseInvestigationReport() deliberately
       // doesn't carry this (other consumers depend on its current narrow shape), so it's read straight off the raw
@@ -688,6 +845,7 @@
     } catch (e) {
       return null;
     }
+    if (report) logInvestigationRawDiagnostics(ctx, raw, report);
     if (!report || !Array.isArray(report.results) || report.results.length === 0) return null;
     // Medicus's own "requiresUrgentReview"/r.urgent flag is not a clinical discriminator anywhere in this feature
     // (removed 2026-09-30, Nick: it fires on virtually every abnormal result indiscriminately, and never on
@@ -797,6 +955,44 @@
         owners.map((p) => p.name)
       );
     });
+  }
+
+  // The assisted-filing-path counterpart to logInvestigationRawDiagnostics above: captures WHAT is
+  // blocking (reasonKinds — lab-flagged-abnormal / unresolved-comment / unapproved-group / etc, not
+  // just the rendered text), WHERE (catalogue engine vs the legacy/baseline gate vs the
+  // "catalogue-fallback" no-adapter path — `engine`), and which comments are being offered for
+  // whitelist and why (pending vs never-submitted). De-duped per taskUuid so it only captures a
+  // genuinely different outcome, same pattern as runFilingShadow's _shadowSignatures below.
+  const _catalogueDiagSignatures = new Map(); // taskUuid -> last-captured JSON signature
+  function logCatalogueDiagnostics(rs, legacyBlockers, catResult, combined, unresolvedComments) {
+    if (!diagEnabled() || !rs) return;
+    try {
+      const sig = JSON.stringify({ legacyBlockers, catResult, combined, unresolvedComments });
+      if (_catalogueDiagSignatures.get(rs.taskUuid) === sig) return;
+      _catalogueDiagSignatures.set(rs.taskUuid, sig);
+      pushLabDiag({
+        kind: 'catalogue',
+        taskUuid: rs.taskUuid,
+        engine: combined && combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',
+        legacyBlockers,
+        catalogueOk: !!(catResult && catResult.ok),
+        catalogueError: catResult && !catResult.ok ? catResult.error : null,
+        reasonKinds: catResult && catResult.ok ? catResult.reasonKinds : null,
+        catalogueBlockers: catResult && catResult.ok ? catResult.blockers : null,
+        meta: catResult && catResult.ok ? catResult.meta : null,
+        combinedBlockers: combined && combined.blockers,
+        commentsOfferedForWhitelist: (unresolvedComments || []).map((c) => ({
+          name: c.name,
+          residue: c.residue,
+          heading: c.heading,
+          pending: c.pending,
+          investigationId: c.investigationId,
+        })),
+      });
+      console.log(`[LabFiling] captured catalogue diagnostic for taskUuid ${rs.taskUuid} — call __chExportLabDiag() when done`);
+    } catch (e) {
+      /* noop */
+    }
   }
 
   // catalogue: only used when profile is null (no legacy match — catalogue-only mode); the caller passes whatever
@@ -1141,6 +1337,13 @@
         catalogueOnly,
         pendingCatalogueMissing: !pendingCatalogue,
       });
+      logCatalogueDiagnostics(
+        rs,
+        legacyBlockers,
+        catResult,
+        combined,
+        LFC.commentsForWhitelist(rs.report, catalogue, pendingCatalogue)
+      );
       return {
         blockers: combined.blockers,
         engine: combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',
@@ -1156,6 +1359,13 @@
         // group-not-approved heading whose results resolve, by code only, to exactly one investigation.
         catalogueUnapprovedGroups:
           catResult && catResult.ok && Array.isArray(catResult.unapprovedGroups) ? catResult.unapprovedGroups : [],
+        // Whichever the engine found (kind 'lab' or 'test') - a heading dropped because its LAB or its TEST is not approved.
+        catalogueLabAwaiting:
+          (catResult &&
+            catResult.ok &&
+            catResult.meta &&
+            (catResult.meta.labAwaitingApproval || catResult.meta.testAwaitingApproval)) ||
+          null,
       };
     } catch (_) {
       // A throw is "could not check". Catalogue-only must not file on the generic baseline. A legacy profile stays
@@ -1504,6 +1714,54 @@
   }
   window.__chOpenInvestigationSetup = openInvestigationSetup;
 
+  // Opens the Investigations page on the LABS list, scrolled to one lab's own card - the card that lists EVERY heading
+  // mapping the lab carries next to its "Approve lab" button. Deliberately a deep link, not a one-click approve from
+  // here: approving a lab activates every heading on it (H-087 control (c)), and the reviewer has to see them.
+  function openLabApproval(labId) {
+    try {
+      chrome.runtime.sendMessage({ action: 'ms-open-options', section: 'investigations', lab: labId });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  window.__chOpenLabApproval = openLabApproval;
+
+  // The blocked card's one-line summary, in the order a person acts on it (Nick, 2026-10-02): the action, then whether
+  // the test will match an outstanding investigation, then why assisted filing is not offered. When headings are set up
+  // but their lab is awaiting approval, that comes first - nothing under an unapproved lab can match a request or file
+  // - with the approve link attached to it. Pure; labAwaiting is the engine's meta.labAwaitingApproval.
+  function composeBlockedSummary(reasons, labAwaiting) {
+    const list = (reasons || []).filter(Boolean);
+    const awaiting = labAwaiting && Array.isArray(labAwaiting.headings) && labAwaiting.headings.length ? labAwaiting : null;
+    const covered = new Set(awaiting ? awaiting.texts || [] : []);
+    const rest = list.filter((r) => !covered.has(r)).map((r) => (/^contains /.test(r) ? 'Report ' + r : r));
+    const shown = rest.slice(0, 2).join(' · ');
+    const extra = rest.length > 2 ? ' (+' + (rest.length - 2) + ' more)' : '';
+    const restText = rest.length ? shown + extra : '';
+    if (!awaiting) {
+      return { lead: '', rest: restText, plain: restText ? 'Review manually: ' + restText : 'Review manually.', target: null };
+    }
+    const names = awaiting.headings.map((h) => '‘' + h + '’');
+    const named = names.length > 3 ? names.slice(0, 3).join(', ') + ' and ' + (names.length - 3) + ' more' : names.join(', ');
+    const many = awaiting.headings.length > 1;
+    const isTest = awaiting.kind === 'test';
+    const lead =
+      named +
+      (many ? ' are' : ' is') +
+      ' set up but ' +
+      (isTest ? (many ? 'their tests need' : 'its test needs') : many ? 'need' : 'needs') +
+      ' approving to match outstanding investigations';
+    return {
+      lead,
+      rest: restText,
+      plain: 'Review manually: ' + lead + ' (approve it on the Investigations page).' + (restText ? ' ' + restText : ''),
+      target: isTest
+        ? { type: 'test', id: (awaiting.testIds || [])[0] || null }
+        : { type: 'lab', id: awaiting.labId || null },
+    };
+  }
+  window.__chComposeBlockedSummary = composeBlockedSummary;
+
   function showBlockedHint(
     blockers,
     profile,
@@ -1512,15 +1770,15 @@
     catalogueUnresolvedComments,
     catalogueUnapprovedGroups,
     catalogue,
-    requestMatchInfo
+    requestMatchInfo,
+    labAwaiting
   ) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
     host.className = 'chlf-card chlf-blocked';
     titleEl.textContent = (profile && profile.name ? profile.name : 'Filing profile') + ' — not auto-filed';
-    const shown = reasons.slice(0, 2).join(' · ');
-    const extra = reasons.length > 2 ? ' (+' + (reasons.length - 2) + ' more)' : '';
-    subEl.textContent = reasons.length ? 'Review manually: ' + shown + extra : 'Review manually.';
+    const summary = composeBlockedSummary(reasons, labAwaiting);
+    subEl.textContent = summary.plain;
     subEl.title = reasons.join('\n');
     if (reasonsEl) {
       const sig = JSON.stringify(reasons);
@@ -1552,6 +1810,10 @@
       mode: 'blocked',
       title: titleEl.textContent,
       sub: subEl.textContent,
+      subLead: summary.lead,
+      subRest: summary.rest,
+      approveLab: summary.lead && labAwaiting ? { labId: labAwaiting.labId, labName: labAwaiting.labName } : null,
+      approveTarget: summary.lead && summary.target && summary.target.id ? summary.target : null,
       reasons,
       requestMatchInfo,
       whitelistRows: computeWhitelistRows(commentedResults, matchedProfiles),
@@ -1925,10 +2187,32 @@
       const inv = invs.find((i) => i.id === g.investigationId);
       if (!inv) continue; // never offer a test the catalogue can no longer find
       seen.add(g.investigationId);
-      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label });
+      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label, state: g.state || 'no-setup' });
     }
     return rows;
   }
+
+  // The one place the three "why is this not approved" states get their wording, shared by the standalone card and
+  // Companion (which receives the rows already computed). 'lab-awaiting-approval' is the live-caught 2026-10-02 case:
+  // the test is set up and approved, but its LAB is not, so nothing under it can act.
+  function unapprovedGroupsIntro(state, count) {
+    if (state === 'lab-awaiting-approval')
+      return count === 1
+        ? 'This test is set up, but its lab is awaiting approval — approve the lab on the Investigations page (Labs list) before it can act.'
+        : 'These tests are set up, but their lab is awaiting approval — approve the lab on the Investigations page (Labs list) before they can act.';
+    if (state === 'test-awaiting-approval')
+      return count === 1
+        ? 'This test is set up at this lab, but the test itself is awaiting approval — approve it on the Investigations page before it can act.'
+        : 'These tests are set up at this lab, but the tests themselves are awaiting approval — approve them on the Investigations page before they can act.';
+    if (state === 'group-awaiting-approval')
+      return count === 1
+        ? 'This test has assisted-filing setup at this lab that is awaiting approval.'
+        : 'These tests have assisted-filing setup at this lab that is awaiting approval.';
+    return count === 1
+      ? 'This test has no assisted-filing setup at this lab yet.'
+      : 'These tests have no assisted-filing setup at this lab yet.';
+  }
+  window.__chUnapprovedGroupsIntro = unapprovedGroupsIntro;
 
   // One row per group-not-approved heading that confidently resolved to exactly one test (see
   // engine/lab-filing-catalogue.js's unapprovedGroups — code-only, never a guess), deduplicated by investigation:
@@ -1944,7 +2228,12 @@
       const inv = invs.find((i) => i.id === g.investigationId);
       if (!inv) continue; // never offer a test the catalogue can no longer find
       seen.add(g.investigationId);
-      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label });
+      rows.push({
+        heading: g.heading,
+        investigationId: g.investigationId,
+        label: inv.label,
+        state: g.state || 'no-setup',
+      });
     }
     if (!rows.length) {
       unapprovedGroupsBox.classList.add('chlf-hidden');
@@ -1952,28 +2241,28 @@
       unapprovedGroupsSignature = null;
       return;
     }
-    const signature = JSON.stringify(rows.map((r) => r.investigationId));
+    const signature = JSON.stringify(rows.map((r) => [r.investigationId, r.state]));
     if (signature === unapprovedGroupsSignature) return;
     unapprovedGroupsSignature = signature;
     unapprovedGroupsBox.innerHTML = '';
     unapprovedGroupsBox.classList.remove('chlf-hidden');
-    unapprovedGroupsBox.appendChild(
-      el(
-        'div',
-        'chlf-wl-intro',
-        rows.length === 1
-          ? 'This test has no assisted-filing setup at this lab yet.'
-          : 'These tests have no assisted-filing setup at this lab yet.'
-      )
-    );
-    rows.forEach((r) => {
-      const row = el('div', 'chlf-wl-row chlf-open-row');
-      row.appendChild(el('span', 'chlf-wl-text', r.label + ' (“' + r.heading + '”)'));
-      const openBtn = el('button', 'chlf-wl-open', 'Set up on Investigations page');
-      openBtn.type = 'button';
-      openBtn.onclick = () => openInvestigationSetup(r.investigationId);
-      row.appendChild(openBtn);
-      unapprovedGroupsBox.appendChild(row);
+    ['no-setup', 'group-awaiting-approval', 'test-awaiting-approval', 'lab-awaiting-approval'].forEach((state) => {
+      const inState = rows.filter((r) => r.state === state);
+      if (!inState.length) return;
+      unapprovedGroupsBox.appendChild(el('div', 'chlf-wl-intro', unapprovedGroupsIntro(state, inState.length)));
+      inState.forEach((r) => {
+        const row = el('div', 'chlf-wl-row chlf-open-row');
+        row.appendChild(el('span', 'chlf-wl-text', r.label + ' (“' + r.heading + '”)'));
+        const openBtn = el(
+          'button',
+          'chlf-wl-open',
+          state === 'no-setup' ? 'Set up on Investigations page' : 'Review on Investigations page'
+        );
+        openBtn.type = 'button';
+        openBtn.onclick = () => openInvestigationSetup(r.investigationId);
+        row.appendChild(openBtn);
+        unapprovedGroupsBox.appendChild(row);
+      });
     });
   }
 
@@ -2430,7 +2719,8 @@
         combined.catalogueUnresolvedComments,
         combined.catalogueUnapprovedGroups,
         catalogueForScreen,
-        requestMatchInfo
+        requestMatchInfo,
+        combined.catalogueLabAwaiting
       );
       return;
     }

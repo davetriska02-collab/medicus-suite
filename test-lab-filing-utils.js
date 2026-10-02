@@ -834,6 +834,104 @@ check(
   "a doubled comment whose own prose repeats the result's unit (no restated value/unit prefix in front of it) resolves to the SAME residue as a single copy — not a mangled, asymmetric duplicate"
 );
 
+// Real-world regression (Nick's own ALP result, 2026-10-01, found by comparing a HAR capture against
+// its raw MESH message): a plain numeric value with no comment at all — "77" — splits into two
+// identical one-character halves ("7" === "7"), so the doubling-collapse treated it as an exact
+// doubled COMMENT and chopped it to "7" before the normal strip-by-token loop ever ran. The result had
+// zero comment content anywhere (text was nothing but the bare value), so the residue must be empty —
+// a result with no comment must never be offered for "whitelist this comment".
+check(
+  LF.numericCommentResidue({ name: 'ALP', value: 77, unit: 'u/L', rawValue: '77', text: '77' }) === '',
+  'a bare two-digit value whose digits happen to match (77) is not mistaken for a doubled comment — no comment, no residue'
+);
+// Every other digit-doubled value, not just 77 — the bug was general, not ALP-specific.
+['11', '22', '33', '44', '55', '66', '88', '99', '00'].forEach((v) => {
+  check(
+    LF.numericCommentResidue({ name: 'X', value: Number(v), unit: '', rawValue: v, text: v }) === '',
+    `a bare value of ${v} is not mistaken for a doubled comment either`
+  );
+});
+// Nick, 2026-10-02: skip the text surgery entirely when the structured fields say there is no comment.
+check(
+  LF.numericCommentResidue({ name: 'X', value: 77, unit: '', rawValue: '77', text: '77 7 77', commentParts: [] }) === '',
+  'a numeric result with empty commentParts has no comment, whatever its text happens to look like'
+);
+check(
+  LF.numericCommentResidue({
+    name: 'X',
+    value: 5,
+    unit: '',
+    rawValue: '5',
+    text: '5 Above reference range',
+    commentParts: ['Above reference range'],
+  }) === '',
+  "commentParts holding only Medicus's own reference-range label is not a comment"
+);
+check(
+  LF.numericCommentResidue({
+    name: 'X',
+    value: 5,
+    unit: '',
+    rawValue: '5',
+    text: '5 see GP',
+    commentParts: ['see GP'],
+  }) === 'see GP',
+  'a real comment in commentParts still produces its residue'
+);
+check(
+  LF.numericCommentResidue({
+    name: 'Histology Report',
+    value: NaN,
+    rawValue: 'Report text',
+    text: 'Report text and a conclusion',
+    commentParts: [],
+  }) === 'and a conclusion',
+  'a NON-numeric result (a free-text report is its own text) never takes the no-comment shortcut'
+);
+// The residue is the lab's comment ITSELF — nothing stripped out of its prose (live capture, 2026-10-02: the old text
+// path cut "creatinine" out of the Creatinine comment, "B12" out of "Vitamin B12", "nmol/L" out of the Vitamin D text,
+// and the "2" out of "2026" in an Anti-CCP date).
+{
+  const creat = 'Insufficient historical creatinine data to assess AKI risk';
+  const b12 = 'High serum Vitamin B12. If this is not due to vitamin B12 supplements, consider liver disease.';
+  const ccp = 'Please note, Change in method and reference range effective from 06/07/2026.';
+  check(
+    LF.numericCommentResidue({ name: 'Creatinine', value: 66, unit: 'µmol/L', rawValue: '66', text: '66 ' + creat, commentParts: [creat] }) === creat,
+    "a Creatinine comment keeps the word 'creatinine'"
+  );
+  check(
+    LF.numericCommentResidue({ name: 'B12', value: 1500, unit: 'ng/L', rawValue: '1500', text: '1500 ' + b12, commentParts: [b12] }) === b12,
+    "a B12 comment keeps 'B12'"
+  );
+  check(
+    LF.numericCommentResidue({ name: 'Anti-CCP', value: 2, unit: 'U/mL', rawValue: '2', text: '2 ' + ccp, commentParts: [ccp] }) === ccp,
+    "a result of 2 does not eat the 2 out of '2026' in the comment"
+  );
+  // A comment saved while the old stripped form was the only residue must keep working.
+  const legacySaved = 'Insufficient historical data to assess AKI risk';
+  const rep = {
+    results: [{ name: 'Creatinine', value: 66, unit: 'µmol/L', rawValue: '66', text: '66 ' + creat, commentParts: [creat] }],
+  };
+  check(
+    LF.unresolvedCommentedResults(rep, { allowComments: [legacySaved] }).length === 0,
+    'an allowed comment saved in the old stripped form still excuses the same comment'
+  );
+  check(
+    LF.unresolvedCommentedResults(rep, { allowComments: [creat] }).length === 0,
+    'and the comment saved exactly as the lab sent it excuses it too'
+  );
+  check(
+    LF.unresolvedCommentedResults(rep, { allowComments: ['Something else entirely about the result'] }).length === 1,
+    'an unrelated allowed comment still excuses nothing'
+  );
+}
+// A genuinely doubled short comment must still collapse correctly — the numeric guard must not
+// weaken the real doubled-phrase detection this function exists for.
+check(
+  LF.numericCommentResidue({ name: 'X', value: 5, unit: '', rawValue: '5', text: '5 see GP see GP' }) === 'see GP',
+  'a genuine short doubled comment alongside a numeric value still collapses to a single copy'
+);
+
 // ── unresolvedCommentedResults (drives the blocked-card "whitelist this
 // comment" checkbox — must expose the EXACT residue text so a saved
 // allowComments entry is guaranteed to match on the next report) ─────────────

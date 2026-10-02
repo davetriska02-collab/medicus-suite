@@ -504,6 +504,24 @@ console.log('\n--- result.code (Phase E, lab-filing-catalogue.js) ---');
   assert(out3.results[0].code === '12345', 'a numeric conceptId is coerced to a string, matching the catalogue’s own string ids');
 }
 
+console.log('\n--- comment text is not doubled, and commentParts says whether a result has a comment (2026-10-02) ---');
+{
+  // Live capture, 2026-10-02: Medicus puts a lab comment in BOTH performerComments and resultPerformerComments[],
+  // identical, on every commented result (45 of 45) — and never doubles any single field.
+  const note = 'Insufficient historical creatinine data to assess AKI risk';
+  const commented = { ...wbcResult, performerComments: note, resultPerformerComments: [note] };
+  const c = normaliseInvestigationReport(makePayload([], [commented])).results[0];
+  assert(c.text.split(note).length === 2, 'the same comment arriving in two Medicus fields appears ONCE in text');
+  assert(c.commentParts.length === 1 && c.commentParts[0] === note, 'commentParts holds the one distinct comment');
+  const two = { ...wbcResult, performerComments: note, resultPerformerComments: [note, 'A second, different comment'] };
+  const t = normaliseInvestigationReport(makePayload([], [two])).results[0];
+  assert(t.commentParts.length === 2 && t.text.includes('A second, different comment'), 'a genuinely different second comment is kept');
+  const none = { ...wbcResult, performerComments: null, resultPerformerComments: [], filingComments: [] };
+  const n = normaliseInvestigationReport(makePayload([], [none])).results[0];
+  assert(Array.isArray(n.commentParts) && n.commentParts.length === 0, 'a result with no comment fields has an empty commentParts');
+  assert(n.text === n.rawValue, 'and its text is just the value — nothing else joined in');
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 console.log(`\n${'─'.repeat(50)}`);
 console.log(`Tests: ${passed + failed} total · ${passed} passed · ${failed} failed`);

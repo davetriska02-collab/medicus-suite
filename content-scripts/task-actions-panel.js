@@ -1138,6 +1138,19 @@
     const catWlHtml = isBlocked ? labFileCatalogueWhitelistHtml() : '';
     const unapprovedHtml = isBlocked ? labFileUnapprovedGroupsHtml() : '';
     const fileActionHtml = !isBlocked && data.fileAction ? labFileActionHtml(data.fileAction) : '';
+    // When headings are set up but their lab is awaiting approval, the lead sentence carries an inline "approve it"
+    // link to that lab's own card on the Investigations page (Nick, 2026-10-02); otherwise the plain summary.
+    const subHtml =
+      isBlocked && data.approveTarget && data.subLead
+        ? 'Review manually: ' +
+          esc(data.subLead) +
+          ' (<button type="button" class="ms-tap-text-btn ms-tap-lf-approve-lab" data-lf-approve-lab="' +
+          esc(data.approveTarget.id) +
+          '" data-lf-approve-type="' +
+          esc(data.approveTarget.type) +
+          '">approve it</button>).' +
+          (data.subRest ? ' ' + esc(data.subRest) : '')
+        : esc(data.sub || '');
     return (
       '<div class="ms-tap-section ms-tap-lf">' +
       '<div class="ms-tap-section-header"><span>Lab filing</span></div>' +
@@ -1149,7 +1162,7 @@
       esc(data.title || '') +
       '</div>' +
       '<div class="ms-tap-lf-sub">' +
-      esc(data.sub || '') +
+      subHtml +
       '</div>' +
       reasonsHtml +
       wlHtml +
@@ -1251,24 +1264,40 @@
   function labFileUnapprovedGroupsHtml() {
     const rows = (s.lf.data && s.lf.data.unapprovedGroupsRows) || [];
     if (!rows.length) return '';
+    // Same wording as the standalone card (lab-file-button.js's unapprovedGroupsIntro, shared via window) — the
+    // fallback only matters if that script is not on the page.
+    const intro = (state, n) =>
+      typeof window.__chUnapprovedGroupsIntro === 'function'
+        ? window.__chUnapprovedGroupsIntro(state, n)
+        : n === 1
+          ? 'This test has no assisted-filing setup at this lab yet.'
+          : 'These tests have no assisted-filing setup at this lab yet.';
     return (
       '<div class="ms-tap-lf-wl">' +
-      '<div class="ms-tap-lf-wl-intro">' +
-      (rows.length === 1
-        ? 'This test has no assisted-filing setup at this lab yet.'
-        : 'These tests have no assisted-filing setup at this lab yet.') +
-      '</div>' +
-      rows
-        .map(
-          (r) =>
-            '<div class="ms-tap-lf-wl-row"><span>' +
-            esc(r.label) +
-            ' (“' +
-            esc(r.heading) +
-            '”)</span> <button type="button" class="ms-tap-text-btn ms-tap-lf-open-setup" data-lf-open-setup="' +
-            esc(r.investigationId) +
-            '">Set up on Investigations page</button></div>'
-        )
+      ['no-setup', 'group-awaiting-approval', 'test-awaiting-approval', 'lab-awaiting-approval']
+        .map((state) => {
+          const inState = rows.filter((r) => (r.state || 'no-setup') === state);
+          if (!inState.length) return '';
+          return (
+            '<div class="ms-tap-lf-wl-intro">' +
+            esc(intro(state, inState.length)) +
+            '</div>' +
+            inState
+              .map(
+                (r) =>
+                  '<div class="ms-tap-lf-wl-row"><span>' +
+                  esc(r.label) +
+                  ' (“' +
+                  esc(r.heading) +
+                  '”)</span> <button type="button" class="ms-tap-text-btn ms-tap-lf-open-setup" data-lf-open-setup="' +
+                  esc(r.investigationId) +
+                  '">' +
+                  (state === 'no-setup' ? 'Set up on Investigations page' : 'Review on Investigations page') +
+                  '</button></div>'
+              )
+              .join('')
+          );
+        })
         .join('') +
       '</div>'
     );
@@ -3262,6 +3291,15 @@
         window.__chWhitelistCatalogueComments(checks, btn);
         s.lf.catWlChecked.clear();
       }
+    });
+    el.querySelectorAll('.ms-tap-lf-approve-lab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-lf-approve-lab');
+        // A lab opens its own card on the Labs list; a test opens its own Review screen (where "Save and approve" is).
+        if (btn.getAttribute('data-lf-approve-type') === 'test') {
+          if (targetId && typeof window.__chOpenInvestigationSetup === 'function') window.__chOpenInvestigationSetup(targetId);
+        } else if (targetId && typeof window.__chOpenLabApproval === 'function') window.__chOpenLabApproval(targetId);
+      });
     });
     el.querySelectorAll('.ms-tap-lf-open-setup').forEach((btn) => {
       btn.addEventListener('click', () => {

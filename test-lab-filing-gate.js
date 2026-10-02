@@ -446,7 +446,7 @@ console.log(
     "the catalogue engine's structured comment data is carried out of combineWithCatalogueIfWanted, not discarded (now sourced from commentsForWhitelist rather than evaluateFilingCatalogue's own narrower unresolvedComments — see the dedicated 2026-09-26 block below), with pendingCatalogue passed through so it can tell 'already saved, awaiting approval' apart from 'never submitted' (2026-09-27)"
   );
   check(
-    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\)/.test(
+    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo,\s*\n\s*combined\.catalogueLabAwaiting\s*\n\s*\)/.test(
       src
     ),
     'they reach the blocked card, alongside the existing legacy-profile comment list — two separate sources, not conflated'
@@ -601,7 +601,7 @@ console.log(
   check(
     /const review = String\(\(msg && msg\.review\) \|\| ''\);/.test(swSrc) &&
       /const query = \/\^\[a-z0-9-\]\+\$\/\.test\(review\) \? `\?review=\$\{review\}` : '';/.test(swSrc) &&
-      /chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\('options\/options\.html'\) \+ query \+ suffix \}\);/.test(
+      /chrome\.tabs\.create\(\{ url: chrome\.runtime\.getURL\('options\/options\.html'\) \+ query \+ labQuery \+ suffix \}\);/.test(
         swSrc
       ),
     "the service worker's ms-open-options handler validates `review` against the same slug shape every investigation id already has (shared/lab-catalogue-overlay.js's freshId/slugify) before it ever reaches a URL — a content script must never steer this at anything but a plain id"
@@ -629,7 +629,7 @@ console.log(
     'a suggested investigation id the current catalogue can no longer find (deleted since the engine resolved it) is silently dropped, never a broken link'
   );
   check(
-    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo\s*\n\s*\);/.test(
+    /showBlockedHint\(\s*\n\s*combined\.blockers,\s*\n\s*profile,\s*\n\s*commentedResults,\s*\n\s*currentMatchedProfiles,\s*\n\s*combined\.catalogueUnresolvedComments,\s*\n\s*combined\.catalogueUnapprovedGroups,\s*\n\s*catalogueForScreen,\s*\n\s*requestMatchInfo,\s*\n\s*combined\.catalogueLabAwaiting\s*\n\s*\);/.test(
       btnSrc
     ),
     'evaluateGate() threads the resolved catalogue through too, so the button can show the test\'s real label, not just its id'
@@ -769,6 +769,92 @@ console.log(
   check(
     /_lastEvalPath = location\.pathname;/.test(body),
     'the task-change check runs before the kill-switch check, not after — every early-return path still gets the clear'
+  );
+}
+
+console.log('\n--- "why is this not approved" reaches the card AND Companion (2026-10-02, Nick, live-caught) ---');
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  const tapSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-actions-panel.js'), 'utf8');
+  check(
+    /state: g\.state \|\| 'no-setup'/.test(btnSrc) && /function unapprovedGroupsIntro\(state, count\)/.test(btnSrc),
+    'the rows carry the engine\'s state, and one function owns the wording for each state'
+  );
+  check(
+    /'lab-awaiting-approval'/.test(btnSrc) && /approve the lab on the Investigations page/.test(btnSrc),
+    'a lab-awaiting-approval row tells the person to approve the LAB, not to set the test up again'
+  );
+  check(
+    /window\.__chUnapprovedGroupsIntro/.test(btnSrc) && /window\.__chUnapprovedGroupsIntro\(state, n\)/.test(tapSrc),
+    'Companion uses the same wording function through window instead of keeping its own copy'
+  );
+}
+
+console.log('\n--- blocked card: lead with what needs approving, link to approve the lab (2026-10-02, Nick) ---');
+{
+  const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
+  const tapSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-actions-panel.js'), 'utf8');
+  const swSrc = fs.readFileSync(path.join(__dirname, 'service-worker.js'), 'utf8');
+  const optSrc = fs.readFileSync(path.join(__dirname, 'options', 'investigations-section.js'), 'utf8');
+  // Evaluate the real composer, not a copy of it.
+  const start = btnSrc.indexOf('function composeBlockedSummary(reasons, labAwaiting) {');
+  const end = btnSrc.indexOf('window.__chComposeBlockedSummary');
+  const compose = new Function(btnSrc.slice(start, end) + '\nreturn composeBlockedSummary;')();
+  const thumb = {
+    labId: 'xray',
+    labName: 'Xray',
+    headings: ['Thumb X-ray'],
+    texts: ['\u2018Thumb X-ray\u2019 is set up, but Xray is awaiting approval, so it cannot act yet'],
+  };
+  const freeText = 'contains a free-text / non-numeric result the suite cannot score: Thumb X-ray';
+  const one = compose([freeText, thumb.texts[0]], thumb);
+  check(
+    one.plain ===
+      'Review manually: \u2018Thumb X-ray\u2019 is set up but needs approving to match outstanding investigations (approve it on the Investigations page). Report contains a free-text / non-numeric result the suite cannot score: Thumb X-ray',
+    "lead = the test is set up but needs approving to match outstanding investigations; then the assisted-filing reason; the awaiting-approval blocker is not repeated"
+  );
+  check(one.lead.startsWith('\u2018Thumb X-ray\u2019 is set up but needs approving') && !one.rest.includes('awaiting approval'), 'lead and rest are returned separately for the link to sit between them');
+  const noLead = compose([freeText], null);
+  check(noLead.plain === 'Review manually: Report ' + freeText && noLead.lead === '', 'with nothing awaiting approval there is no lead and no link');
+  check(compose([], null).plain === 'Review manually.', 'no reasons at all still reads "Review manually."');
+  const many = compose([], { labId: 'x', labName: 'X', headings: ['A', 'B', 'C', 'D'], texts: [] });
+  check(/are set up but need approving/.test(many.lead) && /and 1 more/.test(many.lead), 'several headings are pluralised and capped at three names');
+  // A TEST awaiting approval (not the lab) sends the person to that test's own Review screen.
+  const testAw = {
+    kind: 'test',
+    labId: 'rj700',
+    labName: 'RJ700',
+    testIds: ['hfe-gene-testing'],
+    headings: ['HFE gene testing'],
+    texts: ['x'],
+  };
+  const t = compose(['x'], testAw);
+  check(
+    /its test needs approving to match outstanding investigations/.test(t.lead) &&
+      t.target &&
+      t.target.type === 'test' &&
+      t.target.id === 'hfe-gene-testing',
+    'when the TEST is what is unapproved the lead says so and the link targets the test, not the lab'
+  );
+  check(compose(['x'], thumb).target.type === 'lab' && compose(['x'], thumb).target.id === 'xray', 'a lab awaiting approval still targets the lab');
+  check(
+    /approveLab: summary\.lead && labAwaiting \? \{ labId: labAwaiting\.labId, labName: labAwaiting\.labName \} : null/.test(btnSrc) &&
+      /window\.__chOpenLabApproval = openLabApproval;/.test(btnSrc) &&
+      /action: 'ms-open-options', section: 'investigations', lab: labId/.test(btnSrc),
+    'the approve link is a deep link to the lab\'s own card (not a one-click approve — H-087: approving a lab activates every heading on it, and the reviewer must see them)'
+  );
+  check(
+    /data-lf-approve-lab=/.test(tapSrc) && /window\.__chOpenLabApproval\(targetId\)/.test(tapSrc) && /data\.approveTarget && data\.subLead/.test(tapSrc) && /data-lf-approve-type=/.test(tapSrc) && /window\.__chOpenInvestigationSetup\(targetId\)/.test(tapSrc),
+    'Companion renders the lead with an inline "approve it" button and routes the click through the same opener'
+  );
+  check(
+    /const lab = String\(\(msg && msg\.lab\) \|\| ''\);/.test(swSrc) &&
+      /const labQuery = \/\^\[a-z0-9-\]\+\$\/\.test\(lab\)/.test(swSrc),
+    'the service worker validates lab against the same slug shape before it reaches a URL'
+  );
+  check(
+    /const labId = params\.get\('lab'\);/.test(optSrc) && /S\.scrollToLab = labId;/.test(optSrc) && /id: 'inv-lab-' \+ lab\.id/.test(optSrc),
+    'the Investigations page consumes ?lab=, opens the Labs list and scrolls to that lab\'s card'
   );
 }
 

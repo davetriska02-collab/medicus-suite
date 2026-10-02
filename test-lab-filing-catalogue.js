@@ -91,8 +91,8 @@ console.log('\n--- golden shape ---');
     'no unresolved comments on the golden path'
   );
   check(
-    Object.keys(res.meta).sort().join(',') === 'groupsUsed,labId,recognisedCount,unrecognisedCount',
-    'meta shape is exactly { labId, recognisedCount, unrecognisedCount, groupsUsed }'
+    Object.keys(res.meta).sort().join(',') === 'groupsUsed,labAwaitingApproval,labId,recognisedCount,testAwaitingApproval,unrecognisedCount',
+    'meta shape is exactly { labId, recognisedCount, unrecognisedCount, groupsUsed, labAwaitingApproval, testAwaitingApproval }'
   );
 }
 
@@ -224,6 +224,111 @@ console.log(
   check(
     configured.ok && configured.unapprovedGroups.length === 0,
     'a heading that already has an approved group is not offered — nothing left to set up'
+  );
+}
+
+// Nick, 2026-10-02, live-caught: Folate and Ferritin showed "no approved assisted-filing setup" on the card while the
+// Investigations page showed both set up and APPROVED. The practice had added a "Ferritin" heading to RJ700, which
+// resets the lab entry to unreviewed — and an unreviewed lab is dropped from the acting catalogue, heading, filing
+// group and all. The card now says WHICH of three things is true.
+console.log('\n--- unapprovedGroups: why a heading is not approved — lab awaiting approval, group awaiting approval, or none ---');
+{
+  const TSHCODE = '1022791000000101';
+  const ferr = builtin.investigations.find((i) => i.id === 'tft');
+  const ferritinRow = () =>
+    result({ name: 'TSH', value: 2.5, rawValue: '2.5', unit: 'mIU/L', code: TSHCODE, low: null, high: null, specimen: null, groupHeading: 'Thyroid stimulating hormone' });
+  const pendingView = (o) => OV.mergeCatalogue(builtin, o, { includeUnreviewed: true, includeDisabled: true }).catalogue;
+  const withHeading = () =>
+    OV.saveInvestigation(builtin, OV.emptyOverlay(), {
+      id: 'tft',
+      label: ferr.label,
+      kind: ferr.kind,
+      requestAliases: ferr.requestAliases,
+      synonyms: ferr.synonyms,
+      headingAliases: ferr.headingAliases,
+      exclude: [],
+      members: ferr.members,
+      note: '',
+      labHeadings: [
+        { lab: LAB, text: 'TSH' },
+        { lab: LAB, text: 'Thyroid stimulating hormone' },
+      ],
+    }).overlay;
+
+  let o = withHeading();
+  o = OV.setFilingGroup(builtin, o, { lab: LAB, heading: 'Thyroid stimulating hormone', enabled: true }, TODAY);
+  o = OV.approveFiling(o, 'groups', OV.filingGroupKey({ lab: LAB, heading: 'Thyroid stimulating hormone' }), 'Dr Test', TODAY);
+  o.labs.forEach((l) => (l.provenance = { ...l.provenance, reviewed: false })); // the live state: lab never approved
+  const labWait = FC.evaluateFilingCatalogue(report([ferritinRow()]), acting(o), { pendingCatalogue: pendingView(o) });
+  check(
+    labWait.ok && labWait.unapprovedGroups.length === 1 && labWait.unapprovedGroups[0].state === 'lab-awaiting-approval',
+    'a heading that exists only on an UNAPPROVED lab entry is reported as lab-awaiting-approval, not as "no setup"'
+  );
+  check(
+    labWait.blockers.some((b) => /awaiting approval/.test(b) && /General Pathology \(RJ700\)/.test(b)) &&
+      !labWait.blockers.some((b) => /has no approved assisted-filing setup/.test(b)),
+    'the blocker names the lab that is awaiting approval instead of claiming there is no setup'
+  );
+  check(labWait.reasonKinds.includes('group-not-approved'), 'the reason kind is unchanged (the shadow log keys on it)');
+  check(
+    labWait.meta.labAwaitingApproval &&
+      labWait.meta.labAwaitingApproval.labId === LAB &&
+      labWait.meta.labAwaitingApproval.headings.length === 1 &&
+      labWait.meta.labAwaitingApproval.headings[0] === 'Thyroid stimulating hormone' &&
+      labWait.meta.labAwaitingApproval.texts.every((t) => labWait.blockers.includes(t)),
+    'meta.labAwaitingApproval names the lab and the headings sitting on it, with the exact blocker texts they produced'
+  );
+
+  let g = withHeading();
+  g = OV.setFilingGroup(builtin, g, { lab: LAB, heading: 'Thyroid stimulating hormone', enabled: true }, TODAY);
+  g.labs.forEach((l) => (l.provenance = { ...l.provenance, reviewed: true })); // lab approved, group still pending
+  const groupWait = FC.evaluateFilingCatalogue(report([ferritinRow()]), acting(g), { pendingCatalogue: pendingView(g) });
+  check(
+    groupWait.ok && groupWait.unapprovedGroups[0] && groupWait.unapprovedGroups[0].state === 'group-awaiting-approval',
+    'an approved lab whose filing group is unapproved is reported as group-awaiting-approval'
+  );
+
+  // Nick, 2026-10-03, live-caught: HFE gene testing said the LAB needed approving while every lab was approved. The
+  // acting catalogue also drops a lab heading whose TEST it does not contain, so the cause was the unapproved test.
+  {
+    let t = OV.saveInvestigation(builtin, OV.emptyOverlay(), {
+      label: 'HFE Gene Testing',
+      kind: 'blood',
+      requestAliases: [],
+      synonyms: [],
+      headingAliases: [],
+      exclude: [],
+      members: [],
+      note: '',
+      labHeadings: [{ lab: LAB, text: 'HFE gene testing' }],
+    }).overlay;
+    t.labs.forEach((l) => (l.provenance = { ...l.provenance, reviewed: true })); // every LAB approved; the TEST is not
+    const hfe = result({ name: 'HFE gene testing', code: '401085002', specimen: null, groupHeading: 'HFE gene testing', value: NaN, rawValue: 'text' });
+    const testWait = FC.evaluateFilingCatalogue(report([hfe]), acting(t), { pendingCatalogue: pendingView(t) });
+    const tw = testWait.meta.testAwaitingApproval;
+    check(
+      testWait.ok && tw && tw.kind === 'test' && tw.headings[0] === 'HFE gene testing' && tw.testLabels[0] === 'HFE Gene Testing',
+      'a heading dropped because its TEST is unapproved is reported as the test awaiting approval, not the lab'
+    );
+    check(testWait.meta.labAwaitingApproval === null, 'and the lab is not blamed when every lab is approved');
+    check(
+      testWait.blockers.some((b) => /its test \(HFE Gene Testing\) is awaiting approval/.test(b)) &&
+        !testWait.blockers.some((b) => /Blood|RJ700\) is awaiting approval/.test(b)),
+      'the blocker names the test, so the card can send the person to the test\'s own Review screen'
+    );
+  }
+
+  const none = FC.evaluateFilingCatalogue(report([ferritinRow()]), acting(OV.emptyOverlay()), {
+    pendingCatalogue: pendingView(OV.emptyOverlay()),
+  });
+  check(
+    none.ok && none.unapprovedGroups[0] && none.unapprovedGroups[0].state === 'no-setup' && none.meta.labAwaitingApproval === null,
+    'genuinely nothing set up stays no-setup'
+  );
+  const noPending = FC.evaluateFilingCatalogue(report([ferritinRow()]), acting(o));
+  check(
+    noPending.ok && noPending.unapprovedGroups[0] && noPending.unapprovedGroups[0].state === 'no-setup',
+    'without the pending view the state falls back to no-setup (unchanged behaviour for any caller that does not pass it)'
   );
 }
 
