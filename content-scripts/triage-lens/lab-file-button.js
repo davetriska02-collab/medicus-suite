@@ -658,162 +658,6 @@
     });
   }
 
-  // TEMPORARY diagnostic (2026-10-02, Nick) — accumulates structured entries in memory instead of
-  // printing them (a console dump needs stripping out by hand before it's usable) and exposes a
-  // one-shot export to a downloaded JSON file: call __chExportLabDiag() from the PAGE console once
-  // you've opened every investigation you want captured. __chClearLabDiag() empties the buffer first
-  // if you want to start a fresh capture. See project-lab-filing-phantom-comment-digit-bug /
-  // project-fbc-kingston-specimen-scoping (memory). REMOVE once the bug hunt is done — must not ship.
-  //
-  // 2026-10-02 (empty export, Nick): the ch-debug flag used to be read ONCE at page load, and the buffer lived only in
-  // this page's memory — so setting the flag after load, reloading after a capture, or exporting from another frame's
-  // context all gave []. Now the flag is read live on every capture, and captures are also kept in
-  // chrome.storage.local (last 60), so a reload or a different frame cannot lose them.
-  const DIAG_KEY = '__chLabDiagLog';
-  const DIAG_MAX = 60;
-  const diagEnabled = () => {
-    try {
-      return typeof localStorage !== 'undefined' && localStorage.getItem('ch-debug') === '1';
-    } catch (e) {
-      return false;
-    }
-  };
-  const diagStore = () => (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local ? chrome.storage.local : null);
-  const _labDiagLog = [];
-  let _diagWrite = Promise.resolve();
-  function pushLabDiag(entry) {
-    const full = { ts: new Date().toISOString(), ...entry };
-    _labDiagLog.push(full);
-    const store = diagStore();
-    if (!store) return;
-    _diagWrite = _diagWrite
-      .then(
-        () =>
-          new Promise((resolve) => {
-            store.get(DIAG_KEY, (got) => {
-              const list = Array.isArray(got && got[DIAG_KEY]) ? got[DIAG_KEY] : [];
-              list.push(full);
-              store.set({ [DIAG_KEY]: list.slice(-DIAG_MAX) }, () => resolve());
-            });
-          })
-      )
-      .catch(() => {});
-  }
-  function readStoredDiag() {
-    const store = diagStore();
-    if (!store) return Promise.resolve(_labDiagLog.slice());
-    return _diagWrite.then(
-      () => new Promise((resolve) => store.get(DIAG_KEY, (got) => resolve(Array.isArray(got && got[DIAG_KEY]) ? got[DIAG_KEY] : _labDiagLog.slice())))
-    );
-  }
-  async function exportLabDiag() {
-    try {
-      const all = await readStoredDiag();
-      const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lab-diag-${Date.now()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      console.log(`[LabFiling] exported ${all.length} diagnostic entries to Downloads`);
-    } catch (e) {
-      console.error('[LabFiling] export failed', e);
-    }
-  }
-  window.__chExportLabDiag = exportLabDiag;
-  window.__chClearLabDiag = () => {
-    _labDiagLog.length = 0;
-    const store = diagStore();
-    if (store) store.remove(DIAG_KEY);
-    console.log('[LabFiling] diagnostic buffer cleared');
-  };
-  if (diagEnabled()) console.log('[LabFiling] diagnostic capture is ON in this frame — open a report, then call __chExportLabDiag()');
-
-  // Fires once per investigation report fetch (not per DOM mutation, since loadReportSeverity only
-  // re-fetches on cache-miss/force). Captures the RAW per-result fields exactly as Medicus's own API
-  // returns them, SEPARATELY (resultValue / resultText / interpretation / performerComments /
-  // resultPerformerComments / filingComments each its own field) alongside the NORMALISED result (the
-  // collapsed `text` string and numericCommentResidue's output) so a stray residue can be traced to
-  // the exact source field and the exact strip step, instead of guessed at.
-  function logInvestigationRawDiagnostics(ctx, raw, report) {
-    if (!diagEnabled()) return;
-    try {
-      const data = (raw && raw.data) || {};
-      const ir = data.investigationReport || {};
-      const perf = ir.performer && typeof ir.performer === 'object' ? ir.performer : {};
-      const groups = Array.isArray(ir.investigationGroups) ? ir.investigationGroups : [];
-      const ungrouped = Array.isArray(ir.ungroupedResults) ? ir.ungroupedResults : [];
-      const rowsFor = (list, heading) =>
-        (Array.isArray(list) ? list : []).map((r) => ({
-          groupHeading: heading,
-          name: r && r.description,
-          resultValue: r && r.resultValue,
-          resultText: r && r.resultText,
-          resultUnit: r && r.resultUnit,
-          resultComparator: r && r.resultComparator,
-          isAboveReferenceRange: r && r.isAboveReferenceRange,
-          isBelowReferenceRange: r && r.isBelowReferenceRange,
-          requiresUrgentReview: r && r.requiresUrgentReview,
-          interpretation: r && r.interpretation,
-          performerComments: r && r.performerComments,
-          resultPerformerComments: r && r.resultPerformerComments,
-          filingComments: r && r.filingComments,
-          resultCode: r && r.resultCode,
-        }));
-      const rawRows = groups
-        .flatMap((g) =>
-          rowsFor(g.results, g.groupName || g.name || g.title || g.heading || g.description || null)
-        )
-        .concat(rowsFor(ungrouped, null));
-      const normalisedRows = (report.results || []).map((r) => ({
-        name: r.name,
-        groupHeading: r.groupHeading,
-        rawValue: r.rawValue,
-        value: r.value,
-        unit: r.unit,
-        text: r.text,
-        residue: LF ? LF.numericCommentResidue(r) || null : null,
-        isAbove: r.isAbove,
-        isBelow: r.isBelow,
-      }));
-      // Group-level shape, INCLUDING groups with no results (2026-10-02, Nick: a heading group with no results, just
-      // free text, is not pulled — nothing normalises such a group, so the row dump above never shows it).
-      const groupSummaries = groups.map((g) => ({
-        keys: Object.keys(g || {}),
-        description: g && g.description,
-        groupName: g && g.groupName,
-        name: g && g.name,
-        title: g && g.title,
-        heading: g && g.heading,
-        resultCount: g && Array.isArray(g.results) ? g.results.length : null,
-        resultTypes: g && g.resultTypes,
-        textResults: g && g.textResults,
-        groupPerformerComments: g && g.groupPerformerComments,
-        performerComments: g && g.performerComments,
-        filingComments: g && g.filingComments,
-        specimen: g && g.specimen,
-      }));
-      pushLabDiag({
-        kind: 'raw',
-        taskUuid: ctx && ctx.taskUuid,
-        lab: { organisation: perf.organisationName, department: perf.departmentName },
-        reportKeys: Object.keys(ir),
-        reportDescription: ir.description,
-        reportPerformerComments: ir.performerComments,
-        ungroupedCount: ungrouped.length,
-        groupSummaries,
-        rawRows,
-        normalisedRows,
-      });
-      console.log(`[LabFiling] captured raw diagnostic for taskUuid ${ctx && ctx.taskUuid} (${rawRows.length} results, ${groups.length} groups) — call __chExportLabDiag() when done`);
-    } catch (e) {
-      /* noop */
-    }
-  }
-
   // Fetch + normalise + score the open task's report. Cached per taskUuid (TTL)
   // for the cheap gate poll; pass force=true to BYPASS the cache and re-fetch live
   // — used at click time so an irreversible file always acts on fresh data, never a
@@ -828,9 +672,8 @@
     const overviewURL = `/tasks/data/${ctx.taskTypeSlug}/overview/${ctx.taskUuid}`;
     let report = null;
     let outstandingLabels = [];
-    let raw = null;
     try {
-      raw = await API.fetchInvestigationReport(ctx.apiBase, overviewURL);
+      const raw = await API.fetchInvestigationReport(ctx.apiBase, overviewURL);
       report = NORM.normaliseInvestigationReport(raw);
       // Additive, for the "matched to your request" section only — normaliseInvestigationReport() deliberately
       // doesn't carry this (other consumers depend on its current narrow shape), so it's read straight off the raw
@@ -845,7 +688,6 @@
     } catch (e) {
       return null;
     }
-    if (report) logInvestigationRawDiagnostics(ctx, raw, report);
     if (!report || !Array.isArray(report.results) || report.results.length === 0) return null;
     // Medicus's own "requiresUrgentReview"/r.urgent flag is not a clinical discriminator anywhere in this feature
     // (removed 2026-09-30, Nick: it fires on virtually every abnormal result indiscriminately, and never on
@@ -955,44 +797,6 @@
         owners.map((p) => p.name)
       );
     });
-  }
-
-  // The assisted-filing-path counterpart to logInvestigationRawDiagnostics above: captures WHAT is
-  // blocking (reasonKinds — lab-flagged-abnormal / unresolved-comment / unapproved-group / etc, not
-  // just the rendered text), WHERE (catalogue engine vs the legacy/baseline gate vs the
-  // "catalogue-fallback" no-adapter path — `engine`), and which comments are being offered for
-  // whitelist and why (pending vs never-submitted). De-duped per taskUuid so it only captures a
-  // genuinely different outcome, same pattern as runFilingShadow's _shadowSignatures below.
-  const _catalogueDiagSignatures = new Map(); // taskUuid -> last-captured JSON signature
-  function logCatalogueDiagnostics(rs, legacyBlockers, catResult, combined, unresolvedComments) {
-    if (!diagEnabled() || !rs) return;
-    try {
-      const sig = JSON.stringify({ legacyBlockers, catResult, combined, unresolvedComments });
-      if (_catalogueDiagSignatures.get(rs.taskUuid) === sig) return;
-      _catalogueDiagSignatures.set(rs.taskUuid, sig);
-      pushLabDiag({
-        kind: 'catalogue',
-        taskUuid: rs.taskUuid,
-        engine: combined && combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',
-        legacyBlockers,
-        catalogueOk: !!(catResult && catResult.ok),
-        catalogueError: catResult && !catResult.ok ? catResult.error : null,
-        reasonKinds: catResult && catResult.ok ? catResult.reasonKinds : null,
-        catalogueBlockers: catResult && catResult.ok ? catResult.blockers : null,
-        meta: catResult && catResult.ok ? catResult.meta : null,
-        combinedBlockers: combined && combined.blockers,
-        commentsOfferedForWhitelist: (unresolvedComments || []).map((c) => ({
-          name: c.name,
-          residue: c.residue,
-          heading: c.heading,
-          pending: c.pending,
-          investigationId: c.investigationId,
-        })),
-      });
-      console.log(`[LabFiling] captured catalogue diagnostic for taskUuid ${rs.taskUuid} — call __chExportLabDiag() when done`);
-    } catch (e) {
-      /* noop */
-    }
   }
 
   // catalogue: only used when profile is null (no legacy match — catalogue-only mode); the caller passes whatever
@@ -1337,13 +1141,6 @@
         catalogueOnly,
         pendingCatalogueMissing: !pendingCatalogue,
       });
-      logCatalogueDiagnostics(
-        rs,
-        legacyBlockers,
-        catResult,
-        combined,
-        LFC.commentsForWhitelist(rs.report, catalogue, pendingCatalogue)
-      );
       return {
         blockers: combined.blockers,
         engine: combined.usedCatalogue ? 'catalogue' : 'catalogue-fallback',

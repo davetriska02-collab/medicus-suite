@@ -20,8 +20,6 @@ All notable changes to Medicus Suite are documented here.
 - An inline "approve it" link opens that lab's own card on the Labs list, or the test's own Review screen. It is a deep link, not a one-click approve: approving a lab activates every heading on it (H-087 control (c)), so the reviewer still sees them.
 - Four states are told apart: no setup, group awaiting approval, test awaiting approval, lab awaiting approval. The reason kind used by the shadow log is unchanged.
 
-Also: a temporary `ch-debug` lab-diagnostic capture (`__chExportLabDiag()`, last 60 reports kept in `chrome.storage.local`). It does nothing unless `localStorage ch-debug = 1`.
-
 H-073 (allowed-comment gate) and H-087 (approval) addendum drafted at hazard-log v3.101, PENDING CSO review. Product-version pin stays 3.264.1.
 
 ## [v3.268.17] — 2026-10-02
