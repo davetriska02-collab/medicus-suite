@@ -16,11 +16,15 @@
   var _panelOpen = false;
   var _view = 'staff';
   var _sort = 'total';
+  var _period = 'open';
   var _query = '';
   var _data = null;
+  var _report = null;
   var _updatedAt = 0;
   var _timer = null;
   var _inflight = false;
+  var _typeInflight = false;
+  var _typeAgain = false;
   var _host = null;
   var _display = {};
 
@@ -99,6 +103,14 @@
     list.appendChild(el('div', { className: kind === 'error' ? 'ms-wl-empty' : 'ms-wl-loading', text: text }));
   }
 
+  function hasTypeWork(member) {
+    var cells = Core.typeCells(member);
+    for (var i = 0; i < cells.length; i++) {
+      if (cells[i].loaded && cells[i].value > 0) return true;
+    }
+    return false;
+  }
+
   function renderCard(member, scale) {
     var tone = Core.cardTone(member);
     var card = el('article', { className: 'ms-wl-card' });
@@ -107,12 +119,25 @@
     var top = el('div', { className: 'ms-wl-card-top' });
     top.appendChild(el('div', { className: 'ms-wl-avatar', text: Core.initials(member.label), 'aria-hidden': 'true' }));
     top.appendChild(el('div', { className: 'ms-wl-name', text: member.label }));
-    top.appendChild(el('div', { className: 'ms-wl-total', text: String(Core.totalLoad(member)) }));
+    var totalText = member.fromDashboard === false ? '—' : String(Core.totalLoad(member));
+    var total = el('div', { className: 'ms-wl-total', text: totalText });
+    if (member.fromDashboard === false) total.setAttribute('title', 'Not in the dashboard totals');
+    top.appendChild(total);
     card.appendChild(top);
     var bars = el('div', { className: 'ms-wl-bars' });
     var rows = Core.barRows(member, scale);
     if (!rows.length) {
-      bars.appendChild(el('div', { className: 'ms-wl-bar-label ms-wl-zero', text: 'Clear' }));
+      var emptyNote = '';
+      if (member.fromDashboard === false) emptyNote = 'Not in the dashboard totals';
+      else if (!hasTypeWork(member)) emptyNote = 'Clear';
+      if (emptyNote) {
+        bars.appendChild(
+          el('div', {
+            className: member.fromDashboard === false ? 'ms-wl-extra-note' : 'ms-wl-bar-label ms-wl-zero',
+            text: emptyNote,
+          })
+        );
+      }
     }
     rows.forEach(function (row) {
       var line = el('div', { className: 'ms-wl-bar-row' });
@@ -128,12 +153,47 @@
       bars.appendChild(line);
     });
     card.appendChild(bars);
+    var grid = el('div', { className: 'ms-wl-type-grid' });
+    Core.typeCells(member).forEach(function (cell) {
+      var item = el('div', { className: 'ms-wl-type ms-wl-t-' + cell.key });
+      item.appendChild(el('div', { className: 'ms-wl-type-lbl', text: cell.short }));
+      item.appendChild(el('div', { className: 'ms-wl-type-val', text: cell.loaded ? String(cell.value) : '—' }));
+      item.setAttribute(
+        'title',
+        cell.loaded ? cell.long + ': ' + String(cell.value) : cell.long + ' did not load. This is not zero.'
+      );
+      grid.appendChild(item);
+    });
+    card.appendChild(grid);
     return card;
   }
 
+  function renderTypeBlock(prepared) {
+    var types = document.getElementById('ms-wl-types');
+    if (types) {
+      types.textContent = '';
+      Core.TASK_TYPES.forEach(function (type) {
+        var value = prepared.types ? prepared.types[type.key] : null;
+        var card = el('div', { className: 'ms-wl-type-stat ms-wl-t-' + type.key });
+        card.appendChild(el('div', { className: 'ms-wl-stat-val', text: value == null ? '—' : String(value) }));
+        card.appendChild(el('div', { className: 'ms-wl-stat-lbl', text: type.short }));
+        card.setAttribute(
+          'title',
+          value == null ? type.long + ' did not load. This is not zero.' : type.long
+        );
+        types.appendChild(card);
+      });
+    }
+    var note = document.getElementById('ms-wl-type-note');
+    if (note) note.textContent = Core.typeNote(prepared.flags);
+  }
+
   function render() {
-    if (!_host || !_data) return;
-    var prepared = Core.prepareView(_data, _view, _query, _sort);
+    if (!_host) return;
+    if (!_data && !_report) return;
+    var prepared = Core.prepareView(_data || { staff: [], teams: [] }, _view, _query, _sort, _report);
+    renderTypeBlock(prepared);
+    if (!_data) return;
     var summary = document.getElementById('ms-wl-summary');
     if (summary) {
       summary.textContent = '';
@@ -176,17 +236,79 @@
     });
   }
 
-  function fetchData(manual) {
-    if (_inflight || !_host || !_panelOpen || !_packOn) return;
+  function pageContext() {
+    return {
+      hostname: location.hostname,
+      pathname: location.pathname,
+      href: location.href,
+      protocol: location.protocol,
+    };
+  }
+
+  function fetchTypes(manual) {
+    if (!_host || !_panelOpen || !_packOn) return;
     if (hidden() && !manual) return;
-    var url = Core.dashboardDataUrl(
-      Core.resolveApiBase({
-        hostname: location.hostname,
-        pathname: location.pathname,
-        href: location.href,
-        protocol: location.protocol,
-      })
-    );
+    if (_typeInflight) {
+      _typeAgain = true;
+      return;
+    }
+    var base = Core.resolveApiBase(pageContext());
+    if (!base) return;
+    var range = Core.periodRange(_period, new Date());
+    _typeInflight = true;
+    var pending = Core.TASK_TYPES.map(function (type) {
+      var url = Core.taskListUrl(base, type.slug, range);
+      if (!url) return Promise.resolve({ key: type.key, ok: false, status: 0 });
+      return fetch(url, { method: 'GET', credentials: 'include', cache: 'no-store' })
+        .then(function (resp) {
+          if (!resp.ok) {
+            var err = new Error('http');
+            err.status = resp.status;
+            throw err;
+          }
+          return resp.json().then(function (json) {
+            var read = Core.readTaskList(json, range);
+            return {
+              key: type.key,
+              ok: true,
+              byKey: read.byKey,
+              filterIgnored: read.filterIgnored,
+              truncated: read.truncated,
+              skippedDate: read.skippedDate,
+              counted: read.counted,
+            };
+          });
+        })
+        .catch(function (err) {
+          return { key: type.key, ok: false, status: err && err.status ? err.status : 0 };
+        });
+    });
+    Promise.all(pending).then(function (rows) {
+      _typeInflight = false;
+      if (_typeAgain) {
+        _typeAgain = false;
+        if (_host && _panelOpen && _packOn) fetchTypes(true);
+        return;
+      }
+      if (!_host || !_panelOpen || !_packOn) return;
+      var report = {};
+      var loaded = 0;
+      rows.forEach(function (row) {
+        report[row.key] = row;
+        if (row.ok) loaded += 1;
+      });
+      _report = report;
+      render();
+      if (debugOn()) console.info('[MSWL] types', { loaded: loaded, failed: rows.length - loaded });
+    });
+  }
+
+  function fetchData(manual) {
+    if (!_host || !_panelOpen || !_packOn) return;
+    if (hidden() && !manual) return;
+    fetchTypes(manual);
+    if (_inflight) return;
+    var url = Core.dashboardDataUrl(Core.resolveApiBase(pageContext()));
     if (!url) {
       setListMessage('error', 'Could not find this practice’s Medicus address. Nothing is shown as zero.');
       return;
@@ -282,7 +404,7 @@
     titles.appendChild(
       el('p', {
         className: 'ms-wl-sub',
-        text: 'Read-only counts from the Workflow dashboard. Not a staffing decision.',
+        text: 'Read-only. Dashboard totals stay above the task-type counts. Not a staffing decision.',
       })
     );
     var close = el('button', { type: 'button', className: 'ms-wl-close', 'aria-label': 'Close workload' });
@@ -311,13 +433,9 @@
     });
     var sortLabel = el('label', { className: 'ms-wl-sort-label', for: 'ms-wl-sort', text: 'Sort' });
     var sort = el('select', { id: 'ms-wl-sort' });
-    [
-      ['total', 'Total load'],
-      ['overdue', 'Overdue first'],
-      ['name', 'Name A–Z'],
-    ].forEach(function (opt) {
-      var option = el('option', { value: opt[0], text: opt[1] });
-      if (opt[0] === _sort) option.selected = true;
+    Core.sortModes().forEach(function (opt) {
+      var option = el('option', { value: opt.key, text: opt.label });
+      if (opt.key === _sort) option.selected = true;
       sort.appendChild(option);
     });
     sort.addEventListener('change', function () {
@@ -343,9 +461,26 @@
       render();
     });
 
+    var periodRow = el('div', { className: 'ms-wl-period' });
+    periodRow.appendChild(el('label', { className: 'ms-wl-field-label', for: 'ms-wl-period', text: 'Task types' }));
+    var period = el('select', { id: 'ms-wl-period', 'aria-label': 'Task type period' });
+    Core.PERIODS.forEach(function (opt) {
+      var option = el('option', { value: opt.key, text: opt.label });
+      if (opt.key === _period) option.selected = true;
+      period.appendChild(option);
+    });
+    period.addEventListener('change', function () {
+      _period = period.value;
+      fetchTypes(true);
+    });
+    periodRow.appendChild(period);
+
     panel.appendChild(header);
     panel.appendChild(controls);
+    panel.appendChild(periodRow);
     panel.appendChild(el('div', { id: 'ms-wl-summary', className: 'ms-wl-summary' }));
+    panel.appendChild(el('div', { id: 'ms-wl-types', className: 'ms-wl-type-summary' }));
+    panel.appendChild(el('p', { id: 'ms-wl-type-note', className: 'ms-wl-type-note' }));
     panel.appendChild(refresh);
     panel.appendChild(search);
     panel.appendChild(el('div', { id: 'ms-wl-list', className: 'ms-wl-list' }));
@@ -374,9 +509,13 @@
     clearTimer();
     _panelOpen = false;
     _data = null;
+    _report = null;
     _updatedAt = 0;
     _query = '';
+    _period = 'open';
     _inflight = false;
+    _typeInflight = false;
+    _typeAgain = false;
     if (_host && _host.parentNode) _host.parentNode.removeChild(_host);
     _host = null;
   }

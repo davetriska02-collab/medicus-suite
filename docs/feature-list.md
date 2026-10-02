@@ -1,6 +1,6 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.16
+**Version:** v3.268.17
 **Generated:** 2026-10-02
 
 ## What it is
@@ -103,7 +103,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
-- **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. One GET of the dashboard payload. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
+- **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. Under the totals, each person and team has open-task counts for medical, admin, investigation results, routine and non-routine prescription requests, and inbound documents. A period is still-open tasks created in that window. Those counts are not a split of the dashboard totals. A dash is a queue that did not load, not zero. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
 - **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.17 (2 Oct)** — Workload tracker adds open-task counts by queue (medical, admin, results, routine and non-routine prescriptions, inbound documents) beside the dashboard totals. A period is still-open tasks created in that window. A dash is not zero. H-097 is proposed; CSO sign-off is blank.
 - **v3.268.16 (2 Oct)** — A vaccine filed as a procedure counts on the same concept id and wording, with the same seasons and one-off rules. A later given dose overrides an earlier decline, and a later decline does not undo an in-season given. An administration marked not given is not counted as a dose. COVID eligibility stays 75+, care home, and immunosuppressed, confirmed correct for autumn 2026. H-096 Accepted (ALARP) — CSO signed 2026-10-02 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.14 (1 Oct)** — The suite no longer clears Flag on patient banner. Medicus Record clean up (Patient record > Actions > Record clean up) does that. H-065 retired; signed 2026-10-01 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.13 (1 Oct)** — Lab Filing no longer drops a built-in result's codes when a practice result is merged into it. Medicus's urgent flag is no longer a reason to refuse auto-file. A high or low flag, a value outside the report's own range or the practice range, a clinical rule, and a free-text result still block. H-087 control (c) is kept; the Approve-lab fallback is accepted. CSO signed off 2026-10-01.
