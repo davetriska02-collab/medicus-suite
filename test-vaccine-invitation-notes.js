@@ -106,10 +106,13 @@ console.log('\n--- root cause: COVID given stem is inside the invitation concept
     COVID_DESC.toLowerCase().includes(covidStem),
     'that stem is a substring of the SARS-CoV-2 invitation situation concept'
   );
-  const fluHits = flu.statusTerms.given.filter((t) => FLU_DESC.toLowerCase().includes(t.toLowerCase()));
   check(
-    fluHits.length === 0,
-    `flu given stems do not sit inside the influenza invitation concept (hits: ${fluHits.join(', ') || 'none'})`
+    flu.statusTerms.given.includes('influenza vaccination'),
+    'vax-flu given list contains the bare procedure "influenza vaccination"'
+  );
+  check(
+    FLU_DESC.toLowerCase().includes('influenza vaccination'),
+    'that bare stem sits inside the influenza invitation concept, so the invitation filter has to reject it before the stem match'
   );
   // The same prefix bug on the other programmes' invitation concepts.
   const analogues = [

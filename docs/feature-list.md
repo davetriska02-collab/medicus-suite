@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.14
-**Generated:** 2026-10-01
+**Version:** v3.268.17
+**Generated:** 2026-10-02
 
 ## What it is
 
@@ -103,7 +103,7 @@ These run directly on live Medicus pages, on top of Medicus's own UI:
 - **Appointment-book organise** — cancel, move or rebook appointments directly from the diary view, with a fail-safe write path (destination re-checked before writing, failed moves auto-restored)
 - **Bulk task actions** — checklist-based acknowledge/discard for the Privacy Officer Alerts and EPS Cancellation Failures queues, reviewed and confirmed as one batch
 - **Task presence** — when a colleague is on the same request, a one-line notice (initials + “X has this open. You can still work it.”) on the open request, from Medicus's own Pusher presence channel; queue chips still show a name on a row they already have open (shared-folder fallback). Advisory only, never a lock. Absence of the strip is not evidence nobody is on it.
-- **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. One GET of the dashboard payload. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
+- **Workload tracker** — a Workload button on the Workflow dashboard (`/tasks/dashboard`) opens a read-only panel of staff and team task counts (overdue high-priority, high, normal, snoozed), with search, sort, and a timestamp. Under the totals, each person and team has open-task counts for medical, admin, investigation results, routine and non-routine prescription requests, and inbound documents. A period is still-open tasks created in that window. Those counts are not a split of the dashboard totals. A dash is a queue that did not load, not zero. It does not reassign work. On unless switched off under Practice features. Counts can be a few minutes old; a failed refresh is an error, not zero.
 - **StackChan desk robot** — optional LAN HTTP bridge (default off) so an M5Stack StackChan can show idle/calm/alert/wait faces from Sentinel chip colour, Request Monitor new work, or a Companion role change. Severity enum + event code only — never a patient name. Camera and mics stay off in the shipped firmware. See `docs/STACKCHAN.md`.
 - **Background data feeds** — the pipeline behind Monitoring/Trends, a live-update relay so the panel refreshes without polling, and referral-data discovery for the Referrals Tracker
 
@@ -139,12 +139,15 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.17 (2 Oct)** — Workload tracker adds open-task counts by queue (medical, admin, results, routine and non-routine prescriptions, inbound documents) beside the dashboard totals. A period is still-open tasks created in that window. A dash is not zero. H-097 accepted (ALARP) — CSO signed 2026-10-02 (Dr D. Triska, CSO, GMC 6159481).
+- **v3.268.16 (2 Oct)** — A vaccine filed as a procedure counts on the same concept id and wording, with the same seasons and one-off rules. A later given dose overrides an earlier decline, and a later decline does not undo an in-season given. An administration marked not given is not counted as a dose. COVID eligibility stays 75+, care home, and immunosuppressed, confirmed correct for autumn 2026. H-096 Accepted (ALARP) — CSO signed 2026-10-02 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.14 (1 Oct)** — The suite no longer clears Flag on patient banner. Medicus Record clean up (Patient record > Actions > Record clean up) does that. H-065 retired; signed 2026-10-01 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.13 (1 Oct)** — Lab Filing no longer drops a built-in result's codes when a practice result is merged into it. Medicus's urgent flag is no longer a reason to refuse auto-file. A high or low flag, a value outside the report's own range or the practice range, a clinical rule, and a free-text result still block. H-087 control (c) is kept; the Approve-lab fallback is accepted. CSO signed off 2026-10-01.
 - **v3.268.12 (1 Oct)** — The old release zip is no longer kept in the repository. The extension the practice runs is unchanged.
 - **v3.268.11 (1 Oct)** — Developer lint tooling only. ESLint stays on 9.39.5. Nothing in the extension the practice runs has changed.
 - **v3.268.10 (1 Oct)** — Record ignores a snapshot-updated message that did not come from this extension. Triage Lens escaping and the queue task-list bridge checks are loaded by the test suite.
 - **v3.268.9 (1 Oct)** — Duplicate Problem Checker no longer stores the NHS number in the saved scan. An older saved scan is cleaned on the next open. The local removal note expires after 30 days and is capped at 500 entries. H-094 accepted (ALARP) — CSO signed off 2026-10-01.
+- **v3.268.15 (2 Oct)** — A flu, COVID, RSV, pneumococcal or shingles dose counts from the stored SNOMED concept id as well as the wording. A `(situation)` tag or another parenthetical no longer hides an administration. Fluenz, Influvac, Comirnaty, Spikevax, Nuvaxovid and the PPV23 "23 valent" term count. RSV, pneumococcal and shingles coded notes are kept however old they are. Invitations stay due. Declined stays declined. Seasons are unchanged. COVID eligibility is unchanged (75+, care home, immunosuppressed). H-095 Accepted (ALARP), signed Dr D. Triska (CSO, GMC 6159481), 2026-10-02.
 - **v3.268.8 (30 Sep)** — A patient coded with SNOMED 185903001 (Needs influenza immunization / immunisation) is shown as flu-eligible, labelled "Practice-flagged: needs influenza immunisation". A situation tag does not hide that flag and does not count as the vaccine given. An active problem is kept. A journal note older than 400 days is not. H-093 accepted (ALARP) — CSO signed off 2026-10-01.
 - **v3.268.7 (29 Sep)** — The suite no longer files a patient-submitted attachment as a document. Medicus files that attachment itself. H-063 retired; CSO signed off 2026-09-29.
 - **v3.268.6 (29 Sep)** — RSV, pneumococcal and shingles read the whole immunisation history, not the last 400 days. "Administration of RSV (respiratory syncytial virus) vaccine" counts as RSV given. A pneumococcal dose given before 65 counts for the routine one-off. Flu and COVID stay on their seasons. Invitations still do not count. H-091 accepted (ALARP) — CSO signed off 2026-09-29.

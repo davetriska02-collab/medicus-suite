@@ -11,6 +11,18 @@
 (function (global) {
   'use strict';
 
+  // Concept ids and match-time normalisation. Loaded before this file in the
+  // extension (manifest and the panel/pop-out/options script tags). Node tests
+  // require it. A page that forgot the script still matches wording; it cannot
+  // match a concept id.
+  const VaccineGiven = (function loadVaccineGiven() {
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('../shared/vaccine-given.js');
+    }
+    if (typeof window !== 'undefined' && window.VaccineGiven) return window.VaccineGiven;
+    return null;
+  })();
+
   // === STATUS RANK (worst-first ordering) ===
   // overdue: actionable, lacks recent data within interval
   // not_met: indicator not achieved
@@ -2874,9 +2886,10 @@
 
   // QOF indicator rule evaluator
   function evaluateQofIndicatorRule(rule, data, now) {
-    // VI001–VI004 are dose counts. An invitation, offer, recall SMS or
-    // situation concept must not clear them, even if a future edit adds a
-    // vaccine stem to the (currently empty) observation list. The shipped
+    // VI001–VI004 are dose counts. An invitation, offer or recall SMS must
+    // not clear them, even if a future edit adds a vaccine stem to the
+    // (currently empty) observation list. An administration concept tagged
+    // (situation) is a dose (H-095) and is not removed here. The shipped
     // rules stay disabled; this is the same gate as the vaccine chips.
     if (/^VI\d/i.test(String(rule.indicatorCode || ''))) {
       data = Object.assign({}, data, {
@@ -3971,10 +3984,26 @@
     return terms.some((t) => s.includes(t.toLowerCase()));
   }
 
-  // A coded invitation, offer, recall SMS, or SNOMED situation/"sent" concept
-  // is not a dose. "sent" is a whole word so "consent" is not rejected.
-  // Checked before given AND before declined: an invitation is not a refusal.
+  // "fluenz" is a brand (Fluenz / Fluenz Tetra). It is also the middle of the
+  // word "influenza", so a bare substring would read "Needs influenza
+  // immunization" as a dose (H-093). That one stem is a whole word.
+  function vaccineGivenStemHits(hay, terms) {
+    const s = String(hay || '').toLowerCase();
+    return (terms || []).some((t) => {
+      const needle = String(t || '').toLowerCase();
+      if (!needle) return false;
+      if (needle === 'fluenz') return /(?:^|[^a-z])fluenz(?:[^a-z]|$)/.test(s);
+      return s.includes(needle);
+    });
+  }
+
+  // A coded invitation, offer or recall SMS is not a dose. "sent" is a whole
+  // word so "consent" is not rejected. Checked before given AND before
+  // declined, and before a concept-id hit: an invitation is not a refusal and
+  // not a dose. The SNOMED tag "(situation)" is not itself a rejection —
+  // administration concepts carry it (H-095). The helper owns the phrase list.
   function vaccineTextIsNonAdministration(text) {
+    if (VaccineGiven && VaccineGiven.textIsNonAdministration) return VaccineGiven.textIsNonAdministration(text);
     const s = String(text || '');
     if (!s.trim()) return false;
     return (
@@ -3983,8 +4012,6 @@
       /\boffers?\b/i.test(s) ||
       /\bshort message service\b/i.test(s) ||
       /\btext messages? sent\b/i.test(s) ||
-      /\(situation\)/i.test(s) ||
-      /\bsituation\b/i.test(s) ||
       /\bsent\b/i.test(s) ||
       /filed automatically with the invitation/i.test(s)
     );
@@ -4000,27 +4027,66 @@
     return /\b(?:declined|refused|contraindicated|not given|not indicated)\b/i.test(String(text || ''));
   }
 
+  // Parentheticals and "(situation)" are removed before a stem match. The
+  // stored name is left as filed. Invitation text is rejected on the raw
+  // string, before this, so stripping the tag cannot turn an invitation green.
+  function vaccineTextForStemMatch(text) {
+    const stripped = vaccineTextForGivenMatch(text);
+    if (VaccineGiven && VaccineGiven.normalizeVaccineText) return VaccineGiven.normalizeVaccineText(stripped);
+    return stripped;
+  }
+
   // Returns { type: 'given'|'declined', date, source } or null to skip.
-  // Declined is checked before given (H-044): "Flu vaccine declined" contains
-  // the stem "flu vaccin". A negative phrase that also contains a given stem
-  // is declined even when that exact phrase is missing from the declined list.
-  function classifyVaccineText(text, date, source, givenTerms, declinedTerms) {
-    if (!text || !String(text).trim()) return null;
-    if (vaccineTextIsNonAdministration(text)) return null;
-    const givenHay = vaccineTextForGivenMatch(text);
-    const negative = vaccineTextIsNegativeOutcome(text);
-    if (matchesAnyTerm(text, declinedTerms) || (negative && matchesAnyTerm(givenHay, givenTerms))) {
+  // Declined is checked before given on this one row (H-044): "Flu vaccine
+  // declined" contains the stem "flu vaccin". A negative phrase that also
+  // contains a given stem, or a given concept id, is declined even when that
+  // exact phrase is missing from the declined list. A concept id counts when
+  // the wording does not. A structured not-given status on an otherwise
+  // matching row is declined, not given (H-096). entered-in-error is neither.
+  function classifyVaccineText(text, date, source, givenTerms, declinedTerms, item, givenCodes) {
+    const raw = String(text || '');
+    if (vaccineTextIsNonAdministration(raw)) return null;
+    const outcome =
+      VaccineGiven && VaccineGiven.structuredVaccineOutcome ? VaccineGiven.structuredVaccineOutcome(item) : null;
+    if (outcome === 'entered-in-error') return null;
+    const stemHay = vaccineTextForStemMatch(raw);
+    const negative = vaccineTextIsNegativeOutcome(raw) || vaccineTextIsNegativeOutcome(stemHay);
+    const codeHit = VaccineGiven && VaccineGiven.codeHits ? VaccineGiven.codeHits(item, givenCodes) : false;
+    if (!raw.trim() && !codeHit) return null;
+    const declinedText = matchesAnyTerm(raw, declinedTerms) || matchesAnyTerm(stemHay, declinedTerms);
+    const givenText = vaccineGivenStemHits(stemHay, givenTerms);
+    if (outcome === 'not-given' && (declinedText || negative || givenText || codeHit)) {
       return { type: 'declined', date: date || '', source };
     }
-    if (!negative && matchesAnyTerm(givenHay, givenTerms)) {
+    if (declinedText || (negative && (givenText || codeHit))) {
+      return { type: 'declined', date: date || '', source };
+    }
+    if (!negative && (codeHit || givenText)) {
       return { type: 'given', date: date || '', source };
     }
     return null;
   }
 
+  // Across rows, a given dose inside the window is the status for that
+  // window (H-096). A later given overrides an earlier decline. A later
+  // decline does not override an earlier in-window given: the given dose
+  // still counts for that season or one-off. A decline is the status only
+  // when no given dose is inside the window. The reported row is the latest
+  // dated hit of the winning type. An undated hit is used only when that
+  // type has no date (seasonal undated rows never reach here).
+  function pickVaccineEvent(hits) {
+    if (!hits.length) return null;
+    const givens = hits.filter((h) => h.type === 'given');
+    const pool = givens.length ? givens : hits.filter((h) => h.type === 'declined');
+    if (!pool.length) return null;
+    return pool.reduce((best, hit) => ((hit.date || '') > (best.date || '') ? hit : best));
+  }
+
   function vaccineEventInWindow(rule, data, seasonStartIso) {
     const givenTerms = rule.statusTerms?.given || [];
     const declinedTerms = rule.statusTerms?.declined || [];
+    const givenCodes =
+      VaccineGiven && VaccineGiven.codesForRule ? VaccineGiven.codesForRule(rule && rule.id) : [];
     // UNDATED records fail CLOSED against a real season window (audit C2,
     // 2026-07-18): a dateless historic "given" code used to satisfy EVERY
     // season forever — a false green for an eligible unvaccinated patient.
@@ -4029,32 +4095,41 @@
     // anyway, and rejecting it would spam false DUE recalls instead.
     const windowIsSeasonal = seasonStartIso > '1900-01-01';
     const outOfWindow = (d) => (d ? d < seasonStartIso : windowIsSeasonal);
+    const hits = [];
+    const consider = (hit) => {
+      if (hit) hits.push(hit);
+    };
     // Coded name only. The note body (VAC_* markers, "filed automatically
     // with the invitation") is not administration evidence and is not read.
-    // Search problems
+    // Every in-window row is collected. pickVaccineEvent chooses given over
+    // declined when both are inside the window, whatever the array order.
     for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
       if (outOfWindow(d)) continue;
-      const hit = classifyVaccineText(p.label, d, 'problem', givenTerms, declinedTerms);
-      if (hit) return hit;
+      consider(classifyVaccineText(p.label, d, 'problem', givenTerms, declinedTerms, p, givenCodes));
     }
-    // Search observations (coded name, not the free-text note body)
+    // Search observations (coded name, not the free-text note body).
+    // o.code is the stored concept id. Wording and the id are both read.
+    // A procedure row is the same matcher as a note or an immunisation.
     for (const o of data.observations || []) {
       const d = o.date || '';
       if (outOfWindow(d)) continue;
-      const source = o.entryKind === 'immunisation' ? 'immunisation' : 'observation';
-      const hit = classifyVaccineText(o.name, d, source, givenTerms, declinedTerms);
-      if (hit) return hit;
+      const source =
+        o.entryKind === 'immunisation' ? 'immunisation' : o.entryKind === 'procedure' ? 'procedure' : 'observation';
+      consider(classifyVaccineText(o.name, d, source, givenTerms, declinedTerms, o, givenCodes));
     }
-    // Search observationHistory (journal entries folded into history)
+    // Search observationHistory (journal entries folded into history).
+    // The concept id lives on the group; the date and any not-given status
+    // live on the point. Each in-window point is its own hit.
     for (const h of data.observationHistory || []) {
-      const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
-      if (!latest) continue;
-      const hit = classifyVaccineText(h.name, latest.date, 'history', givenTerms, declinedTerms);
-      if (hit) return hit;
+      for (const pt of h.history || []) {
+        if (!pt || !pt.date || pt.date < seasonStartIso) continue;
+        const item = pt.vaccineOutcome ? Object.assign({}, h, { vaccineOutcome: pt.vaccineOutcome }) : h;
+        consider(classifyVaccineText(h.name, pt.date, 'history', givenTerms, declinedTerms, item, givenCodes));
+      }
     }
-    return null;
+    return pickVaccineEvent(hits);
   }
 
   // Days before an ISO date, as YYYY-MM-DD. Invalid input returns null.
@@ -4077,9 +4152,10 @@
     return day >= cutoff;
   }
 
-  // Opt-in for a problem clause (vax-flu practice flag). H-090's
-  // invitation/situation filter is dose counting only and is not applied
-  // here: "Needs influenza immunization (situation)" is eligibility, not a dose.
+  // Opt-in for a problem clause (vax-flu practice flag). The invitation
+  // filter is dose counting only and is not applied here: "Needs influenza
+  // immunization (situation)" is eligibility, not a dose. The brand stem
+  // "fluenz" is a whole word so it does not match inside "influenza".
   function vaccineObservationClauseLabel(clause, data, nowIso) {
     if (!clause.includeObservations) return null;
     const terms = clause.match || [];

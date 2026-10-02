@@ -37,7 +37,18 @@
 //      pneumococcal, shingles) is given once and the coded dose may be
 //      years or decades old. Flu and COVID still use their seasonal
 //      windows in the rules engine, so an old immunisation does not
-//      satisfy this season. Observations and coded notes stay on the window.
+//      satisfy this season. Ordinary observations and coded notes stay
+//      on the window. A coded note that is itself an RSV, pneumococcal
+//      or shingles record is kept for the whole payload (H-095): those
+//      doses are filed as notes as well as immunisations, and the 400-day
+//      cap was dropping them. Flu notes, COVID notes and the flu
+//      eligibility flag stay on the window. Invitations are not lifetime.
+//   5. Procedure entries (entryType "procedure") are ingested only when
+//      the coded description or concept id is a vaccine record (H-096).
+//      The same matcher, season windows and one-off lifetime rule apply.
+//      A blood test or an operation is not ingested. A structured
+//      not-given status is copied onto the row as vaccineOutcome so an
+//      administration-named entry marked not given is not a dose.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.JournalObservations.<fn>(...)
@@ -45,6 +56,16 @@
 
 (function (global) {
   'use strict';
+
+  // One-off vaccine notes skip the 400-day cap. Flu and COVID notes do not.
+  // Content scripts load shared/vaccine-given.js before this file.
+  var VaccineGiven = (function loadVaccineGiven() {
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('./vaccine-given.js');
+    }
+    if (typeof window !== 'undefined' && window.VaccineGiven) return window.VaccineGiven;
+    return null;
+  })();
 
   var MONTH_INDEX = {
     Jan: 0,
@@ -114,7 +135,11 @@
   //                 (default 400 — the "13 months" window
   //                 shared/smoking-status.js's honest-absence wording is
   //                 derived from; keep in sync). Immunisation entries ignore
-  //                 this and are kept for the whole payload.
+  //                 this and are kept for the whole payload. So does a coded
+  //                 note that is an RSV, pneumococcal or shingles record.
+  //                 Flu notes, COVID notes and every other note keep the window.
+  //                 A vaccine procedure follows the same split. Other
+  //                 procedures are not ingested.
   //
   // Walks BOTH confirmed shapes that carry coded observations:
   //   - nested:  encounter items → consultationTopics → headings → entries
@@ -138,6 +163,7 @@
     });
 
     var result = [];
+    var rowsByKey = {};
 
     // Generic wrapper names carry no coded meaning — Medicus labels a
     // standalone flat item with a UI wrapper title when the coded term lives
@@ -176,16 +202,34 @@
       return null;
     }
 
-    function pushEntry(name, value, entryDate, code, entryKind) {
+    function outcomeOf(entry) {
+      if (!VaccineGiven || !VaccineGiven.structuredVaccineOutcome) return null;
+      return VaccineGiven.structuredVaccineOutcome(entry);
+    }
+
+    function pushEntry(name, value, entryDate, code, entryKind, outcome) {
       if (!name || !entryDate) return;
       // Lifetime immunisation history. One-off vaccines are not "recent
       // observations". Seasonal rules still ignore a dose outside their
-      // own season. Coded notes and ordinary observations keep the window
-      // (SMOK002 / AST015, the deferred 400-day follow-up).
-      if (entryKind !== 'immunisation' && entryDate < cutoff) return;
+      // own season. A coded note of an RSV, pneumococcal or shingles dose
+      // is the same history: the 400-day cap must not drop it. Flu, COVID,
+      // smoking and every other note keep the window.
+      var lifetimeNote =
+        (entryKind === 'note' || entryKind === 'procedure') &&
+        VaccineGiven &&
+        VaccineGiven.isLifetimeVaccineRecord &&
+        VaccineGiven.isLifetimeVaccineRecord(name, code);
+      if (entryKind !== 'immunisation' && !lifetimeNote && entryDate < cutoff) return;
       var isoDate = localIsoDate(entryDate);
       var nameKey = String(name).toLowerCase() + '|' + isoDate;
-      if (existingKeys[nameKey]) return; // already in the investigation dashboard
+      if (existingKeys[nameKey]) {
+        // A later row for the same coded day can be the one that says the
+        // dose was not given. Keep that status on the row already stored.
+        if (outcome && rowsByKey[nameKey] && !rowsByKey[nameKey].vaccineOutcome) {
+          rowsByKey[nameKey].vaccineOutcome = outcome;
+        }
+        return;
+      }
       existingKeys[nameKey] = true; // de-dupe within journal results too
       var row = {
         name: name,
@@ -195,6 +239,8 @@
       };
       if (code) row.code = String(code);
       if (entryKind) row.entryKind = entryKind;
+      if (outcome) row.vaccineOutcome = outcome;
+      rowsByKey[nameKey] = row;
       result.push(row);
     }
 
@@ -232,11 +278,7 @@
 
     function flaggedIncorrectOrDraft(node) {
       if (!node) return false;
-      return (
-        node.isMarkedIncorrect === true ||
-        node.isMarkedAsIncorrect === true ||
-        node.isDraft === true
-      );
+      return node.isMarkedIncorrect === true || node.isMarkedAsIncorrect === true || node.isDraft === true;
     }
 
     // A coded note is clinical evidence. Medicus files SNOMED terms under
@@ -248,7 +290,14 @@
       if (flaggedIncorrectOrDraft(entry) || flaggedIncorrectOrDraft(item)) return;
       var desc = entry.clinicalCodeDescription == null ? '' : String(entry.clinicalCodeDescription).trim();
       if (!desc) return;
-      pushEntry(desc, codedValue(entry), noteClinicalDate(entry, fallbackDate), conceptIdOf(entry), 'note');
+      pushEntry(
+        desc,
+        codedValue(entry),
+        noteClinicalDate(entry, fallbackDate),
+        conceptIdOf(entry),
+        'note',
+        outcomeOf(entry)
+      );
     }
 
     // An Immunisation journal entry is administration evidence when its
@@ -263,7 +312,38 @@
       var desc = entry.clinicalCodeDescription || entry.type || entry.title || '';
       desc = String(desc).trim();
       if (!desc) return;
-      pushEntry(desc, codedValue(entry), noteClinicalDate(entry, fallbackDate), conceptIdOf(entry), 'immunisation');
+      pushEntry(
+        desc,
+        codedValue(entry),
+        noteClinicalDate(entry, fallbackDate),
+        conceptIdOf(entry),
+        'immunisation',
+        outcomeOf(entry)
+      );
+    }
+
+    // A procedure is administration evidence only when the coded term or
+    // concept id is a vaccine record. Same date rules as a coded note:
+    // RSV, pneumococcal and shingles are kept for the whole payload; flu
+    // and COVID stay on the 400-day window and the season window still
+    // decides this season. The note body is not read.
+    function pushProcedure(entry, fallbackDate, item) {
+      if (!entry) return;
+      var kind = String(entry.entryType || (item && item.type) || '').toLowerCase();
+      if (kind !== 'procedure') return;
+      if (flaggedIncorrectOrDraft(entry) || flaggedIncorrectOrDraft(item)) return;
+      var desc = entry.clinicalCodeDescription || entry.type || entry.title || '';
+      desc = String(desc).trim();
+      if (!desc) return;
+      var code = conceptIdOf(entry);
+      if (
+        !VaccineGiven ||
+        !VaccineGiven.isVaccineProcedureRecord ||
+        !VaccineGiven.isVaccineProcedureRecord(desc, code)
+      ) {
+        return;
+      }
+      pushEntry(desc, codedValue(entry), noteClinicalDate(entry, fallbackDate), code, 'procedure', outcomeOf(entry));
     }
 
     try {
@@ -283,7 +363,9 @@
               resolveName(fd.type || item.title || null, fd.value),
               fd.value,
               parseDisplayDate(fd.observationDate) || groupDate,
-              conceptIdOf(fd)
+              conceptIdOf(fd),
+              null,
+              outcomeOf(fd)
             );
             continue;
           }
@@ -298,6 +380,12 @@
             var imd = item.data || {};
             if (!imd.entryType) imd = Object.assign({ entryType: 'immunisation' }, imd);
             pushImmunisation(imd, groupDate, item);
+            continue;
+          }
+          if (item.type === 'procedure') {
+            var pd = item.data || {};
+            if (!pd.entryType) pd = Object.assign({ entryType: 'procedure' }, pd);
+            pushProcedure(pd, groupDate, item);
             continue;
           }
           // Nested consultation-coded entries (the original path).
@@ -317,6 +405,10 @@
                   pushImmunisation(entry, groupDate, item);
                   continue;
                 }
+                if (entry.entryType === 'procedure') {
+                  pushProcedure(entry, groupDate, item);
+                  continue;
+                }
                 // Skip entries missing a type name, or that aren't observations
                 // (e.g. medications, problems, uncoded notes).
                 if (!entry.type || entry.entryType !== 'observation') continue;
@@ -324,7 +416,9 @@
                   resolveName(entry.type, entry.value),
                   entry.value,
                   parseDisplayDate(entry.observationDate) || groupDate,
-                  conceptIdOf(entry)
+                  conceptIdOf(entry),
+                  null,
+                  outcomeOf(entry)
                 );
               }
             }
@@ -386,14 +480,16 @@
         return h && h.date === obs.date;
       });
       if (duplicate) return; // dashboard point for that date is authoritative
-      group.history.push({
+      var point = {
         date: obs.date,
         value: pv(obs.value),
         rawValue: String(obs.value == null ? '' : obs.value),
         isAbove: false,
         isBelow: false,
         source: 'journal',
-      });
+      };
+      if (obs.vaccineOutcome) point.vaccineOutcome = obs.vaccineOutcome;
+      group.history.push(point);
       group.history.sort(function (a, b) {
         return b.date < a.date ? -1 : b.date > a.date ? 1 : 0;
       });
