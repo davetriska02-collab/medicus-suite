@@ -2,6 +2,25 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.17] — 2026-10-02
+
+### Workload tracker counts open tasks by queue (H-097)
+
+The Workload panel still shows the dashboard totals (overdue high-priority, all high-priority, normal, snoozed). Under those, each person and each team now has a count for the open task queues Suite already reads:
+
+- Medical requests (`medical_patient_request_task`)
+- Admin requests (`admin_patient_request_task`)
+- Investigation results (`review_investigation_results_task`)
+- Routine prescription requests (`prescription_request_task_routine`)
+- Non-routine prescription requests (`prescription_request_task_non_routine`)
+- Inbound documents (`review_inbound_document_task`)
+
+Those are the Submissions and rota demand lists, plus the inbound-document queue. Consultations and medication reviews stay on the Activity report, because that report is completed work, not these open lists. Privacy-officer and EPS cancellation lists stay off this panel.
+
+The period control is Open now, Today, Last 7 days, or Last 30 days. A period counts tasks created in that window that are still open. Completed tasks leave the list, so a period is not work done. The type counts are a separate read of each queue. They are not a split of the dashboard totals. Sort by a type uses the number, so 10 stays above 2, and the count stays on that person. A queue that did not load is a dash, not zero. A loaded empty queue is zero. The tally keeps an assignee label and a count. Patient name, NHS number, task id and summary are dropped.
+
+Read-only. The new calls are GET of `/tasks/data/{queue}/task-list` on the same practice API host as the dashboard. There is no write to Medicus. H-097 is Accepted (ALARP) at residual 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-02. Hazard-log document version 3.100. Clinical safety notice document version 3.108. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved. H-084 stays accepted and is not rewritten.
+
 ## [v3.268.16] — 2026-10-02
 
 ### Procedure doses, a later given, and a not-given status (H-096)
