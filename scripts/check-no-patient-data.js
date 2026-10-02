@@ -50,6 +50,12 @@ const NHS_ADD_ALLOWLIST = new Set([
   'rules/qof-rules.json',
   'test-problem-description-cleanup.js',
   'test-snomed-retirement.js',
+  // PCV13 concept in NHSD PNEUVAC1_COD is a 10-digit SNOMED id that passes
+  // Modulus-11. These two files carry that terminology id and no patient
+  // identifiers. H-095. The hazard log and changelog name the concept without
+  // repeating the digits.
+  'shared/vaccine-given.js',
+  'test-vaccine-given-codes.js',
 ]);
 
 // Never NHS-scan these (binaries / vendored bundles / lockfiles).

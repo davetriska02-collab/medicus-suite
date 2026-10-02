@@ -20,7 +20,7 @@ What did not change:
 - Flu and COVID seasons stay 1 September through 31 March. A dose from last season stays due. An undated seasonal row stays due.
 - COVID eligibility is still only age 75+, care home residents, and the immunosuppressed. Diabetes, CHD, CKD and asthma do not get a COVID tile. Widening those cohorts is a separate follow-up.
 - SNOMED `185903001` (Needs influenza immunization) is still eligibility, not a dose, and a journal note of it still counts only within 400 days.
-- PCV13 (`1296904008`) and the generic pneumococcal antigen (`12866006`) count for the 65+ rule only. An infant PCV13 course does not clear the under-65 rule. Zostavax does not clear the immunosuppressed Shingrix rule.
+- The PCV13 conjugate concept and the generic pneumococcal antigen concept count for the 65+ rule only (both are in `shared/vaccine-given.js`). An infant PCV13 course does not clear the under-65 rule. Zostavax does not clear the immunosuppressed Shingrix rule.
 - `90640007` is not used. `1730561000000103` (requires shingles vaccination) is not a dose.
 
 Coded notes of RSV, pneumococcal and shingles are kept however old they are. Flu notes, COVID notes, smoking notes and other coded notes stay on the 400-day window. Immunisation entries were already lifetime.
