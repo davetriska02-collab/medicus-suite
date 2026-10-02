@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.17
-**Generated:** 2026-10-02
+**Version:** v3.268.18
+**Generated:** 2026-10-03
 
 ## What it is
 
@@ -139,6 +139,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 
 ## Recent additions (last 4 weeks)
 
+- **v3.268.18 (3 Oct)** — Lab filing: a result with no comment no longer shows a phantom one (a plain 77 was read as a "7" comment), and a lab comment is read as the lab sent it. The blocked card now says why a test cannot act: no setup, group awaiting approval, test awaiting approval, or lab awaiting approval. An "approve it" link opens the lab's card or the test's Review screen.
 - **v3.268.17 (2 Oct)** — Workload tracker adds open-task counts by queue (medical, admin, results, routine and non-routine prescriptions, inbound documents) beside the dashboard totals. A period is still-open tasks created in that window. A dash is not zero. H-097 accepted (ALARP) — CSO signed 2026-10-02 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.16 (2 Oct)** — A vaccine filed as a procedure counts on the same concept id and wording, with the same seasons and one-off rules. A later given dose overrides an earlier decline, and a later decline does not undo an in-season given. An administration marked not given is not counted as a dose. COVID eligibility stays 75+, care home, and immunosuppressed, confirmed correct for autumn 2026. H-096 Accepted (ALARP) — CSO signed 2026-10-02 (Dr D. Triska, CSO, GMC 6159481).
 - **v3.268.14 (1 Oct)** — The suite no longer clears Flag on patient banner. Medicus Record clean up (Patient record > Actions > Record clean up) does that. H-065 retired; signed 2026-10-01 (Dr D. Triska, CSO, GMC 6159481).
