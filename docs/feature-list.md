@@ -1,7 +1,7 @@
 # Medicus Suite — Feature List
 
-**Version:** v3.268.14
-**Generated:** 2026-10-01
+**Version:** v3.268.15
+**Generated:** 2026-10-02
 
 ## What it is
 
@@ -145,6 +145,7 @@ The shipped alert library carries 39 starter alerts a practice can enable (36 pr
 - **v3.268.11 (1 Oct)** — Developer lint tooling only. ESLint stays on 9.39.5. Nothing in the extension the practice runs has changed.
 - **v3.268.10 (1 Oct)** — Record ignores a snapshot-updated message that did not come from this extension. Triage Lens escaping and the queue task-list bridge checks are loaded by the test suite.
 - **v3.268.9 (1 Oct)** — Duplicate Problem Checker no longer stores the NHS number in the saved scan. An older saved scan is cleaned on the next open. The local removal note expires after 30 days and is capped at 500 entries. H-094 accepted (ALARP) — CSO signed off 2026-10-01.
+- **v3.268.15 (2 Oct)** — A flu, COVID, RSV, pneumococcal or shingles dose counts from the stored SNOMED concept id as well as the wording. A `(situation)` tag or another parenthetical no longer hides an administration. Fluenz, Influvac, Comirnaty, Spikevax, Nuvaxovid and the PPV23 "23 valent" term count. RSV, pneumococcal and shingles coded notes are kept however old they are. Invitations stay due. Declined stays declined. Seasons are unchanged. COVID eligibility is unchanged (75+, care home, immunosuppressed). H-095 drafted, CSO sign-off blank.
 - **v3.268.8 (30 Sep)** — A patient coded with SNOMED 185903001 (Needs influenza immunization / immunisation) is shown as flu-eligible, labelled "Practice-flagged: needs influenza immunisation". A situation tag does not hide that flag and does not count as the vaccine given. An active problem is kept. A journal note older than 400 days is not. H-093 accepted (ALARP) — CSO signed off 2026-10-01.
 - **v3.268.7 (29 Sep)** — The suite no longer files a patient-submitted attachment as a document. Medicus files that attachment itself. H-063 retired; CSO signed off 2026-09-29.
 - **v3.268.6 (29 Sep)** — RSV, pneumococcal and shingles read the whole immunisation history, not the last 400 days. "Administration of RSV (respiratory syncytial virus) vaccine" counts as RSV given. A pneumococcal dose given before 65 counts for the routine one-off. Flu and COVID stay on their seasons. Invitations still do not count. H-091 accepted (ALARP) — CSO signed off 2026-09-29.
