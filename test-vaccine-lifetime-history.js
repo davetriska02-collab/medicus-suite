@@ -22,9 +22,10 @@
 // No shipped rule requires the dose to have been given at or after 65.
 // Asplenia / splenic dysfunction / CKD 5-year revaccination stays unencoded.
 //
-// Seasonal flu and COVID keep their season windows. Invitation, offer and
-// situation concepts stay excluded (H-090). Coded notes stay on the 400-day
-// window (H-088).
+// Seasonal flu and COVID keep their season windows. Invitation and offer
+// concepts stay excluded (H-090). An administration concept tagged
+// (situation) counts when the date is inside the season (H-095). Ordinary
+// coded notes stay on the 400-day window (H-088). One-off vaccine notes do not.
 //
 // Texts and dates only. No patient identifiers.
 
@@ -383,7 +384,7 @@ console.log('\n--- shingles looks back over the same history when the patient is
   );
 }
 
-console.log('\n--- seasonal windows, invitations and situation concepts stay as they were ---');
+console.log('\n--- seasonal windows and invitations stay; administration (situation) counts ---');
 {
   const inSeasonFlu = statusOf(
     'vax-flu',
@@ -400,21 +401,26 @@ console.log('\n--- seasonal windows, invitations and situation concepts stay as 
     `COVID-19 vaccination on 2026-09-20 counts (got ${inSeasonCovid.status})`
   );
 
-  // The pharmacist situation concept contains flu given stems. H-090 must
-  // still reject it even when the date is inside the current season.
+  // The pharmacist situation concept is an administration, not an invitation.
+  // H-095 counts it when the date is inside the current season. The tag used
+  // to force due (H-090). Last season's copy of the same row stays due via
+  // the season window (FLU_SIT_DATE is 2025-10-23; see the aggregate above).
   const situation = statusOf(
     'vax-flu',
     baseData({ observations: [{ name: FLU_PHARM, date: '2026-10-02', entryKind: 'immunisation' }] })
   );
   check(
-    situation.status === 'vax_due',
-    `pharmacist (situation) row inside the season stays due (got ${situation.status})`
+    situation.status === 'vax_given',
+    `pharmacist (situation) row inside the season counts as given (got ${situation.status})`
   );
   const ohp = statusOf(
     'vax-flu',
     baseData({ observations: [{ name: FLU_OHP, date: '2026-10-02', entryKind: 'immunisation' }] })
   );
-  check(ohp.status === 'vax_due', `other-provider (situation) row inside the season stays due (got ${ohp.status})`);
+  check(
+    ohp.status === 'vax_given',
+    `other-provider (situation) row inside the season counts as given (got ${ohp.status})`
+  );
 
   const inviteOnly = statusOf(
     'vax-rsv',

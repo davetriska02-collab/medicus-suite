@@ -2,6 +2,33 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.15] — 2026-10-02
+
+### Vaccine doses match the concept id and the wording (H-095)
+
+A flu, COVID, RSV, pneumococcal or shingles dose was staying due when the record was a SNOMED concept id, a brand, a bare procedure name, or an administration concept whose `(situation)` tag or another parenthetical hid the stem. One-off doses filed as coded notes older than 400 days were dropped before the engine saw them.
+
+What counts as given now:
+
+- The stored concept id, against a curated set. Flu is NHSD `FLU_COD` 20250912 (pharmacist, other healthcare provider, midwife, school, hospital inpatient, and the administration procedures). COVID is PRIMIS `COVADM1` plus the OpenSAFELY COVID-19 vaccination-given course codes (`1324681000000101`, `1324691000000104`, `840534001`, `1324671000000103`, `1324851000000106`). RSV is NHSD `RSVADMIN_COD` 20241205 (`1303503001`, `1853491000000104`). Pneumococcal is NHSD `PNEUVAC1_COD` 20250912. Shingles is the NHS England payment table (Shingrix `1326101000000105` / `1326111000000107` on both rules; Zostavax `871898007` / `871899004` and generic product `722215002` on the routine rule only).
+- The same wording, after parentheticals are removed at match time. The stored name is not rewritten. Bare procedure names and brands are included: Fluenz, Fluenz Tetra, Influvac Tetra, adjuvanted influenza, Comirnaty (including JN.1), Spikevax, Nuvaxovid, and the PPV23 "23 valent" term. `fluenz` is a whole word so it does not match inside "influenza".
+
+What did not change:
+
+- An invitation, offer or recall text stays due, including when it carries a `(situation)` tag.
+- Declined, refused, contraindicated, not given and not indicated stay declined.
+- Flu and COVID seasons stay 1 September through 31 March. A dose from last season stays due. An undated seasonal row stays due.
+- COVID eligibility is still only age 75+, care home residents, and the immunosuppressed. Diabetes, CHD, CKD and asthma do not get a COVID tile. Widening those cohorts is a separate follow-up.
+- SNOMED `185903001` (Needs influenza immunization) is still eligibility, not a dose, and a journal note of it still counts only within 400 days.
+- The PCV13 conjugate concept and the generic pneumococcal antigen concept count for the 65+ rule only (both are in `shared/vaccine-given.js`). An infant PCV13 course does not clear the under-65 rule. Zostavax does not clear the immunosuppressed Shingrix rule.
+- `90640007` is not used. `1730561000000103` (requires shingles vaccination) is not a dose.
+
+Coded notes of RSV, pneumococcal and shingles are kept however old they are. Flu notes, COVID notes, smoking notes and other coded notes stay on the 400-day window. Immunisation entries were already lifetime.
+
+Not changed in this release: procedure entries are still not read; a structured not-given status on a row whose name is an administration term is still read from the name; Sweep still does not read the journal; the first matching problem still wins, so an earlier declined problem can hide a later given dose; asplenia 5-year pneumococcal revaccination, pregnancy pertussis and pregnancy RSV stay unencoded; VI001–VI004 stay disabled.
+
+H-095 is Accepted (ALARP) at residual 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-02. Hazard-log document version 3.96. Clinical safety notice document version 3.106. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved.
+
 ## [v3.268.14] — 2026-10-01
 
 ### Banner-flag cleanup removed

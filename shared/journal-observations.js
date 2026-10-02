@@ -37,7 +37,12 @@
 //      pneumococcal, shingles) is given once and the coded dose may be
 //      years or decades old. Flu and COVID still use their seasonal
 //      windows in the rules engine, so an old immunisation does not
-//      satisfy this season. Observations and coded notes stay on the window.
+//      satisfy this season. Ordinary observations and coded notes stay
+//      on the window. A coded note that is itself an RSV, pneumococcal
+//      or shingles record is kept for the whole payload (H-095): those
+//      doses are filed as notes as well as immunisations, and the 400-day
+//      cap was dropping them. Flu notes, COVID notes and the flu
+//      eligibility flag stay on the window. Invitations are not lifetime.
 //
 // Dual-mode export (same pattern as shared/smoking-status.js):
 //   Browser (classic script): window.JournalObservations.<fn>(...)
@@ -45,6 +50,16 @@
 
 (function (global) {
   'use strict';
+
+  // One-off vaccine notes skip the 400-day cap. Flu and COVID notes do not.
+  // Content scripts load shared/vaccine-given.js before this file.
+  var VaccineGiven = (function loadVaccineGiven() {
+    if (typeof module !== 'undefined' && module.exports) {
+      return require('./vaccine-given.js');
+    }
+    if (typeof window !== 'undefined' && window.VaccineGiven) return window.VaccineGiven;
+    return null;
+  })();
 
   var MONTH_INDEX = {
     Jan: 0,
@@ -114,7 +129,9 @@
   //                 (default 400 — the "13 months" window
   //                 shared/smoking-status.js's honest-absence wording is
   //                 derived from; keep in sync). Immunisation entries ignore
-  //                 this and are kept for the whole payload.
+  //                 this and are kept for the whole payload. So does a coded
+  //                 note that is an RSV, pneumococcal or shingles record.
+  //                 Flu notes, COVID notes and every other note keep the window.
   //
   // Walks BOTH confirmed shapes that carry coded observations:
   //   - nested:  encounter items → consultationTopics → headings → entries
@@ -180,9 +197,15 @@
       if (!name || !entryDate) return;
       // Lifetime immunisation history. One-off vaccines are not "recent
       // observations". Seasonal rules still ignore a dose outside their
-      // own season. Coded notes and ordinary observations keep the window
-      // (SMOK002 / AST015, the deferred 400-day follow-up).
-      if (entryKind !== 'immunisation' && entryDate < cutoff) return;
+      // own season. A coded note of an RSV, pneumococcal or shingles dose
+      // is the same history: the 400-day cap must not drop it. Flu, COVID,
+      // smoking and every other note keep the window.
+      var lifetimeNote =
+        entryKind === 'note' &&
+        VaccineGiven &&
+        VaccineGiven.isLifetimeVaccineRecord &&
+        VaccineGiven.isLifetimeVaccineRecord(name, code);
+      if (entryKind !== 'immunisation' && !lifetimeNote && entryDate < cutoff) return;
       var isoDate = localIsoDate(entryDate);
       var nameKey = String(name).toLowerCase() + '|' + isoDate;
       if (existingKeys[nameKey]) return; // already in the investigation dashboard
