@@ -4037,19 +4037,27 @@
   }
 
   // Returns { type: 'given'|'declined', date, source } or null to skip.
-  // Declined is checked before given (H-044): "Flu vaccine declined" contains
-  // the stem "flu vaccin". A negative phrase that also contains a given stem,
-  // or a given concept id, is declined even when that exact phrase is missing
-  // from the declined list. A concept id counts when the wording does not.
+  // Declined is checked before given on this one row (H-044): "Flu vaccine
+  // declined" contains the stem "flu vaccin". A negative phrase that also
+  // contains a given stem, or a given concept id, is declined even when that
+  // exact phrase is missing from the declined list. A concept id counts when
+  // the wording does not. A structured not-given status on an otherwise
+  // matching row is declined, not given (H-096). entered-in-error is neither.
   function classifyVaccineText(text, date, source, givenTerms, declinedTerms, item, givenCodes) {
     const raw = String(text || '');
     if (vaccineTextIsNonAdministration(raw)) return null;
+    const outcome =
+      VaccineGiven && VaccineGiven.structuredVaccineOutcome ? VaccineGiven.structuredVaccineOutcome(item) : null;
+    if (outcome === 'entered-in-error') return null;
     const stemHay = vaccineTextForStemMatch(raw);
     const negative = vaccineTextIsNegativeOutcome(raw) || vaccineTextIsNegativeOutcome(stemHay);
     const codeHit = VaccineGiven && VaccineGiven.codeHits ? VaccineGiven.codeHits(item, givenCodes) : false;
     if (!raw.trim() && !codeHit) return null;
     const declinedText = matchesAnyTerm(raw, declinedTerms) || matchesAnyTerm(stemHay, declinedTerms);
     const givenText = vaccineGivenStemHits(stemHay, givenTerms);
+    if (outcome === 'not-given' && (declinedText || negative || givenText || codeHit)) {
+      return { type: 'declined', date: date || '', source };
+    }
     if (declinedText || (negative && (givenText || codeHit))) {
       return { type: 'declined', date: date || '', source };
     }
@@ -4057,6 +4065,21 @@
       return { type: 'given', date: date || '', source };
     }
     return null;
+  }
+
+  // Across rows, a given dose inside the window is the status for that
+  // window (H-096). A later given overrides an earlier decline. A later
+  // decline does not override an earlier in-window given: the given dose
+  // still counts for that season or one-off. A decline is the status only
+  // when no given dose is inside the window. The reported row is the latest
+  // dated hit of the winning type. An undated hit is used only when that
+  // type has no date (seasonal undated rows never reach here).
+  function pickVaccineEvent(hits) {
+    if (!hits.length) return null;
+    const givens = hits.filter((h) => h.type === 'given');
+    const pool = givens.length ? givens : hits.filter((h) => h.type === 'declined');
+    if (!pool.length) return null;
+    return pool.reduce((best, hit) => ((hit.date || '') > (best.date || '') ? hit : best));
   }
 
   function vaccineEventInWindow(rule, data, seasonStartIso) {
@@ -4072,34 +4095,41 @@
     // anyway, and rejecting it would spam false DUE recalls instead.
     const windowIsSeasonal = seasonStartIso > '1900-01-01';
     const outOfWindow = (d) => (d ? d < seasonStartIso : windowIsSeasonal);
+    const hits = [];
+    const consider = (hit) => {
+      if (hit) hits.push(hit);
+    };
     // Coded name only. The note body (VAC_* markers, "filed automatically
     // with the invitation") is not administration evidence and is not read.
-    // Search problems
+    // Every in-window row is collected. pickVaccineEvent chooses given over
+    // declined when both are inside the window, whatever the array order.
     for (const p of data.problems || []) {
       if (!p.label) continue;
       const d = p.codedDate || '';
       if (outOfWindow(d)) continue;
-      const hit = classifyVaccineText(p.label, d, 'problem', givenTerms, declinedTerms, p, givenCodes);
-      if (hit) return hit;
+      consider(classifyVaccineText(p.label, d, 'problem', givenTerms, declinedTerms, p, givenCodes));
     }
     // Search observations (coded name, not the free-text note body).
     // o.code is the stored concept id. Wording and the id are both read.
+    // A procedure row is the same matcher as a note or an immunisation.
     for (const o of data.observations || []) {
       const d = o.date || '';
       if (outOfWindow(d)) continue;
-      const source = o.entryKind === 'immunisation' ? 'immunisation' : 'observation';
-      const hit = classifyVaccineText(o.name, d, source, givenTerms, declinedTerms, o, givenCodes);
-      if (hit) return hit;
+      const source =
+        o.entryKind === 'immunisation' ? 'immunisation' : o.entryKind === 'procedure' ? 'procedure' : 'observation';
+      consider(classifyVaccineText(o.name, d, source, givenTerms, declinedTerms, o, givenCodes));
     }
     // Search observationHistory (journal entries folded into history).
-    // The concept id lives on the group; the date lives on the point.
+    // The concept id lives on the group; the date and any not-given status
+    // live on the point. Each in-window point is its own hit.
     for (const h of data.observationHistory || []) {
-      const latest = (h.history || []).find((pt) => pt.date && pt.date >= seasonStartIso);
-      if (!latest) continue;
-      const hit = classifyVaccineText(h.name, latest.date, 'history', givenTerms, declinedTerms, h, givenCodes);
-      if (hit) return hit;
+      for (const pt of h.history || []) {
+        if (!pt || !pt.date || pt.date < seasonStartIso) continue;
+        const item = pt.vaccineOutcome ? Object.assign({}, h, { vaccineOutcome: pt.vaccineOutcome }) : h;
+        consider(classifyVaccineText(h.name, pt.date, 'history', givenTerms, declinedTerms, item, givenCodes));
+      }
     }
-    return null;
+    return pickVaccineEvent(hits);
   }
 
   // Days before an ISO date, as YYYY-MM-DD. Invalid input returns null.

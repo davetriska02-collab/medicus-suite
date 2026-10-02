@@ -207,12 +207,84 @@
     return false;
   }
 
+  var ALL_GIVEN_CODES = [];
+  Object.keys(CODES_BY_RULE).forEach(function (ruleId) {
+    CODES_BY_RULE[ruleId].forEach(function (id) {
+      if (ALL_GIVEN_CODES.indexOf(id) === -1) ALL_GIVEN_CODES.push(id);
+    });
+  });
+
+  // A coded procedure is read only when it is a vaccine record. Other
+  // procedures (a blood test, an operation) stay out of the observation list.
+  var PROCEDURE_TEXT_RE =
+    /\b(?:vaccin|immunis|fluenz|influvac|comirnaty|spikevax|nuvaxovid|abrysvo|arexvy|mresvia|shingrix|zostavax|pneumovax|prevenar|vaxneuvance|influenza|covid-19|covid|coronavirus|pneumococcal|shingles|herpes zoster)\b/i;
+
+  function isVaccineProcedureRecord(name, code) {
+    if (textIsNonAdministration(name)) return false;
+    if (codeHits(code, ALL_GIVEN_CODES)) return true;
+    if (isLifetimeVaccineRecord(name, code)) return true;
+    var norm = normalizeVaccineText(name);
+    return PROCEDURE_TEXT_RE.test(norm);
+  }
+
+  // Structured not-given, only when the record exposes it. Absent, and
+  // ordinary problem status ("active", "inactive"), are not a not-given.
+  // "not-done" / "not given" are the FHIR and journal tokens. entered-in-error
+  // is not a dose and is not a decline.
+  var NOT_GIVEN_RE = /^(?:not[-_ ]?done|not[-_ ]?given)$/i;
+  var STATUS_KEYS = [
+    'administrationStatus',
+    'immunisationStatus',
+    'immunizationStatus',
+    'doseStatus',
+    'outcome',
+    'status',
+  ];
+
+  function statusTokens(value) {
+    if (value == null || value === false || value === true) return [];
+    if (typeof value === 'string' || typeof value === 'number') {
+      var s = String(value).trim();
+      return s ? [s] : [];
+    }
+    if (typeof value !== 'object') return [];
+    var out = [];
+    if (value.code != null && String(value.code).trim()) out.push(String(value.code).trim());
+    if (value.display != null && String(value.display).trim()) out.push(String(value.display).trim());
+    if (value.text != null && String(value.text).trim()) out.push(String(value.text).trim());
+    if (Array.isArray(value.coding)) {
+      value.coding.forEach(function (c) {
+        if (!c) return;
+        if (c.code != null && String(c.code).trim()) out.push(String(c.code).trim());
+        if (c.display != null && String(c.display).trim()) out.push(String(c.display).trim());
+      });
+    }
+    return out;
+  }
+
+  function structuredVaccineOutcome(item) {
+    if (!item || typeof item !== 'object') return null;
+    if (item.vaccineOutcome === 'not-given' || item.vaccineOutcome === 'entered-in-error') return item.vaccineOutcome;
+    if (item.notGiven === true || item.isNotGiven === true || item.notAdministered === true) return 'not-given';
+    for (var k = 0; k < STATUS_KEYS.length; k++) {
+      if (!Object.prototype.hasOwnProperty.call(item, STATUS_KEYS[k])) continue;
+      var tokens = statusTokens(item[STATUS_KEYS[k]]);
+      for (var t = 0; t < tokens.length; t++) {
+        if (NOT_GIVEN_RE.test(tokens[t])) return 'not-given';
+        if (/^entered-in-error$/i.test(tokens[t])) return 'entered-in-error';
+      }
+    }
+    return null;
+  }
+
   var api = {
     codesForRule: codesForRule,
     codeHits: codeHits,
     normalizeVaccineText: normalizeVaccineText,
     textIsNonAdministration: textIsNonAdministration,
     isLifetimeVaccineRecord: isLifetimeVaccineRecord,
+    isVaccineProcedureRecord: isVaccineProcedureRecord,
+    structuredVaccineOutcome: structuredVaccineOutcome,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

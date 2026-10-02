@@ -434,7 +434,7 @@ console.log('\n--- shingles: recombinant stem, situation tag, Zostavax not on th
   );
 }
 
-console.log('\n--- coded notes: one-off lifetime, flu still windowed, procedure still dropped ---');
+console.log('\n--- coded notes: one-off lifetime, flu still windowed, vaccine procedure kept ---');
 {
   function day(title, items) {
     return { title: title, items: items };
@@ -514,7 +514,14 @@ console.log('\n--- coded notes: one-off lifetime, flu still windowed, procedure 
                       {
                         entryType: 'procedure',
                         type: 'Procedure',
-                        clinicalCodeDescription: 'Seasonal influenza vaccination',
+                        clinicalCodeDescription: 'Administration of influenza vaccine',
+                        recordDate: '2026-10-02',
+                        conceptId: '1037311000000106',
+                      },
+                      {
+                        entryType: 'procedure',
+                        type: 'Procedure',
+                        clinicalCodeDescription: 'Appendicectomy',
                         recordDate: '2026-10-01',
                       },
                     ],
@@ -568,9 +575,16 @@ console.log('\n--- coded notes: one-off lifetime, flu still windowed, procedure 
   );
   check(has('Herpes zoster vaccination', '2017-02-23'), '2017 shingles note is kept');
   check(
-    !parsed.some((o) => o.entryKind === 'procedure' || o.name === 'Procedure'),
-    'a procedure entry is still not ingested'
+    parsed.some(
+      (o) =>
+        o.entryKind === 'procedure' &&
+        o.name === 'Administration of influenza vaccine' &&
+        o.date === '2026-10-02' &&
+        o.code === '1037311000000106'
+    ),
+    'a vaccine procedure is ingested with its concept id'
   );
+  check(!parsed.some((o) => o.name === 'Appendicectomy'), 'a non-vaccine procedure is not ingested');
 
   const fluNow = statusOf(
     'vax-flu',
