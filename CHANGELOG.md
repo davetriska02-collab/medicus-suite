@@ -27,7 +27,7 @@ Coded notes of RSV, pneumococcal and shingles are kept however old they are. Flu
 
 Not changed in this release: procedure entries are still not read; a structured not-given status on a row whose name is an administration term is still read from the name; Sweep still does not read the journal; the first matching problem still wins, so an earlier declined problem can hide a later given dose; asplenia 5-year pneumococcal revaccination, pregnancy pertussis and pregnancy RSV stay unencoded; VI001–VI004 stay disabled.
 
-H-095 is Proposed. CSO sign-off is blank. Hazard-log document version 3.95. Clinical safety notice not moved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved.
+H-095 is Accepted (ALARP) at residual 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-02. Hazard-log document version 3.96. Clinical safety notice document version 3.106. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved.
 
 ## [v3.268.14] — 2026-10-01
 
