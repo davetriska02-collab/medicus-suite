@@ -2,6 +2,22 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.16] — 2026-10-02
+
+### Procedure doses, a later given, and a not-given status (H-096)
+
+Three gaps left by v3.268.15 still misread a flu, COVID, RSV, pneumococcal or shingles tile.
+
+- A dose filed as a procedure entry is now read on the same concept-id and wording matcher. Flu and COVID seasons stay 1 September through 31 March. RSV, pneumococcal and shingles procedures are not cut at 400 days. Flu and COVID procedures stay on that window. An operation, a blood test, and a procedure invitation are not ingested.
+- Given versus declined is no longer the first matching row. A given dose inside the season or one-off window is the status for that window, including when a decline is dated later. A later given overrides an earlier decline. A decline is the status only when no given dose is inside that window. On one row, declined wording is still checked before given. A same-day given wins over a same-day decline. A flu or COVID dose from the previous season does not block a decline in this season.
+- Where the record exposes it, a structured not-given status on an administration-named row is declined, not given. The fields read are `notGiven`, `isNotGiven`, `notAdministered`, and a status, administration status, immunisation status, dose status or outcome of not-done or not-given. `entered-in-error` is not counted. Problem status `active` is not a not-given.
+
+COVID eligibility is unchanged: age 75+, care home residents, and the immunosuppressed only. That cohort is confirmed correct for autumn 2026. Diabetes, CHD, CKD and asthma do not get a COVID tile.
+
+Not changed in this release: Sweep still does not read the journal; a not-given status in a field this release does not read is still taken from the name; asplenia 5-year pneumococcal revaccination, pregnancy pertussis and pregnancy RSV stay unencoded; VI001–VI004 stay disabled.
+
+H-096 is Accepted (ALARP) at residual 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-02. Hazard-log document version 3.98. Clinical safety notice document version 3.107. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved. H-095 stays accepted and is not rewritten.
+
 ## [v3.268.15] — 2026-10-02
 
 ### Vaccine doses match the concept id and the wording (H-095)
