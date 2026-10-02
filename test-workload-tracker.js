@@ -356,10 +356,12 @@ check(/H-084 is accepted \(ALARP\)/.test(changelog), 'changelog records the H-08
 check(/H-084 Workload tracker/.test(ledger), 'review ledger names H-084');
 check(!/H-083/.test(ledger), 'review ledger does not keep H-083');
 const h097 = hazard.split('### H-097')[1] ? hazard.split('### H-097')[1].split('## 6. Hazard summary')[0] : '';
-check(/### H-097 — /.test(hazard), 'hazard log drafts H-097');
-check(/Proposed — pending CSO review/.test(h097), 'H-097 is proposed');
-check(!/Signed:/.test(h097), 'H-097 sign-off is blank');
-check(/sign-off blank/.test(h097), 'H-097 says sign-off is blank');
+check(/### H-097 — /.test(hazard), 'hazard log records H-097');
+check(/Accepted \(ALARP\)/.test(h097), 'H-097 is accepted');
+check(/Signed: Dr D\. Triska \(CSO, GMC 6159481\), 2026-10-02/.test(h097), 'H-097 is signed');
+check(/this sign-off is v3\.100/.test(h097), 'H-097 sign-off is hazard-log v3.100');
+check(/doc v3\.108/.test(h097), 'H-097 is aligned with the clinical safety notice');
+check(/H-097 is Accepted \(ALARP\)/.test(changelog), 'changelog records the H-097 sign-off');
 check(/3\.268\.17/.test(changelog), 'changelog records 3.268.17');
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -19,7 +19,7 @@ Those are the Submissions and rota demand lists, plus the inbound-document queue
 
 The period control is Open now, Today, Last 7 days, or Last 30 days. A period counts tasks created in that window that are still open. Completed tasks leave the list, so a period is not work done. The type counts are a separate read of each queue. They are not a split of the dashboard totals. Sort by a type uses the number, so 10 stays above 2, and the count stays on that person. A queue that did not load is a dash, not zero. A loaded empty queue is zero. The tally keeps an assignee label and a count. Patient name, NHS number, task id and summary are dropped.
 
-Read-only. The new calls are GET of `/tasks/data/{queue}/task-list` on the same practice API host as the dashboard. There is no write to Medicus. H-097 is proposed. CSO sign-off is blank. Hazard-log document version 3.99. Clinical safety notice is not moved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved.
+Read-only. The new calls are GET of `/tasks/data/{queue}/task-list` on the same practice API host as the dashboard. There is no write to Medicus. H-097 is Accepted (ALARP) at residual 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-02. Hazard-log document version 3.100. Clinical safety notice document version 3.108. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved. H-084 stays accepted and is not rewritten.
 
 ## [v3.268.16] — 2026-10-02
 
