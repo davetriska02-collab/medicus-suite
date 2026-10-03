@@ -2,6 +2,26 @@
 
 All notable changes to Medicus Suite are documented here.
 
+## [v3.268.18] — 2026-10-03
+
+### Lab filing: no more phantom comments, and the card says WHY a test is not approved
+
+**Comments.** The "doubled comment" the suite used to undo was our own artefact. Medicus puts a lab comment in both `performerComments` and `resultPerformerComments[0]` (identical on all 45 commented results in a live capture; no single field was doubled) and the normaliser joined both. The old residue code then removed the result's own value, unit and name from the comment text. That turned a plain 77 into a phantom "7" comment offered for whitelisting, and mangled real comments ("creatinine" cut from the Creatinine comment, "B12" from "Vitamin B12", the "2" from "2026" in a date).
+
+- The normaliser drops exact repeats once and exposes `commentParts`, the distinct comment fields with the value excluded.
+- For a numeric result the comment residue is its `commentParts`. No comment parts means no comment. Nothing is stripped.
+- A bare number (77, 11, 22 and so on) is never collapsed as a "doubled" string.
+- A comment whitelisted before this change (stored in the old stripped form) still excuses the same comment. New whitelist saves store the comment exactly as the lab sent it.
+- Free-text reports (histology, radiology) take the old text path, since their value is the text.
+
+**Approval clarity.** A heading disappears from the approved catalogue if its lab is unapproved, or if the test it identifies is unapproved. The Investigations page showed all of it as set up and approved. The Companion card now says which is true.
+
+- The blocked line leads with what needs approving, in the order a person acts: the action, then whether the test will match an outstanding investigation, then why assisted filing is not offered.
+- An inline "approve it" link opens that lab's own card on the Labs list, or the test's own Review screen. It is a deep link, not a one-click approve: approving a lab activates every heading on it (H-087 control (c)), so the reviewer still sees them.
+- Four states are told apart: no setup, group awaiting approval, test awaiting approval, lab awaiting approval. The reason kind used by the shadow log is unchanged.
+
+H-073 (allowed-comment gate) and H-087 (approval) stay Accepted (ALARP) at residuals 4 and 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-03, approved on merge go. Hazard-log document version 3.101. Clinical safety notice not moved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved.
+
 ## [v3.268.17] — 2026-10-02
 
 ### Workload tracker counts open tasks by queue (H-097)

@@ -195,14 +195,23 @@ function applyReviewDeepLink() {
     return;
   }
   const invId = params.get('review');
-  if (!invId) return;
+  const labId = params.get('lab');
+  if (!invId && !labId) return;
   params.delete('review');
+  params.delete('lab');
   const qs = params.toString();
   try {
     history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
   } catch (e) {
     /* history API unavailable — the deep link still applies once below, just may re-fire on a later save() */
   }
+  // ?lab=<lab id> (Companion's approve link, Clinician A, 2026-10-02): open the Labs list and scroll to that lab's card - the
+  // one that lists every heading the lab carries beside "Approve lab". Consumed the same one-time way as ?review=.
+  if (labId && S.merged.labs.some((l) => l.id === labId)) {
+    S.labsOpen = true;
+    S.scrollToLab = labId;
+  }
+  if (!invId) return;
   const inv = S.merged.investigations.find((i) => i.id === invId);
   if (!inv) return;
   S.editing = inv.id;
@@ -3122,6 +3131,17 @@ Its report headings, result names and filing setup move onto "${into.name}", the
 
 function renderLabs() {
   const labs = S.merged.labs;
+  if (S.scrollToLab) {
+    const wanted = S.scrollToLab;
+    S.scrollToLab = null;
+    setTimeout(() => {
+      const card = document.getElementById('inv-lab-' + wanted);
+      if (!card) return;
+      if (card.scrollIntoView) card.scrollIntoView({ block: 'center' });
+      card.style.outline = '2px solid #2563eb';
+      card.style.outlineOffset = '4px';
+    }, 80);
+  }
   const invById = new Map(S.merged.investigations.map((i) => [i.id, i]));
   // Kept open across re-renders (2026-09-24, Nick): every save (rename, approve a lab) reloads and rebuilds the
   // whole page, which used to recreate this <details> closed every time — snapping shut mid-edit or mid-scroll.
@@ -3153,7 +3173,7 @@ function renderLabs() {
     };
     const block = h(
       'div',
-      { class: 'inv-lab-block' },
+      { class: 'inv-lab-block', id: 'inv-lab-' + lab.id },
       h('strong', {
         text: `${lab.name} — ${lab.identifiers.performerOrg}${lab.identifiers.department ? ' / ' + lab.identifiers.department : ''}`,
       }),

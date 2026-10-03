@@ -456,6 +456,15 @@
       const groupsUsed = [];
       const unresolvedComments = [];
       const unapprovedGroups = [];
+      // Headings that ARE set up but sit on a lab entry awaiting approval (see `state` below) — kept as structure so a
+      // card can say so first and offer to go and approve the lab, instead of burying it in the blocker list.
+      const awaitingLab = { kind: 'lab', labId, labName: lab.def.name, headings: [], texts: [] };
+      // The same, when the LAB is approved but the TEST a heading identifies is not (or is switched off): the acting
+      // catalogue drops a lab heading whose test it does not contain (shared/lab-catalogue-overlay.js pruneLab), so
+      // the heading vanishes exactly as it does for an unapproved lab — and the Labs page shows nothing to approve
+      // (Clinician A, 2026-10-03, live-caught: HFE gene testing said "needs approving" with every lab already approved).
+      let missingLabels = [];
+      const awaitingTest = { kind: 'test', labId, labName: lab.def.name, testIds: [], testLabels: [], headings: [], texts: [] };
       let recognisedCount = 0;
       let unrecognisedCount = 0;
       for (const results of byHeading.values()) {
@@ -463,12 +472,58 @@
         const group = headingLabel ? findGroup(catalogue, labId, headingLabel) : null;
         if (!group || group.enabled !== true) {
           unrecognisedCount += results.length;
-          reasonPairs.push({
-            text: headingLabel
-              ? `‘${headingLabel}’ has no approved assisted-filing setup at ${lab.def.name}`
-              : 'a result with no report-group heading cannot be matched to an approved assisted-filing group',
-            kind: headingLabel ? 'group-not-approved' : 'no-heading',
-          });
+          // WHY it is not approved, so the card can say so (Clinician A, 2026-10-02, live-caught: Folate and Ferritin showed
+          // "no approved assisted-filing setup" while the Investigations page showed both set up and approved — the
+          // RJ700 lab entry itself was awaiting approval, and an unapproved lab is dropped from the acting catalogue,
+          // taking its headings and every filing group under them with it). The pending view (includeUnreviewed) is
+          // the only place the unapproved lab/group is visible.
+          let state = 'no-setup';
+          if (headingLabel && o.pendingCatalogue) {
+            const hasHeading = (cat) => {
+              const l = asArr(cat && cat.labs).find((x) => x.id === labId);
+              return !!(l && asArr(l.groupHeadings).some((h) => normHeading(h.text) === normHeading(headingLabel)));
+            };
+            const pendingGroup = findGroup(o.pendingCatalogue, labId, headingLabel);
+            if (hasHeading(o.pendingCatalogue) && !hasHeading(catalogue)) {
+              // WHY the heading is missing from the acting catalogue: its test is absent there (unapproved), or the lab is.
+              const pl = asArr(o.pendingCatalogue.labs).find((x) => x.id === labId);
+              const ph = asArr(pl && pl.groupHeadings).find((h) => normHeading(h.text) === normHeading(headingLabel));
+              const missing = asArr(ph && ph.identifies).filter(
+                (id) => !asArr(catalogue.investigations).some((i) => i.id === id)
+              );
+              state = missing.length ? 'test-awaiting-approval' : 'lab-awaiting-approval';
+              missingLabels = missing.map((id) => {
+                const inv0 = asArr(o.pendingCatalogue.investigations).find((i) => i.id === id);
+                return (inv0 && inv0.label) || id;
+              });
+              if (missing.length) {
+                missing.forEach((id) => {
+                  if (awaitingTest.testIds.includes(id)) return;
+                  awaitingTest.testIds.push(id);
+                  const inv = asArr(o.pendingCatalogue.investigations).find((i) => i.id === id);
+                  awaitingTest.testLabels.push((inv && inv.label) || id);
+                });
+              }
+            } else if (pendingGroup && pendingGroup.reviewed !== true) state = 'group-awaiting-approval';
+          }
+          const reasonText = !headingLabel
+            ? 'a result with no report-group heading cannot be matched to an approved assisted-filing group'
+            : state === 'lab-awaiting-approval'
+              ? `‘${headingLabel}’ is set up, but ${lab.def.name} is awaiting approval, so it cannot act yet`
+              : state === 'test-awaiting-approval'
+                ? `‘${headingLabel}’ is set up, but its test (${missingLabels.join(', ')}) is awaiting approval, so it cannot act yet`
+                : state === 'group-awaiting-approval'
+                ? `‘${headingLabel}’ has assisted-filing setup at ${lab.def.name} that is awaiting approval`
+                : `‘${headingLabel}’ has no approved assisted-filing setup at ${lab.def.name}`;
+          if (state === 'lab-awaiting-approval') {
+            awaitingLab.headings.push(headingLabel);
+            awaitingLab.texts.push(reasonText);
+          }
+          if (state === 'test-awaiting-approval') {
+            awaitingTest.headings.push(headingLabel);
+            awaitingTest.texts.push(reasonText);
+          }
+          reasonPairs.push({ text: reasonText, kind: headingLabel ? 'group-not-approved' : 'no-heading' });
           // Which test to offer opening, if any — by CODE only (never alias), and only when EVERY row in the
           // heading resolves to that same one investigation. A row with no code, an unknown code, or a code that
           // belongs to more than one test means there is no single setup to open. Skipping those rows and offering
@@ -497,7 +552,7 @@
               invIds.add(rowIds[0]);
             }
             if (everyRowResolves && invIds.size === 1) {
-              unapprovedGroups.push({ heading: headingLabel, labId, investigationId: [...invIds][0] });
+              unapprovedGroups.push({ heading: headingLabel, labId, investigationId: [...invIds][0], state });
             }
           }
           continue; // the whole group is blocked — no point evaluating individual results under it
@@ -526,7 +581,14 @@
       }
       return ok(
         reasonPairs,
-        { labId, recognisedCount, unrecognisedCount, groupsUsed },
+        {
+          labId,
+          recognisedCount,
+          unrecognisedCount,
+          groupsUsed,
+          labAwaitingApproval: awaitingLab.headings.length ? awaitingLab : null,
+          testAwaitingApproval: awaitingTest.headings.length ? awaitingTest : null,
+        },
         unresolvedComments,
         unapprovedGroups
       );

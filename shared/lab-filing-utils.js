@@ -1070,7 +1070,31 @@
   // comment" offer (Nick, 2026-09-25, live-caught: the blocked card offered to whitelist "Above reference
   // range" as if it were a lab comment, for a result that had no comment at all).
   const LF_REFERENCE_RANGE_LABELS = new Set(['above reference range', 'below reference range']);
+  // The comment residue of a numeric result.
+  //
+  // PREFERRED PATH (2026-10-02, Clinician A): when the result carries `commentParts` (engine/normalisers.js — the distinct
+  // comment-like fields Medicus sent, the value itself excluded) the residue IS those parts, whitespace-collapsed.
+  // Nothing is stripped, collapsed or guessed at. A numeric result with no comment parts has no comment: that ends the
+  // "77 -> 7" class of bug, and it also stops us mangling real comments — the old text path removed the FIRST
+  // occurrence of the result's value, unit and name from the comment's own prose (a live capture showed "creatinine"
+  // cut out of the Creatinine comment, "B12" out of "Vitamin B12", "nmol/L" out of the Vitamin D text, and the "2" out
+  // of "2026" in a date). Medicus's own reference-range label is not a comment. A non-numeric result (a free-text
+  // report IS its text), or a caller that builds a result without commentParts, takes the legacy text path below.
   function numericCommentResidue(r) {
+    if (Array.isArray(r.commentParts) && Number.isFinite(r.value)) {
+      return r.commentParts
+        .filter((p) => isStr(p) && p.trim() && !LF_REFERENCE_RANGE_LABELS.has(p.trim().toLowerCase()))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+    return legacyTextResidue(r);
+  }
+  // What numericCommentResidue returned before commentParts existed: the joined text with the result's own value, unit
+  // and name stripped out. Kept for results without commentParts and for ONE other reason — an allowed comment a
+  // practice saved while this was the only residue is stored in this (sometimes mangled) form, and must keep
+  // excusing the same comment (see unresolvedCommentedResults).
+  function legacyTextResidue(r) {
     if (!isStr(r.text)) return '';
     // Try collapsing an exact whole-string doubling before stripping anything, AND again after EVERY
     // token strip below — 2026-09-30, Nick, live-caught (Vitamin D). A doubled comment is only ever a
@@ -1124,6 +1148,12 @@
   function _collapseRepeatedWhole(s) {
     const n = s.length;
     if (n < 2) return s;
+    // A bare number is never a doubled COMMENT — "77", "7979" etc. can coincidentally split into
+    // two identical halves (2026-10-02, Clinician A, live-caught: ALP = 77, no comment at all, collapsed
+    // to "7" and was offered as a phantom "whitelist this comment" residue). The doubled-phrase
+    // detection below only ever needs to fire on real text, so skip anything that is nothing but
+    // digits and/or a decimal point.
+    if (/^[\d.]+$/.test(s)) return s;
     if (n % 2 === 0) {
       const half = n / 2;
       if (s.slice(0, half) === s.slice(half)) return s.slice(0, half).trim();
@@ -1204,10 +1234,14 @@
       const residue = numericCommentResidue(r);
       if (!residue) continue;
       const norm = _normComment(residue);
+      // An allowed comment saved BEFORE commentParts existed is stored in the legacy (value/unit/name-stripped) form;
+      // it must keep excusing the same comment, so the legacy residue is tried too — never instead of the clean one.
+      const legacyNorm = Array.isArray(r.commentParts) ? _normComment(legacyTextResidue(r)) : '';
       if (
         norm &&
         !LF_BENIGN_COMMENT_PHRASES.has(norm) &&
-        !_commentAllowedForResult(norm, profile, r, matchedProfiles)
+        !_commentAllowedForResult(norm, profile, r, matchedProfiles) &&
+        !(legacyNorm && legacyNorm !== norm && _commentAllowedForResult(legacyNorm, profile, r, matchedProfiles))
       ) {
         // `result` (the raw row) rides along so a caller with several
         // candidate profiles (a combined multi-panel report) can work out

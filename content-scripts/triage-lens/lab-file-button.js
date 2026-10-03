@@ -1156,6 +1156,13 @@
         // group-not-approved heading whose results resolve, by code only, to exactly one investigation.
         catalogueUnapprovedGroups:
           catResult && catResult.ok && Array.isArray(catResult.unapprovedGroups) ? catResult.unapprovedGroups : [],
+        // Whichever the engine found (kind 'lab' or 'test') - a heading dropped because its LAB or its TEST is not approved.
+        catalogueLabAwaiting:
+          (catResult &&
+            catResult.ok &&
+            catResult.meta &&
+            (catResult.meta.labAwaitingApproval || catResult.meta.testAwaitingApproval)) ||
+          null,
       };
     } catch (_) {
       // A throw is "could not check". Catalogue-only must not file on the generic baseline. A legacy profile stays
@@ -1504,6 +1511,54 @@
   }
   window.__chOpenInvestigationSetup = openInvestigationSetup;
 
+  // Opens the Investigations page on the LABS list, scrolled to one lab's own card - the card that lists EVERY heading
+  // mapping the lab carries next to its "Approve lab" button. Deliberately a deep link, not a one-click approve from
+  // here: approving a lab activates every heading on it (H-087 control (c)), and the reviewer has to see them.
+  function openLabApproval(labId) {
+    try {
+      chrome.runtime.sendMessage({ action: 'ms-open-options', section: 'investigations', lab: labId });
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  window.__chOpenLabApproval = openLabApproval;
+
+  // The blocked card's one-line summary, in the order a person acts on it (Clinician A, 2026-10-02): the action, then whether
+  // the test will match an outstanding investigation, then why assisted filing is not offered. When headings are set up
+  // but their lab is awaiting approval, that comes first - nothing under an unapproved lab can match a request or file
+  // - with the approve link attached to it. Pure; labAwaiting is the engine's meta.labAwaitingApproval.
+  function composeBlockedSummary(reasons, labAwaiting) {
+    const list = (reasons || []).filter(Boolean);
+    const awaiting = labAwaiting && Array.isArray(labAwaiting.headings) && labAwaiting.headings.length ? labAwaiting : null;
+    const covered = new Set(awaiting ? awaiting.texts || [] : []);
+    const rest = list.filter((r) => !covered.has(r)).map((r) => (/^contains /.test(r) ? 'Report ' + r : r));
+    const shown = rest.slice(0, 2).join(' · ');
+    const extra = rest.length > 2 ? ' (+' + (rest.length - 2) + ' more)' : '';
+    const restText = rest.length ? shown + extra : '';
+    if (!awaiting) {
+      return { lead: '', rest: restText, plain: restText ? 'Review manually: ' + restText : 'Review manually.', target: null };
+    }
+    const names = awaiting.headings.map((h) => '‘' + h + '’');
+    const named = names.length > 3 ? names.slice(0, 3).join(', ') + ' and ' + (names.length - 3) + ' more' : names.join(', ');
+    const many = awaiting.headings.length > 1;
+    const isTest = awaiting.kind === 'test';
+    const lead =
+      named +
+      (many ? ' are' : ' is') +
+      ' set up but ' +
+      (isTest ? (many ? 'their tests need' : 'its test needs') : many ? 'need' : 'needs') +
+      ' approving to match outstanding investigations';
+    return {
+      lead,
+      rest: restText,
+      plain: 'Review manually: ' + lead + ' (approve it on the Investigations page).' + (restText ? ' ' + restText : ''),
+      target: isTest
+        ? { type: 'test', id: (awaiting.testIds || [])[0] || null }
+        : { type: 'lab', id: awaiting.labId || null },
+    };
+  }
+  window.__chComposeBlockedSummary = composeBlockedSummary;
+
   function showBlockedHint(
     blockers,
     profile,
@@ -1512,15 +1567,15 @@
     catalogueUnresolvedComments,
     catalogueUnapprovedGroups,
     catalogue,
-    requestMatchInfo
+    requestMatchInfo,
+    labAwaiting
   ) {
     currentProfile = null; // not fileable — onAction early-returns
     const reasons = (blockers || []).filter(Boolean);
     host.className = 'chlf-card chlf-blocked';
     titleEl.textContent = (profile && profile.name ? profile.name : 'Filing profile') + ' — not auto-filed';
-    const shown = reasons.slice(0, 2).join(' · ');
-    const extra = reasons.length > 2 ? ' (+' + (reasons.length - 2) + ' more)' : '';
-    subEl.textContent = reasons.length ? 'Review manually: ' + shown + extra : 'Review manually.';
+    const summary = composeBlockedSummary(reasons, labAwaiting);
+    subEl.textContent = summary.plain;
     subEl.title = reasons.join('\n');
     if (reasonsEl) {
       const sig = JSON.stringify(reasons);
@@ -1552,6 +1607,10 @@
       mode: 'blocked',
       title: titleEl.textContent,
       sub: subEl.textContent,
+      subLead: summary.lead,
+      subRest: summary.rest,
+      approveLab: summary.lead && labAwaiting ? { labId: labAwaiting.labId, labName: labAwaiting.labName } : null,
+      approveTarget: summary.lead && summary.target && summary.target.id ? summary.target : null,
       reasons,
       requestMatchInfo,
       whitelistRows: computeWhitelistRows(commentedResults, matchedProfiles),
@@ -1925,10 +1984,32 @@
       const inv = invs.find((i) => i.id === g.investigationId);
       if (!inv) continue; // never offer a test the catalogue can no longer find
       seen.add(g.investigationId);
-      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label });
+      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label, state: g.state || 'no-setup' });
     }
     return rows;
   }
+
+  // The one place the three "why is this not approved" states get their wording, shared by the standalone card and
+  // Companion (which receives the rows already computed). 'lab-awaiting-approval' is the live-caught 2026-10-02 case:
+  // the test is set up and approved, but its LAB is not, so nothing under it can act.
+  function unapprovedGroupsIntro(state, count) {
+    if (state === 'lab-awaiting-approval')
+      return count === 1
+        ? 'This test is set up, but its lab is awaiting approval — approve the lab on the Investigations page (Labs list) before it can act.'
+        : 'These tests are set up, but their lab is awaiting approval — approve the lab on the Investigations page (Labs list) before they can act.';
+    if (state === 'test-awaiting-approval')
+      return count === 1
+        ? 'This test is set up at this lab, but the test itself is awaiting approval — approve it on the Investigations page before it can act.'
+        : 'These tests are set up at this lab, but the tests themselves are awaiting approval — approve them on the Investigations page before they can act.';
+    if (state === 'group-awaiting-approval')
+      return count === 1
+        ? 'This test has assisted-filing setup at this lab that is awaiting approval.'
+        : 'These tests have assisted-filing setup at this lab that is awaiting approval.';
+    return count === 1
+      ? 'This test has no assisted-filing setup at this lab yet.'
+      : 'These tests have no assisted-filing setup at this lab yet.';
+  }
+  window.__chUnapprovedGroupsIntro = unapprovedGroupsIntro;
 
   // One row per group-not-approved heading that confidently resolved to exactly one test (see
   // engine/lab-filing-catalogue.js's unapprovedGroups — code-only, never a guess), deduplicated by investigation:
@@ -1944,7 +2025,12 @@
       const inv = invs.find((i) => i.id === g.investigationId);
       if (!inv) continue; // never offer a test the catalogue can no longer find
       seen.add(g.investigationId);
-      rows.push({ heading: g.heading, investigationId: g.investigationId, label: inv.label });
+      rows.push({
+        heading: g.heading,
+        investigationId: g.investigationId,
+        label: inv.label,
+        state: g.state || 'no-setup',
+      });
     }
     if (!rows.length) {
       unapprovedGroupsBox.classList.add('chlf-hidden');
@@ -1952,28 +2038,28 @@
       unapprovedGroupsSignature = null;
       return;
     }
-    const signature = JSON.stringify(rows.map((r) => r.investigationId));
+    const signature = JSON.stringify(rows.map((r) => [r.investigationId, r.state]));
     if (signature === unapprovedGroupsSignature) return;
     unapprovedGroupsSignature = signature;
     unapprovedGroupsBox.innerHTML = '';
     unapprovedGroupsBox.classList.remove('chlf-hidden');
-    unapprovedGroupsBox.appendChild(
-      el(
-        'div',
-        'chlf-wl-intro',
-        rows.length === 1
-          ? 'This test has no assisted-filing setup at this lab yet.'
-          : 'These tests have no assisted-filing setup at this lab yet.'
-      )
-    );
-    rows.forEach((r) => {
-      const row = el('div', 'chlf-wl-row chlf-open-row');
-      row.appendChild(el('span', 'chlf-wl-text', r.label + ' (“' + r.heading + '”)'));
-      const openBtn = el('button', 'chlf-wl-open', 'Set up on Investigations page');
-      openBtn.type = 'button';
-      openBtn.onclick = () => openInvestigationSetup(r.investigationId);
-      row.appendChild(openBtn);
-      unapprovedGroupsBox.appendChild(row);
+    ['no-setup', 'group-awaiting-approval', 'test-awaiting-approval', 'lab-awaiting-approval'].forEach((state) => {
+      const inState = rows.filter((r) => r.state === state);
+      if (!inState.length) return;
+      unapprovedGroupsBox.appendChild(el('div', 'chlf-wl-intro', unapprovedGroupsIntro(state, inState.length)));
+      inState.forEach((r) => {
+        const row = el('div', 'chlf-wl-row chlf-open-row');
+        row.appendChild(el('span', 'chlf-wl-text', r.label + ' (“' + r.heading + '”)'));
+        const openBtn = el(
+          'button',
+          'chlf-wl-open',
+          state === 'no-setup' ? 'Set up on Investigations page' : 'Review on Investigations page'
+        );
+        openBtn.type = 'button';
+        openBtn.onclick = () => openInvestigationSetup(r.investigationId);
+        row.appendChild(openBtn);
+        unapprovedGroupsBox.appendChild(row);
+      });
     });
   }
 
@@ -2430,7 +2516,8 @@
         combined.catalogueUnresolvedComments,
         combined.catalogueUnapprovedGroups,
         catalogueForScreen,
-        requestMatchInfo
+        requestMatchInfo,
+        combined.catalogueLabAwaiting
       );
       return;
     }

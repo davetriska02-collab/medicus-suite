@@ -160,6 +160,12 @@
       "last_cso_review_date": "2026-09-20",
       "incremental_reviews": [
         {
+          "version": "3.268.18",
+          "date": "2026-10-03",
+          "scope": "CSO sign-off of the H-073 and H-087 update (Dr D. Triska, CSO, GMC 6159481, 2026-10-03, approved on merge go). Both stay Accepted (ALARP) at their signed residuals (H-073: 4, H-087: 6). A numeric result's comment is the distinct comment fields. A result with no comment is not offered for whitelisting. An allow-list entry saved in the old stripped form still matches. The approve link is a deep link only. H-087 control (c) is unchanged. No new write path. Incremental only — product pin stays 3.264.1 and last_cso_review_version does NOT move. Hazard-log document version 3.101. Drafted the same day with sign-off blank. Clinical safety notice not moved. H-086 and H-092 stay reserved.",
+          "doc_version": "3.101"
+        },
+        {
           "version": "3.268.17",
           "date": "2026-10-02",
           "scope": "CSO sign-off of H-097 (Dr D. Triska, CSO, GMC 6159481, 2026-10-02, approved on merge go). H-097 moves from Proposed to Accepted (ALARP) at residual 6 (3×2), the proposed score. Open task counts on the six queues Suite already reads. A dash is not zero. A period is still-open tasks created in that window, not a split of the dashboard totals. Read-only. Incremental only — product pin stays 3.264.1 and last_cso_review_version does NOT move. Hazard-log document version 3.100. Drafted as hazard-log v3.99 with sign-off blank. Aligned with CLINICAL-SAFETY-NOTICE.md doc v3.108. H-084 stays accepted and is not rewritten.",

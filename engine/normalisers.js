@@ -801,40 +801,33 @@
         // callers must lowercase before searching.
         const textParts = [];
         if (rawValue) textParts.push(rawValue);
+        // Everything below is COMMENT-LIKE text — anything on the result other than its own value. Medicus carries a
+        // lab comment in BOTH performerComments and resultPerformerComments[] (identical strings — confirmed across
+        // 45 of 45 commented results in a live capture, 2026-10-02, with no single field itself doubled), so joining
+        // both used to put every comment into `text` twice. That doubling was ours, not Medicus's, and it is what
+        // lab-filing-utils' doubled-comment collapse existed to undo. Exact repeats are now dropped here, once.
+        // `commentParts` is the distinct list, kept apart from the value so a consumer can tell "this result has no
+        // comment at all" from the structure instead of inferring it from a joined string.
+        const commentParts = [];
+        const addComment = (str) => {
+          if (typeof str !== 'string' || !str.trim()) return;
+          if (commentParts.some((p) => p.trim() === str.trim())) return;
+          commentParts.push(str);
+          textParts.push(str);
+        };
         // resultText explicitly (covers results that carry BOTH a numeric resultValue
         // and a separate free-text resultText where a normal phrase may live).
-        if (r.resultText && typeof r.resultText === 'string' && r.resultText !== rawValue) {
-          textParts.push(r.resultText);
-        }
-        if (r.interpretation && typeof r.interpretation === 'string') {
-          textParts.push(r.interpretation);
-        }
-        if (r.performerComments && typeof r.performerComments === 'string') {
-          textParts.push(r.performerComments);
-        }
-        // resultPerformerComments — may be an array of strings or objects
-        if (Array.isArray(r.resultPerformerComments)) {
-          r.resultPerformerComments.forEach((item) => {
-            if (typeof item === 'string') {
-              textParts.push(item);
-            } else if (item && typeof item === 'object') {
-              // Pull any of text / comment / value sub-field present
-              const sub = item.text || item.comment || item.value;
-              if (sub && typeof sub === 'string') textParts.push(sub);
-            }
+        if (r.resultText && typeof r.resultText === 'string' && r.resultText !== rawValue) addComment(r.resultText);
+        if (r.interpretation && typeof r.interpretation === 'string') addComment(r.interpretation);
+        if (r.performerComments && typeof r.performerComments === 'string') addComment(r.performerComments);
+        // resultPerformerComments / filingComments — each may be an array of strings or objects
+        [r.resultPerformerComments, r.filingComments].forEach((list) => {
+          if (!Array.isArray(list)) return;
+          list.forEach((item) => {
+            if (typeof item === 'string') addComment(item);
+            else if (item && typeof item === 'object') addComment(item.text || item.comment || item.value);
           });
-        }
-        // filingComments — may be an array of strings or objects
-        if (Array.isArray(r.filingComments)) {
-          r.filingComments.forEach((item) => {
-            if (typeof item === 'string') {
-              textParts.push(item);
-            } else if (item && typeof item === 'object') {
-              const sub = item.text || item.comment || item.value;
-              if (sub && typeof sub === 'string') textParts.push(sub);
-            }
-          });
-        }
+        });
         const text = textParts.join(' ');
 
         const rc = r.resultCode && typeof r.resultCode === 'object' ? r.resultCode : {};
@@ -856,6 +849,7 @@
           date,
           history,
           text,
+          commentParts,
           specimen: specimenHeader,
           // Additive (Phase E): see the note above `rawResults` — a different question from `specimen`, never read
           // by the legacy engine or by anything specimen-scope-gated (result-combo, result-rules, etc.).
