@@ -20,7 +20,7 @@ All notable changes to Medicus Suite are documented here.
 - An inline "approve it" link opens that lab's own card on the Labs list, or the test's own Review screen. It is a deep link, not a one-click approve: approving a lab activates every heading on it (H-087 control (c)), so the reviewer still sees them.
 - Four states are told apart: no setup, group awaiting approval, test awaiting approval, lab awaiting approval. The reason kind used by the shadow log is unchanged.
 
-H-073 (allowed-comment gate) and H-087 (approval) addendum drafted at hazard-log v3.101, PENDING CSO review. CSO sign-off blank. Product-version pin stays 3.264.1.
+H-073 (allowed-comment gate) and H-087 (approval) stay Accepted (ALARP) at residuals 4 and 6. Signed: Dr D. Triska (CSO, GMC 6159481), 2026-10-03, approved on merge go. Hazard-log document version 3.101. Clinical safety notice not moved. Product-version pin stays 3.264.1. `last_cso_review_version` does not move. H-086 and H-092 stay reserved.
 
 ## [v3.268.17] — 2026-10-02
 
