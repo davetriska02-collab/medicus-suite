@@ -834,7 +834,7 @@ check(
   "a doubled comment whose own prose repeats the result's unit (no restated value/unit prefix in front of it) resolves to the SAME residue as a single copy — not a mangled, asymmetric duplicate"
 );
 
-// Real-world regression (Nick's own ALP result, 2026-10-01, found by comparing a HAR capture against
+// Real-world regression (Clinician A's ALP result, 2026-10-01, found by comparing a HAR capture against
 // its raw MESH message): a plain numeric value with no comment at all — "77" — splits into two
 // identical one-character halves ("7" === "7"), so the doubling-collapse treated it as an exact
 // doubled COMMENT and chopped it to "7" before the normal strip-by-token loop ever ran. The result had
@@ -851,7 +851,7 @@ check(
     `a bare value of ${v} is not mistaken for a doubled comment either`
   );
 });
-// Nick, 2026-10-02: skip the text surgery entirely when the structured fields say there is no comment.
+// Clinician A, 2026-10-02: skip the text surgery entirely when the structured fields say there is no comment.
 check(
   LF.numericCommentResidue({ name: 'X', value: 77, unit: '', rawValue: '77', text: '77 7 77', commentParts: [] }) === '',
   'a numeric result with empty commentParts has no comment, whatever its text happens to look like'

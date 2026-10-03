@@ -1072,7 +1072,7 @@
   const LF_REFERENCE_RANGE_LABELS = new Set(['above reference range', 'below reference range']);
   // The comment residue of a numeric result.
   //
-  // PREFERRED PATH (2026-10-02, Nick): when the result carries `commentParts` (engine/normalisers.js — the distinct
+  // PREFERRED PATH (2026-10-02, Clinician A): when the result carries `commentParts` (engine/normalisers.js — the distinct
   // comment-like fields Medicus sent, the value itself excluded) the residue IS those parts, whitespace-collapsed.
   // Nothing is stripped, collapsed or guessed at. A numeric result with no comment parts has no comment: that ends the
   // "77 -> 7" class of bug, and it also stops us mangling real comments — the old text path removed the FIRST
@@ -1149,7 +1149,7 @@
     const n = s.length;
     if (n < 2) return s;
     // A bare number is never a doubled COMMENT — "77", "7979" etc. can coincidentally split into
-    // two identical halves (2026-10-02, Nick, live-caught: ALP = 77, no comment at all, collapsed
+    // two identical halves (2026-10-02, Clinician A, live-caught: ALP = 77, no comment at all, collapsed
     // to "7" and was offered as a phantom "whitelist this comment" residue). The doubled-phrase
     // detection below only ever needs to fire on real text, so skip anything that is nothing but
     // digits and/or a decimal point.

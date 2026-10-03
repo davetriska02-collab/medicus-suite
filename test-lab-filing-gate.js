@@ -772,7 +772,7 @@ console.log(
   );
 }
 
-console.log('\n--- "why is this not approved" reaches the card AND Companion (2026-10-02, Nick, live-caught) ---');
+console.log('\n--- "why is this not approved" reaches the card AND Companion (2026-10-02, Clinician A, live-caught) ---');
 {
   const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
   const tapSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-actions-panel.js'), 'utf8');
@@ -790,7 +790,7 @@ console.log('\n--- "why is this not approved" reaches the card AND Companion (20
   );
 }
 
-console.log('\n--- blocked card: lead with what needs approving, link to approve the lab (2026-10-02, Nick) ---');
+console.log('\n--- blocked card: lead with what needs approving, link to approve the lab (2026-10-02, Clinician A) ---');
 {
   const btnSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'triage-lens', 'lab-file-button.js'), 'utf8');
   const tapSrc = fs.readFileSync(path.join(__dirname, 'content-scripts', 'task-actions-panel.js'), 'utf8');

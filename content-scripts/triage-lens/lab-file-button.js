@@ -1523,7 +1523,7 @@
   }
   window.__chOpenLabApproval = openLabApproval;
 
-  // The blocked card's one-line summary, in the order a person acts on it (Nick, 2026-10-02): the action, then whether
+  // The blocked card's one-line summary, in the order a person acts on it (Clinician A, 2026-10-02): the action, then whether
   // the test will match an outstanding investigation, then why assisted filing is not offered. When headings are set up
   // but their lab is awaiting approval, that comes first - nothing under an unapproved lab can match a request or file
   // - with the approve link attached to it. Pure; labAwaiting is the engine's meta.labAwaitingApproval.

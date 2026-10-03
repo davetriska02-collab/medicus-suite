@@ -462,7 +462,7 @@
       // The same, when the LAB is approved but the TEST a heading identifies is not (or is switched off): the acting
       // catalogue drops a lab heading whose test it does not contain (shared/lab-catalogue-overlay.js pruneLab), so
       // the heading vanishes exactly as it does for an unapproved lab — and the Labs page shows nothing to approve
-      // (Nick, 2026-10-03, live-caught: HFE gene testing said "needs approving" with every lab already approved).
+      // (Clinician A, 2026-10-03, live-caught: HFE gene testing said "needs approving" with every lab already approved).
       let missingLabels = [];
       const awaitingTest = { kind: 'test', labId, labName: lab.def.name, testIds: [], testLabels: [], headings: [], texts: [] };
       let recognisedCount = 0;
@@ -472,7 +472,7 @@
         const group = headingLabel ? findGroup(catalogue, labId, headingLabel) : null;
         if (!group || group.enabled !== true) {
           unrecognisedCount += results.length;
-          // WHY it is not approved, so the card can say so (Nick, 2026-10-02, live-caught: Folate and Ferritin showed
+          // WHY it is not approved, so the card can say so (Clinician A, 2026-10-02, live-caught: Folate and Ferritin showed
           // "no approved assisted-filing setup" while the Investigations page showed both set up and approved — the
           // RJ700 lab entry itself was awaiting approval, and an unapproved lab is dropped from the acting catalogue,
           // taking its headings and every filing group under them with it). The pending view (includeUnreviewed) is

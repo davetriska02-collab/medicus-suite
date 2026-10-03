@@ -1139,7 +1139,7 @@
     const unapprovedHtml = isBlocked ? labFileUnapprovedGroupsHtml() : '';
     const fileActionHtml = !isBlocked && data.fileAction ? labFileActionHtml(data.fileAction) : '';
     // When headings are set up but their lab is awaiting approval, the lead sentence carries an inline "approve it"
-    // link to that lab's own card on the Investigations page (Nick, 2026-10-02); otherwise the plain summary.
+    // link to that lab's own card on the Investigations page (Clinician A, 2026-10-02); otherwise the plain summary.
     const subHtml =
       isBlocked && data.approveTarget && data.subLead
         ? 'Review manually: ' +

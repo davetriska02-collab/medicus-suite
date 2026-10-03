@@ -649,7 +649,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const review = String((msg && msg.review) || '');
       const suffix = /^[a-z-]+$/.test(section) ? `#sect-${section}` : '';
       const query = /^[a-z0-9-]+$/.test(review) ? `?review=${review}` : '';
-      // `lab` (Companion's approve link, Nick, 2026-10-02): scrolls the Labs list to one lab's own approve card. Same
+      // `lab` (Companion's approve link, Clinician A, 2026-10-02): scrolls the Labs list to one lab's own approve card. Same
       // slug validation - a lab id is the same shape (shared/lab-catalogue-overlay.js freshId/slugify).
       const lab = String((msg && msg.lab) || '');
       const labQuery = /^[a-z0-9-]+$/.test(lab) ? `${query ? '&' : '?'}lab=${lab}` : '';

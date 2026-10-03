@@ -205,7 +205,7 @@ function applyReviewDeepLink() {
   } catch (e) {
     /* history API unavailable — the deep link still applies once below, just may re-fire on a later save() */
   }
-  // ?lab=<lab id> (Companion's approve link, Nick, 2026-10-02): open the Labs list and scroll to that lab's card - the
+  // ?lab=<lab id> (Companion's approve link, Clinician A, 2026-10-02): open the Labs list and scroll to that lab's card - the
   // one that lists every heading the lab carries beside "Approve lab". Consumed the same one-time way as ?review=.
   if (labId && S.merged.labs.some((l) => l.id === labId)) {
     S.labsOpen = true;

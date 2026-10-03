@@ -227,7 +227,7 @@ console.log(
   );
 }
 
-// Nick, 2026-10-02, live-caught: Folate and Ferritin showed "no approved assisted-filing setup" on the card while the
+// Clinician A, 2026-10-02, live-caught: Folate and Ferritin showed "no approved assisted-filing setup" on the card while the
 // Investigations page showed both set up and APPROVED. The practice had added a "Ferritin" heading to RJ700, which
 // resets the lab entry to unreviewed — and an unreviewed lab is dropped from the acting catalogue, heading, filing
 // group and all. The card now says WHICH of three things is true.
@@ -288,7 +288,7 @@ console.log('\n--- unapprovedGroups: why a heading is not approved — lab await
     'an approved lab whose filing group is unapproved is reported as group-awaiting-approval'
   );
 
-  // Nick, 2026-10-03, live-caught: HFE gene testing said the LAB needed approving while every lab was approved. The
+  // Clinician A, 2026-10-03, live-caught: HFE gene testing said the LAB needed approving while every lab was approved. The
   // acting catalogue also drops a lab heading whose TEST it does not contain, so the cause was the unapproved test.
   {
     let t = OV.saveInvestigation(builtin, OV.emptyOverlay(), {
